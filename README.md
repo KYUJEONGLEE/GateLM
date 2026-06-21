@@ -66,7 +66,7 @@ git branch
 처음 clone 받은 팀원은 `.env.example`을 복사해서 `.env`를 만듭니다.
 
 ```powershell
-Copy-Item .env.example .env
+cp .env.example .env
 ```
 
 `.env` 파일은 개인 로컬 환경에서만 사용합니다.
