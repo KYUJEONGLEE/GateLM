@@ -1,0 +1,40 @@
+﻿name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  repo-check:
+    name: repository sanity check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Block committed secret files
+        shell: bash
+        run: |
+          set -e
+
+          if find . \
+            \( -name ".env" \
+            -o -name ".env.*" \
+            -o -name "*.pem" \
+            -o -name "*.key" \
+            -o -name "*.p12" \
+            -o -name "*.pfx" \
+            -o -name "credentials.json" \
+            -o -name "service-account.json" \) \
+            -not -name ".env.example" | grep -q .; then
+              echo "Secret-like file is committed. Remove it before merging."
+              exit 1
+          fi
+
+          echo "Repository sanity check passed."
