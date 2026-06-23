@@ -1,6 +1,6 @@
-# LLMOps Gateway
+# GateLM
 
-LLMOps Gateway는 여러 LLM Provider API를 하나의 Gateway에서 관리하기 위한 프로젝트입니다.
+GateLM은 여러 LLM Provider API를 하나의 Gateway에서 관리하기 위한 프로젝트입니다.
 
 현재 초기 세팅은 다음 내용을 포함합니다.
 
@@ -35,14 +35,14 @@ docker compose version
 
 ```powershell
 git clone <레포지토리_URL>
-cd LLMOps-Gateway
+cd GateLM
 ```
 
 예시:
 
 ```powershell
-git clone https://github.com/KYUJEONGLEE/LLMOps-Gateway.git
-cd LLMOps-Gateway
+git clone https://github.com/KYUJEONGLEE/GateLM.git
+cd GateLM
 ```
 
 현재 브랜치가 `main`인지 확인합니다.
@@ -303,7 +303,7 @@ PostgreSQL 접속 정보는 기본적으로 아래와 같습니다.
 ```txt
 host: localhost
 port: 5432
-database: llmops_db
+database: gatelm_db
 user: admin
 password: adminpassword
 ```
