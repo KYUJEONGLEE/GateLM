@@ -55,12 +55,14 @@ raw prompt/raw response 저장 정책
 | integration smoke | `pnpm smoke:p0` | 자동화 전에는 `p0-test-matrix.md` 수동 결과 기록 |
 | migration validation | `pnpm --filter @gatelm/control-plane-api db:migrate:check` | script 생성 전에는 migration diff 수동 확인 |
 | contract/status value check | `pnpm contracts:check` | script 생성 전에는 `p0-contract.md` 기준 수동 확인 |
-| secret-like fixture scan | `rg -n "(sk-|AKIA|BEGIN PRIVATE KEY|Authorization: Bearer|api_key=|xoxb-|ghp_)" .` | 발견 시 실제 secret이 아님을 증명하거나 제거 |
-| raw prompt/raw response forbidden-field scan | `rg -n "rawPrompt|rawResponse|fullRequestBody|fullResponseBody|providerApiKey|apiKeyPlaintext|appTokenPlaintext|authorizationHeader|rawProviderErrorBody|maskingSampleRawValue" .` | 허용 문서 목록 외 발견 시 차단 |
+| secret-like fixture scan | `rg -n "(sk-|AKIA|BEGIN PRIVATE KEY|Authorization: Bearer|api_key=|xoxb-|ghp_)" apps packages tests .github .env.example docker-compose.yml` | 발견 시 실제 secret이 아님을 증명하거나 제거 |
+| raw prompt/raw response forbidden-field scan | `rg -n "rawPrompt|rawResponse|fullRequestBody|fullResponseBody|providerApiKey|apiKeyPlaintext|appTokenPlaintext|authorizationHeader|rawProviderErrorBody|maskingSampleRawValue" apps packages tests .github docker-compose.yml` | 구현 코드/fixture에서 발견 시 차단 |
 
 P0 초기에 CI가 완성되지 않았으면 PR 본문에 수동 실행 결과를 남긴다.
 
 보안 관련 scan은 가능한 한 Day 3 이후 자동화한다.
+
+`docs/`는 정책과 금지 예시를 설명하기 위해 금지 문자열을 의도적으로 포함할 수 있으므로 기본 scan 대상에서 제외한다. 문서 변경 PR은 사람이 보안 금지 예시가 실제 secret처럼 보이지 않는지 별도로 확인한다.
 
 ---
 

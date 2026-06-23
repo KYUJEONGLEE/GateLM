@@ -39,6 +39,10 @@ P0 local infrastructure:
 
 P0 기본 Mock Provider 방식은 별도 service다. Gateway 내부 adapter는 mock-provider service 구현이 지연될 때만 임시 fallback으로 허용한다. fallback을 쓰더라도 call count, latency, error mode, reset/config에 준하는 테스트 관측 기능은 유지해야 한다.
 
+현재 `docker-compose.yml`의 inline Python `mock-provider`는 팀원이 공통 로컬 환경을 빠르게 띄우기 위한 **bootstrap mock**이다. P0 acceptance용 mock-provider는 `mock-provider.md`의 stats/config/error/timeout 관측 기준을 만족하도록 별도 구현체로 승격해야 한다.
+
+`MOCK_PROVIDER_PORT`는 host port override 용도다. P0 bootstrap mock의 container listen port는 `8090`으로 고정한다. 포트를 바꿔야 하면 host mapping만 바꾸고, Gateway/README/local-dev의 base URL도 함께 맞춘다.
+
 P0 optional infrastructure:
 
 | 서비스 | P0 판단 |

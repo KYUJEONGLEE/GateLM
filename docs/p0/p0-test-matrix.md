@@ -34,7 +34,7 @@ test_secret_token_redacted_for_demo_only
 | ID | 시나리오 | 기대 HTTP | 기대 log/status | 추가 검증 |
 |---|---|---:|---|---|
 | P0-T01 | `GET /healthz` | 200 | 없음 | 서비스 실행 확인 |
-| P0-T02 | `GET /readyz` | 200 | 없음 | PostgreSQL/Redis 연결 상태 확인 |
+| P0-T02 | `GET /readyz` | 200 | 없음 | PostgreSQL/Redis/Mock Provider 연결 상태 확인. 내부 mock adapter fallback이면 self-check 포함 |
 | P0-T03 | seed admin login 또는 local login | 200 | audit optional | key/token 원문 재조회 불가 |
 | P0-T04 | Tenant/Project/Application 생성 | 2xx | audit optional | tenant/project scope 생성 |
 | P0-T05 | API Key 발급 | 2xx | audit optional | 원문 key 1회 반환, hash 저장 |

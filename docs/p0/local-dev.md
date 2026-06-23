@@ -184,7 +184,9 @@ services:
 
 P0에서는 PostgreSQL user/password/db 값을 `gatelm/gatelm/gatelm`으로 고정한다. 로컬 `.env`에 과거 값이 남아 있어도 DB identity 기준을 바꾸지 않는다.
 
-P0 기본값은 별도 `mock-provider` service다.
+P0 기본값은 별도 `mock-provider` service다. 현재 `docker-compose.yml`에 들어 있는 inline Python mock은 공통 로컬 환경을 빠르게 맞추기 위한 bootstrap mock이다. P0 acceptance용 mock-provider는 `docs/p0/mock-provider.md`의 stats/config/error/timeout 기준을 만족하도록 별도 구현체로 승격한다.
+
+`MOCK_PROVIDER_PORT`는 host port override 용도다. bootstrap mock의 container listen port는 `8090`으로 고정한다. 포트를 바꾸는 경우 Gateway의 `MOCK_PROVIDER_BASE_URL`도 함께 바꾼다.
 
 Gateway 내부 adapter는 `apps/mock-provider` 구현이 지연될 때만 임시 fallback으로 허용한다. fallback을 쓰는 경우에도 Provider 호출 횟수, latency, error mode, reset/config에 준하는 테스트 관측 기능은 유지해야 한다.
 

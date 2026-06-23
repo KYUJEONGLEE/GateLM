@@ -87,6 +87,8 @@ P0 기준 서비스명은 아래로 고정합니다.
 | `redis` | `redis:7-alpine` | 6379 |
 | `mock-provider` | `python:3.12-alpine` | 8090 |
 
+현재 `mock-provider`는 공통 로컬 환경을 빠르게 띄우기 위한 bootstrap mock입니다. P0 acceptance용 mock-provider는 `docs/p0/mock-provider.md` 기준에 맞춰 별도 구현체로 승격할 예정입니다.
+
 ### 처음 실행하는 경우
 
 레포 루트에서 아래 명령어를 실행합니다.
