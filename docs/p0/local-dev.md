@@ -1,0 +1,371 @@
+# GateLM Local Development Guide v0.1
+
+## 문서 목적
+
+이 문서는 GateLM P0를 로컬에서 실행하기 위한 기준이다. 개발자는 이 문서를 따라 동일한 환경을 띄우고, 같은 seed 데이터로 Gateway end-to-end 흐름을 검증해야 한다.
+
+---
+
+## 1. 로컬 개발 원칙
+
+```text
+1. 로컬 실행은 Docker Compose + 각 앱 dev server 조합을 기본으로 한다.
+2. P0는 mock provider만으로도 end-to-end 데모가 가능해야 한다.
+3. 실제 Provider Key는 필수가 아니다.
+4. .env 파일은 커밋하지 않는다.
+5. 필요한 환경변수는 .env.example에만 문서화한다.
+6. raw prompt, raw response, secret 원문을 log에 남기지 않는다.
+```
+
+---
+
+## 2. 권장 로컬 포트
+
+| 서비스 | 포트 | 비고 |
+|---|---:|---|
+| Web Console | `3000` | Next.js |
+| Control Plane API | `3001` | NestJS |
+| Gateway Core | `8080` | Go |
+| AI Service | `8000` | P1/P2, P0에서는 optional |
+| Worker | 없음 | background process |
+| PostgreSQL | `5432` | Control Plane |
+| Redis | `6379` | cache, rate limit |
+| Redpanda | `9092` | P1, P0 optional |
+| ClickHouse | `8123`, `9000` | P1, P0 optional |
+| Mock Provider | `8090` | local mock |
+
+---
+
+## 3. 필수 도구
+
+```text
+Node.js 20+
+pnpm 9+
+Go 1.22+
+Docker + Docker Compose
+PostgreSQL client 선택
+Redis client 선택
+```
+
+Python AI Service를 P1/P2에서 실행하려면 아래를 추가한다.
+
+```text
+Python 3.11+
+Poetry 또는 uv
+```
+
+---
+
+## 4. 예상 monorepo 구조
+
+```text
+gatelm/
+├── apps/
+│   ├── web/
+│   ├── control-plane-api/
+│   ├── gateway-core/
+│   ├── worker/
+│   └── ai-service/
+├── packages/
+│   ├── contracts/
+│   └── shared/
+├── infra/
+│   └── local/
+├── docs/
+├── docker-compose.yml
+├── package.json
+├── pnpm-workspace.yaml
+└── .env.example
+```
+
+폴더 구조는 `folder-structure.md`를 우선한다.
+
+---
+
+## 5. `.env.example` 기준
+
+루트 `.env.example`에는 실제 secret을 넣지 않는다.
+
+```bash
+# App
+NODE_ENV=development
+GATELM_ENV=local
+
+# URLs
+WEB_BASE_URL=http://localhost:3000
+CONTROL_PLANE_API_URL=http://localhost:3001
+GATEWAY_BASE_URL=http://localhost:8080
+MOCK_PROVIDER_BASE_URL=http://localhost:8090
+
+# Database
+DATABASE_URL=postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public
+REDIS_URL=redis://localhost:6379
+
+# Optional analytics
+REDPANDA_BROKERS=localhost:9092
+CLICKHOUSE_URL=http://localhost:8123
+CLICKHOUSE_DATABASE=gatelm
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=
+
+# Local secret resolver
+SECRET_STORE_MODE=local
+LOCAL_PROVIDER_SECRET_VALUE=test_provider_key_redacted
+
+# Gateway
+GATEWAY_PORT=8080
+GATEWAY_DEFAULT_PROVIDER=mock
+GATEWAY_DEFAULT_MODEL=mock-balanced
+GATEWAY_LOW_COST_MODEL=mock-fast
+GATEWAY_APP_TOKEN_REQUIRED=true
+
+# Mock provider
+MOCK_PROVIDER_PORT=8090
+MOCK_PROVIDER_DEFAULT_LATENCY_MS=150
+MOCK_PROVIDER_ERROR_MODE=off
+```
+
+금지:
+
+```text
+실제 Provider Key
+실제 고객 데이터
+실제 JWT
+실제 API Key
+```
+
+---
+
+## 6. Docker Compose 최소 구성
+
+P0 최소 구성:
+
+```text
+postgres
+redis
+mock-provider
+```
+
+P1 구성:
+
+```text
+redpanda
+clickhouse
+```
+
+`docker-compose.yml` 기준 서비스 이름은 아래를 따른다.
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: gatelm
+      POSTGRES_PASSWORD: gatelm
+      POSTGRES_DB: gatelm
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  mock-provider:
+    build:
+      context: ./apps/mock-provider
+    ports:
+      - "8090:8090"
+```
+
+P0에서 mock provider를 별도 앱으로 만들지 않고 Gateway 내부 adapter로 처리해도 된다. 단, 데모 중 Provider 호출 횟수와 latency/error를 확인할 수 있어야 한다.
+
+---
+
+## 7. 최초 실행 순서
+
+```bash
+# 1. dependency 설치
+pnpm install
+
+# 2. 로컬 인프라 실행
+docker compose up -d postgres redis mock-provider
+
+# 3. DB migration
+pnpm --filter @gatelm/control-plane-api db:migrate
+
+# 4. seed data 생성
+pnpm --filter @gatelm/control-plane-api db:seed
+
+# 5. Control Plane API 실행
+pnpm --filter @gatelm/control-plane-api dev
+
+# 6. Gateway 실행
+cd apps/gateway-core
+go run ./cmd/gateway
+
+# 7. Web Console 실행
+pnpm --filter @gatelm/web dev
+
+# 8. Worker 실행, P0에서 필요한 경우
+pnpm --filter @gatelm/worker dev
+```
+
+실제 script 이름은 구현 시 `package.json`에 맞춘다. 이 문서는 실행 순서의 기준이다.
+
+---
+
+## 8. Health Check
+
+```bash
+curl -sS http://localhost:3001/healthz
+curl -sS http://localhost:8080/healthz
+curl -sS http://localhost:8080/readyz
+curl -sS http://localhost:8090/healthz
+```
+
+기대 결과:
+
+```json
+{"status":"ok"}
+```
+
+`readyz`는 dependency 상태를 확인한다.
+
+```text
+postgres: connected
+redis: connected
+mock-provider: reachable
+redpanda: optional
+clickhouse: optional
+```
+
+---
+
+## 9. Seed 데이터 기준
+
+P0 seed는 매번 같은 데모를 재현해야 한다.
+
+| 리소스 | 기본값 |
+|---|---|
+| Admin email | `admin@example.invalid` |
+| Admin password | `local-demo-password` |
+| Tenant | `Example Corp` |
+| Project | `Support Bot` |
+| Application | `Support Web App` |
+| Provider | `mock` |
+| Default model | `mock-balanced` |
+| Low-cost model | `mock-fast` |
+| Expensive model | `mock-smart` |
+| API Key preview | `glm_api_test...redacted` |
+| App Token preview | `glm_app_token_test...redacted` |
+
+Seed script는 원문 API Key/App Token을 `.local-seed-output.json` 같은 gitignored 파일에만 기록할 수 있다. 콘솔 출력도 데모 편의를 위한 1회 출력만 허용한다.
+
+---
+
+## 10. Gateway curl 검증
+
+### 10.1 모델 목록
+
+```bash
+curl -sS http://localhost:8080/v1/models \
+  -H 'Authorization: Bearer glm_api_test_redacted' \
+  -H 'X-GateLM-App-Token: glm_app_token_test_redacted'
+```
+
+### 10.2 Chat Completion
+
+```bash
+curl -sS http://localhost:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer glm_api_test_redacted' \
+  -H 'X-GateLM-App-Token: glm_app_token_test_redacted' \
+  -H 'X-GateLM-End-User-Id: user_demo_001' \
+  -H 'X-GateLM-Feature-Id: support-reply' \
+  -d '{
+    "model": "auto",
+    "messages": [
+      {"role": "user", "content": "Write a short refund response."}
+    ],
+    "temperature": 0.2,
+    "max_tokens": 128,
+    "stream": false
+  }'
+```
+
+---
+
+## 11. 로그 검증
+
+```bash
+curl -sS 'http://localhost:3001/api/projects/<projectId>/logs?limit=20' \
+  -H 'Authorization: Bearer <control_plane_access_token>'
+```
+
+```bash
+curl -sS 'http://localhost:3001/api/llm-requests/<requestId>' \
+  -H 'Authorization: Bearer <control_plane_access_token>'
+```
+
+확인할 것:
+
+```text
+status
+provider/model
+requestedModel/selectedModel
+costMicroUsd
+latencyMs
+cacheStatus
+routingReason
+maskingAction
+redactedPromptPreview
+```
+
+---
+
+## 12. Reset 방법
+
+로컬 데이터를 초기화할 때는 명령 이름을 명확히 둔다.
+
+```bash
+pnpm dev:reset
+```
+
+내부 동작 예시:
+
+```text
+1. docker compose down -v
+2. docker compose up -d postgres redis mock-provider
+3. pnpm db:migrate
+4. pnpm db:seed
+```
+
+운영과 혼동되는 destructive command를 문서 없이 사용하지 않는다.
+
+---
+
+## 13. 흔한 문제
+
+| 증상 | 원인 | 조치 |
+|---|---|---|
+| Gateway 401 | API Key seed 불일치 | seed output 확인 |
+| Gateway 403 | App Token 누락 또는 scope 오류 | `X-GateLM-App-Token` 확인 |
+| Cache hit 안 됨 | prompt normalization/hash 불일치 | cache key material log를 sanitized로 확인 |
+| Dashboard 0건 | Worker 미실행 또는 direct writer 미연결 | P0 log writer 경로 확인 |
+| Provider 호출 실패 | mock-provider 미실행 | `curl /healthz` 확인 |
+| raw email이 log에 보임 | masking stage 순서 오류 | 즉시 수정, 보안 리뷰 필요 |
+
+---
+
+## 14. 개발 중 보안 체크
+
+```text
+[ ] .env 커밋 금지
+[ ] 실제 secret seed 금지
+[ ] raw prompt log 금지
+[ ] authorization header dump 금지
+[ ] Provider Key response 반환 금지
+[ ] Request Detail raw prompt/response 반환 금지
+[ ] test snapshot에 secret-like value 금지
+```
