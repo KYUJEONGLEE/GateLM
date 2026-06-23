@@ -1,5 +1,7 @@
 # GateLM Coding Convention
 
+> P0 범위 안내: 이 문서는 장기 구현 기준과 확장 원칙을 포함한다. 현재 구현 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 `MVP` 표현은 현재 P0 필수 범위를 자동으로 의미하지 않는다.
+
 ## 문서 목적
 
 이 문서는 GateLM 팀이 같은 코드 스타일과 같은 구현 기준으로 작업하기 위한 코딩 컨벤션 문서다.
@@ -1804,4 +1806,3 @@ MVP에서는 아래 규칙을 반드시 지킨다.
 - sample 분석이 필요하면 HMAC 기반 `sampleHash`만 사용한다.
 - custom regex는 validation, timeout, audit log 없이 publish하지 않는다.
 - detector type과 action value를 임의로 추가하지 않는다. 먼저 `pii-masking-policy.md`, `llm-log-schema.md`, `db-schema.md`, `api-spec.md`를 수정한다.
-

@@ -83,7 +83,7 @@ P0의 핵심은 “기업이 GateLM을 도입하고, 기존 LLM 요청을 Gatewa
 | API Key 인증 | P0 | Bearer key 검증 |
 | App Token 검증 | P0 | `X-GateLM-App-Token` 검증 |
 | Tenant/Project/User/Application 식별 | P0 | API Key/App Token metadata 기준 |
-| Provider 호출 Proxy | P0 | mock provider 필수, 실제 provider 1개 선택 |
+| Provider 호출 Proxy | P0 | mock provider 필수, 실제 provider adapter는 P1 선택 |
 | Provider별 request/response 변환 | P0 | adapter interface 유지 |
 | SSE Streaming 응답 중계 | P1 | non-stream 먼저 완성 |
 

@@ -462,24 +462,25 @@ attempts/cacheEvents/routingEvents/maskingEvents 상세
 
 ## 10. Storage Mapping
 
-P0에서는 아래 둘 중 하나를 선택한다.
+P0 canonical source는 PostgreSQL `p0_llm_invocation_logs`다.
 
-### A안 — ClickHouse 사용
-
-```text
-Worker/direct writer -> ClickHouse llm_invocations
-Dashboard/Logs -> ClickHouse query
-PostgreSQL -> usage ledger/audit only
-```
-
-### B안 — Postgres fallback
+### P0 기준 — Postgres fallback
 
 ```text
 Gateway/direct writer -> PostgreSQL p0_llm_invocation_logs
-Dashboard/Logs -> PostgreSQL query
+Dashboard/Logs/Detail -> PostgreSQL query
 ```
 
-B안은 P0 shortcut이다. README와 코드 주석에 남긴다.
+이 경로는 P0 shortcut이다. README와 코드 주석에 남긴다.
+
+### Optional — ClickHouse mirror
+
+```text
+Worker/direct writer -> ClickHouse llm_invocations
+Dashboard/Logs -> ClickHouse query only after numbers match PostgreSQL canonical source
+```
+
+ClickHouse를 P0에서 붙이더라도 PostgreSQL과 Dashboard 숫자가 다르면 PostgreSQL 값을 기준으로 판단한다.
 
 ---
 

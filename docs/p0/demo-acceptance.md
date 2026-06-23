@@ -45,7 +45,7 @@ P0 데모는 아래 7개 장면이 끊기지 않고 이어져야 한다.
 [ ] Authorization: Bearer <gateway_api_key> 사용
 [ ] X-GateLM-App-Token 사용
 [ ] Gateway가 requestId를 생성
-[ ] mock 또는 실제 Provider adapter가 응답 반환
+[ ] mock Provider adapter가 응답 반환
 [ ] 응답에 OpenAI-compatible fields가 존재
 [ ] X-GateLM-Request-Id header가 존재
 [ ] Request Log에 status=success 또는 cache_hit로 기록
@@ -223,7 +223,7 @@ curl -sS http://localhost:8080/v1/chat/completions \
 기대 결과:
 
 ```text
-HTTP 403 또는 정책상 정의한 block status
+HTTP 403
 error.code=sensitive_data_blocked
 Provider/mock 호출 없음
 Request Log status=blocked

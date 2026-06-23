@@ -1,5 +1,7 @@
 # GateLM Architecture
 
+> P0 범위 안내: 이 문서는 장기 아키텍처 기준을 포함한다. 현재 구현 목표는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 `MVP` 또는 `1차 구현` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+
 ## 문서 목적
 
 이 문서는 GateLM 구현자가 시스템 경계, 요청 흐름, 저장소 책임, 모듈 책임을 헷갈리지 않도록 고정하는 기준 문서다.
@@ -1243,4 +1245,3 @@ Gateway Request Context
 ```
 
 raw prompt/raw response/raw sensitive sample은 기본적으로 영속 저장하지 않는다.
-

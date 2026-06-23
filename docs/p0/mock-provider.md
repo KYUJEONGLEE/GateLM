@@ -83,7 +83,7 @@ P0 mock provider는 text-only만 처리한다.
 거부 대상:
 
 ```text
-stream=true, P0에서는 optional
+stream=true. P0 Gateway는 명확한 오류로 거부하고, mock provider에 도달해도 unsupported로 처리한다.
 image/file/audio content
 function/tool call
 multipart request

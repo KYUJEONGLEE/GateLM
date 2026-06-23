@@ -41,7 +41,7 @@ P0는 기능 수가 아니라 **end-to-end 흐름**이 기준이다.
 5. 고객사 앱 또는 curl이 /v1/chat/completions로 요청한다.
 6. Gateway가 API Key와 App Token을 검증한다.
 7. Gateway가 민감정보를 Provider 호출 전에 탐지한다.
-8. safe 요청은 mock 또는 실제 Provider로 전달된다.
+8. safe 요청은 mock provider로 전달된다.
 9. 동일 요청의 두 번째 호출은 Exact Cache hit로 처리된다.
 10. model=auto 요청은 저비용 모델로 라우팅된다.
 11. 차단 요청은 Provider 호출 없이 blocked log를 남긴다.
@@ -84,7 +84,7 @@ P0에서 필요한 API만 구현한다.
 | 민감정보 처리 | email/phone redact, api_key/jwt/rrn block |
 | Exact Cache | Redis 기반 |
 | Simple Routing | `model=auto`이면 low-cost model 선택 |
-| Provider Adapter | `mock` 필수, 실제 Provider 1개 선택 |
+| Provider Adapter | `mock` 필수, 실제 Provider adapter는 P1 선택 |
 | Event/Log | 요청 종료 시 invocation event 또는 direct log write |
 
 ### 3.3 Web Console
@@ -123,6 +123,7 @@ P0 완료 후 시간이 남으면 진행한다.
 | 기능 | 설명 |
 |---|---|
 | SSE Streaming | `stream=true` 중계 |
+| 실제 Provider adapter | mock provider acceptance 완료 후 1개 선택 |
 | Redpanda 실제 연동 | event bus 기반 async logging |
 | ClickHouse 실제 집계 | raw invocation table + 간단 aggregate |
 | Rate Limit | RPM 기준 project 단위 |
@@ -178,8 +179,8 @@ P0/P1 후에도 무리해서 넣지 않는다.
 | 인증 | seed admin 또는 local login 허용 |
 | Provider Secret | local encrypted mock 또는 env 기반 secret resolver |
 | Policy | CEL 대신 JSON config |
-| Budget | 실제 ledger 대신 project monthly counter 가능 |
-| Rate Limit | Redis fixed window 가능 |
+| Budget | P0는 cost metadata와 seed policy 수준. hard block은 P1 |
+| Rate Limit | P0는 no-op 또는 seed/config 수준. Redis fixed window는 시간이 남으면 |
 | Worker | direct writer 또는 outbox fallback 가능 |
 | ClickHouse | 개발 안정성이 낮으면 Postgres fallback 가능 |
 | UI | CRUD 전체가 아니라 데모 플로우 중심 |

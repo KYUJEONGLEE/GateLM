@@ -1,5 +1,7 @@
 # GateLM Gateway 요청 흐름
 
+> P0 범위 안내: 이 문서는 장기 Gateway pipeline 흐름을 포함한다. 현재 P0 stage와 동작 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 Streaming, Semantic Cache, Rate Limit, Budget 관련 흐름은 P0에서 no-op, disabled, 또는 P1/P2 후보일 수 있다.
+
 ## 문서 목적
 
 이 문서는 GateLM Gateway가 사용자 요청을 받아 외부 LLM Provider로 전달하고, 응답을 다시 사용자에게 반환하며, 중간 처리 결과를 로그로 남기는 기준을 정의한다.
@@ -1842,4 +1844,3 @@ Conversation Context 조립
 - `email`, `phone_number`, `account_id`, `employee_id`, `api_key`, `authorization_header`, `jwt`는 MVP 기본 정책에서 redacted prompt로 Provider에 전달한다.
 - block 요청도 `llm_invocation` event와 `llm_masking_event`를 발행한다.
 - masking event 발행 실패가 기본적으로 사용자 응답을 실패시키지는 않지만, technical log와 metric에는 반드시 남긴다.
-

@@ -1,5 +1,7 @@
 # GateLM 민감정보 마스킹 정책
 
+> P0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 P0 감지 유형과 action은 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 단, raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 P0에서도 낮추지 않는다.
+
 ## 문서 목적
 
 이 문서는 GateLM에서 이메일, 전화번호, API Key, 주민등록번호 등 민감정보를 감지하고, 외부 LLM Provider 요청 전 또는 로그 저장 전 어떤 방식으로 마스킹/차단할지 정의하는 기준 문서다.

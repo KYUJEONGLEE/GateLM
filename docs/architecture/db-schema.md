@@ -1,5 +1,7 @@
 # GateLM DB Schema
 
+> P0 범위 안내: 이 문서는 장기 DB 설계를 포함한다. 현재 구현할 DB 범위는 `docs/p0/p0-contract.md`와 `docs/p0/p0-db-migration-plan.md`를 우선한다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+
 ## 문서 목적
 
 이 문서는 GateLM에서 Prisma, TypeORM, SQL migration, seed, repository, query 구현 시 기준으로 삼는 DB 설계 문서다.
@@ -2427,4 +2429,3 @@ DB 또는 ORM 작업 전에 아래를 확인한다.
 - `llm_masking_events.sample_hash`에는 HMAC 기반 hash만 저장한다. raw sample 저장 금지.
 - redacted payload는 S3-compatible Object Storage에 저장하고, PostgreSQL/ClickHouse에는 reference만 저장한다.
 - security policy 변경은 immutable version row를 추가하고 binding을 교체한다. 기존 로그를 최신 policy 기준으로 덮어쓰지 않는다.
-

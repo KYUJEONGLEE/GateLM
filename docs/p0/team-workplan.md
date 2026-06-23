@@ -18,6 +18,15 @@
 7. 매일 마지막에는 통합 시나리오를 한 번 실행한다.
 ```
 
+실행 기준 문서:
+
+```text
+범위 판단: docs/p0/p0-contract.md
+테스트 판단: docs/p0/p0-test-matrix.md
+리뷰/CI 판단: docs/p0/p0-review-and-ci-gate.md
+데모 완료 판단: docs/p0/demo-acceptance.md
+```
+
 ---
 
 ## 2. 5명 역할 분배
@@ -238,7 +247,33 @@ Day 15: 최종 통합, fallback demo 준비
 
 ---
 
-## 6. Branch / PR 규칙
+## 6. Daily Smoke Owner
+
+매일 마지막에는 한 명을 smoke owner로 지정한다.
+
+| 요일/일차 | 기본 owner | 확인 범위 |
+|---|---|---|
+| Day 1 | B | healthz/readyz, mock provider 연결 |
+| Day 2 | A | seed admin, tenant/project/application/key/token |
+| Day 3 | B | safe `/v1/chat/completions` |
+| Day 4 | B | API Key/App Token 인증 실패 차단 |
+| Day 5 | C | masking/cache/routing |
+| Day 6 | D | Request Log/Detail |
+| Day 7 | D | Dashboard Overview |
+| Day 8 이후 | 당일 변경이 가장 큰 영역 담당자 | 전체 demo flow |
+
+Smoke 실패 시 원칙:
+
+```text
+1. 새 기능 구현보다 smoke 복구를 우선한다.
+2. 실패 requestId와 깨진 stage를 기록한다.
+3. raw prompt/secret 노출 가능성이 있으면 즉시 보안 이슈로 올린다.
+4. Dashboard 숫자 불일치는 Request Log canonical source부터 확인한다.
+```
+
+---
+
+## 7. Branch / PR 규칙
 
 Branch 이름:
 
@@ -263,17 +298,19 @@ PR checklist:
 
 ```text
 [ ] 관련 문서 확인
+[ ] p0-contract 범위 안의 변경
 [ ] API/DB/Event 변경 여부 표시
 [ ] raw prompt/raw response 저장 없음
 [ ] secret 원문 노출 없음
 [ ] tenant/project scope 확인
-[ ] 테스트 추가 또는 수동 검증 기록
+[ ] p0-test-matrix 관련 항목 통과 또는 수동 검증 기록
+[ ] 보안 리뷰 필요 여부 표시
 [ ] rollback 또는 영향 범위 명시
 ```
 
 ---
 
-## 7. Codex / Claude 사용 규칙
+## 8. Codex / Claude 사용 규칙
 
 ### 7.1 역할 분리
 
@@ -327,7 +364,7 @@ PR checklist:
 
 ---
 
-## 8. 통합 우선순위
+## 9. 통합 우선순위
 
 충돌이 생기면 아래 순서로 결정한다.
 
@@ -341,7 +378,7 @@ PR checklist:
 
 ---
 
-## 9. 팀장 점검 질문
+## 10. 팀장 점검 질문
 
 매일 팀장은 아래 질문만 집요하게 본다.
 
