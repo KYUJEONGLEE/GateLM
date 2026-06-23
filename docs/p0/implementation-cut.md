@@ -104,15 +104,15 @@ P0 화면은 최소화한다.
 
 ### 3.4 Worker / Analytics
 
-P0에서는 아래 중 하나를 선택한다.
+P0 canonical source는 PostgreSQL `p0_llm_invocation_logs`다.
 
-| 선택지 | 설명 | 판단 |
+| 경로 | 설명 | 판단 |
 |---|---|---|
-| A안 | Gateway -> Redpanda -> Worker -> ClickHouse/PostgreSQL | 시간이 되면 권장 |
-| B안 | Gateway -> Postgres/ClickHouse direct writer | P0 shortcut 허용 |
-| C안 | Gateway -> outbox_events -> Worker | Redpanda가 불안정하면 허용 |
+| P0 기준 | Gateway/direct writer -> PostgreSQL `p0_llm_invocation_logs` | 필수 |
+| Optional mirror | Worker/direct writer -> ClickHouse `llm_invocations` | PostgreSQL 숫자와 일치할 때만 사용 |
+| P1 방향 | Gateway -> Redpanda -> Worker -> ClickHouse/PostgreSQL | P0 필수 아님 |
 
-단, 코드와 문서에 반드시 `P0 shortcut`이라고 표시한다. 장기 방향은 응답 경로와 분석 경로 분리다.
+P0 direct writer는 코드와 문서에 반드시 `P0 shortcut`이라고 표시한다. 장기 방향은 응답 경로와 분석 경로 분리다.
 
 ---
 

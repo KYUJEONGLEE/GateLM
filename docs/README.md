@@ -480,8 +480,8 @@ Redpanda
 ClickHouse
 ```
 
-P0에서는 ClickHouse/Redpanda가 불안정하면 PostgreSQL direct writer를 허용한다.
-단, 코드와 주석에 `P0 shortcut`임을 명시한다.
+P0 canonical request log source는 PostgreSQL `p0_llm_invocation_logs`다.
+ClickHouse/Redpanda는 P1 또는 optional mirror이며, P0 direct writer는 코드와 주석에 `P0 shortcut`임을 명시한다.
 
 DB 원칙:
 

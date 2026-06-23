@@ -1,6 +1,6 @@
 # GateLM 민감정보 마스킹 정책
 
-> P0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 P0 감지 유형과 action은 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 단, raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 P0에서도 낮추지 않는다.
+> P0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 P0 감지 유형과 action은 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. P0 `sensitive_data_blocked`는 HTTP 403으로 고정한다. 이 문서의 422 예시는 P1/P2 정책 검증 또는 custom detector validation 문맥으로만 본다. 단, raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 P0에서도 낮추지 않는다.
 
 ## 문서 목적
 

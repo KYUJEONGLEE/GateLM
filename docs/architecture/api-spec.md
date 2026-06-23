@@ -1,6 +1,6 @@
 # GateLM API Spec
 
-> P0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`의 P0 API 목록을 우선한다. 이 문서의 `MVP` 또는 `1차 구현` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> P0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`의 P0 API 목록을 우선한다. P0 cache status는 `hit/miss/bypass/error`만 사용하고 exact 여부는 `cacheType=exact`로 표현한다. P0 `stream=true` 거부는 HTTP 400 `streaming_not_supported`다. 이 문서의 `MVP` 또는 `1차 구현` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
 
 ## 문서 목적
 
@@ -3407,10 +3407,10 @@ Query Parameters:
 |---|---:|---|
 | `from` | Yes | 조회 시작 |
 | `to` | Yes | 조회 종료 |
-| `status` | No | `success`, `error`, `blocked` |
+| `status` | No | `success`, `cache_hit`, `blocked`, `error`, `cancelled` |
 | `provider` | No | provider filter |
 | `model` | No | model filter |
-| `cacheStatus` | No | `miss`, `exact_hit`, `semantic_hit`, `bypass` |
+| `cacheStatus` | No | P0: `hit`, `miss`, `bypass`, `error`. Exact/Semantic 구분은 `cacheType` |
 | `userId` | No | GateLM user ID |
 | `applicationId` | No | Application ID |
 | `requestId` | No | request ID exact search |
@@ -4168,7 +4168,7 @@ Gateway 응답 공통 headers:
 | Header | 설명 |
 |---|---|
 | `X-GateLM-Request-Id` | GateLM request ID |
-| `X-GateLM-Cache-Status` | `miss`, `exact_hit`, `semantic_hit`, `bypass` |
+| `X-GateLM-Cache-Status` | P0: `hit`, `miss`, `bypass`, `error` |
 | `X-GateLM-Routed-Provider` | 실제 호출 provider |
 | `X-GateLM-Routed-Model` | 실제 호출 model |
 | `X-GateLM-Masking-Action` | `none`, `redacted`, `blocked` |

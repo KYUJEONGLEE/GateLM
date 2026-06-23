@@ -1,6 +1,6 @@
 # GateLM Dashboard Metrics
 
-> P0 범위 안내: 이 문서는 장기 Dashboard/Analytics 지표를 포함한다. 현재 P0 Dashboard 범위는 `docs/p0/p0-contract.md`와 `docs/p0/demo-acceptance.md`를 우선한다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> P0 범위 안내: 이 문서는 장기 Dashboard/Analytics 지표를 포함한다. 현재 P0 Dashboard 범위는 `docs/p0/p0-contract.md`와 `docs/p0/demo-acceptance.md`를 우선한다. P0 cache hit 계산은 `cacheStatus=hit`와 `cacheType=exact`를 기준으로 한다. `exact_hit/semantic_hit` 표현은 P1/P2 mapping 후보로만 본다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
 
 ## 문서 목적
 
@@ -227,7 +227,8 @@ MVP UI는 `tenantId`, `projectId`를 우선 지원한다. API와 query 구조는
 | `provider` | provider 문자열 |
 | `model` | model 문자열 |
 | `status` | request status |
-| `cacheStatus` | exact_hit, semantic_hit, miss, bypass |
+| `cacheStatus` | P0: hit, miss, bypass, error |
+| `cacheType` | P0: none, exact |
 | `routingDecision` | routing decision |
 | `maskingAction` | `none`, `redacted`, `blocked` |
 | `errorCode` | 표준 error code |
@@ -594,7 +595,7 @@ Streaming UX 분석용이다. non-streaming 요청은 null일 수 있다.
 ## 6.5 `cacheHitRate`
 
 ```text
-cacheHitRequests = count(request where cacheStatus in ('exact_hit', 'semantic_hit'))
+cacheHitRequests = count(request where cacheStatus = 'hit' and cacheType = 'exact')
 cacheEligibleRequests = count(request where cacheStatus != 'bypass')
 cacheHitRate = cacheHitRequests / max(cacheEligibleRequests, 1)
 ```
@@ -604,7 +605,7 @@ cacheHitRate = cacheHitRequests / max(cacheEligibleRequests, 1)
 ## 6.6 `cacheSavingsMicroUsd`
 
 ```text
-cacheSavingsMicroUsd = sum(savedCostMicroUsd where cacheStatus in ('exact_hit', 'semantic_hit'))
+cacheSavingsMicroUsd = sum(savedCostMicroUsd where cacheStatus = 'hit' and cacheType = 'exact')
 ```
 
 주의:

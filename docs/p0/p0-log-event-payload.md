@@ -482,6 +482,24 @@ Dashboard/Logs -> ClickHouse query only after numbers match PostgreSQL canonical
 
 ClickHouse를 P0에서 붙이더라도 PostgreSQL과 Dashboard 숫자가 다르면 PostgreSQL 값을 기준으로 판단한다.
 
+### 10.1 Event Field / Fallback DB Mapping
+
+P0 fallback table은 event payload 전체를 1:1 column으로 만들지 않는다.
+
+| Field | P0 처리 |
+|---|---|
+| `costMicroUsd` | `cost_micro_usd`에 저장 |
+| `costUsd` | 저장하지 않음. 조회 시 `costMicroUsd`에서 decimal string으로 계산 |
+| `currency` | 저장하지 않음. P0는 `USD` 상수 또는 project default currency로 반환 |
+| `schemaVersion` | `metadata.schemaVersion=1` 또는 DTO 상수로 처리 |
+| `retryable` | P0는 `metadata.retryable` 또는 error response 파생값으로 처리 |
+| `eventId` | P0 direct writer에서는 저장 생략 가능 |
+| `eventType` | `status`에서 파생 가능. P0 direct writer에서는 저장 생략 가능 |
+| `eventVersion` | P0 direct writer에서는 저장 생략 가능 |
+| `occurredAt` | `created_at` 또는 `completed_at` 기준으로 파생 |
+
+위 필드 때문에 P0 DB column을 임의 추가하지 않는다.
+
 ---
 
 ## 11. 보안 금지 필드

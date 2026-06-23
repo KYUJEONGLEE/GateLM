@@ -47,18 +47,35 @@ raw prompt/raw response 저장 정책
 
 프로젝트 구조가 준비되는 즉시 아래 CI를 붙인다.
 
-```text
-lint
-typecheck 또는 compile
-unit test
-integration smoke
-migration validation
-contract/status value check
-secret-like fixture scan
-raw prompt/raw response forbidden-field scan
-```
+| Gate | 표준 명령 | 초기 허용 기준 |
+|---|---|---|
+| lint | `pnpm lint` | package skeleton 전에는 PR에 N/A 사유 기록 |
+| typecheck/compile | `pnpm typecheck` 또는 `go test ./...` | 해당 앱이 없으면 N/A 사유 기록 |
+| unit test | `pnpm test` 또는 `go test ./...` | 해당 앱이 없으면 N/A 사유 기록 |
+| integration smoke | `pnpm smoke:p0` | 자동화 전에는 `p0-test-matrix.md` 수동 결과 기록 |
+| migration validation | `pnpm --filter @gatelm/control-plane-api db:migrate:check` | script 생성 전에는 migration diff 수동 확인 |
+| contract/status value check | `pnpm contracts:check` | script 생성 전에는 `p0-contract.md` 기준 수동 확인 |
+| secret-like fixture scan | `rg -n "(sk-|AKIA|BEGIN PRIVATE KEY|Authorization: Bearer|api_key=|xoxb-|ghp_)" .` | 발견 시 실제 secret이 아님을 증명하거나 제거 |
+| raw prompt/raw response forbidden-field scan | `rg -n "rawPrompt|rawResponse|fullRequestBody|fullResponseBody|providerApiKey|apiKeyPlaintext|appTokenPlaintext|authorizationHeader|rawProviderErrorBody|maskingSampleRawValue" .` | 허용 문서 목록 외 발견 시 차단 |
 
 P0 초기에 CI가 완성되지 않았으면 PR 본문에 수동 실행 결과를 남긴다.
+
+보안 관련 scan은 가능한 한 Day 3 이후 자동화한다.
+
+---
+
+## 3.1 P0 Contract Artifact 후보
+
+기계 검증 가능한 contract는 P0 구현과 병행해 아래 최소 산출물부터 만든다.
+
+```text
+packages/contracts/openapi/p0-api.yaml
+packages/contracts/events/invocation-finished.schema.json
+packages/contracts/policies/p0-policy.schema.json
+packages/contracts/mock-provider/chat-completion-response.schema.json
+```
+
+이 산출물이 생기기 전에는 `p0-contract.md`, `p0-log-event-payload.md`, `p0-test-matrix.md`를 사람이 직접 확인한다.
 
 ---
 

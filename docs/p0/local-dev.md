@@ -15,6 +15,7 @@
 4. .env 파일은 커밋하지 않는다.
 5. 필요한 환경변수는 .env.example에만 문서화한다.
 6. raw prompt, raw response, secret 원문을 log에 남기지 않는다.
+7. 이번 P0에서는 Docker Compose 기반 로컬 인프라를 공식 기준으로 승인한다.
 ```
 
 ---
@@ -172,13 +173,18 @@ services:
       - "6379:6379"
 
   mock-provider:
-    build:
-      context: ./apps/mock-provider
+    image: python:3.12-alpine
+    # P0 bootstrap용 lightweight mock service.
+    # apps/mock-provider가 구현되면 build context 기반 service로 교체할 수 있다.
     ports:
       - "8090:8090"
 ```
 
-P0에서 mock provider를 별도 앱으로 만들지 않고 Gateway 내부 adapter로 처리해도 된다. 단, 데모 중 Provider 호출 횟수와 latency/error를 확인할 수 있어야 한다.
+P0에서는 PostgreSQL user/password/db 값을 `gatelm/gatelm/gatelm`으로 고정한다. 로컬 `.env`에 과거 값이 남아 있어도 DB identity 기준을 바꾸지 않는다.
+
+P0 기본값은 별도 `mock-provider` service다.
+
+Gateway 내부 adapter는 `apps/mock-provider` 구현이 지연될 때만 임시 fallback으로 허용한다. fallback을 쓰는 경우에도 Provider 호출 횟수, latency, error mode, reset/config에 준하는 테스트 관측 기능은 유지해야 한다.
 
 ---
 
@@ -239,6 +245,16 @@ mock-provider: reachable
 redpanda: optional
 clickhouse: optional
 ```
+
+P0 `/readyz` 판정:
+
+| Dependency | 필수 여부 | 전체 ready 실패 조건 |
+|---|---:|---|
+| PostgreSQL | Y | 연결 실패 시 실패 |
+| Redis | Y | 연결 실패 시 실패 |
+| Mock Provider 별도 service 또는 내부 mock adapter | Y | mock 호출 불가능 시 실패 |
+| Redpanda | N | details에만 표시, 전체 실패 아님 |
+| ClickHouse | N | details에만 표시, 전체 실패 아님 |
 
 ---
 

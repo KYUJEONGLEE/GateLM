@@ -511,7 +511,7 @@ create index ix_audit_logs_resource
 
 ### 5.16 `p0_llm_invocation_logs`
 
-ClickHouse가 안정화되지 않은 경우에만 사용하는 P0 fallback table이다.
+P0 canonical request log table이다. Dashboard, Request Log, Request Detail은 이 테이블을 기준으로 조회한다. ClickHouse를 optional mirror로 붙이더라도 P0 완료 판단은 이 테이블의 값을 기준으로 한다.
 
 ```sql
 create table p0_llm_invocation_logs (

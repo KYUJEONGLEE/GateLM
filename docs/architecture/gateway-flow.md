@@ -1,6 +1,6 @@
 # GateLM Gateway 요청 흐름
 
-> P0 범위 안내: 이 문서는 장기 Gateway pipeline 흐름을 포함한다. 현재 P0 stage와 동작 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 Streaming, Semantic Cache, Rate Limit, Budget 관련 흐름은 P0에서 no-op, disabled, 또는 P1/P2 후보일 수 있다.
+> P0 범위 안내: 이 문서는 장기 Gateway pipeline 흐름을 포함한다. 현재 P0 stage와 동작 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. P0 cache status는 `hit/miss/bypass/error`만 저장하고 exact 여부는 `cacheType=exact`로 표현한다. P0 `stream=true`는 HTTP 400 `streaming_not_supported`로 거부한다. 이 문서의 Streaming, Semantic Cache, Rate Limit, Budget 관련 흐름은 P0에서 no-op, disabled, 또는 P1/P2 후보일 수 있다.
 
 ## 문서 목적
 
@@ -922,7 +922,8 @@ Cache hit이면 Provider를 호출하지 않는다.
 응답 metadata:
 
 ```text
-cache_status = exact_hit 또는 semantic_hit
+cache_status = hit
+cache_type = exact
 routed_provider = cached provider
 routed_model = cached model
 estimated_cost_usd = 0 또는 saved cost 기준
@@ -931,7 +932,7 @@ estimated_cost_usd = 0 또는 saved cost 기준
 HTTP header:
 
 ```text
-X-GateLM-Cache-Status: exact_hit
+X-GateLM-Cache-Status: hit
 X-GateLM-Routed-Provider: openai
 X-GateLM-Routed-Model: gpt-4o-mini
 ```
@@ -1168,7 +1169,7 @@ Gateway는 아래 header를 반환한다.
 
 ```text
 X-GateLM-Request-Id: request_01J...
-X-GateLM-Cache-Status: miss | exact_hit | semantic_hit | bypass
+X-GateLM-Cache-Status: hit | miss | bypass | error
 X-GateLM-Routed-Provider: openai
 X-GateLM-Routed-Model: gpt-4o-mini
 X-GateLM-Masking-Action: none | redacted | blocked
@@ -1389,8 +1390,7 @@ invocation.failed
 invocation.blocked
 provider.attempt.completed
 provider.attempt.failed
-cache.exact_hit
-cache.semantic_hit
+cache.hit
 cache.miss
 cache.write_failed
 routing.decided

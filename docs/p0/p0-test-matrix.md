@@ -49,7 +49,7 @@ test_secret_token_redacted_for_demo_only
 | P0-T14 | 주민등록번호 형태 포함 요청 | 403 | `blocked`, `errorCode=sensitive_data_blocked` | mock provider 호출 없음 |
 | P0-T15 | 동일 safe request 2회 호출 | 200 | 1회차 `miss`, 2회차 `cache_hit`/`hit` | 2회차 mock provider 호출 count 증가 없음 |
 | P0-T16 | `model=auto` 짧은 prompt | 200 | `routingReason=low_cost`, `selectedModel=mock-fast` | requestedModel/selectedModel 분리 |
-| P0-T17 | `stream=true` 요청 | 400 또는 422 | `error` | P0에서는 streaming 중계 없음 |
+| P0-T17 | `stream=true` 요청 | 400 | `error`, `errorCode=streaming_not_supported` | Provider/mock 호출 없음, cacheStatus=bypass |
 | P0-T18 | Request Log 목록 | 200 | N/A | project scope 필수, raw prompt 미반환 |
 | P0-T19 | Request Detail | 200 | N/A | cache/routing/masking/cost/latency 필드 표시 |
 | P0-T20 | Dashboard Overview | 200 | N/A | Request Log 기준 total/success/blocked/cache 수 일치 |
