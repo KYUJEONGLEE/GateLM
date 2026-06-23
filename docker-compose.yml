@@ -1,4 +1,6 @@
-﻿services:
+name: gatelm
+
+services:
   db:
     image: postgres:15
     environment:
