@@ -176,6 +176,8 @@ services:
     image: python:3.12-alpine
     # P0 bootstrap용 lightweight mock service.
     # apps/mock-provider가 구현되면 build context 기반 service로 교체할 수 있다.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/healthz', timeout=2).read()\""]
     ports:
       - "8090:8090"
 ```

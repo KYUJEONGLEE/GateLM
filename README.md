@@ -4,7 +4,7 @@ GateLM은 여러 LLM Provider API를 하나의 Gateway에서 관리하기 위한
 
 현재 초기 세팅은 다음 내용을 포함합니다.
 
-* 로컬 개발용 PostgreSQL / Redis 환경
+* 로컬 개발용 PostgreSQL / Redis / Mock Provider 환경
 * Docker Compose 기반 인프라 실행
 * GitHub Actions 기반 초기 CI
 * Pull Request 기반 협업 규칙
@@ -77,7 +77,17 @@ cp .env.example .env
 
 ## 4. 로컬 인프라 실행
 
-이 프로젝트는 로컬 개발을 위해 PostgreSQL과 Redis를 Docker Compose로 실행합니다.
+이 프로젝트는 P0 로컬 개발을 위해 PostgreSQL, Redis, Mock Provider를 Docker Compose로 실행합니다.
+
+P0 기준 서비스명은 아래로 고정합니다.
+
+| 서비스 | 이미지 | 포트 |
+|---|---|---:|
+| `postgres` | `postgres:16` | 5432 |
+| `redis` | `redis:7-alpine` | 6379 |
+| `mock-provider` | `python:3.12-alpine` | 8090 |
+
+### 처음 실행하는 경우
 
 레포 루트에서 아래 명령어를 실행합니다.
 
@@ -91,7 +101,35 @@ docker compose up -d
 docker compose ps
 ```
 
-정상이라면 `db`, `redis` 컨테이너가 실행 중이어야 합니다.
+정상이라면 아래 서비스가 모두 `healthy`여야 합니다.
+
+```txt
+postgres
+redis
+mock-provider
+```
+
+### 예전 Docker를 이미 띄운 경우
+
+기존 설정에서는 `db` 서비스와 `postgres:15`를 사용했습니다. 현재 P0 기준은 `postgres` 서비스와 `postgres:16`입니다.
+
+이미 예전 컨테이너를 띄운 팀원은 아래 명령어로 정리한 뒤 다시 실행합니다.
+
+```powershell
+docker compose down --remove-orphans -v
+docker compose up -d
+docker compose ps
+```
+
+주의: `-v`는 기존 PostgreSQL/Redis volume을 삭제합니다. 아직 중요한 로컬 데이터가 없다면 이 방법이 가장 안전합니다.
+
+정상 상태 예시:
+
+```txt
+gatelm-postgres-1        postgres:16          healthy
+gatelm-redis-1           redis:7-alpine       healthy
+gatelm-mock-provider-1   python:3.12-alpine   healthy
+```
 
 ---
 
@@ -103,7 +141,7 @@ docker compose ps
 docker compose up -d
 ```
 
-PostgreSQL과 Redis를 백그라운드에서 실행합니다.
+PostgreSQL, Redis, Mock Provider를 백그라운드에서 실행합니다.
 
 ### 상태 확인
 
@@ -124,8 +162,9 @@ docker compose logs -f
 특정 서비스 로그만 보고 싶으면 아래처럼 실행합니다.
 
 ```powershell
-docker compose logs -f db
+docker compose logs -f postgres
 docker compose logs -f redis
+docker compose logs -f mock-provider
 ```
 
 ### 중지
@@ -168,6 +207,15 @@ docker compose up -d
 
 Redis는 캐시, rate limit counter, 임시 상태 저장 등에 사용될 예정입니다.
 Redis 데이터는 로컬마다 달라도 문제 없습니다.
+
+Mock Provider는 실제 LLM Provider Key 없이 Gateway end-to-end 흐름을 검증하기 위한 로컬 테스트 Provider입니다.
+
+기본 확인:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:8090/healthz
+Invoke-WebRequest -UseBasicParsing http://localhost:8090/__mock/stats
+```
 
 ---
 
@@ -297,15 +345,16 @@ service-account.json
 | ---------- | ---: |
 | PostgreSQL | 5432 |
 | Redis      | 6379 |
+| Mock Provider | 8090 |
 
 PostgreSQL 접속 정보는 기본적으로 아래와 같습니다.
 
 ```txt
 host: localhost
 port: 5432
-database: gatelm_db
-user: admin
-password: adminpassword
+database: gatelm
+user: gatelm
+password: gatelm
 ```
 
 Redis 접속 정보는 아래와 같습니다.
@@ -313,6 +362,14 @@ Redis 접속 정보는 아래와 같습니다.
 ```txt
 host: localhost
 port: 6379
+```
+
+Mock Provider 확인 URL:
+
+```txt
+health: http://localhost:8090/healthz
+models: http://localhost:8090/v1/models
+stats:  http://localhost:8090/__mock/stats
 ```
 
 ---
@@ -332,6 +389,10 @@ docker compose up -d
 
 # 컨테이너 상태 확인
 docker compose ps
+
+# 예전 db/postgres15 컨테이너까지 정리하고 새 기준으로 재실행
+docker compose down --remove-orphans -v
+docker compose up -d
 
 # 로그 확인
 docker compose logs -f
