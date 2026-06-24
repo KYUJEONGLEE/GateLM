@@ -114,6 +114,51 @@ services:
       timeout: 3s
       retries: 10
 
+  node-toolbox:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infra/docker/node/Dockerfile
+      args:
+        NODE_VERSION: ${NODE_VERSION:-22}
+        PNPM_VERSION: ${PNPM_VERSION:-9.15.0}
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - node_pnpm_store:/pnpm/store
+    command: ["bash"]
+
+  go-toolbox:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infra/docker/go/Dockerfile
+      args:
+        GO_VERSION: ${GO_VERSION:-1.24}
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - go_pkg_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    command: ["bash"]
+
+  python-toolbox:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infra/docker/python/Dockerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - python_pip_cache:/root/.cache/pip
+    command: ["bash"]
+
 volumes:
   postgres_data:
   redis_data:
+  node_pnpm_store:
+  go_pkg_cache:
+  go_build_cache:
+  python_pip_cache:
