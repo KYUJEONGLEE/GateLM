@@ -2,7 +2,7 @@
 
 ## 문서 목적
 
-이 문서는 GateLM P0 구현에 필요한 DB migration 범위를 확정한다. 기존 `db-schema.md`는 장기 제품 테이블을 포함한다. 이 문서는 2~3주 구현에 필요한 최소 테이블만 남긴다.
+이 문서는 GateLM P0 구현에 필요한 DB migration 범위를 확정한다. 기존 `db-schema.md`는 장기 제품 테이블을 포함한다. 이 문서는 3~5일 데모 필수 구현에 필요한 최소 테이블만 남긴다.
 
 ---
 
@@ -42,26 +42,27 @@ AWS Secrets Manager + KMS: P2.
 
 ## 3. PostgreSQL P0 테이블 목록
 
-| 순서 | 테이블 | P0 필요 이유 |
-|---:|---|---|
-| 1 | `users` | admin login |
-| 2 | `tenants` | 조직 scope |
-| 3 | `tenant_memberships` | tenant 권한 |
-| 4 | `projects` | Gateway 사용량/정책 단위 |
-| 5 | `project_memberships` | project 권한 |
-| 6 | `applications` | 고객사 앱 단위 |
-| 7 | `api_keys` | Gateway 인증 |
-| 8 | `app_tokens` | Application 접근 제어 |
-| 9 | `provider_connections` | Provider 연결 metadata |
-| 10 | `model_catalog` | `/v1/models`, routing 후보 |
-| 11 | `model_pricing_rules` | 비용 계산 |
-| 12 | `budget_policies` | P1 budget block 대비, P0 seed 가능 |
-| 13 | `rate_limit_rules` | P1 rate limit 대비, P0 seed 가능 |
-| 14 | `usage_ledger_entries` | 비용/토큰 ledger 최소 |
-| 15 | `audit_logs` | key/provider/policy 변경 감사 |
-| 16 | `p0_llm_invocation_logs` | ClickHouse 미사용 시 request log fallback |
+| 순서 | 테이블 | P0 필요 이유 | 우선순위 |
+|---:|---|---|---|
+| 1 | `users` | seed admin 또는 local login | 높음 |
+| 2 | `tenants` | 조직 scope. seed 허용 | 낮음 |
+| 3 | `tenant_memberships` | tenant 권한. seed 허용 | 낮음 |
+| 4 | `projects` | Gateway 사용량/정책 단위. seed 허용 | 낮음 |
+| 5 | `project_memberships` | project 권한. seed 허용 | 낮음 |
+| 6 | `applications` | 고객사 앱 단위. seed 허용 | 낮음 |
+| 7 | `api_keys` | Gateway 인증 | 높음 |
+| 8 | `app_tokens` | Application 접근 제어. seed 허용 | 중간 |
+| 9 | `provider_connections` | Mock Provider 연결 metadata | 높음 |
+| 10 | `model_catalog` | `/v1/models`, routing 후보. mock catalog 가능 | 낮음 |
+| 11 | `model_pricing_rules` | 예상 비용 계산. mock pricing 가능 | 중간 |
+| 12 | `usage_ledger_entries` | 비용/토큰 ledger 최소. P0에서는 생략 가능 | 중간 |
+| 13 | `audit_logs` | key/provider/policy 변경 감사. P0에서는 생략 가능 | 낮음 |
+| 14 | `p0_llm_invocation_logs` | ClickHouse 미사용 시 request log fallback | 높음 |
 
-P0에서 제외:
+3~5일 P0 필수 migration은 `api_keys`, `app_tokens`, `provider_connections`, `p0_llm_invocation_logs`와 seed 기반 identity/project/application context를 우선한다.
+`budget_policies`, `rate_limit_rules`는 P1 준비 테이블이며 P0 필수 migration이 아니다.
+
+3~5일 P0 필수 migration에서 제외:
 
 ```text
 groups
@@ -73,6 +74,8 @@ policy_bindings
 routing_rules
 sensitive_data_rules
 quota_rules
+budget_policies
+rate_limit_rules
 budget_ledger_entries
 conversations
 chat_messages
@@ -82,7 +85,7 @@ alert_events
 webhook_endpoints
 ```
 
-단, P1/P2에서 추가할 수 있도록 schema 설계와 code structure는 막지 않는다.
+단, P1/P2에서 추가할 수 있도록 schema 설계와 code structure는 막지 않는다. 이 문서의 P1 준비 DDL은 선택 구현용 참고로만 사용한다.
 
 ---
 
@@ -397,7 +400,7 @@ create index ix_model_pricing_rules_lookup
   on model_pricing_rules (provider, model, effective_from desc, effective_to);
 ```
 
-### 5.12 `budget_policies`
+### 5.12 `budget_policies` — P1 준비
 
 ```sql
 create table budget_policies (
@@ -421,9 +424,9 @@ create index ix_budget_policies_target
   on budget_policies (tenant_id, target_type, target_id, status, period);
 ```
 
-P0에서는 UI 없이 seed만 가능하다.
+P1 Budget Hard Block 선택 시 사용한다. 3~5일 P0 필수 migration은 아니다.
 
-### 5.13 `rate_limit_rules`
+### 5.13 `rate_limit_rules` — P1 준비
 
 ```sql
 create table rate_limit_rules (
@@ -446,7 +449,7 @@ create index ix_rate_limit_rules_target
   on rate_limit_rules (tenant_id, target_type, target_id, status, limit_type);
 ```
 
-P0에서는 UI 없이 seed만 가능하다.
+P1 Rate Limit 선택 시 사용한다. 3~5일 P0 필수 migration은 아니다.
 
 ### 5.14 `usage_ledger_entries`
 
@@ -511,7 +514,7 @@ create index ix_audit_logs_resource
 
 ### 5.16 `p0_llm_invocation_logs`
 
-ClickHouse가 안정화되지 않은 경우에만 사용하는 P0 fallback table이다.
+P0 canonical request log table이다. Dashboard, Request Log, Request Detail은 이 테이블을 기준으로 조회한다. ClickHouse를 optional mirror로 붙이더라도 P0 완료 판단은 이 테이블의 값을 기준으로 한다.
 
 ```sql
 create table p0_llm_invocation_logs (
@@ -642,7 +645,7 @@ order by (tenant_id, project_id, created_at, request_id);
 | App Token validation cache | `gatelm:auth:app_token:{tokenHash}` | 5m |
 | Active project config | `gatelm:config:project:{projectId}` | 5m 또는 publish 갱신 |
 | Exact cache | `gatelm:cache:exact:{cacheKeyHash}` | policy TTL |
-| Rate limit counter | `gatelm:rl:{target}:{window}` | window + 60s |
+| Rate limit counter | `gatelm:rl:{target}:{window}` | P1 Rate Limit 선택 시 사용 |
 
 Redis value에도 raw prompt를 넣지 않는다.
 
@@ -655,10 +658,10 @@ Redis value에도 raw prompt를 넣지 않는다.
 002_create_project_tables
 003_create_gateway_credentials
 004_create_provider_and_models
-005_create_limit_and_budget_tables
-006_create_usage_and_audit_tables
-007_create_p0_invocation_logs_fallback
-008_seed_demo_data
+005_create_usage_and_audit_tables_optional
+006_create_p0_invocation_logs_fallback
+007_seed_demo_data
+P1 이후: create_limit_and_budget_tables
 ```
 
 한 migration에 모든 것을 몰아넣지 않는다.
@@ -679,8 +682,6 @@ Redis value에도 raw prompt를 넣지 않는다.
 - mock pricing rules
 - gateway api key metadata
 - app token metadata
-- default budget policy
-- default rate limit rule
 ```
 
 Seed output:

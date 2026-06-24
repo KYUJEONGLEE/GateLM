@@ -1,5 +1,7 @@
 # GateLM LLM Request Log Schema
 
+> P0 범위 안내: 이 문서는 장기 로그/이벤트 스키마를 포함한다. 현재 P0 로그와 이벤트 필드는 `docs/p0/p0-contract.md`와 `docs/p0/p0-log-event-payload.md`를 우선한다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+
 ## 문서 목적
 
 이 문서는 GateLM의 LLM 요청 로그 스키마를 정의한다.
@@ -1629,4 +1631,3 @@ LLM log field를 추가하거나 바꿀 때는 아래 순서를 따른다.
 | Detector type | `detectorType`, `maskingDetectedTypes` | `email`, `phone_number`, `resident_registration_number`, `api_key`, `authorization_header`, `jwt`, `account_id`, `employee_id`, `internal_keyword`, `unknown` |
 
 민감정보 로그에는 raw detected value를 저장하지 않는다. 중복 분석이 필요하면 `sampleHash = HMAC-SHA256(tenant_salt, normalized_sensitive_value)` 기준으로 저장한다.
-

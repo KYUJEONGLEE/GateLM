@@ -1,5 +1,7 @@
 # GateLM DB Schema
 
+> P0 범위 안내: 이 문서는 장기 DB 설계를 포함한다. 현재 구현할 DB 범위는 `docs/p0/p0-contract.md`와 `docs/p0/p0-db-migration-plan.md`를 우선한다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+
 ## 문서 목적
 
 이 문서는 GateLM에서 Prisma, TypeORM, SQL migration, seed, repository, query 구현 시 기준으로 삼는 DB 설계 문서다.
@@ -147,7 +149,7 @@ Hard delete는 아래 경우에만 허용한다.
 - `cost`
 - `latency`
 - `cache_status`
-- `routing_decision`
+- `routing_reason`
 - `masking_result`
 - `object_storage_ref`
 
@@ -201,6 +203,7 @@ Control Plane 원천 데이터 저장소다.
 ## 2.2 ClickHouse
 
 분석 조회 전용 저장소다.
+P0 canonical request log source는 PostgreSQL `p0_llm_invocation_logs`다. 아래 ClickHouse 테이블은 P1/장기 분석 경로 기준이며 P0 필수 저장소가 아니다.
 
 저장 대상:
 
@@ -277,54 +280,54 @@ Provider API Key 원문은 PostgreSQL, Redis, ClickHouse, 로그에 저장하지
 
 ## 3.1 PostgreSQL Control Plane Tables
 
-| 분류 | 테이블 | 설명 | MVP |
-|---|---|---|---|
-| Identity | `users` | 전역 사용자 계정 | 필수 |
-| Identity | `tenants` | 고객사 조직 | 필수 |
-| Identity | `tenant_memberships` | 사용자와 Tenant 관계 | 필수 |
-| Identity | `tenant_invitations` | 사용자 초대 | 필수 |
-| Identity | `groups` | 부서/팀 확장 단위 | 권장 |
-| Identity | `group_memberships` | 사용자와 Group 관계 | 권장 |
-| Project | `projects` | LLM 사용 단위 프로젝트 | 필수 |
-| Project | `project_memberships` | 사용자와 Project 관계 | 필수 |
-| Project | `applications` | 고객사 앱/API Client/Chat UI 단위 | 필수 |
-| Credential | `api_keys` | Gateway API Key metadata | 필수 |
-| Credential | `app_tokens` | Application 접근 Token metadata | 필수 |
-| Provider | `provider_connections` | Tenant/Project별 Provider 연결 | 필수 |
-| Provider | `provider_key_versions` | Provider Key version reference | 필수 |
-| Provider | `model_catalog` | Provider model catalog | 필수 |
-| Provider | `model_pricing_rules` | 모델 가격 계산 기준 | 필수 |
-| Policy | `runtime_policies` | 정책 논리 단위 | 필수 |
-| Policy | `runtime_policy_versions` | immutable 정책 버전 | 필수 |
-| Policy | `policy_bindings` | 정책과 대상 resource 연결 | 필수 |
-| Policy | `model_allowlist_rules` | 허용 Provider/Model 규칙 | 필수 |
-| Policy | `routing_rules` | 모델 라우팅 규칙 | 필수 |
-| Policy | `sensitive_data_rules` | 민감정보 탐지/마스킹 규칙 | 필수 |
-| Limit | `rate_limit_rules` | RPM/TPM/동시 요청 제한 | 필수 |
-| Limit | `quota_rules` | 월/일/사용자별 quota | 필수 |
-| Budget | `budget_policies` | 예산 정책 | 필수 |
-| Budget | `budget_ledger_entries` | 예산 차감/보정 ledger | 필수 |
-| Usage | `usage_ledger_entries` | 비용/토큰 사용 ledger | 필수 |
-| Chat | `conversations` | Chat UI 대화 metadata | 필수 |
-| Chat | `chat_messages` | Reply-to Context용 메시지 metadata | 필수 |
-| Audit | `audit_logs` | 관리자 행위 감사 로그 | 필수 |
-| Reliability | `outbox_events` | Control Plane event outbox | 권장 |
-| Alert | `alert_rules` | 알림 규칙 | 권장 |
-| Alert | `alert_events` | 알림 발생 기록 | 권장 |
-| Extension | `webhook_endpoints` | 외부 webhook 연동 | 선택 |
-| Extension | `deployment_environments` | SaaS/Hybrid/Self-hosted 확장 단위 | 선택 |
-| Retention | `data_retention_policies` | Tenant별 보관 정책 | 권장 |
+| 분류 | 테이블 | 설명 | 장기 판단 | 3~5일 P0 판단 |
+|---|---|---|---|---|
+| Identity | `users` | 전역 사용자 계정 | 필수 | seed 또는 최소 생성 |
+| Identity | `tenants` | 고객사 조직 | 필수 | seed 또는 최소 생성 |
+| Identity | `tenant_memberships` | 사용자와 Tenant 관계 | 필수 | seed 가능 |
+| Identity | `tenant_invitations` | 사용자 초대 | 필수 | 제외 |
+| Identity | `groups` | 부서/팀 확장 단위 | 권장 | 제외 |
+| Identity | `group_memberships` | 사용자와 Group 관계 | 권장 | 제외 |
+| Project | `projects` | LLM 사용 단위 프로젝트 | 필수 | seed 또는 최소 생성 |
+| Project | `project_memberships` | 사용자와 Project 관계 | 필수 | seed 가능 |
+| Project | `applications` | 고객사 앱/API Client/Chat UI 단위 | 필수 | seed 또는 최소 생성 |
+| Credential | `api_keys` | Gateway API Key metadata | 필수 | 필수 |
+| Credential | `app_tokens` | Application 접근 Token metadata | 필수 | 필수 |
+| Provider | `provider_connections` | Tenant/Project별 Provider 연결 | 필수 | 필수 |
+| Provider | `provider_key_versions` | Provider Key version reference | 필수 | seed 또는 간소화 |
+| Provider | `model_catalog` | Provider model catalog | 필수 | seed 가능 |
+| Provider | `model_pricing_rules` | 모델 가격 계산 기준 | 필수 | 선택 |
+| Policy | `runtime_policies` | 정책 논리 단위 | 필수 | JSON config 가능 |
+| Policy | `runtime_policy_versions` | immutable 정책 버전 | 필수 | JSON config 가능 |
+| Policy | `policy_bindings` | 정책과 대상 resource 연결 | 필수 | JSON config 가능 |
+| Policy | `model_allowlist_rules` | 허용 Provider/Model 규칙 | 필수 | 제외 |
+| Policy | `routing_rules` | 모델 라우팅 규칙 | 필수 | simple routing config |
+| Policy | `sensitive_data_rules` | 민감정보 탐지/마스킹 규칙 | 필수 | 기본 rule config |
+| Limit | `rate_limit_rules` | RPM/TPM/동시 요청 제한 | 필수 | P1 |
+| Limit | `quota_rules` | 월/일/사용자별 quota | 필수 | P1 |
+| Budget | `budget_policies` | 예산 정책 | 필수 | P1 |
+| Budget | `budget_ledger_entries` | 예산 차감/보정 ledger | 필수 | 제외 |
+| Usage | `usage_ledger_entries` | 비용/토큰 사용 ledger | 필수 | 선택 |
+| Chat | `conversations` | Chat UI 대화 metadata | 필수 | 제외 |
+| Chat | `chat_messages` | Reply-to Context용 메시지 metadata | 필수 | 제외 |
+| Audit | `audit_logs` | 관리자 행위 감사 로그 | 필수 | 선택 |
+| Reliability | `outbox_events` | Control Plane event outbox | 권장 | 제외 |
+| Alert | `alert_rules` | 알림 규칙 | 권장 | 제외 |
+| Alert | `alert_events` | 알림 발생 기록 | 권장 | 제외 |
+| Extension | `webhook_endpoints` | 외부 webhook 연동 | 선택 | 제외 |
+| Extension | `deployment_environments` | SaaS/Hybrid/Self-hosted 확장 단위 | 선택 | 제외 |
+| Retention | `data_retention_policies` | Tenant별 보관 정책 | 권장 | 제외 |
 
 ## 3.2 ClickHouse Analytics Tables
 
-| 테이블 | 설명 | MVP |
-|---|---|---|
-| `llm_invocations` | 요청 1건당 1 row | 필수 |
-| `llm_provider_attempts` | Provider 호출 attempt 1건당 1 row | 필수 |
-| `llm_masking_events` | 민감정보 탐지/마스킹 이벤트 | 필수 |
-| `llm_cache_events` | exact/semantic cache 이벤트 | 필수 |
-| `llm_routing_events` | routing/fallback 결정 이벤트 | 필수 |
-| `usage_daily_rollups` | 일별 비용/토큰 집계 | 권장 |
+| 테이블 | 설명 | 장기 판단 | 3~5일 P0 판단 |
+|---|---|---|---|
+| `llm_invocations` | 요청 1건당 1 row | 필수 | 선택 mirror |
+| `llm_provider_attempts` | Provider 호출 attempt 1건당 1 row | 필수 | 제외 |
+| `llm_masking_events` | 민감정보 탐지/마스킹 이벤트 | 필수 | 제외 |
+| `llm_cache_events` | exact/semantic cache 이벤트 | 필수 | 제외 |
+| `llm_routing_events` | routing/fallback 결정 이벤트 | 필수 | 제외 |
+| `usage_daily_rollups` | 일별 비용/토큰 집계 | 권장 | 제외 |
 
 ---
 
@@ -2321,9 +2324,11 @@ create extension if not exists pgcrypto;
 
 ---
 
-# 12. MVP 구현 우선순위
+# 12. P0 구현 우선순위
 
-## 12.1 1차로 반드시 만들 테이블
+현재 P0 DB 범위는 `docs/p0/p0-db-migration-plan.md`를 우선한다. 이 장기 DB 문서의 `MVP` 또는 `필수` 표현이 아래 목록과 충돌하면 P1/P2 후보로 본다.
+
+## 12.1 P0에서 우선 만들 테이블
 
 PostgreSQL:
 
@@ -2331,67 +2336,66 @@ PostgreSQL:
 users
 tenants
 tenant_memberships
-tenant_invitations
 projects
 project_memberships
 applications
 api_keys
 app_tokens
 provider_connections
-provider_key_versions
 model_catalog
 model_pricing_rules
+usage_ledger_entries
+audit_logs
+p0_llm_invocation_logs
+```
+
+`usage_ledger_entries`, `audit_logs`, `model_pricing_rules`는 P0에서 mock usage/cost와 key/provider 변경 기록을 단순화해 저장할 때만 사용한다.
+
+P1 준비 또는 선택 구현:
+
+```text
+budget_policies
+rate_limit_rules
+```
+
+Redis:
+
+```text
+gatelm:auth:api_key:{keyHash}
+gatelm:auth:app_token:{tokenHash}
+gatelm:config:project:{projectId}
+gatelm:cache:exact:{cacheKeyHash}
+```
+
+## 12.2 P0 필수에서 미뤄도 되는 테이블
+
+```text
+groups
+group_memberships
+tenant_invitations
+provider_key_versions
 runtime_policies
 runtime_policy_versions
 policy_bindings
 model_allowlist_rules
 routing_rules
 sensitive_data_rules
-rate_limit_rules
 quota_rules
-budget_policies
-usage_ledger_entries
 budget_ledger_entries
 conversations
 chat_messages
-audit_logs
 outbox_events
+alert_rules
+alert_events
+webhook_endpoints
+deployment_environments
 data_retention_policies
-```
-
-ClickHouse:
-
-```text
 llm_invocations
 llm_provider_attempts
 llm_masking_events
 llm_cache_events
 llm_routing_events
 usage_daily_rollups
-```
-
-Redis:
-
-```text
-rl:*
-quota:*
-policy:active:*
-exact_cache:*
-provider_health:*
-circuit:*
-request_lock:*
-idempotency:*
-```
-
-## 12.2 MVP에서 미뤄도 되는 테이블
-
-```text
-groups
-group_memberships
-alert_rules
-alert_events
-webhook_endpoints
-deployment_environments
 ```
 
 단, schema 설계에서는 이미 확장 가능한 target 구조를 사용한다.
@@ -2427,4 +2431,3 @@ DB 또는 ORM 작업 전에 아래를 확인한다.
 - `llm_masking_events.sample_hash`에는 HMAC 기반 hash만 저장한다. raw sample 저장 금지.
 - redacted payload는 S3-compatible Object Storage에 저장하고, PostgreSQL/ClickHouse에는 reference만 저장한다.
 - security policy 변경은 immutable version row를 추가하고 binding을 교체한다. 기존 로그를 최신 policy 기준으로 덮어쓰지 않는다.
-

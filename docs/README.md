@@ -8,6 +8,22 @@ GateLM은 단순 Chat UI가 아니다. 핵심은 LLM Gateway다.
 
 ---
 
+## 0. 현재 구현 기준
+
+현재 repository의 구현 목표는 **P0**다.
+
+문서에 `MVP` 또는 `1차 구현`이라는 표현이 있더라도, P0 범위 판단은 `docs/p0/*` 문서를 우선한다. P0와 충돌하는 장기 설계 내용은 P1/P2 후보 또는 참고 설계로 본다.
+
+용어 기준:
+
+| 용어 | 현재 의미 |
+|---|---|
+| P0 | 지금 구현해야 하는 3~5일 데모 필수 Gateway vertical slice |
+| MVP | 제품 관점의 최소 출시 후보. 문서에 따라 P0보다 넓을 수 있음 |
+| 1차 구현 | 과거 표현 또는 장기 설계 문맥. 현재 P0 필수를 의미하지 않을 수 있음 |
+
+P0 판단이 애매하면 먼저 `docs/p0/p0-contract.md`로 요약 기준을 확인한다. 문서끼리 충돌하면 아래 문서 우선순위를 따른다.
+
 ## 1. 작업 전 필수 읽기 순서
 
 작업을 시작하기 전에 아래 문서를 순서대로 확인한다.
@@ -24,55 +40,67 @@ GateLM은 단순 Chat UI가 아니다. 핵심은 LLM Gateway다.
 
    * 지금 구현해야 하는 P0 범위와 제외 범위를 확인한다.
 
-4. `docs/p0/demo-acceptance.md`
+4. `docs/p0/p0-contract.md`
+
+   * P0 endpoint, DB, event/status, cache, masking, 제외 범위를 하나의 계약표로 확인한다.
+
+5. `docs/p0/demo-acceptance.md`
 
    * 최종 데모 합격 기준과 실패 기준을 확인한다.
 
-5. `docs/architecture/architecture.md`
+6. `docs/p0/p0-test-matrix.md`
+
+   * P0 기능별 기대 HTTP status, log field, Dashboard 검증 기준을 확인한다.
+
+7. `docs/p0/p0-review-and-ci-gate.md`
+
+   * PR merge 전 리뷰, 보안 검증, CI gate 기준을 확인한다.
+
+8. `docs/architecture/architecture.md`
 
    * 시스템 경계, Gateway 중심 구조, Control Plane / Data Plane 분리를 확인한다.
 
-6. `docs/architecture/gateway-flow.md`
+9. `docs/architecture/gateway-flow.md`
 
    * 인증, App Token 검증, 정책 검사, 마스킹, 캐시, 라우팅, Provider 호출, 로깅 흐름을 확인한다.
 
-7. `docs/architecture/api-spec.md`
+10. `docs/architecture/api-spec.md`
 
    * Control Plane API와 Gateway API 계약을 확인한다.
 
-8. `docs/architecture/db-schema.md`
+11. `docs/architecture/db-schema.md`
 
    * 장기 DB 설계 기준을 확인한다.
 
-9. `docs/p0/p0-db-migration-plan.md`
+12. `docs/p0/p0-db-migration-plan.md`
 
    * P0에서 실제로 만들 DB table 범위를 확인한다.
 
-10. `docs/architecture/llm-log-schema.md`
+13. `docs/architecture/llm-log-schema.md`
 
     * 장기 요청 로그와 이벤트 스키마 기준을 확인한다.
 
-11. `docs/p0/p0-log-event-payload.md`
+14. `docs/p0/p0-log-event-payload.md`
 
     * P0에서 반드시 저장할 request log / event payload 필드를 확인한다.
 
-12. `docs/policies/pii-masking-policy.md`
+15. `docs/policies/pii-masking-policy.md`
 
     * Provider 호출 전 민감정보 탐지, 마스킹, 차단 기준을 확인한다.
 
-13. `docs/policies/coding-convention.md`
+16. `docs/policies/coding-convention.md`
 
     * 코드 스타일과 계층별 책임을 확인한다.
 
-14. `docs/policies/ai-coding-rules.md`
+17. `docs/policies/ai-coding-rules.md`
 
     * AI 에이전트가 코드 작성 전 반드시 지켜야 하는 작업 규칙을 확인한다.
 
-15. `docs/p0/local-dev.md`
+18. `docs/p0/local-dev.md`
 
     * 로컬 실행 방식, seed 데이터, mock provider 기준을 확인한다.
 
-16. `docs/p0/mock-provider.md`
+19. `docs/p0/mock-provider.md`
 
     * mock provider 동작과 acceptance 기준을 확인한다.
 
@@ -84,17 +112,20 @@ GateLM은 단순 Chat UI가 아니다. 핵심은 LLM Gateway다.
 
 문서끼리 충돌하면 아래 순서로 판단한다.
 
-1. `docs/p0/implementation-cut.md`
-2. `docs/p0/demo-acceptance.md`
-3. `docs/architecture/gateway-flow.md`
-4. `docs/architecture/api-spec.md`
-5. `docs/p0/p0-db-migration-plan.md`
-6. `docs/p0/p0-log-event-payload.md`
-7. `docs/architecture/db-schema.md`
-8. `docs/architecture/llm-log-schema.md`
-9. `docs/policies/pii-masking-policy.md`
-10. `docs/policies/coding-convention.md`
-11. `docs/policies/ai-coding-rules.md`
+1. `docs/p0/p0-contract.md`
+2. `docs/p0/implementation-cut.md`
+3. `docs/p0/demo-acceptance.md`
+4. `docs/p0/p0-test-matrix.md`
+5. `docs/p0/p0-review-and-ci-gate.md`
+6. `docs/architecture/gateway-flow.md`
+7. `docs/architecture/api-spec.md`
+8. `docs/p0/p0-db-migration-plan.md`
+9. `docs/p0/p0-log-event-payload.md`
+10. `docs/architecture/db-schema.md`
+11. `docs/architecture/llm-log-schema.md`
+12. `docs/policies/pii-masking-policy.md`
+13. `docs/policies/coding-convention.md`
+14. `docs/policies/ai-coding-rules.md`
 
 P0 구현 중에는 장기 설계보다 P0 acceptance 통과가 우선이다.
 단, 보안 기준은 단순화를 이유로 낮추지 않는다.
@@ -124,6 +155,7 @@ Admin onboarding
 ```
 
 P0는 기능 수가 아니라 end-to-end 흐름이 기준이다.
+현재 P0 시간 기준은 3~5일이다. 낮음/중간 우선순위 항목은 seed, mock, 단순 API, 축소 UI로 대체할 수 있다.
 
 ---
 
@@ -132,19 +164,19 @@ P0는 기능 수가 아니라 end-to-end 흐름이 기준이다.
 아래 기능은 P0에서 빠지면 안 된다.
 
 * `/v1/chat/completions`
-* `/v1/models`
+* `/v1/models` mock catalog
 * API Key 인증
-* App Token 검증
-* Tenant / Project / Application 식별
+* App Token 검증 또는 seed token 기반 단순 검증
+* Tenant / Project / Application 식별 또는 seed metadata 식별
 * mock provider 또는 provider adapter 호출
 * Provider 호출 전 민감정보 마스킹/차단
 * Exact Cache
 * `model=auto` Simple Routing
-* Usage Log
+* Usage Log 또는 P0 direct request log
 * Request Log 목록
 * Request Detail Drawer
-* Dashboard Overview
-* 최소 Web Console
+* Dashboard Overview 축소 카드
+* 최소 Web Console 또는 고객사 앱 연동 데모
 
 ---
 
@@ -359,11 +391,11 @@ receive_request
 -> apply_runtime_policy_precheck
 -> detect_sensitive_data
 -> mask_or_block
+-> decide_model_route
 -> normalize_prompt_for_cache
 -> build_cache_key
 -> exact_cache_lookup
 -> semantic_cache_lookup
--> decide_model_route
 -> resolve_provider_credential
 -> convert_provider_request
 -> call_provider_with_timeout_retry_fallback
@@ -377,6 +409,7 @@ receive_request
 
 P0에서는 일부 stage를 no-op 또는 disabled로 둘 수 있다.
 하지만 민감정보 탐지와 마스킹은 cache lookup과 provider call보다 먼저 실행되어야 한다.
+P0에서는 cache key material에 selectedProvider/selectedModel을 포함해야 하므로 simple routing 결과를 cache key 생성 전에 확정한다.
 
 ---
 
@@ -449,8 +482,8 @@ Redpanda
 ClickHouse
 ```
 
-P0에서는 ClickHouse/Redpanda가 불안정하면 PostgreSQL direct writer를 허용한다.
-단, 코드와 주석에 `P0 shortcut`임을 명시한다.
+P0 canonical request log source는 PostgreSQL `p0_llm_invocation_logs`다.
+ClickHouse/Redpanda는 P1 또는 optional mirror이며, P0 direct writer는 코드와 주석에 `P0 shortcut`임을 명시한다.
 
 DB 원칙:
 
@@ -643,20 +676,11 @@ glm_app_token_test_redacted
 작업 우선순위는 아래 순서다.
 
 ```text
-1. docker compose + health check
-2. Control Plane P0 schema/API
-3. Gateway /v1/chat/completions + mock provider
-4. API Key / App Token 인증
-5. Tenant / Project / Application context
-6. 민감정보 masking/block
-7. Exact Cache
-8. Simple Routing
-9. Invocation Log 저장
-10. Request Log / Detail API
-11. Dashboard Overview API
-12. Web Console
-13. Demo App 또는 Text-only Chat UI
-14. 통합 테스트
+1. Mock Provider + Gateway 기본 요청 전달 + health/ready
+2. API Key 발급/인증 + 최소 Project/Application 식별
+3. 민감정보 masking/block + Exact Cache + Simple Routing
+4. Request Log 저장 + Request Detail API
+5. Dashboard 축소 요약 + 고객사 앱 연동 데모 + 통합 테스트
 ```
 
 화면부터 만들지 않는다.

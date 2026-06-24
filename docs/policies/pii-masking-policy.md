@@ -1,5 +1,7 @@
 # GateLM 민감정보 마스킹 정책
 
+> P0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 P0 감지 유형과 action은 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. P0 `sensitive_data_blocked`는 HTTP 403으로 고정한다. 이 문서의 422 예시는 P1/P2 정책 검증 또는 custom detector validation 문맥으로만 본다. 단, raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 P0에서도 낮추지 않는다.
+
 ## 문서 목적
 
 이 문서는 GateLM에서 이메일, 전화번호, API Key, 주민등록번호 등 민감정보를 감지하고, 외부 LLM Provider 요청 전 또는 로그 저장 전 어떤 방식으로 마스킹/차단할지 정의하는 기준 문서다.
@@ -61,8 +63,8 @@ Provider별 차이는 Provider Adapter 또는 Provider Capability에 둔다. 민
 Request Context Assembly
 -> PII / Secret Detection
 -> Redaction or Block
--> Cache Key 생성
 -> Model Routing
+-> Cache Key 생성
 -> Provider Request 변환
 -> Provider 호출
 ```
@@ -109,7 +111,7 @@ Provider 호출 여부와 관계없이, 저장소로 가는 payload는 항상 re
 민감정보 정책으로 차단된 요청은 시스템 장애가 아니다.
 
 - Gateway response status: `blocked`
-- HTTP status: 정책 차단 성격에 따라 `400`, `403`, 또는 `422`
+- HTTP status: P0 `sensitive_data_blocked`는 `403`. P1/P2 정책 검증이나 custom detector validation은 `400` 또는 `422`를 사용할 수 있음
 - Provider 호출: 수행하지 않음
 - 비용: actual provider cost `0`
 - Dashboard error rate: 기본 실패율에서 제외
@@ -140,30 +142,29 @@ sampleHash = HMAC-SHA256(tenant_salt, normalized_sensitive_value)
 민감정보 감지/마스킹 구현은 아래 순서를 따른다.
 
 ```text
-master-spec.md
--> project-overview.md
--> architecture.md
--> gateway-flow.md
--> pii-masking-policy.md
--> llm-log-schema.md
--> db-schema.md
--> api-spec.md
--> dashboard-metrics.md
--> coding-convention.md
--> ai-coding-rules.md
+docs/p0/p0-contract.md
+-> docs/p0/implementation-cut.md
+-> docs/p0/p0-log-event-payload.md
+-> docs/architecture/gateway-flow.md
+-> docs/policies/pii-masking-policy.md
+-> docs/architecture/llm-log-schema.md
+-> docs/p0/p0-db-migration-plan.md
+-> docs/architecture/api-spec.md
+-> docs/architecture/dashboard-metrics.md
+-> docs/policies/coding-convention.md
+-> docs/policies/ai-coding-rules.md
 -> 실제 구현
 ```
 
 충돌 시 기준:
 
-1. 제품 방향과 MVP 범위는 `project-overview.md`를 따른다.
-2. 시스템 경계와 응답/분석 경로 분리는 `architecture.md`를 따른다.
-3. Gateway stage 순서는 `gateway-flow.md`를 따른다.
-4. 민감정보 detector, action, masking 기준은 이 문서를 따른다.
-5. 로그 필드와 event schema 의미는 `llm-log-schema.md`를 따른다.
-6. 저장 테이블과 column type은 `db-schema.md`를 따른다.
-7. API response shape은 `api-spec.md`를 따른다.
-8. Dashboard 지표 계산식은 `dashboard-metrics.md`를 따른다.
+1. P0 범위와 action/status는 `docs/p0/p0-contract.md`를 따른다.
+2. P0 구현 컷라인은 `docs/p0/implementation-cut.md`를 따른다.
+3. P0 로그 필드는 `docs/p0/p0-log-event-payload.md`를 따른다.
+4. Gateway stage 순서는 `docs/architecture/gateway-flow.md`를 따른다.
+5. 민감정보 detector, action, masking 세부 기준은 이 문서를 따른다.
+6. P0 저장 테이블과 column type은 `docs/p0/p0-db-migration-plan.md`를 따른다.
+7. 장기 API/DB/Dashboard 설계는 각 architecture 문서를 참고하되 P0 문서와 충돌하면 P1/P2 후보로 본다.
 
 문서에 없는 detector type, action value, log field, API field, DB column을 임의로 추가하지 않는다.
 
@@ -241,7 +242,7 @@ Mapping:
 주의:
 
 - `llm_masking_events.action`은 `allow`, `redact`, `block`을 사용한다.
-- `llm_invocations.masking_action`과 API의 `maskingAction`은 `none`, `redacted`, `blocked`를 사용한다.
+- P0 canonical source인 `p0_llm_invocation_logs.masking_action`과 API의 `maskingAction`은 `none`, `redacted`, `blocked`를 사용한다. 장기 ClickHouse mirror에서는 `llm_invocations.masking_action`도 같은 값을 사용한다.
 - 기존 코드에서 `mask` 또는 `block`만 사용하고 있다면 migration 전에 이 문서를 기준으로 정리한다.
 
 ---
@@ -491,7 +492,7 @@ Critical rule이 `block`으로 승격된 경우 response 예시:
 ```json
 {
   "error": {
-    "code": "SENSITIVE_DATA_BLOCKED",
+    "code": "sensitive_data_blocked",
     "message": "Request blocked because it contains a credential-like secret.",
     "details": {
       "detectedTypes": ["api_key"],
@@ -787,7 +788,7 @@ Block 응답은 민감값을 포함하지 않는다.
 ```json
 {
   "error": {
-    "code": "SENSITIVE_DATA_BLOCKED",
+    "code": "sensitive_data_blocked",
     "message": "Request blocked by GateLM security policy.",
     "details": {
       "requestId": "request_01J...",
@@ -898,7 +899,7 @@ raw prompt
 
 ## 9.1 Request-level log
 
-`llm_invocations` 또는 Request Log API에는 아래 masking field를 포함한다.
+P0에서는 `p0_llm_invocation_logs`와 Request Log API에 아래 masking field를 포함한다. 장기 ClickHouse mirror에서는 `llm_invocations`에도 같은 의미로 저장한다.
 
 | Field | Type | 설명 |
 |---|---:|---|
@@ -981,7 +982,7 @@ Gateway response는 필요한 경우 masking metadata를 반환할 수 있다.
   "gate_lm": {
     "requestId": "request_01J...",
     "cacheStatus": "miss",
-    "routingDecision": "low_cost_model",
+    "routingReason": "low_cost",
     "maskingAction": "redacted",
     "maskingDetectedTypes": ["email"]
   }
@@ -1175,7 +1176,7 @@ sampleHash는 기본적으로 UI에 노출하지 않는다.
 
 | Error Code | HTTP | 설명 |
 |---|---:|---|
-| `SENSITIVE_DATA_BLOCKED` | 422 | Security policy로 Provider 호출 전 차단 |
+| `sensitive_data_blocked` | 403 | Security policy로 Provider 호출 전 차단 |
 | `SECURITY_POLICY_NOT_FOUND` | 500 또는 503 | active security policy snapshot 없음 |
 | `SECURITY_POLICY_INVALID` | 500 | policy compile/validation 실패 |
 | `MASKING_ENGINE_ERROR` | 500 또는 503 | detector/redaction engine 장애 |
@@ -1211,9 +1212,9 @@ Gateway 통합 테스트는 아래를 확인한다.
 
 - email 포함 요청은 redacted prompt로 Provider adapter에 전달된다.
 - phone 포함 요청은 redacted prompt로 Provider adapter에 전달된다.
-- api_key 포함 요청은 redacted prompt로 Provider adapter에 전달된다.
+- api_key 포함 요청은 P0에서 Provider 호출 전 block된다.
 - resident_registration_number 포함 요청은 Provider adapter가 호출되지 않는다.
-- block 요청도 `llm_invocation` event와 `llm_masking_event`가 발행된다.
+- block 요청도 P0 request log와 masking metadata를 남긴다. 장기 이벤트 경로에서는 invocation/masking event로 발행한다.
 - cache key는 raw prompt를 포함하지 않는다.
 - Gateway response와 logs에 raw sensitive value가 없다.
 
@@ -1237,7 +1238,7 @@ Gateway 통합 테스트는 아래를 확인한다.
 
 ```text
 email_basic_redaction.fixture.json
-api_key_redacts_before_provider_call.fixture.json
+api_key_blocks_before_provider_call.fixture.json
 rrn_blocks_request.fixture.json
 phone_redacts_before_cache.fixture.json
 ```
@@ -1351,7 +1352,7 @@ Worker / Log:
 [ ] Worker가 llm_masking_events에 저장한다.
 [ ] sampleHash는 HMAC 기반이다.
 [ ] raw sample은 저장하지 않는다.
-[ ] llm_invocations에 maskingAction, maskingDetectedTypes, maskingDetectedCount가 저장된다.
+[ ] P0에서는 p0_llm_invocation_logs에 maskingAction, maskingDetectedTypes, maskingDetectedCount가 저장된다.
 ```
 
 API / Dashboard:

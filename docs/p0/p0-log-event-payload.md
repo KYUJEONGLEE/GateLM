@@ -2,7 +2,7 @@
 
 ## 문서 목적
 
-이 문서는 P0에서 반드시 저장하고 조회해야 하는 LLM Request Log와 Event Payload의 최소 필드를 확정한다. 기존 `llm-log-schema.md`는 장기 스키마를 포함한다. 이 문서는 2~3주 구현용 최소 계약이다.
+이 문서는 P0에서 반드시 저장하고 조회해야 하는 LLM Request Log와 Event Payload의 최소 필드를 확정한다. 기존 `llm-log-schema.md`는 장기 스키마를 포함한다. 이 문서는 3~5일 데모 필수 구현용 최소 계약이다.
 
 ---
 
@@ -108,6 +108,9 @@ P0 shortcut이 필요하면 내부 코드 이름만 `invocation.finished`로 부
 | `routingRuleId` | string or null | N | P0는 null 가능 |
 
 ### 4.4 Token / Cost / Latency
+
+P0에서는 실제 Provider 정산 정확도보다 데모 관측성이 우선이다.
+Mock Provider usage metadata 또는 단순 추정값을 사용할 수 있으며, 실제 과금 정산 수준의 정확도는 P1 이후로 본다.
 
 | Field | Type | Required | 설명 |
 |---|---:|---:|---|
@@ -462,24 +465,43 @@ attempts/cacheEvents/routingEvents/maskingEvents 상세
 
 ## 10. Storage Mapping
 
-P0에서는 아래 둘 중 하나를 선택한다.
+P0 canonical source는 PostgreSQL `p0_llm_invocation_logs`다.
 
-### A안 — ClickHouse 사용
-
-```text
-Worker/direct writer -> ClickHouse llm_invocations
-Dashboard/Logs -> ClickHouse query
-PostgreSQL -> usage ledger/audit only
-```
-
-### B안 — Postgres fallback
+### P0 기준 — Postgres fallback
 
 ```text
 Gateway/direct writer -> PostgreSQL p0_llm_invocation_logs
-Dashboard/Logs -> PostgreSQL query
+Dashboard/Logs/Detail -> PostgreSQL query
 ```
 
-B안은 P0 shortcut이다. README와 코드 주석에 남긴다.
+이 경로는 P0 shortcut이다. README와 코드 주석에 남긴다.
+
+### Optional — ClickHouse mirror
+
+```text
+Worker/direct writer -> ClickHouse llm_invocations
+Dashboard/Logs -> ClickHouse query only after numbers match PostgreSQL canonical source
+```
+
+ClickHouse를 P0에서 붙이더라도 PostgreSQL과 Dashboard 숫자가 다르면 PostgreSQL 값을 기준으로 판단한다.
+
+### 10.1 Event Field / Fallback DB Mapping
+
+P0 fallback table은 event payload 전체를 1:1 column으로 만들지 않는다.
+
+| Field | P0 처리 |
+|---|---|
+| `costMicroUsd` | `cost_micro_usd`에 저장 |
+| `costUsd` | 저장하지 않음. 조회 시 `costMicroUsd`에서 decimal string으로 계산 |
+| `currency` | 저장하지 않음. P0는 `USD` 상수 또는 project default currency로 반환 |
+| `schemaVersion` | `metadata.schemaVersion=1` 또는 DTO 상수로 처리 |
+| `retryable` | P0는 `metadata.retryable` 또는 error response 파생값으로 처리 |
+| `eventId` | P0 direct writer에서는 저장 생략 가능 |
+| `eventType` | `status`에서 파생 가능. P0 direct writer에서는 저장 생략 가능 |
+| `eventVersion` | P0 direct writer에서는 저장 생략 가능 |
+| `occurredAt` | `created_at` 또는 `completed_at` 기준으로 파생 |
+
+위 필드 때문에 P0 DB column을 임의 추가하지 않는다.
 
 ---
 

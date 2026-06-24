@@ -9,12 +9,14 @@
 ## 1. 로컬 개발 원칙
 
 ```text
-1. 로컬 실행은 Docker Compose + 각 앱 dev server 조합을 기본으로 한다.
+1. 로컬 실행, 데모, 최종 검증은 Docker Compose 기준으로 한다.
 2. P0는 mock provider만으로도 end-to-end 데모가 가능해야 한다.
 3. 실제 Provider Key는 필수가 아니다.
 4. .env 파일은 커밋하지 않는다.
 5. 필요한 환경변수는 .env.example에만 문서화한다.
 6. raw prompt, raw response, secret 원문을 log에 남기지 않는다.
+7. 이번 P0에서는 Docker Compose 기반 로컬 인프라를 공식 기준으로 승인한다.
+8. 로컬 Node/Go/Python 설치 버전은 보조 수단이며, 최종 기준은 Docker toolbox container다.
 ```
 
 ---
@@ -39,20 +41,24 @@
 ## 3. 필수 도구
 
 ```text
-Node.js 20+
-pnpm 9+
-Go 1.22+
 Docker + Docker Compose
+Git
 PostgreSQL client 선택
 Redis client 선택
 ```
 
-Python AI Service를 P1/P2에서 실행하려면 아래를 추가한다.
+P0 공통 런타임 버전은 Docker로 고정한다.
 
 ```text
-Python 3.11+
-Poetry 또는 uv
+Node.js 22
+pnpm 9.15.0
+Go 1.24
+Python 3.12
+PostgreSQL 16
+Redis 7
 ```
+
+로컬에 Node/Go/Python을 직접 설치해도 되지만, 팀 공통 실행/테스트/데모 기준은 Docker Compose다.
 
 ---
 
@@ -90,6 +96,12 @@ gatelm/
 # App
 NODE_ENV=development
 GATELM_ENV=local
+
+# Runtime versions
+NODE_VERSION=22
+PNPM_VERSION=9.15.0
+GO_VERSION=1.24
+PYTHON_VERSION=3.12
 
 # URLs
 WEB_BASE_URL=http://localhost:3000
@@ -138,12 +150,20 @@ MOCK_PROVIDER_ERROR_MODE=off
 
 ## 6. Docker Compose 최소 구성
 
-P0 최소 구성:
+P0 기본 실행 구성:
 
 ```text
 postgres
 redis
 mock-provider
+```
+
+P0 고정 런타임 도구:
+
+```text
+node-toolbox
+go-toolbox
+python-toolbox
 ```
 
 P1 구성:
@@ -172,13 +192,64 @@ services:
       - "6379:6379"
 
   mock-provider:
-    build:
-      context: ./apps/mock-provider
+    image: python:3.12-alpine
+    # P0 bootstrap용 lightweight mock service.
+    # apps/mock-provider가 구현되면 build context 기반 service로 교체할 수 있다.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/healthz', timeout=2).read()\""]
     ports:
       - "8090:8090"
+
+  node-toolbox:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infra/docker/node/Dockerfile
+
+  go-toolbox:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infra/docker/go/Dockerfile
+
+  python-toolbox:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infra/docker/python/Dockerfile
 ```
 
-P0에서 mock provider를 별도 앱으로 만들지 않고 Gateway 내부 adapter로 처리해도 된다. 단, 데모 중 Provider 호출 횟수와 latency/error를 확인할 수 있어야 한다.
+P0에서는 PostgreSQL user/password/db 값을 `gatelm/gatelm/gatelm`으로 고정한다. 로컬 `.env`에 과거 값이 남아 있어도 DB identity 기준을 바꾸지 않는다.
+
+P0 기본값은 별도 `mock-provider` service다. 현재 `docker-compose.yml`에 들어 있는 inline Python mock은 공통 로컬 환경을 빠르게 맞추기 위한 bootstrap mock이다. P0 acceptance용 mock-provider는 `docs/p0/mock-provider.md`의 stats/config/error/timeout 기준을 만족하도록 별도 구현체로 승격한다.
+
+`MOCK_PROVIDER_PORT`는 host port override 용도다. bootstrap mock의 container listen port는 `8090`으로 고정한다. 포트를 바꾸는 경우 Gateway의 `MOCK_PROVIDER_BASE_URL`도 함께 바꾼다.
+
+Gateway 내부 adapter는 `apps/mock-provider` 구현이 지연될 때만 임시 fallback으로 허용한다. fallback을 쓰는 경우에도 Provider 호출 횟수, latency, error mode, reset/config에 준하는 테스트 관측 기능은 유지해야 한다.
+
+Toolbox container는 앱 소스가 생기기 전부터 팀의 언어 버전을 고정하기 위한 개발용 런타임이다. 앱별 Dockerfile이 추가되면 같은 버전 기준을 재사용한다.
+
+버전 확인:
+
+```bash
+docker compose run --rm node-toolbox node --version
+docker compose run --rm node-toolbox pnpm --version
+docker compose run --rm go-toolbox go version
+docker compose run --rm python-toolbox python --version
+```
+
+Node workspace가 생긴 뒤 dependency 설치와 테스트는 아래처럼 실행한다.
+
+```bash
+docker compose run --rm node-toolbox pnpm install
+docker compose run --rm node-toolbox pnpm test
+```
+
+Gateway Go module이 생긴 뒤 테스트는 아래처럼 실행한다.
+
+```bash
+docker compose run --rm go-toolbox go test ./...
+```
 
 ---
 
@@ -186,7 +257,7 @@ P0에서 mock provider를 별도 앱으로 만들지 않고 Gateway 내부 adapt
 
 ```bash
 # 1. dependency 설치
-pnpm install
+docker compose run --rm node-toolbox pnpm install
 
 # 2. 로컬 인프라 실행
 docker compose up -d postgres redis mock-provider
@@ -201,8 +272,7 @@ pnpm --filter @gatelm/control-plane-api db:seed
 pnpm --filter @gatelm/control-plane-api dev
 
 # 6. Gateway 실행
-cd apps/gateway-core
-go run ./cmd/gateway
+docker compose run --rm --service-ports go-toolbox go run ./apps/gateway-core/cmd/gateway
 
 # 7. Web Console 실행
 pnpm --filter @gatelm/web dev
@@ -239,6 +309,16 @@ mock-provider: reachable
 redpanda: optional
 clickhouse: optional
 ```
+
+P0 `/readyz` 판정:
+
+| Dependency | 필수 여부 | 전체 ready 실패 조건 |
+|---|---:|---|
+| PostgreSQL | Y | 연결 실패 시 실패 |
+| Redis | Y | 연결 실패 시 실패 |
+| Mock Provider 별도 service 또는 내부 mock adapter | Y | mock 호출 불가능 시 실패 |
+| Redpanda | N | details에만 표시, 전체 실패 아님 |
+| ClickHouse | N | details에만 표시, 전체 실패 아님 |
 
 ---
 

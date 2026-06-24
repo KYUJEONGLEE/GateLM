@@ -2,7 +2,7 @@
 
 ## 문서 목적
 
-이 문서는 GateLM P0 데모가 “완성”으로 인정되는 기준을 정의한다. 팀원마다 완성 기준이 달라지면 2~3주 프로젝트는 쉽게 흩어진다. 이 문서의 체크리스트를 통과하지 못하면 기능이 많아도 P0 완료가 아니다.
+이 문서는 GateLM P0 데모가 “완성”으로 인정되는 기준을 정의한다. 팀원마다 완성 기준이 달라지면 3~5일 프로젝트는 쉽게 흩어진다. 이 문서의 체크리스트를 통과하지 못하면 기능이 많아도 P0 완료가 아니다.
 
 ---
 
@@ -28,12 +28,12 @@ P0 데모는 아래 7개 장면이 끊기지 않고 이어져야 한다.
 
 ```text
 [ ] seed admin 또는 signup/login으로 Web Console 진입
-[ ] Tenant 생성
-[ ] Project 생성
-[ ] Application 생성
-[ ] Provider Connection 등록 또는 mock provider 선택
+[ ] Tenant 생성 또는 seed tenant 확인
+[ ] Project 생성 또는 seed project 확인
+[ ] Application 생성 또는 seed application 확인
+[ ] Provider Connection 등록 또는 mock provider 선택/seed 확인
 [ ] API Key 발급
-[ ] App Token 발급
+[ ] App Token 발급 또는 seed token 확인
 [ ] 발급된 원문 key/token은 생성 응답에서만 1회 표시
 [ ] 목록/상세 화면에서는 key/token 원문이 다시 표시되지 않음
 ```
@@ -45,7 +45,7 @@ P0 데모는 아래 7개 장면이 끊기지 않고 이어져야 한다.
 [ ] Authorization: Bearer <gateway_api_key> 사용
 [ ] X-GateLM-App-Token 사용
 [ ] Gateway가 requestId를 생성
-[ ] mock 또는 실제 Provider adapter가 응답 반환
+[ ] mock Provider adapter가 응답 반환
 [ ] 응답에 OpenAI-compatible fields가 존재
 [ ] X-GateLM-Request-Id header가 존재
 [ ] Request Log에 status=success 또는 cache_hit로 기록
@@ -101,10 +101,8 @@ P0 데모는 아래 7개 장면이 끊기지 않고 이어져야 한다.
 [ ] Dashboard Overview에 totalRequests 표시
 [ ] successfulRequests 표시
 [ ] blockedRequests 표시
-[ ] totalTokens 표시
-[ ] totalCostUsd 또는 totalCostMicroUsd 표시
-[ ] averageResponseTimeMs 표시
 [ ] cacheHitRate 또는 cacheHitRequests 표시
+[ ] totalTokens, totalCostUsd 또는 totalCostMicroUsd, averageResponseTimeMs는 mock usage 기반 축소 표시 가능
 [ ] Request Log 목록에서 requestId 클릭 가능
 [ ] Detail Drawer에 provider/model/requestedModel/selectedModel 표시
 [ ] Detail Drawer에 token/cost/latency 표시
@@ -223,7 +221,7 @@ curl -sS http://localhost:8080/v1/chat/completions \
 기대 결과:
 
 ```text
-HTTP 403 또는 정책상 정의한 block status
+HTTP 403
 error.code=sensitive_data_blocked
 Provider/mock 호출 없음
 Request Log status=blocked

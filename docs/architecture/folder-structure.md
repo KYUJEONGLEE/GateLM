@@ -1,5 +1,7 @@
 # GateLM Folder Structure
 
+> P0 범위 안내: 이 문서는 장기 폴더 구조와 확장 후보를 포함한다. 현재 P0 구현 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 `MVP` 또는 `1차 구현` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+
 ## 문서 목적
 
 이 문서는 GateLM 구현자가 백엔드, 프론트엔드, Gateway, Worker, 공통 코드의 위치를 임의로 만들지 않도록 고정하는 기준 문서다.
