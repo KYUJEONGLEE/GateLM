@@ -276,7 +276,9 @@ Gateway API error shape은 OpenAI-compatible 형식을 따른다.
 |---:|---|---|---|
 | 400 | `VALIDATION_ERROR` | `invalid_request_error` | 요청 형식 오류 |
 | 401 | `UNAUTHENTICATED` | `invalid_api_key` | 인증 실패 |
-| 403 | `FORBIDDEN` | `permission_denied` | 권한 없음 |
+| 403 | `FORBIDDEN` | `invalid_app_token` | App Token 오류 |
+| 403 | `FORBIDDEN` | `scope_mismatch` | Tenant/Project/Application scope 불일치 |
+| 403 | `FORBIDDEN` | `permission_denied` | 기타 권한 없음 |
 | 404 | `NOT_FOUND` | `not_found` | 리소스 없음 |
 | 409 | `CONFLICT` | `conflict` | 중복/상태 충돌 |
 | 422 | `POLICY_VALIDATION_FAILED` | `policy_validation_failed` | 정책 검증 실패 |
@@ -468,7 +470,7 @@ allow, block, warn, mask, route, fallback
 | Method | Endpoint | 인증 | 설명 |
 |---|---|---:|---|
 | GET | `/v1/models` | Gateway API Key | 사용 가능한 모델 목록. OpenAI-compatible |
-| POST | `/v1/chat/completions` | Gateway API Key + App Token | Chat Completions. OpenAI-compatible, SSE streaming 지원 |
+| POST | `/v1/chat/completions` | Gateway API Key + App Token | Chat Completions. P0는 non-stream, SSE streaming은 P1 |
 
 ## 3.13 Health
 
@@ -3434,7 +3436,7 @@ Response Body `200`:
       "model": "gpt-4o-mini",
       "status": "success",
       "cacheStatus": "miss",
-      "routingDecision": "low_cost_model",
+      "routingReason": "low_cost",
       "maskingAction": "redacted",
       "usage": {
         "promptTokens": 120,
@@ -3468,6 +3470,7 @@ Error Response:
 ## 14.3 GET `/api/llm-requests/:requestId`
 
 Detail Drawer에 필요한 단일 요청 상세를 조회한다.
+P0 response shape은 `docs/p0/p0-log-event-payload.md`의 Request Detail API 최소 필드를 우선한다.
 
 인증: Project Member
 
@@ -3492,24 +3495,26 @@ Response Body `200`:
     "appTokenId": "app_token_01J...",
     "userId": "user_01J...",
     "featureId": "support-reply",
-    "provider": "openai",
+    "provider": "mock",
+    "model": "mock-fast",
     "requestedModel": "auto",
-    "routedModel": "gpt-4o-mini",
+    "selectedModel": "mock-fast",
     "status": "success",
     "cache": {
-      "status": "miss",
-      "keyHash": "sha256:...",
-      "savingsUsd": "0.000000"
+      "cacheStatus": "miss",
+      "cacheType": "exact",
+      "cacheKeyHash": "sha256:...",
+      "savedCostMicroUsd": 0
     },
     "routing": {
-      "decision": "low_cost_model",
+      "routingReason": "low_cost",
       "ruleId": "policy_ver_01J...",
       "reason": "estimated token count below threshold"
     },
     "masking": {
-      "action": "redacted",
-      "detectedTypes": ["email"],
-      "redactionCount": 1
+      "maskingAction": "redacted",
+      "maskingDetectedTypes": ["email"],
+      "maskingDetectedCount": 1
     },
     "usage": {
       "promptTokens": 120,
@@ -3564,9 +3569,9 @@ Response Body `200`:
         "timestamp": "2026-06-22T06:00:00.010Z",
         "data": {
           "requestedModel": "auto",
-          "routedProvider": "openai",
-          "routedModel": "gpt-4o-mini",
-          "reason": "low_cost_model"
+          "selectedProvider": "mock",
+          "selectedModel": "mock-fast",
+          "routingReason": "low_cost"
         }
       },
       {
@@ -3807,7 +3812,7 @@ Error Response:
 
 # 15. Chat UI API
 
-Chat UI는 고객사가 자체 LLM UI를 갖고 있지 않을 때 제공하는 옵션이다. MVP는 text-only다.
+Chat UI는 고객사가 자체 LLM UI를 갖고 있지 않을 때 제공하는 옵션이다. P1 후보는 text-only다.
 
 금지:
 
@@ -4079,7 +4084,7 @@ Response Body `201`:
       "provider": "openai",
       "model": "gpt-4o-mini",
       "cacheStatus": "miss",
-      "routingDecision": "low_cost_model",
+      "routingReason": "low_cost",
       "maskingAction": "none"
     }
   }
@@ -4110,7 +4115,7 @@ Error Response:
 - `429 RATE_LIMITED`
 - `402 BUDGET_EXCEEDED`
 - `403 POLICY_BLOCKED`
-- `403 SENSITIVE_DATA_BLOCKED`
+- `403 sensitive_data_blocked`
 - `502 PROVIDER_ERROR`
 
 ## 15.8 GET `/api/chat/messages/:messageId`
@@ -4219,12 +4224,13 @@ Response Body `200`:
 Error Response:
 
 - `401 invalid_api_key`
-- `403 permission_denied`
+- `403 invalid_app_token`
+- `403 scope_mismatch`
 - `429 rate_limited`
 
 ## 16.2 POST `/v1/chat/completions`
 
-OpenAI-compatible Chat Completions API다. GateLM은 이 요청 안에서 인증, App Token 검증, Rate Limit, Quota, Runtime Policy, 민감정보 마스킹, Cache, Model Routing, Provider 호출, 비동기 이벤트 발행을 수행한다.
+OpenAI-compatible Chat Completions API다. GateLM은 이 요청 안에서 인증, App Token 검증, 민감정보 마스킹, Cache, Model Routing, Provider 호출, 비동기 이벤트 발행을 수행한다. Rate Limit, Quota, Budget hard block, Runtime Policy 고도화는 P1/P2 후보이며 P0 필수는 아니다.
 
 인증: Gateway API Key + App Token. Project 정책에 따라 App Token optional 가능하지만 기본은 required.
 
@@ -4272,7 +4278,7 @@ OpenAI-compatible 필드 우선 지원:
 | `messages` | Yes | text-only messages. image/file content 금지 |
 | `temperature` | No | Provider로 전달 가능한 경우 전달 |
 | `max_tokens` | No | Provider별 필드로 변환 |
-| `stream` | No | SSE streaming 여부 |
+| `stream` | No | P0에서는 `true`를 `400 streaming_not_supported`로 거부. SSE streaming은 P1 |
 | `metadata` | No | 로그용 비민감 metadata |
 
 GateLM extension field:
@@ -4315,10 +4321,10 @@ Response Body `200` non-stream:
     "projectId": "project_01J...",
     "applicationId": "app_01J...",
     "requestedModel": "auto",
-    "routedProvider": "openai",
-    "routedModel": "gpt-4o-mini",
+    "selectedProvider": "mock",
+    "selectedModel": "mock-fast",
     "cacheStatus": "miss",
-    "routingDecision": "low_cost_model",
+    "routingReason": "low_cost",
     "maskingAction": "redacted",
     "estimatedCostUsd": "0.001240",
     "latencyMs": 820
@@ -4328,12 +4334,14 @@ Response Body `200` non-stream:
 
 Streaming Response `200` with `text/event-stream`:
 
+P0에서는 지원하지 않는다. `stream=true` 요청은 `400 streaming_not_supported`로 거부한다. 아래 예시는 P1 streaming 구현 시 참고한다.
+
 ```text
 data: {"id":"chatcmpl_01J...","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl_01J...","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl_01J...","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"gate_lm":{"requestId":"request_01J...","cacheStatus":"miss","routedProvider":"openai","routedModel":"gpt-4o-mini"}}
+data: {"id":"chatcmpl_01J...","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"gate_lm":{"requestId":"request_01J...","cacheStatus":"miss","selectedProvider":"mock","selectedModel":"mock-fast"}}
 
 data: [DONE]
 ```
@@ -4356,7 +4364,8 @@ Error Response:
 
 - `400 invalid_request_error`: `messages` 누락, image/file content 포함, 지원하지 않는 필드
 - `401 invalid_api_key`: API Key 없음/오류/만료
-- `403 permission_denied`: App Token 오류, scope 부족
+- `403 invalid_app_token`: App Token 없음/오류/만료
+- `403 scope_mismatch`: Tenant/Project/Application scope 불일치
 - `403 policy_blocked`: Runtime Policy 차단
 - `403 sensitive_data_blocked`: 민감정보 정책이 block으로 설정됨
 - `404 not_found`: 요청 모델 또는 project 설정 없음
@@ -4376,27 +4385,28 @@ Error Response:
 3. Tenant / Project / Application 식별
 4. App Token 검증
 5. Scope / IP allowlist / status / expiresAt 확인
-6. Rate Limit / Quota / Budget pre-check
-7. Runtime Policy pre-check
+6. Rate Limit / Quota / Budget pre-check는 P1/P2 후보. P0에서는 disabled 또는 no-op
+7. Runtime Policy pre-check는 P1/P2 후보. P0에서는 JSON config 기반 최소 정책
 8. Text-only validation
 9. 민감정보 탐지
 10. Mask 또는 Block
-11. Reply-to Context 조회 및 prompt 구성
-12. Exact Cache 조회
-13. Semantic Cache 조회
-14. Model Routing
-15. Provider credential 조회
-16. Provider request 변환
-17. Provider 호출 또는 SSE relay
-18. Token / Cost / Latency 계산
-19. Cache write 판단
-20. 사용자에게 응답 반환
-21. Redpanda에 usage/log event 발행
+11. Reply-to Context는 P1. P0에서는 no-op
+12. Model Routing으로 selectedProvider/selectedModel 확정
+13. selectedProvider/selectedModel을 포함해 Exact Cache key 생성
+14. Exact Cache 조회
+15. Semantic Cache 조회
+16. Provider credential 조회
+17. Provider request 변환
+18. Provider 호출. SSE relay는 P1
+19. Token / Cost / Latency 계산
+20. Cache write 판단
+21. 사용자에게 응답 반환
+22. Redpanda에 usage/log event 발행
 ```
 
 ## 16.4 Gateway에서 지원하지 않는 요청
 
-MVP에서는 아래 요청을 거부한다.
+P0에서는 아래 요청을 거부한다.
 
 - `messages[].content`가 image/file/audio part를 포함하는 요청
 - file upload 관련 multipart 요청
@@ -4473,34 +4483,22 @@ Error Response `503`:
 
 # 18. 구현 우선순위
 
-## 18.1 MVP에서 반드시 구현할 API
+## 18.1 P0에서 반드시 구현할 API
 
-1차 구현에서 우선순위가 가장 높은 API는 아래다.
+현재 P0에서 우선순위가 가장 높은 API는 아래다. 장기 API 목록은 P1/P2 후보로 본다.
 
 ```text
-POST /api/auth/signup
 POST /api/auth/login
 GET  /api/auth/me
 POST /api/tenants
-POST /api/tenants/:tenantId/invitations
-POST /api/auth/invitations/accept
 POST /api/projects
-GET  /api/projects
-GET  /api/projects/:projectId
-POST /api/provider-connections
-POST /api/provider-connections/:providerConnectionId/test
 POST /api/projects/:projectId/applications
-POST /api/applications/:applicationId/app-tokens
 POST /api/projects/:projectId/api-keys
-GET  /api/projects/:projectId/api-keys
-PUT  /api/projects/:projectId/rate-limit-rules
-PUT  /api/projects/:projectId/quota-rules
-PUT  /api/projects/:projectId/budget-policy
+POST /api/applications/:applicationId/app-tokens
+POST /api/provider-connections
 GET  /api/dashboard/overview
 GET  /api/projects/:projectId/logs
 GET  /api/llm-requests/:requestId
-POST /api/chat/conversations
-POST /api/chat/conversations/:conversationId/messages
 GET  /v1/models
 POST /v1/chat/completions
 GET  /healthz
@@ -4606,7 +4604,7 @@ Allowed values:
 ```json
 {
   "error": {
-    "code": "SENSITIVE_DATA_BLOCKED",
+    "code": "sensitive_data_blocked",
     "message": "Request blocked by GateLM security policy.",
     "details": {
       "requestId": "request_01J...",

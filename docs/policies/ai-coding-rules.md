@@ -610,13 +610,13 @@ Gateway 요청 흐름은 기본적으로 아래 순서를 따른다.
 2. API Key 인증
 3. Tenant / Project / User / Application 식별
 4. App Token 검증
-5. Rate Limit 검사
-6. Quota / Budget 검사
-7. Runtime Policy 검사
-8. 민감정보 탐지 / 마스킹
-9. Exact Cache 조회
-10. Semantic Cache 조회
-11. Model Routing
+5. Rate Limit / Quota / Budget 검사는 P1/P2 후보. P0에서는 disabled 또는 no-op
+6. Runtime Policy 검사는 P1/P2 후보. P0에서는 JSON config 기반 최소 정책
+7. 민감정보 탐지 / 마스킹
+8. Model Routing
+9. selectedProvider/selectedModel을 포함한 Exact Cache key 생성
+10. Exact Cache 조회
+11. Semantic Cache 조회는 P1/P2 후보. P0에서는 disabled
 12. Provider Adapter 호출
 13. 응답 반환
 14. 비동기 이벤트 발행
@@ -756,7 +756,7 @@ app_token_id
 provider
 model
 cache_status
-routing_decision
+routing_reason
 masking_action
 latency_ms
 error_code

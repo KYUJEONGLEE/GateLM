@@ -18,7 +18,7 @@ GateLM은 단순 Chat UI가 아니다. 핵심은 LLM Gateway다.
 
 | 용어 | 현재 의미 |
 |---|---|
-| P0 | 지금 구현해야 하는 2~3주 Gateway vertical slice |
+| P0 | 지금 구현해야 하는 3~5일 데모 필수 Gateway vertical slice |
 | MVP | 제품 관점의 최소 출시 후보. 문서에 따라 P0보다 넓을 수 있음 |
 | 1차 구현 | 과거 표현 또는 장기 설계 문맥. 현재 P0 필수를 의미하지 않을 수 있음 |
 
@@ -155,6 +155,7 @@ Admin onboarding
 ```
 
 P0는 기능 수가 아니라 end-to-end 흐름이 기준이다.
+현재 P0 시간 기준은 3~5일이다. 낮음/중간 우선순위 항목은 seed, mock, 단순 API, 축소 UI로 대체할 수 있다.
 
 ---
 
@@ -163,19 +164,19 @@ P0는 기능 수가 아니라 end-to-end 흐름이 기준이다.
 아래 기능은 P0에서 빠지면 안 된다.
 
 * `/v1/chat/completions`
-* `/v1/models`
+* `/v1/models` mock catalog
 * API Key 인증
-* App Token 검증
-* Tenant / Project / Application 식별
+* App Token 검증 또는 seed token 기반 단순 검증
+* Tenant / Project / Application 식별 또는 seed metadata 식별
 * mock provider 또는 provider adapter 호출
 * Provider 호출 전 민감정보 마스킹/차단
 * Exact Cache
 * `model=auto` Simple Routing
-* Usage Log
+* Usage Log 또는 P0 direct request log
 * Request Log 목록
 * Request Detail Drawer
-* Dashboard Overview
-* 최소 Web Console
+* Dashboard Overview 축소 카드
+* 최소 Web Console 또는 고객사 앱 연동 데모
 
 ---
 
@@ -390,11 +391,11 @@ receive_request
 -> apply_runtime_policy_precheck
 -> detect_sensitive_data
 -> mask_or_block
+-> decide_model_route
 -> normalize_prompt_for_cache
 -> build_cache_key
 -> exact_cache_lookup
 -> semantic_cache_lookup
--> decide_model_route
 -> resolve_provider_credential
 -> convert_provider_request
 -> call_provider_with_timeout_retry_fallback
@@ -408,6 +409,7 @@ receive_request
 
 P0에서는 일부 stage를 no-op 또는 disabled로 둘 수 있다.
 하지만 민감정보 탐지와 마스킹은 cache lookup과 provider call보다 먼저 실행되어야 한다.
+P0에서는 cache key material에 selectedProvider/selectedModel을 포함해야 하므로 simple routing 결과를 cache key 생성 전에 확정한다.
 
 ---
 
@@ -674,20 +676,11 @@ glm_app_token_test_redacted
 작업 우선순위는 아래 순서다.
 
 ```text
-1. docker compose + health check
-2. Control Plane P0 schema/API
-3. Gateway /v1/chat/completions + mock provider
-4. API Key / App Token 인증
-5. Tenant / Project / Application context
-6. 민감정보 masking/block
-7. Exact Cache
-8. Simple Routing
-9. Invocation Log 저장
-10. Request Log / Detail API
-11. Dashboard Overview API
-12. Web Console
-13. Demo App 또는 Text-only Chat UI
-14. 통합 테스트
+1. Mock Provider + Gateway 기본 요청 전달 + health/ready
+2. API Key 발급/인증 + 최소 Project/Application 식별
+3. 민감정보 masking/block + Exact Cache + Simple Routing
+4. Request Log 저장 + Request Detail API
+5. Dashboard 축소 요약 + 고객사 앱 연동 데모 + 통합 테스트
 ```
 
 화면부터 만들지 않는다.

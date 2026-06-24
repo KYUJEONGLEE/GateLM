@@ -2,7 +2,7 @@
 
 ## 문서 목적
 
-이 문서는 P0에서 반드시 저장하고 조회해야 하는 LLM Request Log와 Event Payload의 최소 필드를 확정한다. 기존 `llm-log-schema.md`는 장기 스키마를 포함한다. 이 문서는 2~3주 구현용 최소 계약이다.
+이 문서는 P0에서 반드시 저장하고 조회해야 하는 LLM Request Log와 Event Payload의 최소 필드를 확정한다. 기존 `llm-log-schema.md`는 장기 스키마를 포함한다. 이 문서는 3~5일 데모 필수 구현용 최소 계약이다.
 
 ---
 
@@ -108,6 +108,9 @@ P0 shortcut이 필요하면 내부 코드 이름만 `invocation.finished`로 부
 | `routingRuleId` | string or null | N | P0는 null 가능 |
 
 ### 4.4 Token / Cost / Latency
+
+P0에서는 실제 Provider 정산 정확도보다 데모 관측성이 우선이다.
+Mock Provider usage metadata 또는 단순 추정값을 사용할 수 있으며, 실제 과금 정산 수준의 정확도는 P1 이후로 본다.
 
 | Field | Type | Required | 설명 |
 |---|---:|---:|---|

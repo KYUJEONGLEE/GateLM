@@ -56,11 +56,12 @@ P0 optional infrastructure:
 
 | 용어 | 현재 기준 |
 |---|---|
-| P0 | 지금 구현해야 하는 2~3주 Gateway vertical slice |
+| P0 | 지금 구현해야 하는 3~5일 데모 필수 Gateway vertical slice |
 | MVP | 제품 관점 최소 출시 후보. 문서에 따라 P0보다 넓을 수 있음 |
 | 1차 구현 | 과거 표현 또는 장기 설계 문맥. 현재 P0 필수를 뜻하지 않을 수 있음 |
 
 P0는 기능 수가 아니라 end-to-end 흐름이 기준이다.
+P0 시간 기준은 3~5일이다. `중간`과 `낮음` 우선순위 항목은 seed, mock, 단순 API, 축소 UI로 대체할 수 있다.
 
 ```text
 Admin onboarding
@@ -77,6 +78,26 @@ Admin onboarding
 -> Dashboard Overview
 ```
 
+P0 우선순위:
+
+| 기능 | P0 처리 | 우선순위 |
+|---|---|---|
+| OpenAI-compatible 요청 전달 | `/v1/chat/completions` -> mock provider/adapter -> response | 높음 |
+| 사용 가능한 모델 목록 조회 | `/v1/models` mock catalog | 낮음 |
+| API Key 발급/인증 | 원문 1회 반환, hash 저장, Gateway 인증 | 높음 |
+| App Token 발급/검증 | Application 단위 접근 제어. seed 또는 단순 검증 허용 | 중간 |
+| Tenant / Project / Application 생성 | 로그 식별용 최소 metadata. seed 허용 | 낮음 |
+| Mock Provider 호출 | 실제 Provider 없이 end-to-end 검증 | 높음 |
+| Simple Routing | `model=auto` -> low-cost/default model | 높음 |
+| Exact Cache | 동일 요청 2회차 Provider 호출 생략 | 높음 |
+| 개인정보 마스킹 | email/phone redaction | 높음 |
+| 위험 정보 차단 | API Key/JWT/RRN 등 Provider 호출 전 block | 높음 |
+| 요청 로그 저장 | requestId 기준 저장 | 높음 |
+| 토큰/비용/응답 시간 기록 | mock usage 기반 예상값 허용 | 중간 |
+| 요청 상세 조회 | cache/routing/masking/cost/latency 확인 | 높음 |
+| 사용 현황 요약 | total/success/blocked/cache 중심 축소 Dashboard | 중간 |
+| 고객사 앱 연동 데모 | endpoint를 GateLM Gateway로 바꾸는 흐름 시연 | 높음 |
+
 ---
 
 ## 3. P0 포함 API
@@ -87,13 +108,13 @@ Admin onboarding
 |---|---|---|
 | 로그인 | `POST /api/auth/login` | seed admin 대체 가능 |
 | 현재 사용자 | `GET /api/auth/me` | tenant/project 권한 포함 |
-| Tenant 생성 | `POST /api/tenants` | onboarding 필수 |
-| Project 생성 | `POST /api/projects` | 비용/정책/로그 기준 단위 |
-| Application 생성 | `POST /api/projects/:projectId/applications` | App Token 발급 대상 |
+| Tenant 생성 | `POST /api/tenants` | 낮음. seed 또는 최소 생성 API 허용 |
+| Project 생성 | `POST /api/projects` | 낮음. 비용/정책/로그 기준 단위, seed 허용 |
+| Application 생성 | `POST /api/projects/:projectId/applications` | 낮음. App Token 발급 대상, seed 허용 |
 | API Key 발급 | `POST /api/projects/:projectId/api-keys` | 원문 key는 1회 반환 |
-| App Token 발급 | `POST /api/applications/:applicationId/app-tokens` | 원문 token은 1회 반환 |
+| App Token 발급 | `POST /api/applications/:applicationId/app-tokens` | 중간. 원문 token은 1회 반환, seed 허용 |
 | Provider Connection 등록 | `POST /api/provider-connections` | P0는 mock provider 가능 |
-| Dashboard Overview | `GET /api/dashboard/overview` | P0 카드 집계 |
+| Dashboard Overview | `GET /api/dashboard/overview` | 중간. P0 축소 카드 집계 |
 | Request Log 목록 | `GET /api/projects/:projectId/logs` | project scope 필수 |
 | Request Detail | `GET /api/llm-requests/:requestId` | raw prompt/response 미반환 |
 
@@ -103,7 +124,7 @@ Admin onboarding
 |---|---|---|
 | Health | `GET /healthz` | 필수 |
 | Ready | `GET /readyz` | 필수 |
-| Models | `GET /v1/models` | mock model catalog 반환 |
+| Models | `GET /v1/models` | 낮음. mock model catalog 반환 |
 | Chat Completions | `POST /v1/chat/completions` | OpenAI-compatible, non-stream |
 
 ### 3.3 P0 Gateway Error Contract
@@ -131,7 +152,7 @@ Streaming is not supported in P0.
 | 기업 Admin signup | seed admin 또는 local login으로 대체 |
 | 사용자 초대 / 초대 수락 | P1 |
 | Provider connection test | P1 |
-| Rate Limit / Quota / Budget 설정 API | P1. P0는 seed/config 수준 |
+| Rate Limit / Quota / Budget 설정 API | P1. P0에서는 구현하지 않음 |
 | Chat conversation API | P1/P2 |
 | Policy version / publish / rollback API | P2 |
 | Streaming response API | P1. P0는 `stream=true` 거부 |
@@ -146,12 +167,13 @@ Streaming is not supported in P0.
 | SSE Streaming | P1. P0에서는 `stream=true`를 명확한 오류로 거부 |
 | Semantic Cache 실제 embedding/vector store | P2. P0는 Exact Cache만 구현 |
 | AI Service routing score | P2. P0는 simple routing만 구현 |
-| Rate Limit UI/API 고도화 | P1. P0에서는 seed/config 또는 no-op 허용 |
-| Budget hard block 고도화 | P1. P0에서는 cost metadata와 seed policy 수준 허용 |
+| Rate Limit | P1. Project 단위 RPM 제한은 P0 이후 구현 |
+| Budget hard block | P1. P0는 cost metadata 기록까지만 처리 |
 | Provider connection test | P1 |
+| Text-only Chat UI | P1. P0는 고객사 앱 연동 데모 우선 |
 | Chat UI Reply-to Context | P1 |
 | Policy publish/rollback UI | P2 |
-| Chat conversation API | P1/P2. P0는 Customer App Demo 또는 Text-only Chat UI 중 하나만 선택 |
+| Chat conversation API | P1/P2. P0는 Customer App Demo로 대체 |
 | Redpanda/ClickHouse 필수 연동 | P1. P0는 PostgreSQL fallback 허용 |
 | AWS Secrets Manager/KMS | P2. P0는 SecretResolver interface와 local resolver |
 
@@ -199,12 +221,13 @@ app_tokens
 provider_connections
 model_catalog
 model_pricing_rules
-budget_policies
-rate_limit_rules
 usage_ledger_entries
 audit_logs
 p0_llm_invocation_logs
 ```
+
+`model_pricing_rules`, `usage_ledger_entries`, `audit_logs`는 P0에서 mock usage/cost와 key/provider 변경 기록을 단순화해 저장할 때만 사용한다.
+`budget_policies`, `rate_limit_rules`는 P1 준비 테이블이며 3~5일 P0 필수 migration이 아니다.
 
 금지:
 
@@ -308,10 +331,8 @@ Dashboard Overview는 Request Log와 같은 데이터 소스를 기준으로 한
 totalRequests
 successfulRequests
 blockedRequests
-totalTokens
-totalCostMicroUsd 또는 totalCostUsd
-averageResponseTimeMs
 cacheHitRequests 또는 cacheHitRate
+totalTokens / totalCostMicroUsd / averageResponseTimeMs는 mock usage 기반 축소 표시 가능
 ```
 
 P0에서는 block 요청을 error rate에 섞어 제품 장애처럼 표시하지 않는다.
@@ -341,6 +362,8 @@ Exact Cache:
 
 ```text
 cache key는 raw prompt가 아니라 redacted prompt 기준
+cache key material에는 selectedProvider/selectedModel을 포함
+P0에서는 simple routing 결과를 cache key 생성 전에 확정
 동일 safe request 1회차 miss, 2회차 hit
 cache hit 시 Provider/mock 호출 count 증가 금지
 block 요청은 cache lookup 금지

@@ -1166,7 +1166,7 @@ Gateway API는 OpenAI-compatible response shape을 우선한다.
 
 ```text
 X-GateLM-Request-Id: request_01J...
-X-GateLM-Cache-Status: hit | miss | bypass
+X-GateLM-Cache-Status: hit | miss | bypass | error
 X-GateLM-Routing-Decision: route_01J...
 X-GateLM-Masking-Action: none | redacted | blocked
 ```

@@ -87,7 +87,7 @@ Employee
 
 Chat UI는 필수 사용 경로가 아니라 제공 옵션이다.
 
-1차 구현에서는 **텍스트 기반 채팅만 지원**한다.
+P1 Chat UI 후보에서는 **텍스트 기반 채팅만 지원**한다.
 
 문서 업로드, 이미지 입력, 파일 분석, OCR, RAG는 1차 범위에서 제외한다.
 
@@ -131,9 +131,9 @@ Customer App / Developer Tool / GateLM Chat UI
    -> Rate Limit / Quota 검사
    -> Runtime Policy 검사
    -> 민감정보 탐지 / 마스킹
+   -> Model Routing
    -> Exact Cache 조회
    -> Semantic Cache 조회
-   -> Model Routing
    -> LLM Provider 호출
    -> 응답 반환
    -> 비동기 이벤트 발행
@@ -439,7 +439,7 @@ Provider는 이전 대화를 자동으로 기억하지 않는다.
 
 따라서 Chat UI 또는 Gateway는 필요한 context를 매 요청마다 Provider에 전달해야 한다.
 
-1차 구현에서는 전체 대화 기록을 매번 보내지 않고, **Reply-to Context** 방식을 우선 적용한다.
+P1 Context 후보에서는 전체 대화 기록을 매번 보내지 않고, **Reply-to Context** 방식을 우선 적용한다.
 
 ```text
 사용자가 특정 AI 응답에 답장
