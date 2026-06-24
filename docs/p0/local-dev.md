@@ -248,7 +248,7 @@ docker compose run --rm node-toolbox pnpm test
 Gateway Go module이 생긴 뒤 테스트는 아래처럼 실행한다.
 
 ```bash
-docker compose run --rm go-toolbox go test ./...
+docker compose run --rm go-toolbox go test ./apps/gateway-core/...
 ```
 
 ---

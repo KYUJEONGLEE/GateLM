@@ -251,7 +251,7 @@ go version -> go1.24.x
 Gateway 코드가 생기면 아래처럼 실행합니다.
 
 ```bash
-go test ./...
+go test ./apps/gateway-core/...
 go run ./apps/gateway-core/cmd/gateway
 ```
 

@@ -135,6 +135,15 @@ services:
       dockerfile: infra/docker/go/Dockerfile
       args:
         GO_VERSION: ${GO_VERSION:-1.24}
+    environment:
+      GATEWAY_PORT: ${GATEWAY_PORT:-8080}
+      GATEWAY_DEFAULT_PROVIDER: ${GATEWAY_DEFAULT_PROVIDER:-mock}
+      GATEWAY_DEFAULT_MODEL: ${GATEWAY_DEFAULT_MODEL:-mock-balanced}
+      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      REDIS_URL: redis://redis:6379
+      MOCK_PROVIDER_BASE_URL: http://mock-provider:8090
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
     working_dir: /workspace
     volumes:
       - .:/workspace
