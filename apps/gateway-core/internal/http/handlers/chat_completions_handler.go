@@ -1,21 +1,35 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/auth"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
+
+type APIKeyAuthenticator interface {
+	AuthenticateAPIKey(ctx context.Context, bearerToken string) (auth.APIKeyIdentity, error)
+}
+
+type AppTokenValidator interface {
+	ValidateAppToken(ctx context.Context, appToken string) (auth.AppTokenIdentity, error)
+}
 
 type ChatCompletionsHandler struct {
 	Providers           *provider.Registry
 	DefaultModel        string
 	DefaultProvider     string
 	MaxRequestBodyBytes int64
+	APIKeyAuthenticator APIKeyAuthenticator
+	AppTokenValidator   AppTokenValidator
 }
 
 func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +87,11 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 	if len(chatReq.Messages) == 0 {
 		writeGatewayError(w, http.StatusBadRequest, requestID, "invalid_request_error", "messages is required.")
+		return
+	}
+
+	if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
+		writeGatewayErrorFromError(w, reqCtx, err)
 		return
 	}
 
@@ -141,6 +160,98 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
+	if h.APIKeyAuthenticator != nil {
+		bearerToken, ok := bearerTokenFromAuthorization(r.Header.Get("Authorization"))
+		if !ok {
+			return gatewayerrors.InvalidAPIKey("authenticate_api_key")
+		}
+
+		identity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
+		if err != nil {
+			return err
+		}
+
+		reqCtx.APIKeyID = identity.APIKeyID
+		reqCtx.TenantID = identity.TenantID
+		reqCtx.ProjectID = identity.ProjectID
+		if identity.ApplicationID != "" {
+			reqCtx.ApplicationID = identity.ApplicationID
+		}
+	}
+
+	if h.AppTokenValidator != nil {
+		appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
+		if appToken == "" {
+			return gatewayerrors.InvalidAppToken("validate_app_token")
+		}
+
+		identity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
+		if err != nil {
+			return err
+		}
+
+		if reqCtx.TenantID != "" && reqCtx.TenantID != identity.TenantID {
+			return gatewayerrors.ScopeMismatch("validate_app_token")
+		}
+		if reqCtx.ProjectID != "" && reqCtx.ProjectID != identity.ProjectID {
+			return gatewayerrors.ScopeMismatch("validate_app_token")
+		}
+		if reqCtx.ApplicationID != "" && reqCtx.ApplicationID != identity.ApplicationID {
+			return gatewayerrors.ScopeMismatch("validate_app_token")
+		}
+
+		reqCtx.AppTokenID = identity.AppTokenID
+		if reqCtx.TenantID == "" {
+			reqCtx.TenantID = identity.TenantID
+		}
+		if reqCtx.ProjectID == "" {
+			reqCtx.ProjectID = identity.ProjectID
+		}
+		if reqCtx.ApplicationID == "" {
+			reqCtx.ApplicationID = identity.ApplicationID
+		}
+	}
+
+	return nil
+}
+
+func bearerTokenFromAuthorization(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+
+	parts := strings.Fields(value)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return "", false
+	}
+
+	return parts[1], true
+}
+
+func writeGatewayErrorFromError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
+	var gatewayErr gatewayerrors.GatewayError
+	if errors.As(err, &gatewayErr) {
+		reqCtx.Status = "error"
+		reqCtx.HTTPStatus = gatewayErr.HTTPStatus
+		reqCtx.ErrorCode = gatewayErr.Code
+		reqCtx.ErrorMessage = gatewayErr.Message
+		reqCtx.ErrorStage = gatewayErr.Stage
+		setGatewayHeaders(w, reqCtx)
+		writeGatewayError(w, gatewayErr.HTTPStatus, reqCtx.RequestID, gatewayErr.Code, gatewayErr.Message)
+		return
+	}
+
+	reqCtx.Status = "error"
+	reqCtx.HTTPStatus = http.StatusInternalServerError
+	reqCtx.ErrorCode = "internal_error"
+	reqCtx.ErrorMessage = "Gateway authentication failed."
+	reqCtx.ErrorStage = "authenticate_api_key"
+	setGatewayHeaders(w, reqCtx)
+	writeGatewayError(w, http.StatusInternalServerError, reqCtx.RequestID, "internal_error", "Gateway authentication failed.")
 }
 
 func setGatewayHeaders(w http.ResponseWriter, reqCtx *pipeline.RequestContext) {

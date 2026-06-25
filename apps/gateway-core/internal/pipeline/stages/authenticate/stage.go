@@ -3,8 +3,8 @@ package authenticate
 import (
 	"context"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/auth"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/auth"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 const StageName = "authenticate_api_key"
