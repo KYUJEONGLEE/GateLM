@@ -85,16 +85,22 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	authStages := []pipeline.Stage{
-		authenticate.NewStage(h.APIKeyAuthenticator, bearerToken),
-		appauth.NewStage(h.AppTokenValidator, appToken),
-		identify.NewStage(h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID),
+	apiKeyStage := authenticate.NewStage(h.APIKeyAuthenticator, bearerToken)
+	if err := apiKeyStage.Execute(r.Context(), reqCtx); err != nil {
+		handleGatewayAuthError(w, reqCtx, err)
+		return
 	}
-	for _, stage := range authStages {
-		if err := stage.Execute(r.Context(), reqCtx); err != nil {
-			handleGatewayAuthError(w, reqCtx, err)
-			return
-		}
+
+	appTokenStage := appauth.NewStage(h.AppTokenValidator, appToken)
+	if err := appTokenStage.Execute(r.Context(), reqCtx); err != nil {
+		handleGatewayAuthError(w, reqCtx, err)
+		return
+	}
+
+	identifyStage := identify.NewStage(h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID)
+	if err := identifyStage.Execute(r.Context(), reqCtx); err != nil {
+		handleGatewayAuthError(w, reqCtx, err)
+		return
 	}
 
 	if chatReq.Stream {
