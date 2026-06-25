@@ -235,6 +235,9 @@ export const REQUEST_LOG_LIST_FIELDS = [
 
 /** micro USD -> USD 문자열. */
 export function formatCostUsdFromMicroUsd(costMicroUsd: number | bigint): string {
+  if (typeof costMicroUsd === "number" && !Number.isFinite(costMicroUsd)) {
+    return "0.000000";
+  }
   const microUsd =
     typeof costMicroUsd === "bigint"
       ? costMicroUsd
