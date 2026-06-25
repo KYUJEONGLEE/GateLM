@@ -46,12 +46,16 @@ type Usage struct {
 
 type GateLMMetadata struct {
 	RequestID        string `json:"requestId"`
+	TenantID         string `json:"tenantId,omitempty"`
+	ProjectID        string `json:"projectId,omitempty"`
+	ApplicationID    string `json:"applicationId,omitempty"`
 	RequestedModel   string `json:"requestedModel"`
 	SelectedProvider string `json:"selectedProvider"`
 	SelectedModel    string `json:"selectedModel"`
 	CacheStatus      string `json:"cacheStatus"`
 	RoutingReason    string `json:"routingReason,omitempty"`
 	MaskingAction    string `json:"maskingAction"`
+	EstimatedCostUSD string `json:"estimatedCostUsd,omitempty"`
 	LatencyMs        int64  `json:"latencyMs"`
 }
 

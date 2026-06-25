@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
 func TestModelsHandlerReturnsProviderCatalog(t *testing.T) {
@@ -56,6 +58,49 @@ func TestModelsHandlerRejectsMissingProviderRegistry(t *testing.T) {
 		t.Fatalf("decode error response: %v", err)
 	}
 	if resp.Error.Code != "internal_error" {
+		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	}
+	if rr.Header().Get("X-GateLM-Cache-Status") != "bypass" {
+		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+	if rr.Header().Get("X-GateLM-Masking-Action") != "none" {
+		t.Fatalf("unexpected masking action header: %s", rr.Header().Get("X-GateLM-Masking-Action"))
+	}
+}
+
+func TestModelsHandlerReturnsPipelineAuthErrorBeforeProviderCall(t *testing.T) {
+	modelCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		modelCalls++
+		writeJSON(w, http.StatusOK, provider.ModelListResponse{})
+	}))
+	defer mockServer.Close()
+
+	handler := ModelsHandler{
+		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		PreProviderPipeline: &fakeGatewayPipeline{err: gatewayerrors.InvalidAPIKey("authenticate_api_key")},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if modelCalls != 0 {
+		t.Fatalf("expected no mock provider calls, got %d", modelCalls)
+	}
+	if rr.Header().Get(middleware.RequestIDHeader) == "" {
+		t.Fatalf("missing response request id header")
+	}
+
+	var resp gatewayErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Error.Code != "invalid_api_key" {
 		t.Fatalf("unexpected error code: %s", resp.Error.Code)
 	}
 }
