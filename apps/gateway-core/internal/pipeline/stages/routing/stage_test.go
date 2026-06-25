@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 )
 
 type fakeRouter struct {
