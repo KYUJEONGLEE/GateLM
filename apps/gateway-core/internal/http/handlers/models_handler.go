@@ -17,6 +17,10 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		requestID = middleware.NewRequestID()
 	}
 
+	if h.Providers == nil {
+		writeGatewayError(w, http.StatusInternalServerError, requestID, "internal_error", "Providers registry is not initialized.")
+		return
+	}
 	adapter, err := h.Providers.Get("")
 	if err != nil {
 		writeGatewayError(w, http.StatusServiceUnavailable, requestID, "provider_not_configured", "Gateway provider is not configured.")

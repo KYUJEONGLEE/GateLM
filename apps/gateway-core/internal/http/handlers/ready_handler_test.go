@@ -119,3 +119,52 @@ func TestReadyHandlerRunsDependencyChecksConcurrently(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestReadyHandlerReturnsTimeoutWhenDependencyIgnoresContext(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+
+	handler := ReadyHandler{
+		Timeout: 10 * time.Millisecond,
+		Checks: map[string]ReadinessCheck{
+			"postgres": {
+				Required: true,
+				Check: func(ctx context.Context) error {
+					<-release
+					return nil
+				},
+			},
+			"redis": {
+				Required: true,
+				Check: func(ctx context.Context) error {
+					return nil
+				},
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rr := httptest.NewRecorder()
+	startedAt := time.Now()
+
+	handler.ServeHTTP(rr, req)
+
+	if elapsed := time.Since(startedAt); elapsed > 500*time.Millisecond {
+		t.Fatalf("ready handler did not honor timeout, elapsed=%s", elapsed)
+	}
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp readinessResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode readiness response: %v", err)
+	}
+	dep := resp.Dependencies["postgres"]
+	if dep.Status != "error" {
+		t.Fatalf("unexpected postgres dependency status: %s", dep.Status)
+	}
+	if dep.Message != "check timed out or context canceled" {
+		t.Fatalf("unexpected postgres dependency message: %s", dep.Message)
+	}
+}

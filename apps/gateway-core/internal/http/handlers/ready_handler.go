@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -59,35 +58,67 @@ func (h ReadyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func runReadinessChecks(ctx context.Context, checks map[string]ReadinessCheck) map[string]dependencyResponse {
 	deps := make(map[string]dependencyResponse, len(checks))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
+	results := make(chan readinessCheckResult, len(checks))
 
 	for name, check := range checks {
-		name := name
-		check := check
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			dep := dependencyResponse{Required: check.Required}
-			if check.Check == nil {
-				dep.Status = "error"
-				dep.Message = "readiness check is not configured"
-			} else if err := check.Check(ctx); err != nil {
-				dep.Status = "error"
-				dep.Message = check.failureMessage()
-			} else {
-				dep.Status = "ok"
+		go func(name string, check ReadinessCheck) {
+			results <- readinessCheckResult{
+				name: name,
+				dep:  runReadinessCheck(ctx, check),
 			}
-
-			mu.Lock()
-			deps[name] = dep
-			mu.Unlock()
-		}()
+		}(name, check)
 	}
 
-	wg.Wait()
+	for range checks {
+		select {
+		case result := <-results:
+			deps[result.name] = result.dep
+		case <-ctx.Done():
+			for {
+				select {
+				case result := <-results:
+					deps[result.name] = result.dep
+				default:
+					fillTimedOutReadinessChecks(deps, checks)
+					return deps
+				}
+			}
+		}
+	}
+
 	return deps
+}
+
+func fillTimedOutReadinessChecks(deps map[string]dependencyResponse, checks map[string]ReadinessCheck) {
+	for name, check := range checks {
+		if _, ok := deps[name]; ok {
+			continue
+		}
+		deps[name] = dependencyResponse{
+			Status:   "error",
+			Required: check.Required,
+			Message:  "check timed out or context canceled",
+		}
+	}
+}
+
+func runReadinessCheck(ctx context.Context, check ReadinessCheck) dependencyResponse {
+	dep := dependencyResponse{Required: check.Required}
+	if check.Check == nil {
+		dep.Status = "error"
+		dep.Message = "readiness check is not configured"
+	} else if err := check.Check(ctx); err != nil {
+		dep.Status = "error"
+		dep.Message = check.failureMessage()
+	} else {
+		dep.Status = "ok"
+	}
+	return dep
+}
+
+type readinessCheckResult struct {
+	name string
+	dep  dependencyResponse
 }
 
 func (c ReadinessCheck) failureMessage() string {

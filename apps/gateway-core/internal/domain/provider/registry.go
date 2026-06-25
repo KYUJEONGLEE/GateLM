@@ -24,6 +24,9 @@ func (r *Registry) Register(adapter Adapter) {
 	if adapter == nil {
 		return
 	}
+	if r.adapters == nil {
+		r.adapters = make(map[string]Adapter)
+	}
 	r.adapters[adapter.Name()] = adapter
 }
 

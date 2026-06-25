@@ -123,6 +123,33 @@ func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerRejectsMissingProviderRegistry(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp gatewayErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Error.Code != "internal_error" {
+		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	}
+}
+
 func TestChatCompletionsHandlerRejectsOversizedBodyBeforeProviderCall(t *testing.T) {
 	chatCalls := 0
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
