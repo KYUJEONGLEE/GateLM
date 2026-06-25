@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,41 @@ type captureAuthFailureWriter struct {
 func (w *captureAuthFailureWriter) WriteAuthFailureLog(_ context.Context, log invocationlog.AuthFailureLog) error {
 	w.logs = append(w.logs, log)
 	return nil
+}
+
+type immediateResponseWriter struct {
+	header     http.Header
+	status     int
+	body       bytes.Buffer
+	writeCalls int
+	flushed    bool
+}
+
+func newImmediateResponseWriter() *immediateResponseWriter {
+	return &immediateResponseWriter{header: make(http.Header)}
+}
+
+func (w *immediateResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *immediateResponseWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+}
+
+func (w *immediateResponseWriter) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	w.writeCalls++
+	return w.body.Write(body)
+}
+
+func (w *immediateResponseWriter) Flush() {
+	w.flushed = true
 }
 
 func TestAuthFailureLogMiddlewareRecordsInvalidAPIKey(t *testing.T) {
@@ -103,6 +139,62 @@ func TestAuthFailureLogMiddlewareRecordsInvalidAppToken(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprintf("%+v", log), "glm_app_token_test_redacted") {
 		t.Fatalf("auth failure log must not include raw app token")
+	}
+}
+
+func TestAuthFailureLogMiddlewarePassesThroughSuccessBodyImmediately(t *testing.T) {
+	writer := &captureAuthFailureWriter{}
+	underlying := newImmediateResponseWriter()
+	observedDuringHandler := false
+
+	handler := AuthFailureLogMiddleware(writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("first"))
+		observedDuringHandler = underlying.body.String() == "first"
+		_, _ = w.Write([]byte("second"))
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+	handler.ServeHTTP(underlying, req)
+
+	if !observedDuringHandler {
+		t.Fatalf("expected success response body to pass through before handler returns")
+	}
+	if underlying.status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", underlying.status)
+	}
+	if underlying.body.String() != "firstsecond" {
+		t.Fatalf("expected response body to be passed through, got %q", underlying.body.String())
+	}
+	if underlying.writeCalls != 2 {
+		t.Fatalf("expected two underlying writes, got %d", underlying.writeCalls)
+	}
+	if len(writer.logs) != 0 {
+		t.Fatalf("expected no auth failure logs for success response, got %d", len(writer.logs))
+	}
+}
+
+func TestAuthFailureLogMiddlewarePreservesFlusherForPassThroughResponses(t *testing.T) {
+	writer := &captureAuthFailureWriter{}
+	underlying := newImmediateResponseWriter()
+
+	handler := AuthFailureLogMiddleware(writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatalf("expected middleware response writer to implement http.Flusher")
+		}
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+	handler.ServeHTTP(underlying, req)
+
+	if !underlying.flushed {
+		t.Fatalf("expected flush to pass through to underlying response writer")
+	}
+	if underlying.status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", underlying.status)
 	}
 }
 
