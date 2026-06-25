@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 const (
@@ -76,6 +77,12 @@ func (s *Stage) Name() string {
 
 func (s *Stage) Execute(ctx context.Context, req Request) (Result, error) {
 	if req.MaskingAction == MaskingActionBlocked {
+		return Result{
+			CacheStatus: CacheStatusBypass,
+			CacheType:   CacheTypeNone,
+		}, nil
+	}
+	if strings.TrimSpace(req.CachePolicyHash) == "" {
 		return Result{
 			CacheStatus: CacheStatusBypass,
 			CacheType:   CacheTypeNone,

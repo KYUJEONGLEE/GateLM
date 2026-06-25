@@ -26,7 +26,7 @@ const (
 	TypeSemantic Type = "semantic"
 )
 
-const ExactKeyMaterialVersion = "p0-exact-v1"
+const ExactKeyMaterialVersion = "p0-exact-v2"
 
 type KeyMaterial struct {
 	TenantID                 string `json:"tenantId"`
