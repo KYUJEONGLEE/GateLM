@@ -36,6 +36,7 @@ type KeyMaterial struct {
 	SelectedModel            string `json:"selectedModel"`
 	SecurityPolicyVersionID  string `json:"securityPolicyVersionId"`
 	RoutingPolicyVersionID   string `json:"routingPolicyVersionId"`
+	CachePolicyHash          string `json:"cachePolicyHash"`
 	NormalizedRedactedPrompt string `json:"normalizedRedactedPrompt"`
 	RequestParamsHash        string `json:"requestParamsHash"`
 }
@@ -75,6 +76,7 @@ func canonicalMaterialBytes(material KeyMaterial) ([]byte, error) {
 	material.SelectedModel = strings.TrimSpace(material.SelectedModel)
 	material.SecurityPolicyVersionID = strings.TrimSpace(material.SecurityPolicyVersionID)
 	material.RoutingPolicyVersionID = strings.TrimSpace(material.RoutingPolicyVersionID)
+	material.CachePolicyHash = strings.TrimSpace(material.CachePolicyHash)
 	material.NormalizedRedactedPrompt = NormalizeRedactedPrompt(material.NormalizedRedactedPrompt)
 	material.RequestParamsHash = strings.TrimSpace(material.RequestParamsHash)
 
@@ -98,6 +100,9 @@ func canonicalMaterialBytes(material KeyMaterial) ([]byte, error) {
 	}
 	if material.RoutingPolicyVersionID == "" {
 		return nil, errors.New("routing policy version id is required")
+	}
+	if material.CachePolicyHash == "" {
+		return nil, errors.New("cache policy hash is required")
 	}
 	if material.NormalizedRedactedPrompt == "" {
 		return nil, errors.New("normalized redacted prompt is required")
