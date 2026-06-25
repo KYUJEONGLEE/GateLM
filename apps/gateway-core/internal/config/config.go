@@ -1,0 +1,83 @@
+package config
+
+import (
+	"net/url"
+	"os"
+	"strconv"
+	"time"
+)
+
+type Config struct {
+	Port                string
+	DatabaseURL         string
+	RedisURL            string
+	MockProviderBaseURL string
+	DefaultProvider     string
+	DefaultModel        string
+	ReadinessTimeout    time.Duration
+	ProviderTimeout     time.Duration
+	MaxRequestBodyBytes int64
+}
+
+func Load() Config {
+	return Config{
+		Port:                envString("GATEWAY_PORT", "8080"),
+		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
+		RedisURL:            envString("REDIS_URL", "redis://localhost:6379"),
+		MockProviderBaseURL: envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
+		DefaultProvider:     envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
+		DefaultModel:        envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
+		ReadinessTimeout:    envDurationMillis("GATEWAY_READINESS_TIMEOUT_MS", 1000),
+		ProviderTimeout:     envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
+		MaxRequestBodyBytes: envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
+	}
+}
+
+func envString(key string, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envDurationMillis(key string, fallback int) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return time.Duration(fallback) * time.Millisecond
+	}
+
+	millis, err := strconv.Atoi(value)
+	if err != nil || millis <= 0 {
+		return time.Duration(fallback) * time.Millisecond
+	}
+
+	return time.Duration(millis) * time.Millisecond
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func DatabaseDriverURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	query := parsed.Query()
+	query.Del("schema")
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String()
+}
