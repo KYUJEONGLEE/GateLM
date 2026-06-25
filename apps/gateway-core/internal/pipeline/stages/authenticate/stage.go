@@ -44,7 +44,10 @@ func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error 
 		if errors.As(err, &gatewayErr) {
 			return err
 		}
-		return gatewayerrors.InvalidAPIKey(StageName)
+		if errors.Is(err, auth.ErrInvalidAPIKey) {
+			return gatewayerrors.InvalidAPIKey(StageName)
+		}
+		return gatewayerrors.InternalError(StageName, "Gateway API key authentication failed.", err)
 	}
 
 	req.APIKeyID = identity.APIKeyID

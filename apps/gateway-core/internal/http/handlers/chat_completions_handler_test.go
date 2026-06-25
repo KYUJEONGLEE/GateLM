@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -380,6 +381,70 @@ func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeAPIKeyLookup(t *testi
 		t.Fatalf("expected no provider calls, got %d", chatCalls)
 	}
 	assertGatewayErrorCode(t, rr, "invalid_app_token")
+}
+
+func TestChatCompletionsHandlerReturnsInternalErrorForAPIKeyStoreFailure(t *testing.T) {
+	chatCalls := 0
+	store := newTestCredentialStore()
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: failingAPIKeyAuthenticator{err: errors.New("credential store unavailable")},
+		AppTokenValidator:   store,
+		ExpectedTenantID:    testTenantID,
+		ExpectedProjectID:   testProjectID,
+		ExpectedAppID:       testAppID,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "internal_error")
+}
+
+func TestChatCompletionsHandlerReturnsInternalErrorForAppTokenStoreFailure(t *testing.T) {
+	chatCalls := 0
+	store := newTestCredentialStore()
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: store,
+		AppTokenValidator:   failingAppTokenValidator{err: errors.New("credential store unavailable")},
+		ExpectedTenantID:    testTenantID,
+		ExpectedProjectID:   testProjectID,
+		ExpectedAppID:       testAppID,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "internal_error")
 }
 
 func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing.T) {

@@ -52,6 +52,24 @@ func TestStageMapsInvalidAPIKeyToGatewayError(t *testing.T) {
 	}
 }
 
+func TestStageMapsUnexpectedAuthenticatorErrorToInternalError(t *testing.T) {
+	upstreamErr := errors.New("credential store unavailable")
+	stage := NewStage(fakeAuthenticator{err: upstreamErr}, "redacted_api_key")
+	req := &pipeline.RequestContext{}
+
+	err := stage.Execute(context.Background(), req)
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected GatewayError, got %T", err)
+	}
+	if gatewayErr.HTTPStatus != 500 || gatewayErr.Code != "internal_error" {
+		t.Fatalf("expected 500 internal_error, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
+	}
+	if !errors.Is(err, upstreamErr) {
+		t.Fatalf("expected wrapped upstream error, got %v", err)
+	}
+}
+
 func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
 	stage := NewStage(fakeAuthenticator{err: context.Canceled}, "redacted_api_key")
 	req := &pipeline.RequestContext{}

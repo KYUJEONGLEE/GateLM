@@ -44,7 +44,10 @@ func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error 
 		if errors.As(err, &gatewayErr) {
 			return err
 		}
-		return gatewayerrors.InvalidAppToken(StageName)
+		if errors.Is(err, auth.ErrInvalidAppToken) {
+			return gatewayerrors.InvalidAppToken(StageName)
+		}
+		return gatewayerrors.InternalError(StageName, "Gateway app token validation failed.", err)
 	}
 
 	if req.TenantID != "" && req.TenantID != identity.TenantID {
