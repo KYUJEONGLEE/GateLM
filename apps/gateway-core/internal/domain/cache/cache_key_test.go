@@ -63,6 +63,10 @@ func TestBuildExactKeyChangesWhenMaterialChanges(t *testing.T) {
 			material.RoutingPolicyVersionID = "routing_policy_p0_v2"
 			return material
 		},
+		"cache policy": func(material KeyMaterial) KeyMaterial {
+			material.CachePolicyHash = "cache_p0_v2"
+			return material
+		},
 		"redacted prompt": func(material KeyMaterial) KeyMaterial {
 			material.NormalizedRedactedPrompt = "Write a short billing response."
 			return material
@@ -131,6 +135,19 @@ func TestBuildExactKeyRequiresRequestParamsHash(t *testing.T) {
 	}
 }
 
+func TestBuildExactKeyRequiresCachePolicyHash(t *testing.T) {
+	material := validKeyMaterial()
+	material.CachePolicyHash = "  "
+
+	_, err := BuildExactKey([]byte("cache-key-secret-for-test-only"), material)
+	if err == nil {
+		t.Fatal("expected error when cache policy hash is empty")
+	}
+	if !strings.Contains(err.Error(), "cache policy hash") {
+		t.Fatalf("expected cache policy hash error, got %v", err)
+	}
+}
+
 func validKeyMaterial() KeyMaterial {
 	return KeyMaterial{
 		TenantID:                 "tenant_01J_DEMO",
@@ -140,6 +157,7 @@ func validKeyMaterial() KeyMaterial {
 		SelectedModel:            "mock-fast",
 		SecurityPolicyVersionID:  "security_policy_p0_v1",
 		RoutingPolicyVersionID:   "routing_policy_p0_v1",
+		CachePolicyHash:          "cache_p0_v1",
 		NormalizedRedactedPrompt: "Write a short refund response.",
 		RequestParamsHash:        "hmac-sha256:params-demo",
 	}

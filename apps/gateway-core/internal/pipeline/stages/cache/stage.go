@@ -27,6 +27,7 @@ type Request struct {
 	SelectedModel            string
 	SecurityPolicyVersionID  string
 	RoutingPolicyVersionID   string
+	CachePolicyHash          string
 	NormalizedRedactedPrompt string
 	RequestParamsHash        string
 	MaskingAction            string

@@ -171,7 +171,6 @@ providerConnections
 modelCatalog
 defaultProvider
 defaultModel
-allowedModels
 securityPolicyHash
 routingPolicyHash
 cachePolicyHash
@@ -354,4 +353,3 @@ securityPolicyHash
 routingPolicyHash
 cachePolicyHash
 ```
-
