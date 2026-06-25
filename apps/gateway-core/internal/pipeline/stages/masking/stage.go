@@ -49,11 +49,15 @@ func (s *Stage) Execute(ctx context.Context, req Request) (Result, error) {
 	}
 
 	result, err := s.engine.Apply(ctx, req)
+	if err != nil {
+		return Result{}, err
+	}
+
 	if result.Blocked {
 		result.MaskingAction = "blocked"
 		result.ErrorCode = ErrorCodeSensitiveDataBlocked
 		result.ErrorStage = StageName
 	}
 
-	return result, err
+	return result, nil
 }
