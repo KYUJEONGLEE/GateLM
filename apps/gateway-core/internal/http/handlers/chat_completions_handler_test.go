@@ -121,3 +121,42 @@ func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
 		t.Fatalf("unexpected error code: %s", resp.Error.Code)
 	}
 }
+
+func TestChatCompletionsHandlerRejectsOversizedBodyBeforeProviderCall(t *testing.T) {
+	chatCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chatCalls++
+		writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+	}))
+	defer mockServer.Close()
+
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		MaxRequestBodyBytes: 16,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "this request is larger than the configured limit"}]
+	}`))
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+	}
+
+	var resp gatewayErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Error.Code != "request_body_too_large" {
+		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	}
+}

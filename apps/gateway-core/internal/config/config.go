@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -15,6 +16,7 @@ type Config struct {
 	DefaultModel        string
 	ReadinessTimeout    time.Duration
 	ProviderTimeout     time.Duration
+	MaxRequestBodyBytes int64
 }
 
 func Load() Config {
@@ -27,6 +29,7 @@ func Load() Config {
 		DefaultModel:        envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
 		ReadinessTimeout:    envDurationMillis("GATEWAY_READINESS_TIMEOUT_MS", 1000),
 		ProviderTimeout:     envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
+		MaxRequestBodyBytes: envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
 	}
 }
 
@@ -50,4 +53,31 @@ func envDurationMillis(key string, fallback int) time.Duration {
 	}
 
 	return time.Duration(millis) * time.Millisecond
+}
+
+func envInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func DatabaseDriverURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	query := parsed.Query()
+	query.Del("schema")
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String()
 }

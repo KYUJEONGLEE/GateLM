@@ -8,22 +8,20 @@ import (
 	"gatelm/apps/gateway-core/internal/http/handlers"
 )
 
-func NewRouter(cfg config.Config, providers *provider.Registry, httpClient *http.Client) http.Handler {
+func NewRouter(cfg config.Config, providers *provider.Registry, readinessChecks map[string]handlers.ReadinessCheck) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
-		DatabaseURL:         cfg.DatabaseURL,
-		RedisURL:            cfg.RedisURL,
-		MockProviderBaseURL: cfg.MockProviderBaseURL,
-		Timeout:             cfg.ReadinessTimeout,
-		HTTPClient:          httpClient,
+		Timeout: cfg.ReadinessTimeout,
+		Checks:  readinessChecks,
 	})
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{Providers: providers})
 	mux.Handle("POST /v1/chat/completions", handlers.ChatCompletionsHandler{
-		Providers:       providers,
-		DefaultModel:    cfg.DefaultModel,
-		DefaultProvider: cfg.DefaultProvider,
+		Providers:           providers,
+		DefaultModel:        cfg.DefaultModel,
+		DefaultProvider:     cfg.DefaultProvider,
+		MaxRequestBodyBytes: cfg.MaxRequestBodyBytes,
 	})
 
 	return mux

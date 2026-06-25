@@ -13,6 +13,10 @@ import (
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/http/handlers"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -21,7 +25,40 @@ func main() {
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	providers := provider.NewRegistry(cfg.DefaultProvider, mockAdapter)
 
-	router := app.NewRouter(cfg, providers, providerHTTPClient)
+	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
+	if err != nil {
+		log.Fatalf("gateway-core postgres pool configuration failed: %v", err)
+	}
+	defer postgresPool.Close()
+
+	redisOptions, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Fatalf("gateway-core redis configuration failed: %v", err)
+	}
+	redisClient := redis.NewClient(redisOptions)
+	defer redisClient.Close()
+
+	readinessChecks := map[string]handlers.ReadinessCheck{
+		"postgres": {
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          postgresPool.Ping,
+		},
+		"redis": {
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check: func(ctx context.Context) error {
+				return redisClient.Ping(ctx).Err()
+			},
+		},
+		"mock_provider": {
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          handlers.HTTPHealthCheck(providerHTTPClient, cfg.MockProviderBaseURL),
+		},
+	}
+
+	router := app.NewRouter(cfg, providers, readinessChecks)
 	server := app.NewServer(cfg, router)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

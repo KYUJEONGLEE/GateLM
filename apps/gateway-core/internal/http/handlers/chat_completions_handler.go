@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -11,9 +12,10 @@ import (
 )
 
 type ChatCompletionsHandler struct {
-	Providers       *provider.Registry
-	DefaultModel    string
-	DefaultProvider string
+	Providers           *provider.Registry
+	DefaultModel        string
+	DefaultProvider     string
+	MaxRequestBodyBytes int64
 }
 
 func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -23,8 +25,21 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		requestID = middleware.NewRequestID()
 	}
 
+	if h.MaxRequestBodyBytes > 0 {
+		if r.ContentLength > h.MaxRequestBodyBytes {
+			writeGatewayError(w, http.StatusRequestEntityTooLarge, requestID, "request_body_too_large", "Request body is too large.")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBodyBytes)
+	}
+
 	var chatReq provider.ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&chatReq); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeGatewayError(w, http.StatusRequestEntityTooLarge, requestID, "request_body_too_large", "Request body is too large.")
+			return
+		}
 		writeGatewayError(w, http.StatusBadRequest, requestID, "invalid_request_error", "Request body is invalid.")
 		return
 	}
