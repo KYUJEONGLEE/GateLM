@@ -193,7 +193,7 @@
       "rules": [
         {
           "reasonCode": "short_prompt_low_cost",
-          "condition": "prompt_length_chars <= 300 and cache_status == 'miss'",
+          "condition": "prompt_length_chars <= 300",
           "selectedModel": "mock-fast"
         },
         {

@@ -38,7 +38,7 @@ A 산출물 -> B/C/D/E 병렬 개발 기준
 | provider | `mock` |
 | defaultModel | `mock-balanced` |
 | lowCostModel | `mock-fast` |
-| optionalHighQualityModel | `mock-smart` |
+| highQualityModel | `mock-smart` |
 | securityPolicyHash | `sec_p0_v1` |
 | routingPolicyHash | `route_p0_v1` |
 | cachePolicyHash | `cache_p0_v1` |
