@@ -77,10 +77,15 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAPIKey(authenticate.StageName))
 		return
 	}
+	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
+	if appToken == "" {
+		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAppToken(appauth.StageName))
+		return
+	}
 
 	authStages := []pipeline.Stage{
 		authenticate.NewStage(h.APIKeyAuthenticator, bearerToken),
-		appauth.NewStage(h.AppTokenValidator, r.Header.Get("X-GateLM-App-Token")),
+		appauth.NewStage(h.AppTokenValidator, appToken),
 		identify.NewStage(h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID),
 	}
 	for _, stage := range authStages {

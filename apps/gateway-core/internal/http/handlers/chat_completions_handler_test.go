@@ -343,6 +343,45 @@ func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testi
 	assertGatewayErrorCode(t, rr, "invalid_app_token")
 }
 
+func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeAPIKeyLookup(t *testing.T) {
+	apiKeyCalls := 0
+	appTokenCalls := 0
+	chatCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: countingAPIKeyAuthenticator{calls: &apiKeyCalls},
+		AppTokenValidator:   countingAppTokenValidator{calls: &appTokenCalls},
+		ExpectedTenantID:    testTenantID,
+		ExpectedProjectID:   testProjectID,
+		ExpectedAppID:       testAppID,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	req.Header.Set("Authorization", "Bearer "+testAPIKey)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if apiKeyCalls != 0 {
+		t.Fatalf("expected no API key authenticator calls, got %d", apiKeyCalls)
+	}
+	if appTokenCalls != 0 {
+		t.Fatalf("expected no app token validator calls, got %d", appTokenCalls)
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "invalid_app_token")
+}
+
 func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing.T) {
 	chatCalls := 0
 	store := auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
@@ -499,6 +538,34 @@ type failingAppTokenValidator struct {
 
 func (v failingAppTokenValidator) ValidateAppToken(ctx context.Context, appToken string) (auth.AppTokenIdentity, error) {
 	return auth.AppTokenIdentity{}, v.err
+}
+
+type countingAPIKeyAuthenticator struct {
+	calls *int
+}
+
+func (a countingAPIKeyAuthenticator) AuthenticateAPIKey(ctx context.Context, bearerToken string) (auth.APIKeyIdentity, error) {
+	(*a.calls)++
+	return auth.APIKeyIdentity{
+		APIKeyID:      testAPIKeyID,
+		TenantID:      testTenantID,
+		ProjectID:     testProjectID,
+		ApplicationID: testAppID,
+	}, nil
+}
+
+type countingAppTokenValidator struct {
+	calls *int
+}
+
+func (v countingAppTokenValidator) ValidateAppToken(ctx context.Context, appToken string) (auth.AppTokenIdentity, error) {
+	(*v.calls)++
+	return auth.AppTokenIdentity{
+		AppTokenID:    testAppTokenID,
+		TenantID:      testTenantID,
+		ProjectID:     testProjectID,
+		ApplicationID: testAppID,
+	}, nil
 }
 
 func withTestAuth(handler *ChatCompletionsHandler) {
