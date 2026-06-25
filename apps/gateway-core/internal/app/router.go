@@ -8,7 +8,6 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/handlers"
-	gatewaymiddleware "gatelm/apps/gateway-core/internal/http/middleware"
 )
 
 type RouterOptions struct {
@@ -74,6 +73,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	if appTokenValidator == nil {
 		appTokenValidator = credentials
 	}
+	authFailureLogWriter := routerOptions.AuthFailureLogWriter
+	if authFailureLogWriter == nil {
+		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
+	}
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
@@ -83,22 +86,17 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{Providers: providers})
 
 	chatCompletionsHandler := http.Handler(handlers.ChatCompletionsHandler{
-		Providers:           providers,
-		DefaultModel:        cfg.DefaultModel,
-		DefaultProvider:     cfg.DefaultProvider,
-		MaxRequestBodyBytes: cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator: apiKeyAuthenticator,
-		AppTokenValidator:   appTokenValidator,
-		ExpectedTenantID:    cfg.DemoTenantID,
-		ExpectedProjectID:   cfg.DemoProjectID,
-		ExpectedAppID:       cfg.DemoApplicationID,
+		Providers:            providers,
+		DefaultModel:         cfg.DefaultModel,
+		DefaultProvider:      cfg.DefaultProvider,
+		MaxRequestBodyBytes:  cfg.MaxRequestBodyBytes,
+		APIKeyAuthenticator:  apiKeyAuthenticator,
+		AppTokenValidator:    appTokenValidator,
+		ExpectedTenantID:     cfg.DemoTenantID,
+		ExpectedProjectID:    cfg.DemoProjectID,
+		ExpectedAppID:        cfg.DemoApplicationID,
+		AuthFailureLogWriter: authFailureLogWriter,
 	})
-
-	authFailureLogWriter := routerOptions.AuthFailureLogWriter
-	if authFailureLogWriter == nil {
-		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
-	}
-	chatCompletionsHandler = gatewaymiddleware.AuthFailureLogMiddleware(authFailureLogWriter)(chatCompletionsHandler)
 	mux.Handle("POST /v1/chat/completions", chatCompletionsHandler)
 
 	return mux
