@@ -826,6 +826,177 @@ func TestChatCompletionsHandlerUsesPipelineRouteAndContextMetadata(t *testing.T)
 	}
 }
 
+func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		rawValue    string
+		placeholder string
+	}{
+		{
+			name:        "email",
+			prompt:      "Write a safe reply to user@example.invalid about the refund.",
+			rawValue:    "user@example.invalid",
+			placeholder: "[EMAIL_REDACTED]",
+		},
+		{
+			name:        "phone",
+			prompt:      "Write a safe reply asking them to call 010-0000-0000 tomorrow.",
+			rawValue:    "010-0000-0000",
+			placeholder: "[PHONE_NUMBER_REDACTED]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatCalls := 0
+			var providerRequests []provider.ChatCompletionRequest
+			handler := ChatCompletionsHandler{
+				Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+					calls:    &chatCalls,
+					requests: &providerRequests,
+				}),
+				DefaultModel:    "mock-balanced",
+				DefaultProvider: "mock",
+			}
+			withTestAuth(&handler)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody(tt.prompt)))
+			setValidGatewayAuthHeaders(req)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if chatCalls != 1 {
+				t.Fatalf("expected one provider call for redacted request, got %d", chatCalls)
+			}
+			if got := rr.Header().Get("X-GateLM-Masking-Action"); got != "redacted" {
+				t.Fatalf("expected masking action redacted header, got %q", got)
+			}
+
+			providerPrompt := recordedProviderPrompt(t, providerRequests)
+			if !strings.Contains(providerPrompt, tt.placeholder) {
+				t.Fatalf("expected provider prompt to contain %s, got %q", tt.placeholder, providerPrompt)
+			}
+			if strings.Contains(providerPrompt, tt.rawValue) {
+				t.Fatalf("provider prompt must not include raw sensitive value %q: %q", tt.rawValue, providerPrompt)
+			}
+
+			var resp provider.ChatCompletionResponse
+			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if resp.GateLM == nil || resp.GateLM.MaskingAction != "redacted" {
+				t.Fatalf("expected redacted gate_lm masking metadata, got %#v", resp.GateLM)
+			}
+		})
+	}
+}
+
+func TestChatCompletionsHandlerBlocksSensitiveDataBeforeProviderCall(t *testing.T) {
+	tests := []struct {
+		name     string
+		prompt   string
+		rawValue string
+	}{
+		{
+			name:     "api key",
+			prompt:   "Summarize this synthetic config: api_key=test_secret_token_redacted_for_demo_only_1234567890",
+			rawValue: "test_secret_token_redacted_for_demo_only_1234567890",
+		},
+		{
+			name:     "jwt",
+			prompt:   "Summarize this synthetic token: eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.signature_for_test_only",
+			rawValue: "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.signature_for_test_only",
+		},
+		{
+			name:     "rrn",
+			prompt:   "Reject this synthetic rrn-like value: 000101-3000000",
+			rawValue: "000101-3000000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatCalls := 0
+			handler := ChatCompletionsHandler{
+				Providers:       provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+				DefaultModel:    "mock-balanced",
+				DefaultProvider: "mock",
+			}
+			withTestAuth(&handler)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody(tt.prompt)))
+			setValidGatewayAuthHeaders(req)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if chatCalls != 0 {
+				t.Fatalf("expected sensitive %s request to block before provider call, got %d provider calls", tt.name, chatCalls)
+			}
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if got := rr.Header().Get("X-GateLM-Masking-Action"); got != "blocked" {
+				t.Fatalf("expected masking action blocked header, got %q", got)
+			}
+			if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "bypass" {
+				t.Fatalf("expected blocked request to bypass cache, got %q", got)
+			}
+			if strings.Contains(rr.Body.String(), tt.rawValue) {
+				t.Fatalf("blocked response must not include raw sensitive value %q", tt.rawValue)
+			}
+			assertGatewayErrorCode(t, rr, "sensitive_data_blocked")
+		})
+	}
+}
+
+func TestChatCompletionsHandlerSameSafeRequestMissThenHit(t *testing.T) {
+	chatCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	body := chatCompletionBody("Write a short safe refund response.")
+	firstReq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	setValidGatewayAuthHeaders(firstReq)
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, firstReq)
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	setValidGatewayAuthHeaders(secondReq)
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, secondReq)
+
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected first request 200, got %d: %s", first.Code, first.Body.String())
+	}
+	if second.Code != http.StatusOK {
+		t.Fatalf("expected second request 200, got %d: %s", second.Code, second.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf(
+			"expected provider call count to remain 1 across miss then hit, got %d (first cache=%q second cache=%q)",
+			chatCalls,
+			first.Header().Get("X-GateLM-Cache-Status"),
+			second.Header().Get("X-GateLM-Cache-Status"),
+		)
+	}
+	if got := first.Header().Get("X-GateLM-Cache-Status"); got != "miss" {
+		t.Fatalf("expected first safe request cache miss, got %q", got)
+	}
+	if got := second.Header().Get("X-GateLM-Cache-Status"); got != "hit" {
+		t.Fatalf("expected second safe request cache hit, got %q", got)
+	}
+}
+
 type nilProviderAdapter struct{}
 
 func (nilProviderAdapter) Name() string {
@@ -855,6 +1026,50 @@ func (a countingProviderAdapter) ListModels(ctx context.Context) (*provider.Mode
 func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	(*a.calls)++
 	return &provider.ChatCompletionResponse{}, nil
+}
+
+type recordingProviderAdapter struct {
+	calls    *int
+	requests *[]provider.ChatCompletionRequest
+}
+
+func (a recordingProviderAdapter) Name() string {
+	return "mock"
+}
+
+func (a recordingProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a recordingProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	if a.calls != nil {
+		(*a.calls)++
+	}
+	if a.requests != nil {
+		*a.requests = append(*a.requests, req)
+	}
+
+	return &provider.ChatCompletionResponse{
+		ID:      "mock_chatcmpl_recording",
+		Object:  "chat.completion",
+		Created: 1782108000,
+		Model:   req.Model,
+		Choices: []provider.ChatChoice{
+			{
+				Index: 0,
+				Message: provider.ChatMessage{
+					Role:    "assistant",
+					Content: json.RawMessage(`"Mock response"`),
+				},
+				FinishReason: "stop",
+			},
+		},
+		Usage: &provider.Usage{
+			PromptTokens:     4,
+			CompletionTokens: 3,
+			TotalTokens:      7,
+		},
+	}, nil
 }
 
 type failingAPIKeyAuthenticator struct {
@@ -946,6 +1161,43 @@ func newTestCredentialStore() *auth.StaticCredentialStore {
 func setValidGatewayAuthHeaders(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+testAPIKey)
 	req.Header.Set("X-GateLM-App-Token", testAppToken)
+}
+
+func chatCompletionBody(prompt string) string {
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral(prompt)),
+			},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(body)
+}
+
+func jsonStringLiteral(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
+}
+
+func recordedProviderPrompt(t *testing.T, requests []provider.ChatCompletionRequest) string {
+	t.Helper()
+
+	if len(requests) != 1 {
+		t.Fatalf("expected one recorded provider request, got %d", len(requests))
+	}
+	promptText, err := extractTextPrompt(requests[0].Messages)
+	if err != nil {
+		t.Fatalf("extract provider prompt: %v", err)
+	}
+	return promptText
 }
 
 func assertGatewayErrorCode(t *testing.T, rr *httptest.ResponseRecorder, expected string) {
