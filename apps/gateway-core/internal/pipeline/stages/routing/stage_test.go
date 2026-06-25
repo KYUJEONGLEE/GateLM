@@ -16,7 +16,7 @@ func (r fakeRouter) DecideRoute(_ context.Context, _ routing.Request) (routing.D
 	return r.decision, nil
 }
 
-func TestStageWritesRoutingContext(t *testing.T) {
+func TestStageWritesRoutingFields(t *testing.T) {
 	stage := NewStage(fakeRouter{
 		decision: routing.Decision{
 			RequestedModel:   "auto",
