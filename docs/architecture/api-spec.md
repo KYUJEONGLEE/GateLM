@@ -275,6 +275,7 @@ Gateway API error shape은 OpenAI-compatible 형식을 따른다.
 | HTTP Status | Control Plane Code | Gateway Code | 설명 |
 |---:|---|---|---|
 | 400 | `VALIDATION_ERROR` | `invalid_request_error` | 요청 형식 오류 |
+| 413 | `PAYLOAD_TOO_LARGE` | `request_body_too_large` | 요청 body 크기 제한 초과 |
 | 401 | `UNAUTHENTICATED` | `invalid_api_key` | 인증 실패 |
 | 403 | `FORBIDDEN` | `invalid_app_token` | App Token 오류 |
 | 403 | `FORBIDDEN` | `scope_mismatch` | Tenant/Project/Application scope 불일치 |
@@ -4363,6 +4364,7 @@ Error Response:
 주요 Error:
 
 - `400 invalid_request_error`: `messages` 누락, image/file content 포함, 지원하지 않는 필드
+- `413 request_body_too_large`: Gateway 요청 body 크기 제한 초과
 - `401 invalid_api_key`: API Key 없음/오류/만료
 - `403 invalid_app_token`: App Token 없음/오류/만료
 - `403 scope_mismatch`: Tenant/Project/Application scope 불일치

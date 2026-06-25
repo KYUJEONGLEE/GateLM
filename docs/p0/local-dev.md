@@ -130,6 +130,7 @@ GATEWAY_DEFAULT_PROVIDER=mock
 GATEWAY_DEFAULT_MODEL=mock-balanced
 GATEWAY_LOW_COST_MODEL=mock-fast
 GATEWAY_APP_TOKEN_REQUIRED=true
+GATEWAY_MAX_REQUEST_BODY_BYTES=4194304
 
 # Mock provider
 MOCK_PROVIDER_PORT=8090
@@ -248,7 +249,7 @@ docker compose run --rm node-toolbox pnpm test
 Gateway Go module이 생긴 뒤 테스트는 아래처럼 실행한다.
 
 ```bash
-docker compose run --rm go-toolbox go test ./...
+docker compose run --rm go-toolbox go test ./apps/gateway-core/...
 ```
 
 ---
