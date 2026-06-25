@@ -49,6 +49,42 @@ func TestChatCompletionsHandlerRejectsInvalidAPIKeyBeforeProviderCall(t *testing
 	}
 }
 
+func TestChatCompletionsHandlerRejectsMissingAuthorizationBeforeProviderCall(t *testing.T) {
+	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
+	defer closeServer()
+
+	apiAuth := &fakeAPIKeyAuthenticator{
+		identity: validAPIKeyIdentity(),
+	}
+	appValidator := &fakeAppTokenValidator{
+		identity: validAppTokenIdentity(),
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           registry,
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: apiAuth,
+		AppTokenValidator:   appValidator,
+	}
+
+	req := authSafetyRequest()
+	req.Header.Del("Authorization")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assertGatewayError(t, rr, http.StatusUnauthorized, "invalid_api_key")
+	if apiAuth.calls != 0 {
+		t.Fatalf("expected API key authenticator not to be called, got %d", apiAuth.calls)
+	}
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
+	}
+	if *chatCalls != 0 {
+		t.Fatalf("expected no mock provider calls, got %d", *chatCalls)
+	}
+}
+
 func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testing.T) {
 	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
 	defer closeServer()
@@ -78,6 +114,42 @@ func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testi
 	}
 	if appValidator.calls != 1 {
 		t.Fatalf("expected app token validator to be called once, got %d", appValidator.calls)
+	}
+	if *chatCalls != 0 {
+		t.Fatalf("expected no mock provider calls, got %d", *chatCalls)
+	}
+}
+
+func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeProviderCall(t *testing.T) {
+	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
+	defer closeServer()
+
+	apiAuth := &fakeAPIKeyAuthenticator{
+		identity: validAPIKeyIdentity(),
+	}
+	appValidator := &fakeAppTokenValidator{
+		identity: validAppTokenIdentity(),
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           registry,
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: apiAuth,
+		AppTokenValidator:   appValidator,
+	}
+
+	req := authSafetyRequest()
+	req.Header.Del("X-GateLM-App-Token")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assertGatewayError(t, rr, http.StatusForbidden, "invalid_app_token")
+	if apiAuth.calls != 1 {
+		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
+	}
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
 	if *chatCalls != 0 {
 		t.Fatalf("expected no mock provider calls, got %d", *chatCalls)

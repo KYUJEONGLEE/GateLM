@@ -127,11 +127,27 @@ function Get-MockCallCount {
     }
 
     $json = $response.Body | ConvertFrom-Json
-    if ($null -eq $json.calls) {
-        throw "mock provider stats response is missing calls"
+    $callCount = $null
+    $callsProperty = $json.PSObject.Properties["calls"]
+    if ($null -ne $callsProperty) {
+        $callCount = $callsProperty.Value
     }
 
-    return [int]$json.calls
+    if ($null -eq $callCount) {
+        $dataProperty = $json.PSObject.Properties["data"]
+        if ($null -ne $dataProperty -and $null -ne $dataProperty.Value) {
+            $totalCallsProperty = $dataProperty.Value.PSObject.Properties["totalCalls"]
+            if ($null -ne $totalCallsProperty) {
+                $callCount = $totalCallsProperty.Value
+            }
+        }
+    }
+
+    if ($null -eq $callCount) {
+        throw "mock provider stats response is missing calls or data.totalCalls"
+    }
+
+    return [int]$callCount
 }
 
 function Invoke-GatewayChat {
