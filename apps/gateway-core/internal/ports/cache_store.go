@@ -2,7 +2,9 @@ package ports
 
 import "context"
 
-type CacheLookupResult struct {
+// CacheLookupResult is an alias so exact cache stages and adapters keep one
+// structural GetExact contract while the Gateway module boundary is skeletal.
+type CacheLookupResult = struct {
 	Hit               bool
 	CacheHitRequestID string
 	Payload           []byte

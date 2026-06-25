@@ -102,6 +102,9 @@ func canonicalMaterialBytes(material KeyMaterial) ([]byte, error) {
 	if material.NormalizedRedactedPrompt == "" {
 		return nil, errors.New("normalized redacted prompt is required")
 	}
+	if material.RequestParamsHash == "" {
+		return nil, errors.New("request params hash is required")
+	}
 
 	return json.Marshal(keyEnvelope{
 		Version:  ExactKeyMaterialVersion,

@@ -49,7 +49,9 @@ type Store interface {
 	GetExact(ctx context.Context, keyHash string) (LookupResult, error)
 }
 
-type LookupResult struct {
+// LookupResult is an alias so future ports.CacheStore adapters can share this
+// method signature without introducing a distinct named return type.
+type LookupResult = struct {
 	Hit               bool
 	CacheHitRequestID string
 	Payload           []byte

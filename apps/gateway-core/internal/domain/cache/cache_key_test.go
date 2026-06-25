@@ -67,6 +67,10 @@ func TestBuildExactKeyChangesWhenMaterialChanges(t *testing.T) {
 			material.NormalizedRedactedPrompt = "Write a short billing response."
 			return material
 		},
+		"request params": func(material KeyMaterial) KeyMaterial {
+			material.RequestParamsHash = "hmac-sha256:params-other"
+			return material
+		},
 	}
 
 	for name, mutate := range cases {
@@ -111,6 +115,19 @@ func TestNormalizeRedactedPrompt(t *testing.T) {
 	want := "Write a short response."
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestBuildExactKeyRequiresRequestParamsHash(t *testing.T) {
+	material := validKeyMaterial()
+	material.RequestParamsHash = "  "
+
+	_, err := BuildExactKey([]byte("cache-key-secret-for-test-only"), material)
+	if err == nil {
+		t.Fatal("expected error when request params hash is empty")
+	}
+	if !strings.Contains(err.Error(), "request params hash") {
+		t.Fatalf("expected request params hash error, got %v", err)
 	}
 }
 
