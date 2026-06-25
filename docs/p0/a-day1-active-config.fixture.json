@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "fixtureName": "p0-active-config",
+  "generatedFor": "GateLM P0 Day1",
+  "securityNotice": {
+    "containsPlaintextApiKey": false,
+    "containsPlaintextAppToken": false,
+    "containsPlaintextProviderKey": false,
+    "containsRawPrompt": false,
+    "containsRawResponse": false
+  },
+  "tenant": {
+    "tenantId": "00000000-0000-4000-8000-000000000100",
+    "tenantAlias": "tenant_acme_p0",
+    "tenantName": "Acme Corp",
+    "tenantSlug": "acme",
+    "status": "active",
+    "defaultTimezone": "Asia/Seoul",
+    "defaultCurrency": "USD"
+  },
+  "adminUser": {
+    "adminUserId": "00000000-0000-4000-8000-000000000110",
+    "email": "admin@example.com",
+    "name": "P0 Admin",
+    "role": "tenant_admin",
+    "status": "active"
+  },
+  "project": {
+    "projectId": "00000000-0000-4000-8000-000000000200",
+    "projectAlias": "project_campaign_p0",
+    "tenantId": "00000000-0000-4000-8000-000000000100",
+    "projectName": "CampaignBot",
+    "projectSlug": "campaign-bot",
+    "defaultProvider": "mock",
+    "defaultModel": "mock-balanced",
+    "status": "active"
+  },
+  "application": {
+    "applicationId": "00000000-0000-4000-8000-000000000300",
+    "applicationAlias": "app_campaign_web_p0",
+    "tenantId": "00000000-0000-4000-8000-000000000100",
+    "projectId": "00000000-0000-4000-8000-000000000200",
+    "applicationName": "CampaignBot Web",
+    "applicationSlug": "campaign-web",
+    "type": "customer_app",
+    "status": "active"
+  },
+  "credentials": {
+    "apiKey": {
+      "apiKeyId": "00000000-0000-4000-8000-000000000400",
+      "tenantId": "00000000-0000-4000-8000-000000000100",
+      "projectId": "00000000-0000-4000-8000-000000000200",
+      "applicationId": "00000000-0000-4000-8000-000000000300",
+      "name": "CampaignBot Gateway Key",
+      "keyPrefix": "glm_api_p0_demo",
+      "keyHash": "<sha256-or-hmac-hash-of-local-only-api-key>",
+      "scopes": [
+        "gateway:chat",
+        "gateway:models"
+      ],
+      "status": "active"
+    },
+    "appToken": {
+      "appTokenId": "00000000-0000-4000-8000-000000000500",
+      "tenantId": "00000000-0000-4000-8000-000000000100",
+      "projectId": "00000000-0000-4000-8000-000000000200",
+      "applicationId": "00000000-0000-4000-8000-000000000300",
+      "name": "CampaignBot App Token",
+      "tokenPrefix": "glm_app_p0_demo",
+      "tokenHash": "<sha256-or-hmac-hash-of-local-only-app-token>",
+      "scopes": [
+        "app:invoke"
+      ],
+      "status": "active"
+    }
+  },
+  "providerConnections": [
+    {
+      "providerConnectionId": "00000000-0000-4000-8000-000000000600",
+      "tenantId": "00000000-0000-4000-8000-000000000100",
+      "projectId": "00000000-0000-4000-8000-000000000200",
+      "name": "P0 Mock Provider",
+      "provider": "mock",
+      "baseUrlInDocker": "http://mock-provider:8090",
+      "baseUrlOnHost": "http://localhost:8090",
+      "defaultModel": "mock-balanced",
+      "secretRef": "local/mock-provider/no-secret-required",
+      "credentialPreview": "mock-provider",
+      "status": "active"
+    }
+  ],
+  "modelCatalog": [
+    {
+      "modelId": "00000000-0000-4000-8000-000000000701",
+      "provider": "mock",
+      "model": "mock-fast",
+      "displayName": "Mock Fast",
+      "purpose": "low-cost / short prompt",
+      "capabilities": [
+        "chat"
+      ],
+      "status": "active"
+    },
+    {
+      "modelId": "00000000-0000-4000-8000-000000000702",
+      "provider": "mock",
+      "model": "mock-balanced",
+      "displayName": "Mock Balanced",
+      "purpose": "default model",
+      "capabilities": [
+        "chat"
+      ],
+      "status": "active"
+    },
+    {
+      "modelId": "00000000-0000-4000-8000-000000000703",
+      "provider": "mock",
+      "model": "mock-smart",
+      "displayName": "Mock Smart",
+      "purpose": "optional high-quality demo",
+      "capabilities": [
+        "chat"
+      ],
+      "status": "active"
+    }
+  ],
+  "pricingRules": [
+    {
+      "pricingRuleId": "00000000-0000-4000-8000-000000000801",
+      "provider": "mock",
+      "model": "mock-fast",
+      "pricingVersion": "p0-demo",
+      "inputMicroUsdPer1MTokens": 100000,
+      "outputMicroUsdPer1MTokens": 400000,
+      "currency": "USD"
+    },
+    {
+      "pricingRuleId": "00000000-0000-4000-8000-000000000802",
+      "provider": "mock",
+      "model": "mock-balanced",
+      "pricingVersion": "p0-demo",
+      "inputMicroUsdPer1MTokens": 300000,
+      "outputMicroUsdPer1MTokens": 800000,
+      "currency": "USD"
+    },
+    {
+      "pricingRuleId": "00000000-0000-4000-8000-000000000803",
+      "provider": "mock",
+      "model": "mock-smart",
+      "pricingVersion": "p0-demo",
+      "inputMicroUsdPer1MTokens": 1000000,
+      "outputMicroUsdPer1MTokens": 3000000,
+      "currency": "USD"
+    }
+  ],
+  "policies": {
+    "security": {
+      "securityPolicyHash": "sec_p0_v1",
+      "inspectionMode": "sync_gateway_pre_provider",
+      "redactTypes": [
+        "person_name",
+        "email",
+        "phone_number"
+      ],
+      "blockTypes": [
+        "resident_registration_number",
+        "api_key",
+        "authorization_header",
+        "jwt",
+        "private_key"
+      ],
+      "redactionPlaceholders": {
+        "person_name": "[PERSON_NAME_REDACTED]",
+        "email": "[EMAIL_REDACTED]",
+        "phone_number": "[PHONE_NUMBER_REDACTED]",
+        "resident_registration_number": "[RESIDENT_REGISTRATION_NUMBER_REDACTED]",
+        "api_key": "[API_KEY_REDACTED]",
+        "authorization_header": "[AUTHORIZATION_HEADER_REDACTED]",
+        "jwt": "[JWT_REDACTED]",
+        "private_key": "[SECRET_REDACTED]"
+      },
+      "logStorage": {
+        "storeRawPrompt": false,
+        "storeRawResponse": false,
+        "storeRedactedPromptPreview": true,
+        "storeDetectionCounts": true
+      }
+    },
+    "routing": {
+      "routingPolicyHash": "route_p0_v1",
+      "requestedModelMode": "auto",
+      "defaultProvider": "mock",
+      "defaultModel": "mock-balanced",
+      "lowCostModel": "mock-fast",
+      "highQualityModel": "mock-smart",
+      "rules": [
+        {
+          "reasonCode": "short_prompt_low_cost",
+          "condition": "prompt_length_chars <= 300",
+          "selectedModel": "mock-fast"
+        },
+        {
+          "reasonCode": "default_balanced",
+          "condition": "otherwise",
+          "selectedModel": "mock-balanced"
+        }
+      ],
+      "decisionMetadataKeys": [
+        "requested_model",
+        "routing_type",
+        "selected_provider",
+        "selected_model",
+        "reason_codes"
+      ]
+    },
+    "cache": {
+      "cachePolicyHash": "cache_p0_v1",
+      "mode": "exact_only",
+      "exactCacheEnabled": true,
+      "semanticCacheEnabled": false,
+      "ttlSeconds": 3600,
+      "keyMaterial": [
+        "tenantId",
+        "projectId",
+        "applicationId",
+        "selectedProvider",
+        "selectedModel",
+        "normalizedRedactedPrompt",
+        "securityPolicyHash",
+        "routingPolicyHash",
+        "cachePolicyHash"
+      ],
+      "responseStorage": {
+        "storeRawResponse": false,
+        "storeProviderNormalizedResponse": true,
+        "storeTokenCostMetadata": true
+      }
+    }
+  },
+  "redisKeys": {
+    "apiKeyAuth": {
+      "pattern": "gatelm:auth:api_key:{keyHash}",
+      "ttlSeconds": 300
+    },
+    "appTokenAuth": {
+      "pattern": "gatelm:auth:app_token:{tokenHash}",
+      "ttlSeconds": 300
+    },
+    "projectConfig": {
+      "pattern": "gatelm:config:project:{projectId}",
+      "ttlSeconds": 300
+    },
+    "exactCache": {
+      "pattern": "gatelm:cache:exact:{cacheKeyHash}",
+      "ttlSeconds": 3600
+    }
+  },
+  "requestContextShape": {
+    "required": [
+      "requestId",
+      "tenantId",
+      "projectId",
+      "applicationId",
+      "apiKeyId",
+      "provider",
+      "model",
+      "securityPolicyHash",
+      "routingPolicyHash",
+      "cachePolicyHash"
+    ],
+    "optional": [
+      "appTokenId",
+      "endUserId",
+      "cacheStatus",
+      "routingReasonCodes"
+    ]
+  },
+  "consumers": {
+    "B_gateway_mock_provider": [
+      "providerConnections",
+      "modelCatalog",
+      "routing default provider/model"
+    ],
+    "C_security_auth": [
+      "credentials metadata",
+      "security policy",
+      "redaction placeholders"
+    ],
+    "D_cache_routing": [
+      "cache policy",
+      "routing policy",
+      "pricing rules"
+    ],
+    "E_dashboard_logs": [
+      "tenant/project/application metadata",
+      "pricing rules",
+      "policy hashes"
+    ]
+  }
+}
