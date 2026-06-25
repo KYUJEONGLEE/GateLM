@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/auth"
-	gatewayerrors "github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/errors"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/auth"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 type fakeValidator struct {

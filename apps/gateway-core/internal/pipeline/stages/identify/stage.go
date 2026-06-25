@@ -3,8 +3,8 @@ package identify
 import (
 	"context"
 
-	gatewayerrors "github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/errors"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 const StageName = "resolve_tenant_project_application"
