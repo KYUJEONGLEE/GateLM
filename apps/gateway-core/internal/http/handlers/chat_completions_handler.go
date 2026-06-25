@@ -163,6 +163,11 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 func extractTextPrompt(messages []provider.ChatMessage) (string, error) {
 	var builder strings.Builder
 	for index, message := range messages {
+		rawContent := strings.TrimSpace(string(message.Content))
+		if rawContent == "" || rawContent == "null" {
+			return "", fmt.Errorf("messages[%d].content must be a JSON string", index)
+		}
+
 		var content string
 		if err := json.Unmarshal(message.Content, &content); err != nil {
 			return "", fmt.Errorf("messages[%d].content must be a JSON string: %w", index, err)

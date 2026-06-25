@@ -220,45 +220,73 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 }
 
 func TestChatCompletionsHandlerRejectsNonTextMessageContentBeforePipelineAndProvider(t *testing.T) {
-	chatCalls := 0
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		chatCalls++
-		writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
-	}))
-	defer mockServer.Close()
-
-	preflight := &fakeGatewayPipeline{}
-	handler := ChatCompletionsHandler{
-		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
-		PreProviderPipeline: preflight,
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "array content",
+			body: `{
+				"model": "mock-balanced",
+				"messages": [{"role": "user", "content": [{"type": "text", "text": "unsupported in P0"}]}]
+			}`,
+		},
+		{
+			name: "null content",
+			body: `{
+				"model": "mock-balanced",
+				"messages": [{"role": "assistant", "content": null}]
+			}`,
+		},
+		{
+			name: "missing content",
+			body: `{
+				"model": "mock-balanced",
+				"messages": [{"role": "assistant"}]
+			}`,
+		},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
-		"model": "mock-balanced",
-		"messages": [{"role": "user", "content": [{"type": "text", "text": "unsupported in P0"}]}]
-	}`))
-	rr := httptest.NewRecorder()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatCalls := 0
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				chatCalls++
+				writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+			}))
+			defer mockServer.Close()
 
-	handler.ServeHTTP(rr, req)
+			preflight := &fakeGatewayPipeline{}
+			handler := ChatCompletionsHandler{
+				Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+				DefaultModel:        "mock-balanced",
+				DefaultProvider:     "mock",
+				PreProviderPipeline: preflight,
+			}
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if preflight.calls != 0 {
-		t.Fatalf("expected no preflight calls, got %d", preflight.calls)
-	}
-	if chatCalls != 0 {
-		t.Fatalf("expected no mock provider calls, got %d", chatCalls)
-	}
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(tt.body))
+			rr := httptest.NewRecorder()
 
-	var resp gatewayErrorResponse
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if resp.Error.Code != "invalid_request_error" {
-		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if preflight.calls != 0 {
+				t.Fatalf("expected no preflight calls, got %d", preflight.calls)
+			}
+			if chatCalls != 0 {
+				t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+			}
+
+			var resp gatewayErrorResponse
+			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if resp.Error.Code != "invalid_request_error" {
+				t.Fatalf("unexpected error code: %s", resp.Error.Code)
+			}
+		})
 	}
 }
 
