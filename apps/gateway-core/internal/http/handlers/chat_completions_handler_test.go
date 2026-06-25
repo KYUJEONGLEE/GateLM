@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,8 +13,11 @@ import (
 
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
+	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
 )
 
 const (
@@ -447,6 +452,36 @@ func TestChatCompletionsHandlerReturnsInternalErrorForAppTokenStoreFailure(t *te
 	assertGatewayErrorCode(t, rr, "internal_error")
 }
 
+func TestLogGatewayAuthInternalErrorWritesSafeCause(t *testing.T) {
+	output := captureDefaultLog(t)
+	reqCtx := &pipeline.RequestContext{RequestID: "req_test"}
+	err := gatewayerrors.InternalError(authenticate.StageName, "Gateway API key authentication failed.", errors.New("credential store unavailable\nretry later"))
+
+	logGatewayAuthInternalError(reqCtx, err)
+
+	logged := output.String()
+	if !strings.Contains(logged, "gateway auth internal error") {
+		t.Fatalf("expected auth internal error log, got %q", logged)
+	}
+	if !strings.Contains(logged, "request_id=req_test") || !strings.Contains(logged, "stage=authenticate_api_key") {
+		t.Fatalf("expected request and stage context in log, got %q", logged)
+	}
+	if !strings.Contains(logged, "credential store unavailable retry later") {
+		t.Fatalf("expected sanitized cause in log, got %q", logged)
+	}
+}
+
+func TestLogGatewayAuthInternalErrorSkipsInvalidAPIKey(t *testing.T) {
+	output := captureDefaultLog(t)
+	reqCtx := &pipeline.RequestContext{RequestID: "req_test"}
+
+	logGatewayAuthInternalError(reqCtx, gatewayerrors.InvalidAPIKey(authenticate.StageName))
+
+	if output.String() != "" {
+		t.Fatalf("expected no log for invalid API key, got %q", output.String())
+	}
+}
+
 func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing.T) {
 	chatCalls := 0
 	store := auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
@@ -676,4 +711,23 @@ func assertGatewayErrorCode(t *testing.T, rr *httptest.ResponseRecorder, expecte
 	if resp.Error.Code != expected {
 		t.Fatalf("expected error code %s, got %s", expected, resp.Error.Code)
 	}
+}
+
+func captureDefaultLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var output bytes.Buffer
+	oldOutput := log.Writer()
+	oldFlags := log.Flags()
+	oldPrefix := log.Prefix()
+	log.SetOutput(&output)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	t.Cleanup(func() {
+		log.SetOutput(oldOutput)
+		log.SetFlags(oldFlags)
+		log.SetPrefix(oldPrefix)
+	})
+
+	return &output
 }

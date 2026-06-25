@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -216,8 +218,36 @@ func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestConte
 	reqCtx.CacheStatus = "bypass"
 	reqCtx.CacheType = "none"
 
+	logGatewayAuthInternalError(reqCtx, gatewayErr)
 	setGatewayHeaders(w, reqCtx)
 	writeGatewayError(w, gatewayErr.HTTPStatus, reqCtx.RequestID, gatewayErr.Code, gatewayErr.Message)
+}
+
+func logGatewayAuthInternalError(reqCtx *pipeline.RequestContext, gatewayErr gatewayerrors.GatewayError) {
+	if gatewayErr.HTTPStatus < http.StatusInternalServerError {
+		return
+	}
+
+	causeType := "<nil>"
+	causeMessage := gatewayErr.Message
+	if gatewayErr.Cause != nil {
+		causeType = fmt.Sprintf("%T", gatewayErr.Cause)
+		causeMessage = sanitizeLogValue(gatewayErr.Cause.Error())
+	}
+
+	log.Printf("gateway auth internal error request_id=%s stage=%s code=%s http_status=%d cause_type=%s cause=%q",
+		reqCtx.RequestID,
+		gatewayErr.Stage,
+		gatewayErr.Code,
+		gatewayErr.HTTPStatus,
+		causeType,
+		causeMessage,
+	)
+}
+
+func sanitizeLogValue(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	return strings.ReplaceAll(value, "\n", " ")
 }
 
 func setGatewayHeaders(w http.ResponseWriter, reqCtx *pipeline.RequestContext) {
