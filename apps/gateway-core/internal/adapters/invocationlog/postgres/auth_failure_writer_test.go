@@ -162,6 +162,34 @@ func TestAuthFailureWriterDoesNotPersistRawCredentials(t *testing.T) {
 	}
 }
 
+func TestAuthFailureWriterDropsInvalidOptionalUUIDs(t *testing.T) {
+	execer := &fakeExecer{}
+	writer := NewAuthFailureWriter(execer, AuthFailureDefaults{
+		TenantID:  "00000000-0000-4000-8000-000000000100",
+		ProjectID: "00000000-0000-4000-8000-000000000200",
+	})
+
+	err := writer.WriteAuthFailureLog(context.Background(), invocationlog.BuildAuthFailureLog(invocationlog.AuthFailureInput{
+		RequestID:     "request_invalid_optional_ids",
+		TenantID:      "00000000-0000-4000-8000-000000000100",
+		ProjectID:     "00000000-0000-4000-8000-000000000200",
+		ApplicationID: "app_demo",
+		APIKeyID:      "api_key_demo",
+		AppTokenID:    "app_token_demo",
+		HTTPStatus:    403,
+		ErrorCode:     invocationlog.ErrorCodeInvalidAppToken,
+		ErrorMessage:  "Invalid GateLM App Token.",
+		StartedAt:     time.Now(),
+		CompletedAt:   time.Now(),
+	}))
+	if err != nil {
+		t.Fatalf("WriteAuthFailureLog returned error: %v", err)
+	}
+	assertArg(t, execer.args, 5, nil)
+	assertArg(t, execer.args, 6, nil)
+	assertArg(t, execer.args, 7, nil)
+}
+
 func TestAuthFailureWriterIgnoresNonAuthFailures(t *testing.T) {
 	execer := &fakeExecer{}
 	writer := NewAuthFailureWriter(execer, AuthFailureDefaults{

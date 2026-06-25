@@ -248,11 +248,47 @@ func nullableText(value string) any {
 	return value
 }
 
+func nullableUUID(value string) any {
+	value = strings.TrimSpace(value)
+	if !isValidUUID(value) {
+		return nil
+	}
+	return value
+}
+
 func nullableInt64(value *int64) any {
 	if value == nil {
 		return nil
 	}
 	return *value
+}
+
+func isValidUUID(u string) bool {
+	if len(u) != 36 {
+		return false
+	}
+	for i, r := range u {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if r != '-' {
+				return false
+			}
+		} else {
+			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func firstValidUUID(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if isValidUUID(trimmed) {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {
