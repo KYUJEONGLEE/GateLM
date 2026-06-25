@@ -19,7 +19,7 @@ type ChatCompletionsHandler struct {
 }
 
 func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	startedAt := time.Now().UTC()
+	startedAt := time.Now()
 	requestID := middleware.NormalizeRequestID(r.Header.Get(middleware.RequestIDHeader))
 	if requestID == "" {
 		requestID = middleware.NewRequestID()
@@ -50,7 +50,7 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		Endpoint:  "/v1/chat/completions",
 		Method:    http.MethodPost,
 		Stream:    chatReq.Stream,
-		StartedAt: startedAt,
+		StartedAt: startedAt.UTC(),
 		EndUserID: r.Header.Get("X-GateLM-End-User-Id"),
 		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
 	})
@@ -101,6 +101,16 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		reqCtx.ErrorStage = "call_provider_with_timeout_retry_fallback"
 		setGatewayHeaders(w, reqCtx)
 		writeGatewayError(w, http.StatusBadGateway, requestID, "provider_error", "Provider request failed.")
+		return
+	}
+	if providerResp == nil {
+		reqCtx.Status = "error"
+		reqCtx.HTTPStatus = http.StatusBadGateway
+		reqCtx.ErrorCode = "provider_error"
+		reqCtx.ErrorMessage = "Provider returned an empty response."
+		reqCtx.ErrorStage = "call_provider_with_timeout_retry_fallback"
+		setGatewayHeaders(w, reqCtx)
+		writeGatewayError(w, http.StatusBadGateway, requestID, "provider_error", "Provider returned an empty response.")
 		return
 	}
 
