@@ -9,7 +9,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
-func TestStageAllowsMatchingIdentityContext(t *testing.T) {
+func TestStageAllowsMatchingRequestScope(t *testing.T) {
 	stage := NewStage("tenant_demo", "project_demo", "app_demo")
 	gatewayCtx := &request.GatewayContext{
 		Identity: request.IdentityContext{

@@ -1,5 +1,7 @@
 package request
 
+import "time"
+
 type GatewayContext struct {
 	Request  RequestContext
 	Identity IdentityContext
@@ -13,6 +15,7 @@ type RequestContext struct {
 	Endpoint       string
 	Method         string
 	Stream         bool
+	StartedAt      time.Time
 	RequestedModel string
 	PromptText     string
 }

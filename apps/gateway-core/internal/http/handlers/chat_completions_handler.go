@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,9 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
 )
 
 type APIKeyAuthenticator interface {
@@ -30,6 +35,10 @@ type ChatCompletionsHandler struct {
 	MaxRequestBodyBytes int64
 	APIKeyAuthenticator APIKeyAuthenticator
 	AppTokenValidator   AppTokenValidator
+	ExpectedTenantID    string
+	ExpectedProjectID   string
+	ExpectedAppID       string
+	PreProviderPipeline GatewayPipeline
 }
 
 func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -39,9 +48,19 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		requestID = middleware.NewRequestID()
 	}
 
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: requestID,
+		TraceID:   requestID,
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+		StartedAt: startedAt.UTC(),
+		EndUserID: r.Header.Get("X-GateLM-End-User-Id"),
+		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
+	})
+
 	if h.MaxRequestBodyBytes > 0 {
 		if r.ContentLength > h.MaxRequestBodyBytes {
-			writeGatewayError(w, http.StatusRequestEntityTooLarge, requestID, "request_body_too_large", "Request body is too large.")
+			writeGatewayErrorWithContext(w, reqCtx, http.StatusRequestEntityTooLarge, "request_body_too_large", "Request body is too large.", "parse_openai_compatible_payload")
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBodyBytes)
@@ -51,33 +70,57 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	if err := json.NewDecoder(r.Body).Decode(&chatReq); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeGatewayError(w, http.StatusRequestEntityTooLarge, requestID, "request_body_too_large", "Request body is too large.")
+			writeGatewayErrorWithContext(w, reqCtx, http.StatusRequestEntityTooLarge, "request_body_too_large", "Request body is too large.", "parse_openai_compatible_payload")
 			return
 		}
-		writeGatewayError(w, http.StatusBadRequest, requestID, "invalid_request_error", "Request body is invalid.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "Request body is invalid.", "parse_openai_compatible_payload")
 		return
 	}
 
-	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
-		RequestID: requestID,
-		TraceID:   requestID,
-		Endpoint:  "/v1/chat/completions",
-		Method:    http.MethodPost,
-		Stream:    chatReq.Stream,
-		StartedAt: startedAt.UTC(),
-		EndUserID: r.Header.Get("X-GateLM-End-User-Id"),
-		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
-	})
+	reqCtx.Stream = chatReq.Stream
 	reqCtx.RequestedModel = chatReq.Model
 
+	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway authentication is not initialized.", "authenticate_api_key")
+		return
+	}
+
+	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAPIKey(authenticate.StageName))
+		return
+	}
+	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
+	if appToken == "" {
+		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAppToken(appauth.StageName))
+		return
+	}
+
+	authGatewayCtx := newGatewayContext(reqCtx, "")
+	apiKeyStage := authenticate.NewStage(h.APIKeyAuthenticator, bearerToken)
+	if err := apiKeyStage.Execute(r.Context(), authGatewayCtx); err != nil {
+		applyGatewayContext(reqCtx, authGatewayCtx)
+		handleGatewayAuthError(w, reqCtx, err)
+		return
+	}
+
+	appTokenStage := appauth.NewStage(h.AppTokenValidator, appToken)
+	if err := appTokenStage.Execute(r.Context(), authGatewayCtx); err != nil {
+		applyGatewayContext(reqCtx, authGatewayCtx)
+		handleGatewayAuthError(w, reqCtx, err)
+		return
+	}
+
+	identifyStage := identify.NewStage(h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID)
+	if err := identifyStage.Execute(r.Context(), authGatewayCtx); err != nil {
+		applyGatewayContext(reqCtx, authGatewayCtx)
+		handleGatewayAuthError(w, reqCtx, err)
+		return
+	}
+	applyGatewayContext(reqCtx, authGatewayCtx)
+
 	if chatReq.Stream {
-		reqCtx.Status = "error"
-		reqCtx.HTTPStatus = http.StatusBadRequest
-		reqCtx.ErrorCode = "streaming_not_supported"
-		reqCtx.ErrorMessage = "Streaming is not supported in P0."
-		reqCtx.ErrorStage = "parse_openai_compatible_payload"
-		setGatewayHeaders(w, reqCtx)
-		writeGatewayError(w, http.StatusBadRequest, requestID, "streaming_not_supported", "Streaming is not supported in P0.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
 		return
 	}
 
@@ -86,54 +129,69 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		reqCtx.RequestedModel = h.DefaultModel
 	}
 	if len(chatReq.Messages) == 0 {
-		writeGatewayError(w, http.StatusBadRequest, requestID, "invalid_request_error", "messages is required.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages is required.", "parse_openai_compatible_payload")
+		return
+	}
+	promptText, err := extractTextPrompt(chatReq.Messages)
+	if err != nil {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages content must be text-only.", "parse_openai_compatible_payload")
 		return
 	}
 
-	if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
-		writeGatewayErrorFromError(w, reqCtx, err)
+if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
+	handleGatewayAuthError(w, reqCtx, err)
+	return
+}
+
+gatewayCtx := newGatewayContext(reqCtx, promptText)
+if h.PreProviderPipeline != nil {
+	if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+		applyGatewayContext(reqCtx, gatewayCtx)
+		writeGatewayPipelineFailure(w, reqCtx, err)
 		return
 	}
+	applyGatewayContext(reqCtx, gatewayCtx)
+}
 
 	if h.Providers == nil {
-		writeGatewayError(w, http.StatusInternalServerError, requestID, "internal_error", "Providers registry is not initialized.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Providers registry is not initialized.", "resolve_provider_adapter")
 		return
 	}
-	adapter, err := h.Providers.Get(h.DefaultProvider)
+
+	providerName := reqCtx.SelectedProvider
+	if providerName == "" {
+		providerName = h.DefaultProvider
+	}
+	adapter, err := h.Providers.Get(providerName)
 	if err != nil {
-		writeGatewayError(w, http.StatusServiceUnavailable, requestID, "provider_not_configured", "Gateway provider is not configured.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway provider is not configured.", "resolve_provider_adapter")
 		return
 	}
 
 	chatReq.RequestID = requestID
-	reqCtx.SelectedProvider = adapter.Name()
-	reqCtx.SelectedModel = chatReq.Model
-	reqCtx.RoutingReason = "not_routed"
-	reqCtx.Provider = adapter.Name()
-	reqCtx.Model = chatReq.Model
+	if reqCtx.SelectedProvider == "" {
+		reqCtx.SelectedProvider = adapter.Name()
+	}
+	if reqCtx.SelectedModel == "" {
+		reqCtx.SelectedModel = chatReq.Model
+	}
+	if reqCtx.RoutingReason == "" {
+		reqCtx.RoutingReason = "not_routed"
+	}
+	chatReq.Model = reqCtx.SelectedModel
+	reqCtx.Provider = reqCtx.SelectedProvider
+	reqCtx.Model = reqCtx.SelectedModel
 
 	providerStartedAt := time.Now()
 	providerResp, err := adapter.CreateChatCompletion(r.Context(), chatReq)
 	reqCtx.ProviderLatencyMs = time.Since(providerStartedAt).Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
-		reqCtx.Status = "error"
-		reqCtx.HTTPStatus = http.StatusBadGateway
-		reqCtx.ErrorCode = "provider_error"
-		reqCtx.ErrorMessage = "Provider request failed."
-		reqCtx.ErrorStage = "call_provider_with_timeout_retry_fallback"
-		setGatewayHeaders(w, reqCtx)
-		writeGatewayError(w, http.StatusBadGateway, requestID, "provider_error", "Provider request failed.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_with_timeout_retry_fallback")
 		return
 	}
 	if providerResp == nil {
-		reqCtx.Status = "error"
-		reqCtx.HTTPStatus = http.StatusBadGateway
-		reqCtx.ErrorCode = "provider_error"
-		reqCtx.ErrorMessage = "Provider returned an empty response."
-		reqCtx.ErrorStage = "call_provider_with_timeout_retry_fallback"
-		setGatewayHeaders(w, reqCtx)
-		writeGatewayError(w, http.StatusBadGateway, requestID, "provider_error", "Provider returned an empty response.")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
 		return
 	}
 
@@ -149,12 +207,16 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	providerResp.GateLM = &provider.GateLMMetadata{
 		RequestID:        reqCtx.RequestID,
+		TenantID:         reqCtx.TenantID,
+		ProjectID:        reqCtx.ProjectID,
+		ApplicationID:    reqCtx.ApplicationID,
 		RequestedModel:   reqCtx.RequestedModel,
 		SelectedProvider: reqCtx.SelectedProvider,
 		SelectedModel:    reqCtx.SelectedModel,
 		CacheStatus:      reqCtx.CacheStatus,
 		RoutingReason:    reqCtx.RoutingReason,
 		MaskingAction:    reqCtx.MaskingAction,
+		EstimatedCostUSD: formatCostMicroUSD(reqCtx.CostMicroUSD),
 		LatencyMs:        reqCtx.LatencyMs,
 	}
 
@@ -163,68 +225,79 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
-	if h.APIKeyAuthenticator != nil {
-		bearerToken, ok := bearerTokenFromAuthorization(r.Header.Get("Authorization"))
-		if !ok {
-			return gatewayerrors.InvalidAPIKey("authenticate_api_key")
-		}
-
-		identity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
-		if err != nil {
-			return err
-		}
-
-		reqCtx.APIKeyID = identity.APIKeyID
-		reqCtx.TenantID = identity.TenantID
-		reqCtx.ProjectID = identity.ProjectID
-		if identity.ApplicationID != "" {
-			reqCtx.ApplicationID = identity.ApplicationID
-		}
+	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication is not initialized.", nil)
 	}
 
-	if h.AppTokenValidator != nil {
-		appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
-		if appToken == "" {
-			return gatewayerrors.InvalidAppToken("validate_app_token")
-		}
+	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		return gatewayerrors.InvalidAPIKey(authenticate.StageName)
+	}
 
-		identity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
-		if err != nil {
-			return err
+	apiKeyIdentity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidAPIKey) {
+			return gatewayerrors.InvalidAPIKey(authenticate.StageName)
 		}
+		return err
+	}
 
-		if reqCtx.TenantID != "" && reqCtx.TenantID != identity.TenantID {
-			return gatewayerrors.ScopeMismatch("validate_app_token")
-		}
-		if reqCtx.ProjectID != "" && reqCtx.ProjectID != identity.ProjectID {
-			return gatewayerrors.ScopeMismatch("validate_app_token")
-		}
-		if reqCtx.ApplicationID != "" && reqCtx.ApplicationID != identity.ApplicationID {
-			return gatewayerrors.ScopeMismatch("validate_app_token")
-		}
+	reqCtx.APIKeyID = apiKeyIdentity.APIKeyID
+	reqCtx.TenantID = apiKeyIdentity.TenantID
+	reqCtx.ProjectID = apiKeyIdentity.ProjectID
+	if apiKeyIdentity.ApplicationID != "" {
+		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
+	}
 
-		reqCtx.AppTokenID = identity.AppTokenID
-		if reqCtx.TenantID == "" {
-			reqCtx.TenantID = identity.TenantID
+	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
+	if appToken == "" {
+		return gatewayerrors.InvalidAppToken(appauth.StageName)
+	}
+
+	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidAppToken) {
+			return gatewayerrors.InvalidAppToken(appauth.StageName)
 		}
-		if reqCtx.ProjectID == "" {
-			reqCtx.ProjectID = identity.ProjectID
-		}
-		if reqCtx.ApplicationID == "" {
-			reqCtx.ApplicationID = identity.ApplicationID
-		}
+		return err
+	}
+
+	if reqCtx.TenantID != "" && reqCtx.TenantID != appTokenIdentity.TenantID {
+		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	}
+	if reqCtx.ProjectID != "" && reqCtx.ProjectID != appTokenIdentity.ProjectID {
+		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	}
+	if reqCtx.ApplicationID != "" && reqCtx.ApplicationID != appTokenIdentity.ApplicationID {
+		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	}
+
+	reqCtx.AppTokenID = appTokenIdentity.AppTokenID
+	if reqCtx.TenantID == "" {
+		reqCtx.TenantID = appTokenIdentity.TenantID
+	}
+	if reqCtx.ProjectID == "" {
+		reqCtx.ProjectID = appTokenIdentity.ProjectID
+	}
+	if reqCtx.ApplicationID == "" {
+		reqCtx.ApplicationID = appTokenIdentity.ApplicationID
+	}
+
+	if h.ExpectedTenantID != "" && reqCtx.TenantID != h.ExpectedTenantID {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+	if h.ExpectedProjectID != "" && reqCtx.ProjectID != h.ExpectedProjectID {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+	if h.ExpectedAppID != "" && reqCtx.ApplicationID != h.ExpectedAppID {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
 	}
 
 	return nil
 }
 
-func bearerTokenFromAuthorization(value string) (string, bool) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", false
-	}
-
-	parts := strings.Fields(value)
+func extractBearerToken(header string) (string, bool) {
+	parts := strings.Fields(header)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
 		return "", false
 	}
@@ -232,33 +305,80 @@ func bearerTokenFromAuthorization(value string) (string, bool) {
 	return parts[1], true
 }
 
-func writeGatewayErrorFromError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
+func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
 	var gatewayErr gatewayerrors.GatewayError
-	if errors.As(err, &gatewayErr) {
+	if !errors.As(err, &gatewayErr) {
+		switch {
+		case errors.Is(err, context.Canceled):
+			gatewayErr = gatewayerrors.RequestCancelled(authenticate.StageName, err)
+		case errors.Is(err, context.DeadlineExceeded):
+			gatewayErr = gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication timed out.", err)
+		default:
+			gatewayErr = gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication failed.", err)
+		}
+	}
+
+	if gatewayErr.HTTPStatus == gatewayerrors.StatusClientClosedRequest || errors.Is(err, context.Canceled) {
+		reqCtx.Status = "cancelled"
+	} else {
 		reqCtx.Status = "error"
-		reqCtx.HTTPStatus = gatewayErr.HTTPStatus
-		reqCtx.ErrorCode = gatewayErr.Code
-		reqCtx.ErrorMessage = gatewayErr.Message
-		reqCtx.ErrorStage = gatewayErr.Stage
-		setGatewayHeaders(w, reqCtx)
-		writeGatewayError(w, gatewayErr.HTTPStatus, reqCtx.RequestID, gatewayErr.Code, gatewayErr.Message)
+	}
+	reqCtx.HTTPStatus = gatewayErr.HTTPStatus
+	reqCtx.ErrorCode = gatewayErr.Code
+	reqCtx.ErrorMessage = gatewayErr.Message
+	reqCtx.ErrorStage = gatewayErr.Stage
+	reqCtx.CacheStatus = "bypass"
+	reqCtx.CacheType = "none"
+
+	logGatewayAuthInternalError(reqCtx, gatewayErr)
+	setGatewayHeaders(w, reqCtx)
+	writeGatewayError(w, gatewayErr.HTTPStatus, reqCtx.RequestID, gatewayErr.Code, gatewayErr.Message)
+}
+
+func logGatewayAuthInternalError(reqCtx *pipeline.RequestContext, gatewayErr gatewayerrors.GatewayError) {
+	if gatewayErr.HTTPStatus < http.StatusInternalServerError {
 		return
 	}
 
-	reqCtx.Status = "error"
-	reqCtx.HTTPStatus = http.StatusInternalServerError
-	reqCtx.ErrorCode = "internal_error"
-	reqCtx.ErrorMessage = "Gateway authentication failed."
-	reqCtx.ErrorStage = "authenticate_api_key"
-	setGatewayHeaders(w, reqCtx)
-	writeGatewayError(w, http.StatusInternalServerError, reqCtx.RequestID, "internal_error", "Gateway authentication failed.")
+	causeType := "<nil>"
+	causeMessage := gatewayErr.Message
+	if gatewayErr.Cause != nil {
+		causeType = fmt.Sprintf("%T", gatewayErr.Cause)
+		causeMessage = sanitizeLogValue(gatewayErr.Cause.Error())
+	}
+
+	log.Printf("gateway auth internal error request_id=%s stage=%s code=%s http_status=%d cause_type=%s cause=%q",
+		reqCtx.RequestID,
+		gatewayErr.Stage,
+		gatewayErr.Code,
+		gatewayErr.HTTPStatus,
+		causeType,
+		causeMessage,
+	)
 }
 
-func setGatewayHeaders(w http.ResponseWriter, reqCtx *pipeline.RequestContext) {
-	w.Header().Set(middleware.RequestIDHeader, reqCtx.RequestID)
-	w.Header().Set("X-GateLM-Cache-Status", reqCtx.CacheStatus)
-	w.Header().Set("X-GateLM-Routed-Provider", reqCtx.SelectedProvider)
-	w.Header().Set("X-GateLM-Routed-Model", reqCtx.SelectedModel)
-	w.Header().Set("X-GateLM-Masking-Action", reqCtx.MaskingAction)
-	w.Header().Set("X-GateLM-Estimated-Cost-Usd", "0.000000")
+func sanitizeLogValue(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	return strings.ReplaceAll(value, "\n", " ")
+}
+
+func extractTextPrompt(messages []provider.ChatMessage) (string, error) {
+	var builder strings.Builder
+	for index, message := range messages {
+		rawContent := strings.TrimSpace(string(message.Content))
+		if rawContent == "" || rawContent == "null" {
+			return "", fmt.Errorf("messages[%d].content must be a JSON string", index)
+		}
+
+		var content string
+		if err := json.Unmarshal(message.Content, &content); err != nil {
+			return "", fmt.Errorf("messages[%d].content must be a JSON string: %w", index, err)
+		}
+		if index > 0 {
+			builder.WriteByte('\n')
+		}
+		builder.WriteString(content)
+	}
+
+	return builder.String(), nil
 }

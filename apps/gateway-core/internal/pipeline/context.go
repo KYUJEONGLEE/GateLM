@@ -3,12 +3,13 @@ package pipeline
 import "time"
 
 type RequestContext struct {
-	RequestID string
-	TraceID   string
-	Endpoint  string
-	Method    string
-	Stream    bool
-	StartedAt time.Time
+	RequestID  string
+	TraceID    string
+	Endpoint   string
+	Method     string
+	Stream     bool
+	StartedAt  time.Time
+	PromptText string
 
 	TenantID      string
 	ProjectID     string
@@ -23,6 +24,7 @@ type RequestContext struct {
 	SelectedProvider  string
 	SelectedModel     string
 	RoutingReason     string
+	RoutingPolicyHash string
 
 	MaskingAction         string
 	MaskingDetectedTypes  []string
