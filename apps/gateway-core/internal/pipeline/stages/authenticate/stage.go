@@ -2,9 +2,11 @@ package authenticate
 
 import (
 	"context"
+	"errors"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/auth"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/auth"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 const StageName = "authenticate_api_key"
@@ -29,17 +31,21 @@ func (s Stage) Name() string {
 	return StageName
 }
 
-func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
+func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error {
 	identity, err := s.authenticator.AuthenticateAPIKey(ctx, s.bearerToken)
 	if err != nil {
-		return err
+		var gatewayErr gatewayerrors.GatewayError
+		if errors.As(err, &gatewayErr) {
+			return err
+		}
+		return gatewayerrors.InvalidAPIKey(StageName)
 	}
 
-	gatewayCtx.Identity.APIKeyID = identity.APIKeyID
-	gatewayCtx.Identity.TenantID = identity.TenantID
-	gatewayCtx.Identity.ProjectID = identity.ProjectID
+	req.APIKeyID = identity.APIKeyID
+	req.TenantID = identity.TenantID
+	req.ProjectID = identity.ProjectID
 	if identity.ApplicationID != "" {
-		gatewayCtx.Identity.ApplicationID = identity.ApplicationID
+		req.ApplicationID = identity.ApplicationID
 	}
 
 	return nil

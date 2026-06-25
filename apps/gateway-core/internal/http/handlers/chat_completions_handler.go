@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
 )
 
 type ChatCompletionsHandler struct {
@@ -16,6 +21,11 @@ type ChatCompletionsHandler struct {
 	DefaultModel        string
 	DefaultProvider     string
 	MaxRequestBodyBytes int64
+	APIKeyAuthenticator authenticate.APIKeyAuthenticator
+	AppTokenValidator   appauth.AppTokenValidator
+	ExpectedTenantID    string
+	ExpectedProjectID   string
+	ExpectedAppID       string
 }
 
 func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +65,29 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
 	})
 	reqCtx.RequestedModel = chatReq.Model
+
+	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
+		writeGatewayError(w, http.StatusInternalServerError, requestID, "internal_error", "Gateway authentication is not initialized.")
+		return
+	}
+
+	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAPIKey(authenticate.StageName))
+		return
+	}
+
+	authStages := []pipeline.Stage{
+		authenticate.NewStage(h.APIKeyAuthenticator, bearerToken),
+		appauth.NewStage(h.AppTokenValidator, r.Header.Get("X-GateLM-App-Token")),
+		identify.NewStage(h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID),
+	}
+	for _, stage := range authStages {
+		if err := stage.Execute(r.Context(), reqCtx); err != nil {
+			handleGatewayAuthError(w, reqCtx, err)
+			return
+		}
+	}
 
 	if chatReq.Stream {
 		reqCtx.Status = "error"
@@ -141,6 +174,33 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func extractBearerToken(header string) (string, bool) {
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return "", false
+	}
+
+	return parts[1], true
+}
+
+func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		gatewayErr = gatewayerrors.New(http.StatusInternalServerError, "internal_error", "Gateway authentication failed.", "authenticate_api_key")
+	}
+
+	reqCtx.Status = "error"
+	reqCtx.HTTPStatus = gatewayErr.HTTPStatus
+	reqCtx.ErrorCode = gatewayErr.Code
+	reqCtx.ErrorMessage = gatewayErr.Message
+	reqCtx.ErrorStage = gatewayErr.Stage
+	reqCtx.CacheStatus = "bypass"
+	reqCtx.CacheType = "none"
+
+	setGatewayHeaders(w, reqCtx)
+	writeGatewayError(w, gatewayErr.HTTPStatus, reqCtx.RequestID, gatewayErr.Code, gatewayErr.Message)
 }
 
 func setGatewayHeaders(w http.ResponseWriter, reqCtx *pipeline.RequestContext) {

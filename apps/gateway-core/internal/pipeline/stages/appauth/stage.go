@@ -2,10 +2,11 @@ package appauth
 
 import (
 	"context"
+	"errors"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/auth"
-	gatewayerrors "github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/errors"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/auth"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 const StageName = "validate_app_token"
@@ -30,31 +31,35 @@ func (s Stage) Name() string {
 	return StageName
 }
 
-func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
+func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error {
 	identity, err := s.validator.ValidateAppToken(ctx, s.appToken)
 	if err != nil {
-		return err
+		var gatewayErr gatewayerrors.GatewayError
+		if errors.As(err, &gatewayErr) {
+			return err
+		}
+		return gatewayerrors.InvalidAppToken(StageName)
 	}
 
-	if gatewayCtx.Identity.TenantID != "" && gatewayCtx.Identity.TenantID != identity.TenantID {
+	if req.TenantID != "" && req.TenantID != identity.TenantID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if gatewayCtx.Identity.ProjectID != "" && gatewayCtx.Identity.ProjectID != identity.ProjectID {
+	if req.ProjectID != "" && req.ProjectID != identity.ProjectID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if gatewayCtx.Identity.ApplicationID != "" && gatewayCtx.Identity.ApplicationID != identity.ApplicationID {
+	if req.ApplicationID != "" && req.ApplicationID != identity.ApplicationID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
 
-	gatewayCtx.Identity.AppTokenID = identity.AppTokenID
-	if gatewayCtx.Identity.TenantID == "" {
-		gatewayCtx.Identity.TenantID = identity.TenantID
+	req.AppTokenID = identity.AppTokenID
+	if req.TenantID == "" {
+		req.TenantID = identity.TenantID
 	}
-	if gatewayCtx.Identity.ProjectID == "" {
-		gatewayCtx.Identity.ProjectID = identity.ProjectID
+	if req.ProjectID == "" {
+		req.ProjectID = identity.ProjectID
 	}
-	if gatewayCtx.Identity.ApplicationID == "" {
-		gatewayCtx.Identity.ApplicationID = identity.ApplicationID
+	if req.ApplicationID == "" {
+		req.ApplicationID = identity.ApplicationID
 	}
 
 	return nil

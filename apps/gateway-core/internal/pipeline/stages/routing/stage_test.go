@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 type fakeRouter struct {
@@ -16,7 +16,7 @@ func (r fakeRouter) DecideRoute(_ context.Context, _ routing.Request) (routing.D
 	return r.decision, nil
 }
 
-func TestStageWritesRoutingContext(t *testing.T) {
+func TestStageWritesRoutingFields(t *testing.T) {
 	stage := NewStage(fakeRouter{
 		decision: routing.Decision{
 			RequestedModel:   "auto",
@@ -26,24 +26,22 @@ func TestStageWritesRoutingContext(t *testing.T) {
 			PolicyHash:       "routing_policy_demo",
 		},
 	})
-	gatewayCtx := &request.GatewayContext{
-		Request: request.RequestContext{
-			RequestedModel: "auto",
-			PromptText:     "short prompt",
-		},
+	req := &pipeline.RequestContext{
+		RequestedModel: "auto",
+		PromptText:     "short prompt",
 	}
 
-	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+	if err := stage.Execute(context.Background(), req); err != nil {
 		t.Fatalf("expected routing stage to pass, got %v", err)
 	}
 
-	if gatewayCtx.Routing.RequestedModel != "auto" {
-		t.Fatalf("expected requested model to remain auto, got %s", gatewayCtx.Routing.RequestedModel)
+	if req.RequestedModel != "auto" {
+		t.Fatalf("expected requested model to remain auto, got %s", req.RequestedModel)
 	}
-	if gatewayCtx.Routing.SelectedProvider != "mock" || gatewayCtx.Routing.SelectedModel != "mock-fast" {
-		t.Fatalf("expected mock/mock-fast route, got %s/%s", gatewayCtx.Routing.SelectedProvider, gatewayCtx.Routing.SelectedModel)
+	if req.SelectedProvider != "mock" || req.SelectedModel != "mock-fast" {
+		t.Fatalf("expected mock/mock-fast route, got %s/%s", req.SelectedProvider, req.SelectedModel)
 	}
-	if gatewayCtx.Routing.RoutingReason != "low_cost" {
-		t.Fatalf("expected low_cost routing reason, got %s", gatewayCtx.Routing.RoutingReason)
+	if req.RoutingReason != "low_cost" {
+		t.Fatalf("expected low_cost routing reason, got %s", req.RoutingReason)
 	}
 }

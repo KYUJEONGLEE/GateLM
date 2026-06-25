@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/auth"
-	gatewayerrors "github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/errors"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/auth"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 type fakeValidator struct {
@@ -27,18 +27,16 @@ func TestStageWritesAppTokenIdentity(t *testing.T) {
 			ApplicationID: "app_demo",
 		},
 	}, "redacted_app_token")
-	gatewayCtx := &request.GatewayContext{
-		Identity: request.IdentityContext{
-			TenantID:  "tenant_demo",
-			ProjectID: "project_demo",
-		},
+	req := &pipeline.RequestContext{
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
 	}
 
-	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+	if err := stage.Execute(context.Background(), req); err != nil {
 		t.Fatalf("expected app token stage to pass, got %v", err)
 	}
-	if gatewayCtx.Identity.AppTokenID != "app_token_demo" || gatewayCtx.Identity.ApplicationID != "app_demo" {
-		t.Fatalf("expected app token identity to be written, got %#v", gatewayCtx.Identity)
+	if req.AppTokenID != "app_token_demo" || req.ApplicationID != "app_demo" {
+		t.Fatalf("expected app token identity to be written, got %#v", req)
 	}
 }
 
@@ -51,14 +49,12 @@ func TestStageRejectsScopeMismatch(t *testing.T) {
 			ApplicationID: "app_demo",
 		},
 	}, "redacted_app_token")
-	gatewayCtx := &request.GatewayContext{
-		Identity: request.IdentityContext{
-			TenantID:  "tenant_demo",
-			ProjectID: "project_demo",
-		},
+	req := &pipeline.RequestContext{
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
 	}
 
-	err := stage.Execute(context.Background(), gatewayCtx)
+	err := stage.Execute(context.Background(), req)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -77,15 +73,13 @@ func TestStageRejectsApplicationScopeMismatch(t *testing.T) {
 			ApplicationID: "other_app",
 		},
 	}, "redacted_app_token")
-	gatewayCtx := &request.GatewayContext{
-		Identity: request.IdentityContext{
-			TenantID:      "tenant_demo",
-			ProjectID:     "project_demo",
-			ApplicationID: "app_demo",
-		},
+	req := &pipeline.RequestContext{
+		TenantID:      "tenant_demo",
+		ProjectID:     "project_demo",
+		ApplicationID: "app_demo",
 	}
 
-	err := stage.Execute(context.Background(), gatewayCtx)
+	err := stage.Execute(context.Background(), req)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)

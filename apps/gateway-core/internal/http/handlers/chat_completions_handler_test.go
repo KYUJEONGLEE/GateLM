@@ -9,8 +9,19 @@ import (
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
+)
+
+const (
+	testAPIKey     = "glm_api_test_redacted"
+	testAppToken   = "glm_app_token_test_redacted"
+	testTenantID   = "tenant_demo"
+	testProjectID  = "project_demo"
+	testAppID      = "app_demo"
+	testAPIKeyID   = "api_key_demo"
+	testAppTokenID = "app_token_demo"
 )
 
 func TestChatCompletionsHandlerCallsMockProvider(t *testing.T) {
@@ -59,12 +70,14 @@ func TestChatCompletionsHandlerCallsMockProvider(t *testing.T) {
 		DefaultModel:    "mock-balanced",
 		DefaultProvider: "mock",
 	}
+	withTestAuth(&handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
 		"messages": [{"role": "user", "content": "Write a short refund response."}],
 		"stream": false
 	}`))
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -100,12 +113,14 @@ func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
 		DefaultModel:    "mock-balanced",
 		DefaultProvider: "mock",
 	}
+	withTestAuth(&handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
 		"messages": [{"role": "user", "content": "Write a short refund response."}],
 		"stream": true
 	}`))
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -123,16 +138,67 @@ func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerAuthenticatesBeforeRejectingStreaming(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock"),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}],
+		"stream": true
+	}`))
+	req.Header.Set("Authorization", "Bearer wrong_key_redacted")
+	req.Header.Set("X-GateLM-App-Token", testAppToken)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected auth to run before stream validation, got %d: %s", rr.Code, rr.Body.String())
+	}
+	assertGatewayErrorCode(t, rr, "invalid_api_key")
+}
+
+func TestChatCompletionsHandlerAuthenticatesBeforeRejectingMissingMessages(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock"),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": []
+	}`))
+	req.Header.Set("Authorization", "Bearer "+testAPIKey)
+	req.Header.Set("X-GateLM-App-Token", "wrong_token_redacted")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected auth to run before message validation, got %d: %s", rr.Code, rr.Body.String())
+	}
+	assertGatewayErrorCode(t, rr, "invalid_app_token")
+}
+
 func TestChatCompletionsHandlerRejectsMissingProviderRegistry(t *testing.T) {
 	handler := ChatCompletionsHandler{
 		DefaultModel:    "mock-balanced",
 		DefaultProvider: "mock",
 	}
+	withTestAuth(&handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
 		"messages": [{"role": "user", "content": "synthetic test message"}]
 	}`))
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -164,11 +230,13 @@ func TestChatCompletionsHandlerRejectsOversizedBodyBeforeProviderCall(t *testing
 		DefaultProvider:     "mock",
 		MaxRequestBodyBytes: 16,
 	}
+	withTestAuth(&handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
 		"messages": [{"role": "user", "content": "this request is larger than the configured limit"}]
 	}`))
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -195,11 +263,13 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 		DefaultModel:    "mock-balanced",
 		DefaultProvider: "nil-provider",
 	}
+	withTestAuth(&handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
 		"messages": [{"role": "user", "content": "Write a short refund response."}]
 	}`))
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -217,6 +287,109 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerRejectsInvalidAPIKeyBeforeProviderCall(t *testing.T) {
+	chatCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	req.Header.Set("Authorization", "Bearer wrong_key_redacted")
+	req.Header.Set("X-GateLM-App-Token", testAppToken)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "invalid_api_key")
+}
+
+func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testing.T) {
+	chatCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	req.Header.Set("Authorization", "Bearer "+testAPIKey)
+	req.Header.Set("X-GateLM-App-Token", "wrong_token_redacted")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "invalid_app_token")
+}
+
+func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing.T) {
+	chatCalls := 0
+	store := auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
+		APIKey:   testAPIKey,
+		AppToken: testAppToken,
+		APIKeyIdentity: auth.APIKeyIdentity{
+			APIKeyID:      testAPIKeyID,
+			TenantID:      testTenantID,
+			ProjectID:     testProjectID,
+			ApplicationID: testAppID,
+		},
+		AppTokenIdentity: auth.AppTokenIdentity{
+			AppTokenID:    testAppTokenID,
+			TenantID:      testTenantID,
+			ProjectID:     "other_project",
+			ApplicationID: testAppID,
+		},
+	})
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: store,
+		AppTokenValidator:   store,
+		ExpectedTenantID:    testTenantID,
+		ExpectedProjectID:   testProjectID,
+		ExpectedAppID:       testAppID,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "scope_mismatch")
+}
+
 type nilProviderAdapter struct{}
 
 func (nilProviderAdapter) Name() string {
@@ -229,4 +402,62 @@ func (nilProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListRe
 
 func (nilProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	return nil, nil
+}
+
+type countingProviderAdapter struct {
+	calls *int
+}
+
+func (a countingProviderAdapter) Name() string {
+	return "mock"
+}
+
+func (a countingProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	(*a.calls)++
+	return &provider.ChatCompletionResponse{}, nil
+}
+
+func withTestAuth(handler *ChatCompletionsHandler) {
+	store := auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
+		APIKey:   testAPIKey,
+		AppToken: testAppToken,
+		APIKeyIdentity: auth.APIKeyIdentity{
+			APIKeyID:      testAPIKeyID,
+			TenantID:      testTenantID,
+			ProjectID:     testProjectID,
+			ApplicationID: testAppID,
+		},
+		AppTokenIdentity: auth.AppTokenIdentity{
+			AppTokenID:    testAppTokenID,
+			TenantID:      testTenantID,
+			ProjectID:     testProjectID,
+			ApplicationID: testAppID,
+		},
+	})
+	handler.APIKeyAuthenticator = store
+	handler.AppTokenValidator = store
+	handler.ExpectedTenantID = testTenantID
+	handler.ExpectedProjectID = testProjectID
+	handler.ExpectedAppID = testAppID
+}
+
+func setValidGatewayAuthHeaders(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer "+testAPIKey)
+	req.Header.Set("X-GateLM-App-Token", testAppToken)
+}
+
+func assertGatewayErrorCode(t *testing.T, rr *httptest.ResponseRecorder, expected string) {
+	t.Helper()
+
+	var resp gatewayErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Error.Code != expected {
+		t.Fatalf("expected error code %s, got %s", expected, resp.Error.Code)
+	}
 }

@@ -3,8 +3,8 @@ package routingstage
 import (
 	"context"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 const StageName = "decide_model_route"
@@ -25,20 +25,20 @@ func (s Stage) Name() string {
 	return StageName
 }
 
-func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
+func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error {
 	decision, err := s.router.DecideRoute(ctx, routing.Request{
-		RequestedModel: gatewayCtx.Request.RequestedModel,
-		PromptText:     gatewayCtx.Request.PromptText,
+		RequestedModel: req.RequestedModel,
+		PromptText:     req.PromptText,
 	})
 	if err != nil {
 		return err
 	}
 
-	gatewayCtx.Routing.RequestedModel = decision.RequestedModel
-	gatewayCtx.Routing.SelectedProvider = decision.SelectedProvider
-	gatewayCtx.Routing.SelectedModel = decision.SelectedModel
-	gatewayCtx.Routing.RoutingReason = decision.RoutingReason
-	gatewayCtx.Routing.RoutingPolicyHash = decision.PolicyHash
+	req.RequestedModel = decision.RequestedModel
+	req.SelectedProvider = decision.SelectedProvider
+	req.SelectedModel = decision.SelectedModel
+	req.RoutingReason = decision.RoutingReason
+	req.RoutingPolicyHash = decision.PolicyHash
 
 	return nil
 }

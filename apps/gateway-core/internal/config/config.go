@@ -14,6 +14,13 @@ type Config struct {
 	MockProviderBaseURL string
 	DefaultProvider     string
 	DefaultModel        string
+	DemoAPIKey          string
+	DemoAppToken        string
+	DemoTenantID        string
+	DemoProjectID       string
+	DemoApplicationID   string
+	DemoAPIKeyID        string
+	DemoAppTokenID      string
 	ReadinessTimeout    time.Duration
 	ProviderTimeout     time.Duration
 	MaxRequestBodyBytes int64
@@ -27,6 +34,13 @@ func Load() Config {
 		MockProviderBaseURL: envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:     envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
 		DefaultModel:        envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
+		DemoAPIKey:          envString("GATELM_DEMO_API_KEY", "glm_api_test_redacted"),
+		DemoAppToken:        envString("GATELM_DEMO_APP_TOKEN", "glm_app_token_test_redacted"),
+		DemoTenantID:        envString("GATELM_DEMO_TENANT_ID", "00000000-0000-4000-8000-000000000100"),
+		DemoProjectID:       envString("GATELM_DEMO_PROJECT_ID", "00000000-0000-4000-8000-000000000200"),
+		DemoApplicationID:   envString("GATELM_DEMO_APPLICATION_ID", "00000000-0000-4000-8000-000000000300"),
+		DemoAPIKeyID:        envString("GATELM_DEMO_API_KEY_ID", "00000000-0000-4000-8000-000000000400"),
+		DemoAppTokenID:      envString("GATELM_DEMO_APP_TOKEN_ID", "00000000-0000-4000-8000-000000000500"),
 		ReadinessTimeout:    envDurationMillis("GATEWAY_READINESS_TIMEOUT_MS", 1000),
 		ProviderTimeout:     envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
 		MaxRequestBodyBytes: envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
