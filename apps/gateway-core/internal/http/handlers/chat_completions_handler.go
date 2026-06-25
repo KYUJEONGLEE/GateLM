@@ -84,7 +84,7 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
 		handleGatewayAuthError(w, reqCtx, err)
-		h.writeAuthFailureLog(r.Context(), reqCtx, time.Now())
+		h.writeAuthFailureLog(r.Context(), reqCtx, startedAt, time.Now())
 		return
 	}
 
