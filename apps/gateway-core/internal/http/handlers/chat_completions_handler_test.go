@@ -219,6 +219,49 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerRejectsNonTextMessageContentBeforePipelineAndProvider(t *testing.T) {
+	chatCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chatCalls++
+		writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+	}))
+	defer mockServer.Close()
+
+	preflight := &fakeGatewayPipeline{}
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		PreProviderPipeline: preflight,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": [{"type": "text", "text": "unsupported in P0"}]}]
+	}`))
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if preflight.calls != 0 {
+		t.Fatalf("expected no preflight calls, got %d", preflight.calls)
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+	}
+
+	var resp gatewayErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.Error.Code != "invalid_request_error" {
+		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	}
+}
+
 func TestChatCompletionsHandlerReturnsPipelineAuthErrorsBeforeProviderCall(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -329,6 +372,10 @@ func TestChatCompletionsHandlerUsesPipelineRouteAndContextMetadata(t *testing.T)
 
 	preflight := &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
+			expectedPrompt := "system prompt\nshort prompt"
+			if gatewayCtx.Request.PromptText != expectedPrompt {
+				t.Fatalf("expected prompt text %q, got %q", expectedPrompt, gatewayCtx.Request.PromptText)
+			}
 			gatewayCtx.Identity.TenantID = "tenant_demo"
 			gatewayCtx.Identity.ProjectID = "project_demo"
 			gatewayCtx.Identity.ApplicationID = "app_demo"
@@ -348,7 +395,10 @@ func TestChatCompletionsHandlerUsesPipelineRouteAndContextMetadata(t *testing.T)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "auto",
-		"messages": [{"role": "user", "content": "short prompt"}]
+		"messages": [
+			{"role": "system", "content": "system prompt"},
+			{"role": "user", "content": "short prompt"}
+		]
 	}`))
 	rr := httptest.NewRecorder()
 

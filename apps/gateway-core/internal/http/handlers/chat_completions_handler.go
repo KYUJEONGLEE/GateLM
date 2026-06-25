@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/provider"
@@ -71,8 +73,13 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages is required.", "parse_openai_compatible_payload")
 		return
 	}
+	promptText, err := extractTextPrompt(chatReq.Messages)
+	if err != nil {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages content must be text-only.", "parse_openai_compatible_payload")
+		return
+	}
 
-	gatewayCtx := newGatewayContext(reqCtx)
+	gatewayCtx := newGatewayContext(reqCtx, promptText)
 	if h.PreProviderPipeline != nil {
 		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 			applyGatewayContext(reqCtx, gatewayCtx)
@@ -151,4 +158,20 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func extractTextPrompt(messages []provider.ChatMessage) (string, error) {
+	var builder strings.Builder
+	for index, message := range messages {
+		var content string
+		if err := json.Unmarshal(message.Content, &content); err != nil {
+			return "", fmt.Errorf("messages[%d].content must be a JSON string: %w", index, err)
+		}
+		if index > 0 {
+			builder.WriteByte('\n')
+		}
+		builder.WriteString(content)
+	}
+
+	return builder.String(), nil
 }

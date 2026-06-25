@@ -12,7 +12,7 @@ type GatewayPipeline interface {
 	Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error
 }
 
-func newGatewayContext(reqCtx *pipeline.RequestContext) *request.GatewayContext {
+func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *request.GatewayContext {
 	if reqCtx == nil {
 		return &request.GatewayContext{}
 	}
@@ -25,6 +25,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext) *request.GatewayContext 
 			Method:         reqCtx.Method,
 			Stream:         reqCtx.Stream,
 			RequestedModel: reqCtx.RequestedModel,
+			PromptText:     promptText,
 		},
 		Identity: request.IdentityContext{
 			TenantID:      reqCtx.TenantID,

@@ -26,7 +26,7 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Method:    http.MethodGet,
 	})
 
-	gatewayCtx := newGatewayContext(reqCtx)
+	gatewayCtx := newGatewayContext(reqCtx, "")
 	if h.PreProviderPipeline != nil {
 		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 			applyGatewayContext(reqCtx, gatewayCtx)
