@@ -68,7 +68,11 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
 	reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason
 
-	if gatewayCtx.Status.Status != "" {
+	if gatewayCtx.Status.Status != "" ||
+		gatewayCtx.Status.HTTPStatus != 0 ||
+		gatewayCtx.Status.ErrorCode != "" ||
+		gatewayCtx.Status.ErrorMessage != "" ||
+		gatewayCtx.Status.ErrorStage != "" {
 		reqCtx.Status = gatewayCtx.Status.Status
 		reqCtx.HTTPStatus = gatewayCtx.Status.HTTPStatus
 		reqCtx.ErrorCode = gatewayCtx.Status.ErrorCode
