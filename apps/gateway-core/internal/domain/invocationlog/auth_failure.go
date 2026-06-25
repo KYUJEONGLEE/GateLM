@@ -170,8 +170,8 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		CostMicroUSD:     0,
 		LatencyMs:        latencyMillis(input.StartedAt, completedAt),
 
-		CreatedAt:   input.StartedAt,
-		CompletedAt: completedAt,
+		CreatedAt:   input.StartedAt.UTC(),
+		CompletedAt: completedAt.UTC(),
 	}
 }
 
