@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	gatewayerrors "github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/errors"
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 func TestStageAllowsMatchingIdentityContext(t *testing.T) {

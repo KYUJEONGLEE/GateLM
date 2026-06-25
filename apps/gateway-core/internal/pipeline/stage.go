@@ -3,7 +3,7 @@ package pipeline
 import (
 	"context"
 
-	"github.com/gatelm/llmops-gateway/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 type Stage interface {
