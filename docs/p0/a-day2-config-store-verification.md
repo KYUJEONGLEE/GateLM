@@ -22,6 +22,7 @@ db/migrations/001_create_identity_tables.sql
 db/migrations/002_create_project_tables.sql
 db/migrations/003_create_gateway_credentials.sql
 db/migrations/004_create_provider_and_models.sql
+db/migrations/005_harden_config_store_constraints.sql
 db/seeds/001_seed_p0_demo_data.sql
 ```
 
@@ -157,9 +158,23 @@ models:
 - mock-smart
 pricing version: p0-demo
 currency: USD
+effective_from: 2024-01-01 00:00:00+00
 ```
 
-### 4.6 금지 컬럼 검증
+### 4.6 Constraint / Index 검증
+
+아래 제약과 인덱스가 존재해야 한다.
+
+```text
+ux_projects_id_tenant_id
+fk_applications_project_tenant
+ix_api_keys_application_id
+ix_app_tokens_application_id
+ux_model_catalog_provider_model
+fk_model_pricing_rules_model_catalog
+```
+
+### 4.7 금지 컬럼 검증
 
 아래 컬럼은 public schema에 존재하지 않는다.
 
@@ -196,9 +211,10 @@ authorization_header
 
 Day2 A파트 4단계 기준으로 다음 조건을 만족했다.
 
-- migration 4개가 PostgreSQL에서 사용할 수 있는 table 구조를 제공한다.
+- migration 5개가 PostgreSQL에서 사용할 수 있는 table 구조와 정합성 제약을 제공한다.
 - seed 1개가 P0 E2E 기준 데이터를 채운다.
 - seed는 반복 실행 가능하다.
+- seed의 pricing `effective_from`은 `2024-01-01 00:00:00+00` 고정값을 사용한다.
 - fixture JSON은 파싱 가능하다.
 - seed와 DB schema에는 금지된 raw payload/key 원문 저장 구조가 없다.
 - B/C/D/E가 Day1 fixture와 Day2 seed를 같은 기준으로 보고 병렬 개발할 수 있다.

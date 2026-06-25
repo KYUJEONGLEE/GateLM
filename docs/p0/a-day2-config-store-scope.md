@@ -193,6 +193,20 @@ db/migrations/001_create_identity_tables.sql
 db/migrations/002_create_project_tables.sql
 db/migrations/003_create_gateway_credentials.sql
 db/migrations/004_create_provider_and_models.sql
+db/migrations/005_harden_config_store_constraints.sql
+```
+
+`005_harden_config_store_constraints.sql`는 PR review 반영용 보강 migration이다.
+
+포함 내용:
+
+```text
+projects(id, tenant_id) composite unique constraint
+applications(project_id, tenant_id) -> projects(id, tenant_id) composite foreign key
+api_keys(application_id) index
+app_tokens(application_id) index
+model_catalog(provider, model) explicit unique constraint
+model_pricing_rules(provider, model) -> model_catalog(provider, model) foreign key
 ```
 
 Day2 3단계에서 실제 생성한 P0 demo seed 파일:
@@ -267,3 +281,7 @@ docs/p0/a-day2-config-store-verification.md
 - provider/model/pricing 기준 데이터 검증
 - API Key/App Token/Provider Key 원문 미저장 검증
 - raw prompt/raw response 금지 컬럼 미존재 검증
+- tenant/project/application composite constraint 검증
+- application_id 조회 index 검증
+- model pricing 참조 무결성 검증
+- seed pricing effective_from 고정값 검증

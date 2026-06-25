@@ -337,6 +337,7 @@ insert into model_pricing_rules (
   input_micro_usd_per_1m_tokens,
   output_micro_usd_per_1m_tokens,
   pricing_version,
+  effective_from,
   source
 ) values
 (
@@ -347,6 +348,7 @@ insert into model_pricing_rules (
   100000,
   400000,
   'p0-demo',
+  '2024-01-01 00:00:00+00',
   'p0_seed'
 ),
 (
@@ -357,6 +359,7 @@ insert into model_pricing_rules (
   300000,
   800000,
   'p0-demo',
+  '2024-01-01 00:00:00+00',
   'p0_seed'
 ),
 (
@@ -367,6 +370,7 @@ insert into model_pricing_rules (
   1000000,
   3000000,
   'p0-demo',
+  '2024-01-01 00:00:00+00',
   'p0_seed'
 )
 on conflict (id) do update set
@@ -376,4 +380,5 @@ on conflict (id) do update set
   input_micro_usd_per_1m_tokens = excluded.input_micro_usd_per_1m_tokens,
   output_micro_usd_per_1m_tokens = excluded.output_micro_usd_per_1m_tokens,
   pricing_version = excluded.pricing_version,
+  effective_from = excluded.effective_from,
   source = excluded.source;
