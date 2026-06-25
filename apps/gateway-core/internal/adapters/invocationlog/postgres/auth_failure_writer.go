@@ -160,7 +160,7 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 		TraceID:                  firstNonEmpty(log.TraceID, requestID),
 		TenantID:                 tenantID,
 		ProjectID:                projectID,
-		ApplicationID:            firstNonEmpty(log.ApplicationID, w.defaults.ApplicationID),
+		ApplicationID:            firstValidUUID(log.ApplicationID, w.defaults.ApplicationID),
 		APIKeyID:                 strings.TrimSpace(log.APIKeyID),
 		AppTokenID:               strings.TrimSpace(log.AppTokenID),
 		EndUserID:                strings.TrimSpace(log.EndUserID),
