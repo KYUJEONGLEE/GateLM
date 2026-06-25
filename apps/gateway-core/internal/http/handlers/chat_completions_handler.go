@@ -188,7 +188,7 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, providerResp)
 }
 
-func (h ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx *pipeline.RequestContext, completedAt time.Time) {
+func (h ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx *pipeline.RequestContext, startedAt time.Time, completedAt time.Time) {
 	if h.AuthFailureLogWriter == nil || reqCtx == nil || !invocationlog.IsAuthFailure(reqCtx.HTTPStatus, reqCtx.ErrorCode) {
 		return
 	}
@@ -212,7 +212,7 @@ func (h ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx 
 		ErrorCode:      reqCtx.ErrorCode,
 		ErrorMessage:   reqCtx.ErrorMessage,
 		ErrorStage:     reqCtx.ErrorStage,
-		StartedAt:      reqCtx.StartedAt,
+		StartedAt:      startedAt,
 		CompletedAt:    completedAt,
 	}))
 }
