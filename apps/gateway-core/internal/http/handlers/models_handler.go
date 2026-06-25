@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
@@ -14,6 +15,7 @@ type ModelsHandler struct {
 }
 
 func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	requestID := middleware.NormalizeRequestID(r.Header.Get(middleware.RequestIDHeader))
 	if requestID == "" {
 		requestID = middleware.NewRequestID()
@@ -24,6 +26,7 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		TraceID:   requestID,
 		Endpoint:  "/v1/models",
 		Method:    http.MethodGet,
+		StartedAt: startedAt.UTC(),
 	})
 
 	gatewayCtx := newGatewayContext(reqCtx, "")

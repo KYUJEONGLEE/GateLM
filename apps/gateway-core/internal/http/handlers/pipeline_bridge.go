@@ -24,6 +24,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			Endpoint:       reqCtx.Endpoint,
 			Method:         reqCtx.Method,
 			Stream:         reqCtx.Stream,
+			StartedAt:      reqCtx.StartedAt,
 			RequestedModel: reqCtx.RequestedModel,
 			PromptText:     promptText,
 		},
@@ -68,15 +69,19 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
 	reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason
 
-	if gatewayCtx.Status.Status != "" ||
-		gatewayCtx.Status.HTTPStatus != 0 ||
-		gatewayCtx.Status.ErrorCode != "" ||
-		gatewayCtx.Status.ErrorMessage != "" ||
-		gatewayCtx.Status.ErrorStage != "" {
+	if gatewayCtx.Status.Status != "" {
 		reqCtx.Status = gatewayCtx.Status.Status
+	}
+	if gatewayCtx.Status.HTTPStatus != 0 {
 		reqCtx.HTTPStatus = gatewayCtx.Status.HTTPStatus
+	}
+	if gatewayCtx.Status.ErrorCode != "" {
 		reqCtx.ErrorCode = gatewayCtx.Status.ErrorCode
+	}
+	if gatewayCtx.Status.ErrorMessage != "" {
 		reqCtx.ErrorMessage = gatewayCtx.Status.ErrorMessage
+	}
+	if gatewayCtx.Status.ErrorStage != "" {
 		reqCtx.ErrorStage = gatewayCtx.Status.ErrorStage
 	}
 }

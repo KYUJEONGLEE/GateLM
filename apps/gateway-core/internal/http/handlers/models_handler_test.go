@@ -9,6 +9,7 @@ import (
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	gatewayrequest "gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
@@ -38,6 +39,47 @@ func TestModelsHandlerReturnsProviderCatalog(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestModelsHandlerPassesStartedAtToPipeline(t *testing.T) {
+	modelCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		modelCalls++
+		writeJSON(w, http.StatusOK, provider.ModelListResponse{
+			Object: "list",
+			Data: []provider.ModelInfo{
+				{ID: "mock-fast", Object: "model", OwnedBy: "mock"},
+			},
+		})
+	}))
+	defer mockServer.Close()
+
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *gatewayrequest.GatewayContext) {
+			if gatewayCtx.Request.StartedAt.IsZero() {
+				t.Fatalf("expected non-zero started at")
+			}
+		},
+	}
+	handler := ModelsHandler{
+		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		PreProviderPipeline: preflight,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if preflight.calls != 1 {
+		t.Fatalf("expected one preflight call, got %d", preflight.calls)
+	}
+	if modelCalls != 1 {
+		t.Fatalf("expected one mock provider call, got %d", modelCalls)
 	}
 }
 
