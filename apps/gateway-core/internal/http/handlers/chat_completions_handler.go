@@ -80,44 +80,10 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	reqCtx.Stream = chatReq.Stream
 	reqCtx.RequestedModel = chatReq.Model
 
-	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway authentication is not initialized.", "authenticate_api_key")
-		return
-	}
-
-	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
-	if !ok {
-		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAPIKey(authenticate.StageName))
-		return
-	}
-	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
-	if appToken == "" {
-		handleGatewayAuthError(w, reqCtx, gatewayerrors.InvalidAppToken(appauth.StageName))
-		return
-	}
-
-	authGatewayCtx := newGatewayContext(reqCtx, "")
-	apiKeyStage := authenticate.NewStage(h.APIKeyAuthenticator, bearerToken)
-	if err := apiKeyStage.Execute(r.Context(), authGatewayCtx); err != nil {
-		applyGatewayContext(reqCtx, authGatewayCtx)
+	if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
 		handleGatewayAuthError(w, reqCtx, err)
 		return
 	}
-
-	appTokenStage := appauth.NewStage(h.AppTokenValidator, appToken)
-	if err := appTokenStage.Execute(r.Context(), authGatewayCtx); err != nil {
-		applyGatewayContext(reqCtx, authGatewayCtx)
-		handleGatewayAuthError(w, reqCtx, err)
-		return
-	}
-
-	identifyStage := identify.NewStage(h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID)
-	if err := identifyStage.Execute(r.Context(), authGatewayCtx); err != nil {
-		applyGatewayContext(reqCtx, authGatewayCtx)
-		handleGatewayAuthError(w, reqCtx, err)
-		return
-	}
-	applyGatewayContext(reqCtx, authGatewayCtx)
 
 	if chatReq.Stream {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
@@ -138,20 +104,15 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
-	handleGatewayAuthError(w, reqCtx, err)
-	return
-}
-
-gatewayCtx := newGatewayContext(reqCtx, promptText)
-if h.PreProviderPipeline != nil {
-	if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+	gatewayCtx := newGatewayContext(reqCtx, promptText)
+	if h.PreProviderPipeline != nil {
+		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+			applyGatewayContext(reqCtx, gatewayCtx)
+			writeGatewayPipelineFailure(w, reqCtx, err)
+			return
+		}
 		applyGatewayContext(reqCtx, gatewayCtx)
-		writeGatewayPipelineFailure(w, reqCtx, err)
-		return
 	}
-	applyGatewayContext(reqCtx, gatewayCtx)
-}
 
 	if h.Providers == nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Providers registry is not initialized.", "resolve_provider_adapter")
@@ -233,6 +194,10 @@ func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http
 	if !ok {
 		return gatewayerrors.InvalidAPIKey(authenticate.StageName)
 	}
+	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
+	if appToken == "" {
+		return gatewayerrors.InvalidAppToken(appauth.StageName)
+	}
 
 	apiKeyIdentity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
 	if err != nil {
@@ -247,11 +212,6 @@ func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http
 	reqCtx.ProjectID = apiKeyIdentity.ProjectID
 	if apiKeyIdentity.ApplicationID != "" {
 		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
-	}
-
-	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
-	if appToken == "" {
-		return gatewayerrors.InvalidAppToken(appauth.StageName)
 	}
 
 	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)

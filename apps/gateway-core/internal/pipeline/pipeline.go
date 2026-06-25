@@ -14,9 +14,9 @@ func New(stages ...Stage) Pipeline {
 	return Pipeline{stages: stages}
 }
 
-func (p Pipeline) Execute(ctx context.Context, req *request.GatewayContext) error {
+func (p Pipeline) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	for _, stage := range p.stages {
-		if err := stage.Execute(ctx, req); err != nil {
+		if err := stage.Execute(ctx, gatewayCtx); err != nil {
 			return err
 		}
 	}

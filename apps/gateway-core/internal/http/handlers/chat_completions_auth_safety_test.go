@@ -14,7 +14,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 )
 
-func TestChatCompletionsHandlerRejectsInvalidAPIKeyBeforeProviderCall(t *testing.T) {
+func TestChatCompletionsHandlerAuthSafetyRejectsInvalidAPIKeyBeforeProviderCall(t *testing.T) {
 	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
 	defer closeServer()
 
@@ -85,7 +85,7 @@ func TestChatCompletionsHandlerRejectsMissingAuthorizationBeforeProviderCall(t *
 	}
 }
 
-func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testing.T) {
+func TestChatCompletionsHandlerAuthSafetyRejectsInvalidAppTokenBeforeProviderCall(t *testing.T) {
 	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
 	defer closeServer()
 
@@ -145,8 +145,8 @@ func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeProviderCall(t *testi
 	handler.ServeHTTP(rr, req)
 
 	assertGatewayError(t, rr, http.StatusForbidden, "invalid_app_token")
-	if apiAuth.calls != 1 {
-		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
+	if apiAuth.calls != 0 {
+		t.Fatalf("expected API key authenticator not to be called, got %d", apiAuth.calls)
 	}
 	if appValidator.calls != 0 {
 		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
@@ -156,7 +156,7 @@ func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeProviderCall(t *testi
 	}
 }
 
-func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing.T) {
+func TestChatCompletionsHandlerAuthSafetyRejectsScopeMismatchBeforeProviderCall(t *testing.T) {
 	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
 	defer closeServer()
 

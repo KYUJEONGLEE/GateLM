@@ -6,7 +6,9 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
-type DomainStage interface {
+type Stage interface {
 	Name() string
 	Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error
 }
+
+type DomainStage = Stage
