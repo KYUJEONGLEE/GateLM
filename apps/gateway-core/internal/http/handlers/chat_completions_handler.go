@@ -12,6 +12,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
@@ -29,16 +30,17 @@ type AppTokenValidator interface {
 }
 
 type ChatCompletionsHandler struct {
-	Providers           *provider.Registry
-	DefaultModel        string
-	DefaultProvider     string
-	MaxRequestBodyBytes int64
-	APIKeyAuthenticator APIKeyAuthenticator
-	AppTokenValidator   AppTokenValidator
-	ExpectedTenantID    string
-	ExpectedProjectID   string
-	ExpectedAppID       string
-	PreProviderPipeline GatewayPipeline
+	Providers            *provider.Registry
+	DefaultModel         string
+	DefaultProvider      string
+	MaxRequestBodyBytes  int64
+	APIKeyAuthenticator  APIKeyAuthenticator
+	AppTokenValidator    AppTokenValidator
+	ExpectedTenantID     string
+	ExpectedProjectID    string
+	ExpectedAppID        string
+	PreProviderPipeline  GatewayPipeline
+	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
 }
 
 func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +84,7 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
 		handleGatewayAuthError(w, reqCtx, err)
+		h.writeAuthFailureLog(r.Context(), reqCtx, time.Now())
 		return
 	}
 
@@ -183,6 +186,35 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func (h ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx *pipeline.RequestContext, completedAt time.Time) {
+	if h.AuthFailureLogWriter == nil || reqCtx == nil || !invocationlog.IsAuthFailure(reqCtx.HTTPStatus, reqCtx.ErrorCode) {
+		return
+	}
+
+	_ = h.AuthFailureLogWriter.WriteAuthFailureLog(ctx, invocationlog.BuildAuthFailureLog(invocationlog.AuthFailureInput{
+		RequestID:      reqCtx.RequestID,
+		TraceID:        reqCtx.TraceID,
+		TenantID:       reqCtx.TenantID,
+		ProjectID:      reqCtx.ProjectID,
+		ApplicationID:  reqCtx.ApplicationID,
+		APIKeyID:       reqCtx.APIKeyID,
+		AppTokenID:     reqCtx.AppTokenID,
+		EndUserID:      reqCtx.EndUserID,
+		FeatureID:      reqCtx.FeatureID,
+		Endpoint:       reqCtx.Endpoint,
+		Method:         reqCtx.Method,
+		Source:         invocationlog.SourceCustomerApp,
+		Stream:         reqCtx.Stream,
+		RequestedModel: reqCtx.RequestedModel,
+		HTTPStatus:     reqCtx.HTTPStatus,
+		ErrorCode:      reqCtx.ErrorCode,
+		ErrorMessage:   reqCtx.ErrorMessage,
+		ErrorStage:     reqCtx.ErrorStage,
+		StartedAt:      reqCtx.StartedAt,
+		CompletedAt:    completedAt,
+	}))
 }
 
 func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
