@@ -126,6 +126,7 @@
   ],
   "pricingRules": [
     {
+      "pricingRuleId": "00000000-0000-4000-8000-000000000801",
       "provider": "mock",
       "model": "mock-fast",
       "pricingVersion": "p0-demo",
@@ -134,6 +135,7 @@
       "currency": "USD"
     },
     {
+      "pricingRuleId": "00000000-0000-4000-8000-000000000802",
       "provider": "mock",
       "model": "mock-balanced",
       "pricingVersion": "p0-demo",
@@ -142,6 +144,7 @@
       "currency": "USD"
     },
     {
+      "pricingRuleId": "00000000-0000-4000-8000-000000000803",
       "provider": "mock",
       "model": "mock-smart",
       "pricingVersion": "p0-demo",

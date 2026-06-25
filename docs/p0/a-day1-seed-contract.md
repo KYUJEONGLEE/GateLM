@@ -327,7 +327,6 @@ adminUserId=00000000-0000-4000-8000-000000000110
   "providerConnectionId": "00000000-0000-4000-8000-000000000600",
   "provider": "mock",
   "defaultModel": "mock-balanced",
-  "allowedModels": ["mock-fast", "mock-balanced", "mock-smart"],
   "securityPolicyHash": "sec_p0_v1",
   "routingPolicyHash": "route_p0_v1",
   "cachePolicyHash": "cache_p0_v1",
@@ -398,4 +397,3 @@ config hash
 다음 작업은 `[A] Active Config`다.
 
 다음 단계에서는 이 seed 계약을 바탕으로 Gateway가 직접 읽을 수 있는 JSON fixture를 작성한다.
-
