@@ -1,5 +1,7 @@
 package gatewayerrors
 
+import "fmt"
+
 type GatewayError struct {
 	HTTPStatus int
 	Code       string
@@ -8,7 +10,7 @@ type GatewayError struct {
 }
 
 func (e GatewayError) Error() string {
-	return e.Code
+	return fmt.Sprintf("%s: %s (stage=%s)", e.Code, e.Message, e.Stage)
 }
 
 func New(httpStatus int, code string, message string, stage string) GatewayError {

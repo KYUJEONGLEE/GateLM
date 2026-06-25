@@ -28,13 +28,13 @@ func (s Stage) Name() string {
 }
 
 func (s Stage) Execute(_ context.Context, gatewayCtx *request.GatewayContext) error {
-	if gatewayCtx.Identity.TenantID != s.expectedTenantID {
+	if s.expectedTenantID != "" && gatewayCtx.Identity.TenantID != s.expectedTenantID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if gatewayCtx.Identity.ProjectID != s.expectedProjectID {
+	if s.expectedProjectID != "" && gatewayCtx.Identity.ProjectID != s.expectedProjectID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if gatewayCtx.Identity.ApplicationID != s.expectedApplicationID {
+	if s.expectedApplicationID != "" && gatewayCtx.Identity.ApplicationID != s.expectedApplicationID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
 

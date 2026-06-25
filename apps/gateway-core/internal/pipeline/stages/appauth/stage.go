@@ -42,6 +42,9 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	if gatewayCtx.Identity.ProjectID != "" && gatewayCtx.Identity.ProjectID != identity.ProjectID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
+	if gatewayCtx.Identity.ApplicationID != "" && gatewayCtx.Identity.ApplicationID != identity.ApplicationID {
+		return gatewayerrors.ScopeMismatch(StageName)
+	}
 
 	gatewayCtx.Identity.AppTokenID = identity.AppTokenID
 	if gatewayCtx.Identity.TenantID == "" {
@@ -50,7 +53,9 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	if gatewayCtx.Identity.ProjectID == "" {
 		gatewayCtx.Identity.ProjectID = identity.ProjectID
 	}
-	gatewayCtx.Identity.ApplicationID = identity.ApplicationID
+	if gatewayCtx.Identity.ApplicationID == "" {
+		gatewayCtx.Identity.ApplicationID = identity.ApplicationID
+	}
 
 	return nil
 }

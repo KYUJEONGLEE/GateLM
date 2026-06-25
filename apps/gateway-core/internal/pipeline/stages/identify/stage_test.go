@@ -26,6 +26,21 @@ func TestStageAllowsMatchingIdentityContext(t *testing.T) {
 	}
 }
 
+func TestStageAllowsUnspecifiedExpectedScope(t *testing.T) {
+	stage := NewStage("tenant_demo", "project_demo", "")
+	gatewayCtx := &request.GatewayContext{
+		Identity: request.IdentityContext{
+			TenantID:      "tenant_demo",
+			ProjectID:     "project_demo",
+			ApplicationID: "app_demo",
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected unspecified application scope to pass, got %v", err)
+	}
+}
+
 func TestStageRejectsScopeMismatch(t *testing.T) {
 	stage := NewStage("tenant_demo", "project_demo", "app_demo")
 	gatewayCtx := &request.GatewayContext{
