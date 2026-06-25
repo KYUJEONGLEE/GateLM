@@ -2,23 +2,35 @@ package gatewayerrors
 
 import "fmt"
 
+const StatusClientClosedRequest = 499
+
 type GatewayError struct {
 	HTTPStatus int
 	Code       string
 	Message    string
 	Stage      string
+	Cause      error
 }
 
 func (e GatewayError) Error() string {
 	return fmt.Sprintf("%s: %s (stage=%s)", e.Code, e.Message, e.Stage)
 }
 
+func (e GatewayError) Unwrap() error {
+	return e.Cause
+}
+
 func New(httpStatus int, code string, message string, stage string) GatewayError {
+	return NewWithCause(httpStatus, code, message, stage, nil)
+}
+
+func NewWithCause(httpStatus int, code string, message string, stage string, cause error) GatewayError {
 	return GatewayError{
 		HTTPStatus: httpStatus,
 		Code:       code,
 		Message:    message,
 		Stage:      stage,
+		Cause:      cause,
 	}
 }
 
@@ -32,4 +44,12 @@ func InvalidAppToken(stage string) GatewayError {
 
 func ScopeMismatch(stage string) GatewayError {
 	return New(403, "scope_mismatch", "Tenant, project, or application scope mismatch.", stage)
+}
+
+func RequestCancelled(stage string, cause error) GatewayError {
+	return NewWithCause(StatusClientClosedRequest, "internal_error", "Request was cancelled.", stage, cause)
+}
+
+func InternalError(stage string, message string, cause error) GatewayError {
+	return NewWithCause(500, "internal_error", message, stage, cause)
 }

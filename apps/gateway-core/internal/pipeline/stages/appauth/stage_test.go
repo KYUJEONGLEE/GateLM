@@ -12,10 +12,11 @@ import (
 
 type fakeValidator struct {
 	identity auth.AppTokenIdentity
+	err      error
 }
 
 func (v fakeValidator) ValidateAppToken(_ context.Context, _ string) (auth.AppTokenIdentity, error) {
-	return v.identity, nil
+	return v.identity, v.err
 }
 
 func TestStageWritesAppTokenIdentity(t *testing.T) {
@@ -86,5 +87,45 @@ func TestStageRejectsApplicationScopeMismatch(t *testing.T) {
 	}
 	if gatewayErr.HTTPStatus != 403 || gatewayErr.Code != "scope_mismatch" {
 		t.Fatalf("expected 403 scope_mismatch, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
+	}
+}
+
+func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
+	stage := NewStage(fakeValidator{err: context.Canceled}, "redacted_app_token")
+	req := &pipeline.RequestContext{}
+
+	err := stage.Execute(context.Background(), req)
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected GatewayError, got %T", err)
+	}
+	if gatewayErr.HTTPStatus != gatewayerrors.StatusClientClosedRequest || gatewayErr.Code == "invalid_app_token" {
+		t.Fatalf("expected cancelled context not invalid_app_token, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
+	}
+	if gatewayErr.Stage != StageName {
+		t.Fatalf("expected stage %s, got %s", StageName, gatewayErr.Stage)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected wrapped context.Canceled, got %v", err)
+	}
+}
+
+func TestStageMapsDeadlineExceededToInternalError(t *testing.T) {
+	stage := NewStage(fakeValidator{err: context.DeadlineExceeded}, "redacted_app_token")
+	req := &pipeline.RequestContext{}
+
+	err := stage.Execute(context.Background(), req)
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected GatewayError, got %T", err)
+	}
+	if gatewayErr.HTTPStatus != 500 || gatewayErr.Code != "internal_error" {
+		t.Fatalf("expected 500 internal_error, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
+	}
+	if gatewayErr.Stage != StageName {
+		t.Fatalf("expected stage %s, got %s", StageName, gatewayErr.Stage)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected wrapped context.DeadlineExceeded, got %v", err)
 	}
 }

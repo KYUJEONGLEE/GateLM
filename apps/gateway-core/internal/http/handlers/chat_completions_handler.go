@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -188,10 +189,21 @@ func extractBearerToken(header string) (string, bool) {
 func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
-		gatewayErr = gatewayerrors.New(http.StatusInternalServerError, "internal_error", "Gateway authentication failed.", "authenticate_api_key")
+		switch {
+		case errors.Is(err, context.Canceled):
+			gatewayErr = gatewayerrors.RequestCancelled(authenticate.StageName, err)
+		case errors.Is(err, context.DeadlineExceeded):
+			gatewayErr = gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication timed out.", err)
+		default:
+			gatewayErr = gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication failed.", err)
+		}
 	}
 
-	reqCtx.Status = "error"
+	if gatewayErr.HTTPStatus == gatewayerrors.StatusClientClosedRequest || errors.Is(err, context.Canceled) {
+		reqCtx.Status = "cancelled"
+	} else {
+		reqCtx.Status = "error"
+	}
 	reqCtx.HTTPStatus = gatewayErr.HTTPStatus
 	reqCtx.ErrorCode = gatewayErr.Code
 	reqCtx.ErrorMessage = gatewayErr.Message

@@ -51,3 +51,37 @@ func TestStageMapsInvalidAPIKeyToGatewayError(t *testing.T) {
 		t.Fatalf("expected 401 invalid_api_key, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
 	}
 }
+
+func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
+	stage := NewStage(fakeAuthenticator{err: context.Canceled}, "redacted_api_key")
+	req := &pipeline.RequestContext{}
+
+	err := stage.Execute(context.Background(), req)
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected GatewayError, got %T", err)
+	}
+	if gatewayErr.HTTPStatus != gatewayerrors.StatusClientClosedRequest || gatewayErr.Code == "invalid_api_key" {
+		t.Fatalf("expected cancelled context not invalid_api_key, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected wrapped context.Canceled, got %v", err)
+	}
+}
+
+func TestStageMapsDeadlineExceededToInternalError(t *testing.T) {
+	stage := NewStage(fakeAuthenticator{err: context.DeadlineExceeded}, "redacted_api_key")
+	req := &pipeline.RequestContext{}
+
+	err := stage.Execute(context.Background(), req)
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected GatewayError, got %T", err)
+	}
+	if gatewayErr.HTTPStatus != 500 || gatewayErr.Code != "internal_error" {
+		t.Fatalf("expected 500 internal_error, got %d %s", gatewayErr.HTTPStatus, gatewayErr.Code)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected wrapped context.DeadlineExceeded, got %v", err)
+	}
+}

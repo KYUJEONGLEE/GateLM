@@ -390,6 +390,70 @@ func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing
 	assertGatewayErrorCode(t, rr, "scope_mismatch")
 }
 
+func TestChatCompletionsHandlerDoesNotMaskAPIKeyContextCancellation(t *testing.T) {
+	chatCalls := 0
+	store := newTestCredentialStore()
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: failingAPIKeyAuthenticator{err: context.Canceled},
+		AppTokenValidator:   store,
+		ExpectedTenantID:    testTenantID,
+		ExpectedProjectID:   testProjectID,
+		ExpectedAppID:       testAppID,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != 499 {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "internal_error")
+}
+
+func TestChatCompletionsHandlerDoesNotMaskAppTokenDeadlineExceeded(t *testing.T) {
+	chatCalls := 0
+	store := newTestCredentialStore()
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		APIKeyAuthenticator: store,
+		AppTokenValidator:   failingAppTokenValidator{err: context.DeadlineExceeded},
+		ExpectedTenantID:    testTenantID,
+		ExpectedProjectID:   testProjectID,
+		ExpectedAppID:       testAppID,
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "synthetic test message"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	}
+	assertGatewayErrorCode(t, rr, "internal_error")
+}
+
 type nilProviderAdapter struct{}
 
 func (nilProviderAdapter) Name() string {
@@ -421,8 +485,33 @@ func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, req p
 	return &provider.ChatCompletionResponse{}, nil
 }
 
+type failingAPIKeyAuthenticator struct {
+	err error
+}
+
+func (a failingAPIKeyAuthenticator) AuthenticateAPIKey(ctx context.Context, bearerToken string) (auth.APIKeyIdentity, error) {
+	return auth.APIKeyIdentity{}, a.err
+}
+
+type failingAppTokenValidator struct {
+	err error
+}
+
+func (v failingAppTokenValidator) ValidateAppToken(ctx context.Context, appToken string) (auth.AppTokenIdentity, error) {
+	return auth.AppTokenIdentity{}, v.err
+}
+
 func withTestAuth(handler *ChatCompletionsHandler) {
-	store := auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
+	store := newTestCredentialStore()
+	handler.APIKeyAuthenticator = store
+	handler.AppTokenValidator = store
+	handler.ExpectedTenantID = testTenantID
+	handler.ExpectedProjectID = testProjectID
+	handler.ExpectedAppID = testAppID
+}
+
+func newTestCredentialStore() *auth.StaticCredentialStore {
+	return auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
 		APIKey:   testAPIKey,
 		AppToken: testAppToken,
 		APIKeyIdentity: auth.APIKeyIdentity{
@@ -438,11 +527,6 @@ func withTestAuth(handler *ChatCompletionsHandler) {
 			ApplicationID: testAppID,
 		},
 	})
-	handler.APIKeyAuthenticator = store
-	handler.AppTokenValidator = store
-	handler.ExpectedTenantID = testTenantID
-	handler.ExpectedProjectID = testProjectID
-	handler.ExpectedAppID = testAppID
 }
 
 func setValidGatewayAuthHeaders(req *http.Request) {
