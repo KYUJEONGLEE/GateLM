@@ -2,6 +2,7 @@ package appauth
 
 import (
 	"context"
+	"errors"
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
@@ -33,7 +34,20 @@ func (s Stage) Name() string {
 func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	identity, err := s.validator.ValidateAppToken(ctx, s.appToken)
 	if err != nil {
-		return err
+		if errors.Is(err, context.Canceled) {
+			return gatewayerrors.RequestCancelled(StageName, err)
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return gatewayerrors.InternalError(StageName, "Gateway app token validation timed out.", err)
+		}
+		var gatewayErr gatewayerrors.GatewayError
+		if errors.As(err, &gatewayErr) {
+			return err
+		}
+		if errors.Is(err, auth.ErrInvalidAppToken) {
+			return gatewayerrors.InvalidAppToken(StageName)
+		}
+		return gatewayerrors.InternalError(StageName, "Gateway app token validation failed.", err)
 	}
 
 	if gatewayCtx.Identity.TenantID != "" && gatewayCtx.Identity.TenantID != identity.TenantID {
