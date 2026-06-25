@@ -7,7 +7,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
-	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 type fakeValidator struct {
@@ -28,16 +28,18 @@ func TestStageWritesAppTokenIdentity(t *testing.T) {
 			ApplicationID: "app_demo",
 		},
 	}, "redacted_app_token")
-	req := &pipeline.RequestContext{
-		TenantID:  "tenant_demo",
-		ProjectID: "project_demo",
+	gatewayCtx := &request.GatewayContext{
+		Identity: request.IdentityContext{
+			TenantID:  "tenant_demo",
+			ProjectID: "project_demo",
+		},
 	}
 
-	if err := stage.Execute(context.Background(), req); err != nil {
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
 		t.Fatalf("expected app token stage to pass, got %v", err)
 	}
-	if req.AppTokenID != "app_token_demo" || req.ApplicationID != "app_demo" {
-		t.Fatalf("expected app token identity to be written, got %#v", req)
+	if gatewayCtx.Identity.AppTokenID != "app_token_demo" || gatewayCtx.Identity.ApplicationID != "app_demo" {
+		t.Fatalf("expected app token identity to be written, got %#v", gatewayCtx.Identity)
 	}
 }
 
@@ -50,12 +52,14 @@ func TestStageRejectsScopeMismatch(t *testing.T) {
 			ApplicationID: "app_demo",
 		},
 	}, "redacted_app_token")
-	req := &pipeline.RequestContext{
-		TenantID:  "tenant_demo",
-		ProjectID: "project_demo",
+	gatewayCtx := &request.GatewayContext{
+		Identity: request.IdentityContext{
+			TenantID:  "tenant_demo",
+			ProjectID: "project_demo",
+		},
 	}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -74,13 +78,15 @@ func TestStageRejectsApplicationScopeMismatch(t *testing.T) {
 			ApplicationID: "other_app",
 		},
 	}, "redacted_app_token")
-	req := &pipeline.RequestContext{
-		TenantID:      "tenant_demo",
-		ProjectID:     "project_demo",
-		ApplicationID: "app_demo",
+	gatewayCtx := &request.GatewayContext{
+		Identity: request.IdentityContext{
+			TenantID:      "tenant_demo",
+			ProjectID:     "project_demo",
+			ApplicationID: "app_demo",
+		},
 	}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -92,9 +98,9 @@ func TestStageRejectsApplicationScopeMismatch(t *testing.T) {
 
 func TestStageMapsInvalidAppTokenToGatewayError(t *testing.T) {
 	stage := NewStage(fakeValidator{err: auth.ErrInvalidAppToken}, "redacted_app_token")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -107,9 +113,9 @@ func TestStageMapsInvalidAppTokenToGatewayError(t *testing.T) {
 func TestStageMapsUnexpectedValidatorErrorToInternalError(t *testing.T) {
 	upstreamErr := errors.New("credential store unavailable")
 	stage := NewStage(fakeValidator{err: upstreamErr}, "redacted_app_token")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -124,9 +130,9 @@ func TestStageMapsUnexpectedValidatorErrorToInternalError(t *testing.T) {
 
 func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
 	stage := NewStage(fakeValidator{err: context.Canceled}, "redacted_app_token")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -144,9 +150,9 @@ func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
 
 func TestStageMapsDeadlineExceededToInternalError(t *testing.T) {
 	stage := NewStage(fakeValidator{err: context.DeadlineExceeded}, "redacted_app_token")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)

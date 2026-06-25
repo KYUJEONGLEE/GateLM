@@ -3,8 +3,8 @@ package routingstage
 import (
 	"context"
 
+	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/domain/routing"
-	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 const StageName = "decide_model_route"
@@ -25,20 +25,20 @@ func (s Stage) Name() string {
 	return StageName
 }
 
-func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error {
+func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	decision, err := s.router.DecideRoute(ctx, routing.Request{
-		RequestedModel: req.RequestedModel,
-		PromptText:     req.PromptText,
+		RequestedModel: gatewayCtx.Request.RequestedModel,
+		PromptText:     gatewayCtx.Request.PromptText,
 	})
 	if err != nil {
 		return err
 	}
 
-	req.RequestedModel = decision.RequestedModel
-	req.SelectedProvider = decision.SelectedProvider
-	req.SelectedModel = decision.SelectedModel
-	req.RoutingReason = decision.RoutingReason
-	req.RoutingPolicyHash = decision.PolicyHash
+	gatewayCtx.Routing.RequestedModel = decision.RequestedModel
+	gatewayCtx.Routing.SelectedProvider = decision.SelectedProvider
+	gatewayCtx.Routing.SelectedModel = decision.SelectedModel
+	gatewayCtx.Routing.RoutingReason = decision.RoutingReason
+	gatewayCtx.Routing.RoutingPolicyHash = decision.PolicyHash
 
 	return nil
 }

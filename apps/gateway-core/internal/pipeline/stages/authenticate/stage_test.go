@@ -7,7 +7,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
-	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 type fakeAuthenticator struct {
@@ -28,21 +28,21 @@ func TestStageWritesAPIKeyIdentity(t *testing.T) {
 			ApplicationID: "app_demo",
 		},
 	}, "redacted_api_key")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	if err := stage.Execute(context.Background(), req); err != nil {
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
 		t.Fatalf("expected API key stage to pass, got %v", err)
 	}
-	if req.APIKeyID != "api_key_demo" || req.TenantID != "tenant_demo" {
-		t.Fatalf("expected API key identity to be written, got %#v", req)
+	if gatewayCtx.Identity.APIKeyID != "api_key_demo" || gatewayCtx.Identity.TenantID != "tenant_demo" {
+		t.Fatalf("expected API key identity to be written, got %#v", gatewayCtx.Identity)
 	}
 }
 
 func TestStageMapsInvalidAPIKeyToGatewayError(t *testing.T) {
 	stage := NewStage(fakeAuthenticator{err: auth.ErrInvalidAPIKey}, "redacted_api_key")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -55,9 +55,9 @@ func TestStageMapsInvalidAPIKeyToGatewayError(t *testing.T) {
 func TestStageMapsUnexpectedAuthenticatorErrorToInternalError(t *testing.T) {
 	upstreamErr := errors.New("credential store unavailable")
 	stage := NewStage(fakeAuthenticator{err: upstreamErr}, "redacted_api_key")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -72,9 +72,9 @@ func TestStageMapsUnexpectedAuthenticatorErrorToInternalError(t *testing.T) {
 
 func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
 	stage := NewStage(fakeAuthenticator{err: context.Canceled}, "redacted_api_key")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)
@@ -89,9 +89,9 @@ func TestStagePreservesCanceledContextAsCancelled(t *testing.T) {
 
 func TestStageMapsDeadlineExceededToInternalError(t *testing.T) {
 	stage := NewStage(fakeAuthenticator{err: context.DeadlineExceeded}, "redacted_api_key")
-	req := &pipeline.RequestContext{}
+	gatewayCtx := &request.GatewayContext{}
 
-	err := stage.Execute(context.Background(), req)
+	err := stage.Execute(context.Background(), gatewayCtx)
 	var gatewayErr gatewayerrors.GatewayError
 	if !errors.As(err, &gatewayErr) {
 		t.Fatalf("expected GatewayError, got %T", err)

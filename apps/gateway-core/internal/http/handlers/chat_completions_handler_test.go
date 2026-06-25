@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
@@ -293,6 +294,79 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerRejectsNonTextMessageContentBeforePipelineAndProvider(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "array content",
+			body: `{
+				"model": "mock-balanced",
+				"messages": [{"role": "user", "content": [{"type": "text", "text": "unsupported in P0"}]}]
+			}`,
+		},
+		{
+			name: "null content",
+			body: `{
+				"model": "mock-balanced",
+				"messages": [{"role": "assistant", "content": null}]
+			}`,
+		},
+		{
+			name: "missing content",
+			body: `{
+				"model": "mock-balanced",
+				"messages": [{"role": "assistant"}]
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatCalls := 0
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				chatCalls++
+				writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+			}))
+			defer mockServer.Close()
+
+			preflight := &fakeGatewayPipeline{}
+			handler := ChatCompletionsHandler{
+				Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+				DefaultModel:        "mock-balanced",
+				DefaultProvider:     "mock",
+				PreProviderPipeline: preflight,
+			}
+			withTestAuth(&handler)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(tt.body))
+			setValidGatewayAuthHeaders(req)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if preflight.calls != 0 {
+				t.Fatalf("expected no preflight calls, got %d", preflight.calls)
+			}
+			if chatCalls != 0 {
+				t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+			}
+
+			var resp gatewayErrorResponse
+			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if resp.Error.Code != "invalid_request_error" {
+				t.Fatalf("unexpected error code: %s", resp.Error.Code)
+			}
+		})
+	}
+}
+
 func TestChatCompletionsHandlerRejectsInvalidAPIKeyBeforeProviderCall(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
@@ -452,6 +526,78 @@ func TestChatCompletionsHandlerReturnsInternalErrorForAppTokenStoreFailure(t *te
 	assertGatewayErrorCode(t, rr, "internal_error")
 }
 
+func TestChatCompletionsHandlerReturnsPipelineAuthErrorsBeforeProviderCall(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "invalid api key",
+			err:        gatewayerrors.InvalidAPIKey("authenticate_api_key"),
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "invalid_api_key",
+		},
+		{
+			name:       "invalid app token",
+			err:        gatewayerrors.InvalidAppToken("validate_app_token"),
+			wantStatus: http.StatusForbidden,
+			wantCode:   "invalid_app_token",
+		},
+		{
+			name:       "scope mismatch",
+			err:        gatewayerrors.ScopeMismatch("resolve_tenant_project_application"),
+			wantStatus: http.StatusForbidden,
+			wantCode:   "scope_mismatch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatCalls := 0
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				chatCalls++
+				writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+			}))
+			defer mockServer.Close()
+
+			preflight := &fakeGatewayPipeline{err: tt.err}
+			handler := ChatCompletionsHandler{
+				Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+				DefaultModel:        "mock-balanced",
+				DefaultProvider:     "mock",
+				PreProviderPipeline: preflight,
+			}
+			withTestAuth(&handler)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+				"model": "mock-balanced",
+				"messages": [{"role": "user", "content": "synthetic auth failure test"}]
+			}`))
+			setValidGatewayAuthHeaders(req)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tt.wantStatus, rr.Code, rr.Body.String())
+			}
+			if chatCalls != 0 {
+				t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+			}
+			if preflight.calls != 1 {
+				t.Fatalf("expected one preflight call, got %d", preflight.calls)
+			}
+			if rr.Header().Get("X-GateLM-Cache-Status") != "bypass" {
+				t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
+			}
+
+			assertGatewayErrorCode(t, rr, tt.wantCode)
+		})
+	}
+}
+
 func TestLogGatewayAuthInternalErrorWritesSafeCause(t *testing.T) {
 	output := captureDefaultLog(t)
 	reqCtx := &pipeline.RequestContext{RequestID: "req_test"}
@@ -593,6 +739,93 @@ func TestChatCompletionsHandlerDoesNotMaskAppTokenDeadlineExceeded(t *testing.T)
 	assertGatewayErrorCode(t, rr, "internal_error")
 }
 
+func TestChatCompletionsHandlerUsesPipelineRouteAndContextMetadata(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req provider.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode provider request: %v", err)
+		}
+		if req.Model != "mock-fast" {
+			t.Fatalf("expected routed model mock-fast, got %s", req.Model)
+		}
+
+		writeJSON(w, http.StatusOK, provider.ChatCompletionResponse{
+			ID:      "mock_chatcmpl_route_test",
+			Object:  "chat.completion",
+			Created: 1782108000,
+			Model:   req.Model,
+			Choices: []provider.ChatChoice{
+				{
+					Index: 0,
+					Message: provider.ChatMessage{
+						Role:    "assistant",
+						Content: json.RawMessage(`"Mock routed response"`),
+					},
+					FinishReason: "stop",
+				},
+			},
+		})
+	}))
+	defer mockServer.Close()
+
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			expectedPrompt := "system prompt\nshort prompt"
+			if gatewayCtx.Request.PromptText != expectedPrompt {
+				t.Fatalf("expected prompt text %q, got %q", expectedPrompt, gatewayCtx.Request.PromptText)
+			}
+			gatewayCtx.Identity.TenantID = testTenantID
+			gatewayCtx.Identity.ProjectID = testProjectID
+			gatewayCtx.Identity.ApplicationID = testAppID
+			gatewayCtx.Identity.APIKeyID = testAPIKeyID
+			gatewayCtx.Identity.AppTokenID = testAppTokenID
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		PreProviderPipeline: preflight,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [
+			{"role": "system", "content": "system prompt"},
+			{"role": "user", "content": "short prompt"}
+		]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
+		t.Fatalf("unexpected routed model header: %s", rr.Header().Get("X-GateLM-Routed-Model"))
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.GateLM == nil {
+		t.Fatalf("missing gate_lm metadata")
+	}
+	if resp.GateLM.TenantID != testTenantID || resp.GateLM.ProjectID != testProjectID || resp.GateLM.ApplicationID != testAppID {
+		t.Fatalf("unexpected gate_lm context metadata: %#v", resp.GateLM)
+	}
+	if resp.GateLM.SelectedModel != "mock-fast" || resp.GateLM.RoutingReason != "short_prompt_low_cost" {
+		t.Fatalf("unexpected gate_lm routing metadata: %#v", resp.GateLM)
+	}
+}
+
 type nilProviderAdapter struct{}
 
 func (nilProviderAdapter) Name() string {
@@ -666,6 +899,20 @@ func (v countingAppTokenValidator) ValidateAppToken(ctx context.Context, appToke
 		ProjectID:     testProjectID,
 		ApplicationID: testAppID,
 	}, nil
+}
+
+type fakeGatewayPipeline struct {
+	err    error
+	mutate func(gatewayCtx *request.GatewayContext)
+	calls  int
+}
+
+func (p *fakeGatewayPipeline) Execute(_ context.Context, gatewayCtx *request.GatewayContext) error {
+	p.calls++
+	if p.mutate != nil {
+		p.mutate(gatewayCtx)
+	}
+	return p.err
 }
 
 func withTestAuth(handler *ChatCompletionsHandler) {

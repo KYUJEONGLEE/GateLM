@@ -6,7 +6,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
-	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 const StageName = "validate_app_token"
@@ -31,7 +31,7 @@ func (s Stage) Name() string {
 	return StageName
 }
 
-func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error {
+func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	identity, err := s.validator.ValidateAppToken(ctx, s.appToken)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -50,25 +50,25 @@ func (s Stage) Execute(ctx context.Context, req *pipeline.RequestContext) error 
 		return gatewayerrors.InternalError(StageName, "Gateway app token validation failed.", err)
 	}
 
-	if req.TenantID != "" && req.TenantID != identity.TenantID {
+	if gatewayCtx.Identity.TenantID != "" && gatewayCtx.Identity.TenantID != identity.TenantID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if req.ProjectID != "" && req.ProjectID != identity.ProjectID {
+	if gatewayCtx.Identity.ProjectID != "" && gatewayCtx.Identity.ProjectID != identity.ProjectID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if req.ApplicationID != "" && req.ApplicationID != identity.ApplicationID {
+	if gatewayCtx.Identity.ApplicationID != "" && gatewayCtx.Identity.ApplicationID != identity.ApplicationID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
 
-	req.AppTokenID = identity.AppTokenID
-	if req.TenantID == "" {
-		req.TenantID = identity.TenantID
+	gatewayCtx.Identity.AppTokenID = identity.AppTokenID
+	if gatewayCtx.Identity.TenantID == "" {
+		gatewayCtx.Identity.TenantID = identity.TenantID
 	}
-	if req.ProjectID == "" {
-		req.ProjectID = identity.ProjectID
+	if gatewayCtx.Identity.ProjectID == "" {
+		gatewayCtx.Identity.ProjectID = identity.ProjectID
 	}
-	if req.ApplicationID == "" {
-		req.ApplicationID = identity.ApplicationID
+	if gatewayCtx.Identity.ApplicationID == "" {
+		gatewayCtx.Identity.ApplicationID = identity.ApplicationID
 	}
 
 	return nil

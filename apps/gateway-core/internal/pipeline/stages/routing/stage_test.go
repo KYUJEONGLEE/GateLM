@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/domain/routing"
-	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
 type fakeRouter struct {
@@ -26,22 +26,24 @@ func TestStageWritesRoutingFields(t *testing.T) {
 			PolicyHash:       "routing_policy_demo",
 		},
 	})
-	req := &pipeline.RequestContext{
-		RequestedModel: "auto",
-		PromptText:     "short prompt",
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{
+			RequestedModel: "auto",
+			PromptText:     "short prompt",
+		},
 	}
 
-	if err := stage.Execute(context.Background(), req); err != nil {
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
 		t.Fatalf("expected routing stage to pass, got %v", err)
 	}
 
-	if req.RequestedModel != "auto" {
-		t.Fatalf("expected requested model to remain auto, got %s", req.RequestedModel)
+	if gatewayCtx.Routing.RequestedModel != "auto" {
+		t.Fatalf("expected requested model to remain auto, got %s", gatewayCtx.Routing.RequestedModel)
 	}
-	if req.SelectedProvider != "mock" || req.SelectedModel != "mock-fast" {
-		t.Fatalf("expected mock/mock-fast route, got %s/%s", req.SelectedProvider, req.SelectedModel)
+	if gatewayCtx.Routing.SelectedProvider != "mock" || gatewayCtx.Routing.SelectedModel != "mock-fast" {
+		t.Fatalf("expected mock/mock-fast route, got %s/%s", gatewayCtx.Routing.SelectedProvider, gatewayCtx.Routing.SelectedModel)
 	}
-	if req.RoutingReason != "low_cost" {
-		t.Fatalf("expected low_cost routing reason, got %s", req.RoutingReason)
+	if gatewayCtx.Routing.RoutingReason != "low_cost" {
+		t.Fatalf("expected low_cost routing reason, got %s", gatewayCtx.Routing.RoutingReason)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
-	"gatelm/apps/gateway-core/internal/pipeline"
+	"gatelm/apps/gateway-core/internal/domain/request"
 )
 
 const StageName = "resolve_tenant_project_application"
@@ -27,14 +27,14 @@ func (s Stage) Name() string {
 	return StageName
 }
 
-func (s Stage) Execute(_ context.Context, req *pipeline.RequestContext) error {
-	if s.expectedTenantID != "" && req.TenantID != s.expectedTenantID {
+func (s Stage) Execute(_ context.Context, gatewayCtx *request.GatewayContext) error {
+	if s.expectedTenantID != "" && gatewayCtx.Identity.TenantID != s.expectedTenantID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if s.expectedProjectID != "" && req.ProjectID != s.expectedProjectID {
+	if s.expectedProjectID != "" && gatewayCtx.Identity.ProjectID != s.expectedProjectID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
-	if s.expectedApplicationID != "" && req.ApplicationID != s.expectedApplicationID {
+	if s.expectedApplicationID != "" && gatewayCtx.Identity.ApplicationID != s.expectedApplicationID {
 		return gatewayerrors.ScopeMismatch(StageName)
 	}
 
