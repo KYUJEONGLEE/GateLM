@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/middleware"
@@ -19,13 +20,21 @@ import (
 	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
 )
 
+type APIKeyAuthenticator interface {
+	AuthenticateAPIKey(ctx context.Context, bearerToken string) (auth.APIKeyIdentity, error)
+}
+
+type AppTokenValidator interface {
+	ValidateAppToken(ctx context.Context, appToken string) (auth.AppTokenIdentity, error)
+}
+
 type ChatCompletionsHandler struct {
 	Providers           *provider.Registry
 	DefaultModel        string
 	DefaultProvider     string
 	MaxRequestBodyBytes int64
-	APIKeyAuthenticator authenticate.APIKeyAuthenticator
-	AppTokenValidator   appauth.AppTokenValidator
+	APIKeyAuthenticator APIKeyAuthenticator
+	AppTokenValidator   AppTokenValidator
 	ExpectedTenantID    string
 	ExpectedProjectID   string
 	ExpectedAppID       string
@@ -129,15 +138,20 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	gatewayCtx := newGatewayContext(reqCtx, promptText)
-	if h.PreProviderPipeline != nil {
-		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
-			applyGatewayContext(reqCtx, gatewayCtx)
-			writeGatewayPipelineFailure(w, reqCtx, err)
-			return
-		}
+if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
+	handleGatewayAuthError(w, reqCtx, err)
+	return
+}
+
+gatewayCtx := newGatewayContext(reqCtx, promptText)
+if h.PreProviderPipeline != nil {
+	if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 		applyGatewayContext(reqCtx, gatewayCtx)
+		writeGatewayPipelineFailure(w, reqCtx, err)
+		return
 	}
+	applyGatewayContext(reqCtx, gatewayCtx)
+}
 
 	if h.Providers == nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Providers registry is not initialized.", "resolve_provider_adapter")
@@ -208,6 +222,78 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
+	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication is not initialized.", nil)
+	}
+
+	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		return gatewayerrors.InvalidAPIKey(authenticate.StageName)
+	}
+
+	apiKeyIdentity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidAPIKey) {
+			return gatewayerrors.InvalidAPIKey(authenticate.StageName)
+		}
+		return err
+	}
+
+	reqCtx.APIKeyID = apiKeyIdentity.APIKeyID
+	reqCtx.TenantID = apiKeyIdentity.TenantID
+	reqCtx.ProjectID = apiKeyIdentity.ProjectID
+	if apiKeyIdentity.ApplicationID != "" {
+		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
+	}
+
+	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
+	if appToken == "" {
+		return gatewayerrors.InvalidAppToken(appauth.StageName)
+	}
+
+	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidAppToken) {
+			return gatewayerrors.InvalidAppToken(appauth.StageName)
+		}
+		return err
+	}
+
+	if reqCtx.TenantID != "" && reqCtx.TenantID != appTokenIdentity.TenantID {
+		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	}
+	if reqCtx.ProjectID != "" && reqCtx.ProjectID != appTokenIdentity.ProjectID {
+		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	}
+	if reqCtx.ApplicationID != "" && reqCtx.ApplicationID != appTokenIdentity.ApplicationID {
+		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	}
+
+	reqCtx.AppTokenID = appTokenIdentity.AppTokenID
+	if reqCtx.TenantID == "" {
+		reqCtx.TenantID = appTokenIdentity.TenantID
+	}
+	if reqCtx.ProjectID == "" {
+		reqCtx.ProjectID = appTokenIdentity.ProjectID
+	}
+	if reqCtx.ApplicationID == "" {
+		reqCtx.ApplicationID = appTokenIdentity.ApplicationID
+	}
+
+	if h.ExpectedTenantID != "" && reqCtx.TenantID != h.ExpectedTenantID {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+	if h.ExpectedProjectID != "" && reqCtx.ProjectID != h.ExpectedProjectID {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+	if h.ExpectedAppID != "" && reqCtx.ApplicationID != h.ExpectedAppID {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+
+	return nil
 }
 
 func extractBearerToken(header string) (string, bool) {

@@ -9,7 +9,28 @@ import (
 	"gatelm/apps/gateway-core/internal/http/handlers"
 )
 
-func NewRouter(cfg config.Config, providers *provider.Registry, readinessChecks map[string]handlers.ReadinessCheck) http.Handler {
+type RouterOptions struct {
+	APIKeyAuthenticator handlers.APIKeyAuthenticator
+	AppTokenValidator   handlers.AppTokenValidator
+}
+
+type RouterOption func(*RouterOptions)
+
+func WithGatewayAuth(apiKeyAuthenticator handlers.APIKeyAuthenticator, appTokenValidator handlers.AppTokenValidator) RouterOption {
+	return func(options *RouterOptions) {
+		options.APIKeyAuthenticator = apiKeyAuthenticator
+		options.AppTokenValidator = appTokenValidator
+	}
+}
+
+func NewRouter(cfg config.Config, providers *provider.Registry, readinessChecks map[string]handlers.ReadinessCheck, opts ...RouterOption) http.Handler {
+	routerOptions := RouterOptions{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&routerOptions)
+		}
+	}
+
 	mux := http.NewServeMux()
 	credentials := auth.NewStaticCredentialStore(auth.StaticCredentialConfig{
 		APIKey:   cfg.DemoAPIKey,
@@ -39,8 +60,8 @@ func NewRouter(cfg config.Config, providers *provider.Registry, readinessChecks 
 		DefaultModel:        cfg.DefaultModel,
 		DefaultProvider:     cfg.DefaultProvider,
 		MaxRequestBodyBytes: cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator: credentials,
-		AppTokenValidator:   credentials,
+		APIKeyAuthenticator: routerOptions.APIKeyAuthenticator,
+		AppTokenValidator:   routerOptions.AppTokenValidator,
 		ExpectedTenantID:    cfg.DemoTenantID,
 		ExpectedProjectID:   cfg.DemoProjectID,
 		ExpectedAppID:       cfg.DemoApplicationID,
