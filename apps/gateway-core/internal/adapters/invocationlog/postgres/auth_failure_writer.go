@@ -137,10 +137,10 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 		return authFailureRecord{}, errors.New("auth failure log requires request id")
 	}
 
-	tenantID := firstNonEmpty(log.TenantID, w.defaults.TenantID)
-	projectID := firstNonEmpty(log.ProjectID, w.defaults.ProjectID)
+	tenantID := firstValidUUID(log.TenantID, w.defaults.TenantID)
+	projectID := firstValidUUID(log.ProjectID, w.defaults.ProjectID)
 	if tenantID == "" || projectID == "" {
-		return authFailureRecord{}, errors.New("auth failure log requires tenant and project ids")
+		return authFailureRecord{}, errors.New("auth failure log requires valid tenant and project UUIDs")
 	}
 
 	id, err := newUUID()
