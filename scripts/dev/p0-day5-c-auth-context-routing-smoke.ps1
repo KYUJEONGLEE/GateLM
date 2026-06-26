@@ -108,6 +108,24 @@ function Convert-JsonBody {
     return ($Body | ConvertFrom-Json)
 }
 
+function Get-SafeProperty {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Object -or $null -eq $Object.PSObject) {
+        return $null
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -ne $prop) {
+        return $prop.Value
+    }
+
+    return $null
+}
+
 function Assert-Equal {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -167,17 +185,15 @@ function Invoke-MockProviderCurl {
 function Get-MockCallCount {
     param([Parameter(Mandatory = $true)]$Stats)
 
-    $callsProperty = $Stats.PSObject.Properties["calls"]
-    if ($null -ne $callsProperty) {
-        return [int]$callsProperty.Value
+    $calls = Get-SafeProperty -Object $Stats -Name "calls"
+    if ($null -ne $calls) {
+        return [int]$calls
     }
 
-    $dataProperty = $Stats.PSObject.Properties["data"]
-    if ($null -ne $dataProperty -and $null -ne $dataProperty.Value) {
-        $totalCallsProperty = $dataProperty.Value.PSObject.Properties["totalCalls"]
-        if ($null -ne $totalCallsProperty) {
-            return [int]$totalCallsProperty.Value
-        }
+    $data = Get-SafeProperty -Object $Stats -Name "data"
+    $totalCalls = Get-SafeProperty -Object $data -Name "totalCalls"
+    if ($null -ne $totalCalls) {
+        return [int]$totalCalls
     }
 
     throw "mock stats response is missing calls or data.totalCalls"
@@ -234,8 +250,10 @@ function Get-ErrorCode {
 
     try {
         $json = Convert-JsonBody -Body $Body
-        if ($null -ne $json.error -and $null -ne $json.error.code) {
-            return [string]$json.error.code
+        $errorObject = Get-SafeProperty -Object $json -Name "error"
+        $code = Get-SafeProperty -Object $errorObject -Name "code"
+        if ($null -ne $code) {
+            return [string]$code
         }
     }
     catch {
@@ -259,17 +277,18 @@ function Assert-RoutingMetadata {
     Assert-Equal -Name "routed model header" -Expected $ExpectedSelectedModel -Actual (Get-HeaderValue -Response $Response -Name "X-GateLM-Routed-Model")
 
     $json = Convert-JsonBody -Body $Response.Body
-    if ($null -eq $json.gate_lm) {
+    $gateLm = Get-SafeProperty -Object $json -Name "gate_lm"
+    if ($null -eq $gateLm) {
         throw "response is missing gate_lm metadata"
     }
 
-    Assert-Equal -Name "tenant context" -Expected $ExpectedTenantId -Actual ([string]$json.gate_lm.tenantId)
-    Assert-Equal -Name "project context" -Expected $ExpectedProjectId -Actual ([string]$json.gate_lm.projectId)
-    Assert-Equal -Name "application context" -Expected $ExpectedApplicationId -Actual ([string]$json.gate_lm.applicationId)
-    Assert-Equal -Name "requested model" -Expected $ExpectedRequestedModel -Actual ([string]$json.gate_lm.requestedModel)
-    Assert-Equal -Name "selected provider" -Expected $ExpectedProvider -Actual ([string]$json.gate_lm.selectedProvider)
-    Assert-Equal -Name "selected model" -Expected $ExpectedSelectedModel -Actual ([string]$json.gate_lm.selectedModel)
-    Assert-Equal -Name "routing reason" -Expected $ExpectedRoutingReason -Actual ([string]$json.gate_lm.routingReason)
+    Assert-Equal -Name "tenant context" -Expected $ExpectedTenantId -Actual ([string](Get-SafeProperty -Object $gateLm -Name "tenantId"))
+    Assert-Equal -Name "project context" -Expected $ExpectedProjectId -Actual ([string](Get-SafeProperty -Object $gateLm -Name "projectId"))
+    Assert-Equal -Name "application context" -Expected $ExpectedApplicationId -Actual ([string](Get-SafeProperty -Object $gateLm -Name "applicationId"))
+    Assert-Equal -Name "requested model" -Expected $ExpectedRequestedModel -Actual ([string](Get-SafeProperty -Object $gateLm -Name "requestedModel"))
+    Assert-Equal -Name "selected provider" -Expected $ExpectedProvider -Actual ([string](Get-SafeProperty -Object $gateLm -Name "selectedProvider"))
+    Assert-Equal -Name "selected model" -Expected $ExpectedSelectedModel -Actual ([string](Get-SafeProperty -Object $gateLm -Name "selectedModel"))
+    Assert-Equal -Name "routing reason" -Expected $ExpectedRoutingReason -Actual ([string](Get-SafeProperty -Object $gateLm -Name "routingReason"))
 }
 
 function Invoke-SmokeCase {
