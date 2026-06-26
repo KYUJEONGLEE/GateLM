@@ -36,9 +36,35 @@ v1.0.0은 기능 개수로 판단하지 않는다.
 
 이 경로에 직접 기여하지 않거나 데모 안정성을 크게 흔드는 기능은 v1.0.0 main path에서 제외한다.
 
-## 3. 최종 우선순위
+## 3. 팀원별 의견 채택 순위
 
-### 3.1 v1 Main Path
+최종 결정에서 우선 반영할 팀원별 의견 순위는 아래로 정한다.
+
+이 순위는 사람의 기여도를 평가하는 순위가 아니라, v1.0.0 최종 의사결정에서 어떤 의견을 더 상위 기준으로 삼을지 정한 것이다.
+
+| 순위 | 팀원 | 최종 반영 방식 | 이유 |
+|---:|---|---|---|
+| 1 | Jiseob | 제품 기준과 v1/v2 로드맵의 상위 기준으로 채택 | v1은 제품처럼 보이는 B2B Gateway baseline, v2는 확장성 증명이라는 프레임이 가장 균형적이다. |
+| 2 | Kyujeong | 범위 조절 기준으로 채택 | main path, candidate, evidence path를 분리해 데모 안정성과 제품 설득력을 동시에 잡는다. |
+| 3 | Kyumin | 기술 경계와 구현 가드레일로 채택 | Go Gateway, NestJS, Next.js, PostgreSQL/Redis, interface 중심 구조가 v1 구현 안정성과 v2 확장성을 보장한다. |
+| 4 | Yoonji | 실행 방식과 병렬 작업 운영 기준으로 채택 | vertical slice, mock/fixture/contract stub, 작은 merge 단위가 5명 병렬 구현에 가장 실용적이다. |
+| 5 | Hyeok | 제품 임팩트 후보로 채택 | 실제 Provider, Budget, Streaming, Policy, Dashboard trend 같은 공격적인 아이디어는 좋지만 v1 필수선으로 모두 올리면 실패 위험이 커서 candidate/evidence로 흡수한다. |
+
+정리하면 최종 판단 순서는 아래와 같다.
+
+```text
+1순위: Jiseob의 제품 기준과 v1/v2 분리
+2순위: Kyujeong의 범위 조절
+3순위: Kyumin의 기술 경계
+4순위: Yoonji의 실행 계획
+5순위: Hyeok의 제품 임팩트 후보
+```
+
+따라서 기능을 판단할 때는 먼저 Jiseob의 제품 baseline에 맞는지 보고, 그 다음 Kyujeong의 분류 기준으로 main/candidate/evidence를 나눈다. 기술 선택은 Kyumin 기준을 따른다. 실제 구현 운영은 Yoonji 기준을 따른다. Hyeok의 제안은 데모 임팩트를 높이는 후보로 검토하되, main path를 흔들면 v1 candidate 또는 v2 evidence로 내린다.
+
+## 4. 기능 범위 우선순위
+
+### 4.1 v1 Main Path
 
 아래는 v1.0.0에서 반드시 완성한다.
 
@@ -57,7 +83,7 @@ v1.0.0은 기능 개수로 판단하지 않는다.
 | 11 | Metrics endpoint | request, latency, cache, masking/block, rate limit, log write duration 기준 수치를 남긴다. |
 | 12 | k6 baseline report | pass/fail 목표보다 병목과 다음 최적화 방향을 설명하는 재현 가능한 report를 만든다. |
 
-### 3.2 v1 Candidate
+### 4.2 v1 Candidate
 
 아래는 가능하면 붙인다. 실패해도 main path가 살아 있어야 한다.
 
@@ -69,7 +95,7 @@ v1.0.0은 기능 개수로 판단하지 않는다.
 | 4 | Dashboard trend 일부 | 숫자 카드가 먼저다. trend는 시간이 남을 때만 일부 포함한다. |
 | 5 | Provider timeout/fallback scenario | 실제 Provider를 붙인 경우에만 우선한다. |
 
-### 3.3 v2 Evidence Path
+### 4.3 v2 Evidence Path
 
 아래는 v1.0.0 필수에서 제외하고, v2에서 "왜 필요한지"를 수치와 구조로 증명한다.
 
@@ -85,7 +111,7 @@ v1.0.0은 기능 개수로 판단하지 않는다.
 | 8 | Self-hosted / Hybrid guide | Docker Compose 실행 기준을 넘어 설치/운영 가이드로 확장한다. |
 | 9 | RAG / FAQ chatbot | GateLM 내부 기능이 아니라 고객사 앱 예시로 둔다. |
 
-## 4. 기술스택 결정
+## 5. 기술스택 결정
 
 v1.0.0 기술스택은 아래로 고정한다.
 
@@ -99,7 +125,7 @@ v1.0.0 기술스택은 아래로 고정한다.
 | AI Service | FastAPI, v2 이후 | Semantic Cache, routing score, embedding 등 AI 보조 기능이 필요할 때 붙인다. |
 | Event / Analytics | Redpanda / ClickHouse, v2 이후 | v1 metrics와 병목 근거가 나온 뒤 분석 경로로 확장한다. |
 
-## 5. Rate Limit 최종 결정
+## 6. Rate Limit 최종 결정
 
 v1 Rate Limit은 PostgreSQL-backed fixed window로 시작한다.
 
@@ -124,7 +150,7 @@ v2: Redis adapter와 비교
 - "이 앱이 제한됐다"는 데모 장면이 project/apiKey보다 직관적이다.
 - Request Detail에서는 applicationId와 함께 projectId, apiKeyId도 보여준다.
 
-## 6. Control Plane 설정 반영 방식
+## 7. Control Plane 설정 반영 방식
 
 v1에서는 DB-backed active config read로 시작한다.
 
@@ -144,7 +170,7 @@ Control Plane DB
 - `.env` static key만으로 제품 데모를 끝내는 구조
 - 정책 판단을 handler 내부 if문으로 흩뿌리는 구조
 
-## 7. 역할별 우선순위
+## 8. 역할별 우선순위
 
 역할은 기술 레이어가 아니라 하루 끝에 보여줄 수 있는 제품 결과물 기준으로 나눈다.
 
@@ -156,7 +182,7 @@ Control Plane DB
 | D | Safety & Cost | redaction/block/cache/routing이 한 요청 흐름에서 보이는 장면 | cost-saving evidence와 cache safety |
 | E | Observability & Demo | requestId 하나로 log/detail/dashboard/metrics/demo flow가 연결되는 장면 | k6 baseline과 발표용 demo checklist |
 
-## 8. Day 0 Contract Freeze
+## 9. Day 0 Contract Freeze
 
 구현 전에 아래 계약만 먼저 고정한다. 문서 회의가 길어지지 않도록 범위를 작게 잡는다.
 
@@ -172,7 +198,7 @@ Control Plane DB
 
 계약은 문서만으로 끝내지 않는다. fixture, smoke script, schema validation, 테스트 중 하나로 깨지는 지점이 드러나야 한다.
 
-## 9. Merge와 운영 원칙
+## 10. Merge와 운영 원칙
 
 1. 하루에 담당자당 1~2개 PR을 목표로 한다.
 2. PR 하나는 스크럼에서 보여줄 수 있는 작동 결과를 가져야 한다.
@@ -182,7 +208,7 @@ Control Plane DB
 6. 매일 끝에는 코드 설명보다 실행 결과를 보여준다.
 7. 마지막에는 main path smoke owner가 전체 흐름을 확인한다.
 
-## 10. 보안 원칙
+## 11. 보안 원칙
 
 v1.0.0이 작아도 보안 기준은 낮추지 않는다.
 
@@ -196,7 +222,7 @@ v1.0.0이 작아도 보안 기준은 낮추지 않는다.
 - masking stage를 cache lookup 뒤로 이동 금지
 - Web Console 또는 Customer Demo App에서 Provider 직접 호출 금지
 
-## 11. 최종 결정 요약
+## 12. 최종 결정 요약
 
 최종 결론은 다음이다.
 
