@@ -107,6 +107,60 @@ func TestProjectLogsHandlerRejectsMissingRange(t *testing.T) {
 	}
 }
 
+func TestParseRequiredRFC3339QueryAcceptsTimezoneOffsets(t *testing.T) {
+	tests := []struct {
+		name       string
+		rawURL     string
+		wantFormat string
+	}{
+		{
+			name:       "utc z",
+			rawURL:     "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z",
+			wantFormat: "2026-06-25T00:00:00Z",
+		},
+		{
+			name:       "encoded plus offset",
+			rawURL:     "/api/projects/project_demo/logs?from=2026-06-25T00:00:00%2B09:00",
+			wantFormat: "2026-06-25T00:00:00+09:00",
+		},
+		{
+			name:       "unencoded plus offset decoded as space",
+			rawURL:     "/api/projects/project_demo/logs?from=2026-06-25T00:00:00+09:00",
+			wantFormat: "2026-06-25T00:00:00+09:00",
+		},
+		{
+			name:       "unencoded plus offset with fractional seconds",
+			rawURL:     "/api/projects/project_demo/logs?from=2026-06-25T00:00:00.123+09:00",
+			wantFormat: "2026-06-25T00:00:00+09:00",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.rawURL, nil)
+
+			parsed, err := parseRequiredRFC3339Query(req, "from")
+
+			if err != nil {
+				t.Fatalf("expected query to parse, got %v", err)
+			}
+			if parsed.Format(time.RFC3339) != tt.wantFormat {
+				t.Fatalf("unexpected parsed time: got %s want %s", parsed.Format(time.RFC3339), tt.wantFormat)
+			}
+		})
+	}
+}
+
+func TestParseRequiredRFC3339QueryRejectsInvalidSpace(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00+invalid", nil)
+
+	_, err := parseRequiredRFC3339Query(req, "from")
+
+	if err == nil {
+		t.Fatalf("expected invalid RFC3339 query to be rejected")
+	}
+}
+
 func TestProjectLogsHandlerMapsInvalidReaderQueryToBadRequest(t *testing.T) {
 	handler := ProjectLogsHandler{
 		Reader:   &recordingProjectLogsReader{err: invocationlog.ErrInvalidLogQuery},

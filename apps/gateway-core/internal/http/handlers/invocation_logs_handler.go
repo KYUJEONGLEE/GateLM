@@ -491,11 +491,54 @@ func parseRequiredRFC3339Query(r *http.Request, name string) (time.Time, error) 
 	if value == "" {
 		return time.Time{}, errors.New(name + " is required")
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, value)
+	parsed, err := parseRFC3339QueryValue(value)
 	if err != nil {
 		return time.Time{}, errors.New(name + " must be RFC3339")
 	}
 	return parsed, nil
+}
+
+func parseRFC3339QueryValue(value string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err == nil {
+		return parsed, nil
+	}
+
+	restored, ok := restoreDecodedPlusTimezoneOffset(value)
+	if !ok {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339Nano, restored)
+}
+
+func restoreDecodedPlusTimezoneOffset(value string) (string, bool) {
+	if strings.Contains(value, "+") {
+		return "", false
+	}
+
+	lastSpace := strings.LastIndex(value, " ")
+	if lastSpace <= len("2006-01-02T15:04:05")-1 {
+		return "", false
+	}
+
+	offset := value[lastSpace+1:]
+	if !isHHMMOffset(offset) {
+		return "", false
+	}
+
+	return value[:lastSpace] + "+" + offset, true
+}
+
+func isHHMMOffset(value string) bool {
+	if len(value) != len("09:00") || value[2] != ':' {
+		return false
+	}
+	for _, index := range []int{0, 1, 3, 4} {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func parseOptionalPositiveIntQuery(r *http.Request, name string) (int, error) {
