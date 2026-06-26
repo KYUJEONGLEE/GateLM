@@ -971,6 +971,7 @@ func TestChatCompletionsHandlerPreservesCacheMissAndCallsProvider(t *testing.T) 
 }
 
 func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.T) {
+	output := captureDefaultLog(t)
 	chatCalls := 0
 	preflight := &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
@@ -979,6 +980,7 @@ func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.
 			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
 			gatewayCtx.Cache.CacheStatus = "hit"
 			gatewayCtx.Cache.CacheType = "exact"
+			gatewayCtx.Cache.CacheKeyHash = "hmac-sha256:cache-key"
 			gatewayCtx.Cache.Payload = []byte(`{"unexpected":"shape"}`)
 		},
 	}
@@ -994,6 +996,7 @@ func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.
 		"model": "auto",
 		"messages": [{"role": "user", "content": "short prompt"}]
 	}`))
+	req.Header.Set(middleware.RequestIDHeader, "req_cache_decode")
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
@@ -1015,6 +1018,23 @@ func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.
 	}
 	if resp.GateLM == nil || resp.GateLM.CacheStatus != "error" || resp.GateLM.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected gate_lm cache error metadata: %#v", resp.GateLM)
+	}
+
+	logged := output.String()
+	if !strings.Contains(logged, "gateway cache decode error") {
+		t.Fatalf("expected cache decode error log, got %q", logged)
+	}
+	if !strings.Contains(logged, "request_id=req_cache_decode") || !strings.Contains(logged, "cache_type=exact") {
+		t.Fatalf("expected cache decode context in log, got %q", logged)
+	}
+	if !strings.Contains(logged, "cache_key_hash=hmac-sha256:cache-key") {
+		t.Fatalf("expected cache key hash in log, got %q", logged)
+	}
+	if !strings.Contains(logged, "cached chat completion payload has invalid shape") {
+		t.Fatalf("expected sanitized decode error in log, got %q", logged)
+	}
+	if strings.Contains(logged, "unexpected") {
+		t.Fatalf("cache decode log must not include raw cached payload: %q", logged)
 	}
 }
 

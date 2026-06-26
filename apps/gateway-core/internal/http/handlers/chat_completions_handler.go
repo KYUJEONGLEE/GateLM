@@ -192,6 +192,7 @@ func (h ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseWr
 
 	cachedResp, err := decodeCachedChatCompletionPayload(gatewayCtx.Cache.Payload)
 	if err != nil {
+		logGatewayCacheDecodeError(reqCtx, err)
 		reqCtx.CacheStatus = cachestage.CacheStatusError
 		if reqCtx.CacheType == "" || reqCtx.CacheType == cachestage.CacheTypeNone {
 			reqCtx.CacheType = cachestage.CacheTypeExact
@@ -244,6 +245,19 @@ func decodeCachedChatCompletionPayload(payload []byte) (*provider.ChatCompletion
 	}
 
 	return &resp, nil
+}
+
+func logGatewayCacheDecodeError(reqCtx *pipeline.RequestContext, err error) {
+	if reqCtx == nil || err == nil {
+		return
+	}
+
+	log.Printf("gateway cache decode error request_id=%s cache_type=%s cache_key_hash=%s error=%q",
+		sanitizeLogValue(reqCtx.RequestID),
+		sanitizeLogValue(reqCtx.CacheType),
+		sanitizeLogValue(reqCtx.CacheKeyHash),
+		sanitizeLogValue(err.Error()),
+	)
 }
 
 func ensureCacheDefaults(reqCtx *pipeline.RequestContext) {
