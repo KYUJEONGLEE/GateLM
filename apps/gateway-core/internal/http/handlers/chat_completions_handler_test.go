@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
@@ -114,6 +115,46 @@ func TestChatCompletionsHandlerCallsMockProvider(t *testing.T) {
 	}
 	if resp.GateLM.SelectedProvider != "mock" {
 		t.Fatalf("unexpected selected provider metadata: %s", resp.GateLM.SelectedProvider)
+	}
+}
+
+func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusSuccess || logged.HTTPStatus != http.StatusOK {
+		t.Fatalf("unexpected terminal status: %+v", logged)
+	}
+	if logged.CacheStatus != invocationlog.CacheStatusMiss || logged.CacheType != invocationlog.CacheTypeExact {
+		t.Fatalf("unexpected cache fields: %+v", logged)
+	}
+	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-balanced" {
+		t.Fatalf("unexpected route fields: %+v", logged)
+	}
+	if logged.PromptTokens != 4 || logged.CompletionTokens != 3 || logged.TotalTokens != 7 {
+		t.Fatalf("unexpected usage fields: %+v", logged)
+	}
+	if logged.RequestBodyHash == "" || logged.PromptHash == "" {
+		t.Fatalf("expected request and prompt hashes: %+v", logged)
 	}
 }
 
@@ -958,6 +999,51 @@ func TestChatCompletionsHandlerBlocksSensitiveDataBeforeProviderCall(t *testing.
 	}
 }
 
+func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) {
+	chatCalls := 0
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	rawSecret := "test_secret_token_redacted_for_demo_only_1234567890"
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Summarize api_key="+rawSecret)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("blocked request must not call provider, got %d calls", chatCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusBlocked || logged.HTTPStatus != http.StatusForbidden {
+		t.Fatalf("unexpected blocked log status: %+v", logged)
+	}
+	if logged.ErrorCode != "sensitive_data_blocked" || logged.ErrorStage != "mask_or_block" {
+		t.Fatalf("unexpected blocked error fields: %+v", logged)
+	}
+	if logged.CacheStatus != invocationlog.CacheStatusBypass || logged.CacheType != invocationlog.CacheTypeNone {
+		t.Fatalf("blocked request must bypass cache, got %+v", logged)
+	}
+	if logged.MaskingAction != "blocked" || logged.MaskingDetectedCount == 0 {
+		t.Fatalf("unexpected masking fields: %+v", logged)
+	}
+	if strings.Contains(logged.RedactedPromptPreview, rawSecret) {
+		t.Fatalf("blocked log preview must not include raw secret: %q", logged.RedactedPromptPreview)
+	}
+}
+
 func TestChatCompletionsHandlerSameSafeRequestMissThenHit(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
@@ -1282,6 +1368,62 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	}
 	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-balanced" {
 		t.Fatalf("unexpected gate_lm cache/routing metadata: %#v", resp.GateLM)
+	}
+}
+
+func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
+	chatCalls := 0
+	logWriter := &recordingTerminalLogWriter{}
+	cachedPayload := marshalChatCompletionPayload(t, provider.ChatCompletionResponse{
+		ID:      "cached_chatcmpl_previous",
+		Object:  "chat.completion",
+		Created: 1782108000,
+		Model:   "mock-balanced",
+	})
+	cacheStore := &recordingExactCacheStore{
+		result: ports.CacheLookupResult{
+			Hit:               true,
+			CacheHitRequestID: "request_previous",
+			Payload:           cachedPayload,
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:         "mock-balanced",
+		DefaultProvider:      "mock",
+		ExactCacheStore:      cacheStore,
+		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-key"},
+		TerminalLogWriter:    logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short safe cached response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("cache hit must not call provider, got %d calls", chatCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCacheHit || logged.CacheStatus != invocationlog.CacheStatusHit {
+		t.Fatalf("unexpected cache hit log status: %+v", logged)
+	}
+	if logged.CacheType != invocationlog.CacheTypeExact || logged.CacheKeyHash != "hmac-sha256:cache-key" || logged.CacheHitRequestID != "request_previous" {
+		t.Fatalf("unexpected cache hit fields: %+v", logged)
+	}
+	if logged.PromptTokens != 0 || logged.CompletionTokens != 0 || logged.TotalTokens != 0 || logged.CostMicroUSD != 0 {
+		t.Fatalf("cache hit usage/cost must be zero, got %+v", logged)
+	}
+	if logged.ProviderLatencyMs != nil {
+		t.Fatalf("cache hit provider latency must be nil, got %+v", logged.ProviderLatencyMs)
 	}
 }
 
@@ -1676,6 +1818,19 @@ func (s *recordingExactCacheStore) SetExact(ctx context.Context, entry ports.Cac
 	}
 	entry.Payload = append([]byte(nil), entry.Payload...)
 	s.entries = append(s.entries, entry)
+	return nil
+}
+
+type recordingTerminalLogWriter struct {
+	logs []invocationlog.TerminalLog
+	err  error
+}
+
+func (w *recordingTerminalLogWriter) WriteTerminalLog(_ context.Context, log invocationlog.TerminalLog) error {
+	if w.err != nil {
+		return w.err
+	}
+	w.logs = append(w.logs, log)
 	return nil
 }
 

@@ -20,6 +20,7 @@ type RouterOptions struct {
 	APIKeyAuthenticator  handlers.APIKeyAuthenticator
 	AppTokenValidator    handlers.AppTokenValidator
 	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
+	TerminalLogWriter    invocationlog.TerminalLogWriter
 	ExactCacheStore      ports.CacheStore
 	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
 	PreProviderPipeline  handlers.GatewayPipeline
@@ -37,6 +38,12 @@ func WithGatewayAuth(apiKeyAuthenticator handlers.APIKeyAuthenticator, appTokenV
 func WithAuthFailureLogWriter(writer invocationlog.AuthFailureLogWriter) RouterOption {
 	return func(options *RouterOptions) {
 		options.AuthFailureLogWriter = writer
+	}
+}
+
+func WithTerminalLogWriter(writer invocationlog.TerminalLogWriter) RouterOption {
+	return func(options *RouterOptions) {
+		options.TerminalLogWriter = writer
 	}
 }
 
@@ -99,6 +106,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	if authFailureLogWriter == nil {
 		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
 	}
+	terminalLogWriter := routerOptions.TerminalLogWriter
+	if terminalLogWriter == nil {
+		terminalLogWriter = invocationlog.NoopTerminalLogWriter{}
+	}
 
 	simpleRouter := routingdomain.NewSimpleRouter(routingdomain.SimpleRouterConfig{
 		DefaultProvider:     cfg.DefaultProvider,
@@ -140,6 +151,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExpectedAppID:           cfg.DemoApplicationID,
 		PreProviderPipeline:     preProviderPipeline,
 		AuthFailureLogWriter:    authFailureLogWriter,
+		TerminalLogWriter:       terminalLogWriter,
 		MaskingEngine:           maskdomain.NewP0Engine(),
 		ExactCacheStore:         routerOptions.ExactCacheStore,
 		ExactCacheKeyBuilder:    exactCacheKeyBuilder,

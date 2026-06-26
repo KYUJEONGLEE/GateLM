@@ -66,12 +66,18 @@ func main() {
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
+	terminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
+		TenantID:      cfg.DemoTenantID,
+		ProjectID:     cfg.DemoProjectID,
+		ApplicationID: cfg.DemoApplicationID,
+	})
 
 	router := app.NewRouter(
 		cfg,
 		providers,
 		readinessChecks,
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
+		app.WithTerminalLogWriter(terminalLogWriter),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
