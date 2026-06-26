@@ -883,12 +883,14 @@ def proxy_request(handler, base_url, prefix):
             payload = response.read()
             handler.send_response(response.status)
             copy_response_headers(handler, response)
+            handler.send_header("Content-Length", str(len(payload)))
             handler.end_headers()
             handler.wfile.write(payload)
     except urllib.error.HTTPError as error:
         payload = error.read()
         handler.send_response(error.code)
         copy_response_headers(handler, error)
+        handler.send_header("Content-Length", str(len(payload)))
         handler.end_headers()
         handler.wfile.write(payload)
     except Exception as error:
