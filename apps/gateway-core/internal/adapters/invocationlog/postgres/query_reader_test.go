@@ -14,10 +14,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func TestBuildProjectLogsQueryUsesProjectScopeAndSafeColumns(t *testing.T) {
+func TestBuildProjectLogsQueryUsesTenantProjectScopeAndSafeColumns(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
 	query, args := buildProjectLogsQuery(invocationlog.ProjectLogsFilter{
+		TenantID:    "tenant_demo",
 		ProjectID:   "project_demo",
 		From:        from,
 		To:          to,
@@ -29,8 +30,8 @@ func TestBuildProjectLogsQueryUsesProjectScopeAndSafeColumns(t *testing.T) {
 	if !strings.Contains(query, "from p0_llm_invocation_logs") {
 		t.Fatalf("expected p0 fallback table query, got %s", query)
 	}
-	if !strings.Contains(query, "project_id = $1") || !strings.Contains(query, "created_at >= $2") || !strings.Contains(query, "created_at < $3") {
-		t.Fatalf("expected project-scoped time range query, got %s", query)
+	if !strings.Contains(query, "tenant_id = $1") || !strings.Contains(query, "project_id = $2") || !strings.Contains(query, "created_at >= $3") || !strings.Contains(query, "created_at < $4") {
+		t.Fatalf("expected tenant/project-scoped time range query, got %s", query)
 	}
 	for _, forbidden := range []string{
 		"raw_prompt",
@@ -46,8 +47,8 @@ func TestBuildProjectLogsQueryUsesProjectScopeAndSafeColumns(t *testing.T) {
 			t.Fatalf("query must not select forbidden field %q: %s", forbidden, query)
 		}
 	}
-	if len(args) != 6 {
-		t.Fatalf("expected project/from/to/status/cacheStatus/limit args, got %d", len(args))
+	if len(args) != 7 {
+		t.Fatalf("expected tenant/project/from/to/status/cacheStatus/limit args, got %d", len(args))
 	}
 }
 
@@ -83,6 +84,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	items, err := reader.ListProjectLogs(context.Background(), invocationlog.ProjectLogsFilter{
+		TenantID:  "tenant_demo",
 		ProjectID: "project_demo",
 		From:      from,
 		To:        to,
@@ -146,6 +148,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	detail, err := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{
+		TenantID:  "tenant_demo",
 		ProjectID: "project_demo",
 		RequestID: "request_001",
 	})
@@ -199,6 +202,7 @@ func TestQueryReaderGetRequestDetailMapsNoRowsToDomainNotFound(t *testing.T) {
 	for _, noRowsErr := range []error{pgx.ErrNoRows, sql.ErrNoRows} {
 		reader := NewQueryReader(&fakeQueryer{row: fakeRow{err: noRowsErr}})
 		_, err := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{
+			TenantID:  "tenant_demo",
 			ProjectID: "project_demo",
 			RequestID: "request_missing",
 		})

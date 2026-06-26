@@ -20,6 +20,7 @@ type Reader interface {
 }
 
 type ProjectLogsFilter struct {
+	TenantID      string
 	ProjectID     string
 	From          time.Time
 	To            time.Time
@@ -33,6 +34,7 @@ type ProjectLogsFilter struct {
 }
 
 type RequestDetailFilter struct {
+	TenantID  string
 	ProjectID string
 	RequestID string
 }
@@ -194,6 +196,7 @@ type DashboardOverviewFields struct {
 }
 
 func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, error) {
+	filter.TenantID = strings.TrimSpace(filter.TenantID)
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
 	filter.Status = strings.TrimSpace(filter.Status)
 	filter.Provider = strings.TrimSpace(filter.Provider)
@@ -202,6 +205,9 @@ func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, er
 	filter.ApplicationID = strings.TrimSpace(filter.ApplicationID)
 	filter.RequestID = strings.TrimSpace(filter.RequestID)
 
+	if filter.TenantID == "" {
+		return ProjectLogsFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
+	}
 	if filter.ProjectID == "" {
 		return ProjectLogsFilter{}, fmt.Errorf("%w: project id is required", ErrInvalidLogQuery)
 	}
@@ -219,8 +225,12 @@ func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, er
 }
 
 func NormalizeRequestDetailFilter(filter RequestDetailFilter) (RequestDetailFilter, error) {
+	filter.TenantID = strings.TrimSpace(filter.TenantID)
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
 	filter.RequestID = strings.TrimSpace(filter.RequestID)
+	if filter.TenantID == "" {
+		return RequestDetailFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
+	}
 	if filter.ProjectID == "" {
 		return RequestDetailFilter{}, fmt.Errorf("%w: project id is required", ErrInvalidLogQuery)
 	}
@@ -233,8 +243,8 @@ func NormalizeRequestDetailFilter(filter RequestDetailFilter) (RequestDetailFilt
 func NormalizeDashboardOverviewFilter(filter DashboardOverviewFilter) (DashboardOverviewFilter, error) {
 	filter.TenantID = strings.TrimSpace(filter.TenantID)
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
-	if filter.TenantID == "" && filter.ProjectID == "" {
-		return DashboardOverviewFilter{}, fmt.Errorf("%w: tenant id or project id is required", ErrInvalidLogQuery)
+	if filter.TenantID == "" {
+		return DashboardOverviewFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
 	}
 	if err := validateTimeRange(filter.From, filter.To); err != nil {
 		return DashboardOverviewFilter{}, err
