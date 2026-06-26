@@ -157,6 +157,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 	if logged.SavedCostMicroUSD != 0 {
 		t.Fatalf("success log saved cost must default to zero, got %d", logged.SavedCostMicroUSD)
+	}
 	if logged.ProviderLatencyMs == nil {
 		t.Fatalf("success log must include provider latency: %+v", logged)
 	}

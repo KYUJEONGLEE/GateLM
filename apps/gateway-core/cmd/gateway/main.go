@@ -71,6 +71,7 @@ func main() {
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
+	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
 
 	router := app.NewRouter(
 		cfg,
@@ -78,6 +79,7 @@ func main() {
 		readinessChecks,
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
+		app.WithInvocationLogReader(invocationLogReader),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
@@ -102,4 +104,16 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("gateway-core shutdown failed: %v", err)
 	}
+}
+
+type invocationLogQueryer struct {
+	pool *pgxpool.Pool
+}
+
+func (q invocationLogQueryer) Query(ctx context.Context, sql string, arguments ...any) (postgresinvocationlog.Rows, error) {
+	return q.pool.Query(ctx, sql, arguments...)
+}
+
+func (q invocationLogQueryer) QueryRow(ctx context.Context, sql string, arguments ...any) postgresinvocationlog.Row {
+	return q.pool.QueryRow(ctx, sql, arguments...)
 }

@@ -21,6 +21,7 @@ type RouterOptions struct {
 	AppTokenValidator    handlers.AppTokenValidator
 	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
 	TerminalLogWriter    invocationlog.TerminalLogWriter
+	InvocationLogReader  invocationlog.Reader
 	ExactCacheStore      ports.CacheStore
 	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
 	PreProviderPipeline  handlers.GatewayPipeline
@@ -44,6 +45,12 @@ func WithAuthFailureLogWriter(writer invocationlog.AuthFailureLogWriter) RouterO
 func WithTerminalLogWriter(writer invocationlog.TerminalLogWriter) RouterOption {
 	return func(options *RouterOptions) {
 		options.TerminalLogWriter = writer
+	}
+}
+
+func WithInvocationLogReader(reader invocationlog.Reader) RouterOption {
+	return func(options *RouterOptions) {
+		options.InvocationLogReader = reader
 	}
 }
 
@@ -137,6 +144,19 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{
 		Providers:           providers,
 		PreProviderPipeline: preProviderPipeline,
+	})
+	mux.Handle("GET /api/projects/{projectId}/logs", handlers.ProjectLogsHandler{
+		Reader:   routerOptions.InvocationLogReader,
+		TenantID: cfg.DemoTenantID,
+	})
+	mux.Handle("GET /api/llm-requests/{requestId}", handlers.RequestDetailHandler{
+		Reader:    routerOptions.InvocationLogReader,
+		TenantID:  cfg.DemoTenantID,
+		ProjectID: cfg.DemoProjectID,
+	})
+	mux.Handle("GET /api/dashboard/overview", handlers.DashboardOverviewHandler{
+		Reader:   routerOptions.InvocationLogReader,
+		TenantID: cfg.DemoTenantID,
 	})
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{

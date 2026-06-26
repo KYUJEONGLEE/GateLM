@@ -379,14 +379,24 @@ curl -sS http://localhost:8080/v1/chat/completions \
 
 ## 11. 로그 검증
 
+Day4 Request Log / Detail / Dashboard API는 아래 smoke helper로 한 번에 확인할 수 있다.
+
+```powershell
+.\scripts\dev\p0-day4-log-dashboard-smoke.ps1
+```
+
+수동 확인이 필요하면 아래 endpoint를 직접 호출한다.
+
 ```bash
-curl -sS 'http://localhost:3001/api/projects/<projectId>/logs?limit=20' \
-  -H 'Authorization: Bearer <control_plane_access_token>'
+curl -sS 'http://localhost:8080/api/projects/<projectId>/logs?from=<fromIso>&to=<toIso>&limit=20'
 ```
 
 ```bash
-curl -sS 'http://localhost:3001/api/llm-requests/<requestId>' \
-  -H 'Authorization: Bearer <control_plane_access_token>'
+curl -sS 'http://localhost:8080/api/llm-requests/<requestId>'
+```
+
+```bash
+curl -sS 'http://localhost:8080/api/dashboard/overview?projectId=<projectId>&from=<fromIso>&to=<toIso>'
 ```
 
 확인할 것:
