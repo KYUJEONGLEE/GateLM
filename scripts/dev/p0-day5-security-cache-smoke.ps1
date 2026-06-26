@@ -59,6 +59,7 @@ function Invoke-SmokeHttp {
     }
 
     $client = [System.Net.Http.HttpClient]::new()
+    $client.Timeout = [TimeSpan]::FromSeconds(10)
     $httpMethod = [System.Net.Http.HttpMethod]::Get
     if ($Method -eq "POST") {
         $httpMethod = [System.Net.Http.HttpMethod]::Post
@@ -144,6 +145,40 @@ function Assert-True {
 
     if (-not $Condition) {
         throw "$Name expected true"
+    }
+}
+
+function Assert-AtLeast {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][int64]$Minimum,
+        [Parameter(Mandatory = $true)][int64]$Actual
+    )
+
+    if ($Actual -lt $Minimum) {
+        throw "$Name expected at least '$Minimum' but got '$Actual'"
+    }
+}
+
+function Assert-NotBlank {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        $Value
+    )
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        throw "$Name expected a non-empty value"
+    }
+}
+
+function Assert-NullOrBlank {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        $Value
+    )
+
+    if ($null -ne $Value -and -not [string]::IsNullOrWhiteSpace([string]$Value)) {
+        throw "$Name expected null or blank but got '$Value'"
     }
 }
 
@@ -373,6 +408,22 @@ function Get-ProjectLogs {
     $response = Invoke-SmokeHttp -Method GET -Uri $uri
     Assert-Equal -Name "project logs HTTP" -Expected 200 -Actual $response.StatusCode
     Assert-NoForbiddenFields -Name "project logs" -Body $response.Body
+    Assert-BodyDoesNotExpose -Name "project logs" -Body $response.Body -RawValues @($ValidApiKey, $ValidAppToken)
+    return (Convert-JsonBody -Body $response.Body)
+}
+
+function Get-DashboardOverview {
+    $query = @{
+        projectId = $ProjectId
+        from      = $FromIso
+        to        = $ToIso
+    }
+
+    $uri = (Join-Url $GatewayBaseUrl "/api/dashboard/overview") + "?" + (New-QueryString -Values $query)
+    $response = Invoke-SmokeHttp -Method GET -Uri $uri
+    Assert-Equal -Name "dashboard HTTP" -Expected 200 -Actual $response.StatusCode
+    Assert-NoForbiddenFields -Name "dashboard" -Body $response.Body
+    Assert-BodyDoesNotExpose -Name "dashboard" -Body $response.Body -RawValues @($ValidApiKey, $ValidAppToken)
     return (Convert-JsonBody -Body $response.Body)
 }
 
@@ -394,6 +445,7 @@ function Wait-RequestDetail {
         $lastBody = $response.Body
         if ($response.StatusCode -eq 200) {
             Assert-NoForbiddenFields -Name "request detail" -Body $response.Body -AllowRedactedPromptPreview $true
+            Assert-BodyDoesNotExpose -Name "request detail" -Body $response.Body -RawValues @($ValidApiKey, $ValidAppToken)
             return (Convert-JsonBody -Body $response.Body)
         }
         Start-Sleep -Milliseconds 200
@@ -444,11 +496,15 @@ function Assert-BlockedRequest {
     Assert-Equal -Name "$Name detail error code" -Expected "sensitive_data_blocked" -Actual ([string]$detail.data.error.errorCode)
     Assert-Equal -Name "$Name detail cache status" -Expected "bypass" -Actual ([string]$detail.data.cache.cacheStatus)
     Assert-Equal -Name "$Name detail cache type" -Expected "none" -Actual ([string]$detail.data.cache.cacheType)
+    Assert-NullOrBlank -Name "$Name detail cache key hash" -Value $detail.data.cache.cacheKeyHash
+    Assert-NullOrBlank -Name "$Name detail cache hit request id" -Value $detail.data.cache.cacheHitRequestId
     Assert-Equal -Name "$Name detail cost" -Expected 0 -Actual ([int64]$detail.data.cost.costMicroUsd)
     Assert-Equal -Name "$Name detail masking action" -Expected "blocked" -Actual ([string]$detail.data.masking.maskingAction)
     Assert-ArrayContains -Name "$Name detected types" -Values $detail.data.masking.maskingDetectedTypes -Expected $ExpectedDetectorType
+    Assert-AtLeast -Name "$Name masking detected count" -Minimum 1 -Actual ([int64]$detail.data.masking.maskingDetectedCount)
     Assert-BodyDoesNotExpose -Name "$Name detail" -Body ($detail | ConvertTo-Json -Depth 20) -RawValues @($RawValue)
     Assert-LogItem -RequestId $requestId -ExpectedStatus "blocked" -ExpectedCacheStatus "bypass"
+    $script:BlockedRequestIds += $requestId
 }
 
 function Invoke-SmokeCase {
@@ -493,6 +549,7 @@ $script:SafeMissRequestId = ""
 $script:SafeHitRequestId = ""
 $script:RoutingRequestId = ""
 $script:RedactionRequestId = ""
+$script:BlockedRequestIds = @()
 
 Invoke-SmokeCase -Name "baseline health checks" -Body {
     Invoke-HealthCheck -Name "gateway healthz" -Uri (Join-Url $GatewayBaseUrl "/healthz")
@@ -515,7 +572,11 @@ Invoke-SmokeCase -Name "day5 safe request miss then cache hit" -Body {
     Assert-Equal -Name "first detail status" -Expected "success" -Actual ([string]$firstDetail.data.status)
     Assert-Equal -Name "first detail cache status" -Expected "miss" -Actual ([string]$firstDetail.data.cache.cacheStatus)
     Assert-Equal -Name "first detail cache type" -Expected "exact" -Actual ([string]$firstDetail.data.cache.cacheType)
+    Assert-NotBlank -Name "first detail cache key hash" -Value $firstDetail.data.cache.cacheKeyHash
+    Assert-Equal -Name "first detail masking action" -Expected "none" -Actual ([string]$firstDetail.data.masking.maskingAction)
+    Assert-Equal -Name "first detail masking count" -Expected 0 -Actual ([int64]$firstDetail.data.masking.maskingDetectedCount)
     Assert-LogItem -RequestId $script:SafeMissRequestId -ExpectedStatus "success" -ExpectedCacheStatus "miss"
+    $firstCacheKeyHash = [string]$firstDetail.data.cache.cacheKeyHash
 
     $second = Invoke-GatewayChat -Prompt $prompt -Feature "day5-cache-demo"
     Assert-Equal -Name "second safe HTTP" -Expected 200 -Actual $second.StatusCode
@@ -528,8 +589,11 @@ Invoke-SmokeCase -Name "day5 safe request miss then cache hit" -Body {
     Assert-Equal -Name "second detail status" -Expected "cache_hit" -Actual ([string]$secondDetail.data.status)
     Assert-Equal -Name "second detail cache status" -Expected "hit" -Actual ([string]$secondDetail.data.cache.cacheStatus)
     Assert-Equal -Name "second detail cache type" -Expected "exact" -Actual ([string]$secondDetail.data.cache.cacheType)
+    Assert-Equal -Name "second detail cache key hash" -Expected $firstCacheKeyHash -Actual ([string]$secondDetail.data.cache.cacheKeyHash)
     Assert-Equal -Name "second detail cache hit request id" -Expected $script:SafeMissRequestId -Actual ([string]$secondDetail.data.cache.cacheHitRequestId)
     Assert-Equal -Name "second detail cost" -Expected 0 -Actual ([int64]$secondDetail.data.cost.costMicroUsd)
+    Assert-Equal -Name "second detail masking action" -Expected "none" -Actual ([string]$secondDetail.data.masking.maskingAction)
+    Assert-Equal -Name "second detail masking count" -Expected 0 -Actual ([int64]$secondDetail.data.masking.maskingDetectedCount)
     Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "cache_hit" -ExpectedCacheStatus "hit"
 }
 
@@ -542,6 +606,7 @@ Invoke-SmokeCase -Name "day5 model auto short prompt routes to mock-fast" -Body 
 
     $detail = Wait-RequestDetail -RequestId $script:RoutingRequestId
     Assert-Equal -Name "routing requested model" -Expected "auto" -Actual ([string]$detail.data.requestedModel)
+    Assert-Equal -Name "routing selected provider" -Expected "mock" -Actual ([string]$detail.data.routing.selectedProvider)
     Assert-Equal -Name "routing selected model" -Expected "mock-fast" -Actual ([string]$detail.data.selectedModel)
     Assert-Equal -Name "routing nested selected model" -Expected "mock-fast" -Actual ([string]$detail.data.routing.selectedModel)
     Assert-Equal -Name "routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$detail.data.routing.routingReason)
@@ -578,6 +643,9 @@ Invoke-SmokeCase -Name "day5 redaction applies before provider and log detail" -
     Assert-Equal -Name "redaction detail masking action" -Expected "redacted" -Actual ([string]$detail.data.masking.maskingAction)
     Assert-ArrayContains -Name "redaction detail detected types" -Values $detail.data.masking.maskingDetectedTypes -Expected "email"
     Assert-ArrayContains -Name "redaction detail detected types" -Values $detail.data.masking.maskingDetectedTypes -Expected "phone_number"
+    Assert-AtLeast -Name "redaction detail masking count" -Minimum 2 -Actual ([int64]$detail.data.masking.maskingDetectedCount)
+    Assert-Equal -Name "redaction detail cache type" -Expected "exact" -Actual ([string]$detail.data.cache.cacheType)
+    Assert-NotBlank -Name "redaction detail cache key hash" -Value $detail.data.cache.cacheKeyHash
     $detailPreview = [string]$detail.data.masking.redactedPromptPreview
     Assert-Contains -Name "redaction detail preview" -Text $detailPreview -Needle "[EMAIL_REDACTED]"
     Assert-Contains -Name "redaction detail preview" -Text $detailPreview -Needle "[PHONE_NUMBER_REDACTED]"
@@ -610,6 +678,22 @@ Invoke-SmokeCase -Name "day5 RRN marker blocks before cache and provider" -Body 
         -Prompt "This day5 request includes a synthetic resident registration marker: $rrnMarker" `
         -RawValue $rrnMarker `
         -ExpectedDetectorType "resident_registration_number"
+}
+
+Invoke-SmokeCase -Name "day5 dashboard reflects request log canonical source" -Body {
+    $dashboard = Get-DashboardOverview
+    $totals = $dashboard.data.totals
+    Assert-AtLeast -Name "dashboard totalRequests" -Minimum 7 -Actual ([int64]$totals.totalRequests)
+    Assert-AtLeast -Name "dashboard successfulRequests" -Minimum 4 -Actual ([int64]$totals.successfulRequests)
+    Assert-AtLeast -Name "dashboard blockedRequests" -Minimum 3 -Actual ([int64]$totals.blockedRequests)
+    Assert-AtLeast -Name "dashboard cacheHitRequests" -Minimum 1 -Actual ([int64]$totals.cacheHitRequests)
+    Assert-True -Name "dashboard totalCostMicroUsd present" -Condition ($null -ne $totals.totalCostMicroUsd)
+
+    foreach ($requestId in @($script:SafeMissRequestId, $script:SafeHitRequestId, $script:RoutingRequestId, $script:RedactionRequestId) + $script:BlockedRequestIds) {
+        Assert-NotBlank -Name "dashboard source request id" -Value $requestId
+        $logs = Get-ProjectLogs -RequestId $requestId -Limit 20
+        Assert-AtLeast -Name "dashboard source log contains $requestId" -Minimum 1 -Actual ([int64]@($logs.data).Count)
+    }
 }
 
 Write-Host ""
