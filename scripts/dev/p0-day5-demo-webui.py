@@ -901,7 +901,7 @@ def proxy_request(handler, base_url, prefix):
 
 
 def copy_response_headers(handler, response):
-    skip = {"transfer-encoding", "connection", "content-encoding"}
+    skip = {"transfer-encoding", "connection", "content-encoding", "content-length"}
     for key, value in response.headers.items():
         if key.lower() in skip:
             continue
