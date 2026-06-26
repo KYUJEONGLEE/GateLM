@@ -56,6 +56,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			CacheType:         reqCtx.CacheType,
 			CacheKeyHash:      reqCtx.CacheKeyHash,
 			CacheHitRequestID: reqCtx.CacheHitRequestID,
+			SavedCostMicroUSD: reqCtx.SavedCostMicroUSD,
 		},
 		Status: request.StatusContext{
 			Status:       reqCtx.Status,
@@ -124,6 +125,7 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Cache.CacheHitRequestID != "" {
 		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
 	}
+	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 
 	if gatewayCtx.Status.Status != "" {
 		reqCtx.Status = gatewayCtx.Status.Status

@@ -41,11 +41,12 @@ type RequestContext struct {
 	Model             string
 	ProviderLatencyMs int64
 
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
-	CostMicroUSD     int64
-	LatencyMs        int64
+	PromptTokens      int
+	CompletionTokens  int
+	TotalTokens       int
+	CostMicroUSD      int64
+	SavedCostMicroUSD int64
+	LatencyMs         int64
 
 	Status       string
 	HTTPStatus   int

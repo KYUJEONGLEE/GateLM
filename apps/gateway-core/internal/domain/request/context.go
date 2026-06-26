@@ -54,6 +54,7 @@ type CacheContext struct {
 	CacheType         string
 	CacheKeyHash      string
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 

@@ -165,6 +165,8 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		reqCtx.ErrorStage = "mask_or_block"
 		reqCtx.CacheStatus = cachestage.CacheStatusBypass
 		reqCtx.CacheType = cachestage.CacheTypeNone
+		reqCtx.CostMicroUSD = 0
+		reqCtx.SavedCostMicroUSD = 0
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 		setGatewayHeaders(w, reqCtx)
 		writeGatewayErrorWithHeaders(w, http.StatusForbidden, gatewayHeaderValuesFromContext(reqCtx), reqCtx.ErrorCode, reqCtx.ErrorMessage)
@@ -248,6 +250,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	reqCtx.Status = "success"
 	reqCtx.HTTPStatus = http.StatusOK
+	reqCtx.SavedCostMicroUSD = 0
 	if reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
@@ -502,6 +505,7 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	reqCtx.CompletionTokens = 0
 	reqCtx.TotalTokens = 0
 	reqCtx.CostMicroUSD = 0
+	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	reqCtx.Status = "cache_hit"
 	reqCtx.HTTPStatus = http.StatusOK
@@ -658,6 +662,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		CompletionTokens:        reqCtx.CompletionTokens,
 		TotalTokens:             reqCtx.TotalTokens,
 		CostMicroUSD:            reqCtx.CostMicroUSD,
+		SavedCostMicroUSD:       reqCtx.SavedCostMicroUSD,
 		LatencyMs:               reqCtx.LatencyMs,
 		ProviderLatencyMs:       providerLatencyMs,
 		Status:                  reqCtx.Status,
