@@ -80,7 +80,7 @@ func (r *QueryReader) GetRequestDetail(ctx context.Context, filter invocationlog
 
 	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.RequestID, normalizedFilter.ProjectID))
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			return invocationlog.RequestDetail{}, invocationlog.ErrLogNotFound
 		}
 		return invocationlog.RequestDetail{}, err

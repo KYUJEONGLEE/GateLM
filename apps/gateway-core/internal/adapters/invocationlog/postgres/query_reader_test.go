@@ -196,13 +196,15 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 }
 
 func TestQueryReaderGetRequestDetailMapsNoRowsToDomainNotFound(t *testing.T) {
-	reader := NewQueryReader(&fakeQueryer{row: fakeRow{err: pgx.ErrNoRows}})
-	_, err := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{
-		ProjectID: "project_demo",
-		RequestID: "request_missing",
-	})
-	if !errors.Is(err, invocationlog.ErrLogNotFound) {
-		t.Fatalf("expected domain not found error, got %v", err)
+	for _, noRowsErr := range []error{pgx.ErrNoRows, sql.ErrNoRows} {
+		reader := NewQueryReader(&fakeQueryer{row: fakeRow{err: noRowsErr}})
+		_, err := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{
+			ProjectID: "project_demo",
+			RequestID: "request_missing",
+		})
+		if !errors.Is(err, invocationlog.ErrLogNotFound) {
+			t.Fatalf("expected domain not found error for %T, got %v", noRowsErr, err)
+		}
 	}
 }
 
