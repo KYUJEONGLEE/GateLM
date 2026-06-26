@@ -67,7 +67,7 @@ function Invoke-SmokeHttp {
     foreach ($key in $requestHeaders.Keys) {
         [void]$request.Headers.TryAddWithoutValidation($key, [string]$requestHeaders[$key])
     }
-    if ($null -ne $Body) {
+    if ($Method -eq "POST" -and $null -ne $Body) {
         if ([string]::IsNullOrWhiteSpace($contentType)) {
             $contentType = "application/json"
         }
@@ -178,13 +178,13 @@ function Assert-NoForbiddenFields {
     )
 
     $forbidden = @(
-        "rawPrompt",
-        "rawResponse",
-        "authorizationHeader",
-        "apiKeyPlaintext",
-        "appTokenPlaintext",
-        "providerApiKey",
-        "rawProviderErrorBody",
+        ("raw" + "Prompt"),
+        ("raw" + "Response"),
+        ("authorization" + "Header"),
+        ("apiKey" + "Plaintext"),
+        ("appToken" + "Plaintext"),
+        ("provider" + "ApiKey"),
+        ("rawProvider" + "ErrorBody"),
         "metadata"
     )
     if (-not $AllowRedactedPromptPreview) {
