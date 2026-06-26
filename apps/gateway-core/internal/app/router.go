@@ -5,16 +5,22 @@ import (
 
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	gatewaymiddleware "gatelm/apps/gateway-core/internal/http/middleware"
+	"gatelm/apps/gateway-core/internal/ports"
 )
 
 type RouterOptions struct {
 	APIKeyAuthenticator  handlers.APIKeyAuthenticator
 	AppTokenValidator    handlers.AppTokenValidator
 	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
+	ExactCacheStore      ports.CacheStore
+	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
 }
 
 type RouterOption func(*RouterOptions)
@@ -29,6 +35,13 @@ func WithGatewayAuth(apiKeyAuthenticator handlers.APIKeyAuthenticator, appTokenV
 func WithAuthFailureLogWriter(writer invocationlog.AuthFailureLogWriter) RouterOption {
 	return func(options *RouterOptions) {
 		options.AuthFailureLogWriter = writer
+	}
+}
+
+func WithExactCache(store ports.CacheStore, keyBuilder handlers.ExactCacheKeyBuilder) RouterOption {
+	return func(options *RouterOptions) {
+		options.ExactCacheStore = store
+		options.ExactCacheKeyBuilder = keyBuilder
 	}
 }
 
@@ -82,17 +95,30 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	})
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{Providers: providers})
 
-	chatCompletionsHandler := http.Handler(handlers.ChatCompletionsHandler{
-		Providers:           providers,
-		DefaultModel:        cfg.DefaultModel,
-		DefaultProvider:     cfg.DefaultProvider,
-		MaxRequestBodyBytes: cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator: apiKeyAuthenticator,
-		AppTokenValidator:   appTokenValidator,
-		ExpectedTenantID:    cfg.DemoTenantID,
-		ExpectedProjectID:   cfg.DemoProjectID,
-		ExpectedAppID:       cfg.DemoApplicationID,
-	})
+	chatHandler := &handlers.ChatCompletionsHandler{
+		Providers:               providers,
+		DefaultModel:            cfg.DefaultModel,
+		DefaultProvider:         cfg.DefaultProvider,
+		MaxRequestBodyBytes:     cfg.MaxRequestBodyBytes,
+		APIKeyAuthenticator:     apiKeyAuthenticator,
+		AppTokenValidator:       appTokenValidator,
+		ExpectedTenantID:        cfg.DemoTenantID,
+		ExpectedProjectID:       cfg.DemoProjectID,
+		ExpectedAppID:           cfg.DemoApplicationID,
+		MaskingEngine:           maskdomain.NewP0Engine(),
+		Router:                  routingdomain.NewP0SimpleRouter(cfg.DefaultProvider, cfg.DefaultModel),
+		ExactCacheStore:         routerOptions.ExactCacheStore,
+		ExactCacheKeyBuilder:    routerOptions.ExactCacheKeyBuilder,
+		ExactCacheTTL:           cfg.ExactCacheTTL,
+		CachePolicyHash:         "cache_p0_v1",
+		SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
+	}
+	if routerOptions.ExactCacheKeyBuilder == nil {
+		if cfg.ExactCacheKeySecret != "" {
+			chatHandler.ExactCacheKeyBuilder = cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret))
+		}
+	}
+	chatCompletionsHandler := http.Handler(chatHandler)
 
 	authFailureLogWriter := routerOptions.AuthFailureLogWriter
 	if authFailureLogWriter == nil {

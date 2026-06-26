@@ -26,10 +26,11 @@ type RequestContext struct {
 	RoutingReason     string
 	RoutingPolicyHash string
 
-	MaskingAction         string
-	MaskingDetectedTypes  []string
-	MaskingDetectedCount  int
-	RedactedPromptPreview string
+	MaskingAction           string
+	MaskingDetectedTypes    []string
+	MaskingDetectedCount    int
+	RedactedPromptPreview   string
+	SecurityPolicyVersionID string
 
 	CacheStatus       string
 	CacheType         string

@@ -35,16 +35,56 @@ services:
       MOCK_PROVIDER_PORT: ${MOCK_PROVIDER_PORT:-8090}
       MOCK_PROVIDER_DEFAULT_LATENCY_MS: ${MOCK_PROVIDER_DEFAULT_LATENCY_MS:-150}
       MOCK_PROVIDER_ERROR_MODE: ${MOCK_PROVIDER_ERROR_MODE:-off}
+      MOCK_PROVIDER_STATS_HASH_SECRET: ${MOCK_PROVIDER_STATS_HASH_SECRET:-mock_provider_stats_hash_secret_for_p0_demo_only}
     command:
       - python
       - -c
       - |
-        import json, os, time
+        import hashlib, hmac, json, os, re, time
         from http.server import BaseHTTPRequestHandler, HTTPServer
 
         port = int(os.getenv("MOCK_PROVIDER_PORT", "8090"))
         latency_ms = int(os.getenv("MOCK_PROVIDER_DEFAULT_LATENCY_MS", "150"))
-        state = {"calls": 0}
+        stats_hash_secret = os.getenv("MOCK_PROVIDER_STATS_HASH_SECRET", "mock_provider_stats_hash_secret_for_p0_demo_only").encode("utf-8")
+        raw_sensitive_patterns = [
+            re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"),
+            re.compile(r"\b(?:\+82[-.\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}\b"),
+            re.compile(r"\b\d{6}-[1-4]\d{6}\b"),
+            re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
+            re.compile(r"(?i)\b(api[_-]?key|secret|token|access[_-]?key|client[_-]?secret)\s*[:=]\s*['\"]?[A-Za-z0-9_\-.]{20,}"),
+        ]
+        state = {"calls": 0, "data": {"totalCalls": 0, "callsByModel": {}, "lastCalls": []}}
+
+        def reset_state():
+            state["calls"] = 0
+            state["data"]["totalCalls"] = 0
+            state["data"]["callsByModel"] = {}
+            state["data"]["lastCalls"] = []
+
+        def prompt_hash(prompt):
+            digest = hmac.new(stats_hash_secret, prompt.encode("utf-8"), hashlib.sha256).hexdigest()
+            return "hmac-sha256:" + digest
+
+        def redacted_preview_for_stats(prompt):
+            preview = prompt[:120]
+            for pattern in raw_sensitive_patterns:
+                if pattern.search(preview):
+                    return "[UNREDACTED_PROVIDER_INPUT_BLOCKED_FROM_STATS]"
+            return preview
+
+        def record_call(request_id, model, prompt):
+            state["calls"] += 1
+            data = state["data"]
+            data["totalCalls"] = state["calls"]
+            data["callsByModel"][model] = data["callsByModel"].get(model, 0) + 1
+            data["lastCalls"].append({
+                "requestId": request_id,
+                "model": model,
+                "promptHash": prompt_hash(prompt),
+                "redactedPromptPreview": redacted_preview_for_stats(prompt),
+                "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+            })
+            data["lastCalls"] = data["lastCalls"][-20:]
 
         class Handler(BaseHTTPRequestHandler):
             def send_json(self, status, payload):
@@ -79,14 +119,13 @@ services:
                 except Exception:
                     payload = {}
                 if self.path == "/__mock/reset":
-                    state["calls"] = 0
+                    reset_state()
                     self.send_json(200, {"ok": True})
                     return
                 if self.path == "/__mock/config":
                     self.send_json(200, {"ok": True})
                     return
                 if self.path == "/v1/chat/completions":
-                    state["calls"] += 1
                     if payload.get("stream") is True:
                         self.send_json(400, {"error": {"code": "streaming_not_supported", "message": "Streaming is not supported in P0."}})
                         return
@@ -94,6 +133,7 @@ services:
                     model = payload.get("model") or "mock-balanced"
                     messages = payload.get("messages") or []
                     prompt = " ".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
+                    record_call(self.headers.get("X-GateLM-Request-Id", ""), model, prompt)
                     self.send_json(200, {
                         "id": "mock_chatcmpl_local",
                         "object": "chat.completion",

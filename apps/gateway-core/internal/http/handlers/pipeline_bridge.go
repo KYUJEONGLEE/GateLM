@@ -36,10 +36,24 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			AppTokenID:    reqCtx.AppTokenID,
 		},
 		Routing: request.RoutingContext{
-			RequestedModel:   reqCtx.RequestedModel,
-			SelectedProvider: reqCtx.SelectedProvider,
-			SelectedModel:    reqCtx.SelectedModel,
-			RoutingReason:    reqCtx.RoutingReason,
+			RequestedModel:    reqCtx.RequestedModel,
+			SelectedProvider:  reqCtx.SelectedProvider,
+			SelectedModel:     reqCtx.SelectedModel,
+			RoutingReason:     reqCtx.RoutingReason,
+			RoutingPolicyHash: reqCtx.RoutingPolicyHash,
+		},
+		Masking: request.MaskingContext{
+			Action:                  reqCtx.MaskingAction,
+			DetectedTypes:           reqCtx.MaskingDetectedTypes,
+			DetectedCount:           reqCtx.MaskingDetectedCount,
+			RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
+			SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
+		},
+		Cache: request.CacheContext{
+			Status:       reqCtx.CacheStatus,
+			Type:         reqCtx.CacheType,
+			KeyHash:      reqCtx.CacheKeyHash,
+			HitRequestID: reqCtx.CacheHitRequestID,
 		},
 		Status: request.StatusContext{
 			Status:       reqCtx.Status,
@@ -68,6 +82,32 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.SelectedProvider = gatewayCtx.Routing.SelectedProvider
 	reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
 	reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason
+	reqCtx.RoutingPolicyHash = gatewayCtx.Routing.RoutingPolicyHash
+
+	if gatewayCtx.Masking.Action != "" {
+		reqCtx.MaskingAction = gatewayCtx.Masking.Action
+	}
+	reqCtx.MaskingDetectedTypes = gatewayCtx.Masking.DetectedTypes
+	reqCtx.MaskingDetectedCount = gatewayCtx.Masking.DetectedCount
+	if gatewayCtx.Masking.RedactedPromptPreview != "" {
+		reqCtx.RedactedPromptPreview = gatewayCtx.Masking.RedactedPromptPreview
+	}
+	if gatewayCtx.Masking.SecurityPolicyVersionID != "" {
+		reqCtx.SecurityPolicyVersionID = gatewayCtx.Masking.SecurityPolicyVersionID
+	}
+
+	if gatewayCtx.Cache.Status != "" {
+		reqCtx.CacheStatus = gatewayCtx.Cache.Status
+	}
+	if gatewayCtx.Cache.Type != "" {
+		reqCtx.CacheType = gatewayCtx.Cache.Type
+	}
+	if gatewayCtx.Cache.KeyHash != "" {
+		reqCtx.CacheKeyHash = gatewayCtx.Cache.KeyHash
+	}
+	if gatewayCtx.Cache.HitRequestID != "" {
+		reqCtx.CacheHitRequestID = gatewayCtx.Cache.HitRequestID
+	}
 
 	if gatewayCtx.Status.Status != "" {
 		reqCtx.Status = gatewayCtx.Status.Status

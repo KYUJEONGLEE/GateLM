@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
+	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 
@@ -58,7 +60,15 @@ func main() {
 		},
 	}
 
-	router := app.NewRouter(cfg, providers, readinessChecks)
+	router := app.NewRouter(
+		cfg,
+		providers,
+		readinessChecks,
+		app.WithExactCache(
+			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
+			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
+		),
+	)
 	server := app.NewServer(cfg, router)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
