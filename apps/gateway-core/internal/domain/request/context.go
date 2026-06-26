@@ -5,6 +5,7 @@ import "time"
 type GatewayContext struct {
 	Request  RequestContext
 	Identity IdentityContext
+	Masking  MaskingContext
 	Routing  RoutingContext
 	Cache    CacheContext
 	Status   StatusContext
@@ -27,6 +28,15 @@ type IdentityContext struct {
 	ApplicationID string
 	APIKeyID      string
 	AppTokenID    string
+}
+
+type MaskingContext struct {
+	Action                  string
+	DetectedTypes           []string
+	DetectedCount           int
+	RedactedPrompt          string
+	RedactedPromptPreview   string
+	SecurityPolicyVersionID string
 }
 
 type RoutingContext struct {

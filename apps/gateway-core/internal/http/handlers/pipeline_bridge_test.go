@@ -137,7 +137,49 @@ func TestApplyGatewayContextCopiesRoutingPolicyHash(t *testing.T) {
 
 	applyGatewayContext(reqCtx, gatewayCtx)
 
+	if reqCtx.RequestedModel != "auto" {
+		t.Fatalf("expected requested model auto, got %s", reqCtx.RequestedModel)
+	}
+	if reqCtx.SelectedProvider != "mock" || reqCtx.SelectedModel != "mock-fast" {
+		t.Fatalf("unexpected selected route: %#v", reqCtx)
+	}
 	if reqCtx.RoutingPolicyHash != "route_p0_v1" {
 		t.Fatalf("expected routing policy hash route_p0_v1, got %s", reqCtx.RoutingPolicyHash)
+	}
+}
+
+func TestApplyGatewayContextCopiesMaskingMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Masking: request.MaskingContext{
+			Action:                  "redacted",
+			DetectedTypes:           []string{"email"},
+			DetectedCount:           1,
+			RedactedPromptPreview:   "Contact [EMAIL_REDACTED].",
+			SecurityPolicyVersionID: "security_policy_p0_v1",
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.MaskingAction != "redacted" {
+		t.Fatalf("expected masking action redacted, got %q", reqCtx.MaskingAction)
+	}
+	if len(reqCtx.MaskingDetectedTypes) != 1 || reqCtx.MaskingDetectedTypes[0] != "email" {
+		t.Fatalf("unexpected masking detected types: %#v", reqCtx.MaskingDetectedTypes)
+	}
+	if reqCtx.MaskingDetectedCount != 1 {
+		t.Fatalf("expected masking detected count 1, got %d", reqCtx.MaskingDetectedCount)
+	}
+	if reqCtx.RedactedPromptPreview != "Contact [EMAIL_REDACTED]." {
+		t.Fatalf("unexpected redacted prompt preview: %q", reqCtx.RedactedPromptPreview)
+	}
+	if reqCtx.SecurityPolicyVersionID != "security_policy_p0_v1" {
+		t.Fatalf("unexpected security policy version: %q", reqCtx.SecurityPolicyVersionID)
 	}
 }

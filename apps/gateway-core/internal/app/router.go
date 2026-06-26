@@ -5,18 +5,23 @@ import (
 
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
+	"gatelm/apps/gateway-core/internal/ports"
 )
 
 type RouterOptions struct {
 	APIKeyAuthenticator  handlers.APIKeyAuthenticator
 	AppTokenValidator    handlers.AppTokenValidator
 	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
+	ExactCacheStore      ports.CacheStore
+	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
 	PreProviderPipeline  handlers.GatewayPipeline
 }
 
@@ -35,9 +40,16 @@ func WithAuthFailureLogWriter(writer invocationlog.AuthFailureLogWriter) RouterO
 	}
 }
 
-func WithPreProviderPipeline(pipeline handlers.GatewayPipeline) RouterOption {
+func WithExactCache(store ports.CacheStore, keyBuilder handlers.ExactCacheKeyBuilder) RouterOption {
 	return func(options *RouterOptions) {
-		options.PreProviderPipeline = pipeline
+		options.ExactCacheStore = store
+		options.ExactCacheKeyBuilder = keyBuilder
+	}
+}
+
+func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.PreProviderPipeline = preProviderPipeline
 	}
 }
 
@@ -88,13 +100,6 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
 	}
 
-	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
-	mux.Handle("GET /readyz", handlers.ReadyHandler{
-		Timeout: cfg.ReadinessTimeout,
-		Checks:  readinessChecks,
-	})
-	mux.Handle("GET /v1/models", handlers.ModelsHandler{Providers: providers})
-
 	simpleRouter := routingdomain.NewSimpleRouter(routingdomain.SimpleRouterConfig{
 		DefaultProvider:     cfg.DefaultProvider,
 		DefaultModel:        cfg.DefaultModel,
@@ -108,20 +113,40 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		preProviderPipeline = routerOptions.PreProviderPipeline
 	}
 
-	chatCompletionsHandler := http.Handler(handlers.ChatCompletionsHandler{
-		Providers:            providers,
-		DefaultModel:         cfg.DefaultModel,
-		DefaultProvider:      cfg.DefaultProvider,
-		MaxRequestBodyBytes:  cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator:  apiKeyAuthenticator,
-		AppTokenValidator:    appTokenValidator,
-		ExpectedTenantID:     cfg.DemoTenantID,
-		ExpectedProjectID:    cfg.DemoProjectID,
-		ExpectedAppID:        cfg.DemoApplicationID,
-		AuthFailureLogWriter: authFailureLogWriter,
-		PreProviderPipeline:  preProviderPipeline,
+	exactCacheKeyBuilder := routerOptions.ExactCacheKeyBuilder
+	if exactCacheKeyBuilder == nil && cfg.ExactCacheKeySecret != "" {
+		exactCacheKeyBuilder = cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret))
+	}
+
+	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
+	mux.Handle("GET /readyz", handlers.ReadyHandler{
+		Timeout: cfg.ReadinessTimeout,
+		Checks:  readinessChecks,
 	})
-	mux.Handle("POST /v1/chat/completions", chatCompletionsHandler)
+	mux.Handle("GET /v1/models", handlers.ModelsHandler{
+		Providers:           providers,
+		PreProviderPipeline: preProviderPipeline,
+	})
+
+	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
+		Providers:               providers,
+		DefaultModel:            cfg.DefaultModel,
+		DefaultProvider:         cfg.DefaultProvider,
+		MaxRequestBodyBytes:     cfg.MaxRequestBodyBytes,
+		APIKeyAuthenticator:     apiKeyAuthenticator,
+		AppTokenValidator:       appTokenValidator,
+		ExpectedTenantID:        cfg.DemoTenantID,
+		ExpectedProjectID:       cfg.DemoProjectID,
+		ExpectedAppID:           cfg.DemoApplicationID,
+		PreProviderPipeline:     preProviderPipeline,
+		AuthFailureLogWriter:    authFailureLogWriter,
+		MaskingEngine:           maskdomain.NewP0Engine(),
+		ExactCacheStore:         routerOptions.ExactCacheStore,
+		ExactCacheKeyBuilder:    exactCacheKeyBuilder,
+		ExactCacheTTL:           cfg.ExactCacheTTL,
+		CachePolicyHash:         "cache_p0_v1",
+		SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
+	}))
 
 	return mux
 }

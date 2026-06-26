@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	DefaultPolicyHash         = "route_p0_v1"
-	DefaultShortPromptMaxRune = 300
+	DefaultPolicyHash          = "route_p0_v1"
+	DefaultShortPromptMaxChars = 300
 
 	ReasonShortPromptLowCost = "short_prompt_low_cost"
 	ReasonDefaultBalanced    = "default_balanced"
@@ -59,7 +59,7 @@ func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
 		router.policyHash = DefaultPolicyHash
 	}
 	if router.shortPromptMaxChars <= 0 {
-		router.shortPromptMaxChars = DefaultShortPromptMaxRune
+		router.shortPromptMaxChars = DefaultShortPromptMaxChars
 	}
 
 	return router

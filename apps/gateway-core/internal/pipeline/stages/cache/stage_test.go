@@ -62,6 +62,32 @@ func TestExecuteBypassesWhenCachePolicyHashIsEmpty(t *testing.T) {
 	}
 }
 
+func TestExecuteBypassesBlockedRequestsBeforeKeyBuilderAndStore(t *testing.T) {
+	keyBuilder := &fakeKeyBuilder{}
+	store := &fakeStore{}
+	stage := NewStage(keyBuilder, store)
+
+	result, err := stage.Execute(context.Background(), Request{
+		CachePolicyHash: "cache_p0_v1",
+		MaskingAction:   MaskingActionBlocked,
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result.CacheStatus != CacheStatusBypass {
+		t.Fatalf("expected cache status %q, got %q", CacheStatusBypass, result.CacheStatus)
+	}
+	if result.CacheType != CacheTypeNone {
+		t.Fatalf("expected cache type %q, got %q", CacheTypeNone, result.CacheType)
+	}
+	if keyBuilder.called {
+		t.Fatal("blocked request must not build an exact cache key")
+	}
+	if store.called {
+		t.Fatal("blocked request must not look up exact cache")
+	}
+}
+
 func TestExecutePropagatesKeyBuilderErrorWhenCachePolicyHashExists(t *testing.T) {
 	stage := NewStage(&fakeKeyBuilder{err: errors.New("key builder failed")}, &fakeStore{})
 
