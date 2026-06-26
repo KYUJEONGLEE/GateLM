@@ -352,7 +352,7 @@ requestId -> log list -> detail -> dashboard count
 | A   | seed reset 절차와 demo credential 확인            | 데모 시작 상태가 재현됨                   |
 | B   | Gateway smoke script 안정화                     | safe/cache/provider 경로가 모두 동작   |
 | C   | auth/context/routing demo case 검증            | invalid/auto routing 케이스가 설명 가능 |
-| D   | security/cache safety checklist 통과           | raw prompt/secret 노출 없음         |
+| D   | security/cacghe safety checklist 통과          | raw prompt/secret 노출 없음         |
 | E   | Web Console 또는 demo page, curl script, 발표 흐름 | Dashboard/Detail에서 결과 확인 가능     |
 
 
