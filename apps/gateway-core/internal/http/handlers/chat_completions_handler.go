@@ -505,7 +505,7 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	reqCtx.CompletionTokens = 0
 	reqCtx.TotalTokens = 0
 	reqCtx.CostMicroUSD = 0
-	reqCtx.SavedCostMicroUSD = 0
+	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	reqCtx.Status = "cache_hit"
 	reqCtx.HTTPStatus = http.StatusOK
