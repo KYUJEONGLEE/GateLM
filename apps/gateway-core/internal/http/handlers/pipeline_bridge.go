@@ -41,6 +41,12 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SelectedModel:    reqCtx.SelectedModel,
 			RoutingReason:    reqCtx.RoutingReason,
 		},
+		Cache: request.CacheContext{
+			CacheStatus:       reqCtx.CacheStatus,
+			CacheType:         reqCtx.CacheType,
+			CacheKeyHash:      reqCtx.CacheKeyHash,
+			CacheHitRequestID: reqCtx.CacheHitRequestID,
+		},
 		Status: request.StatusContext{
 			Status:       reqCtx.Status,
 			HTTPStatus:   reqCtx.HTTPStatus,
@@ -68,6 +74,19 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.SelectedProvider = gatewayCtx.Routing.SelectedProvider
 	reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
 	reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason
+
+	if gatewayCtx.Cache.CacheStatus != "" {
+		reqCtx.CacheStatus = gatewayCtx.Cache.CacheStatus
+	}
+	if gatewayCtx.Cache.CacheType != "" {
+		reqCtx.CacheType = gatewayCtx.Cache.CacheType
+	}
+	if gatewayCtx.Cache.CacheKeyHash != "" {
+		reqCtx.CacheKeyHash = gatewayCtx.Cache.CacheKeyHash
+	}
+	if gatewayCtx.Cache.CacheHitRequestID != "" {
+		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
+	}
 
 	if gatewayCtx.Status.Status != "" {
 		reqCtx.Status = gatewayCtx.Status.Status

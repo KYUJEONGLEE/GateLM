@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,10 +15,12 @@ import (
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	cachestage "gatelm/apps/gateway-core/internal/pipeline/stages/cache"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
 )
 
@@ -117,6 +120,10 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
+	if h.writeCachedChatCompletionIfHit(w, reqCtx, gatewayCtx, chatReq.Model, startedAt) {
+		return
+	}
+
 	if h.Providers == nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Providers registry is not initialized.", "resolve_provider_adapter")
 		return
@@ -145,6 +152,7 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	chatReq.Model = reqCtx.SelectedModel
 	reqCtx.Provider = reqCtx.SelectedProvider
 	reqCtx.Model = reqCtx.SelectedModel
+	ensureCacheDefaults(reqCtx)
 
 	providerStartedAt := time.Now()
 	providerResp, err := adapter.CreateChatCompletion(r.Context(), chatReq)
@@ -166,10 +174,96 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 	reqCtx.Status = "success"
 	reqCtx.HTTPStatus = http.StatusOK
-	reqCtx.CacheStatus = "bypass"
-	reqCtx.CacheType = "none"
+	attachGateLMMetadata(providerResp, reqCtx)
 
-	providerResp.GateLM = &provider.GateLMMetadata{
+	setGatewayHeaders(w, reqCtx)
+	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func (h ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, requestedModel string, startedAt time.Time) bool {
+	if reqCtx == nil || gatewayCtx == nil || gatewayCtx.Cache.CacheStatus != cachestage.CacheStatusHit {
+		return false
+	}
+
+	reqCtx.CacheStatus = cachestage.CacheStatusHit
+	if reqCtx.CacheType == "" || reqCtx.CacheType == cachestage.CacheTypeNone {
+		reqCtx.CacheType = cachestage.CacheTypeExact
+	}
+
+	cachedResp, err := decodeCachedChatCompletionPayload(gatewayCtx.Cache.Payload)
+	if err != nil {
+		reqCtx.CacheStatus = cachestage.CacheStatusError
+		if reqCtx.CacheType == "" || reqCtx.CacheType == cachestage.CacheTypeNone {
+			reqCtx.CacheType = cachestage.CacheTypeExact
+		}
+		return false
+	}
+
+	if reqCtx.SelectedProvider == "" {
+		reqCtx.SelectedProvider = h.DefaultProvider
+	}
+	if reqCtx.SelectedModel == "" {
+		reqCtx.SelectedModel = requestedModel
+	}
+	if reqCtx.RoutingReason == "" {
+		reqCtx.RoutingReason = "not_routed"
+	}
+	reqCtx.Provider = reqCtx.SelectedProvider
+	reqCtx.Model = reqCtx.SelectedModel
+	reqCtx.ProviderLatencyMs = 0
+	reqCtx.PromptTokens = 0
+	reqCtx.CompletionTokens = 0
+	reqCtx.TotalTokens = 0
+	reqCtx.CostMicroUSD = 0
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	reqCtx.Status = "cache_hit"
+	reqCtx.HTTPStatus = http.StatusOK
+
+	if reqCtx.SelectedModel != "" {
+		cachedResp.Model = reqCtx.SelectedModel
+	}
+	cachedResp.Usage = &provider.Usage{}
+	attachGateLMMetadata(cachedResp, reqCtx)
+
+	setGatewayHeaders(w, reqCtx)
+	writeJSON(w, http.StatusOK, cachedResp)
+	return true
+}
+
+func decodeCachedChatCompletionPayload(payload []byte) (*provider.ChatCompletionResponse, error) {
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return nil, errors.New("cached chat completion payload is empty")
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.Unmarshal(payload, &resp); err != nil {
+		return nil, fmt.Errorf("decode cached chat completion payload: %w", err)
+	}
+	if strings.TrimSpace(resp.ID) == "" || resp.Object != "chat.completion" {
+		return nil, errors.New("cached chat completion payload has invalid shape")
+	}
+
+	return &resp, nil
+}
+
+func ensureCacheDefaults(reqCtx *pipeline.RequestContext) {
+	if reqCtx == nil {
+		return
+	}
+	if reqCtx.CacheStatus == "" {
+		reqCtx.CacheStatus = cachestage.CacheStatusBypass
+	}
+	if reqCtx.CacheType == "" {
+		reqCtx.CacheType = cachestage.CacheTypeNone
+	}
+}
+
+func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipeline.RequestContext) {
+	if resp == nil || reqCtx == nil {
+		return
+	}
+
+	resp.GateLM = &provider.GateLMMetadata{
 		RequestID:        reqCtx.RequestID,
 		TenantID:         reqCtx.TenantID,
 		ProjectID:        reqCtx.ProjectID,
@@ -183,9 +277,6 @@ func (h ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		EstimatedCostUSD: formatCostMicroUSD(reqCtx.CostMicroUSD),
 		LatencyMs:        reqCtx.LatencyMs,
 	}
-
-	setGatewayHeaders(w, reqCtx)
-	writeJSON(w, http.StatusOK, providerResp)
 }
 
 func (h ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx *pipeline.RequestContext, startedAt time.Time, completedAt time.Time) {
@@ -319,8 +410,8 @@ func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestConte
 	reqCtx.ErrorCode = gatewayErr.Code
 	reqCtx.ErrorMessage = gatewayErr.Message
 	reqCtx.ErrorStage = gatewayErr.Stage
-	reqCtx.CacheStatus = "bypass"
-	reqCtx.CacheType = "none"
+	reqCtx.CacheStatus = cachestage.CacheStatusBypass
+	reqCtx.CacheType = cachestage.CacheTypeNone
 
 	logGatewayAuthInternalError(reqCtx, gatewayErr)
 	setGatewayHeaders(w, reqCtx)
