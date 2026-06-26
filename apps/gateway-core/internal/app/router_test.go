@@ -351,6 +351,118 @@ func TestNewRouterWiresPreProviderPipeline(t *testing.T) {
 	}
 }
 
+func TestNewRouterWiresProjectLogsWithDemoTenantScope(t *testing.T) {
+	reader := &routerTestInvocationLogReader{
+		items: []invocationlog.RequestLogListItem{{
+			RequestID:      "request_001",
+			ProjectID:      "project_demo",
+			Status:         invocationlog.StatusSuccess,
+			HTTPStatus:     http.StatusOK,
+			CacheStatus:    invocationlog.CacheStatusMiss,
+			CacheType:      invocationlog.CacheTypeExact,
+			MaskingAction:  "none",
+			RequestedModel: "auto",
+			SelectedModel:  "mock-fast",
+		}},
+	}
+	router := NewRouter(config.Config{
+		DemoTenantID:    "tenant_demo",
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_demo" || reader.filter.ProjectID != "project_demo" {
+		t.Fatalf("expected demo tenant and path project scope, got %+v", reader.filter)
+	}
+	if strings.Contains(rr.Body.String(), "redactedPromptPreview") || strings.Contains(rr.Body.String(), "metadata") {
+		t.Fatalf("list response must not include detail-only fields: %s", rr.Body.String())
+	}
+}
+
+func TestNewRouterWiresRequestDetailWithDemoTenantProjectScope(t *testing.T) {
+	reader := &routerTestInvocationLogReader{
+		detail: invocationlog.RequestDetail{
+			RequestID:      "request_001",
+			TraceID:        "trace_001",
+			TenantID:       "tenant_demo",
+			ProjectID:      "project_demo",
+			Status:         invocationlog.StatusSuccess,
+			HTTPStatus:     http.StatusOK,
+			Provider:       "mock",
+			Model:          "mock-fast",
+			RequestedModel: "auto",
+			SelectedModel:  "mock-fast",
+			Cache: invocationlog.CacheFields{
+				CacheStatus: invocationlog.CacheStatusMiss,
+				CacheType:   invocationlog.CacheTypeExact,
+			},
+			Masking: invocationlog.MaskingFields{MaskingAction: "none"},
+		},
+	}
+	router := NewRouter(config.Config{
+		DemoTenantID:    "tenant_demo",
+		DemoProjectID:   "project_demo",
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/llm-requests/request_001", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.detailFilter.TenantID != "tenant_demo" || reader.detailFilter.ProjectID != "project_demo" || reader.detailFilter.RequestID != "request_001" {
+		t.Fatalf("expected demo tenant/project and path request scope, got %+v", reader.detailFilter)
+	}
+	if strings.Contains(rr.Body.String(), "rawPrompt") || strings.Contains(rr.Body.String(), "metadata") {
+		t.Fatalf("detail response must not include raw/detail-forbidden fields: %s", rr.Body.String())
+	}
+}
+
+func TestNewRouterWiresDashboardOverviewWithDemoTenantScope(t *testing.T) {
+	cacheHitRate := 0.5
+	reader := &routerTestInvocationLogReader{
+		overview: invocationlog.DashboardOverviewFields{
+			TotalRequests:      2,
+			SuccessfulRequests: 2,
+			CacheHitRequests:   1,
+			CacheHitRate:       &cacheHitRate,
+			TotalCostUSD:       "0.000000",
+		},
+	}
+	router := NewRouter(config.Config{
+		DemoTenantID:    "tenant_demo",
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/overview?projectId=project_demo&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.dashboardFilter.TenantID != "tenant_demo" || reader.dashboardFilter.ProjectID != "project_demo" {
+		t.Fatalf("expected demo tenant and query project dashboard scope, got %+v", reader.dashboardFilter)
+	}
+	if strings.Contains(rr.Body.String(), "rawPrompt") || strings.Contains(rr.Body.String(), "redactedPromptPreview") {
+		t.Fatalf("dashboard response must not include request payload fields: %s", rr.Body.String())
+	}
+}
+
 func writeRouterTestJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -395,6 +507,30 @@ func (db *routerTestInvocationLogDB) Exec(_ context.Context, query string, argum
 	db.query = query
 	db.args = append([]any(nil), arguments...)
 	return pgconn.CommandTag{}, nil
+}
+
+type routerTestInvocationLogReader struct {
+	filter          invocationlog.ProjectLogsFilter
+	detailFilter    invocationlog.RequestDetailFilter
+	dashboardFilter invocationlog.DashboardOverviewFilter
+	items           []invocationlog.RequestLogListItem
+	detail          invocationlog.RequestDetail
+	overview        invocationlog.DashboardOverviewFields
+}
+
+func (r *routerTestInvocationLogReader) ListProjectLogs(_ context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
+	r.filter = filter
+	return r.items, nil
+}
+
+func (r *routerTestInvocationLogReader) GetRequestDetail(_ context.Context, filter invocationlog.RequestDetailFilter) (invocationlog.RequestDetail, error) {
+	r.detailFilter = filter
+	return r.detail, nil
+}
+
+func (r *routerTestInvocationLogReader) GetDashboardOverview(_ context.Context, filter invocationlog.DashboardOverviewFilter) (invocationlog.DashboardOverviewFields, error) {
+	r.dashboardFilter = filter
+	return r.overview, nil
 }
 
 type routerTestAPIKeyAuthenticator struct {
