@@ -84,6 +84,81 @@ func TestNewRouterWiresAuthBeforeProviderCall(t *testing.T) {
 	}
 }
 
+func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
+	var providerRequest provider.ChatCompletionRequest
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&providerRequest); err != nil {
+			t.Fatalf("decode provider request: %v", err)
+		}
+		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{
+			ID:      "mock_chatcmpl_router_routing",
+			Object:  "chat.completion",
+			Created: 1782108000,
+			Model:   providerRequest.Model,
+		})
+	}))
+	defer mockServer.Close()
+
+	registry := provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client()))
+	apiAuth := &routerTestAPIKeyAuthenticator{
+		identity: routerTestValidAPIKeyIdentity(),
+	}
+	appValidator := &routerTestAppTokenValidator{
+		identity: routerTestValidAppTokenIdentity(),
+	}
+	router := NewRouter(config.Config{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		RoutingPolicyHash:   "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		DemoTenantID:        "tenant_demo",
+		DemoProjectID:       "project_demo",
+		DemoApplicationID:   "app_demo",
+	}, registry, nil, WithGatewayAuth(apiAuth, appValidator))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"stream": false
+	}`))
+	req.Header.Set("Authorization", "Bearer glm_api_test_redacted")
+	req.Header.Set("X-GateLM-App-Token", "glm_app_token_test_redacted")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if providerRequest.Model != "mock-fast" {
+		t.Fatalf("expected provider request to use mock-fast, got %s", providerRequest.Model)
+	}
+	if rr.Header().Get("X-GateLM-Routed-Provider") != "mock" {
+		t.Fatalf("expected routed provider mock, got %s", rr.Header().Get("X-GateLM-Routed-Provider"))
+	}
+	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
+		t.Fatalf("expected routed model mock-fast, got %s", rr.Header().Get("X-GateLM-Routed-Model"))
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.GateLM == nil {
+		t.Fatal("expected gate_lm metadata")
+	}
+	if resp.GateLM.RequestedModel != "auto" {
+		t.Fatalf("expected requestedModel auto, got %s", resp.GateLM.RequestedModel)
+	}
+	if resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-fast" {
+		t.Fatalf("unexpected selected route: %#v", resp.GateLM)
+	}
+	if resp.GateLM.RoutingReason != "short_prompt_low_cost" {
+		t.Fatalf("expected short_prompt_low_cost, got %s", resp.GateLM.RoutingReason)
+	}
+}
+
 func TestNewRouterWritesAuthFailureLogForInvalidAppToken(t *testing.T) {
 	chatCalls := 0
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

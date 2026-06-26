@@ -22,8 +22,8 @@ func TestStageWritesRoutingFields(t *testing.T) {
 			RequestedModel:   "auto",
 			SelectedProvider: "mock",
 			SelectedModel:    "mock-fast",
-			RoutingReason:    "low_cost",
-			PolicyHash:       "routing_policy_demo",
+			RoutingReason:    routing.ReasonShortPromptLowCost,
+			PolicyHash:       "route_p0_v1",
 		},
 	})
 	gatewayCtx := &request.GatewayContext{
@@ -43,7 +43,10 @@ func TestStageWritesRoutingFields(t *testing.T) {
 	if gatewayCtx.Routing.SelectedProvider != "mock" || gatewayCtx.Routing.SelectedModel != "mock-fast" {
 		t.Fatalf("expected mock/mock-fast route, got %s/%s", gatewayCtx.Routing.SelectedProvider, gatewayCtx.Routing.SelectedModel)
 	}
-	if gatewayCtx.Routing.RoutingReason != "low_cost" {
-		t.Fatalf("expected low_cost routing reason, got %s", gatewayCtx.Routing.RoutingReason)
+	if gatewayCtx.Routing.RoutingReason != routing.ReasonShortPromptLowCost {
+		t.Fatalf("expected short prompt routing reason, got %s", gatewayCtx.Routing.RoutingReason)
+	}
+	if gatewayCtx.Routing.RoutingPolicyHash != "route_p0_v1" {
+		t.Fatalf("expected route_p0_v1 policy hash, got %s", gatewayCtx.Routing.RoutingPolicyHash)
 	}
 }
