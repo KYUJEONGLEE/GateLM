@@ -7,10 +7,19 @@ import (
 )
 
 const (
+	StatusSuccess     = "success"
+	StatusCacheHit    = "cache_hit"
+	StatusBlocked     = "blocked"
 	StatusError       = "error"
+	StatusCancelled   = "cancelled"
+	CacheStatusHit    = "hit"
+	CacheStatusMiss   = "miss"
 	CacheStatusBypass = "bypass"
+	CacheStatusError  = "error"
 	CacheTypeNone     = "none"
+	CacheTypeExact    = "exact"
 	SourceCustomerApp = "customer_app"
+	CurrencyUSD       = "USD"
 
 	ErrorCodeInvalidAPIKey   = "invalid_api_key"
 	ErrorCodeInvalidAppToken = "invalid_app_token"
