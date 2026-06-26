@@ -266,6 +266,8 @@ Redaction placeholder는 대문자 snake case를 사용한다.
 [SECRET_REDACTED]
 ```
 
+P0에서 `private_key` detector는 저장/preview redaction 시 `[SECRET_REDACTED]`를 사용하며, 별도 private key 전용 placeholder를 만들지 않는다.
+
 ## 4.2 Placeholder에 원문 일부를 남기지 않는다
 
 금지:

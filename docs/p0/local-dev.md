@@ -130,6 +130,7 @@ GATEWAY_DEFAULT_PROVIDER=mock
 GATEWAY_DEFAULT_MODEL=mock-balanced
 GATEWAY_LOW_COST_MODEL=mock-fast
 GATEWAY_APP_TOKEN_REQUIRED=true
+GATEWAY_MAX_REQUEST_BODY_BYTES=4194304
 
 # Mock provider
 MOCK_PROVIDER_PORT=8090
@@ -248,7 +249,7 @@ docker compose run --rm node-toolbox pnpm test
 Gateway Go module이 생긴 뒤 테스트는 아래처럼 실행한다.
 
 ```bash
-docker compose run --rm go-toolbox go test ./...
+docker compose run --rm go-toolbox go test ./apps/gateway-core/...
 ```
 
 ---
@@ -378,14 +379,42 @@ curl -sS http://localhost:8080/v1/chat/completions \
 
 ## 11. 로그 검증
 
+Day4 Request Log / Detail / Dashboard API는 아래 smoke helper로 한 번에 확인할 수 있다.
+
+```powershell
+.\scripts\dev\p0-day4-log-dashboard-smoke.ps1
+```
+
+Day5 Gateway 데모 기준은 아래 helper로 확인한다. 이 스크립트는 health/ready, model catalog, safe miss, cache hit, redaction, block, requestId 기반 log/detail/dashboard 조회를 한 번에 검증한다.
+
+```powershell
+docker compose up -d postgres redis mock-provider
+```
+
+다른 터미널에서 Gateway를 실행한다.
+
+```powershell
+docker compose run --rm --service-ports go-toolbox go run ./apps/gateway-core/cmd/gateway
+```
+
+그 다음 smoke helper를 실행한다. Windows PowerShell에서 실행 정책에 막히면 `-ExecutionPolicy Bypass`를 붙인다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev\p0-day5-gateway-smoke.ps1
+```
+
+수동 확인이 필요하면 아래 endpoint를 직접 호출한다.
+
 ```bash
-curl -sS 'http://localhost:3001/api/projects/<projectId>/logs?limit=20' \
-  -H 'Authorization: Bearer <control_plane_access_token>'
+curl -sS 'http://localhost:8080/api/projects/<projectId>/logs?from=<fromIso>&to=<toIso>&limit=20'
 ```
 
 ```bash
-curl -sS 'http://localhost:3001/api/llm-requests/<requestId>' \
-  -H 'Authorization: Bearer <control_plane_access_token>'
+curl -sS 'http://localhost:8080/api/llm-requests/<requestId>'
+```
+
+```bash
+curl -sS 'http://localhost:8080/api/dashboard/overview?projectId=<projectId>&from=<fromIso>&to=<toIso>'
 ```
 
 확인할 것:

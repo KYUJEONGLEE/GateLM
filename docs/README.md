@@ -324,6 +324,8 @@ Redaction placeholder는 원문 일부를 남기지 않는다.
 [SECRET_REDACTED]
 ```
 
+P0에서 `private_key` detector의 저장/preview redaction placeholder는 `[SECRET_REDACTED]`를 사용하며, 별도 private key 전용 placeholder를 만들지 않는다.
+
 금지:
 
 ```text

@@ -131,6 +131,7 @@ P0 우선순위:
 
 | 케이스 | HTTP status | errorCode | Request Log | Provider/mock 호출 | Cache |
 |---|---:|---|---|---|---|
+| Request body 크기 제한 초과 | 413 | `request_body_too_large` | `status=error` | 없음 | `cacheStatus=bypass`, `cacheType=none` |
 | `stream=true` | 400 | `streaming_not_supported` | `status=error` | 없음 | `cacheStatus=bypass`, `cacheType=none` |
 | API Key 누락/불일치 | 401 | `invalid_api_key` | `status=error` 또는 auth failure log | 없음 | `cacheStatus=bypass`, `cacheType=none` |
 | App Token 누락/불일치 | 403 | `invalid_app_token` | `status=error` 또는 auth failure log | 없음 | `cacheStatus=bypass`, `cacheType=none` |
