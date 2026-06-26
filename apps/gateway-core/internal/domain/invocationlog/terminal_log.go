@@ -218,7 +218,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		CacheHitRequestID: strings.TrimSpace(input.CacheHitRequestID),
 
 		MaskingAction:           firstNonEmptyString(input.MaskingAction, "none"),
-		MaskingDetectedTypes:    append([]string(nil), input.MaskingDetectedTypes...),
+		MaskingDetectedTypes:    append([]string{}, input.MaskingDetectedTypes...),
 		MaskingDetectedCount:    input.MaskingDetectedCount,
 		RedactedPromptPreview:   strings.TrimSpace(input.RedactedPromptPreview),
 		SecurityPolicyVersionID: strings.TrimSpace(input.SecurityPolicyVersionID),
