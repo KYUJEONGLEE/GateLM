@@ -10,6 +10,7 @@ import (
 	"time"
 
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
+	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
@@ -60,10 +61,17 @@ func main() {
 		},
 	}
 
+	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
+		TenantID:      cfg.DemoTenantID,
+		ProjectID:     cfg.DemoProjectID,
+		ApplicationID: cfg.DemoApplicationID,
+	})
+
 	router := app.NewRouter(
 		cfg,
 		providers,
 		readinessChecks,
+		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),

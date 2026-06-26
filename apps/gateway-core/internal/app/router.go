@@ -11,7 +11,8 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
-	gatewaymiddleware "gatelm/apps/gateway-core/internal/http/middleware"
+	"gatelm/apps/gateway-core/internal/pipeline"
+	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
 	"gatelm/apps/gateway-core/internal/ports"
 )
 
@@ -21,6 +22,7 @@ type RouterOptions struct {
 	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
 	ExactCacheStore      ports.CacheStore
 	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
+	PreProviderPipeline  handlers.GatewayPipeline
 }
 
 type RouterOption func(*RouterOptions)
@@ -42,6 +44,12 @@ func WithExactCache(store ports.CacheStore, keyBuilder handlers.ExactCacheKeyBui
 	return func(options *RouterOptions) {
 		options.ExactCacheStore = store
 		options.ExactCacheKeyBuilder = keyBuilder
+	}
+}
+
+func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.PreProviderPipeline = preProviderPipeline
 	}
 }
 
@@ -87,15 +95,40 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	if appTokenValidator == nil {
 		appTokenValidator = credentials
 	}
+	authFailureLogWriter := routerOptions.AuthFailureLogWriter
+	if authFailureLogWriter == nil {
+		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
+	}
+
+	simpleRouter := routingdomain.NewSimpleRouter(routingdomain.SimpleRouterConfig{
+		DefaultProvider:     cfg.DefaultProvider,
+		DefaultModel:        cfg.DefaultModel,
+		LowCostModel:        cfg.LowCostModel,
+		HighQualityModel:    cfg.HighQualityModel,
+		PolicyHash:          cfg.RoutingPolicyHash,
+		ShortPromptMaxChars: cfg.ShortPromptMaxChars,
+	})
+	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
+	if routerOptions.PreProviderPipeline != nil {
+		preProviderPipeline = routerOptions.PreProviderPipeline
+	}
+
+	exactCacheKeyBuilder := routerOptions.ExactCacheKeyBuilder
+	if exactCacheKeyBuilder == nil && cfg.ExactCacheKeySecret != "" {
+		exactCacheKeyBuilder = cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret))
+	}
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
 		Timeout: cfg.ReadinessTimeout,
 		Checks:  readinessChecks,
 	})
-	mux.Handle("GET /v1/models", handlers.ModelsHandler{Providers: providers})
+	mux.Handle("GET /v1/models", handlers.ModelsHandler{
+		Providers:           providers,
+		PreProviderPipeline: preProviderPipeline,
+	})
 
-	chatHandler := &handlers.ChatCompletionsHandler{
+	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
 		Providers:               providers,
 		DefaultModel:            cfg.DefaultModel,
 		DefaultProvider:         cfg.DefaultProvider,
@@ -105,27 +138,15 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExpectedTenantID:        cfg.DemoTenantID,
 		ExpectedProjectID:       cfg.DemoProjectID,
 		ExpectedAppID:           cfg.DemoApplicationID,
+		PreProviderPipeline:     preProviderPipeline,
+		AuthFailureLogWriter:    authFailureLogWriter,
 		MaskingEngine:           maskdomain.NewP0Engine(),
-		Router:                  routingdomain.NewP0SimpleRouter(cfg.DefaultProvider, cfg.DefaultModel),
 		ExactCacheStore:         routerOptions.ExactCacheStore,
-		ExactCacheKeyBuilder:    routerOptions.ExactCacheKeyBuilder,
+		ExactCacheKeyBuilder:    exactCacheKeyBuilder,
 		ExactCacheTTL:           cfg.ExactCacheTTL,
 		CachePolicyHash:         "cache_p0_v1",
 		SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
-	}
-	if routerOptions.ExactCacheKeyBuilder == nil {
-		if cfg.ExactCacheKeySecret != "" {
-			chatHandler.ExactCacheKeyBuilder = cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret))
-		}
-	}
-	chatCompletionsHandler := http.Handler(chatHandler)
-
-	authFailureLogWriter := routerOptions.AuthFailureLogWriter
-	if authFailureLogWriter == nil {
-		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
-	}
-	chatCompletionsHandler = gatewaymiddleware.AuthFailureLogMiddleware(authFailureLogWriter)(chatCompletionsHandler)
-	mux.Handle("POST /v1/chat/completions", chatCompletionsHandler)
+	}))
 
 	return mux
 }

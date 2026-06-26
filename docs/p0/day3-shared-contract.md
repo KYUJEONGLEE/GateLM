@@ -117,9 +117,17 @@ applicationId
 selectedProvider
 selectedModel
 normalizedRedactedPrompt
-securityPolicyHash
-routingPolicyHash
+securityPolicyVersionId
+routingPolicyVersionId
 cachePolicyHash
+requestParamsHash
+```
+
+Policy mapping:
+
+```text
+securityPolicyVersionId = securityPolicyHash 값 사용
+routingPolicyVersionId = routingPolicyHash 값 사용
 ```
 
 Cache key 원칙:
@@ -129,6 +137,7 @@ raw prompt를 key material에 넣지 않는다.
 redacted prompt를 normalize한 값을 사용한다.
 selectedProvider/selectedModel이 확정된 뒤 cache key를 만든다.
 cachePolicyHash가 비어 있으면 cacheStatus=bypass, cacheType=none으로 처리한다.
+Go 코드의 KeyMaterial JSON tag는 securityPolicyVersionId, routingPolicyVersionId를 사용한다.
 ```
 
 ---
@@ -358,7 +367,7 @@ Day3 PR에는 아래를 본문에 표시한다.
 
 ```text
 ## 작업 내용
-- 
+-
 
 ## 확인한 내용
 - [ ] 로컬 실행 확인
@@ -374,9 +383,8 @@ Day3 PR에는 아래를 본문에 표시한다.
 - Event:
 
 ## 참고 사항
-- 
+-
 ```
 
 API/DB/Event 변경이 있으면 관련 문서를 같이 수정한다.
 문서에 없는 필드를 임의로 만들지 않는다.
-

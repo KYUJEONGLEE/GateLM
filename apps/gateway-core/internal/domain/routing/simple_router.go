@@ -3,77 +3,93 @@ package routing
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 )
 
-const DefaultPolicyHash = "routing_policy_p0_v1"
+const (
+	DefaultPolicyHash          = "route_p0_v1"
+	DefaultShortPromptMaxChars = 300
+
+	ReasonShortPromptLowCost = "short_prompt_low_cost"
+	ReasonDefaultBalanced    = "default_balanced"
+	ReasonPinned             = "pinned"
+)
+
+type SimpleRouterConfig struct {
+	DefaultProvider     string
+	DefaultModel        string
+	LowCostModel        string
+	HighQualityModel    string
+	PolicyHash          string
+	ShortPromptMaxChars int
+}
 
 type SimpleRouter struct {
-	DefaultProvider string
-	DefaultModel    string
-	LowCostModel    string
-	ShortPromptMax  int
-	PolicyHash      string
+	defaultProvider     string
+	defaultModel        string
+	lowCostModel        string
+	highQualityModel    string
+	policyHash          string
+	shortPromptMaxChars int
 }
 
-func NewP0SimpleRouter(defaultProvider string, defaultModel string) SimpleRouter {
-	if strings.TrimSpace(defaultProvider) == "" {
-		defaultProvider = "mock"
+func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
+	router := &SimpleRouter{
+		defaultProvider:     strings.TrimSpace(config.DefaultProvider),
+		defaultModel:        strings.TrimSpace(config.DefaultModel),
+		lowCostModel:        strings.TrimSpace(config.LowCostModel),
+		highQualityModel:    strings.TrimSpace(config.HighQualityModel),
+		policyHash:          strings.TrimSpace(config.PolicyHash),
+		shortPromptMaxChars: config.ShortPromptMaxChars,
 	}
-	if strings.TrimSpace(defaultModel) == "" {
-		defaultModel = "mock-balanced"
+
+	if router.defaultProvider == "" {
+		router.defaultProvider = "mock"
 	}
-	return SimpleRouter{
-		DefaultProvider: defaultProvider,
-		DefaultModel:    defaultModel,
-		LowCostModel:    "mock-fast",
-		ShortPromptMax:  120,
-		PolicyHash:      DefaultPolicyHash,
+	if router.defaultModel == "" {
+		router.defaultModel = "mock-balanced"
 	}
+	if router.lowCostModel == "" {
+		router.lowCostModel = "mock-fast"
+	}
+	if router.highQualityModel == "" {
+		router.highQualityModel = "mock-smart"
+	}
+	if router.policyHash == "" {
+		router.policyHash = DefaultPolicyHash
+	}
+	if router.shortPromptMaxChars <= 0 {
+		router.shortPromptMaxChars = DefaultShortPromptMaxChars
+	}
+
+	return router
 }
 
-func (r SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
-	defaultProvider := strings.TrimSpace(r.DefaultProvider)
-	if defaultProvider == "" {
-		defaultProvider = "mock"
-	}
-	defaultModel := strings.TrimSpace(r.DefaultModel)
-	if defaultModel == "" {
-		defaultModel = "mock-balanced"
-	}
-	lowCostModel := strings.TrimSpace(r.LowCostModel)
-	if lowCostModel == "" {
-		lowCostModel = "mock-fast"
-	}
-	shortPromptMax := r.ShortPromptMax
-	if shortPromptMax <= 0 {
-		shortPromptMax = 120
-	}
-	policyHash := strings.TrimSpace(r.PolicyHash)
-	if policyHash == "" {
-		policyHash = DefaultPolicyHash
-	}
-
+func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
 	requestedModel := strings.TrimSpace(req.RequestedModel)
 	if requestedModel == "" {
-		requestedModel = defaultModel
+		requestedModel = r.defaultModel
 	}
 
-	selectedModel := requestedModel
-	reason := "pinned"
-	if requestedModel == "auto" {
-		selectedModel = defaultModel
-		reason = "default"
-		if len([]rune(strings.Join(strings.Fields(req.PromptText), " "))) <= shortPromptMax {
-			selectedModel = lowCostModel
-			reason = "low_cost"
-		}
-	}
-
-	return Decision{
+	decision := Decision{
 		RequestedModel:   requestedModel,
-		SelectedProvider: defaultProvider,
-		SelectedModel:    selectedModel,
-		RoutingReason:    reason,
-		PolicyHash:       policyHash,
-	}, nil
+		SelectedProvider: r.defaultProvider,
+		PolicyHash:       r.policyHash,
+	}
+
+	if strings.EqualFold(requestedModel, "auto") {
+		if utf8.RuneCountInString(req.PromptText) <= r.shortPromptMaxChars {
+			decision.SelectedModel = r.lowCostModel
+			decision.RoutingReason = ReasonShortPromptLowCost
+			return decision, nil
+		}
+
+		decision.SelectedModel = r.defaultModel
+		decision.RoutingReason = ReasonDefaultBalanced
+		return decision, nil
+	}
+
+	decision.SelectedModel = requestedModel
+	decision.RoutingReason = ReasonPinned
+	return decision, nil
 }

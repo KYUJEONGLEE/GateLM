@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"reflect"
 	"testing"
 	"time"
 
@@ -20,6 +19,10 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 		StartedAt: startedAt,
 	})
 	reqCtx.RequestedModel = "auto"
+	reqCtx.CacheStatus = "miss"
+	reqCtx.CacheType = "exact"
+	reqCtx.CacheKeyHash = "hmac-sha256:cache-key"
+	reqCtx.CacheHitRequestID = "request_cached"
 
 	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt")
 
@@ -31,6 +34,12 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	}
 	if !gatewayCtx.Request.StartedAt.Equal(startedAt) {
 		t.Fatalf("unexpected started at: %s", gatewayCtx.Request.StartedAt)
+	}
+	if gatewayCtx.Cache.CacheStatus != "miss" || gatewayCtx.Cache.CacheType != "exact" {
+		t.Fatalf("unexpected cache metadata: %#v", gatewayCtx.Cache)
+	}
+	if gatewayCtx.Cache.CacheKeyHash != "hmac-sha256:cache-key" || gatewayCtx.Cache.CacheHitRequestID != "request_cached" {
+		t.Fatalf("unexpected cache key metadata: %#v", gatewayCtx.Cache)
 	}
 }
 
@@ -82,6 +91,33 @@ func TestApplyGatewayContextCopiesHTTPStatusOnly(t *testing.T) {
 	}
 }
 
+func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Cache: request.CacheContext{
+			CacheStatus:       "hit",
+			CacheType:         "exact",
+			CacheKeyHash:      "hmac-sha256:cache-key",
+			CacheHitRequestID: "request_cached",
+			Payload:           []byte(`{"id":"cached"}`),
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.CacheStatus != "hit" || reqCtx.CacheType != "exact" {
+		t.Fatalf("unexpected cache status metadata: %#v", reqCtx)
+	}
+	if reqCtx.CacheKeyHash != "hmac-sha256:cache-key" || reqCtx.CacheHitRequestID != "request_cached" {
+		t.Fatalf("unexpected cache key metadata: %#v", reqCtx)
+	}
+}
+
 func TestApplyGatewayContextCopiesRoutingPolicyHash(t *testing.T) {
 	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
 		RequestID: "request_test",
@@ -91,36 +127,43 @@ func TestApplyGatewayContextCopiesRoutingPolicyHash(t *testing.T) {
 	})
 	gatewayCtx := &request.GatewayContext{
 		Routing: request.RoutingContext{
+			RequestedModel:    "auto",
 			SelectedProvider:  "mock",
 			SelectedModel:     "mock-fast",
-			RoutingReason:     "low_cost",
-			RoutingPolicyHash: "routing_policy_p0_v1",
+			RoutingReason:     "short_prompt_low_cost",
+			RoutingPolicyHash: "route_p0_v1",
 		},
 	}
 
 	applyGatewayContext(reqCtx, gatewayCtx)
 
-	if reqCtx.RoutingPolicyHash != "routing_policy_p0_v1" {
-		t.Fatalf("expected routing policy hash to be copied, got %q", reqCtx.RoutingPolicyHash)
+	if reqCtx.RequestedModel != "auto" {
+		t.Fatalf("expected requested model auto, got %s", reqCtx.RequestedModel)
+	}
+	if reqCtx.SelectedProvider != "mock" || reqCtx.SelectedModel != "mock-fast" {
+		t.Fatalf("unexpected selected route: %#v", reqCtx)
+	}
+	if reqCtx.RoutingPolicyHash != "route_p0_v1" {
+		t.Fatalf("expected routing policy hash route_p0_v1, got %s", reqCtx.RoutingPolicyHash)
 	}
 }
 
-func TestApplyGatewayContextCopiesSafetyAndCacheMetadata(t *testing.T) {
+func TestApplyGatewayContextCopiesMaskingMetadata(t *testing.T) {
 	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
 		RequestID: "request_test",
 		TraceID:   "request_test",
 		Endpoint:  "/v1/chat/completions",
 		Method:    http.MethodPost,
 	})
-	gatewayCtx := &request.GatewayContext{}
-	setNestedStringField(t, gatewayCtx, "Masking", "Action", "redacted")
-	setNestedStringSliceField(t, gatewayCtx, "Masking", "DetectedTypes", []string{"email"})
-	setNestedIntField(t, gatewayCtx, "Masking", "DetectedCount", 1)
-	setNestedStringField(t, gatewayCtx, "Masking", "RedactedPromptPreview", "Contact [EMAIL_REDACTED].")
-	setNestedStringField(t, gatewayCtx, "Cache", "Status", "hit")
-	setNestedStringField(t, gatewayCtx, "Cache", "Type", "exact")
-	setNestedStringField(t, gatewayCtx, "Cache", "KeyHash", "hmac-sha256:cache-key-test")
-	setNestedStringField(t, gatewayCtx, "Cache", "HitRequestID", "request_original")
+	gatewayCtx := &request.GatewayContext{
+		Masking: request.MaskingContext{
+			Action:                  "redacted",
+			DetectedTypes:           []string{"email"},
+			DetectedCount:           1,
+			RedactedPromptPreview:   "Contact [EMAIL_REDACTED].",
+			SecurityPolicyVersionID: "security_policy_p0_v1",
+		},
+	}
 
 	applyGatewayContext(reqCtx, gatewayCtx)
 
@@ -136,70 +179,7 @@ func TestApplyGatewayContextCopiesSafetyAndCacheMetadata(t *testing.T) {
 	if reqCtx.RedactedPromptPreview != "Contact [EMAIL_REDACTED]." {
 		t.Fatalf("unexpected redacted prompt preview: %q", reqCtx.RedactedPromptPreview)
 	}
-	if reqCtx.CacheStatus != "hit" || reqCtx.CacheType != "exact" {
-		t.Fatalf("expected exact cache hit metadata, got status=%q type=%q", reqCtx.CacheStatus, reqCtx.CacheType)
+	if reqCtx.SecurityPolicyVersionID != "security_policy_p0_v1" {
+		t.Fatalf("unexpected security policy version: %q", reqCtx.SecurityPolicyVersionID)
 	}
-	if reqCtx.CacheKeyHash != "hmac-sha256:cache-key-test" || reqCtx.CacheHitRequestID != "request_original" {
-		t.Fatalf("unexpected cache identity metadata: key=%q hitRequest=%q", reqCtx.CacheKeyHash, reqCtx.CacheHitRequestID)
-	}
-}
-
-func setNestedStringField(t *testing.T, target any, parentName string, fieldName string, value string) {
-	t.Helper()
-
-	field := nestedSettableField(t, target, parentName, fieldName)
-	if field.Kind() != reflect.String {
-		t.Fatalf("GatewayContext.%s.%s must be string, got %s", parentName, fieldName, field.Kind())
-	}
-	field.SetString(value)
-}
-
-func setNestedStringSliceField(t *testing.T, target any, parentName string, fieldName string, value []string) {
-	t.Helper()
-
-	field := nestedSettableField(t, target, parentName, fieldName)
-	if field.Kind() != reflect.Slice || field.Type().Elem().Kind() != reflect.String {
-		t.Fatalf("GatewayContext.%s.%s must be []string, got %s", parentName, fieldName, field.Type())
-	}
-	field.Set(reflect.ValueOf(value))
-}
-
-func setNestedIntField(t *testing.T, target any, parentName string, fieldName string, value int) {
-	t.Helper()
-
-	field := nestedSettableField(t, target, parentName, fieldName)
-	if field.Kind() != reflect.Int {
-		t.Fatalf("GatewayContext.%s.%s must be int, got %s", parentName, fieldName, field.Kind())
-	}
-	field.SetInt(int64(value))
-}
-
-func nestedSettableField(t *testing.T, target any, parentName string, fieldName string) reflect.Value {
-	t.Helper()
-
-	root := reflect.ValueOf(target)
-	if root.Kind() != reflect.Pointer || root.IsNil() {
-		t.Fatalf("target must be a non-nil pointer")
-	}
-	parent := root.Elem().FieldByName(parentName)
-	if !parent.IsValid() {
-		t.Fatalf("GatewayContext missing %s context for P0 metadata propagation", parentName)
-	}
-	if parent.Kind() == reflect.Pointer {
-		if parent.IsNil() {
-			parent.Set(reflect.New(parent.Type().Elem()))
-		}
-		parent = parent.Elem()
-	}
-	if parent.Kind() != reflect.Struct {
-		t.Fatalf("GatewayContext.%s must be a struct or struct pointer, got %s", parentName, parent.Kind())
-	}
-	field := parent.FieldByName(fieldName)
-	if !field.IsValid() {
-		t.Fatalf("GatewayContext.%s missing %s field for P0 metadata propagation", parentName, fieldName)
-	}
-	if !field.CanSet() {
-		t.Fatalf("GatewayContext.%s.%s is not settable", parentName, fieldName)
-	}
-	return field
 }

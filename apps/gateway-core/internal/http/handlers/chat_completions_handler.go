@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,14 +18,18 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	cachestage "gatelm/apps/gateway-core/internal/pipeline/stages/cache"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
+	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
 	"gatelm/apps/gateway-core/internal/ports"
 )
 
@@ -38,10 +43,6 @@ type AppTokenValidator interface {
 
 type MaskingEngine interface {
 	Apply(ctx context.Context, req maskdomain.ApplyRequest) (maskdomain.Result, error)
-}
-
-type RouteDecider interface {
-	DecideRoute(ctx context.Context, req routingdomain.Request) (routingdomain.Decision, error)
 }
 
 type ExactCacheKeyBuilder interface {
@@ -59,8 +60,8 @@ type ChatCompletionsHandler struct {
 	ExpectedProjectID       string
 	ExpectedAppID           string
 	PreProviderPipeline     GatewayPipeline
+	AuthFailureLogWriter    invocationlog.AuthFailureLogWriter
 	MaskingEngine           MaskingEngine
-	Router                  RouteDecider
 	ExactCacheStore         ports.CacheStore
 	ExactCacheKeyBuilder    ExactCacheKeyBuilder
 	ExactCacheTTL           time.Duration
@@ -111,6 +112,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	if err := h.authenticateRequest(r.Context(), r, reqCtx); err != nil {
 		handleGatewayAuthError(w, reqCtx, err)
+		h.writeAuthFailureLog(r.Context(), reqCtx, startedAt, time.Now())
 		return
 	}
 
@@ -127,6 +129,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages is required.", "parse_openai_compatible_payload")
 		return
 	}
+
 	promptText, err := extractTextPrompt(chatReq.Messages)
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages content must be text-only.", "parse_openai_compatible_payload")
@@ -150,8 +153,8 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		reqCtx.ErrorCode = "sensitive_data_blocked"
 		reqCtx.ErrorMessage = "Request blocked by GateLM security policy."
 		reqCtx.ErrorStage = "mask_or_block"
-		reqCtx.CacheStatus = "bypass"
-		reqCtx.CacheType = "none"
+		reqCtx.CacheStatus = cachestage.CacheStatusBypass
+		reqCtx.CacheType = cachestage.CacheTypeNone
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 		setGatewayHeaders(w, reqCtx)
 		writeGatewayErrorWithHeaders(w, http.StatusForbidden, gatewayHeaderValuesFromContext(reqCtx), reqCtx.ErrorCode, reqCtx.ErrorMessage)
@@ -171,31 +174,18 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
-	if err := h.ensureRouting(r.Context(), reqCtx, promptText); err != nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway routing failed.", "decide_model_route")
-		return
-	}
-
-	cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
-	if cacheHit {
-		var cachedResp provider.ChatCompletionResponse
-		if err := json.Unmarshal(cachePayload, &cachedResp); err != nil {
-			reqCtx.CacheStatus = "error"
-			reqCtx.CacheType = "exact"
-			reqCtx.CacheHitRequestID = ""
-		} else {
-			reqCtx.CacheHitRequestID = cacheHitRequestID
-			reqCtx.Status = "cache_hit"
-			reqCtx.HTTPStatus = http.StatusOK
-			reqCtx.CostMicroUSD = 0
-			reqCtx.Provider = reqCtx.SelectedProvider
-			reqCtx.Model = reqCtx.SelectedModel
-			reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
-			h.attachGateLMMetadata(&cachedResp, reqCtx)
-			setGatewayHeaders(w, reqCtx)
-			writeJSON(w, http.StatusOK, cachedResp)
-			return
+	if shouldLookupExactCache(gatewayCtx) {
+		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
+		if cacheHit {
+			gatewayCtx.Cache.CacheStatus = cachestage.CacheStatusHit
+			gatewayCtx.Cache.CacheType = cachestage.CacheTypeExact
+			gatewayCtx.Cache.CacheKeyHash = reqCtx.CacheKeyHash
+			gatewayCtx.Cache.CacheHitRequestID = cacheHitRequestID
+			gatewayCtx.Cache.Payload = cachePayload
 		}
+	}
+	if h.writeCachedChatCompletionIfHit(w, reqCtx, gatewayCtx, chatReq.Model, startedAt) {
+		return
 	}
 
 	if h.Providers == nil {
@@ -226,6 +216,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	chatReq.Model = reqCtx.SelectedModel
 	reqCtx.Provider = reqCtx.SelectedProvider
 	reqCtx.Model = reqCtx.SelectedModel
+	ensureCacheDefaults(reqCtx)
 
 	providerStartedAt := time.Now()
 	providerResp, err := adapter.CreateChatCompletion(r.Context(), chatReq)
@@ -247,16 +238,29 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	reqCtx.Status = "success"
 	reqCtx.HTTPStatus = http.StatusOK
-	if reqCtx.CacheStatus == "" || reqCtx.CacheStatus == "bypass" {
-		reqCtx.CacheStatus = "miss"
-		reqCtx.CacheType = "exact"
+	if reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass {
+		reqCtx.CacheStatus = cachestage.CacheStatusMiss
+		reqCtx.CacheType = cachestage.CacheTypeExact
 	}
 
 	h.writeExactCache(r.Context(), reqCtx, providerResp)
-	h.attachGateLMMetadata(providerResp, reqCtx)
+	attachGateLMMetadata(providerResp, reqCtx)
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
+	if gatewayCtx == nil {
+		return true
+	}
+
+	switch gatewayCtx.Cache.CacheStatus {
+	case "", cachestage.CacheStatusBypass:
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
@@ -264,9 +268,14 @@ func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
 		engine := maskdomain.NewP0Engine()
 		h.MaskingEngine = engine
 	}
-	if h.Router == nil {
-		router := routingdomain.NewP0SimpleRouter(h.DefaultProvider, h.DefaultModel)
-		h.Router = router
+	if h.PreProviderPipeline == nil {
+		simpleRouter := routingdomain.NewSimpleRouter(routingdomain.SimpleRouterConfig{
+			DefaultProvider:     h.DefaultProvider,
+			DefaultModel:        h.DefaultModel,
+			PolicyHash:          routingdomain.DefaultPolicyHash,
+			ShortPromptMaxChars: routingdomain.DefaultShortPromptMaxChars,
+		})
+		h.PreProviderPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
 	}
 	if h.ExactCacheTTL <= 0 {
 		h.ExactCacheTTL = 10 * time.Minute
@@ -324,9 +333,6 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 	detectedTypeSet := map[string]struct{}{}
 	detectedCount := 0
 	securityPolicyVersionID := strings.TrimSpace(fallbackPolicyVersion)
-	if securityPolicyVersionID == "" {
-		securityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
-	}
 
 	for _, result := range results {
 		if result.Action == maskdomain.ActionBlocked {
@@ -341,6 +347,9 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 		if result.SecurityPolicyVersionID != "" {
 			securityPolicyVersionID = result.SecurityPolicyVersionID
 		}
+	}
+	if securityPolicyVersionID == "" {
+		securityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
 	}
 
 	detectedTypes := make([]string, 0, len(detectedTypeSet))
@@ -359,67 +368,41 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 	}
 }
 
-func (h *ChatCompletionsHandler) ensureRouting(ctx context.Context, reqCtx *pipeline.RequestContext, promptText string) error {
-	if reqCtx.SelectedProvider != "" && reqCtx.SelectedModel != "" {
-		if reqCtx.RoutingPolicyHash == "" {
-			reqCtx.RoutingPolicyHash = routingdomain.DefaultPolicyHash
-		}
-		return nil
-	}
-
-	decision, err := h.Router.DecideRoute(ctx, routingdomain.Request{
-		RequestedModel: reqCtx.RequestedModel,
-		PromptText:     promptText,
-	})
-	if err != nil {
-		return err
-	}
-
-	if decision.RequestedModel != "" {
-		reqCtx.RequestedModel = decision.RequestedModel
-	}
-	reqCtx.SelectedProvider = decision.SelectedProvider
-	reqCtx.SelectedModel = decision.SelectedModel
-	reqCtx.RoutingReason = decision.RoutingReason
-	reqCtx.RoutingPolicyHash = decision.PolicyHash
-	return nil
-}
-
 func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
 	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) {
-		reqCtx.CacheStatus = "bypass"
-		reqCtx.CacheType = "none"
+		reqCtx.CacheStatus = cachestage.CacheStatusBypass
+		reqCtx.CacheType = cachestage.CacheTypeNone
 		return nil, "", false
 	}
 	if h.ExactCacheStore == nil || h.ExactCacheKeyBuilder == nil {
-		reqCtx.CacheStatus = "bypass"
-		reqCtx.CacheType = "none"
+		reqCtx.CacheStatus = cachestage.CacheStatusBypass
+		reqCtx.CacheType = cachestage.CacheTypeNone
 		return nil, "", false
 	}
 
 	keyHash, err := h.buildExactCacheKey(ctx, reqCtx, chatReq, redactedPrompt)
 	if err != nil {
-		reqCtx.CacheStatus = "error"
-		reqCtx.CacheType = "exact"
+		reqCtx.CacheStatus = cachestage.CacheStatusError
+		reqCtx.CacheType = cachestage.CacheTypeExact
 		return nil, "", false
 	}
 	reqCtx.CacheKeyHash = keyHash
 
 	lookup, err := h.ExactCacheStore.GetExact(ctx, keyHash)
 	if err != nil {
-		reqCtx.CacheStatus = "error"
-		reqCtx.CacheType = "exact"
+		reqCtx.CacheStatus = cachestage.CacheStatusError
+		reqCtx.CacheType = cachestage.CacheTypeExact
 		return nil, "", false
 	}
 
 	if !lookup.Hit {
-		reqCtx.CacheStatus = "miss"
-		reqCtx.CacheType = "exact"
+		reqCtx.CacheStatus = cachestage.CacheStatusMiss
+		reqCtx.CacheType = cachestage.CacheTypeExact
 		return nil, "", false
 	}
 
-	reqCtx.CacheStatus = "hit"
-	reqCtx.CacheType = "exact"
+	reqCtx.CacheStatus = cachestage.CacheStatusHit
+	reqCtx.CacheType = cachestage.CacheTypeExact
 	return lookup.Payload, lookup.CacheHitRequestID, true
 }
 
@@ -439,7 +422,7 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 }
 
 func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
-	if h.ExactCacheStore == nil || reqCtx.CacheStatus != "miss" || reqCtx.CacheKeyHash == "" || providerResp == nil {
+	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil {
 		return
 	}
 
@@ -457,19 +440,120 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 		Payload:   payload,
 	}); err != nil {
 		log.Printf("exact cache write failed request_id=%s cache_key_hash=%s cause=%q",
-			reqCtx.RequestID,
-			reqCtx.CacheKeyHash,
+			sanitizeLogValue(reqCtx.RequestID),
+			sanitizeLogValue(reqCtx.CacheKeyHash),
 			sanitizeLogValue(err.Error()),
 		)
 	}
 }
 
-func (h *ChatCompletionsHandler) attachGateLMMetadata(providerResp *provider.ChatCompletionResponse, reqCtx *pipeline.RequestContext) {
-	if providerResp == nil || reqCtx == nil {
+func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, requestedModel string, startedAt time.Time) bool {
+	if reqCtx == nil || gatewayCtx == nil || gatewayCtx.Cache.CacheStatus != cachestage.CacheStatusHit {
+		return false
+	}
+
+	reqCtx.CacheStatus = cachestage.CacheStatusHit
+	if gatewayCtx.Cache.CacheType != "" {
+		reqCtx.CacheType = gatewayCtx.Cache.CacheType
+	} else if reqCtx.CacheType == "" || reqCtx.CacheType == cachestage.CacheTypeNone {
+		reqCtx.CacheType = cachestage.CacheTypeExact
+	}
+	if gatewayCtx.Cache.CacheKeyHash != "" {
+		reqCtx.CacheKeyHash = gatewayCtx.Cache.CacheKeyHash
+	}
+
+	cachedResp, err := decodeCachedChatCompletionPayload(gatewayCtx.Cache.Payload)
+	if err != nil {
+		logGatewayCacheDecodeError(reqCtx, err)
+		reqCtx.CacheStatus = cachestage.CacheStatusError
+		reqCtx.CacheHitRequestID = ""
+		if reqCtx.CacheType == "" || reqCtx.CacheType == cachestage.CacheTypeNone {
+			reqCtx.CacheType = cachestage.CacheTypeExact
+		}
+		return false
+	}
+
+	if gatewayCtx.Cache.CacheHitRequestID != "" {
+		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
+	}
+	if reqCtx.SelectedProvider == "" {
+		reqCtx.SelectedProvider = h.DefaultProvider
+	}
+	if reqCtx.SelectedModel == "" {
+		reqCtx.SelectedModel = requestedModel
+	}
+	if reqCtx.RoutingReason == "" {
+		reqCtx.RoutingReason = "not_routed"
+	}
+	reqCtx.Provider = reqCtx.SelectedProvider
+	reqCtx.Model = reqCtx.SelectedModel
+	reqCtx.ProviderLatencyMs = 0
+	reqCtx.PromptTokens = 0
+	reqCtx.CompletionTokens = 0
+	reqCtx.TotalTokens = 0
+	reqCtx.CostMicroUSD = 0
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	reqCtx.Status = "cache_hit"
+	reqCtx.HTTPStatus = http.StatusOK
+
+	if reqCtx.SelectedModel != "" {
+		cachedResp.Model = reqCtx.SelectedModel
+	}
+	cachedResp.Usage = &provider.Usage{}
+	attachGateLMMetadata(cachedResp, reqCtx)
+
+	setGatewayHeaders(w, reqCtx)
+	writeJSON(w, http.StatusOK, cachedResp)
+	return true
+}
+
+func decodeCachedChatCompletionPayload(payload []byte) (*provider.ChatCompletionResponse, error) {
+	if len(bytes.TrimSpace(payload)) == 0 {
+		return nil, errors.New("cached chat completion payload is empty")
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.Unmarshal(payload, &resp); err != nil {
+		return nil, fmt.Errorf("decode cached chat completion payload: %w", err)
+	}
+	if strings.TrimSpace(resp.ID) == "" || resp.Object != "chat.completion" {
+		return nil, errors.New("cached chat completion payload has invalid shape")
+	}
+
+	return &resp, nil
+}
+
+func logGatewayCacheDecodeError(reqCtx *pipeline.RequestContext, err error) {
+	if reqCtx == nil || err == nil {
 		return
 	}
 
-	providerResp.GateLM = &provider.GateLMMetadata{
+	log.Printf("gateway cache decode error request_id=%s cache_type=%s cache_key_hash=%s error=%q",
+		sanitizeLogValue(reqCtx.RequestID),
+		sanitizeLogValue(reqCtx.CacheType),
+		sanitizeLogValue(reqCtx.CacheKeyHash),
+		sanitizeLogValue(err.Error()),
+	)
+}
+
+func ensureCacheDefaults(reqCtx *pipeline.RequestContext) {
+	if reqCtx == nil {
+		return
+	}
+	if reqCtx.CacheStatus == "" {
+		reqCtx.CacheStatus = cachestage.CacheStatusBypass
+	}
+	if reqCtx.CacheType == "" {
+		reqCtx.CacheType = cachestage.CacheTypeNone
+	}
+}
+
+func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipeline.RequestContext) {
+	if resp == nil || reqCtx == nil {
+		return
+	}
+
+	resp.GateLM = &provider.GateLMMetadata{
 		RequestID:        reqCtx.RequestID,
 		TenantID:         reqCtx.TenantID,
 		ProjectID:        reqCtx.ProjectID,
@@ -499,7 +583,36 @@ func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func (h ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
+func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx *pipeline.RequestContext, startedAt time.Time, completedAt time.Time) {
+	if h.AuthFailureLogWriter == nil || reqCtx == nil || !invocationlog.IsAuthFailure(reqCtx.HTTPStatus, reqCtx.ErrorCode) {
+		return
+	}
+
+	_ = h.AuthFailureLogWriter.WriteAuthFailureLog(ctx, invocationlog.BuildAuthFailureLog(invocationlog.AuthFailureInput{
+		RequestID:      reqCtx.RequestID,
+		TraceID:        reqCtx.TraceID,
+		TenantID:       reqCtx.TenantID,
+		ProjectID:      reqCtx.ProjectID,
+		ApplicationID:  reqCtx.ApplicationID,
+		APIKeyID:       reqCtx.APIKeyID,
+		AppTokenID:     reqCtx.AppTokenID,
+		EndUserID:      reqCtx.EndUserID,
+		FeatureID:      reqCtx.FeatureID,
+		Endpoint:       reqCtx.Endpoint,
+		Method:         reqCtx.Method,
+		Source:         invocationlog.SourceCustomerApp,
+		Stream:         reqCtx.Stream,
+		RequestedModel: reqCtx.RequestedModel,
+		HTTPStatus:     reqCtx.HTTPStatus,
+		ErrorCode:      reqCtx.ErrorCode,
+		ErrorMessage:   reqCtx.ErrorMessage,
+		ErrorStage:     reqCtx.ErrorStage,
+		StartedAt:      startedAt,
+		CompletedAt:    completedAt,
+	}))
+}
+
+func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
 	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
 		return gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication is not initialized.", nil)
 	}
@@ -601,8 +714,8 @@ func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestConte
 	reqCtx.ErrorCode = gatewayErr.Code
 	reqCtx.ErrorMessage = gatewayErr.Message
 	reqCtx.ErrorStage = gatewayErr.Stage
-	reqCtx.CacheStatus = "bypass"
-	reqCtx.CacheType = "none"
+	reqCtx.CacheStatus = cachestage.CacheStatusBypass
+	reqCtx.CacheType = cachestage.CacheTypeNone
 
 	logGatewayAuthInternalError(reqCtx, gatewayErr)
 	setGatewayHeaders(w, reqCtx)
@@ -622,11 +735,11 @@ func logGatewayAuthInternalError(reqCtx *pipeline.RequestContext, gatewayErr gat
 	}
 
 	log.Printf("gateway auth internal error request_id=%s stage=%s code=%s http_status=%d cause_type=%s cause=%q",
-		reqCtx.RequestID,
-		gatewayErr.Stage,
-		gatewayErr.Code,
+		sanitizeLogValue(reqCtx.RequestID),
+		sanitizeLogValue(gatewayErr.Stage),
+		sanitizeLogValue(gatewayErr.Code),
 		gatewayErr.HTTPStatus,
-		causeType,
+		sanitizeLogValue(causeType),
 		causeMessage,
 	)
 }

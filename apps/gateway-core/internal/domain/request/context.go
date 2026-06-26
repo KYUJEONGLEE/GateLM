@@ -30,14 +30,6 @@ type IdentityContext struct {
 	AppTokenID    string
 }
 
-type RoutingContext struct {
-	RequestedModel    string
-	SelectedProvider  string
-	SelectedModel     string
-	RoutingReason     string
-	RoutingPolicyHash string
-}
-
 type MaskingContext struct {
 	Action                  string
 	DetectedTypes           []string
@@ -47,12 +39,20 @@ type MaskingContext struct {
 	SecurityPolicyVersionID string
 }
 
+type RoutingContext struct {
+	RequestedModel    string
+	SelectedProvider  string
+	SelectedModel     string
+	RoutingReason     string
+	RoutingPolicyHash string
+}
+
 type CacheContext struct {
-	Status       string
-	Type         string
-	KeyHash      string
-	HitRequestID string
-	Payload      []byte
+	CacheStatus       string
+	CacheType         string
+	CacheKeyHash      string
+	CacheHitRequestID string
+	Payload           []byte
 }
 
 type StatusContext struct {

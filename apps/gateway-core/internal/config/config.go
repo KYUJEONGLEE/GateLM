@@ -14,6 +14,10 @@ type Config struct {
 	MockProviderBaseURL string
 	DefaultProvider     string
 	DefaultModel        string
+	LowCostModel        string
+	HighQualityModel    string
+	RoutingPolicyHash   string
+	ShortPromptMaxChars int
 	DemoAPIKey          string
 	DemoAppToken        string
 	DemoTenantID        string
@@ -36,6 +40,10 @@ func Load() Config {
 		MockProviderBaseURL: envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:     envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
 		DefaultModel:        envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
+		LowCostModel:        envString("GATEWAY_LOW_COST_MODEL", "mock-fast"),
+		HighQualityModel:    envString("GATEWAY_HIGH_QUALITY_MODEL", "mock-smart"),
+		RoutingPolicyHash:   envString("GATEWAY_ROUTING_POLICY_HASH", "route_p0_v1"),
+		ShortPromptMaxChars: envInt("GATEWAY_SHORT_PROMPT_MAX_CHARS", 300),
 		DemoAPIKey:          envString("GATELM_DEMO_API_KEY", "glm_api_test_redacted"),
 		DemoAppToken:        envString("GATELM_DEMO_APP_TOKEN", "glm_app_token_test_redacted"),
 		DemoTenantID:        envString("GATELM_DEMO_TENANT_ID", "00000000-0000-4000-8000-000000000100"),
@@ -94,6 +102,20 @@ func envInt64(key string, fallback int64) int64 {
 	}
 
 	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func envInt(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed < 0 {
 		return fallback
 	}

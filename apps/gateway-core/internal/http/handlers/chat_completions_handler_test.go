@@ -1109,7 +1109,7 @@ func TestChatCompletionsHandlerDoesNotSetHitRequestIDBeforeCachedPayloadDecodes(
 	reqCtx.RequestedModel = "mock-balanced"
 	reqCtx.SelectedProvider = "mock"
 	reqCtx.SelectedModel = "mock-balanced"
-	reqCtx.RoutingPolicyHash = "routing_policy_p0_v1"
+	reqCtx.RoutingPolicyHash = "route_p0_v1"
 	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
 	reqCtx.MaskingAction = string(maskdomain.ActionNone)
 	handler := ChatCompletionsHandler{
@@ -1285,6 +1285,102 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	}
 }
 
+func TestChatCompletionsHandlerReturnsCacheHitWithoutProviderCall(t *testing.T) {
+	chatCalls := 0
+	cachedPayload := marshalChatCompletionPayload(t, provider.ChatCompletionResponse{
+		ID:      "cached_chatcmpl_previous",
+		Object:  "chat.completion",
+		Created: 1782108000,
+		Model:   "mock-balanced",
+		Choices: []provider.ChatChoice{
+			{
+				Index: 0,
+				Message: provider.ChatMessage{
+					Role:    "assistant",
+					Content: json.RawMessage(`"Cached response"`),
+				},
+				FinishReason: "stop",
+			},
+		},
+		Usage: &provider.Usage{
+			PromptTokens:     12,
+			CompletionTokens: 8,
+			TotalTokens:      20,
+		},
+		GateLM: &provider.GateLMMetadata{
+			RequestID:   "request_previous",
+			CacheStatus: "miss",
+		},
+	})
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Cache.CacheStatus = "hit"
+			gatewayCtx.Cache.CacheType = "exact"
+			gatewayCtx.Cache.CacheKeyHash = "hmac-sha256:cache-key"
+			gatewayCtx.Cache.CacheHitRequestID = "request_previous"
+			gatewayCtx.Cache.Payload = cachedPayload
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		PreProviderPipeline: preflight,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "short prompt"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if preflight.calls != 1 {
+		t.Fatalf("expected pre-provider pipeline to be called once, got %d", preflight.calls)
+	}
+	if chatCalls != 0 {
+		t.Fatalf("expected provider not to be called on cache hit, got %d", chatCalls)
+	}
+	if rr.Header().Get("X-GateLM-Cache-Status") != "hit" {
+		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
+		t.Fatalf("unexpected routed model header: %s", rr.Header().Get("X-GateLM-Routed-Model"))
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ID != "cached_chatcmpl_previous" || resp.Object != "chat.completion" {
+		t.Fatalf("unexpected cached response shape: %#v", resp)
+	}
+	if resp.Model != "mock-fast" {
+		t.Fatalf("expected cached response model to use routed model, got %s", resp.Model)
+	}
+	if resp.Usage == nil || resp.Usage.PromptTokens != 0 || resp.Usage.CompletionTokens != 0 || resp.Usage.TotalTokens != 0 {
+		t.Fatalf("expected cache hit usage to be zeroed, got %#v", resp.Usage)
+	}
+	if resp.GateLM == nil {
+		t.Fatalf("missing gate_lm metadata")
+	}
+	if resp.GateLM.RequestID == "request_previous" || resp.GateLM.RequestID != rr.Header().Get(middleware.RequestIDHeader) {
+		t.Fatalf("expected current request id in gate_lm metadata, got %#v", resp.GateLM)
+	}
+	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedModel != "mock-fast" || resp.GateLM.EstimatedCostUSD != "0.000000" {
+		t.Fatalf("unexpected gate_lm cache metadata: %#v", resp.GateLM)
+	}
+}
+
 func TestChatCompletionsHandlerBypassesCacheForBlockedRequestBeforeKeyBuilderAndStore(t *testing.T) {
 	chatCalls := 0
 	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:must-not-build"}
@@ -1316,6 +1412,132 @@ func TestChatCompletionsHandlerBypassesCacheForBlockedRequestBeforeKeyBuilderAnd
 	if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "bypass" {
 		t.Fatalf("expected cache bypass header, got %q", got)
 	}
+}
+
+func TestChatCompletionsHandlerPreservesCacheMissAndCallsProvider(t *testing.T) {
+	chatCalls := 0
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Cache.CacheStatus = "miss"
+			gatewayCtx.Cache.CacheType = "exact"
+			gatewayCtx.Cache.CacheKeyHash = "hmac-sha256:cache-key"
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		PreProviderPipeline: preflight,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "short prompt"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected provider to be called once on cache miss, got %d", chatCalls)
+	}
+	if rr.Header().Get("X-GateLM-Cache-Status") != "miss" {
+		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.GateLM == nil || resp.GateLM.CacheStatus != "miss" || resp.GateLM.SelectedModel != "mock-fast" {
+		t.Fatalf("unexpected gate_lm cache miss metadata: %#v", resp.GateLM)
+	}
+}
+
+func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.T) {
+	output := captureDefaultLog(t)
+	chatCalls := 0
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Cache.CacheStatus = "hit"
+			gatewayCtx.Cache.CacheType = "exact"
+			gatewayCtx.Cache.CacheKeyHash = "hmac-sha256:cache-key"
+			gatewayCtx.Cache.Payload = []byte(`{"unexpected":"shape"}`)
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		PreProviderPipeline: preflight,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "short prompt"}]
+	}`))
+	req.Header.Set(middleware.RequestIDHeader, "req_cache_decode")
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected provider to be called once after invalid cache payload, got %d", chatCalls)
+	}
+	if rr.Header().Get("X-GateLM-Cache-Status") != "error" {
+		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.GateLM == nil || resp.GateLM.CacheStatus != "error" || resp.GateLM.SelectedModel != "mock-fast" {
+		t.Fatalf("unexpected gate_lm cache error metadata: %#v", resp.GateLM)
+	}
+
+	logged := output.String()
+	if !strings.Contains(logged, "gateway cache decode error") {
+		t.Fatalf("expected cache decode error log, got %q", logged)
+	}
+	if !strings.Contains(logged, "request_id=req_cache_decode") || !strings.Contains(logged, "cache_type=exact") {
+		t.Fatalf("expected cache decode context in log, got %q", logged)
+	}
+	if !strings.Contains(logged, "cache_key_hash=hmac-sha256:cache-key") {
+		t.Fatalf("expected cache key hash in log, got %q", logged)
+	}
+	if !strings.Contains(logged, "cached chat completion payload has invalid shape") {
+		t.Fatalf("expected sanitized decode error in log, got %q", logged)
+	}
+	if strings.Contains(logged, "unexpected") {
+		t.Fatalf("cache decode log must not include raw cached payload: %q", logged)
+	}
+}
+
+func marshalChatCompletionPayload(t *testing.T, resp provider.ChatCompletionResponse) []byte {
+	t.Helper()
+
+	payload, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal cached payload: %v", err)
+	}
+	return payload
 }
 
 type nilProviderAdapter struct{}
