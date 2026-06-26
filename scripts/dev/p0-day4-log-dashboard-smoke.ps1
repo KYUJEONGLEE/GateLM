@@ -80,13 +80,17 @@ function Invoke-SmokeHttp {
         foreach ($header in $response.Headers.GetEnumerator()) {
             $responseHeaders[$header.Key] = ($header.Value -join ",")
         }
-        foreach ($header in $response.Content.Headers.GetEnumerator()) {
-            $responseHeaders[$header.Key] = ($header.Value -join ",")
+        $responseBody = ""
+        if ($null -ne $response.Content) {
+            foreach ($header in $response.Content.Headers.GetEnumerator()) {
+                $responseHeaders[$header.Key] = ($header.Value -join ",")
+            }
+            $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         }
 
         return [pscustomobject]@{
             StatusCode = [int]$response.StatusCode
-            Body       = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            Body       = $responseBody
             Headers    = $responseHeaders
         }
     }
@@ -194,6 +198,15 @@ function Assert-NoForbiddenFields {
     foreach ($field in $forbidden) {
         Assert-NotContains -Name "$Name forbidden field" -Text $Body -Needle $field
     }
+}
+
+function Convert-ToSafeArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+    return @($Value)
 }
 
 function Reset-MockStats {
@@ -327,7 +340,7 @@ function Assert-LogItem {
     )
 
     $logs = Get-ProjectLogs -RequestId $RequestId -Limit 20
-    $items = @($logs.data)
+    $items = @(Convert-ToSafeArray -Value $logs.data)
     Assert-True -Name "log list contains $RequestId" -Condition ($items.Count -gt 0)
     $item = $items[0]
     Assert-Equal -Name "log item requestId" -Expected $RequestId -Actual ([string]$item.requestId)
@@ -489,7 +502,7 @@ Invoke-SmokeCase -Name "dashboard reflects log canonical source" -Body {
     Assert-True -Name "dashboard totalCostMicroUsd present" -Condition ($null -ne $totals.totalCostMicroUsd)
 
     $logs = Get-ProjectLogs -Limit 100
-    $logItems = @($logs.data)
+    $logItems = @(Convert-ToSafeArray -Value $logs.data)
     foreach ($requestId in @($script:SafeMissRequestId, $script:SafeHitRequestId, $script:RedactionRequestId, $script:BlockedRequestId, $script:AuthErrorRequestId)) {
         $matching = @($logItems | Where-Object { [string]$_.requestId -eq $requestId })
         Assert-True -Name "dashboard range log list contains $requestId" -Condition ($matching.Count -gt 0)
