@@ -61,6 +61,7 @@ type ChatCompletionsHandler struct {
 	ExpectedAppID           string
 	PreProviderPipeline     GatewayPipeline
 	AuthFailureLogWriter    invocationlog.AuthFailureLogWriter
+	TerminalLogWriter       invocationlog.TerminalLogWriter
 	MaskingEngine           MaskingEngine
 	ExactCacheStore         ports.CacheStore
 	ExactCacheKeyBuilder    ExactCacheKeyBuilder
@@ -87,6 +88,13 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		EndUserID: r.Header.Get("X-GateLM-End-User-Id"),
 		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
 	})
+	terminalLogEnabled := false
+	terminalLogPrompt := ""
+	defer func() {
+		if terminalLogEnabled {
+			h.writeTerminalLog(context.WithoutCancel(r.Context()), reqCtx, terminalLogPrompt, startedAt, time.Now())
+		}
+	}()
 
 	if h.MaxRequestBodyBytes > 0 {
 		if r.ContentLength > h.MaxRequestBodyBytes {
@@ -115,6 +123,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.writeAuthFailureLog(r.Context(), reqCtx, startedAt, time.Now())
 		return
 	}
+	terminalLogEnabled = true
 
 	if chatReq.Stream {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
@@ -146,6 +155,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.MaskingDetectedCount = maskingResult.DetectedCount
 	reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
 	reqCtx.SecurityPolicyVersionID = maskingResult.SecurityPolicyVersionID
+	terminalLogPrompt = redactedPrompt
 
 	if maskingResult.Action == maskdomain.ActionBlocked {
 		reqCtx.Status = "blocked"
@@ -610,6 +620,86 @@ func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx
 		StartedAt:      startedAt,
 		CompletedAt:    completedAt,
 	}))
+}
+
+func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *pipeline.RequestContext, redactedPrompt string, startedAt time.Time, completedAt time.Time) {
+	if h.TerminalLogWriter == nil || reqCtx == nil || !shouldWriteTerminalLog(reqCtx) {
+		return
+	}
+
+	if reqCtx.LatencyMs == 0 {
+		reqCtx.LatencyMs = completedAt.Sub(startedAt).Milliseconds()
+	}
+
+	providerLatencyMs := providerLatencyForLog(reqCtx)
+	err := h.TerminalLogWriter.WriteTerminalLog(ctx, invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
+		RequestID:               reqCtx.RequestID,
+		TraceID:                 reqCtx.TraceID,
+		TenantID:                reqCtx.TenantID,
+		ProjectID:               reqCtx.ProjectID,
+		ApplicationID:           reqCtx.ApplicationID,
+		APIKeyID:                reqCtx.APIKeyID,
+		AppTokenID:              reqCtx.AppTokenID,
+		EndUserID:               reqCtx.EndUserID,
+		FeatureID:               reqCtx.FeatureID,
+		Endpoint:                reqCtx.Endpoint,
+		Method:                  reqCtx.Method,
+		Source:                  invocationlog.SourceCustomerApp,
+		Stream:                  reqCtx.Stream,
+		RequestedProvider:       reqCtx.RequestedProvider,
+		RequestedModel:          reqCtx.RequestedModel,
+		Provider:                reqCtx.Provider,
+		Model:                   reqCtx.Model,
+		SelectedProvider:        reqCtx.SelectedProvider,
+		SelectedModel:           reqCtx.SelectedModel,
+		RoutingReason:           reqCtx.RoutingReason,
+		RoutingPolicyHash:       reqCtx.RoutingPolicyHash,
+		PromptTokens:            reqCtx.PromptTokens,
+		CompletionTokens:        reqCtx.CompletionTokens,
+		TotalTokens:             reqCtx.TotalTokens,
+		CostMicroUSD:            reqCtx.CostMicroUSD,
+		LatencyMs:               reqCtx.LatencyMs,
+		ProviderLatencyMs:       providerLatencyMs,
+		Status:                  reqCtx.Status,
+		HTTPStatus:              reqCtx.HTTPStatus,
+		ErrorCode:               reqCtx.ErrorCode,
+		ErrorMessage:            reqCtx.ErrorMessage,
+		ErrorStage:              reqCtx.ErrorStage,
+		CacheStatus:             reqCtx.CacheStatus,
+		CacheType:               reqCtx.CacheType,
+		CacheKeyHash:            reqCtx.CacheKeyHash,
+		CacheHitRequestID:       reqCtx.CacheHitRequestID,
+		MaskingAction:           reqCtx.MaskingAction,
+		MaskingDetectedTypes:    reqCtx.MaskingDetectedTypes,
+		MaskingDetectedCount:    reqCtx.MaskingDetectedCount,
+		RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
+		SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
+		RedactedPromptForHash:   redactedPrompt,
+		StartedAt:               startedAt,
+		CompletedAt:             completedAt,
+	}))
+	if err != nil {
+		log.Printf("terminal invocation log write failed request_id=%s status=%s cause=%q",
+			sanitizeLogValue(reqCtx.RequestID),
+			sanitizeLogValue(reqCtx.Status),
+			sanitizeLogValue(err.Error()),
+		)
+	}
+}
+
+func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {
+	return reqCtx.Status != "" && reqCtx.HTTPStatus != 0
+}
+
+func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
+	if reqCtx == nil || reqCtx.Status == invocationlog.StatusCacheHit || reqCtx.Status == invocationlog.StatusBlocked {
+		return nil
+	}
+	if reqCtx.ProviderLatencyMs == 0 {
+		return nil
+	}
+	providerLatencyMs := reqCtx.ProviderLatencyMs
+	return &providerLatencyMs
 }
 
 func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
