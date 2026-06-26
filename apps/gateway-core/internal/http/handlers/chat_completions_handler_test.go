@@ -755,7 +755,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForPipelineFailure(t *testing.T)
 		t.Fatalf("unexpected pipeline redacted preview: %q", logged.RedactedPromptPreview)
 	}
 	if logged.ProviderLatencyMs != nil {
-		t.Fatalf("pipeline failure before provider call must not include provider latency: %+v", logged.ProviderLatencyMs)
+		t.Fatalf("pipeline failure before provider call must not include provider latency: %d", *logged.ProviderLatencyMs)
 	}
 }
 
@@ -1164,7 +1164,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) 
 		t.Fatalf("blocked log usage/cost must be zero, got %+v", logged)
 	}
 	if logged.ProviderLatencyMs != nil {
-		t.Fatalf("blocked log provider latency must be nil, got %+v", logged.ProviderLatencyMs)
+		t.Fatalf("blocked log provider latency must be nil, got %d", *logged.ProviderLatencyMs)
 	}
 }
 
@@ -2128,8 +2128,9 @@ func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.
 	if logged.MaskingAction != rr.Header().Get("X-GateLM-Masking-Action") || logged.MaskingAction != resp.GateLM.MaskingAction {
 		t.Fatalf("masking action mismatch: log=%q header=%q gate_lm=%q", logged.MaskingAction, rr.Header().Get("X-GateLM-Masking-Action"), resp.GateLM.MaskingAction)
 	}
-	if formatCostMicroUSD(logged.CostMicroUSD) != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") || formatCostMicroUSD(logged.CostMicroUSD) != resp.GateLM.EstimatedCostUSD {
-		t.Fatalf("cost mismatch: log=%q header=%q gate_lm=%q", formatCostMicroUSD(logged.CostMicroUSD), rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
+	expectedCost := formatCostMicroUSD(logged.CostMicroUSD)
+	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") || expectedCost != resp.GateLM.EstimatedCostUSD {
+		t.Fatalf("cost mismatch: log=%q header=%q gate_lm=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
 	}
 	if logged.LatencyMs != resp.GateLM.LatencyMs {
 		t.Fatalf("latency mismatch: log=%d gate_lm=%d", logged.LatencyMs, resp.GateLM.LatencyMs)
@@ -2154,8 +2155,9 @@ func assertTerminalLogMatchesBlockedResponse(t *testing.T, logged invocationlog.
 	if logged.MaskingAction != rr.Header().Get("X-GateLM-Masking-Action") {
 		t.Fatalf("masking action mismatch: log=%q header=%q", logged.MaskingAction, rr.Header().Get("X-GateLM-Masking-Action"))
 	}
-	if formatCostMicroUSD(logged.CostMicroUSD) != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") {
-		t.Fatalf("cost mismatch: log=%q header=%q", formatCostMicroUSD(logged.CostMicroUSD), rr.Header().Get("X-GateLM-Estimated-Cost-Usd"))
+	expectedCost := formatCostMicroUSD(logged.CostMicroUSD)
+	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") {
+		t.Fatalf("cost mismatch: log=%q header=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"))
 	}
 }
 
@@ -2177,8 +2179,9 @@ func assertTerminalLogMatchesGatewayErrorResponse(t *testing.T, logged invocatio
 	if logged.MaskingAction != rr.Header().Get("X-GateLM-Masking-Action") {
 		t.Fatalf("masking action mismatch: log=%q header=%q", logged.MaskingAction, rr.Header().Get("X-GateLM-Masking-Action"))
 	}
-	if formatCostMicroUSD(logged.CostMicroUSD) != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") {
-		t.Fatalf("cost mismatch: log=%q header=%q", formatCostMicroUSD(logged.CostMicroUSD), rr.Header().Get("X-GateLM-Estimated-Cost-Usd"))
+	expectedCost := formatCostMicroUSD(logged.CostMicroUSD)
+	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") {
+		t.Fatalf("cost mismatch: log=%q header=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"))
 	}
 }
 
