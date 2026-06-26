@@ -16,6 +16,7 @@ import (
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/request"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -280,6 +281,76 @@ func TestNewRouterPersistsInvalidAuthThroughPostgresWriter(t *testing.T) {
 	}
 }
 
+func TestNewRouterWiresPreProviderPipeline(t *testing.T) {
+	chatCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chatCalls++
+		var req provider.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode provider request: %v", err)
+		}
+		if req.Model != "mock-fast" {
+			t.Fatalf("expected routed model mock-fast, got %s", req.Model)
+		}
+
+		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{
+			ID:      "mock_chatcmpl_router_pipeline",
+			Object:  "chat.completion",
+			Created: 1782108000,
+			Model:   req.Model,
+		})
+	}))
+	defer mockServer.Close()
+
+	registry := provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client()))
+	preflight := &routerTestGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Cache.CacheStatus = "miss"
+			gatewayCtx.Cache.CacheType = "exact"
+		},
+	}
+	router := NewRouter(config.Config{
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}, registry, nil,
+		WithGatewayAuth(
+			&routerTestAPIKeyAuthenticator{identity: routerTestValidAPIKeyIdentity()},
+			&routerTestAppTokenValidator{identity: routerTestValidAppTokenIdentity()},
+		),
+		WithPreProviderPipeline(preflight),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"stream": false
+	}`))
+	req.Header.Set("Authorization", "Bearer glm_api_test_redacted")
+	req.Header.Set("X-GateLM-App-Token", "glm_app_token_test_redacted")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if preflight.calls != 1 {
+		t.Fatalf("expected pre-provider pipeline to be called once, got %d", preflight.calls)
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected provider to be called once, got %d", chatCalls)
+	}
+	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
+		t.Fatalf("unexpected routed model header: %s", rr.Header().Get("X-GateLM-Routed-Model"))
+	}
+	if rr.Header().Get("X-GateLM-Cache-Status") != "miss" {
+		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+}
+
 func writeRouterTestJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -352,4 +423,17 @@ func (f *routerTestAppTokenValidator) ValidateAppToken(_ context.Context, _ stri
 		return auth.AppTokenIdentity{}, f.err
 	}
 	return f.identity, nil
+}
+
+type routerTestGatewayPipeline struct {
+	calls  int
+	mutate func(gatewayCtx *request.GatewayContext)
+}
+
+func (p *routerTestGatewayPipeline) Execute(_ context.Context, gatewayCtx *request.GatewayContext) error {
+	p.calls++
+	if p.mutate != nil {
+		p.mutate(gatewayCtx)
+	}
+	return nil
 }

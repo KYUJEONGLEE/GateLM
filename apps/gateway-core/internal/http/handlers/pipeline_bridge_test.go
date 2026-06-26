@@ -19,6 +19,10 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 		StartedAt: startedAt,
 	})
 	reqCtx.RequestedModel = "auto"
+	reqCtx.CacheStatus = "miss"
+	reqCtx.CacheType = "exact"
+	reqCtx.CacheKeyHash = "hmac-sha256:cache-key"
+	reqCtx.CacheHitRequestID = "request_cached"
 
 	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt")
 
@@ -30,6 +34,12 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	}
 	if !gatewayCtx.Request.StartedAt.Equal(startedAt) {
 		t.Fatalf("unexpected started at: %s", gatewayCtx.Request.StartedAt)
+	}
+	if gatewayCtx.Cache.CacheStatus != "miss" || gatewayCtx.Cache.CacheType != "exact" {
+		t.Fatalf("unexpected cache metadata: %#v", gatewayCtx.Cache)
+	}
+	if gatewayCtx.Cache.CacheKeyHash != "hmac-sha256:cache-key" || gatewayCtx.Cache.CacheHitRequestID != "request_cached" {
+		t.Fatalf("unexpected cache key metadata: %#v", gatewayCtx.Cache)
 	}
 }
 
@@ -78,6 +88,33 @@ func TestApplyGatewayContextCopiesHTTPStatusOnly(t *testing.T) {
 	}
 	if reqCtx.ErrorCode != "existing_error" {
 		t.Fatalf("unexpected error code: %s", reqCtx.ErrorCode)
+	}
+}
+
+func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Cache: request.CacheContext{
+			CacheStatus:       "hit",
+			CacheType:         "exact",
+			CacheKeyHash:      "hmac-sha256:cache-key",
+			CacheHitRequestID: "request_cached",
+			Payload:           []byte(`{"id":"cached"}`),
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.CacheStatus != "hit" || reqCtx.CacheType != "exact" {
+		t.Fatalf("unexpected cache status metadata: %#v", reqCtx)
+	}
+	if reqCtx.CacheKeyHash != "hmac-sha256:cache-key" || reqCtx.CacheHitRequestID != "request_cached" {
+		t.Fatalf("unexpected cache key metadata: %#v", reqCtx)
 	}
 }
 

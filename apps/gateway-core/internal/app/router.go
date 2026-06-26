@@ -17,6 +17,7 @@ type RouterOptions struct {
 	APIKeyAuthenticator  handlers.APIKeyAuthenticator
 	AppTokenValidator    handlers.AppTokenValidator
 	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
+	PreProviderPipeline  handlers.GatewayPipeline
 }
 
 type RouterOption func(*RouterOptions)
@@ -31,6 +32,12 @@ func WithGatewayAuth(apiKeyAuthenticator handlers.APIKeyAuthenticator, appTokenV
 func WithAuthFailureLogWriter(writer invocationlog.AuthFailureLogWriter) RouterOption {
 	return func(options *RouterOptions) {
 		options.AuthFailureLogWriter = writer
+	}
+}
+
+func WithPreProviderPipeline(pipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.PreProviderPipeline = pipeline
 	}
 }
 
@@ -96,7 +103,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		PolicyHash:          cfg.RoutingPolicyHash,
 		ShortPromptMaxChars: cfg.ShortPromptMaxChars,
 	})
-	preProviderPipeline := pipeline.New(routingstage.NewStage(simpleRouter))
+	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
+	if routerOptions.PreProviderPipeline != nil {
+		preProviderPipeline = routerOptions.PreProviderPipeline
+	}
 
 	chatCompletionsHandler := http.Handler(handlers.ChatCompletionsHandler{
 		Providers:            providers,

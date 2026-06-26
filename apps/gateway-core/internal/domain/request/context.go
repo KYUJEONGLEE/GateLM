@@ -6,6 +6,7 @@ type GatewayContext struct {
 	Request  RequestContext
 	Identity IdentityContext
 	Routing  RoutingContext
+	Cache    CacheContext
 	Status   StatusContext
 }
 
@@ -34,6 +35,14 @@ type RoutingContext struct {
 	SelectedModel     string
 	RoutingReason     string
 	RoutingPolicyHash string
+}
+
+type CacheContext struct {
+	CacheStatus       string
+	CacheType         string
+	CacheKeyHash      string
+	CacheHitRequestID string
+	Payload           []byte
 }
 
 type StatusContext struct {
