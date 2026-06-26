@@ -80,3 +80,27 @@ func TestApplyGatewayContextCopiesHTTPStatusOnly(t *testing.T) {
 		t.Fatalf("unexpected error code: %s", reqCtx.ErrorCode)
 	}
 }
+
+func TestApplyGatewayContextCopiesRoutingPolicyHash(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Routing: request.RoutingContext{
+			RequestedModel:    "auto",
+			SelectedProvider:  "mock",
+			SelectedModel:     "mock-fast",
+			RoutingReason:     "short_prompt_low_cost",
+			RoutingPolicyHash: "route_p0_v1",
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.RoutingPolicyHash != "route_p0_v1" {
+		t.Fatalf("expected routing policy hash route_p0_v1, got %s", reqCtx.RoutingPolicyHash)
+	}
+}
