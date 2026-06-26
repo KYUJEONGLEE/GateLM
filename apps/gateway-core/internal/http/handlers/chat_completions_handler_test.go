@@ -137,10 +137,12 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+	resp := decodeChatCompletionResponse(t, rr)
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
 	logged := logWriter.logs[0]
+	assertTerminalLogMatchesSuccessResponse(t, logged, rr, resp)
 	if logged.Status != invocationlog.StatusSuccess || logged.HTTPStatus != http.StatusOK {
 		t.Fatalf("unexpected terminal status: %+v", logged)
 	}
@@ -155,9 +157,61 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 	if logged.SavedCostMicroUSD != 0 {
 		t.Fatalf("success log saved cost must default to zero, got %d", logged.SavedCostMicroUSD)
+	if logged.ProviderLatencyMs == nil {
+		t.Fatalf("success log must include provider latency: %+v", logged)
 	}
 	if logged.RequestBodyHash == "" || logged.PromptHash == "" {
 		t.Fatalf("expected request and prompt hashes: %+v", logged)
+	}
+}
+
+func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"stream": false
+	}`))
+	setValidGatewayAuthHeaders(req)
+	req.Header.Set("X-GateLM-End-User-Id", "user_demo_001")
+	req.Header.Set("X-GateLM-Feature-Id", "support-reply")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+
+	logged := logWriter.logs[0]
+	if logged.TenantID != testTenantID || logged.ProjectID != testProjectID || logged.ApplicationID != testAppID {
+		t.Fatalf("unexpected tenant/project/application metadata: %+v", logged)
+	}
+	if logged.APIKeyID != testAPIKeyID || logged.AppTokenID != testAppTokenID {
+		t.Fatalf("unexpected key/token metadata: %+v", logged)
+	}
+	if logged.EndUserID != "user_demo_001" || logged.FeatureID != "support-reply" {
+		t.Fatalf("unexpected end user/feature metadata: %+v", logged)
+	}
+	if logged.RequestedModel != "auto" {
+		t.Fatalf("expected requested model auto, got %q", logged.RequestedModel)
+	}
+	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-fast" || logged.RoutingReason != "short_prompt_low_cost" {
+		t.Fatalf("unexpected routing metadata: %+v", logged)
+	}
+	if logged.Provider != "mock" || logged.Model != "mock-fast" {
+		t.Fatalf("unexpected provider/model metadata: %+v", logged)
 	}
 }
 
@@ -341,10 +395,12 @@ func TestChatCompletionsHandlerRejectsOversizedBodyBeforeProviderCall(t *testing
 }
 
 func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("nil-provider", nilProviderAdapter{}),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "nil-provider",
+		Providers:         provider.NewRegistry("nil-provider", nilProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "nil-provider",
+		TerminalLogWriter: logWriter,
 	}
 	withTestAuth(&handler)
 
@@ -367,6 +423,23 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 	if resp.Error.Code != "provider_error" {
 		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	assertTerminalLogMatchesGatewayErrorResponse(t, logged, rr, resp)
+	if logged.Status != invocationlog.StatusError || logged.HTTPStatus != http.StatusBadGateway {
+		t.Fatalf("unexpected provider error log status: %+v", logged)
+	}
+	if logged.ErrorCode != "provider_error" || logged.ErrorStage != "call_provider_with_timeout_retry_fallback" {
+		t.Fatalf("unexpected provider error fields: %+v", logged)
+	}
+	if logged.SelectedProvider != "nil-provider" || logged.SelectedModel != "mock-balanced" {
+		t.Fatalf("unexpected provider error route fields: %+v", logged)
+	}
+	if logged.ProviderLatencyMs == nil {
+		t.Fatalf("provider error after adapter call must include provider latency: %+v", logged)
 	}
 }
 
@@ -671,6 +744,70 @@ func TestChatCompletionsHandlerReturnsPipelineAuthErrorsBeforeProviderCall(t *te
 
 			assertGatewayErrorCode(t, rr, tt.wantCode)
 		})
+	}
+}
+
+func TestChatCompletionsHandlerWritesTerminalLogForPipelineFailure(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	preflight := &fakeGatewayPipeline{
+		err: gatewayerrors.InternalError("gateway_pipeline", "Gateway pipeline failed.", errors.New("stage unavailable")),
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Identity.TenantID = testTenantID
+			gatewayCtx.Identity.ProjectID = testProjectID
+			gatewayCtx.Identity.ApplicationID = testAppID
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Cache.CacheStatus = invocationlog.CacheStatusBypass
+			gatewayCtx.Cache.CacheType = invocationlog.CacheTypeNone
+			gatewayCtx.Masking.Action = "none"
+			gatewayCtx.Masking.RedactedPromptPreview = "Summarize safe pipeline failure input."
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:           provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:        "mock-balanced",
+		DefaultProvider:     "mock",
+		PreProviderPipeline: preflight,
+		TerminalLogWriter:   logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Summarize safe pipeline failure input.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp gatewayErrorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	assertTerminalLogMatchesGatewayErrorResponse(t, logged, rr, resp)
+	if logged.Status != invocationlog.StatusError || logged.HTTPStatus != http.StatusInternalServerError {
+		t.Fatalf("unexpected pipeline failure status: %+v", logged)
+	}
+	if logged.ErrorCode != "internal_error" || logged.ErrorStage != "gateway_pipeline" {
+		t.Fatalf("unexpected pipeline error fields: %+v", logged)
+	}
+	if logged.CacheStatus != invocationlog.CacheStatusBypass || logged.CacheType != invocationlog.CacheTypeNone {
+		t.Fatalf("pipeline failure must bypass cache, got %+v", logged)
+	}
+	if logged.MaskingAction != "none" || logged.MaskingDetectedCount != 0 {
+		t.Fatalf("unexpected pipeline masking metadata: %+v", logged)
+	}
+	if logged.RedactedPromptPreview != "Summarize safe pipeline failure input." {
+		t.Fatalf("unexpected pipeline redacted preview: %q", logged.RedactedPromptPreview)
+	}
+	if logged.ProviderLatencyMs != nil {
+		t.Fatalf("pipeline failure before provider call must not include provider latency: %d", *logged.ProviderLatencyMs)
 	}
 }
 
@@ -1078,6 +1215,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) 
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
 	logged := logWriter.logs[0]
+	assertTerminalLogMatchesBlockedResponse(t, logged, rr)
 	if logged.Status != invocationlog.StatusBlocked || logged.HTTPStatus != http.StatusForbidden {
 		t.Fatalf("unexpected blocked log status: %+v", logged)
 	}
@@ -1098,6 +1236,12 @@ func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) 
 	}
 	if strings.Contains(logged.RedactedPromptPreview, rawSecret) {
 		t.Fatalf("blocked log preview must not include raw secret: %q", logged.RedactedPromptPreview)
+	}
+	if logged.PromptTokens != 0 || logged.CompletionTokens != 0 || logged.TotalTokens != 0 || logged.CostMicroUSD != 0 {
+		t.Fatalf("blocked log usage/cost must be zero, got %+v", logged)
+	}
+	if logged.ProviderLatencyMs != nil {
+		t.Fatalf("blocked log provider latency must be nil, got %d", *logged.ProviderLatencyMs)
 	}
 }
 
@@ -1469,7 +1613,9 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
+	resp := decodeChatCompletionResponse(t, rr)
 	logged := logWriter.logs[0]
+	assertTerminalLogMatchesSuccessResponse(t, logged, rr, resp)
 	if logged.Status != invocationlog.StatusCacheHit || logged.CacheStatus != invocationlog.CacheStatusHit {
 		t.Fatalf("unexpected cache hit log status: %+v", logged)
 	}
@@ -2029,6 +2175,94 @@ func recordedProviderPrompt(t *testing.T, requests []provider.ChatCompletionRequ
 		t.Fatalf("extract provider prompt: %v", err)
 	}
 	return promptText
+}
+
+func decodeChatCompletionResponse(t *testing.T, rr *httptest.ResponseRecorder) provider.ChatCompletionResponse {
+	t.Helper()
+
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return resp
+}
+
+func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder, resp provider.ChatCompletionResponse) {
+	t.Helper()
+
+	if resp.GateLM == nil {
+		t.Fatalf("missing gate_lm metadata")
+	}
+	if logged.RequestID != rr.Header().Get(middleware.RequestIDHeader) || logged.RequestID != resp.GateLM.RequestID {
+		t.Fatalf("request id mismatch: log=%q header=%q gate_lm=%q", logged.RequestID, rr.Header().Get(middleware.RequestIDHeader), resp.GateLM.RequestID)
+	}
+	if logged.CacheStatus != rr.Header().Get("X-GateLM-Cache-Status") || logged.CacheStatus != resp.GateLM.CacheStatus {
+		t.Fatalf("cache status mismatch: log=%q header=%q gate_lm=%q", logged.CacheStatus, rr.Header().Get("X-GateLM-Cache-Status"), resp.GateLM.CacheStatus)
+	}
+	if logged.SelectedProvider != rr.Header().Get("X-GateLM-Routed-Provider") || logged.SelectedProvider != resp.GateLM.SelectedProvider {
+		t.Fatalf("selected provider mismatch: log=%q header=%q gate_lm=%q", logged.SelectedProvider, rr.Header().Get("X-GateLM-Routed-Provider"), resp.GateLM.SelectedProvider)
+	}
+	if logged.SelectedModel != rr.Header().Get("X-GateLM-Routed-Model") || logged.SelectedModel != resp.GateLM.SelectedModel {
+		t.Fatalf("selected model mismatch: log=%q header=%q gate_lm=%q", logged.SelectedModel, rr.Header().Get("X-GateLM-Routed-Model"), resp.GateLM.SelectedModel)
+	}
+	if logged.MaskingAction != rr.Header().Get("X-GateLM-Masking-Action") || logged.MaskingAction != resp.GateLM.MaskingAction {
+		t.Fatalf("masking action mismatch: log=%q header=%q gate_lm=%q", logged.MaskingAction, rr.Header().Get("X-GateLM-Masking-Action"), resp.GateLM.MaskingAction)
+	}
+	expectedCost := formatCostMicroUSD(logged.CostMicroUSD)
+	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") || expectedCost != resp.GateLM.EstimatedCostUSD {
+		t.Fatalf("cost mismatch: log=%q header=%q gate_lm=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
+	}
+	if logged.LatencyMs != resp.GateLM.LatencyMs {
+		t.Fatalf("latency mismatch: log=%d gate_lm=%d", logged.LatencyMs, resp.GateLM.LatencyMs)
+	}
+	if resp.Usage == nil {
+		t.Fatalf("missing usage metadata")
+	}
+	if logged.PromptTokens != resp.Usage.PromptTokens || logged.CompletionTokens != resp.Usage.CompletionTokens || logged.TotalTokens != resp.Usage.TotalTokens {
+		t.Fatalf("usage mismatch: log=%+v response=%+v", logged, resp.Usage)
+	}
+}
+
+func assertTerminalLogMatchesBlockedResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder) {
+	t.Helper()
+
+	if logged.RequestID != rr.Header().Get(middleware.RequestIDHeader) {
+		t.Fatalf("request id mismatch: log=%q header=%q", logged.RequestID, rr.Header().Get(middleware.RequestIDHeader))
+	}
+	if logged.CacheStatus != rr.Header().Get("X-GateLM-Cache-Status") {
+		t.Fatalf("cache status mismatch: log=%q header=%q", logged.CacheStatus, rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+	if logged.MaskingAction != rr.Header().Get("X-GateLM-Masking-Action") {
+		t.Fatalf("masking action mismatch: log=%q header=%q", logged.MaskingAction, rr.Header().Get("X-GateLM-Masking-Action"))
+	}
+	expectedCost := formatCostMicroUSD(logged.CostMicroUSD)
+	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") {
+		t.Fatalf("cost mismatch: log=%q header=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"))
+	}
+}
+
+func assertTerminalLogMatchesGatewayErrorResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder, resp gatewayErrorResponse) {
+	t.Helper()
+
+	if logged.RequestID != rr.Header().Get(middleware.RequestIDHeader) || logged.RequestID != resp.Error.RequestID {
+		t.Fatalf("request id mismatch: log=%q header=%q error=%q", logged.RequestID, rr.Header().Get(middleware.RequestIDHeader), resp.Error.RequestID)
+	}
+	if logged.HTTPStatus != rr.Code {
+		t.Fatalf("http status mismatch: log=%d response=%d", logged.HTTPStatus, rr.Code)
+	}
+	if logged.ErrorCode != resp.Error.Code || logged.ErrorMessage != resp.Error.Message {
+		t.Fatalf("error mismatch: log=%+v response=%+v", logged, resp.Error)
+	}
+	if logged.CacheStatus != rr.Header().Get("X-GateLM-Cache-Status") {
+		t.Fatalf("cache status mismatch: log=%q header=%q", logged.CacheStatus, rr.Header().Get("X-GateLM-Cache-Status"))
+	}
+	if logged.MaskingAction != rr.Header().Get("X-GateLM-Masking-Action") {
+		t.Fatalf("masking action mismatch: log=%q header=%q", logged.MaskingAction, rr.Header().Get("X-GateLM-Masking-Action"))
+	}
+	expectedCost := formatCostMicroUSD(logged.CostMicroUSD)
+	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") {
+		t.Fatalf("cost mismatch: log=%q header=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"))
+	}
 }
 
 func assertGatewayErrorCode(t *testing.T, rr *httptest.ResponseRecorder, expected string) {

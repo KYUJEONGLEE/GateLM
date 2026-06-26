@@ -700,7 +700,7 @@ func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
 	if reqCtx == nil || reqCtx.Status == invocationlog.StatusCacheHit || reqCtx.Status == invocationlog.StatusBlocked {
 		return nil
 	}
-	if reqCtx.ProviderLatencyMs == 0 {
+	if reqCtx.Provider == "" {
 		return nil
 	}
 	providerLatencyMs := reqCtx.ProviderLatencyMs

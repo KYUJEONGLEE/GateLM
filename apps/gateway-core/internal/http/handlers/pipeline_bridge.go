@@ -34,6 +34,8 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			ApplicationID: reqCtx.ApplicationID,
 			APIKeyID:      reqCtx.APIKeyID,
 			AppTokenID:    reqCtx.AppTokenID,
+			EndUserID:     reqCtx.EndUserID,
+			FeatureID:     reqCtx.FeatureID,
 		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
@@ -76,6 +78,8 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.ApplicationID = gatewayCtx.Identity.ApplicationID
 	reqCtx.APIKeyID = gatewayCtx.Identity.APIKeyID
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
+	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID
+	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
 
 	if gatewayCtx.Masking.Action != "" {
 		reqCtx.MaskingAction = gatewayCtx.Masking.Action

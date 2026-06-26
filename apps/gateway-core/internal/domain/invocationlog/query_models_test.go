@@ -174,6 +174,55 @@ func TestNormalizeProjectLogsFilterRequiresTenantProjectScopeAndRange(t *testing
 	}
 }
 
+func TestNormalizeRequestDetailFilterRequiresTenantProjectAndRequest(t *testing.T) {
+	_, err := NormalizeRequestDetailFilter(RequestDetailFilter{
+		ProjectID: "project_demo",
+		RequestID: "request_001",
+	})
+	if err == nil {
+		t.Fatalf("expected missing tenant id to fail")
+	}
+
+	filter, err := NormalizeRequestDetailFilter(RequestDetailFilter{
+		TenantID:  " tenant_demo ",
+		ProjectID: " project_demo ",
+		RequestID: " request_001 ",
+	})
+	if err != nil {
+		t.Fatalf("expected valid filter, got %v", err)
+	}
+	if filter.TenantID != "tenant_demo" || filter.ProjectID != "project_demo" || filter.RequestID != "request_001" {
+		t.Fatalf("unexpected normalized filter: %+v", filter)
+	}
+}
+
+func TestNormalizeDashboardOverviewFilterRequiresTenantScope(t *testing.T) {
+	from := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+
+	_, err := NormalizeDashboardOverviewFilter(DashboardOverviewFilter{
+		ProjectID: "project_demo",
+		From:      from,
+		To:        to,
+	})
+	if err == nil {
+		t.Fatalf("expected missing tenant id to fail")
+	}
+
+	filter, err := NormalizeDashboardOverviewFilter(DashboardOverviewFilter{
+		TenantID:  " tenant_demo ",
+		ProjectID: " project_demo ",
+		From:      from,
+		To:        to,
+	})
+	if err != nil {
+		t.Fatalf("expected valid filter, got %v", err)
+	}
+	if filter.TenantID != "tenant_demo" || filter.ProjectID != "project_demo" {
+		t.Fatalf("unexpected normalized filter: %+v", filter)
+	}
+}
+
 func TestNormalizeRequestDetailFilterRequiresTenantProjectRequestScope(t *testing.T) {
 	_, err := NormalizeRequestDetailFilter(RequestDetailFilter{
 		ProjectID: "project_demo",
