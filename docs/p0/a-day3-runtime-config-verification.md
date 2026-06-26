@@ -51,7 +51,13 @@ PowerShell에서 실행한다.
 | exact cache enabled | `true` |
 | semantic cache enabled | `false` |
 | cache TTL | `3600` |
+| fixture cache key material | `securityPolicyVersionId` |
+| fixture cache key material | `routingPolicyVersionId` |
+| fixture cache key material | `requestParamsHash` |
 | exact key material version | `p0-exact-v2` |
+| Go cache key JSON tag | `securityPolicyVersionId` |
+| Go cache key JSON tag | `routingPolicyVersionId` |
+| Go cache key JSON tag | `requestParamsHash` |
 | short prompt routing reason | `short_prompt_low_cost` |
 | default routing reason | `default_balanced` |
 
@@ -71,6 +77,7 @@ Day3 runtime config check passed.
 fixture의 policy hash 또는 model name 변경
 cache key material 변경
 cache key version 변경
+Go KeyMaterial JSON tag 변경
 p0-test-matrix의 routingReason 불일치
 ```
 
@@ -101,4 +108,3 @@ p0-exact-v2
 4. p0-day3-config-check.ps1을 수정한다.
 5. 통합 smoke를 다시 실행한다.
 ```
-

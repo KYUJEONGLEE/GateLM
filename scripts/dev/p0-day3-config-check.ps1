@@ -1,5 +1,5 @@
 param(
-  [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+  [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,9 +32,9 @@ function Assert-Contains {
   Write-Host "[OK] $Name contains $Expected"
 }
 
-$fixturePath = Join-Path $Root "docs\p0\a-day1-active-config.fixture.json"
-$cacheKeyPath = Join-Path $Root "apps\gateway-core\internal\domain\cache\cache_key.go"
-$testMatrixPath = Join-Path $Root "docs\p0\p0-test-matrix.md"
+$fixturePath = Join-Path $Root "docs/p0/a-day1-active-config.fixture.json"
+$cacheKeyPath = Join-Path $Root "apps/gateway-core/internal/domain/cache/cache_key.go"
+$testMatrixPath = Join-Path $Root "docs/p0/p0-test-matrix.md"
 
 if (-not (Test-Path -LiteralPath $fixturePath)) {
   throw "fixture not found: $fixturePath"
@@ -100,9 +100,10 @@ foreach ($required in @(
   "selectedProvider",
   "selectedModel",
   "normalizedRedactedPrompt",
-  "securityPolicyHash",
-  "routingPolicyHash",
-  "cachePolicyHash"
+  "securityPolicyVersionId",
+  "routingPolicyVersionId",
+  "cachePolicyHash",
+  "requestParamsHash"
 )) {
   Assert-Contains "cache keyMaterial" $keyMaterial $required
 }
@@ -112,6 +113,21 @@ if ($cacheKeySource -notmatch 'ExactKeyMaterialVersion\s*=\s*"p0-exact-v2"') {
   throw "ExactKeyMaterialVersion must be p0-exact-v2"
 }
 Write-Host "[OK] ExactKeyMaterialVersion = p0-exact-v2"
+
+if ($cacheKeySource -notmatch 'SecurityPolicyVersionID\s+string\s+`json:"securityPolicyVersionId"`') {
+  throw "KeyMaterial must expose json tag securityPolicyVersionId"
+}
+Write-Host "[OK] KeyMaterial JSON tag securityPolicyVersionId exists"
+
+if ($cacheKeySource -notmatch 'RoutingPolicyVersionID\s+string\s+`json:"routingPolicyVersionId"`') {
+  throw "KeyMaterial must expose json tag routingPolicyVersionId"
+}
+Write-Host "[OK] KeyMaterial JSON tag routingPolicyVersionId exists"
+
+if ($cacheKeySource -notmatch 'RequestParamsHash\s+string\s+`json:"requestParamsHash"`') {
+  throw "KeyMaterial must expose json tag requestParamsHash"
+}
+Write-Host "[OK] KeyMaterial JSON tag requestParamsHash exists"
 
 $testMatrix = Get-Content -LiteralPath $testMatrixPath -Raw -Encoding UTF8
 if ($testMatrix -notmatch "short_prompt_low_cost") {
