@@ -3,13 +3,30 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/http/middleware"
 )
+
+const (
+	invocationLogInternalErrorMaxLen = 512
+	invocationLogLogFieldMaxLen      = 256
+)
+
+var invocationLogSecretPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)authorization\s*[:=]\s*(bearer\s+)?\S+`),
+	regexp.MustCompile(`(?i)(api[_ -]?key|app[_ -]?token|provider[_ -]?key)\s*[:=]\s*\S+`),
+	regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9._~+/\-=]+`),
+	regexp.MustCompile(`glm_(api|app_token)_[A-Za-z0-9._-]+`),
+	regexp.MustCompile(`[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`),
+}
 
 type ProjectLogsReader interface {
 	ListProjectLogs(ctx context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error)
@@ -194,6 +211,7 @@ func (h ProjectLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
 			return
 		}
+		logInvocationLogInternalError(r, "list_project_logs", filter.TenantID, filter.ProjectID, err)
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Request logs could not be loaded.")
 		return
 	}
@@ -210,11 +228,12 @@ func (h RequestDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	detail, err := h.Reader.GetRequestDetail(r.Context(), invocationlog.RequestDetailFilter{
+	filter := invocationlog.RequestDetailFilter{
 		TenantID:  h.TenantID,
 		ProjectID: h.ProjectID,
 		RequestID: r.PathValue("requestId"),
-	})
+	}
+	detail, err := h.Reader.GetRequestDetail(r.Context(), filter)
 	if err != nil {
 		if errors.Is(err, invocationlog.ErrInvalidLogQuery) {
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
@@ -224,6 +243,7 @@ func (h RequestDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			writeGatewayError(w, http.StatusNotFound, "", "request_log_not_found", "Request log was not found.")
 			return
 		}
+		logInvocationLogInternalError(r, "get_request_detail", filter.TenantID, filter.ProjectID, err)
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Request detail could not be loaded.")
 		return
 	}
@@ -260,6 +280,7 @@ func (h DashboardOverviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
 			return
 		}
+		logInvocationLogInternalError(r, "get_dashboard_overview", filter.TenantID, filter.ProjectID, err)
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Dashboard overview could not be loaded.")
 		return
 	}
@@ -413,6 +434,56 @@ func stringPointerOrNil(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func logInvocationLogInternalError(r *http.Request, stage string, tenantID string, projectID string, err error) {
+	if err == nil {
+		return
+	}
+
+	slog.ErrorContext(r.Context(), "invocation log query failed",
+		"request_id", invocationLogRequestID(r),
+		"stage", sanitizeInvocationLogField(stage),
+		"error_code", "internal_error",
+		"tenant_id", sanitizeInvocationLogField(tenantID),
+		"project_id", sanitizeInvocationLogField(projectID),
+		"error_type", sanitizeInvocationLogField(fmt.Sprintf("%T", err)),
+		"error", sanitizeInvocationLogError(err),
+	)
+}
+
+func invocationLogRequestID(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return middleware.NormalizeRequestID(r.Header.Get(middleware.RequestIDHeader))
+}
+
+func sanitizeInvocationLogError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	value := normalizeInvocationLogText(err.Error())
+	for _, pattern := range invocationLogSecretPatterns {
+		value = pattern.ReplaceAllString(value, "[REDACTED]")
+	}
+	return truncateInvocationLogText(value, invocationLogInternalErrorMaxLen)
+}
+
+func sanitizeInvocationLogField(value string) string {
+	return truncateInvocationLogText(normalizeInvocationLogText(value), invocationLogLogFieldMaxLen)
+}
+
+func normalizeInvocationLogText(value string) string {
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func truncateInvocationLogText(value string, maxLen int) string {
+	if maxLen <= 0 || len(value) <= maxLen {
+		return value
+	}
+	return value[:maxLen] + "...truncated"
 }
 
 func parseRequiredRFC3339Query(r *http.Request, name string) (time.Time, error) {

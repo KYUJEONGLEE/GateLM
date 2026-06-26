@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
 func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
@@ -121,11 +124,13 @@ func TestProjectLogsHandlerMapsInvalidReaderQueryToBadRequest(t *testing.T) {
 }
 
 func TestProjectLogsHandlerMapsUnexpectedReaderErrorToInternalError(t *testing.T) {
+	logs := captureStructuredLogs(t)
 	handler := ProjectLogsHandler{
-		Reader:   &recordingProjectLogsReader{err: errors.New("database unavailable")},
+		Reader:   &recordingProjectLogsReader{err: errors.New("database unavailable\nauthorization: Bearer secret_token_value")},
 		TenantID: "tenant_demo",
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	req.Header.Set(middleware.RequestIDHeader, "request_list_500")
 	req.SetPathValue("projectId", "project_demo")
 	rr := httptest.NewRecorder()
 
@@ -133,6 +138,20 @@ func TestProjectLogsHandlerMapsUnexpectedReaderErrorToInternalError(t *testing.T
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	entry := decodeSingleStructuredLog(t, logs)
+	if entry["request_id"] != "request_list_500" || entry["stage"] != "list_project_logs" || entry["error_code"] != "internal_error" {
+		t.Fatalf("unexpected internal error log context: %+v", entry)
+	}
+	if entry["tenant_id"] != "tenant_demo" || entry["project_id"] != "project_demo" {
+		t.Fatalf("expected tenant/project log context, got %+v", entry)
+	}
+	errorMessage, ok := entry["error"].(string)
+	if !ok {
+		t.Fatalf("expected string error log field, got %+v", entry["error"])
+	}
+	if strings.Contains(errorMessage, "\n") || strings.Contains(errorMessage, "secret_token_value") || !strings.Contains(errorMessage, "[REDACTED]") {
+		t.Fatalf("expected sanitized error log field, got %q", errorMessage)
 	}
 }
 
@@ -270,6 +289,32 @@ func TestRequestDetailHandlerMapsInvalidReaderQueryToBadRequest(t *testing.T) {
 	}
 }
 
+func TestRequestDetailHandlerMapsUnexpectedReaderErrorToInternalError(t *testing.T) {
+	logs := captureStructuredLogs(t)
+	handler := RequestDetailHandler{
+		Reader:    &recordingRequestDetailReader{err: errors.New("detail query failed")},
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/llm-requests/request_001", nil)
+	req.Header.Set(middleware.RequestIDHeader, "request_detail_500")
+	req.SetPathValue("requestId", "request_001")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	entry := decodeSingleStructuredLog(t, logs)
+	if entry["request_id"] != "request_detail_500" || entry["stage"] != "get_request_detail" || entry["error_code"] != "internal_error" {
+		t.Fatalf("unexpected internal error log context: %+v", entry)
+	}
+	if entry["tenant_id"] != "tenant_demo" || entry["project_id"] != "project_demo" {
+		t.Fatalf("expected tenant/project log context, got %+v", entry)
+	}
+}
+
 func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t *testing.T) {
 	cacheHitRate := 0.25
 	averageLatency := 50.0
@@ -361,6 +406,57 @@ func TestDashboardOverviewHandlerMapsInvalidReaderQueryToBadRequest(t *testing.T
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 	}
+}
+
+func TestDashboardOverviewHandlerMapsUnexpectedReaderErrorToInternalError(t *testing.T) {
+	logs := captureStructuredLogs(t)
+	handler := DashboardOverviewHandler{
+		Reader:   &recordingDashboardOverviewReader{err: errors.New("overview query failed")},
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/overview?projectId=project_demo&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	req.Header.Set(middleware.RequestIDHeader, "request_dashboard_500")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	entry := decodeSingleStructuredLog(t, logs)
+	if entry["request_id"] != "request_dashboard_500" || entry["stage"] != "get_dashboard_overview" || entry["error_code"] != "internal_error" {
+		t.Fatalf("unexpected internal error log context: %+v", entry)
+	}
+	if entry["tenant_id"] != "tenant_demo" || entry["project_id"] != "project_demo" {
+		t.Fatalf("expected tenant/project log context, got %+v", entry)
+	}
+}
+
+func captureStructuredLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buffer bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buffer, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+	})
+	return &buffer
+}
+
+func decodeSingleStructuredLog(t *testing.T, logs *bytes.Buffer) map[string]any {
+	t.Helper()
+
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	if len(lines) != 1 || lines[0] == "" {
+		t.Fatalf("expected one structured log entry, got %q", logs.String())
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("decode structured log: %v; log=%s", err, lines[0])
+	}
+	return entry
 }
 
 type recordingProjectLogsReader struct {
