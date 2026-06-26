@@ -226,9 +226,10 @@
         "selectedProvider",
         "selectedModel",
         "normalizedRedactedPrompt",
-        "securityPolicyHash",
-        "routingPolicyHash",
-        "cachePolicyHash"
+        "securityPolicyVersionId",
+        "routingPolicyVersionId",
+        "cachePolicyHash",
+        "requestParamsHash"
       ],
       "responseStorage": {
         "storeRawResponse": false,

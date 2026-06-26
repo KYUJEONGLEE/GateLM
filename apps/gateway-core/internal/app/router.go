@@ -7,7 +7,10 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
+	"gatelm/apps/gateway-core/internal/pipeline"
+	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
 )
 
 type RouterOptions struct {
@@ -92,6 +95,19 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	})
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{Providers: providers})
 
+	simpleRouter := routingdomain.NewSimpleRouter(routingdomain.SimpleRouterConfig{
+		DefaultProvider:     cfg.DefaultProvider,
+		DefaultModel:        cfg.DefaultModel,
+		LowCostModel:        cfg.LowCostModel,
+		HighQualityModel:    cfg.HighQualityModel,
+		PolicyHash:          cfg.RoutingPolicyHash,
+		ShortPromptMaxChars: cfg.ShortPromptMaxChars,
+	})
+	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(simpleRouter))
+	if routerOptions.PreProviderPipeline != nil {
+		preProviderPipeline = routerOptions.PreProviderPipeline
+	}
+
 	chatCompletionsHandler := http.Handler(handlers.ChatCompletionsHandler{
 		Providers:            providers,
 		DefaultModel:         cfg.DefaultModel,
@@ -102,8 +118,8 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExpectedTenantID:     cfg.DemoTenantID,
 		ExpectedProjectID:    cfg.DemoProjectID,
 		ExpectedAppID:        cfg.DemoApplicationID,
-		PreProviderPipeline:  routerOptions.PreProviderPipeline,
 		AuthFailureLogWriter: authFailureLogWriter,
+		PreProviderPipeline:  preProviderPipeline,
 	})
 	mux.Handle("POST /v1/chat/completions", chatCompletionsHandler)
 

@@ -36,10 +36,11 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			AppTokenID:    reqCtx.AppTokenID,
 		},
 		Routing: request.RoutingContext{
-			RequestedModel:   reqCtx.RequestedModel,
-			SelectedProvider: reqCtx.SelectedProvider,
-			SelectedModel:    reqCtx.SelectedModel,
-			RoutingReason:    reqCtx.RoutingReason,
+			RequestedModel:    reqCtx.RequestedModel,
+			SelectedProvider:  reqCtx.SelectedProvider,
+			SelectedModel:     reqCtx.SelectedModel,
+			RoutingReason:     reqCtx.RoutingReason,
+			RoutingPolicyHash: reqCtx.RoutingPolicyHash,
 		},
 		Cache: request.CacheContext{
 			CacheStatus:       reqCtx.CacheStatus,
@@ -74,6 +75,7 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.SelectedProvider = gatewayCtx.Routing.SelectedProvider
 	reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
 	reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason
+	reqCtx.RoutingPolicyHash = gatewayCtx.Routing.RoutingPolicyHash
 
 	if gatewayCtx.Cache.CacheStatus != "" {
 		reqCtx.CacheStatus = gatewayCtx.Cache.CacheStatus
