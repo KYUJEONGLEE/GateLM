@@ -5,3 +5,4 @@
 ## Notes
 
 - [GateLM v1.0.0 Baseline Proposal](./v1-baseline-proposal.md)
+- [GateLM v1/v2 Roadmap Synthesis](./v1-v2-roadmap-synthesis.md)
