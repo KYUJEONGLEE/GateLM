@@ -109,6 +109,28 @@ func TestP0EngineLeavesSafePromptUnchanged(t *testing.T) {
 	}
 }
 
+func TestP0EngineBoundsRedactedPromptPreview(t *testing.T) {
+	engine := NewP0Engine()
+	prompt := strings.Repeat("safe ", 40)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.RedactedPrompt != prompt {
+		t.Fatalf("expected full redacted prompt to remain available in memory, got %q", result.RedactedPrompt)
+	}
+	if len([]rune(result.RedactedPromptPreview)) > RedactedPromptPreviewMaxRunes+3 {
+		t.Fatalf("expected preview to be bounded, got length=%d preview=%q", len([]rune(result.RedactedPromptPreview)), result.RedactedPromptPreview)
+	}
+	if strings.Contains(result.RedactedPromptPreview, "  ") || strings.Contains(result.RedactedPromptPreview, "\n") {
+		t.Fatalf("expected normalized preview, got %q", result.RedactedPromptPreview)
+	}
+	if !strings.HasSuffix(result.RedactedPromptPreview, "...") {
+		t.Fatalf("expected truncated preview suffix, got %q", result.RedactedPromptPreview)
+	}
+}
+
 func TestP0EngineBlockWinsOverRedact(t *testing.T) {
 	engine := NewP0Engine()
 

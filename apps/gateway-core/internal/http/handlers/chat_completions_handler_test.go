@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/http/middleware"
@@ -999,6 +1000,29 @@ func TestChatCompletionsHandlerSameSafeRequestMissThenHit(t *testing.T) {
 	}
 }
 
+func TestCombineMaskingResultsBoundsRedactedPromptPreview(t *testing.T) {
+	redactedPrompt := strings.Repeat("safe ", 40)
+
+	result := combineMaskingResults([]maskdomain.Result{
+		{
+			Action:                  maskdomain.ActionNone,
+			RedactedPrompt:          redactedPrompt,
+			RedactedPromptPreview:   redactedPrompt,
+			SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
+		},
+	}, redactedPrompt, maskdomain.DefaultSecurityPolicyVersionID)
+
+	if result.RedactedPrompt != redactedPrompt {
+		t.Fatalf("expected full redacted prompt to remain available in memory, got %q", result.RedactedPrompt)
+	}
+	if len([]rune(result.RedactedPromptPreview)) > maskdomain.RedactedPromptPreviewMaxRunes+3 {
+		t.Fatalf("expected bounded preview, got length=%d preview=%q", len([]rune(result.RedactedPromptPreview)), result.RedactedPromptPreview)
+	}
+	if !strings.HasSuffix(result.RedactedPromptPreview, "...") {
+		t.Fatalf("expected truncated preview suffix, got %q", result.RedactedPromptPreview)
+	}
+}
+
 func TestChatCompletionsHandlerStoresSanitizedPayloadOnCacheMiss(t *testing.T) {
 	chatCalls := 0
 	rawPayload := json.RawMessage(`{"raw":"provider body must not be cached"}`)
@@ -1069,6 +1093,123 @@ func TestChatCompletionsHandlerStoresSanitizedPayloadOnCacheMiss(t *testing.T) {
 	}
 	if strings.Contains(cachedPayload, "provider body must not be cached") {
 		t.Fatalf("cached payload must not include raw provider payload: %s", cachedPayload)
+	}
+}
+
+func TestChatCompletionsHandlerDoesNotSetHitRequestIDBeforeCachedPayloadDecodes(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_current",
+		TraceID:   "request_current",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	reqCtx.TenantID = testTenantID
+	reqCtx.ProjectID = testProjectID
+	reqCtx.ApplicationID = testAppID
+	reqCtx.RequestedModel = "mock-balanced"
+	reqCtx.SelectedProvider = "mock"
+	reqCtx.SelectedModel = "mock-balanced"
+	reqCtx.RoutingPolicyHash = "routing_policy_p0_v1"
+	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
+	reqCtx.MaskingAction = string(maskdomain.ActionNone)
+	handler := ChatCompletionsHandler{
+		ExactCacheStore: &recordingExactCacheStore{
+			result: ports.CacheLookupResult{
+				Hit:               true,
+				CacheHitRequestID: "request_original",
+				Payload:           []byte(`not-json`),
+			},
+		},
+		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-hit-key"},
+		CachePolicyHash:      "cache_p0_v1",
+	}
+
+	payload, hitRequestID, hit := handler.lookupExactCache(
+		context.Background(),
+		reqCtx,
+		provider.ChatCompletionRequest{Model: "mock-balanced"},
+		"Write a short safe cached response.",
+	)
+
+	if !hit || string(payload) != "not-json" || hitRequestID != "request_original" {
+		t.Fatalf("expected raw cache hit result, hit=%v hitRequestID=%q payload=%q", hit, hitRequestID, string(payload))
+	}
+	if reqCtx.CacheHitRequestID != "" {
+		t.Fatalf("cache hit request id must be applied only after cached payload decode succeeds, got %q", reqCtx.CacheHitRequestID)
+	}
+}
+
+func TestChatCompletionsHandlerFallsBackToProviderWhenCachedPayloadIsInvalid(t *testing.T) {
+	chatCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls: &chatCalls,
+		}),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+		ExactCacheStore: &recordingExactCacheStore{
+			result: ports.CacheLookupResult{
+				Hit:               true,
+				CacheHitRequestID: "request_original",
+				Payload:           []byte(`not-json`),
+			},
+		},
+		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:bad-cache-payload"},
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short safe cached response with corrupt cache fallback.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected provider fallback 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected provider fallback after corrupt cache hit, got %d provider calls", chatCalls)
+	}
+	var resp provider.ChatCompletionResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.GateLM == nil || resp.GateLM.CacheStatus != "error" {
+		t.Fatalf("expected cache error metadata on fallback response, got %#v", resp.GateLM)
+	}
+}
+
+func TestChatCompletionsHandlerLogsCacheWriteFailureWithoutFailingResponse(t *testing.T) {
+	output := captureDefaultLog(t)
+	chatCalls := 0
+	cacheStore := &recordingExactCacheStore{setErr: errors.New("redis unavailable\nretry later")}
+	handler := ChatCompletionsHandler{
+		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:         "mock-balanced",
+		DefaultProvider:      "mock",
+		ExactCacheStore:      cacheStore,
+		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-write-failure"},
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short safe response while cache write fails.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("cache write failure must not fail response, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 || cacheStore.setCalls != 1 {
+		t.Fatalf("expected one provider call and one cache set, got provider=%d set=%d", chatCalls, cacheStore.setCalls)
+	}
+	logged := output.String()
+	if !strings.Contains(logged, "exact cache write failed") || !strings.Contains(logged, "request_id=") || !strings.Contains(logged, "cache_key_hash=hmac-sha256:cache-write-failure") {
+		t.Fatalf("expected safe cache write failure log, got %q", logged)
+	}
+	if strings.Contains(logged, "\nretry later") {
+		t.Fatalf("expected sanitized one-line cache write failure log, got %q", logged)
 	}
 }
 

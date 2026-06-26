@@ -7,6 +7,7 @@ import (
 )
 
 const DefaultSecurityPolicyVersionID = "security_policy_p0_v1"
+const RedactedPromptPreviewMaxRunes = 120
 
 type Engine struct {
 	registry                Registry
@@ -46,7 +47,7 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		return Result{
 			Action:                  ActionNone,
 			RedactedPrompt:          req.Prompt,
-			RedactedPromptPreview:   req.Prompt,
+			RedactedPromptPreview:   PreviewRedactedPrompt(req.Prompt),
 			SecurityPolicyVersionID: securityPolicyVersionID,
 		}, nil
 	}
@@ -62,14 +63,24 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		}
 	}
 
+	redactedPrompt := redact(req.Prompt, effective)
 	return Result{
 		Action:                  action,
 		DetectedTypes:           detectedTypes(effective),
 		DetectedCount:           len(effective),
-		RedactedPrompt:          redact(req.Prompt, effective),
-		RedactedPromptPreview:   redact(req.Prompt, effective),
+		RedactedPrompt:          redactedPrompt,
+		RedactedPromptPreview:   PreviewRedactedPrompt(redactedPrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}, nil
+}
+
+func PreviewRedactedPrompt(prompt string) string {
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(prompt)), " ")
+	runes := []rune(normalized)
+	if len(runes) <= RedactedPromptPreviewMaxRunes {
+		return normalized
+	}
+	return string(runes[:RedactedPromptPreviewMaxRunes]) + "..."
 }
 
 func effectiveDetections(detections []Detection) []Detection {

@@ -176,13 +176,15 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	cachePayload, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
+	cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
 	if cacheHit {
 		var cachedResp provider.ChatCompletionResponse
 		if err := json.Unmarshal(cachePayload, &cachedResp); err != nil {
 			reqCtx.CacheStatus = "error"
 			reqCtx.CacheType = "exact"
+			reqCtx.CacheHitRequestID = ""
 		} else {
+			reqCtx.CacheHitRequestID = cacheHitRequestID
 			reqCtx.Status = "cache_hit"
 			reqCtx.HTTPStatus = http.StatusOK
 			reqCtx.CostMicroUSD = 0
@@ -352,7 +354,7 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 		DetectedTypes:           detectedTypes,
 		DetectedCount:           detectedCount,
 		RedactedPrompt:          redactedPrompt,
-		RedactedPromptPreview:   redactedPrompt,
+		RedactedPromptPreview:   maskdomain.PreviewRedactedPrompt(redactedPrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}
 }
@@ -383,23 +385,23 @@ func (h *ChatCompletionsHandler) ensureRouting(ctx context.Context, reqCtx *pipe
 	return nil
 }
 
-func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, bool) {
+func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
 	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) {
 		reqCtx.CacheStatus = "bypass"
 		reqCtx.CacheType = "none"
-		return nil, false
+		return nil, "", false
 	}
 	if h.ExactCacheStore == nil || h.ExactCacheKeyBuilder == nil {
 		reqCtx.CacheStatus = "bypass"
 		reqCtx.CacheType = "none"
-		return nil, false
+		return nil, "", false
 	}
 
 	keyHash, err := h.buildExactCacheKey(ctx, reqCtx, chatReq, redactedPrompt)
 	if err != nil {
 		reqCtx.CacheStatus = "error"
 		reqCtx.CacheType = "exact"
-		return nil, false
+		return nil, "", false
 	}
 	reqCtx.CacheKeyHash = keyHash
 
@@ -407,19 +409,18 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	if err != nil {
 		reqCtx.CacheStatus = "error"
 		reqCtx.CacheType = "exact"
-		return nil, false
+		return nil, "", false
 	}
 
 	if !lookup.Hit {
 		reqCtx.CacheStatus = "miss"
 		reqCtx.CacheType = "exact"
-		return nil, false
+		return nil, "", false
 	}
 
 	reqCtx.CacheStatus = "hit"
 	reqCtx.CacheType = "exact"
-	reqCtx.CacheHitRequestID = lookup.CacheHitRequestID
-	return lookup.Payload, true
+	return lookup.Payload, lookup.CacheHitRequestID, true
 }
 
 func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) (string, error) {
@@ -450,11 +451,17 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 		return
 	}
 
-	_ = h.ExactCacheStore.SetExact(ctx, ports.CacheEntry{
+	if err := h.ExactCacheStore.SetExact(ctx, ports.CacheEntry{
 		KeyHash:   reqCtx.CacheKeyHash,
 		RequestID: reqCtx.RequestID,
 		Payload:   payload,
-	})
+	}); err != nil {
+		log.Printf("exact cache write failed request_id=%s cache_key_hash=%s cause=%q",
+			reqCtx.RequestID,
+			reqCtx.CacheKeyHash,
+			sanitizeLogValue(err.Error()),
+		)
+	}
 }
 
 func (h *ChatCompletionsHandler) attachGateLMMetadata(providerResp *provider.ChatCompletionResponse, reqCtx *pipeline.RequestContext) {

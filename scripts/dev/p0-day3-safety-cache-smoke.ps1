@@ -1,5 +1,6 @@
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Net.Http
 
 function Get-EnvOrDefault {
     param(
@@ -40,51 +41,46 @@ function Invoke-SmokeHttp {
         $requestHeaders[$key] = [string]$Headers[$key]
     }
 
-    try {
-        if (-not [string]::IsNullOrEmpty($Body)) {
-            if ($null -ne $contentType) {
-                $response = Invoke-WebRequest -Method Post -Uri $Uri -Headers $requestHeaders -Body $Body -ContentType $contentType -UseBasicParsing -ErrorAction Stop
-            }
-            else {
-                $response = Invoke-WebRequest -Method Post -Uri $Uri -Headers $requestHeaders -Body $Body -UseBasicParsing -ErrorAction Stop
-            }
-        }
-        else {
-            $response = Invoke-WebRequest -Method Get -Uri $Uri -Headers $requestHeaders -UseBasicParsing -ErrorAction Stop
-        }
-        return [pscustomobject]@{
-            StatusCode = [int]$response.StatusCode
-            Body       = [string]$response.Content
-            Headers    = $response.Headers
-        }
+    $client = [System.Net.Http.HttpClient]::new()
+    $method = [System.Net.Http.HttpMethod]::Get
+    if (-not [string]::IsNullOrEmpty($Body)) {
+        $method = [System.Net.Http.HttpMethod]::Post
     }
-    catch [System.Net.WebException] {
-        $response = $_.Exception.Response
-        if ($null -eq $response) {
-            throw
+    $request = [System.Net.Http.HttpRequestMessage]::new($method, $Uri)
+
+    foreach ($key in $requestHeaders.Keys) {
+        [void]$request.Headers.TryAddWithoutValidation($key, [string]$requestHeaders[$key])
+    }
+    if (-not [string]::IsNullOrEmpty($Body)) {
+        if ([string]::IsNullOrWhiteSpace($contentType)) {
+            $contentType = "application/json"
         }
+        $request.Content = [System.Net.Http.StringContent]::new($Body, [System.Text.Encoding]::UTF8, $contentType)
     }
 
     try {
-        $responseStream = $response.GetResponseStream()
-        $text = ""
-        if ($null -ne $responseStream) {
-            $reader = [System.IO.StreamReader]::new($responseStream)
-            try {
-                $text = $reader.ReadToEnd()
-            }
-            finally {
-                $reader.Dispose()
-            }
+        $response = $client.SendAsync($request).GetAwaiter().GetResult()
+        $responseHeaders = @{}
+        foreach ($header in $response.Headers.GetEnumerator()) {
+            $responseHeaders[$header.Key] = ($header.Value -join ",")
         }
+        foreach ($header in $response.Content.Headers.GetEnumerator()) {
+            $responseHeaders[$header.Key] = ($header.Value -join ",")
+        }
+
         return [pscustomobject]@{
             StatusCode = [int]$response.StatusCode
-            Body       = $text
-            Headers    = $response.Headers
+            Body       = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            Headers    = $responseHeaders
         }
     }
     finally {
-        $response.Dispose()
+        if ($null -ne $request) {
+            $request.Dispose()
+        }
+        if ($null -ne $client) {
+            $client.Dispose()
+        }
     }
 }
 
@@ -291,11 +287,7 @@ Invoke-SmokeCase -Name "blocked request no provider" -Body {
     $response = Invoke-GatewayChat -Prompt $prompt -Feature "day3-block-smoke"
     Assert-Equal -Name "blocked HTTP" -Expected 403 -Actual $response.StatusCode
     $blockedCacheStatus = Get-HeaderValue -Response $response -Name "X-GateLM-Cache-Status"
-    $blockedMaskingAction = Get-HeaderValue -Response $response -Name "X-GateLM-Masking-Action"
     $blockedErrorCode = Get-ErrorCode -Body $response.Body
-    if ([string]::IsNullOrWhiteSpace($blockedErrorCode) -and $blockedMaskingAction -eq "blocked" -and $blockedCacheStatus -eq "bypass") {
-        $blockedErrorCode = "sensitive_data_blocked"
-    }
     Assert-Equal -Name "blocked error code" -Expected "sensitive_data_blocked" -Actual $blockedErrorCode
     Assert-Equal -Name "blocked cache status" -Expected "bypass" -Actual $blockedCacheStatus
     $stats = Get-MockStats
