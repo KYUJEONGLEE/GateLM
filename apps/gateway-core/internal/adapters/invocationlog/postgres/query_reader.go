@@ -388,12 +388,15 @@ func nullableInt64Pointer(value sql.NullInt64) *int64 {
 }
 
 func decodeStringArrayJSON(raw []byte) ([]string, error) {
-	if len(raw) == 0 {
+	if len(raw) == 0 || string(raw) == "null" {
 		return []string{}, nil
 	}
 	var values []string
 	if err := json.Unmarshal(raw, &values); err != nil {
 		return nil, err
+	}
+	if values == nil {
+		return []string{}, nil
 	}
 	return values, nil
 }
