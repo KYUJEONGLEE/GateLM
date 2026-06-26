@@ -119,6 +119,30 @@ func TestBuildDashboardOverviewCountsP0Statuses(t *testing.T) {
 	}
 }
 
+func TestFormatCostUSDFromMicroUSDHandlesNegativeValuesSafely(t *testing.T) {
+	const minInt64 int64 = -1 << 63
+	cases := []struct {
+		name         string
+		costMicroUSD int64
+		want         string
+	}{
+		{name: "zero", costMicroUSD: 0, want: "0.000000"},
+		{name: "positive", costMicroUSD: 1_234_567, want: "1.234567"},
+		{name: "negative fractional", costMicroUSD: -1, want: "-0.000001"},
+		{name: "negative whole", costMicroUSD: -1_000_001, want: "-1.000001"},
+		{name: "min int64", costMicroUSD: minInt64, want: "-9223372036854.775808"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatCostUSDFromMicroUSD(tc.costMicroUSD)
+			if got != tc.want {
+				t.Fatalf("expected %s, got %s", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestNormalizeProjectLogsFilterRequiresProjectScopeAndRange(t *testing.T) {
 	_, err := NormalizeProjectLogsFilter(ProjectLogsFilter{})
 	if err == nil {

@@ -371,14 +371,18 @@ func BuildDashboardOverviewFromAggregate(totalRequests int64, successfulRequests
 }
 
 func FormatCostUSDFromMicroUSD(costMicroUSD int64) string {
-	sign := ""
-	if costMicroUSD < 0 {
-		sign = "-"
-		costMicroUSD = -costMicroUSD
-	}
 	wholeUSD := costMicroUSD / 1_000_000
 	fractionalUSD := costMicroUSD % 1_000_000
-	return fmt.Sprintf("%s%d.%06d", sign, wholeUSD, fractionalUSD)
+	if wholeUSD < 0 || fractionalUSD < 0 {
+		if wholeUSD < 0 {
+			wholeUSD = -wholeUSD
+		}
+		if fractionalUSD < 0 {
+			fractionalUSD = -fractionalUSD
+		}
+		return fmt.Sprintf("-%d.%06d", wholeUSD, fractionalUSD)
+	}
+	return fmt.Sprintf("%d.%06d", wholeUSD, fractionalUSD)
 }
 
 func validateTimeRange(from time.Time, to time.Time) error {
