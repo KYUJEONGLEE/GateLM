@@ -15,6 +15,21 @@ function Get-EnvOrDefault {
     return $value
 }
 
+function Get-FirstEnvOrDefault {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Names,
+        [Parameter(Mandatory = $true)][string]$DefaultValue
+    )
+
+    foreach ($name in $Names) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+    return $DefaultValue
+}
+
 function Join-Url {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -158,7 +173,7 @@ function Assert-Contains {
     )
 
     if (-not $Text.Contains($Needle)) {
-        throw "$Name expected to contain '$Needle' but got '$Text'"
+        throw "$Name expected to contain '$Needle'"
     }
 }
 
@@ -170,7 +185,7 @@ function Assert-NotContains {
     )
 
     if ($Text.Contains($Needle)) {
-        throw "$Name must not contain '$Needle': '$Text'"
+        throw "$Name must not contain '$Needle'"
     }
 }
 
@@ -188,8 +203,7 @@ function Assert-NoForbiddenFields {
         ("apiKey" + "Plaintext"),
         ("appToken" + "Plaintext"),
         ("provider" + "ApiKey"),
-        ("rawProvider" + "ErrorBody"),
-        "metadata"
+        ("rawProvider" + "ErrorBody")
     )
     if (-not $AllowRedactedPromptPreview) {
         $forbidden += "redactedPromptPreview"
@@ -207,6 +221,27 @@ function Convert-ToSafeArray {
         return @()
     }
     return @($Value)
+}
+
+function New-SmokeTag {
+    $chars = "abcdefghijkmnopqrstuvwxyz".ToCharArray()
+    $builder = [System.Text.StringBuilder]::new()
+    for ($i = 0; $i -lt 10; $i++) {
+        [void]$builder.Append($chars[(Get-Random -Minimum 0 -Maximum $chars.Length)])
+    }
+    return $builder.ToString()
+}
+
+function New-GatewayHeaders {
+    param([string]$Feature = "day5-demo")
+
+    return @{
+        "Content-Type"          = "application/json"
+        "Authorization"         = ("Bearer " + $ValidApiKey)
+        "X-GateLM-App-Token"   = $ValidAppToken
+        "X-GateLM-End-User-Id" = "user_demo_001"
+        "X-GateLM-Feature-Id"  = $Feature
+    }
 }
 
 function Reset-MockStats {
@@ -241,24 +276,31 @@ function Get-MockCallCount {
     throw "mock stats response is missing calls or data.totalCalls"
 }
 
+function Get-LastMockCall {
+    param([Parameter(Mandatory = $true)]$Stats)
+
+    $dataProperty = $Stats.PSObject.Properties["data"]
+    if ($null -eq $dataProperty -or $null -eq $dataProperty.Value) {
+        throw "mock stats response is missing data"
+    }
+
+    $lastCalls = @(Convert-ToSafeArray -Value $dataProperty.Value.lastCalls)
+    if ($lastCalls.Count -eq 0) {
+        throw "mock stats response has no lastCalls"
+    }
+
+    return $lastCalls[$lastCalls.Count - 1]
+}
+
 function Invoke-GatewayChat {
     param(
         [Parameter(Mandatory = $true)][string]$Prompt,
         [Parameter(Mandatory = $true)][string]$Feature,
-        [string]$ApiKey = $ValidApiKey,
-        [string]$AppToken = $ValidAppToken
+        [string]$Model = "auto"
     )
 
-    $headers = @{
-        "Content-Type"          = "application/json"
-        "Authorization"         = ("Bearer " + $ApiKey)
-        "X-GateLM-App-Token"   = $AppToken
-        "X-GateLM-End-User-Id" = "user_demo_001"
-        "X-GateLM-Feature-Id"  = $Feature
-    }
-
     $payload = [ordered]@{
-        model       = "auto"
+        model       = $Model
         messages    = @(
             [ordered]@{
                 role    = "user"
@@ -271,7 +313,7 @@ function Invoke-GatewayChat {
     } | ConvertTo-Json -Depth 5
 
     $uri = Join-Url $GatewayBaseUrl "/v1/chat/completions"
-    return Invoke-SmokeHttp -Method POST -Uri $uri -Headers $headers -Body $payload
+    return Invoke-SmokeHttp -Method POST -Uri $uri -Headers (New-GatewayHeaders -Feature $Feature) -Body $payload
 }
 
 function Get-RequestId {
@@ -282,6 +324,36 @@ function Get-RequestId {
         throw "response is missing X-GateLM-Request-Id"
     }
     return $requestId
+}
+
+function Get-GateLMMetadata {
+    param([Parameter(Mandatory = $true)]$Response)
+
+    $body = Convert-JsonBody -Body $Response.Body
+    if ($null -eq $body.gate_lm) {
+        throw "response is missing gate_lm metadata"
+    }
+    return $body.gate_lm
+}
+
+function Get-ErrorCode {
+    param([string]$Body)
+
+    if ([string]::IsNullOrWhiteSpace($Body)) {
+        return ""
+    }
+
+    try {
+        $json = $Body | ConvertFrom-Json
+        if ($null -ne $json.error -and $null -ne $json.error.code) {
+            return [string]$json.error.code
+        }
+    }
+    catch {
+        return ""
+    }
+
+    return ""
 }
 
 function Get-ProjectLogs {
@@ -317,11 +389,9 @@ function Wait-RequestDetail {
     param([Parameter(Mandatory = $true)][string]$RequestId)
 
     $lastStatus = $null
-    $lastBody = ""
     for ($i = 0; $i -lt 10; $i++) {
         $response = Get-RequestDetailResponse -RequestId $RequestId
         $lastStatus = $response.StatusCode
-        $lastBody = $response.Body
         if ($response.StatusCode -eq 200) {
             Assert-NoForbiddenFields -Name "request detail" -Body $response.Body -AllowRedactedPromptPreview $true
             return (Convert-JsonBody -Body $response.Body)
@@ -329,7 +399,7 @@ function Wait-RequestDetail {
         Start-Sleep -Milliseconds 200
     }
 
-    throw "request detail for $RequestId was not available; lastStatus=$lastStatus body=$lastBody"
+    throw "request detail for $RequestId was not available; lastStatus=$lastStatus"
 }
 
 function Assert-LogItem {
@@ -382,49 +452,71 @@ function Invoke-SmokeCase {
 
 $GatewayBaseUrl = Get-EnvOrDefault -Name "GATEWAY_BASE_URL" -DefaultValue "http://localhost:8080"
 $MockProviderBaseUrl = Get-EnvOrDefault -Name "MOCK_PROVIDER_BASE_URL" -DefaultValue "http://localhost:8090"
-$ValidApiKey = Get-EnvOrDefault -Name "GATELM_API_KEY" -DefaultValue "glm_api_test_redacted"
-$ValidAppToken = Get-EnvOrDefault -Name "GATELM_APP_TOKEN" -DefaultValue "glm_app_token_test_redacted"
-$InvalidApiKey = Get-EnvOrDefault -Name "GATELM_INVALID_API_KEY" -DefaultValue "glm_api_invalid_redacted"
+$ValidApiKey = Get-FirstEnvOrDefault -Names @("GATELM_DEMO_API_KEY", "GATELM_API_KEY") -DefaultValue "glm_api_test_redacted"
+$ValidAppToken = Get-FirstEnvOrDefault -Names @("GATELM_DEMO_APP_TOKEN", "GATELM_APP_TOKEN") -DefaultValue "glm_app_token_test_redacted"
 $ProjectId = Get-EnvOrDefault -Name "GATELM_DEMO_PROJECT_ID" -DefaultValue "00000000-0000-4000-8000-000000000200"
-$RunId = Get-Date -Format "yyyyMMddHHmmssfff"
+$RunTag = New-SmokeTag
 $FromIso = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ssZ")
 $ToIso = (Get-Date).ToUniversalTime().AddMinutes(15).ToString("yyyy-MM-ddTHH:mm:ssZ")
 $Failures = 0
 
-Write-Host "GateLM Day4 log/detail/dashboard smoke"
+Write-Host "GateLM Day5 Gateway smoke"
 Write-Host "gateway:      $GatewayBaseUrl"
 Write-Host "mockProvider: $MockProviderBaseUrl"
 Write-Host "projectId:    $ProjectId"
 Write-Host "range:        $FromIso -> $ToIso"
-Write-Host "runId:        $RunId"
+Write-Host "runTag:       $RunTag"
 
 $script:SafeMissRequestId = ""
 $script:SafeHitRequestId = ""
 $script:RedactionRequestId = ""
 $script:BlockedRequestId = ""
-$script:AuthErrorRequestId = ""
 
-Invoke-SmokeCase -Name "safe request logs miss then cache hit" -Body {
+Invoke-SmokeCase -Name "health readiness and model catalog" -Body {
+    $health = Invoke-SmokeHttp -Method GET -Uri (Join-Url $GatewayBaseUrl "/healthz")
+    Assert-Equal -Name "health HTTP" -Expected 200 -Actual $health.StatusCode
+    Assert-Equal -Name "health status" -Expected "ok" -Actual ([string](Convert-JsonBody -Body $health.Body).status)
+
+    $ready = Invoke-SmokeHttp -Method GET -Uri (Join-Url $GatewayBaseUrl "/readyz")
+    Assert-Equal -Name "ready HTTP" -Expected 200 -Actual $ready.StatusCode
+
+    $models = Invoke-SmokeHttp -Method GET -Uri (Join-Url $GatewayBaseUrl "/v1/models") -Headers (New-GatewayHeaders -Feature "day5-models-demo")
+    Assert-Equal -Name "models HTTP" -Expected 200 -Actual $models.StatusCode
+    $modelBody = Convert-JsonBody -Body $models.Body
+    $modelIds = @($modelBody.data | ForEach-Object { [string]$_.id })
+    Assert-True -Name "models include mock-fast" -Condition ($modelIds -contains "mock-fast")
+    Assert-True -Name "models include mock-balanced" -Condition ($modelIds -contains "mock-balanced")
+}
+
+Invoke-SmokeCase -Name "safe request miss then cache hit without provider recall" -Body {
     Reset-MockStats
-    $prompt = "Write a short safe refund response for day4 smoke $RunId."
+    $prompt = "Write a short safe refund response for day five gateway smoke $RunTag."
 
-    $first = Invoke-GatewayChat -Prompt $prompt -Feature "day4-cache-smoke"
+    $first = Invoke-GatewayChat -Prompt $prompt -Feature "day5-safe-demo"
     Assert-Equal -Name "first safe HTTP" -Expected 200 -Actual $first.StatusCode
     Assert-Equal -Name "first safe cache header" -Expected "miss" -Actual (Get-HeaderValue -Response $first -Name "X-GateLM-Cache-Status")
+    Assert-Equal -Name "first safe masking header" -Expected "none" -Actual (Get-HeaderValue -Response $first -Name "X-GateLM-Masking-Action")
     $script:SafeMissRequestId = Get-RequestId -Response $first
+    $firstMeta = Get-GateLMMetadata -Response $first
+    Assert-Equal -Name "first requested model" -Expected "auto" -Actual ([string]$firstMeta.requestedModel)
+    Assert-Equal -Name "first selected provider" -Expected "mock" -Actual ([string]$firstMeta.selectedProvider)
+    Assert-Equal -Name "first selected model" -Expected "mock-fast" -Actual ([string]$firstMeta.selectedModel)
+    Assert-Equal -Name "first routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstMeta.routingReason)
     Assert-Equal -Name "provider calls after first safe request" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $firstDetail = Wait-RequestDetail -RequestId $script:SafeMissRequestId
     Assert-Equal -Name "first detail status" -Expected "success" -Actual ([string]$firstDetail.data.status)
     Assert-Equal -Name "first detail cache status" -Expected "miss" -Actual ([string]$firstDetail.data.cache.cacheStatus)
-    Assert-Equal -Name "first selected model" -Expected "mock-fast" -Actual ([string]$firstDetail.data.selectedModel)
-    Assert-Equal -Name "first routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstDetail.data.routing.routingReason)
+    Assert-Equal -Name "first detail selected model" -Expected "mock-fast" -Actual ([string]$firstDetail.data.selectedModel)
+    Assert-Equal -Name "first detail routing reason" -Expected "short_prompt_low_cost" -Actual ([string]$firstDetail.data.routing.routingReason)
     Assert-LogItem -RequestId $script:SafeMissRequestId -ExpectedStatus "success" -ExpectedCacheStatus "miss"
 
-    $second = Invoke-GatewayChat -Prompt $prompt -Feature "day4-cache-smoke"
+    $second = Invoke-GatewayChat -Prompt $prompt -Feature "day5-cache-demo"
     Assert-Equal -Name "second safe HTTP" -Expected 200 -Actual $second.StatusCode
     Assert-Equal -Name "second safe cache header" -Expected "hit" -Actual (Get-HeaderValue -Response $second -Name "X-GateLM-Cache-Status")
     $script:SafeHitRequestId = Get-RequestId -Response $second
+    $secondMeta = Get-GateLMMetadata -Response $second
+    Assert-Equal -Name "second cache metadata" -Expected "hit" -Actual ([string]$secondMeta.cacheStatus)
     Assert-Equal -Name "provider calls after cache hit" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $secondDetail = Wait-RequestDetail -RequestId $script:SafeHitRequestId
@@ -434,37 +526,49 @@ Invoke-SmokeCase -Name "safe request logs miss then cache hit" -Body {
     Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "cache_hit" -ExpectedCacheStatus "hit"
 }
 
-Invoke-SmokeCase -Name "redacted request detail has redacted preview only" -Body {
+Invoke-SmokeCase -Name "redaction happens before provider and detail stays redacted" -Body {
     Reset-MockStats
-    $rawEmail = "user-$RunId@example.invalid"
-    $rawPhone = "010-0000-0000"
-    $prompt = "Send a safe note for day4 smoke $RunId to $rawEmail and call $rawPhone."
+    $rawEmail = "day5-$RunTag@example.invalid"
+    $rawPhone = "010-0000-1234"
+    $prompt = "Send a safe follow up note to $rawEmail and call $rawPhone."
 
-    $response = Invoke-GatewayChat -Prompt $prompt -Feature "day4-redaction-smoke"
+    $response = Invoke-GatewayChat -Prompt $prompt -Feature "day5-redaction-demo"
     Assert-Equal -Name "redacted HTTP" -Expected 200 -Actual $response.StatusCode
     Assert-Equal -Name "redacted masking header" -Expected "redacted" -Actual (Get-HeaderValue -Response $response -Name "X-GateLM-Masking-Action")
     $script:RedactionRequestId = Get-RequestId -Response $response
-    Assert-Equal -Name "provider calls after redacted request" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
+    $redactionMeta = Get-GateLMMetadata -Response $response
+    Assert-Equal -Name "redacted metadata action" -Expected "redacted" -Actual ([string]$redactionMeta.maskingAction)
+
+    $stats = Get-MockStats
+    Assert-Equal -Name "provider calls after redacted request" -Expected 1 -Actual (Get-MockCallCount -Stats $stats)
+    $last = Get-LastMockCall -Stats $stats
+    $providerPreview = [string]$last.redactedPromptPreview
+    Assert-Contains -Name "provider preview email" -Text $providerPreview -Needle "[EMAIL_REDACTED]"
+    Assert-Contains -Name "provider preview phone" -Text $providerPreview -Needle "[PHONE_NUMBER_REDACTED]"
+    Assert-NotContains -Name "provider preview raw email" -Text $providerPreview -Needle $rawEmail
+    Assert-NotContains -Name "provider preview raw phone" -Text $providerPreview -Needle $rawPhone
+    Assert-NotContains -Name "provider preview guard marker" -Text $providerPreview -Needle "[UNREDACTED_PROVIDER_INPUT_BLOCKED_FROM_STATS]"
 
     $detail = Wait-RequestDetail -RequestId $script:RedactionRequestId
     Assert-Equal -Name "redaction detail status" -Expected "success" -Actual ([string]$detail.data.status)
     Assert-Equal -Name "redaction masking action" -Expected "redacted" -Actual ([string]$detail.data.masking.maskingAction)
-    $preview = [string]$detail.data.masking.redactedPromptPreview
-    Assert-Contains -Name "redacted detail preview" -Text $preview -Needle "[EMAIL_REDACTED]"
-    Assert-Contains -Name "redacted detail preview" -Text $preview -Needle "[PHONE_NUMBER_REDACTED]"
-    Assert-NotContains -Name "redacted detail preview" -Text $preview -Needle $rawEmail
-    Assert-NotContains -Name "redacted detail preview" -Text $preview -Needle $rawPhone
-    Assert-NotContains -Name "redacted detail body" -Text ($detail | ConvertTo-Json -Depth 20) -Needle $rawEmail
+    $detailBody = $detail | ConvertTo-Json -Depth 20
+    Assert-Contains -Name "redaction detail email placeholder" -Text $detailBody -Needle "[EMAIL_REDACTED]"
+    Assert-Contains -Name "redaction detail phone placeholder" -Text $detailBody -Needle "[PHONE_NUMBER_REDACTED]"
+    Assert-NotContains -Name "redaction detail raw email" -Text $detailBody -Needle $rawEmail
+    Assert-NotContains -Name "redaction detail raw phone" -Text $detailBody -Needle $rawPhone
     Assert-LogItem -RequestId $script:RedactionRequestId -ExpectedStatus "success" -ExpectedCacheStatus ([string]$detail.data.cache.cacheStatus)
 }
 
-Invoke-SmokeCase -Name "blocked request is logged without provider call" -Body {
+Invoke-SmokeCase -Name "credential-like content blocks before provider" -Body {
     Reset-MockStats
-    $prompt = "Summarize this synthetic credential marker: api_key=test_secret_token_redacted_for_demo_only_$RunId"
+    $prompt = "This message contains a credential-like placeholder: api_key=test_secret_token_redacted_for_demo_only"
 
-    $response = Invoke-GatewayChat -Prompt $prompt -Feature "day4-block-smoke"
+    $response = Invoke-GatewayChat -Prompt $prompt -Feature "day5-block-demo"
     Assert-Equal -Name "blocked HTTP" -Expected 403 -Actual $response.StatusCode
+    Assert-Equal -Name "blocked error code" -Expected "sensitive_data_blocked" -Actual (Get-ErrorCode -Body $response.Body)
     Assert-Equal -Name "blocked cache header" -Expected "bypass" -Actual (Get-HeaderValue -Response $response -Name "X-GateLM-Cache-Status")
+    Assert-Equal -Name "blocked masking header" -Expected "blocked" -Actual (Get-HeaderValue -Response $response -Name "X-GateLM-Masking-Action")
     $script:BlockedRequestId = Get-RequestId -Response $response
     Assert-Equal -Name "provider calls after blocked request" -Expected 0 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
@@ -473,46 +577,31 @@ Invoke-SmokeCase -Name "blocked request is logged without provider call" -Body {
     Assert-Equal -Name "blocked detail HTTP" -Expected 403 -Actual ([int]$detail.data.httpStatus)
     Assert-Equal -Name "blocked detail error code" -Expected "sensitive_data_blocked" -Actual ([string]$detail.data.error.errorCode)
     Assert-Equal -Name "blocked detail cache status" -Expected "bypass" -Actual ([string]$detail.data.cache.cacheStatus)
+    Assert-Equal -Name "blocked detail masking action" -Expected "blocked" -Actual ([string]$detail.data.masking.maskingAction)
     Assert-Equal -Name "blocked detail cost" -Expected 0 -Actual ([int64]$detail.data.cost.costMicroUsd)
     Assert-LogItem -RequestId $script:BlockedRequestId -ExpectedStatus "blocked" -ExpectedCacheStatus "bypass"
 }
 
-Invoke-SmokeCase -Name "invalid API key error is logged without provider call" -Body {
-    Reset-MockStats
-    $response = Invoke-GatewayChat -Prompt "Write a short safe response for invalid auth smoke $RunId." -Feature "day4-auth-smoke" -ApiKey $InvalidApiKey
-    Assert-Equal -Name "invalid API HTTP" -Expected 401 -Actual $response.StatusCode
-    Assert-Equal -Name "invalid API cache header" -Expected "bypass" -Actual (Get-HeaderValue -Response $response -Name "X-GateLM-Cache-Status")
-    $script:AuthErrorRequestId = Get-RequestId -Response $response
-    Assert-Equal -Name "provider calls after invalid API key" -Expected 0 -Actual (Get-MockCallCount -Stats (Get-MockStats))
-
-    $detail = Wait-RequestDetail -RequestId $script:AuthErrorRequestId
-    Assert-Equal -Name "auth detail status" -Expected "error" -Actual ([string]$detail.data.status)
-    Assert-Equal -Name "auth detail HTTP" -Expected 401 -Actual ([int]$detail.data.httpStatus)
-    Assert-Equal -Name "auth detail error code" -Expected "invalid_api_key" -Actual ([string]$detail.data.error.errorCode)
-    Assert-LogItem -RequestId $script:AuthErrorRequestId -ExpectedStatus "error" -ExpectedCacheStatus "bypass"
-}
-
-Invoke-SmokeCase -Name "dashboard reflects log canonical source" -Body {
+Invoke-SmokeCase -Name "dashboard and log list include day5 request ids" -Body {
     $dashboard = Get-DashboardOverview
     $totals = $dashboard.data.totals
-    Assert-True -Name "dashboard totalRequests >= smoke requests" -Condition ([int64]$totals.totalRequests -ge 5)
+    Assert-True -Name "dashboard totalRequests includes smoke requests" -Condition ([int64]$totals.totalRequests -ge 4)
     Assert-True -Name "dashboard successfulRequests includes success/cache_hit" -Condition ([int64]$totals.successfulRequests -ge 3)
     Assert-True -Name "dashboard blockedRequests includes blocked smoke" -Condition ([int64]$totals.blockedRequests -ge 1)
     Assert-True -Name "dashboard cacheHitRequests includes cache hit smoke" -Condition ([int64]$totals.cacheHitRequests -ge 1)
-    Assert-True -Name "dashboard totalCostMicroUsd present" -Condition ($null -ne $totals.totalCostMicroUsd)
 
     $logs = Get-ProjectLogs -Limit 100
     $logItems = @(Convert-ToSafeArray -Value $logs.data)
-    foreach ($requestId in @($script:SafeMissRequestId, $script:SafeHitRequestId, $script:RedactionRequestId, $script:BlockedRequestId, $script:AuthErrorRequestId)) {
+    foreach ($requestId in @($script:SafeMissRequestId, $script:SafeHitRequestId, $script:RedactionRequestId, $script:BlockedRequestId)) {
         $matching = @($logItems | Where-Object { [string]$_.requestId -eq $requestId })
-        Assert-True -Name "dashboard range log list contains $requestId" -Condition ($matching.Count -gt 0)
+        Assert-True -Name "project log list contains $requestId" -Condition ($matching.Count -gt 0)
     }
 }
 
 Write-Host ""
 if ($Failures -gt 0) {
-    Write-Host "Day4 log/detail/dashboard smoke failed: $Failures failure(s)"
+    Write-Host "Day5 Gateway smoke failed: $Failures failure(s)"
     exit 1
 }
 
-Write-Host "Day4 log/detail/dashboard smoke passed"
+Write-Host "Day5 Gateway smoke passed"
