@@ -28,6 +28,8 @@ type IdentityContext struct {
 	ApplicationID string
 	APIKeyID      string
 	AppTokenID    string
+	EndUserID     string
+	FeatureID     string
 }
 
 type MaskingContext struct {

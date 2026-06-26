@@ -158,6 +158,56 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"stream": false
+	}`))
+	setValidGatewayAuthHeaders(req)
+	req.Header.Set("X-GateLM-End-User-Id", "user_demo_001")
+	req.Header.Set("X-GateLM-Feature-Id", "support-reply")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+
+	logged := logWriter.logs[0]
+	if logged.TenantID != testTenantID || logged.ProjectID != testProjectID || logged.ApplicationID != testAppID {
+		t.Fatalf("unexpected tenant/project/application metadata: %+v", logged)
+	}
+	if logged.APIKeyID != testAPIKeyID || logged.AppTokenID != testAppTokenID {
+		t.Fatalf("unexpected key/token metadata: %+v", logged)
+	}
+	if logged.EndUserID != "user_demo_001" || logged.FeatureID != "support-reply" {
+		t.Fatalf("unexpected end user/feature metadata: %+v", logged)
+	}
+	if logged.RequestedModel != "auto" {
+		t.Fatalf("expected requested model auto, got %q", logged.RequestedModel)
+	}
+	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-fast" || logged.RoutingReason != "short_prompt_low_cost" {
+		t.Fatalf("unexpected routing metadata: %+v", logged)
+	}
+	if logged.Provider != "mock" || logged.Model != "mock-fast" {
+		t.Fatalf("unexpected provider/model metadata: %+v", logged)
+	}
+}
+
 func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
