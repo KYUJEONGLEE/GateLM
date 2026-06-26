@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
@@ -58,7 +59,13 @@ func main() {
 		},
 	}
 
-	router := app.NewRouter(cfg, providers, readinessChecks)
+	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
+		TenantID:      cfg.DemoTenantID,
+		ProjectID:     cfg.DemoProjectID,
+		ApplicationID: cfg.DemoApplicationID,
+	})
+
+	router := app.NewRouter(cfg, providers, readinessChecks, app.WithAuthFailureLogWriter(authFailureLogWriter))
 	server := app.NewServer(cfg, router)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

@@ -9,7 +9,6 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
-	gatewaymiddleware "gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	routingstage "gatelm/apps/gateway-core/internal/pipeline/stages/routing"
 )
@@ -77,6 +76,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	if appTokenValidator == nil {
 		appTokenValidator = credentials
 	}
+	authFailureLogWriter := routerOptions.AuthFailureLogWriter
+	if authFailureLogWriter == nil {
+		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
+	}
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
@@ -96,23 +99,18 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	preProviderPipeline := pipeline.New(routingstage.NewStage(simpleRouter))
 
 	chatCompletionsHandler := http.Handler(handlers.ChatCompletionsHandler{
-		Providers:           providers,
-		DefaultModel:        cfg.DefaultModel,
-		DefaultProvider:     cfg.DefaultProvider,
-		MaxRequestBodyBytes: cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator: apiKeyAuthenticator,
-		AppTokenValidator:   appTokenValidator,
-		ExpectedTenantID:    cfg.DemoTenantID,
-		ExpectedProjectID:   cfg.DemoProjectID,
-		ExpectedAppID:       cfg.DemoApplicationID,
-		PreProviderPipeline: preProviderPipeline,
+		Providers:            providers,
+		DefaultModel:         cfg.DefaultModel,
+		DefaultProvider:      cfg.DefaultProvider,
+		MaxRequestBodyBytes:  cfg.MaxRequestBodyBytes,
+		APIKeyAuthenticator:  apiKeyAuthenticator,
+		AppTokenValidator:    appTokenValidator,
+		ExpectedTenantID:     cfg.DemoTenantID,
+		ExpectedProjectID:    cfg.DemoProjectID,
+		ExpectedAppID:        cfg.DemoApplicationID,
+		AuthFailureLogWriter: authFailureLogWriter,
+		PreProviderPipeline:  preProviderPipeline,
 	})
-
-	authFailureLogWriter := routerOptions.AuthFailureLogWriter
-	if authFailureLogWriter == nil {
-		authFailureLogWriter = invocationlog.NoopAuthFailureLogWriter{}
-	}
-	chatCompletionsHandler = gatewaymiddleware.AuthFailureLogMiddleware(authFailureLogWriter)(chatCompletionsHandler)
 	mux.Handle("POST /v1/chat/completions", chatCompletionsHandler)
 
 	return mux
