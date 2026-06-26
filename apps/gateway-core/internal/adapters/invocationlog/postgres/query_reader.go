@@ -78,7 +78,7 @@ func (r *QueryReader) GetRequestDetail(ctx context.Context, filter invocationlog
 		return invocationlog.RequestDetail{}, err
 	}
 
-	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.RequestID, normalizedFilter.ProjectID))
+	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.RequestID, normalizedFilter.TenantID, normalizedFilter.ProjectID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			return invocationlog.RequestDetail{}, invocationlog.ErrLogNotFound
@@ -136,11 +136,12 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 }
 
 func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
-	args := []any{filter.ProjectID, filter.From.UTC(), filter.To.UTC()}
+	args := []any{filter.TenantID, filter.ProjectID, filter.From.UTC(), filter.To.UTC()}
 	where := []string{
-		"project_id = $1",
-		"created_at >= $2",
-		"created_at < $3",
+		"tenant_id = $1",
+		"project_id = $2",
+		"created_at >= $3",
+		"created_at < $4",
 	}
 	addOptionalWhere := func(column string, value string) {
 		if strings.TrimSpace(value) == "" {
@@ -255,7 +256,8 @@ select
   completed_at
 from p0_llm_invocation_logs
 where request_id = $1
-  and project_id = $2
+  and tenant_id = $2
+  and project_id = $3
 limit 1`
 
 func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
