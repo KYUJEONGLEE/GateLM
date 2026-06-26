@@ -43,7 +43,7 @@ function Wait-MockProvider {
     $healthUrl = $BaseUrl.TrimEnd("/") + "/healthz"
     for ($i = 0; $i -lt 30; $i++) {
         try {
-            $response = Invoke-RestMethod -Method Get -Uri $healthUrl -TimeoutSec 2
+            $response = Invoke-RestMethod -Method Get -Uri $healthUrl
             if ($response.status -eq "ok") {
                 return
             }

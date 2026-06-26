@@ -58,7 +58,7 @@ function Get-MockStats {
     param([Parameter(Mandatory = $true)][string]$BaseUrl)
 
     $statsUrl = $BaseUrl.TrimEnd("/") + "/__mock/stats"
-    return Invoke-RestMethod -Method Get -Uri $statsUrl -TimeoutSec 3
+    return Invoke-RestMethod -Method Get -Uri $statsUrl
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../..")
