@@ -50,6 +50,7 @@ function Invoke-DemoHttp {
 
     $client = $null
     $request = $null
+    $response = $null
     $requestHeaders = @{}
     $contentType = $null
     foreach ($key in $Headers.Keys) {
@@ -93,6 +94,9 @@ function Invoke-DemoHttp {
         }
     }
     finally {
+        if ($null -ne $response) {
+            $response.Dispose()
+        }
         if ($null -ne $request) {
             $request.Dispose()
         }
