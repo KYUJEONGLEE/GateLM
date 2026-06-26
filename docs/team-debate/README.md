@@ -4,6 +4,10 @@
 
 각 팀원은 자기 이름 디렉토리 아래에 의견, 반박, 근거 자료, 실험 계획을 Markdown 문서로 정리합니다.
 
+## Common Proposals
+
+- [GateLM v1.0.0 Baseline Proposal](./v1-baseline-proposal.md)
+
 ## Directories
 
 - `jiseob/`
