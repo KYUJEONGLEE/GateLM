@@ -28,6 +28,7 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		PromptTokens:            4,
 		CompletionTokens:        3,
 		TotalTokens:             7,
+		SavedCostMicroUSD:       9,
 		LatencyMs:               25,
 		ProviderLatencyMs:       &providerLatencyMs,
 		Status:                  StatusSuccess,
@@ -53,6 +54,9 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	}
 	if log.Status != StatusSuccess || log.CacheStatus != CacheStatusMiss || log.CacheType != CacheTypeExact {
 		t.Fatalf("unexpected terminal fields: %+v", log)
+	}
+	if log.SavedCostMicroUSD != 9 {
+		t.Fatalf("expected saved cost metadata 9, got %d", log.SavedCostMicroUSD)
 	}
 	if !strings.HasPrefix(log.RequestBodyHash, "sha256:") || !strings.HasPrefix(log.PromptHash, "sha256:") {
 		t.Fatalf("expected synthetic hashes, got %s %s", log.RequestBodyHash, log.PromptHash)

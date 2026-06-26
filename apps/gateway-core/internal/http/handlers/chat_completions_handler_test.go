@@ -153,6 +153,9 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	if logged.PromptTokens != 4 || logged.CompletionTokens != 3 || logged.TotalTokens != 7 {
 		t.Fatalf("unexpected usage fields: %+v", logged)
 	}
+	if logged.SavedCostMicroUSD != 0 {
+		t.Fatalf("success log saved cost must default to zero, got %d", logged.SavedCostMicroUSD)
+	}
 	if logged.RequestBodyHash == "" || logged.PromptHash == "" {
 		t.Fatalf("expected request and prompt hashes: %+v", logged)
 	}
@@ -924,13 +927,15 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 		t.Run(tt.name, func(t *testing.T) {
 			chatCalls := 0
 			var providerRequests []provider.ChatCompletionRequest
+			logWriter := &recordingTerminalLogWriter{}
 			handler := ChatCompletionsHandler{
 				Providers: provider.NewRegistry("mock", recordingProviderAdapter{
 					calls:    &chatCalls,
 					requests: &providerRequests,
 				}),
-				DefaultModel:    "mock-balanced",
-				DefaultProvider: "mock",
+				DefaultModel:      "mock-balanced",
+				DefaultProvider:   "mock",
+				TerminalLogWriter: logWriter,
 			}
 			withTestAuth(&handler)
 
@@ -958,12 +963,29 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 				t.Fatalf("provider prompt must not include raw sensitive value %q: %q", tt.rawValue, providerPrompt)
 			}
 
+			responseBody := rr.Body.String()
 			var resp provider.ChatCompletionResponse
-			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			if err := json.NewDecoder(strings.NewReader(responseBody)).Decode(&resp); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
 			if resp.GateLM == nil || resp.GateLM.MaskingAction != "redacted" {
 				t.Fatalf("expected redacted gate_lm masking metadata, got %#v", resp.GateLM)
+			}
+			if strings.Contains(responseBody, tt.rawValue) {
+				t.Fatalf("response body must not include raw sensitive value %q: %s", tt.rawValue, responseBody)
+			}
+			if len(logWriter.logs) != 1 {
+				t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+			}
+			logged := logWriter.logs[0]
+			if logged.MaskingAction != "redacted" || logged.MaskingDetectedCount == 0 {
+				t.Fatalf("unexpected redacted terminal log masking metadata: %+v", logged)
+			}
+			if !strings.Contains(logged.RedactedPromptPreview, tt.placeholder) {
+				t.Fatalf("expected redacted prompt preview to contain %s, got %q", tt.placeholder, logged.RedactedPromptPreview)
+			}
+			if strings.Contains(logged.RedactedPromptPreview, tt.rawValue) {
+				t.Fatalf("redacted prompt preview must not include raw sensitive value %q: %q", tt.rawValue, logged.RedactedPromptPreview)
 			}
 		})
 	}
@@ -1064,6 +1086,12 @@ func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) 
 	}
 	if logged.CacheStatus != invocationlog.CacheStatusBypass || logged.CacheType != invocationlog.CacheTypeNone {
 		t.Fatalf("blocked request must bypass cache, got %+v", logged)
+	}
+	if logged.CostMicroUSD != 0 || logged.SavedCostMicroUSD != 0 {
+		t.Fatalf("blocked request cost fields must be zero, got %+v", logged)
+	}
+	if logged.ProviderLatencyMs != nil {
+		t.Fatalf("blocked request provider latency must be nil, got %+v", logged.ProviderLatencyMs)
 	}
 	if logged.MaskingAction != "blocked" || logged.MaskingDetectedCount == 0 {
 		t.Fatalf("unexpected masking fields: %+v", logged)
@@ -1450,6 +1478,9 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	}
 	if logged.PromptTokens != 0 || logged.CompletionTokens != 0 || logged.TotalTokens != 0 || logged.CostMicroUSD != 0 {
 		t.Fatalf("cache hit usage/cost must be zero, got %+v", logged)
+	}
+	if logged.SavedCostMicroUSD != 0 {
+		t.Fatalf("cache hit saved cost must default to zero, got %d", logged.SavedCostMicroUSD)
 	}
 	if logged.ProviderLatencyMs != nil {
 		t.Fatalf("cache hit provider latency must be nil, got %+v", logged.ProviderLatencyMs)

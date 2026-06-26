@@ -23,6 +23,7 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	reqCtx.CacheType = "exact"
 	reqCtx.CacheKeyHash = "hmac-sha256:cache-key"
 	reqCtx.CacheHitRequestID = "request_cached"
+	reqCtx.SavedCostMicroUSD = 5
 
 	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt")
 
@@ -40,6 +41,9 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	}
 	if gatewayCtx.Cache.CacheKeyHash != "hmac-sha256:cache-key" || gatewayCtx.Cache.CacheHitRequestID != "request_cached" {
 		t.Fatalf("unexpected cache key metadata: %#v", gatewayCtx.Cache)
+	}
+	if gatewayCtx.Cache.SavedCostMicroUSD != 5 {
+		t.Fatalf("unexpected saved cost metadata: %#v", gatewayCtx.Cache)
 	}
 }
 
@@ -104,6 +108,7 @@ func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
 			CacheType:         "exact",
 			CacheKeyHash:      "hmac-sha256:cache-key",
 			CacheHitRequestID: "request_cached",
+			SavedCostMicroUSD: 11,
 			Payload:           []byte(`{"id":"cached"}`),
 		},
 	}
@@ -115,6 +120,30 @@ func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
 	}
 	if reqCtx.CacheKeyHash != "hmac-sha256:cache-key" || reqCtx.CacheHitRequestID != "request_cached" {
 		t.Fatalf("unexpected cache key metadata: %#v", reqCtx)
+	}
+	if reqCtx.SavedCostMicroUSD != 11 {
+		t.Fatalf("unexpected saved cost metadata: %#v", reqCtx)
+	}
+}
+
+func TestApplyGatewayContextCopiesZeroSavedCostMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	reqCtx.SavedCostMicroUSD = 99
+	gatewayCtx := &request.GatewayContext{
+		Cache: request.CacheContext{
+			SavedCostMicroUSD: 0,
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.SavedCostMicroUSD != 0 {
+		t.Fatalf("expected saved cost metadata to be cleared to zero, got %d", reqCtx.SavedCostMicroUSD)
 	}
 }
 
