@@ -28,6 +28,8 @@ type IdentityContext struct {
 	ApplicationID string
 	APIKeyID      string
 	AppTokenID    string
+	EndUserID     string
+	FeatureID     string
 }
 
 type MaskingContext struct {
@@ -52,6 +54,7 @@ type CacheContext struct {
 	CacheType         string
 	CacheKeyHash      string
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 

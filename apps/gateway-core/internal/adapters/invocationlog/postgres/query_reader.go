@@ -78,7 +78,7 @@ func (r *QueryReader) GetRequestDetail(ctx context.Context, filter invocationlog
 		return invocationlog.RequestDetail{}, err
 	}
 
-	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.RequestID, normalizedFilter.TenantID, normalizedFilter.ProjectID))
+	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.TenantID, normalizedFilter.ProjectID, normalizedFilter.RequestID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			return invocationlog.RequestDetail{}, invocationlog.ErrLogNotFound
@@ -255,9 +255,9 @@ select
   created_at,
   completed_at
 from p0_llm_invocation_logs
-where request_id = $1
-  and tenant_id = $2
-  and project_id = $3
+where tenant_id = $1
+  and project_id = $2
+  and request_id = $3
 limit 1`
 
 func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {

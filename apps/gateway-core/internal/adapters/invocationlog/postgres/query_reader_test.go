@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func TestBuildProjectLogsQueryUsesProjectScopeAndSafeColumns(t *testing.T) {
+func TestBuildProjectLogsQueryUsesTenantProjectScopeAndSafeColumns(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
 	query, args := buildProjectLogsQuery(invocationlog.ProjectLogsFilter{
@@ -30,8 +30,15 @@ func TestBuildProjectLogsQueryUsesProjectScopeAndSafeColumns(t *testing.T) {
 	if !strings.Contains(query, "from p0_llm_invocation_logs") {
 		t.Fatalf("expected p0 fallback table query, got %s", query)
 	}
-	if !strings.Contains(query, "tenant_id = $1") || !strings.Contains(query, "project_id = $2") || !strings.Contains(query, "created_at >= $3") || !strings.Contains(query, "created_at < $4") {
-		t.Fatalf("expected tenant/project-scoped time range query, got %s", query)
+	for _, expected := range []string{
+		"tenant_id = $1",
+		"project_id = $2",
+		"created_at >= $3",
+		"created_at < $4",
+	} {
+		if !strings.Contains(query, expected) {
+			t.Fatalf("expected tenant/project-scoped time range query to contain %q, got %s", expected, query)
+		}
 	}
 	for _, forbidden := range []string{
 		"raw_prompt",
@@ -49,6 +56,9 @@ func TestBuildProjectLogsQueryUsesProjectScopeAndSafeColumns(t *testing.T) {
 	}
 	if len(args) != 7 {
 		t.Fatalf("expected tenant/project/from/to/status/cacheStatus/limit args, got %d", len(args))
+	}
+	if args[0] != "tenant_demo" || args[1] != "project_demo" || args[6] != 50 {
+		t.Fatalf("unexpected query args: %#v", args)
 	}
 }
 
@@ -102,6 +112,12 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	}
 	if !strings.Contains(db.query, "order by created_at desc, request_id desc") {
 		t.Fatalf("expected stable descending sort, got %s", db.query)
+	}
+	if !strings.Contains(db.query, "tenant_id = $1") || !strings.Contains(db.query, "project_id = $2") {
+		t.Fatalf("expected tenant/project scoped list query, got %s", db.query)
+	}
+	if len(db.args) < 2 || db.args[0] != "tenant_demo" || db.args[1] != "project_demo" {
+		t.Fatalf("unexpected list query args: %#v", db.args)
 	}
 }
 
@@ -161,8 +177,17 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.SelectedProvider != "mock" {
 		t.Fatalf("unexpected cache/routing detail: %+v %+v", detail.Cache, detail.Routing)
 	}
-	if !strings.Contains(db.query, "request_id = $1") || !strings.Contains(db.query, "tenant_id = $2") || !strings.Contains(db.query, "project_id = $3") {
-		t.Fatalf("expected request detail to require request, tenant, and project scope, got %s", db.query)
+	for _, expected := range []string{
+		"tenant_id = $1",
+		"project_id = $2",
+		"request_id = $3",
+	} {
+		if !strings.Contains(db.query, expected) {
+			t.Fatalf("expected tenant/project/request scoped detail query to contain %q, got %s", expected, db.query)
+		}
+	}
+	if len(db.args) != 3 || db.args[0] != "tenant_demo" || db.args[1] != "project_demo" || db.args[2] != "request_001" {
+		t.Fatalf("unexpected detail query args: %#v", db.args)
 	}
 }
 
@@ -183,9 +208,10 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	overview, err := reader.GetDashboardOverview(context.Background(), invocationlog.DashboardOverviewFilter{
-		TenantID: "tenant_demo",
-		From:     from,
-		To:       to,
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
+		From:      from,
+		To:        to,
 	})
 	if err != nil {
 		t.Fatalf("expected dashboard overview to succeed, got %v", err)
@@ -196,8 +222,11 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.25) {
 		t.Fatalf("unexpected cache hit rate: %+v", overview.CacheHitRate)
 	}
-	if !strings.Contains(db.query, "from p0_llm_invocation_logs") || !strings.Contains(db.query, "tenant_id = $3") {
-		t.Fatalf("expected tenant-scoped dashboard query, got %s", db.query)
+	if !strings.Contains(db.query, "from p0_llm_invocation_logs") || !strings.Contains(db.query, "tenant_id = $3") || !strings.Contains(db.query, "project_id = $4") {
+		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
+	}
+	if len(db.args) != 4 || db.args[2] != "tenant_demo" || db.args[3] != "project_demo" {
+		t.Fatalf("unexpected dashboard query args: %#v", db.args)
 	}
 }
 

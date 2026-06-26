@@ -34,6 +34,8 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			ApplicationID: reqCtx.ApplicationID,
 			APIKeyID:      reqCtx.APIKeyID,
 			AppTokenID:    reqCtx.AppTokenID,
+			EndUserID:     reqCtx.EndUserID,
+			FeatureID:     reqCtx.FeatureID,
 		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
@@ -54,6 +56,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			CacheType:         reqCtx.CacheType,
 			CacheKeyHash:      reqCtx.CacheKeyHash,
 			CacheHitRequestID: reqCtx.CacheHitRequestID,
+			SavedCostMicroUSD: reqCtx.SavedCostMicroUSD,
 		},
 		Status: request.StatusContext{
 			Status:       reqCtx.Status,
@@ -75,6 +78,8 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.ApplicationID = gatewayCtx.Identity.ApplicationID
 	reqCtx.APIKeyID = gatewayCtx.Identity.APIKeyID
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
+	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID
+	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
 
 	if gatewayCtx.Masking.Action != "" {
 		reqCtx.MaskingAction = gatewayCtx.Masking.Action
@@ -120,6 +125,7 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Cache.CacheHitRequestID != "" {
 		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
 	}
+	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 
 	if gatewayCtx.Status.Status != "" {
 		reqCtx.Status = gatewayCtx.Status.Status

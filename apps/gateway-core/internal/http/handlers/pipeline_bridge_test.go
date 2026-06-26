@@ -17,12 +17,15 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 		Endpoint:  "/v1/chat/completions",
 		Method:    http.MethodPost,
 		StartedAt: startedAt,
+		EndUserID: "user_demo_001",
+		FeatureID: "support-reply",
 	})
 	reqCtx.RequestedModel = "auto"
 	reqCtx.CacheStatus = "miss"
 	reqCtx.CacheType = "exact"
 	reqCtx.CacheKeyHash = "hmac-sha256:cache-key"
 	reqCtx.CacheHitRequestID = "request_cached"
+	reqCtx.SavedCostMicroUSD = 5
 
 	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt")
 
@@ -32,6 +35,9 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	if gatewayCtx.Request.RequestedModel != "auto" {
 		t.Fatalf("unexpected requested model: %s", gatewayCtx.Request.RequestedModel)
 	}
+	if gatewayCtx.Identity.EndUserID != "user_demo_001" || gatewayCtx.Identity.FeatureID != "support-reply" {
+		t.Fatalf("unexpected Day4 identity metadata: %#v", gatewayCtx.Identity)
+	}
 	if !gatewayCtx.Request.StartedAt.Equal(startedAt) {
 		t.Fatalf("unexpected started at: %s", gatewayCtx.Request.StartedAt)
 	}
@@ -40,6 +46,41 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	}
 	if gatewayCtx.Cache.CacheKeyHash != "hmac-sha256:cache-key" || gatewayCtx.Cache.CacheHitRequestID != "request_cached" {
 		t.Fatalf("unexpected cache key metadata: %#v", gatewayCtx.Cache)
+	}
+	if gatewayCtx.Cache.SavedCostMicroUSD != 5 {
+		t.Fatalf("unexpected saved cost metadata: %#v", gatewayCtx.Cache)
+	}
+}
+
+func TestApplyGatewayContextCopiesDay4IdentityMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Identity: request.IdentityContext{
+			TenantID:      "tenant_demo",
+			ProjectID:     "project_demo",
+			ApplicationID: "app_demo",
+			APIKeyID:      "api_key_demo",
+			AppTokenID:    "app_token_demo",
+			EndUserID:     "user_demo_001",
+			FeatureID:     "support-reply",
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.TenantID != "tenant_demo" || reqCtx.ProjectID != "project_demo" || reqCtx.ApplicationID != "app_demo" {
+		t.Fatalf("unexpected tenant/project/application metadata: %#v", reqCtx)
+	}
+	if reqCtx.APIKeyID != "api_key_demo" || reqCtx.AppTokenID != "app_token_demo" {
+		t.Fatalf("unexpected key/token metadata: %#v", reqCtx)
+	}
+	if reqCtx.EndUserID != "user_demo_001" || reqCtx.FeatureID != "support-reply" {
+		t.Fatalf("unexpected end user/feature metadata: %#v", reqCtx)
 	}
 }
 
@@ -104,6 +145,7 @@ func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
 			CacheType:         "exact",
 			CacheKeyHash:      "hmac-sha256:cache-key",
 			CacheHitRequestID: "request_cached",
+			SavedCostMicroUSD: 11,
 			Payload:           []byte(`{"id":"cached"}`),
 		},
 	}
@@ -115,6 +157,30 @@ func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
 	}
 	if reqCtx.CacheKeyHash != "hmac-sha256:cache-key" || reqCtx.CacheHitRequestID != "request_cached" {
 		t.Fatalf("unexpected cache key metadata: %#v", reqCtx)
+	}
+	if reqCtx.SavedCostMicroUSD != 11 {
+		t.Fatalf("unexpected saved cost metadata: %#v", reqCtx)
+	}
+}
+
+func TestApplyGatewayContextCopiesZeroSavedCostMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	reqCtx.SavedCostMicroUSD = 99
+	gatewayCtx := &request.GatewayContext{
+		Cache: request.CacheContext{
+			SavedCostMicroUSD: 0,
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.SavedCostMicroUSD != 0 {
+		t.Fatalf("expected saved cost metadata to be cleared to zero, got %d", reqCtx.SavedCostMicroUSD)
 	}
 }
 
