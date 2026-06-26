@@ -92,7 +92,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	terminalLogPrompt := ""
 	defer func() {
 		if terminalLogEnabled {
-			h.writeTerminalLog(r.Context(), reqCtx, terminalLogPrompt, startedAt, time.Now())
+			h.writeTerminalLog(context.WithoutCancel(r.Context()), reqCtx, terminalLogPrompt, startedAt, time.Now())
 		}
 	}()
 

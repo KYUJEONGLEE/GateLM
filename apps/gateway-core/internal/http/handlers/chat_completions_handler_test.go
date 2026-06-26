@@ -158,6 +158,35 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response."))).WithContext(ctx)
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+	cancel()
+
+	handler.ServeHTTP(rr, req)
+
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log despite cancelled request context, got %d", len(logWriter.logs))
+	}
+	if logWriter.ctxErr != nil {
+		t.Fatalf("terminal log context must ignore request cancellation, got %v", logWriter.ctxErr)
+	}
+	if logWriter.ctxDoneClosed {
+		t.Fatalf("terminal log context must not expose an already-closed Done channel")
+	}
+}
+
 func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock"),
@@ -1822,13 +1851,22 @@ func (s *recordingExactCacheStore) SetExact(ctx context.Context, entry ports.Cac
 }
 
 type recordingTerminalLogWriter struct {
-	logs []invocationlog.TerminalLog
-	err  error
+	logs          []invocationlog.TerminalLog
+	err           error
+	ctxErr        error
+	ctxDoneClosed bool
 }
 
-func (w *recordingTerminalLogWriter) WriteTerminalLog(_ context.Context, log invocationlog.TerminalLog) error {
+func (w *recordingTerminalLogWriter) WriteTerminalLog(ctx context.Context, log invocationlog.TerminalLog) error {
 	if w.err != nil {
 		return w.err
+	}
+	w.ctxErr = ctx.Err()
+	select {
+	case <-ctx.Done():
+		w.ctxDoneClosed = true
+	default:
+		w.ctxDoneClosed = false
 	}
 	w.logs = append(w.logs, log)
 	return nil
