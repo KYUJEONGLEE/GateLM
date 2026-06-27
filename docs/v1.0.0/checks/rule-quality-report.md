@@ -1,204 +1,187 @@
-# GateLM v1 Rule Quality Report
+# GateLM v1 규칙 품질 보고서
 
-## 1. Executive Summary
+## 1. 요약
 
-This report explains why the v1 Gateway rule-based safety baseline is sufficient for the demo and review scope.
+이 보고서는 v1 Gateway의 rule-based safety baseline이 데모와 리뷰 범위에서 충분한 이유를 설명한다.
 
-The evidence source is the PR 2 Safety Eval Runner output:
+근거는 PR 2 Safety Eval Runner 출력이다.
 
-| Item | Value |
-|---|---|
-| Primary evidence | `reports/safety-eval/safety-eval-report.json` |
-| Supporting evidence | `reports/safety-eval/safety-eval-report.md` |
-| Report version | `safety-eval-report.v1` |
-| Generated at | `2026-06-27T07:15:03.743582Z` |
-| Eval mode | `detector_output` |
-| Fixture | `v1-safety-eval-detector-output-pass` |
-| Fixture version | `2026-06-27.v1` |
-| Corpus | `docs/v1.0.0/fixtures/safety-eval-corpus.jsonl` |
 
-Current result: 9 of 9 cases passed. There are no failed cases, false positives, false negatives, action mismatches, or gateway effect mismatches in the referenced PR 2 report.
+| 항목     | 값                                               |
+| ------ | ----------------------------------------------- |
+| 기본 근거  | `reports/safety-eval/safety-eval-report.json`   |
+| 보조 근거  | `reports/safety-eval/safety-eval-report.md`     |
+| 보고서 버전 | `safety-eval-report.v1`                         |
+| 생성 시각  | `2026-06-27T07:15:03.743582Z`                   |
+| 평가 모드  | `detector_output`                               |
+| 픽스처    | `v1-safety-eval-detector-output-pass`           |
+| 픽스처 버전 | `2026-06-27.v1`                                 |
+| 코퍼스    | `docs/v1.0.0/fixtures/safety-eval-corpus.jsonl` |
 
-This document does not introduce a new evaluator, parser, API, DB table, event field, or runtime policy. It only turns the PR 2 result into a review-ready explanation.
 
-## 2. PR 2 / PR 3 Responsibility Boundary
+## 2. 문서 계약 근거
 
-| Area | PR 2 Safety Eval Runner | PR 3 Rule Quality Report |
-|---|---|---|
-| Corpus parsing | Owns | Does not implement |
-| Actual result fixture parsing | Owns | Does not implement |
-| Expected versus actual comparison | Owns | Does not implement |
-| Detector metric calculation | Owns | Reads the reported metrics |
-| JSON and Markdown eval output | Owns | References the output |
-| Forbidden sensitive literal scan | Owns | Reuses as a verification step |
-| Human-facing quality narrative | Produces machine-oriented report | Owns |
-| API / DB / Event changes | None | None |
+이 보고서는 v1 문서 세트를 근거로 한다.
 
-PR 3 must stay a documentation PR. If the eval shape, comparison logic, detector coverage, or fixture format needs to change, that belongs to PR 2 or a follow-up eval-runner PR, not this report.
 
-## 3. Contract Evidence From Docs
+| 문서                                    | 이 보고서에서 사용하는 근거                                                                                                                        |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/v1.0.0/contracts.md`            | v1 safety는 rule-based redaction/block을 사용한다. Safety Lab은 corpus와 evaluation 근거를 담당한다. Gateway는 hot path 실행과 governance metadata를 담당한다. |
+| `docs/v1.0.0/implementation-plan.md`  | Python/FastAPI Safety Lab은 선택적 shadow/evaluation path다. v1 smoke는 Python service 의존 없이 통과해야 한다.                                        |
+| `docs/architecture/gateway-flow.md`   | 민감정보 탐지와 정책 평가는 routing, cache, provider call보다 먼저 수행된다. Block된 요청은 provider call 전에 멈춘다.                                              |
+| `docs/policies/pii-masking-policy.md` | Provider 호출 후에만 redaction하는 방식은 금지된다. Raw sensitive value는 저장하지 않는다. Detector action과 safety checklist가 이 문서에 정의되어 있다.                 |
+| `docs/architecture/llm-log-schema.md` | Log와 detail view는 raw prompt, response, credential, detected value가 아니라 redacted/hash/metadata 형태를 저장한다.                               |
+| `docs/architecture/api-spec.md`       | Masking metadata는 안전한 summary field로 노출되고, masking analytics는 aggregate 중심으로 제한된다.                                                     |
 
-The report is grounded in the v1 documentation set:
 
-| Source | Evidence used in this report |
-|---|---|
-| `docs/v1.0.0/contracts.md` | v1 safety uses rule-based redaction/block. Safety Lab owns corpus and evaluation evidence. Gateway owns hot-path execution and governance metadata. |
-| `docs/v1.0.0/implementation-plan.md` | Python/FastAPI Safety Lab is optional, shadow, and evaluation path. v1 smoke must pass without depending on the Python service. |
-| `docs/architecture/gateway-flow.md` | Sensitive detection and policy evaluation happen before routing, cache, and provider call. Blocked requests stop before provider call. |
-| `docs/policies/pii-masking-policy.md` | Provider-call-before-redaction is prohibited. Raw sensitive values must not be stored. Detector actions and the safety checklist are defined here. |
-| `docs/architecture/llm-log-schema.md` | Logs and detail views store redacted/hash/metadata forms, not raw prompt, response, credential, or detected values. |
-| `docs/architecture/api-spec.md` | Masking metadata is exposed as safe summary fields, and masking analytics remain aggregate-only. |
+이 보고서가 주장하는 가장 강한 safety claim은 v1 rule set의 demo-baseline 품질이다. 모든 가능한 민감정보 포맷에 대한 전체 DLP coverage나 production-grade detection을 주장하지 않는다.
 
-The strongest safety claim this report makes is demo-baseline quality for the v1 rule set. It does not claim full DLP coverage or production-grade detection for every possible sensitive data format.
+## 3. Eval 결과 스냅샷
 
-## 4. Eval Result Snapshot
 
-| Metric | Value |
-|---|---:|
-| Total cases | 9 |
-| Passed cases | 9 |
-| Failed cases | 0 |
-| Pass rate | 1.0 |
-| False positive cases | 0 |
-| False negative cases | 0 |
-| Action mismatch cases | 0 |
-| Gateway effect mismatch cases | 0 |
+| 지표                          | 값   |
+| --------------------------- | --- |
+| 전체 케이스                      | 9   |
+| 통과 케이스                      | 9   |
+| 실패 케이스                      | 0   |
+| 통과율                         | 1.0 |
+| 오탐 케이스                      | 0   |
+| 미탐 케이스                      | 0   |
+| Action mismatch 케이스         | 0   |
+| Gateway effect mismatch 케이스 | 0   |
 
-Action confusion summary:
 
-| Expected action | Actual action | Count |
-|---|---|---:|
-| `none` | `none` | 1 |
-| `redacted` | `redacted` | 3 |
-| `blocked` | `blocked` | 5 |
+Action confusion 요약:
 
-Because the current evidence mode is `detector_output`, the detector/action quality is directly evidenced by the runner output. Gateway effects are interpreted from the v1 contract and corpus expectations. When a `gateway_safety_output` report is produced, the provider/cache bypass claims can be promoted from contract-backed expectation to runtime evidence.
 
-## 5. Detector Type Quality Summary
+| 기대 action  | 실제 action  | 개수  |
+| ---------- | ---------- | --- |
+| `none`     | `none`     | 1   |
+| `redacted` | `redacted` | 3   |
+| `blocked`  | `blocked`  | 5   |
 
-| Detector type | Expected action | Covered cases | Passed cases | Detector pass rate | Precision | Recall | FP | FN | Count mismatch |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `email` | `redacted` | 2 | 2 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
-| `phone_number` | `redacted` | 1 | 1 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
-| `resident_registration_number` | `blocked` | 1 | 1 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
-| `api_key` | `blocked` | 1 | 1 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
-| `authorization_header` | `blocked` | 1 | 1 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
-| `jwt` | `blocked` | 1 | 1 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
-| `private_key` | `blocked` | 1 | 1 | 1.0 | 1.0 | 1.0 | 0 | 0 | 0 |
 
-Covered cases are counted from cases where the detector appears in expected or actual detected types. The pass-rate summary is documented here for review readability only; PR 3 does not add an automated metric calculator.
+현재 근거 모드는 `detector_output`이므로 detector/action 품질은 runner 출력으로 직접 확인된다. Gateway effect는 v1 계약과 corpus expectation을 기준으로 해석한다. `gateway_safety_output` 보고서가 생성되면 provider/cache bypass 관련 claim은 계약 기반 기대값에서 runtime evidence로 승격할 수 있다.
 
-## 6. Expected Block/Redact Behavior
+## 4. Detector type별 품질 요약
 
-`redacted` behavior:
 
-- `email` and `phone_number` are expected to continue the request using a redacted prompt representation.
-- Downstream cache/provider stages must not receive the raw sensitive value.
-- The request can complete with normal success semantics when no stricter detector is present.
+| Detector type                  | 기대 action  | 포함 케이스 | 통과 케이스 | Detector 통과율 | Precision | Recall | FP  | FN  | Count mismatch |
+| ------------------------------ | ---------- | ------ | ------ | ------------ | --------- | ------ | --- | --- | -------------- |
+| `email`                        | `redacted` | 2      | 2      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
+| `phone_number`                 | `redacted` | 1      | 1      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
+| `resident_registration_number` | `blocked`  | 1      | 1      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
+| `api_key`                      | `blocked`  | 1      | 1      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
+| `authorization_header`         | `blocked`  | 1      | 1      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
+| `jwt`                          | `blocked`  | 1      | 1      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
+| `private_key`                  | `blocked`  | 1      | 1      | 1.0          | 1.0       | 1.0    | 0   | 0   | 0              |
 
-`blocked` behavior:
 
-- `resident_registration_number`, `api_key`, `authorization_header`, `jwt`, and `private_key` are expected to stop before cache lookup and provider call.
-- Expected terminal result is `blocked`.
-- Expected HTTP status is `403`.
-- Expected error code is `sensitive_data_blocked`.
-- Expected provider call result is `providerCalled=false`.
-- Expected cache lookup result is `cacheLookup=false`.
+포함 케이스는 해당 detector가 expected 또는 actual detected types에 등장한 case 기준으로 계산했다. 이 통과율 요약은 리뷰 가독성을 위한 문서화일 뿐이며, PR 3는 자동 지표 계산기를 추가하지 않는다.
 
-This matches the v1 safety contract: low-risk contact data can be redacted for a demo-safe provider request, while credential and high-risk identity material is blocked before leaving the Gateway.
+## 5. Block/Redact 기대 동작
 
-## 7. v1 Safety Checklist
+`redacted` 동작:
 
-| Checklist item | Report status | Evidence basis |
-|---|---|---|
-| Masking happens before cache/provider | Satisfied by contract | `contracts.md`, `gateway-flow.md`, `pii-masking-policy.md` |
-| Block stops before provider call | Satisfied by contract and corpus expectation | `contracts.md`, PR 2 expected gateway effects |
-| Block skips cache lookup | Satisfied by contract and corpus expectation | `contracts.md`, PR 2 expected gateway effects |
-| Redact sends only redacted representation downstream | Satisfied by contract | `pii-masking-policy.md`, `gateway-flow.md` |
-| Cache key is not based on raw prompt | Satisfied by contract | `contracts.md`, `gateway-flow.md` |
-| Report contains no raw prompt, raw response, raw secret, or raw detected value | Required and verified | PR 2 security scan plus PR 3 document review |
-| Blocked requests are policy outcomes, not system failures | Satisfied by contract | `pii-masking-policy.md`, `contracts.md` |
+- `email`과 `phone_number`는 redacted prompt representation을 사용해 요청을 계속 진행하는 것이 기대 동작이다.
+- Downstream cache/provider stage는 raw sensitive value를 받으면 안 된다.
+- 더 엄격한 detector가 함께 존재하지 않으면 요청은 정상 success semantics로 완료될 수 있다.
 
-## 8. Known Limitations
+`blocked` 동작:
 
-- This report covers the v1 demo baseline only.
-- The evidence is based on a synthetic, text-only safety corpus.
-- The current referenced report mode is detector output, not a live Gateway execution transcript.
-- Full DLP coverage is out of scope for v1.
-- OCR, file upload scanning, image/audio input, RAG corpus scanning, and provider response re-identification protection are out of scope.
-- The corpus does not claim coverage for every national identifier format, every credential format, or every false-positive edge case.
-- Runtime proof that provider/cache bypass happened should be taken from a future `gateway_safety_output` report or Gateway integration evidence.
+- `resident_registration_number`, `api_key`, `authorization_header`, `jwt`, `private_key`는 cache lookup과 provider call 전에 멈추는 것이 기대 동작이다.
+- 기대 terminal result는 `blocked`다.
+- 기대 HTTP status는 `403`이다.
+- 기대 error code는 `sensitive_data_blocked`다.
+- 기대 provider call result는 `providerCalled=false`다.
+- 기대 cache lookup result는 `cacheLookup=false`다.
 
-If any PR 2 result later includes failed cases, false negatives, false positives, or action mismatches, this report must state that plainly and lower the quality claim.
+이는 v1 safety 계약과 일치한다. 낮은 위험도의 연락처 데이터는 데모 안전성이 확보된 provider request를 위해 redaction 후 진행할 수 있고, credential 및 고위험 identity material은 Gateway 밖으로 나가기 전에 block된다.
 
-## 9. Raw Sensitive Value Handling Rules
+## 6. v1 Safety Checklist
 
-This report may include:
 
-- Case IDs.
-- Detector types.
-- Expected and actual actions.
-- Pass/fail outcomes.
-- Aggregate metrics.
+| 체크 항목                                                                | 보고서 상태                        | 근거                                                         |
+| -------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------- |
+| Masking이 cache/provider보다 먼저 실행됨                                     | 계약상 충족                        | `contracts.md`, `gateway-flow.md`, `pii-masking-policy.md` |
+| Block이 provider call 전에 멈춤                                           | 계약 및 corpus expectation 기준 충족 | `contracts.md`, PR 2 expected gateway effects              |
+| Block이 cache lookup을 건너뜀                                             | 계약 및 corpus expectation 기준 충족 | `contracts.md`, PR 2 expected gateway effects              |
+| Redact가 redacted representation만 downstream으로 보냄                     | 계약상 충족                        | `pii-masking-policy.md`, `gateway-flow.md`                 |
+| Cache key가 raw prompt 기반이 아님                                         | 계약상 충족                        | `contracts.md`, `gateway-flow.md`                          |
+| Report에 raw prompt, raw response, raw secret, raw detected value가 없음 | 필수이며 검증됨                      | PR 2 security scan 및 PR 3 document review                  |
+| Blocked request는 시스템 장애가 아니라 정책 적용 결과임                               | 계약상 충족                        | `pii-masking-policy.md`, `contracts.md`                    |
+
+
+## 7. known limitation
+
+- 이 보고서는 v1 demo baseline만 다룬다.
+- 근거는 합성 text-only safety corpus를 기반으로 한다.
+- 현재 참조한 report mode는 detector output이며, 실제 Gateway 실행 기록이 아니다.
+- 전체 DLP coverage는 v1 범위 밖이다.
+- OCR, file upload scanning, image/audio input, RAG corpus scanning, provider response re-identification protection은 범위 밖이다.
+- Corpus는 모든 국가별 식별자 format, 모든 credential format, 모든 오탐 edge case를 포괄한다고 주장하지 않는다.
+- Provider/cache bypass가 실제 runtime에서 발생했다는 증명은 향후 `gateway_safety_output` report 또는 Gateway integration evidence에서 확인해야 한다.
+
+향후 PR 2 결과에 실패 케이스, 미탐, 오탐, action mismatch가 포함되면 이 보고서는 이를 명확히 적고 quality claim을 낮춰야 한다.
+
+## 8. Raw Sensitive Value 처리 규칙
+
+이 보고서에 포함할 수 있는 것:
+
+- Case ID.
+- Detector type.
+- 기대 action과 실제 action.
+- 통과/실패 결과.
+- 집계 지표.
 - Report metadata.
-- Documentation paths.
+- Documentation path.
 
-This report must not include:
+이 보고서에 포함하면 안 되는 것:
 
-- Source prompt templates or full prompts.
-- Redacted preview text copied from fixtures or eval cases.
-- Raw responses.
-- Raw secrets, credentials, tokens, or authorization values.
-- Raw detected sensitive values.
-- Sample hash values.
-- Full fixture result bodies.
+- Source prompt template 또는 전체 prompt.
+- Fixture 또는 eval case에서 복사한 redacted preview text.
+- Raw response.
+- Raw secret, credential, token, authorization value.
+- Raw detected sensitive value.
+- Sample hash value.
+- Full fixture result body.
 
-When evidence is needed, link to the PR 2 report path and summarize safe aggregate fields instead of copying case payloads.
+근거가 필요하면 case payload를 복사하지 말고 PR 2 report path를 연결한 뒤 안전한 집계 field만 요약한다.
 
-## 10. Review Q&A
+## 9. 리뷰 Q&A
 
-Q: Is this duplicating PR 2?
+Q: 이 문서가 live Gateway block-before-provider behavior를 증명하는가?
 
-A: No. PR 2 executes and calculates the evaluation. PR 3 explains the already-produced result for reviewers.
+A: report mode가 `detector_output`인 동안에는 이 문서만으로 직접 증명하지 않는다. 이 문서는 detector/action 품질을 보여주고, gateway effect는 v1 contract와 corpus expectation을 근거로 설명한다. `gateway_safety_output` report가 있으면 직접적인 runtime evidence를 제공할 수 있다.
 
-Q: Does this prove live Gateway block-before-provider behavior?
+Q: 향후 report에서 detector가 실패하면 어떻게 되는가?
 
-A: Not by itself while the report mode is `detector_output`. It shows detector/action quality and uses the v1 contract plus corpus expectations for gateway effects. A `gateway_safety_output` report can provide direct runtime evidence later.
+A: 실패 케이스 수, mismatch reason, 영향을 받은 detector, limitation을 문서화해야 한다. 실패가 해결되거나 명시적으로 accepted되기 전까지 이 report는 safety rule이 충분하다고 주장하면 안 된다.
 
-Q: Why are no sample prompts or values shown?
+## 10. 검증 메모
 
-A: The v1 contract and PII policy prohibit storing or copying raw sensitive values in reports and documents. Reviewers should use IDs, detector types, actions, and aggregate metrics.
+이 문서의 verification checklist:
 
-Q: What happens if a detector fails in a future report?
 
-A: The failed case count, mismatch reason, affected detector, and limitation must be documented. The report must not claim the safety rule is sufficient until the failure is resolved or explicitly accepted.
+| 확인 항목                          | 기대 결과                                                             |
+| ------------------------------ | ----------------------------------------------------------------- |
+| PR 2 report 존재                 | `reports/safety-eval/safety-eval-report.json` exists              |
+| Report summary와 이 문서 일치        | 전체 9개, 통과 9개, 실패 0개                                               |
+| Detector 행과 PR 2 output 일치     | Precision/recall은 1.0이고 FP/FN/count mismatch는 0                   |
+| Runner/parser/comparison 변경 없음 | PR 3에는 코드 변경 없음                                                   |
+| API/DB/Event 변경 없음             | PR 3에는 contract shape 변경 없음                                       |
+| 금지된 민감 literal 스캔              | 새 문서가 기존 PR 2 scanner를 통과                                         |
+| 수동 raw-value review            | Raw prompt, raw response, raw secret, raw detected value를 복사하지 않음 |
 
-Q: Does PR 3 change API, DB, or Event contracts?
 
-A: No. PR 3 is documentation-only and does not alter runtime behavior or contracts.
-
-## 11. Verification Notes
-
-Verification checklist for this document:
-
-| Check | Expected result |
-|---|---|
-| PR 2 report exists | `reports/safety-eval/safety-eval-report.json` is present |
-| Report summary matches this document | 9 total, 9 passed, 0 failed |
-| Detector rows match PR 2 output | Precision/recall are 1.0 and FP/FN/count mismatch are 0 |
-| No runner/parser/comparison changes | No code changes in PR 3 |
-| No API/DB/Event changes | No contract shape changes in PR 3 |
-| Forbidden sensitive literal scan | New document passes existing PR 2 scanner |
-| Manual raw-value review | No raw prompt, raw response, raw secret, or raw detected value copied |
-
-Recommended local checks:
+권장 local check:
 
 ```text
-# From the repository root:
+# Repository root에서:
 python scripts/dev/v1-safety-eval-corpus-smoke.py
 
-# From apps/ai-service:
+# apps/ai-service에서:
 python -m app.services.safety_eval_runner --mode detector-output --corpus ../../docs/v1.0.0/fixtures/safety-eval-corpus.jsonl --fixture app/tests/fixtures/safety_eval/detector-output.fixture.json --out ../../reports/safety-eval
 ```
 
-Run the existing forbidden-value scanner against this document before merging. If it fails, remove the unsafe field or literal instead of weakening the scanner.
+Merge 전에는 기존 forbidden-value scanner를 이 문서에 실행한다. 실패하면 scanner를 약화하지 말고 unsafe field 또는 literal을 제거한다.
