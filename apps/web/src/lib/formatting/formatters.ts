@@ -15,8 +15,17 @@ function getDateTimeFormatter(timezone: string) {
   return formatter;
 }
 
-export function formatDateTime(value: string, timezone = "UTC") {
-  return getDateTimeFormatter(timezone).format(new Date(value));
+export function formatDateTime(value: string | null | undefined, timezone = "UTC") {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return getDateTimeFormatter(timezone).format(date);
 }
 
 export function formatInteger(value: number) {
