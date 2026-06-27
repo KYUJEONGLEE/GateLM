@@ -162,6 +162,13 @@ services:
       args:
         NODE_VERSION: ${NODE_VERSION:-22}
         PNPM_VERSION: ${PNPM_VERSION:-9.15.0}
+    environment:
+      CONTROL_PLANE_PORT: ${CONTROL_PLANE_PORT:-3001}
+      DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
+      REDIS_URL: redis://redis:6379
+      CONTROL_PLANE_ADMIN_AUTH_MODE: ${CONTROL_PLANE_ADMIN_AUTH_MODE:-demo_admin_placeholder}
+    ports:
+      - "${CONTROL_PLANE_PORT:-3001}:${CONTROL_PLANE_PORT:-3001}"
     working_dir: /workspace
     volumes:
       - .:/workspace
