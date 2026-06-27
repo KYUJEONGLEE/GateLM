@@ -467,7 +467,9 @@ var maxCreatedAt time.Time
 		aggregate.AverageLatencyMs = &averageLatency
 		aggregate.P95LatencyMs = &p95Latency
 	}
-	aggregate.LastLogCreatedAt = lastLogCreatedAt
+if !maxCreatedAt.IsZero() {
+	aggregate.LastLogCreatedAt = &maxCreatedAt
+}
 	aggregate.RoutingCountByModel = routingCountsFromMap(routingCounts)
 	aggregate.CostByModel = costCountsFromMap(costCounts)
 
