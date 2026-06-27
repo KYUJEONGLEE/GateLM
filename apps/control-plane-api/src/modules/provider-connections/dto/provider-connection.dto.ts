@@ -33,6 +33,7 @@ export class UpsertProviderDto {
 
   @Transform(({ value }) => trimString(value))
   @IsUrl({ require_protocol: true, require_tld: false })
+  @MaxLength(2048)
   baseUrl!: string;
 
   @Type(() => Number)
@@ -72,7 +73,7 @@ export class UpsertProviderDto {
 
   @IsOptional()
   @IsObject()
-  providerConfig?: Record<string, unknown>;
+  providerConfig?: Record<string, unknown> | null;
 }
 
 export class ListProvidersQueryDto {

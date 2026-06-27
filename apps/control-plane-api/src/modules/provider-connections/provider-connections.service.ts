@@ -123,8 +123,12 @@ export class ProviderConnectionsService {
   }
 
   private toJsonObject(
-    value: Record<string, unknown> | undefined,
-  ): Prisma.InputJsonObject | undefined {
+    value: Record<string, unknown> | null | undefined,
+  ): Prisma.InputJsonObject | typeof Prisma.DbNull | undefined {
+    if (value === null) {
+      return Prisma.DbNull;
+    }
+
     return value as Prisma.InputJsonObject | undefined;
   }
 

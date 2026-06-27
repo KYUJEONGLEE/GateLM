@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Project } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -124,9 +123,10 @@ export class ProjectsService {
 
   private isRecordNotFoundError(
     error: unknown,
-  ): error is PrismaClientKnownRequestError {
+  ): error is Prisma.PrismaClientKnownRequestError {
     return (
-      error instanceof PrismaClientKnownRequestError && error.code === 'P2025'
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
     );
   }
 

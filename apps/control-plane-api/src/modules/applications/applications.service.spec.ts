@@ -1,6 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { ResourceStatus } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { Prisma, ResourceStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -79,7 +78,7 @@ describe('ApplicationsService', () => {
   it('maps Prisma P2025 update failures to not found', async () => {
     const { service, prisma } = createService();
     prisma.application.update.mockRejectedValue(
-      new PrismaClientKnownRequestError('No Application found.', {
+      new Prisma.PrismaClientKnownRequestError('No Application found.', {
         code: 'P2025',
         clientVersion: 'test',
       }),

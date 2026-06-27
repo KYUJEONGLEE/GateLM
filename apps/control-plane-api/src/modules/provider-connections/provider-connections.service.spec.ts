@@ -1,4 +1,4 @@
-import { ProviderConnectionStatus } from '@prisma/client';
+import { Prisma, ProviderConnectionStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -91,6 +91,32 @@ describe('ProviderConnectionsService', () => {
       nextCursor: '00000000-0000-4000-8000-000000000902',
       hasMore: true,
     });
+  });
+
+  it('maps explicit null providerConfig to Prisma DbNull', async () => {
+    const { service, prisma } = createService();
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.upsert.mockResolvedValue(
+      providerConnection('00000000-0000-4000-8000-000000000904'),
+    );
+
+    await service.upsertProvider(projectId, {
+      provider: 'mock',
+      displayName: 'Mock Provider',
+      baseUrl: 'http://mock-provider:8090',
+      providerConfig: null,
+    });
+
+    expect(prisma.providerConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          providerConfig: Prisma.DbNull,
+        }),
+        update: expect.objectContaining({
+          providerConfig: Prisma.DbNull,
+        }),
+      }),
+    );
   });
 
   function providerConnection(id: string) {
