@@ -1,0 +1,12 @@
+{
+  "name": "gatelm",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:control-plane": "pnpm --filter @gatelm/control-plane-api dev",
+    "build:control-plane": "pnpm --filter @gatelm/control-plane-api build",
+    "typecheck:control-plane": "pnpm --filter @gatelm/control-plane-api typecheck",
+    "test:control-plane": "pnpm --filter @gatelm/control-plane-api test"
+  }
+}
