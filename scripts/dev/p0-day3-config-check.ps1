@@ -32,9 +32,9 @@ function Assert-Contains {
   Write-Host "[OK] $Name contains $Expected"
 }
 
-$fixturePath = Join-Path $Root "docs/p0/a-day1-active-config.fixture.json"
+$fixturePath = Join-Path $Root "docs/archive/p0/a-day1-active-config.fixture.json"
 $cacheKeyPath = Join-Path $Root "apps/gateway-core/internal/domain/cache/cache_key.go"
-$testMatrixPath = Join-Path $Root "docs/p0/p0-test-matrix.md"
+$testMatrixPath = Join-Path $Root "docs/archive/p0/p0-test-matrix.md"
 
 if (-not (Test-Path -LiteralPath $fixturePath)) {
   throw "fixture not found: $fixturePath"

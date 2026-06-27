@@ -2,46 +2,54 @@
 
 GateLM 구현 작업을 시작할 때는 먼저 `docs/README.md`를 읽는다.
 
-`docs/README.md`는 에이전트용 구현 기준 문서이며, 프로젝트 목표, P0 범위, 필수 참고 문서 순서, 작업 판단 기준을 정의한다.
+`docs/README.md`는 에이전트용 구현 기준 문서이며, 현재 구현 목표, 문서 우선순위, 필수 참고 문서 순서, 작업 판단 기준을 정의한다.
+
+현재 구현 기준은 **v1.0.0 baseline**이다.
 
 코드 변경 전에는 작업 범위에 맞는 세부 문서를 함께 확인한다.
 
-* API 작업은 `docs/architecture/api-spec.md`를 따른다.
-* DB 작업은 `docs/architecture/db-schema.md`와 `docs/p0/p0-db-migration-plan.md`를 따른다.
-* Gateway 요청 흐름은 `docs/architecture/gateway-flow.md`를 따른다.
-* 로그와 이벤트 작업은 `docs/architecture/llm-log-schema.md`와 `docs/p0/p0-log-event-payload.md`를 따른다.
-* 민감정보 처리는 `docs/policies/pii-masking-policy.md`를 따른다.
+* v1 계획은 `docs/v1.0.0/implementation-plan.md`를 따른다.
+* v1 계약은 `docs/v1.0.0/contracts.md`를 따른다.
+* API 작업은 `docs/architecture/api-spec.md`를 참고하되, 충돌하면 v1 계약을 우선한다.
+* DB 작업은 `docs/architecture/db-schema.md`를 참고하되, 충돌하면 v1 계약을 우선한다.
+* Gateway 요청 흐름은 `docs/architecture/gateway-flow.md`를 참고하되, 충돌하면 v1 계약을 우선한다.
+* 로그와 이벤트 작업은 `docs/architecture/llm-log-schema.md`를 참고하되, 충돌하면 v1 계약을 우선한다.
+* 민감정보 처리는 `docs/policies/pii-masking-policy.md`와 v1 safety 계약을 함께 따른다.
 * 코드 스타일과 AI 작업 규칙은 `docs/policies/coding-convention.md`, `docs/policies/ai-coding-rules.md`를 따른다.
 
-P0 구현에서는 Gateway vertical slice 완성이 최우선이다.
+이전 P0 문서는 `docs/archive/p0/*`에 보관된 과거 구현 기록이다. 새 v1.0.0 작업의 우선 계약으로 사용하지 않는다.
+
+v1.0.0 구현에서는 B2B LLM Gateway baseline 완성이 최우선이다.
 
 다음 흐름이 깨지면 안 된다.
 
 ```text
 Admin onboarding
 -> Project / Application / Provider / API Key / App Token
--> Gateway request
+-> Customer Demo App Gateway request
 -> API Key / App Token authentication
 -> Tenant / Project / Application context
+-> applicationId PostgreSQL-backed Rate Limit
 -> Sensitive data redaction or block
 -> Exact Cache
 -> Simple Routing
 -> Provider call
 -> Usage Log
 -> Request Log / Detail
--> Dashboard Overview
+-> Dashboard Overview / Metrics
+-> k6 baseline
 ```
 
-모든 코드는 P0 구현이라도 확장 가능하게 작성한다.
+모든 코드는 v1.0.0 baseline이라도 확장 가능하게 작성한다.
 
 * Provider와 Model을 enum으로 고정하지 않는다.
 * Provider별 로직은 Provider Adapter 안에 둔다.
 * Gateway handler에 provider별 조건문을 흩뿌리지 않는다.
 * Gateway pipeline은 stage 단위로 추가/교체 가능하게 둔다.
 * Sensitive Data Detector는 registry 구조로 추가 가능하게 둔다.
-* Cache, Routing, Secret 조회는 interface를 통해 분리한다.
+* Cache, Routing, Rate Limit, Secret 조회는 interface를 통해 분리한다.
 * 정책 판단은 하드코딩하지 않고 config/policy object를 통해 처리한다.
-* 확장성을 이유로 P0 범위를 넘는 기능을 임의로 구현하지 않는다.
+* 확장성을 이유로 v1.0.0 범위를 넘는 기능을 임의로 구현하지 않는다.
 
 명시적 지시 없이 아래 작업은 하지 않는다.
 
