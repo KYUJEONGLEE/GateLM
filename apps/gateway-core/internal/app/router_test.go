@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 
@@ -460,6 +461,30 @@ func TestNewRouterWiresDashboardOverviewWithDemoTenantScope(t *testing.T) {
 	}
 	if strings.Contains(rr.Body.String(), "rawPrompt") || strings.Contains(rr.Body.String(), "redactedPromptPreview") {
 		t.Fatalf("dashboard response must not include request payload fields: %s", rr.Body.String())
+	}
+}
+
+func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
+	registry := metrics.NewRegistry()
+	registry.MaskingAction("none")
+	router := NewRouter(config.Config{
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithMetrics(registry))
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); got != metrics.PrometheusTextContentType {
+		t.Fatalf("unexpected content type: %q", got)
+	}
+	if !strings.Contains(rr.Body.String(), `gatelm_masking_actions_total{masking_action="none"} 1`) {
+		t.Fatalf("expected router to expose injected registry metrics, got:\n%s", rr.Body.String())
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
@@ -64,6 +65,7 @@ type ChatCompletionsHandler struct {
 	AuthFailureLogWriter    invocationlog.AuthFailureLogWriter
 	TerminalLogWriter       invocationlog.TerminalLogWriter
 	MaskingEngine           MaskingEngine
+	MetricsRegistry         *metrics.Registry
 	ExactCacheStore         ports.CacheStore
 	ExactCacheKeyBuilder    ExactCacheKeyBuilder
 	ExactCacheTTL           time.Duration
@@ -89,6 +91,11 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		EndUserID: r.Header.Get("X-GateLM-End-User-Id"),
 		FeatureID: r.Header.Get("X-GateLM-Feature-Id"),
 	})
+	h.recordGatewayRequestStarted(reqCtx)
+	defer func() {
+		h.recordGatewayRequestCompleted(reqCtx, startedAt, time.Now())
+	}()
+
 	terminalLogEnabled := false
 	terminalLogPrompt := ""
 	defer func() {
@@ -243,16 +250,41 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	providerStartedAt := time.Now()
 	providerResp, err := adapter.CreateChatCompletion(r.Context(), chatReq)
-	reqCtx.ProviderLatencyMs = time.Since(providerStartedAt).Milliseconds()
+	providerDuration := time.Since(providerStartedAt)
+	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: reqCtx.SelectedProvider,
+			SelectedModel:    reqCtx.SelectedModel,
+			Status:           "error",
+			HTTPStatus:       http.StatusBadGateway,
+			ErrorCode:        "provider_error",
+			DurationSeconds:  providerDuration.Seconds(),
+		})
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_with_timeout_retry_fallback")
 		return
 	}
 	if providerResp == nil {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: reqCtx.SelectedProvider,
+			SelectedModel:    reqCtx.SelectedModel,
+			Status:           "error",
+			HTTPStatus:       http.StatusBadGateway,
+			ErrorCode:        "provider_error",
+			DurationSeconds:  providerDuration.Seconds(),
+		})
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
 		return
 	}
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		Status:           "success",
+		HTTPStatus:       http.StatusOK,
+		ErrorCode:        "none",
+		DurationSeconds:  providerDuration.Seconds(),
+	})
 
 	if providerResp.Usage != nil {
 		reqCtx.PromptTokens = providerResp.Usage.PromptTokens
@@ -408,6 +440,7 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	if err != nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusError
 		reqCtx.CacheType = cachestage.CacheTypeExact
+		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "error")
 		return nil, "", false
 	}
 	reqCtx.CacheKeyHash = keyHash
@@ -416,17 +449,20 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	if err != nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusError
 		reqCtx.CacheType = cachestage.CacheTypeExact
+		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "error")
 		return nil, "", false
 	}
 
 	if !lookup.Hit {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
+		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
 		return nil, "", false
 	}
 
 	reqCtx.CacheStatus = cachestage.CacheStatusHit
 	reqCtx.CacheType = cachestage.CacheTypeExact
+	h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
 	return lookup.Payload, lookup.CacheHitRequestID, true
 }
 
@@ -455,6 +491,7 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 	cacheable.Raw = nil
 	payload, err := json.Marshal(cacheable)
 	if err != nil {
+		h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeExact, "error")
 		return
 	}
 
@@ -463,12 +500,15 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 		RequestID: reqCtx.RequestID,
 		Payload:   payload,
 	}); err != nil {
+		h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeExact, "error")
 		log.Printf("exact cache write failed request_id=%s cache_key_hash=%s cause=%q",
 			sanitizeLogValue(reqCtx.RequestID),
 			sanitizeLogValue(reqCtx.CacheKeyHash),
 			sanitizeLogValue(err.Error()),
 		)
+		return
 	}
+	h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeExact, "success")
 }
 
 func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, requestedModel string, startedAt time.Time) bool {
@@ -613,7 +653,8 @@ func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx
 		return
 	}
 
-	_ = h.AuthFailureLogWriter.WriteAuthFailureLog(ctx, invocationlog.BuildAuthFailureLog(invocationlog.AuthFailureInput{
+	logStartedAt := time.Now()
+	err := h.AuthFailureLogWriter.WriteAuthFailureLog(ctx, invocationlog.BuildAuthFailureLog(invocationlog.AuthFailureInput{
 		RequestID:      reqCtx.RequestID,
 		TraceID:        reqCtx.TraceID,
 		TenantID:       reqCtx.TenantID,
@@ -635,6 +676,7 @@ func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx
 		StartedAt:      startedAt,
 		CompletedAt:    completedAt,
 	}))
+	h.recordLogWrite("auth_failure", err, time.Since(logStartedAt))
 }
 
 func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *pipeline.RequestContext, redactedPrompt string, startedAt time.Time, completedAt time.Time) {
@@ -647,6 +689,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 	}
 
 	providerLatencyMs := providerLatencyForLog(reqCtx)
+	logStartedAt := time.Now()
 	err := h.TerminalLogWriter.WriteTerminalLog(ctx, invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
 		RequestID:               reqCtx.RequestID,
 		TraceID:                 reqCtx.TraceID,
@@ -695,6 +738,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		StartedAt:               startedAt,
 		CompletedAt:             completedAt,
 	}))
+	h.recordLogWrite("terminal", err, time.Since(logStartedAt))
 	if err != nil {
 		log.Printf("terminal invocation log write failed request_id=%s status=%s cause=%q",
 			sanitizeLogValue(reqCtx.RequestID),
@@ -717,6 +761,78 @@ func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
 	}
 	providerLatencyMs := reqCtx.ProviderLatencyMs
 	return &providerLatencyMs
+}
+
+func (h *ChatCompletionsHandler) recordGatewayRequestStarted(reqCtx *pipeline.RequestContext) {
+	if h.MetricsRegistry == nil || reqCtx == nil {
+		return
+	}
+	h.MetricsRegistry.GatewayRequestStarted(reqCtx.Endpoint, reqCtx.Method)
+}
+
+func (h *ChatCompletionsHandler) recordGatewayRequestCompleted(reqCtx *pipeline.RequestContext, startedAt time.Time, completedAt time.Time) {
+	if h.MetricsRegistry == nil || reqCtx == nil {
+		return
+	}
+
+	status := reqCtx.Status
+	if status == "" {
+		status = "error"
+	}
+	h.MetricsRegistry.GatewayRequestCompleted(metrics.GatewayRequest{
+		Endpoint:        reqCtx.Endpoint,
+		Method:          reqCtx.Method,
+		Status:          status,
+		HTTPStatus:      reqCtx.HTTPStatus,
+		ErrorCode:       reqCtx.ErrorCode,
+		DurationSeconds: completedAt.Sub(startedAt).Seconds(),
+	})
+
+	if reqCtx.RateLimitDecision != nil {
+		h.MetricsRegistry.RateLimitDecision(metrics.RateLimitDecision{
+			Allowed:         reqCtx.RateLimitDecision.Allowed,
+			Reason:          reqCtx.RateLimitDecision.Reason,
+			DurationSeconds: float64(reqCtx.RateLimitDecision.DurationMS) / 1000,
+		})
+	}
+	if reqCtx.MaskingAction != "" {
+		h.MetricsRegistry.MaskingAction(reqCtx.MaskingAction)
+	}
+}
+
+func (h *ChatCompletionsHandler) recordProviderRequest(request metrics.ProviderRequest) {
+	if h.MetricsRegistry == nil {
+		return
+	}
+	h.MetricsRegistry.ProviderRequest(request)
+}
+
+func (h *ChatCompletionsHandler) recordCacheOperation(operation string, cacheStatus string, cacheType string, status string) {
+	if h.MetricsRegistry == nil {
+		return
+	}
+	h.MetricsRegistry.CacheOperation(metrics.CacheOperation{
+		Operation:   operation,
+		CacheStatus: cacheStatus,
+		CacheType:   cacheType,
+		Status:      status,
+	})
+}
+
+func (h *ChatCompletionsHandler) recordLogWrite(operation string, err error, duration time.Duration) {
+	if h.MetricsRegistry == nil {
+		return
+	}
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	h.MetricsRegistry.LogWrite(metrics.LogWrite{
+		Operation:       operation,
+		Status:          status,
+		DurationSeconds: duration.Seconds(),
+	})
 }
 
 func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
