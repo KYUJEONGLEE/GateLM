@@ -1,0 +1,450 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v1.0.0/schemas/runtime-config.schema.json",
+  "title": "GateLM v1 Active Runtime Config Fixture",
+  "description": "Control Plane produced ActiveRuntimeConfig consumed by Gateway RuntimeConfigProvider.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fixtureName",
+    "fixtureVersion",
+    "owner",
+    "producer",
+    "consumers",
+    "sourceOfTruth",
+    "notes",
+    "runtimeConfig"
+  ],
+  "properties": {
+    "fixtureName": { "$ref": "#/$defs/nonEmptyString" },
+    "fixtureVersion": { "$ref": "#/$defs/nonEmptyString" },
+    "owner": { "$ref": "#/$defs/nonEmptyString" },
+    "producer": { "$ref": "#/$defs/nonEmptyString" },
+    "consumers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "sourceOfTruth": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "runtimeConfig": { "$ref": "#/$defs/runtimeConfig" }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nullableDateTime": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "resourceStatus": {
+      "enum": ["active", "disabled", "archived"]
+    },
+    "credentialStatus": {
+      "enum": ["active", "revoked", "expired", "disabled"]
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "configVersion",
+        "configHash",
+        "configHashAlgorithm",
+        "generatedAt",
+        "effectiveAt",
+        "publishedAt",
+        "publishState",
+        "tenantId",
+        "tenantStatus",
+        "projectId",
+        "projectStatus",
+        "applicationId",
+        "applicationStatus",
+        "apiKeyId",
+        "apiKeyStatus",
+        "appTokenId",
+        "appTokenStatus",
+        "apiKey",
+        "appToken",
+        "providers",
+        "models",
+        "defaultProvider",
+        "defaultModel",
+        "lowCostProvider",
+        "lowCostModel",
+        "fallbackProvider",
+        "fallbackModel",
+        "rateLimit",
+        "safetyPolicy",
+        "cachePolicy",
+        "routingPolicy",
+        "pricingRules",
+        "hashing",
+        "costing"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "gatelm.active-runtime-config.v1" },
+        "configVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "configHash": { "$ref": "#/$defs/hash" },
+        "configHashAlgorithm": { "const": "sha256(canonical_json(runtimeConfig_without_configHash))" },
+        "generatedAt": { "$ref": "#/$defs/dateTime" },
+        "effectiveAt": { "$ref": "#/$defs/dateTime" },
+        "publishedAt": { "$ref": "#/$defs/dateTime" },
+        "publishState": { "enum": ["draft", "active", "superseded", "rolled_back"] },
+        "tenantId": { "$ref": "#/$defs/nonEmptyString" },
+        "tenantStatus": { "$ref": "#/$defs/resourceStatus" },
+        "projectId": { "$ref": "#/$defs/nonEmptyString" },
+        "projectStatus": { "$ref": "#/$defs/resourceStatus" },
+        "applicationId": { "$ref": "#/$defs/nonEmptyString" },
+        "applicationStatus": { "$ref": "#/$defs/resourceStatus" },
+        "apiKeyId": { "$ref": "#/$defs/nonEmptyString" },
+        "apiKeyStatus": { "$ref": "#/$defs/credentialStatus" },
+        "appTokenId": { "$ref": "#/$defs/nonEmptyString" },
+        "appTokenStatus": { "$ref": "#/$defs/credentialStatus" },
+        "apiKey": { "$ref": "#/$defs/credentialRef" },
+        "appToken": { "$ref": "#/$defs/credentialRef" },
+        "providers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/provider" }
+        },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/model" }
+        },
+        "defaultProvider": { "$ref": "#/$defs/nonEmptyString" },
+        "defaultModel": { "$ref": "#/$defs/nonEmptyString" },
+        "lowCostProvider": { "$ref": "#/$defs/nonEmptyString" },
+        "lowCostModel": { "$ref": "#/$defs/nonEmptyString" },
+        "fallbackProvider": { "$ref": "#/$defs/nonEmptyString" },
+        "fallbackModel": { "$ref": "#/$defs/nonEmptyString" },
+        "rateLimit": { "$ref": "#/$defs/rateLimit" },
+        "safetyPolicy": { "$ref": "#/$defs/safetyPolicy" },
+        "cachePolicy": { "$ref": "#/$defs/cachePolicy" },
+        "routingPolicy": { "$ref": "#/$defs/routingPolicy" },
+        "pricingRules": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/pricingRule" }
+        },
+        "hashing": { "$ref": "#/$defs/hashing" },
+        "costing": { "$ref": "#/$defs/costing" }
+      }
+    },
+    "credentialRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "status",
+        "prefix",
+        "last4",
+        "scopes",
+        "expiresAt",
+        "verification"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "type": { "enum": ["api_key", "app_token"] },
+        "status": { "$ref": "#/$defs/credentialStatus" },
+        "prefix": { "$ref": "#/$defs/nonEmptyString" },
+        "last4": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4
+        },
+        "scopes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        },
+        "expiresAt": { "$ref": "#/$defs/nullableDateTime" },
+        "verification": { "const": "prefix_then_hash_compare" }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "provider",
+        "displayName",
+        "status",
+        "baseUrl",
+        "timeoutMs",
+        "secretRef",
+        "credentialPreview",
+        "resolver",
+        "models",
+        "failureMode"
+      ],
+      "properties": {
+        "providerId": { "$ref": "#/$defs/nonEmptyString" },
+        "provider": { "$ref": "#/$defs/nonEmptyString" },
+        "displayName": { "$ref": "#/$defs/nonEmptyString" },
+        "status": { "enum": ["active", "disabled", "degraded"] },
+        "baseUrl": { "$ref": "#/$defs/nonEmptyString" },
+        "timeoutMs": { "$ref": "#/$defs/positiveInteger" },
+        "secretRef": { "$ref": "#/$defs/nullableString" },
+        "credentialPreview": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/credentialPreview" }
+          ]
+        },
+        "resolver": { "enum": ["none", "control_plane_secret_store", "environment"] },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "failureMode": { "enum": ["fail_closed", "fail_open_to_fallback"] }
+      }
+    },
+    "credentialPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefix", "last4"],
+      "properties": {
+        "prefix": { "$ref": "#/$defs/nonEmptyString" },
+        "last4": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "model",
+        "displayName",
+        "status",
+        "contextWindowTokens",
+        "supportsStreaming",
+        "supportsJsonMode"
+      ],
+      "properties": {
+        "provider": { "$ref": "#/$defs/nonEmptyString" },
+        "model": { "$ref": "#/$defs/nonEmptyString" },
+        "displayName": { "$ref": "#/$defs/nonEmptyString" },
+        "status": { "enum": ["active", "disabled"] },
+        "contextWindowTokens": { "$ref": "#/$defs/positiveInteger" },
+        "supportsStreaming": { "type": "boolean" },
+        "supportsJsonMode": { "type": "boolean" }
+      }
+    },
+    "rateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "scope", "algorithm", "windowSeconds", "limit"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "scope": { "const": "application" },
+        "algorithm": { "const": "fixed_window" },
+        "windowSeconds": { "const": 60 },
+        "limit": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
+    "safetyPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "securityPolicyHash", "remoteSafety", "detectors"],
+      "properties": {
+        "mode": { "const": "rule_based" },
+        "securityPolicyHash": { "$ref": "#/$defs/hash" },
+        "remoteSafety": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "mode"],
+          "properties": {
+            "enabled": { "const": false },
+            "mode": { "const": "disabled" }
+          }
+        },
+        "detectors": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/safetyDetector" }
+        }
+      }
+    },
+    "safetyDetector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "enabled", "action", "placeholder"],
+      "properties": {
+        "type": {
+          "enum": [
+            "email",
+            "phone_number",
+            "resident_registration_number",
+            "api_key",
+            "authorization_header",
+            "jwt",
+            "private_key"
+          ]
+        },
+        "enabled": { "type": "boolean" },
+        "action": { "enum": ["redact", "block"] },
+        "placeholder": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "cachePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "type", "ttlSeconds"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "type": { "const": "exact" },
+        "ttlSeconds": { "$ref": "#/$defs/positiveInteger" }
+      }
+    },
+    "routingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "autoModel",
+        "defaultProvider",
+        "defaultModel",
+        "lowCostProvider",
+        "lowCostModel",
+        "fallbackProvider",
+        "fallbackModel",
+        "shortPromptMaxChars",
+        "routingPolicyHash"
+      ],
+      "properties": {
+        "type": { "const": "simple" },
+        "autoModel": { "const": "auto" },
+        "defaultProvider": { "$ref": "#/$defs/nonEmptyString" },
+        "defaultModel": { "$ref": "#/$defs/nonEmptyString" },
+        "lowCostProvider": { "$ref": "#/$defs/nonEmptyString" },
+        "lowCostModel": { "$ref": "#/$defs/nonEmptyString" },
+        "fallbackProvider": { "$ref": "#/$defs/nonEmptyString" },
+        "fallbackModel": { "$ref": "#/$defs/nonEmptyString" },
+        "shortPromptMaxChars": { "$ref": "#/$defs/positiveInteger" },
+        "routingPolicyHash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "pricingRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pricingRuleId",
+        "provider",
+        "model",
+        "pricingVersion",
+        "currency",
+        "unit",
+        "promptTokenMicroUsd",
+        "completionTokenMicroUsd",
+        "effectiveAt"
+      ],
+      "properties": {
+        "pricingRuleId": { "$ref": "#/$defs/nonEmptyString" },
+        "provider": { "$ref": "#/$defs/nonEmptyString" },
+        "model": { "$ref": "#/$defs/nonEmptyString" },
+        "pricingVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "currency": { "const": "USD" },
+        "unit": { "const": "token" },
+        "promptTokenMicroUsd": { "$ref": "#/$defs/nonNegativeInteger" },
+        "completionTokenMicroUsd": { "$ref": "#/$defs/nonNegativeInteger" },
+        "effectiveAt": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "hashing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalJson",
+        "usesSecret",
+        "configHashSourceFields",
+        "routingPolicyHashSourceFields",
+        "securityPolicyHashSourceFields",
+        "requestBodyHash",
+        "promptHash",
+        "cacheKeyHash",
+        "cacheKeyFields"
+      ],
+      "properties": {
+        "canonicalJson": { "const": "utf8_json_sorted_keys_no_extra_whitespace" },
+        "usesSecret": { "const": false },
+        "configHashSourceFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "routingPolicyHashSourceFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "securityPolicyHashSourceFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "requestBodyHash": { "const": "sha256(canonical_json(openai_request_body_without_credentials))" },
+        "promptHash": { "const": "sha256(normalized_redacted_prompt_utf8)" },
+        "cacheKeyHash": { "const": "sha256(canonical_json(cache_key_material))" },
+        "cacheKeyFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "costing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "formula",
+        "savedCostMicroUsdFormula",
+        "usdStringFormat",
+        "missingPricingRule"
+      ],
+      "properties": {
+        "unit": { "const": "micro_usd" },
+        "formula": { "const": "ceil(promptTokens * promptTokenMicroUsd + completionTokens * completionTokenMicroUsd)" },
+        "savedCostMicroUsdFormula": { "const": "sourceRequestCostMicroUsd_on_exact_cache_hit_else_0" },
+        "usdStringFormat": { "const": "fixed_6_decimal_places" },
+        "missingPricingRule": { "enum": ["provider_error", "internal_error"] }
+      }
+    }
+  }
+}

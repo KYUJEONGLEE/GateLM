@@ -15,17 +15,23 @@
 
 | 부족한 계약 | 우선 맞출 역할 | 우선순위 | 이유 |
 |---|---|---:|---|
-| ActiveRuntimeConfig 상세 구조 | 이지섭 / Gateway | P1 | Control Plane이 만들고 Gateway가 그대로 실행한다. |
-| API Key/App Token lifecycle | 이지섭 / Gateway, 김규민 / Web | P1 | Gateway 검증과 Web 1회 표시 UX가 동시에 의존한다. |
-| Runtime Config publish/versioning | 이지섭 / Gateway, 이규정 / Observability | P1 | Gateway는 active config를 실행하고 로그는 configHash를 추적한다. |
-| Control Plane Admin API | 김규민 / Web | P1 | Web Console이 재혁님 API를 호출해 설정을 만든다. |
-| Provider credential/secretRef | 이지섭 / Gateway | P1 | Gateway가 Provider 호출 시 어떤 secret reference를 쓸지 알아야 한다. |
+| ActiveRuntimeConfig 상세 구조 | 이지섭 / Gateway | P1 | `runtime-config` schema/fixture로 1차 고정했다. |
+| API Key/App Token lifecycle | 이지섭 / Gateway, 김규민 / Web | P1 | `credential-lifecycle` schema/fixture로 1차 고정했다. |
+| Runtime Config publish/versioning | 이지섭 / Gateway, 이규정 / Observability | P1 | `configVersion`, `configHash`, `publishState`를 Runtime Config 계약에 반영했다. |
+| Control Plane Admin API | 김규민 / Web | P1 | `control-plane-admin-api` route catalog로 1차 고정했다. |
+| Provider credential/secretRef | 이지섭 / Gateway | P1 | Runtime Config 계약에 `secretRef`, `credentialPreview`, `resolver`를 반영했다. |
 | Rate Limit config/counter 경계 | 이지섭 / Gateway, 이규정 / Observability | P2 | 재혁님은 limit 설정, Gateway는 counter 실행, Observability는 429를 집계한다. |
-| Auth failure log 기준 | 이지섭 / Gateway, 이규정 / Observability | P2 | invalid API Key는 tenant/project context가 없을 수 있다. |
-| Dashboard/Detail API query | 이규정 / Observability, 김규민 / Web | P2 | API path, filter, pagination이 있어야 UI와 backend가 맞는다. |
+| Auth failure log 기준 | 이지섭 / Gateway, 이규정 / Observability | P2 | null 허용 기준은 보강됐지만 auth failure 포함 범위는 아직 남았다. |
+| Dashboard/Detail API query | 이규정 / Observability, 김규민 / Web | P2 | Dashboard 필수 필드와 fixture는 보강됐지만 API path, filter, pagination은 아직 맞춰야 한다. |
 | Safety policy 상세 구조 | 이지섭 / Gateway, 이윤지 / Safety | P2 | Gateway는 정책을 실행하고 Safety는 detector 기준을 평가한다. |
-| Hash/cost 계산 규칙 | 이지섭 / Gateway, 이규정 / Observability | P2 | Gateway가 기록한 값을 Observability가 같은 의미로 집계해야 한다. |
-| Fixture/schema 위치와 검증 기준 | 전체, 특히 이지섭 / Gateway | P2 | mock 개발과 smoke가 같은 입력 계약을 써야 한다. |
+| Hash/cost 계산 규칙 | 이지섭 / Gateway, 이규정 / Observability | P2 | Runtime Config 계약에 hash/cost 기준을 반영했고 구현 검증이 남았다. |
+| Runtime Config fixture/schema 검증 기준 | 전체, 특히 이지섭 / Gateway | P2 | 재혁님 코드형 계약 3종을 추가했고 validation script가 남았다. |
+
+### 2.1 2026-06-27 pull 검토 결과
+
+- `3751fac docs: 관측성 fixture 출처 기준 보강`은 `docs/v1.0.0/fixtures/invocation-log.fixture.json`의 출처 기준과 금지 데이터 기준을 보강했다.
+- 관측성 fixture 출처 기준은 닫혔고, 재혁님이 추가해야 하는 코드형 계약은 Control Plane/Runtime Policy 산출물로 좁힌다.
+- 이번 정리에서 추가한 코드형 계약은 `runtime-config`, `credential-lifecycle`, `control-plane-admin-api` 3개 축이다.
 
 ## 3. Gateway 계약: 재혁님 <-> 이지섭
 
@@ -33,53 +39,41 @@ Gateway 담당자와 가장 먼저 확정해야 하는 계약이다.
 
 ### 3.1 ActiveRuntimeConfig 상세 구조
 
-현재 부족한 점:
+코드형 계약 반영:
 
-- `contracts.md`에는 필수 field 이름만 있다.
-- `providers[]`, `models[]`, `pricingRules[]`, `safetyPolicy`, `cachePolicy`, `routingPolicy` 내부 구조가 고정되어 있지 않다.
+- `docs/v1.0.0/schemas/runtime-config.schema.json`으로 ActiveRuntimeConfig의 v1 기본 구조를 고정했다.
+- `docs/v1.0.0/fixtures/runtime-config.fixture.json`은 Gateway `RuntimeConfigProvider`가 읽어야 하는 샘플 입력이다.
+- `providers[]`, `models[]`, `pricingRules[]`, `safetyPolicy`, `cachePolicy`, `routingPolicy` 내부 구조를 JSON Schema로 명시했다.
 
-추가로 정해야 할 것:
+구현 시 확인할 것:
 
-- `providers[]` item 구조
-- `models[]` item 구조
-- `pricingRules[]` item 구조
-- status allowed values
-- `defaultProvider/defaultModel`과 `fallbackProvider/fallbackModel`의 관계
 - inactive tenant/project/application/key/token 처리 방식
 - active config가 없을 때 Gateway error code
 - config fetch 실패 시 Gateway가 fail-open인지 fail-closed인지
 
-계약 산출물 후보:
+계약 산출물:
 
-- `active-runtime-config.schema.json`
-- `runtime-config.fixture.json`
+- `docs/v1.0.0/schemas/runtime-config.schema.json`
+- `docs/v1.0.0/fixtures/runtime-config.fixture.json`
 - Gateway `RuntimeConfigProvider` input/output DTO
 
 ### 3.2 API Key/App Token 검증 데이터 계약
 
-현재 부족한 점:
+코드형 계약 반영:
 
-- API Key/App Token을 발급한다는 경계는 있지만 검증에 필요한 저장/조회 계약이 부족하다.
+- `docs/v1.0.0/schemas/credential-lifecycle.schema.json`으로 발급, 1회 원문 표시, 조회, 회전, 폐기, Gateway 검증 record 형태를 고정했다.
+- `docs/v1.0.0/fixtures/credential-lifecycle.fixture.json`은 API Key와 App Token 각각의 lifecycle 예시다.
 
-추가로 정해야 할 것:
+구현 시 확인할 것:
 
-- key/token 생성 prefix
-- raw key/token 형식
-- hash 알고리즘
-- trim/normalize 여부
-- prefix 검색 후 hash 비교인지, full hash direct lookup인지
-- `last4` 저장 여부
-- `scopes` 의미
-- `applicationId` binding 기준
-- `active/revoked/expired/disabled` 상태 의미
-- rotate 시 기존 key 처리
-- revoke 시 Gateway 응답
+- Control Plane DB schema가 `gatewayVerificationRecord`와 같은 정보를 저장하는지
+- Admin API response에서 `secretHash`, `plaintext`, raw Authorization header가 빠지는지
+- Gateway가 `prefix_then_hash_compare` 기준으로 검증하는지
 
-계약 산출물 후보:
+계약 산출물:
 
-- credential lifecycle contract
-- credential verification query contract
-- one-time plaintext response contract
+- `docs/v1.0.0/schemas/credential-lifecycle.schema.json`
+- `docs/v1.0.0/fixtures/credential-lifecycle.fixture.json`
 
 ### 3.3 Runtime Config publish/versioning 계약
 
@@ -99,30 +93,30 @@ Gateway 담당자와 가장 먼저 확정해야 하는 계약이다.
 
 계약 산출물 후보:
 
-- runtime config publish contract
+- `docs/v1.0.0/schemas/runtime-config.schema.json`
+- `docs/v1.0.0/fixtures/runtime-config.fixture.json`
 - active config selection rule
 - config hash canonicalization rule
 
 ### 3.4 Provider credential/secretRef 계약
 
-현재 부족한 점:
+코드형 계약 반영:
 
-- Provider Key 원문 저장 금지는 있지만 `secretRef` 형식과 Gateway 사용 방식이 부족하다.
+- `runtime-config.schema.json`의 `providers[]`에 `secretRef`, `credentialPreview`, `resolver`를 고정했다.
+- Runtime Config fixture는 Mock Provider의 `secretRef=null` 예시와 실제 provider가 채워야 할 위치를 보여준다.
 
-추가로 정해야 할 것:
+구현 시 확인할 것:
 
-- `secretRef` format
-- `credentialPreview` 허용 범위
 - Mock Provider와 실제 Provider config 차이
 - base URL 우선순위
 - provider별 추가 config 위치
 - disabled/degraded provider 처리
 - Provider credential을 Gateway가 직접 읽는지 별도 resolver를 쓰는지
 
-계약 산출물 후보:
+계약 산출물:
 
-- provider connection contract
-- secret reference contract
+- `docs/v1.0.0/schemas/runtime-config.schema.json`
+- `docs/v1.0.0/fixtures/runtime-config.fixture.json`
 
 ### 3.5 Rate Limit config와 실행 경계
 
@@ -149,24 +143,20 @@ Gateway 담당자와 가장 먼저 확정해야 하는 계약이다.
 
 ### 4.1 Control Plane Admin API 계약
 
-현재 부족한 점:
+코드형 계약 반영:
 
-- Gateway endpoint 계약은 있지만 Admin API endpoint 계약이 없다.
+- `docs/v1.0.0/schemas/control-plane-admin-api.schema.json`으로 Admin API route catalog 구조를 고정했다.
+- `docs/v1.0.0/fixtures/control-plane-admin-api.fixture.json`에 Project/Application/Provider/API Key/App Token/Runtime Config endpoint 목록을 정리했다.
 
-추가로 정해야 할 것:
+구현 시 확인할 것:
 
-- Project 생성/조회/수정 API
-- Application 생성/조회/수정 API
-- Provider 등록/조회/수정 API
-- API Key 발급/조회/회전/폐기 API
-- App Token 발급/조회/회전/폐기 API
-- Runtime Config 조회/수정/publish API
 - 공통 error response
 - authorization placeholder 기준
 
-계약 산출물 후보:
+계약 산출물:
 
-- Control Plane OpenAPI skeleton
+- `docs/v1.0.0/schemas/control-plane-admin-api.schema.json`
+- `docs/v1.0.0/fixtures/control-plane-admin-api.fixture.json`
 - Admin API request/response DTO
 
 ### 4.2 Credential 원문 1회 표시 UX 계약
@@ -192,36 +182,34 @@ Gateway 담당자와 가장 먼저 확정해야 하는 계약이다.
 
 이규정은 로그, 대시보드, 지표를 담당한다. 재혁님 설정은 로그 해석 기준이 된다.
 
-### 5.1 configHash/policyHash 추적 계약
+### 5.1 configHash/policyHash 계산 계약
 
 현재 부족한 점:
 
-- `configHash`, `routingPolicyHash`, `securityPolicyHash`는 있지만 어떤 설정에서 만들어지는지 부족하다.
+- `contracts.md`에 `GatewayContext -> Invocation Log Mapping`이 추가되어 저장 위치는 보강됐다.
+- `runtime-config.schema.json`에 hash canonicalization과 source field 목록을 추가했다.
+- 실제 코드에서 같은 canonicalization 함수를 공유하는지는 아직 확인해야 한다.
 
 추가로 정해야 할 것:
 
-- `configHash` source fields
-- `routingPolicyHash` source fields
-- `securityPolicyHash` source fields
 - `cachePolicyHash` 필요 여부
 - `pricingVersion`과 cost 계산 연결
-- 로그에 저장할 config identifier 이름
 
 계약 산출물 후보:
 
+- `docs/v1.0.0/schemas/runtime-config.schema.json`
 - runtime metadata mapping contract
-- policy hash calculation rule
 
 ### 5.2 Auth failure log 계약
 
 현재 부족한 점:
 
-- invalid API Key는 tenant/project/application context를 모를 수 있는데, log contract는 tenant/project 중심이다.
+- `contracts.md`에 실행되지 않은 stage가 생산하는 field는 `null` 가능하다는 기준이 추가되어, auth failure log의 일부 모호함은 줄었다.
+- 아직 invalid API Key처럼 tenant/project/application context를 모를 수 있는 요청을 Dashboard total에 포함할지, 별도 auth failure log로 둘지 부족하다.
 
 추가로 정해야 할 것:
 
 - auth failure를 invocation log에 저장할지 별도 auth failure log에 저장할지
-- unknown tenant/project일 때 nullable 허용 여부
 - credential prefix/hash 저장 가능 범위
 - auth failure가 dashboard totalRequests에 포함되는지
 - raw Authorization header 저장 금지 검증 기준
@@ -235,22 +223,20 @@ Gateway 담당자와 가장 먼저 확정해야 하는 계약이다.
 
 현재 부족한 점:
 
-- field는 있지만 계산 방식이 부족하다.
+- `contracts.md`에 `requestBodyHash`는 normalized request body, `promptHash`는 normalized redacted prompt 기준이라는 설명이 추가됐다.
+- Dashboard 필수 집계 field와 fixture는 보강됐다.
+- Demo scenario에 `cacheHitRate = cacheHitRequests / cacheEligibleRequests` 기준이 보강됐다.
+- `runtime-config.schema.json`에 canonical JSON normalize 방식, hash algorithm, cache key field, cost formula를 추가했다.
+- 실제 Gateway와 Observability 구현이 같은 식을 쓰는지는 구현 PR에서 검증해야 한다.
 
-추가로 정해야 할 것:
+구현 시 확인할 것:
 
-- `requestBodyHash` 계산 기준
-- `promptHash` 계산 기준
-- `cacheKeyHash` 계산 기준
-- `costMicroUsd` 계산식
-- `savedCostMicroUsd` 계산식
-- micro USD에서 USD string 변환 규칙
-- pricing rule이 없을 때 처리
+- `missingPricingRule=provider_error` 기준을 Gateway가 그대로 적용하는지
 
 계약 산출물 후보:
 
-- hash calculation contract
-- cost calculation contract
+- `docs/v1.0.0/schemas/runtime-config.schema.json`
+- cost calculation contract test
 
 ## 6. Safety 계약: 재혁님 <-> 이윤지
 
@@ -279,25 +265,23 @@ v1 hot path 실행은 Gateway가 담당하지만, 정책 설정과 평가 기준
 
 ## 7. 전체 팀 계약
 
-### 7.1 Fixture/schema 위치와 검증 기준
+### 7.1 Runtime Config fixture/schema 검증 기준
 
 현재 부족한 점:
 
-- `implementation-plan.md`에는 fixture 목록이 있지만 실제 위치와 검증 기준이 부족하다.
+- `docs/v1.0.0/fixtures/`와 `docs/v1.0.0/schemas/`가 canonical 위치로 정리됐다.
+- `invocation-log`, `dashboard-overview`, `gateway-context`, `safety-eval-corpus` fixture/schema는 추가됐다.
+- 재혁님이 생산해야 하는 `runtime-config`, `credential-lifecycle`, `control-plane-admin-api` fixture/schema를 이번 정리에서 추가했다.
 
 추가로 정해야 할 것:
 
-- `runtime-config.fixture.json` 위치
-- `gateway-context.schema.json` 위치
-- `invocation-log.fixture.json` 위치
-- fixture가 어떤 schema를 통과해야 하는지
-- smoke script가 어떤 fixture를 읽는지
+- Gateway `RuntimeConfigProvider`가 fixture와 같은 shape을 사용하는지
+- smoke script가 runtime config fixture를 읽을지
 - fixture 변경 시 누가 승인하는지
 
 계약 산출물 후보:
 
-- contracts package directory rule
-- fixture validation script
+- runtime config fixture validation script
 - contract smoke checklist
 
 ## 8. Recommended Order
