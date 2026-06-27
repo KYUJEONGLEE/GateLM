@@ -16,5 +16,5 @@ export default async function CustomerDemoPage({ params }: CustomerDemoPageProps
     notFound();
   }
 
-  return <CustomerDemoApp model={model} />;
+  return <CustomerDemoApp key={tenantId} model={model} />;
 }

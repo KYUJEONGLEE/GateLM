@@ -1048,6 +1048,17 @@ select {
   gap: 12px;
 }
 
+.customer-demo-error {
+  margin: 0;
+  padding: 12px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .chat-bubble {
   display: grid;
   gap: 8px;

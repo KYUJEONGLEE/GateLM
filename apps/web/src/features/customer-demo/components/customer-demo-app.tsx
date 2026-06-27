@@ -17,9 +17,24 @@ type CustomerDemoAppProps = {
 export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
   const client = useMemo(() => new FixtureGatewayChatClient(model.scenarios), [model.scenarios]);
   const [exchange, setExchange] = useState<CustomerDemoExchange>(model.scenarios[0]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function selectScenario(scenarioId: CustomerDemoScenarioId) {
-    setExchange(await client.sendChatCompletion(scenarioId));
+    if (isLoading) {
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      setExchange(await client.sendChatCompletion(scenarioId));
+    } catch {
+      setLoadError("Unable to load this fixture scenario.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -70,6 +85,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
               data-status={scenario.status}
               key={scenario.scenarioId}
               onClick={() => selectScenario(scenario.scenarioId)}
+              disabled={isLoading}
               type="button"
             >
               <span>{scenario.httpStatus}</span>
@@ -79,7 +95,11 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           ))}
         </aside>
 
-        <section className="customer-demo-chat" aria-label="Text-only chat preview">
+        <section
+          className="customer-demo-chat"
+          aria-busy={isLoading}
+          aria-label="Text-only chat preview"
+        >
           <div className="panel-heading">
             <div>
               <p className="console-kicker">chat preview</p>
@@ -91,6 +111,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           </div>
 
           <div className="chat-window">
+            {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
             <article className="chat-bubble chat-bubble-user">
               <span>Customer message</span>
               <p>{exchange.request.body.messages[1]?.content ?? "No prompt preview stored."}</p>
@@ -104,10 +125,11 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           <div className="customer-demo-actions">
             <button
               className="primary-button"
+              disabled={isLoading}
               onClick={() => selectScenario(exchange.scenarioId)}
               type="button"
             >
-              Replay fixture request
+              {isLoading ? "Loading fixture..." : "Replay fixture request"}
             </button>
             <Link className="secondary-button" href={exchange.requestLogHref}>
               Open request detail
