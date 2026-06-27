@@ -60,6 +60,32 @@ func TestLimiterAllowsRequestWithinPostgresFixedWindow(t *testing.T) {
 	}
 }
 
+func TestLimiterTrimsScopeIdentifiersOnceForDecisionAndQuery(t *testing.T) {
+	// Given tenant/application id에 앞뒤 공백이 섞여 있다
+	db := &fakeQueryer{row: fakeRow{requestCount: 1}}
+	limiter := NewLimiter(db)
+
+	// When RateLimiter가 요청 scope를 정규화한다
+	decision, err := limiter.Check(context.Background(), ratelimit.Request{
+		TenantID:      "  " + testTenantID + "  ",
+		ProjectID:     testProjectID,
+		ApplicationID: "\t" + testApplicationID + "\n",
+		Config:        testConfig(3),
+		Now:           time.Date(2026, 6, 27, 9, 0, 10, 0, time.UTC),
+	})
+
+	// Then decision과 DB query에는 trimmed id만 사용된다
+	if err != nil {
+		t.Fatalf("expected trimmed identifiers to pass, got %v", err)
+	}
+	if decision.ScopeID != testApplicationID {
+		t.Fatalf("expected trimmed application id in decision, got %q", decision.ScopeID)
+	}
+	if len(db.args) < 2 || db.args[0] != testTenantID || db.args[1] != testApplicationID {
+		t.Fatalf("expected trimmed query args, got %#v", db.args)
+	}
+}
+
 func TestLimiterBlocksRequestWhenCounterExceedsLimit(t *testing.T) {
 	// Given PostgreSQL counter 증가 후 count가 limit을 초과한다
 	now := time.Date(2026, 6, 27, 9, 0, 42, 0, time.UTC)
@@ -232,8 +258,8 @@ func TestLimiterIntegrationConcurrentFixedWindow(t *testing.T) {
 	tenantID := newTestUUID(t)
 	projectID := newTestUUID(t)
 	applicationID := newTestUUID(t)
-	ensureIntegrationScope(t, ctx, pool, tenantID, projectID, applicationID)
 	defer cleanupIntegrationScope(t, context.Background(), pool, tenantID, projectID, applicationID)
+	ensureIntegrationScope(t, ctx, pool, tenantID, projectID, applicationID)
 
 	limiter := NewLimiter(pool)
 	req := ratelimit.Request{

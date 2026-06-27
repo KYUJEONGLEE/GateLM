@@ -32,12 +32,14 @@ func NewLimiter(db Queryer) *Limiter {
 func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.Decision, error) {
 	startedAt := time.Now()
 	config := ratelimit.NormalizeConfig(req.Config)
+	tenantID := strings.TrimSpace(req.TenantID)
+	applicationID := strings.TrimSpace(req.ApplicationID)
 	now := normalizeNow(req.Now)
 	windowStart := fixedWindowStart(now, config.WindowSeconds)
 	resetAt := windowStart.Add(time.Duration(config.WindowSeconds) * time.Second)
 	decision := ratelimit.Decision{
 		Scope:             config.Scope,
-		ScopeID:           strings.TrimSpace(req.ApplicationID),
+		ScopeID:           applicationID,
 		Limit:             config.Limit,
 		WindowSeconds:     config.WindowSeconds,
 		WindowStart:       windowStart,
@@ -53,7 +55,7 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 		decision.DurationMS = time.Since(startedAt).Milliseconds()
 		return decision, nil
 	}
-	if err := validateRequest(config, req); err != nil {
+	if err := validateRequest(config, tenantID, applicationID); err != nil {
 		decision.Allowed = false
 		decision.Remaining = 0
 		decision.Reason = ratelimit.ReasonConfigMissing
@@ -73,8 +75,8 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 
 	var requestCount int
 	if err := l.db.QueryRow(ctx, checkAndIncrementSQL,
-		strings.TrimSpace(req.TenantID),
-		strings.TrimSpace(req.ApplicationID),
+		tenantID,
+		applicationID,
 		windowStart,
 		config.WindowSeconds,
 		config.Limit,
@@ -98,7 +100,7 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 	return decision, nil
 }
 
-func validateRequest(config ratelimit.Config, req ratelimit.Request) error {
+func validateRequest(config ratelimit.Config, tenantID string, applicationID string) error {
 	if config.Scope != ratelimit.ScopeApplication {
 		return fmt.Errorf("%w: unsupported scope %q", ErrMissingConfig, config.Scope)
 	}
@@ -108,7 +110,7 @@ func validateRequest(config ratelimit.Config, req ratelimit.Request) error {
 	if config.WindowSeconds <= 0 || config.Limit <= 0 {
 		return fmt.Errorf("%w: windowSeconds and limit must be positive", ErrMissingConfig)
 	}
-	if strings.TrimSpace(req.TenantID) == "" || strings.TrimSpace(req.ApplicationID) == "" {
+	if tenantID == "" || applicationID == "" {
 		return ErrMissingScope
 	}
 	return nil
