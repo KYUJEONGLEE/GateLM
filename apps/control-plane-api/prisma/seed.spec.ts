@@ -1,7 +1,8 @@
-import { RuntimeConfigPublishState } from '@prisma/client';
+import { PrismaClient, RuntimeConfigPublishState } from '@prisma/client';
 
 import {
   buildDemoRuntimeConfigDocument,
+  canonicalJsonForDemo,
   credentialHash,
   DEMO_APPLICATION_ID,
   DEMO_RUNTIME_CONFIG_VERSION,
@@ -51,6 +52,13 @@ describe('Control Plane demo seed baseline', () => {
     );
   });
 
+  it('canonicalizes undefined like JSON for arrays while omitting object fields', () => {
+    expect(canonicalJsonForDemo({ a: 1, b: undefined })).toBe('{"a":1}');
+    expect(canonicalJsonForDemo(['a', undefined, 'c'])).toBe(
+      '["a",null,"c"]',
+    );
+  });
+
   it('supersedes older active runtime configs and upserts the demo active config', async () => {
     const tx = createMockTransaction();
     const client = {
@@ -59,7 +67,7 @@ describe('Control Plane demo seed baseline', () => {
       ),
     };
 
-    await seedDemoData(client as never);
+    await seedDemoData(client as unknown as PrismaClient);
 
     expect(client.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.runtimeConfig.updateMany).toHaveBeenCalledWith({

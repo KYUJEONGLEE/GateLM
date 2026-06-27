@@ -37,6 +37,10 @@ export function credentialHash(plaintext: string): string {
   return sha256(plaintext.trim());
 }
 
+export function canonicalJsonForDemo(value: unknown): string {
+  return canonicalJson(value);
+}
+
 export function buildDemoRuntimeConfigDocument(
   providerId: string,
 ): ActiveRuntimeConfigResponseDto {
@@ -496,7 +500,7 @@ function demoProviderConfig(): Prisma.InputJsonObject {
 
 function canonicalJson(value: unknown): string {
   if (value === undefined) {
-    return '';
+    return 'null';
   }
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) {
