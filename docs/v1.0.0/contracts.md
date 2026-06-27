@@ -282,7 +282,7 @@ Required groups:
 
 ```text
 request:
-  requestId, traceId, startedAt, endpoint, method, source, stream
+  requestId, traceId, startedAt, endpoint, method, source, stream, requestBodyHash
 
 identity:
   tenantId, projectId, applicationId, apiKeyId, appTokenId, endUserId, featureId
@@ -536,6 +536,39 @@ status, httpStatus, errorCode, errorMessage, errorStage
 createdAt, completedAt
 metadata
 ```
+
+### 12.1 GatewayContext -> Invocation Log Mapping
+
+`GatewayContext` is the in-memory request context used by Gateway stages. Invocation Log is the terminal record written after request handling finishes.
+
+| GatewayContext field | Producer | Invocation Log storage |
+|---|---|---|
+| `request.requestId`, `request.traceId` | `assign_request_id` | `requestId`, `traceId` |
+| `request.startedAt` | `receive_request` | `createdAt` |
+| `time.completedAt` | terminal response/log stage | `completedAt` |
+| `request.endpoint`, `request.method`, `request.source`, `request.stream` | HTTP receive / request classification | `endpoint`, `method`, `source`, `stream` |
+| `request.requestBodyHash` | `parse_openai_compatible_payload` after normalized JSON parse | `requestBodyHash` |
+| `identity.*` | auth, app token validation, context resolver | matching identity fields |
+| `runtime.configHash` | `load_active_runtime_config` / `RuntimeConfigProvider` | `metadata.runtime.configHash` |
+| `runtime.securityPolicyHash` | `evaluate_safety` from active safety policy | `metadata.runtime.securityPolicyHash` |
+| `runtime.routingPolicyHash` | `load_active_runtime_config` or `decide_model_route` | `metadata.runtime.routingPolicyHash` |
+| `governance.rateLimitDecision` | `check_rate_limit` | `rateLimitDecision` |
+| `safety.promptHash` | `evaluate_safety` / `mask_or_block` using the normalized redacted prompt | `promptHash` |
+| `safety.redactedPromptPreview` | `mask_or_block` | `redactedPromptPreview` |
+| `safety.maskingAction`, `safety.maskingDetectedTypes`, `safety.maskingDetectedCount` | `evaluate_safety` / `mask_or_block` | matching masking fields |
+| `routing.*` | `decide_model_route` | matching routing fields |
+| `cache.*` | `build_exact_cache_key`, `exact_cache_lookup` | matching cache fields |
+| `usage.*` | `compute_usage_cost_latency`, cache hit handling | matching usage fields |
+| `latency.*` | pipeline timing / provider adapter timing | matching latency fields |
+| `status.*` | terminal stage or failing stage | matching status/error fields |
+
+`startedAt` MUST be stored as Invocation Log `createdAt`. `completedAt` MUST be stored as Invocation Log `completedAt`.
+
+`requestBodyHash` is produced from the normalized request body, never from raw credentials. `promptHash` is produced from the normalized redacted prompt. `redactedPromptPreview` is produced only after safety redaction. `configHash`, `securityPolicyHash`, and `routingPolicyHash` are runtime provenance values and MUST be stored under Invocation Log `metadata.runtime`.
+
+`InvocationLogWriter` serializes terminal outcomes already present in `GatewayContext`. It MUST NOT invent or infer stage outcomes that are missing from `GatewayContext`.
+
+This mapping MUST NOT store raw prompt, raw response, raw API Key, raw App Token, raw Provider Key, Authorization header, or raw detected sensitive values.
 
 PostgreSQL is the v1 canonical source. Existing `p0_llm_invocation_logs` may be reused only if migration notes document the v1 mapping.
 
