@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const readinessItems = [
   {
     label: "Workspace",
@@ -13,6 +15,8 @@ const readinessItems = [
   }
 ];
 
+const fixtureTenantId = "tenant_demo_acme";
+
 export function WebConsoleInitView() {
   return (
     <main className="init-shell">
@@ -24,6 +28,14 @@ export function WebConsoleInitView() {
             Product experience and customer demo workspace for the v1.0.0
             gateway baseline.
           </p>
+          <div className="init-actions">
+            <Link className="primary-link" href={`/tenants/${fixtureTenantId}/dashboard`}>
+              Open dashboard
+            </Link>
+            <Link className="back-link" href={`/tenants/${fixtureTenantId}/request-logs`}>
+              View request logs
+            </Link>
+          </div>
         </div>
 
         <dl className="readiness-grid" aria-label="Web console setup status">
