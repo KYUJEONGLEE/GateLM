@@ -1,0 +1,532 @@
+{
+  "actionConfusion": {
+    "blocked": {
+      "blocked": 5
+    },
+    "none": {
+      "none": 1
+    },
+    "redacted": {
+      "redacted": 3
+    }
+  },
+  "actualFixture": {
+    "fixtureName": "v1-safety-eval-detector-output-pass",
+    "fixtureVersion": "2026-06-27.v1",
+    "mode": "detector_output",
+    "path": "app\\tests\\fixtures\\safety_eval\\detector-output.fixture.json"
+  },
+  "cases": [
+    {
+      "actual": {
+        "action": "none",
+        "blockReason": null,
+        "detectedCount": 0,
+        "detectedTypes": [],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:95485125258ce4034600b50449f34bb0aa0607ecd13401da5ba53127cfdcdf80",
+      "caseId": "safe_none_basic",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "none",
+        "blockReason": null,
+        "detectedCount": 0,
+        "detectedTypes": [],
+        "gatewayEffects": {
+          "cacheLookup": true,
+          "errorCode": null,
+          "httpStatus": 200,
+          "providerCalled": true,
+          "terminalStatus": "success"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:95485125258ce4034600b50449f34bb0aa0607ecd13401da5ba53127cfdcdf80",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "none"
+      ]
+    },
+    {
+      "actual": {
+        "action": "redacted",
+        "blockReason": null,
+        "detectedCount": 1,
+        "detectedTypes": [
+          "email"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:41972015ce62a55631fb8884c85beaeadd2d907fb999a9beef4a2e2f74bbdebe",
+      "caseId": "email_redacts_before_provider",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "redacted",
+        "blockReason": null,
+        "detectedCount": 1,
+        "detectedTypes": [
+          "email"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": true,
+          "errorCode": null,
+          "httpStatus": 200,
+          "providerCalled": true,
+          "terminalStatus": "success"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:41972015ce62a55631fb8884c85beaeadd2d907fb999a9beef4a2e2f74bbdebe",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "redaction",
+        "email"
+      ]
+    },
+    {
+      "actual": {
+        "action": "redacted",
+        "blockReason": null,
+        "detectedCount": 2,
+        "detectedTypes": [
+          "email"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:744303c92381c491e88e8979aeec4f7360fe27a3d1a13d5718172a971db46c43",
+      "caseId": "repeated_email_redacts_count",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "redacted",
+        "blockReason": null,
+        "detectedCount": 2,
+        "detectedTypes": [
+          "email"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": true,
+          "errorCode": null,
+          "httpStatus": 200,
+          "providerCalled": true,
+          "terminalStatus": "success"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:744303c92381c491e88e8979aeec4f7360fe27a3d1a13d5718172a971db46c43",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "redaction",
+        "email",
+        "repeated"
+      ]
+    },
+    {
+      "actual": {
+        "action": "redacted",
+        "blockReason": null,
+        "detectedCount": 1,
+        "detectedTypes": [
+          "phone_number"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:6fe8102dc999d10e5602385b81d7e6710073db94a304cfb9b9f01ea8e92b2f55",
+      "caseId": "phone_redacts_before_provider",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "redacted",
+        "blockReason": null,
+        "detectedCount": 1,
+        "detectedTypes": [
+          "phone_number"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": true,
+          "errorCode": null,
+          "httpStatus": 200,
+          "providerCalled": true,
+          "terminalStatus": "success"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:6fe8102dc999d10e5602385b81d7e6710073db94a304cfb9b9f01ea8e92b2f55",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "redaction",
+        "phone_number"
+      ]
+    },
+    {
+      "actual": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "resident_registration_number"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:1eaa7fd66e885d1e6d1c28e384f565eee8f766e51bb2df1a4743dc71d62c4eb5",
+      "caseId": "rrn_blocks_before_cache",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "resident_registration_number"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": false,
+          "errorCode": "sensitive_data_blocked",
+          "httpStatus": 403,
+          "providerCalled": false,
+          "terminalStatus": "blocked"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:1eaa7fd66e885d1e6d1c28e384f565eee8f766e51bb2df1a4743dc71d62c4eb5",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "block",
+        "resident_registration_number"
+      ]
+    },
+    {
+      "actual": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "api_key"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:fbeb5300e719fb97ec2e58e6dece807d687dcde2b81f92e0b0f92b3f49552de3",
+      "caseId": "api_key_blocks_before_cache",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "api_key"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": false,
+          "errorCode": "sensitive_data_blocked",
+          "httpStatus": 403,
+          "providerCalled": false,
+          "terminalStatus": "blocked"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:fbeb5300e719fb97ec2e58e6dece807d687dcde2b81f92e0b0f92b3f49552de3",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "block",
+        "api_key"
+      ]
+    },
+    {
+      "actual": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "authorization_header"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:344f7bc2e7e274f7ae4bbe1f35ecffeeaa2f4402edd9b4d18fd1737be8ab6045",
+      "caseId": "authorization_header_blocks_before_cache",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "authorization_header"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": false,
+          "errorCode": "sensitive_data_blocked",
+          "httpStatus": 403,
+          "providerCalled": false,
+          "terminalStatus": "blocked"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:344f7bc2e7e274f7ae4bbe1f35ecffeeaa2f4402edd9b4d18fd1737be8ab6045",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "block",
+        "authorization_header"
+      ]
+    },
+    {
+      "actual": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "jwt"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:ef02436f71c53c82374cd84608eec00b1fca1c19127d38bfcfc868dcc7232eb2",
+      "caseId": "jwt_blocks_before_cache",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "jwt"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": false,
+          "errorCode": "sensitive_data_blocked",
+          "httpStatus": 403,
+          "providerCalled": false,
+          "terminalStatus": "blocked"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:ef02436f71c53c82374cd84608eec00b1fca1c19127d38bfcfc868dcc7232eb2",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "block",
+        "jwt"
+      ]
+    },
+    {
+      "actual": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "private_key"
+        ],
+        "gatewayEffects": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "actualPreviewHash": "sha256:102d2a017ba96ad5cb8173afefc0a624e28e3b6aef6f6639cc5b59b6779fbd5d",
+      "caseId": "private_key_blocks_before_cache",
+      "classification": {
+        "falseNegative": false,
+        "falsePositive": false
+      },
+      "expected": {
+        "action": "blocked",
+        "blockReason": "sensitive_data_blocked",
+        "detectedCount": 1,
+        "detectedTypes": [
+          "private_key"
+        ],
+        "gatewayEffects": {
+          "cacheLookup": false,
+          "errorCode": "sensitive_data_blocked",
+          "httpStatus": 403,
+          "providerCalled": false,
+          "terminalStatus": "blocked"
+        },
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "expectedPreviewHash": "sha256:102d2a017ba96ad5cb8173afefc0a624e28e3b6aef6f6639cc5b59b6779fbd5d",
+      "extraDetectorTypes": [],
+      "mismatchReasons": [],
+      "missingDetectorTypes": [],
+      "outcome": "pass",
+      "redactedPromptPreviewMatched": true,
+      "tags": [
+        "v1",
+        "safety",
+        "block",
+        "private_key"
+      ]
+    }
+  ],
+  "corpus": {
+    "path": "..\\..\\docs\\v1.0.0\\fixtures\\safety-eval-corpus.jsonl"
+  },
+  "detectors": [
+    {
+      "actualPositiveCases": 1,
+      "countMismatchCases": 0,
+      "detectorType": "api_key",
+      "expectedPositiveCases": 1,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 8,
+      "truePositiveCases": 1
+    },
+    {
+      "actualPositiveCases": 1,
+      "countMismatchCases": 0,
+      "detectorType": "authorization_header",
+      "expectedPositiveCases": 1,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 8,
+      "truePositiveCases": 1
+    },
+    {
+      "actualPositiveCases": 2,
+      "countMismatchCases": 0,
+      "detectorType": "email",
+      "expectedPositiveCases": 2,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 7,
+      "truePositiveCases": 2
+    },
+    {
+      "actualPositiveCases": 1,
+      "countMismatchCases": 0,
+      "detectorType": "jwt",
+      "expectedPositiveCases": 1,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 8,
+      "truePositiveCases": 1
+    },
+    {
+      "actualPositiveCases": 1,
+      "countMismatchCases": 0,
+      "detectorType": "phone_number",
+      "expectedPositiveCases": 1,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 8,
+      "truePositiveCases": 1
+    },
+    {
+      "actualPositiveCases": 1,
+      "countMismatchCases": 0,
+      "detectorType": "private_key",
+      "expectedPositiveCases": 1,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 8,
+      "truePositiveCases": 1
+    },
+    {
+      "actualPositiveCases": 1,
+      "countMismatchCases": 0,
+      "detectorType": "resident_registration_number",
+      "expectedPositiveCases": 1,
+      "falseNegativeCases": 0,
+      "falsePositiveCases": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "trueNegativeCases": 8,
+      "truePositiveCases": 1
+    }
+  ],
+  "generatedAt": "2026-06-27T07:15:03.743582Z",
+  "reportVersion": "safety-eval-report.v1",
+  "summary": {
+    "actionMismatchCases": 0,
+    "failedCases": 0,
+    "falseNegativeCases": 0,
+    "falsePositiveCases": 0,
+    "gatewayEffectMismatchCases": 0,
+    "passRate": 1.0,
+    "passedCases": 9,
+    "totalCases": 9
+  }
+}
