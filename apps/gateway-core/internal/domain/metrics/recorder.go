@@ -127,9 +127,10 @@ func defaultLabelValue(value string) string {
 }
 
 func normalizeStatus(status string) string {
-	switch strings.TrimSpace(status) {
+	trimmed := strings.TrimSpace(status)
+	switch trimmed {
 	case "success", "cache_hit", "blocked", "rate_limited", "error", "cancelled":
-		return status
+		return trimmed
 	case "":
 		return "error"
 	default:
