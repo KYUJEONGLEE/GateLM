@@ -6,7 +6,9 @@
   "consumers": ["김규민", "이규정"],
   "sourceOfTruth": [
     "docs/v1.0.0/contracts.md",
-    "docs/v1.0.0/implementation-plan.md"
+    "docs/v1.0.0/implementation-plan.md",
+    "docs/v1.0.0/schemas/gateway-context.schema.json",
+    "docs/v1.0.0/fixtures/gateway-context.fixture.json"
   ],
   "notes": [
     "PostgreSQL is the canonical request log source for v1.0.0.",
