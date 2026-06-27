@@ -309,6 +309,49 @@ describe('RuntimeConfigsService', () => {
     ).rejects.toThrow('Active Runtime Config is not executable.');
   });
 
+  it('rejects an active runtime config when credential references are malformed', async () => {
+    const { service, prisma } = createService();
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    delete activeDocument.apiKey;
+    activeDocument.appTokenId = null;
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+        },
+      ),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+    expect(prisma.gatewayApiKey.findUnique).not.toHaveBeenCalled();
+    expect(prisma.appToken.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects an active runtime config when provider models are malformed', async () => {
+    const { service, prisma } = createService();
+    const activeDocument = activeRuntimeConfigDocument();
+    const provider = activeDocument.providers[0];
+    if (!provider) {
+      throw new Error('Expected active runtime config fixture provider.');
+    }
+    (provider as unknown as { models: unknown }).models = 'mock-fast';
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+  });
+
   it('serializes canonical JSON with stable key order and Date values', () => {
     const { service } = createService();
     const canonicalJson = (

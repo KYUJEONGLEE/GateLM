@@ -581,7 +581,12 @@ export class RuntimeConfigsService {
   private assertRuntimeConfigRequiredPolicyShape(
     document: ActiveRuntimeConfigResponseDto,
   ): void {
+    const runtimeDocument = document as unknown as Record<string, unknown>;
     if (
+      !this.isNonEmptyString(runtimeDocument.apiKeyId) ||
+      !this.isNonEmptyString(runtimeDocument.appTokenId) ||
+      !this.isCredentialRefShape(runtimeDocument.apiKey, 'api_key') ||
+      !this.isCredentialRefShape(runtimeDocument.appToken, 'app_token') ||
       !Array.isArray(document.providers) ||
       document.providers.length === 0 ||
       !Array.isArray(document.models) ||
@@ -615,6 +620,7 @@ export class RuntimeConfigsService {
       !provider ||
       !model ||
       provider.status !== 'active' ||
+      !Array.isArray(provider.models) ||
       !provider.models.includes(modelName) ||
       model.status !== 'active'
     ) {
@@ -622,6 +628,47 @@ export class RuntimeConfigsService {
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
       );
     }
+  }
+
+  private isCredentialRefShape(
+    value: unknown,
+    expectedType: 'api_key' | 'app_token',
+  ): value is RuntimeConfigCredentialRefDto {
+    if (!this.isRecord(value)) {
+      return false;
+    }
+
+    return (
+      this.isNonEmptyString(value.id) &&
+      value.type === expectedType &&
+      this.isCredentialStatusValue(value.status) &&
+      this.isNonEmptyString(value.prefix) &&
+      typeof value.last4 === 'string' &&
+      value.last4.length === 4 &&
+      Array.isArray(value.scopes) &&
+      value.scopes.every((scope) => this.isNonEmptyString(scope)) &&
+      (value.expiresAt === null || this.isNonEmptyString(value.expiresAt)) &&
+      value.verification === 'prefix_then_hash_compare'
+    );
+  }
+
+  private isCredentialStatusValue(
+    value: unknown,
+  ): value is RuntimeConfigCredentialRefDto['status'] {
+    return (
+      value === 'active' ||
+      value === 'revoked' ||
+      value === 'expired' ||
+      value === 'disabled'
+    );
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private isNonEmptyString(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 0;
   }
 
   private assertNoForbiddenRuntimeConfigKeys(value: unknown): void {
