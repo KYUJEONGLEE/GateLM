@@ -13,6 +13,7 @@ Write-Host ""
 Write-Host "GateLM v1 PostgreSQL RateLimiter Demo"
 Write-Host "====================================="
 Write-Host "Runs the PostgreSQL fixed-window adapter demo test and prints input/output decisions."
+Write-Host "With GATELM_TEST_DATABASE_URL, it also checks concurrency and counter pruning against PostgreSQL."
 Write-Host ""
 Write-Host "[Command]"
 Write-Host "go test ./internal/adapters/ratelimit/postgres -run TestLimiterDemoPostgresFixedWindow -v"
@@ -27,13 +28,13 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($env:GATELM_TEST_DATABASE_URL)) {
         Write-Host ""
         Write-Host "[Optional Integration]"
-        Write-Host "GATELM_TEST_DATABASE_URL is set, running PostgreSQL concurrency test."
-        go test ./internal/adapters/ratelimit/postgres -run TestLimiterIntegrationConcurrentFixedWindow -v
+        Write-Host "GATELM_TEST_DATABASE_URL is set, running PostgreSQL concurrency and pruning tests."
+        go test ./internal/adapters/ratelimit/postgres -run "Test(LimiterIntegrationConcurrentFixedWindow|CounterPrunerIntegrationDeletesExpiredCounters)" -v
     }
     else {
         Write-Host ""
         Write-Host "[Optional Integration]"
-        Write-Host "Skipped. Set GATELM_TEST_DATABASE_URL to run the real PostgreSQL concurrency test."
+        Write-Host "Skipped. Set GATELM_TEST_DATABASE_URL to run the real PostgreSQL concurrency and pruning tests."
     }
 }
 finally {
