@@ -351,9 +351,9 @@ time:
   completedAt
 ```
 
-The canonical JSON Schema for the terminal GatewayContext snapshot is `docs/v1.0.0/schemas/gateway-context.schema.json`. The canonical fixture example is `docs/v1.0.0/fixtures/gateway-context.fixture.json`.
+The canonical JSON Schema for the terminal GatewayContext snapshot and its fixture wrapper is `docs/v1.0.0/schemas/gateway-context.schema.json`. The canonical fixture example is `docs/v1.0.0/fixtures/gateway-context.fixture.json`.
 
-The schema describes the terminal snapshot handed to `InvocationLogWriter`. In-progress stage implementations may use typed optional fields internally, but the writer input must include the required groups and keys; values for stages that did not run may be `null`.
+The schema accepts the fixture wrapper and the nested `gatewayContext` object. The nested context describes the terminal snapshot handed to `InvocationLogWriter`. In-progress stage implementations may use typed optional fields internally, but the writer input must include the required groups and keys; values for stages that did not run may be `null`.
 
 MUST NOT store in GatewayContext:
 

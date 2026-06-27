@@ -1,24 +1,65 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gatelm.local/docs/v1.0.0/schemas/gateway-context.schema.json",
-  "title": "GateLM v1 Terminal GatewayContext",
-  "description": "Terminal in-memory GatewayContext snapshot handed to InvocationLogWriter.",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "request",
-    "identity",
-    "runtime",
-    "governance",
-    "safety",
-    "routing",
-    "cache",
-    "usage",
-    "latency",
-    "status",
-    "time"
+  "title": "GateLM v1 GatewayContext Contract",
+  "description": "Terminal GatewayContext contract. Validates either the fixture wrapper or the GatewayContext object itself.",
+  "anyOf": [
+    { "$ref": "#/$defs/gatewayContextFixture" },
+    { "$ref": "#/$defs/gatewayContext" }
   ],
-  "properties": {
+  "$defs": {
+    "gatewayContextFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixtureName",
+        "fixtureVersion",
+        "owner",
+        "producer",
+        "consumers",
+        "sourceOfTruth",
+        "notes",
+        "gatewayContext"
+      ],
+      "properties": {
+        "fixtureName": { "$ref": "#/$defs/nonEmptyString" },
+        "fixtureVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "owner": { "$ref": "#/$defs/nonEmptyString" },
+        "producer": { "$ref": "#/$defs/nonEmptyString" },
+        "consumers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "sourceOfTruth": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "gatewayContext": { "$ref": "#/$defs/gatewayContext" }
+      }
+    },
+    "gatewayContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request",
+        "identity",
+        "runtime",
+        "governance",
+        "safety",
+        "routing",
+        "cache",
+        "usage",
+        "latency",
+        "status",
+        "time"
+      ],
+      "properties": {
     "request": {
       "type": "object",
       "additionalProperties": false,
@@ -216,8 +257,8 @@
         "completedAt": { "$ref": "#/$defs/dateTime" }
       }
     }
-  },
-  "$defs": {
+      }
+    },
     "dateTime": {
       "type": "string",
       "format": "date-time"

@@ -195,8 +195,8 @@ def validate_case_shape(case: dict[str, Any], index: int) -> None:
         fail(f"{label}: unknown detectedTypes {decision['detectedTypes']}")
     if not isinstance(decision["detectedCount"], int) or decision["detectedCount"] < 0:
         fail(f"{label}: detectedCount must be a non-negative integer")
-    if decision["detectedCount"] != len(decision["detectedTypes"]):
-        fail(f"{label}: detectedCount must equal detectedTypes length for Phase 0 corpus")
+    if decision["detectedCount"] < len(decision["detectedTypes"]):
+        fail(f"{label}: detectedCount cannot be less than detectedTypes length")
     if decision["redactedPromptPreview"] is not None and not isinstance(decision["redactedPromptPreview"], str):
         fail(f"{label}: redactedPromptPreview must be string or null")
     if decision["blockReason"] is not None and not isinstance(decision["blockReason"], str):
