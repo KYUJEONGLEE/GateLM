@@ -1,6 +1,6 @@
 # GateLM AI Coding Rules
 
-> P0 범위 안내: 이 문서는 AI 작업 규칙과 장기 안전 기준을 포함한다. 현재 구현 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 `MVP` 표현은 현재 P0 필수 범위를 자동으로 의미하지 않는다.
+> v1.0.0 범위 안내: 이 문서는 AI 작업 규칙과 장기 안전 기준을 포함한다. 현재 구현 범위는 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 우선한다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다.
 
 ## 문서 목적
 
@@ -610,13 +610,13 @@ Gateway 요청 흐름은 기본적으로 아래 순서를 따른다.
 2. API Key 인증
 3. Tenant / Project / User / Application 식별
 4. App Token 검증
-5. Rate Limit / Quota / Budget 검사는 P1/P2 후보. P0에서는 disabled 또는 no-op
-6. Runtime Policy 검사는 P1/P2 후보. P0에서는 JSON config 기반 최소 정책
+5. Rate Limit 검사는 v1.0.0 필수. `applicationId` 기준 PostgreSQL-backed fixed window를 적용
+6. Runtime Policy 검사는 v1.0.0 ActiveRuntimeConfig 기반 최소 정책을 적용
 7. 민감정보 탐지 / 마스킹
 8. Model Routing
 9. selectedProvider/selectedModel을 포함한 Exact Cache key 생성
 10. Exact Cache 조회
-11. Semantic Cache 조회는 P1/P2 후보. P0에서는 disabled
+11. Semantic Cache 조회는 v2 후보. v1.0.0에서는 disabled
 12. Provider Adapter 호출
 13. 응답 반환
 14. 비동기 이벤트 발행

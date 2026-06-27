@@ -1,6 +1,6 @@
 # GateLM Dashboard Metrics
 
-> P0 범위 안내: 이 문서는 장기 Dashboard/Analytics 지표를 포함한다. 현재 P0 Dashboard 범위는 `docs/p0/p0-contract.md`와 `docs/p0/demo-acceptance.md`를 우선한다. P0 cache hit 계산은 `cacheStatus=hit`와 `cacheType=exact`를 기준으로 한다. `exact_hit/semantic_hit` 표현은 P1/P2 mapping 후보로만 본다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> v1.0.0 범위 안내: 이 문서는 장기 Dashboard/Analytics 지표를 포함한다. 현재 Dashboard/Observability 범위는 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 우선한다. v1.0.0은 PostgreSQL request log와 Prometheus metrics를 기준으로 데모/측정을 수행하고, Redpanda/ClickHouse는 v2 evidence path로 둔다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 

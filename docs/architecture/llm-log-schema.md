@@ -1,6 +1,6 @@
 # GateLM LLM Request Log Schema
 
-> P0 범위 안내: 이 문서는 장기 로그/이벤트 스키마를 포함한다. 현재 P0 로그와 이벤트 필드는 `docs/p0/p0-contract.md`와 `docs/p0/p0-log-event-payload.md`를 우선한다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> v1.0.0 범위 안내: 이 문서는 장기 로그/이벤트 스키마를 포함한다. 현재 로그/이벤트 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. v1.0.0은 PostgreSQL canonical request log와 Prometheus metrics를 기준으로 하고, Redpanda/ClickHouse는 v2 evidence path로 둔다. 과거 P0 로그 기준은 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
 
 ## 문서 목적
 
