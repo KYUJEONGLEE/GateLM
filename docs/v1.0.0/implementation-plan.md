@@ -104,7 +104,7 @@ Gateway SafetyEngine
 -> RemoteSafetyEngine          # optional, disabled by default
 
 Safety Lab
--> safety-eval-corpus.jsonl
+-> docs/v1.0.0/fixtures/safety-eval-corpus.jsonl
 -> detector quality report
 -> AI detector prototype
 -> semantic cache evaluation report
@@ -126,11 +126,12 @@ Day 0에 아래 fixture를 먼저 고정한다.
 
 | Fixture / Contract | Producer | Consumers |
 |---|---|---|
-| `runtime-config.fixture.json` | 재혁님 | 이지섭, 이윤지, 이규정 |
-| `gateway-context.schema.json` | 이지섭 | 재혁님, 이윤지, 이규정 |
-| `invocation-log.fixture.json` | 이지섭, 이규정 | 김규민, 이규정 |
-| `dashboard-overview.fixture.json` | 이규정 | 김규민 |
-| `safety-eval-corpus.jsonl` | 이윤지 | 이지섭, 재혁님 |
+| `docs/v1.0.0/fixtures/runtime-config.fixture.json` | 재혁님 | 이지섭, 이윤지, 이규정 |
+| `docs/v1.0.0/schemas/gateway-context.schema.json` | 이지섭 | 재혁님, 이윤지, 이규정 |
+| `docs/v1.0.0/fixtures/gateway-context.fixture.json` | 이지섭 | 이규정 |
+| `docs/v1.0.0/fixtures/invocation-log.fixture.json` | 이지섭, 이규정 | 김규민, 이규정 |
+| `docs/v1.0.0/fixtures/dashboard-overview.fixture.json` | 이규정 | 김규민 |
+| `docs/v1.0.0/fixtures/safety-eval-corpus.jsonl` | 이윤지 | 이지섭, 재혁님 |
 | `demo-scenario.md` | 김규민, 이규정 | 전체 |
 
 규칙:

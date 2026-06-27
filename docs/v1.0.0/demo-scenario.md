@@ -19,10 +19,13 @@
 
 | File | Purpose |
 |---|---|
-| `docs/v1.0.0/invocation-log.fixture.json` | Request Log and Detail baseline records |
-| `docs/v1.0.0/dashboard-overview.fixture.json` | Dashboard Overview baseline aggregate |
-| `runtime-config.fixture.json` | Runtime policy/config input from Control Plane owner |
-| `gateway-context.schema.json` | Gateway pipeline context contract from Gateway owner |
+| `docs/v1.0.0/fixtures/invocation-log.fixture.json` | Request Log and Detail baseline records |
+| `docs/v1.0.0/fixtures/dashboard-overview.fixture.json` | Dashboard Overview baseline aggregate |
+| `docs/v1.0.0/fixtures/gateway-context.fixture.json` | Gateway terminal context example from Gateway owner |
+| `docs/v1.0.0/fixtures/runtime-config.fixture.json` | Runtime policy/config input from Control Plane owner |
+| `docs/v1.0.0/fixtures/safety-eval-corpus.jsonl` | Safety detector/effect corpus from Safety owner |
+| `docs/v1.0.0/schemas/gateway-context.schema.json` | Gateway pipeline context contract from Gateway owner |
+| `docs/v1.0.0/schemas/safety-eval-corpus.schema.json` | Safety corpus line schema |
 
 ## 4. Demo Preconditions
 

@@ -12,9 +12,11 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLES_DIR = ROOT / "packages" / "contracts" / "examples"
-SCHEMA_PATH = EXAMPLES_DIR / "safety-eval-corpus.schema.json"
-CORPUS_PATH = EXAMPLES_DIR / "safety-eval-corpus.jsonl"
+V1_DOCS_DIR = ROOT / "docs" / "v1.0.0"
+FIXTURES_DIR = V1_DOCS_DIR / "fixtures"
+SCHEMAS_DIR = V1_DOCS_DIR / "schemas"
+SCHEMA_PATH = SCHEMAS_DIR / "safety-eval-corpus.schema.json"
+CORPUS_PATH = FIXTURES_DIR / "safety-eval-corpus.jsonl"
 
 DETECTOR_TYPES = {
     "email",

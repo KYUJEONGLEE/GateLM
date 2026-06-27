@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v1.0.0/schemas/gateway-context.schema.json",
+  "title": "GateLM v1 Terminal GatewayContext",
+  "description": "Terminal in-memory GatewayContext snapshot handed to InvocationLogWriter.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request",
+    "identity",
+    "runtime",
+    "governance",
+    "safety",
+    "routing",
+    "cache",
+    "usage",
+    "latency",
+    "status",
+    "time"
+  ],
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "traceId",
+        "startedAt",
+        "endpoint",
+        "method",
+        "source",
+        "stream",
+        "requestBodyHash"
+      ],
+      "properties": {
+        "requestId": { "$ref": "#/$defs/nonEmptyString" },
+        "traceId": { "$ref": "#/$defs/nonEmptyString" },
+        "startedAt": { "$ref": "#/$defs/dateTime" },
+        "endpoint": { "$ref": "#/$defs/nonEmptyString" },
+        "method": { "enum": ["GET", "POST"] },
+        "source": { "$ref": "#/$defs/nonEmptyString" },
+        "stream": { "type": "boolean" },
+        "requestBodyHash": { "$ref": "#/$defs/nullableHash" }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "projectId",
+        "applicationId",
+        "apiKeyId",
+        "appTokenId",
+        "endUserId",
+        "featureId"
+      ],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/nullableString" },
+        "projectId": { "$ref": "#/$defs/nullableString" },
+        "applicationId": { "$ref": "#/$defs/nullableString" },
+        "apiKeyId": { "$ref": "#/$defs/nullableString" },
+        "appTokenId": { "$ref": "#/$defs/nullableString" },
+        "endUserId": { "$ref": "#/$defs/nullableString" },
+        "featureId": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configHash", "securityPolicyHash", "routingPolicyHash"],
+      "properties": {
+        "configHash": { "$ref": "#/$defs/nullableHash" },
+        "securityPolicyHash": { "$ref": "#/$defs/nullableHash" },
+        "routingPolicyHash": { "$ref": "#/$defs/nullableHash" }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rateLimitDecision"],
+      "properties": {
+        "rateLimitDecision": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/rateLimitDecision" }
+          ]
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maskingAction",
+        "maskingDetectedTypes",
+        "maskingDetectedCount",
+        "redactedPromptPreview",
+        "promptHash"
+      ],
+      "properties": {
+        "maskingAction": {
+          "type": ["string", "null"],
+          "enum": ["none", "redacted", "blocked", null]
+        },
+        "maskingDetectedTypes": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "email",
+                  "phone_number",
+                  "resident_registration_number",
+                  "api_key",
+                  "authorization_header",
+                  "jwt",
+                  "private_key"
+                ]
+              },
+              "uniqueItems": true
+            }
+          ]
+        },
+        "maskingDetectedCount": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "redactedPromptPreview": { "$ref": "#/$defs/nullableString" },
+        "promptHash": { "$ref": "#/$defs/nullableHash" }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestedProvider",
+        "requestedModel",
+        "selectedProvider",
+        "selectedModel",
+        "routingReason"
+      ],
+      "properties": {
+        "requestedProvider": { "$ref": "#/$defs/nullableString" },
+        "requestedModel": { "$ref": "#/$defs/nullableString" },
+        "selectedProvider": { "$ref": "#/$defs/nullableString" },
+        "selectedModel": { "$ref": "#/$defs/nullableString" },
+        "routingReason": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cacheStatus", "cacheType", "cacheKeyHash", "cacheHitRequestId"],
+      "properties": {
+        "cacheStatus": {
+          "type": ["string", "null"],
+          "enum": ["hit", "miss", "bypass", "error", null]
+        },
+        "cacheType": {
+          "type": ["string", "null"],
+          "enum": ["none", "exact", null]
+        },
+        "cacheKeyHash": { "$ref": "#/$defs/nullableHash" },
+        "cacheHitRequestId": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promptTokens",
+        "completionTokens",
+        "totalTokens",
+        "costMicroUsd",
+        "savedCostMicroUsd"
+      ],
+      "properties": {
+        "promptTokens": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "completionTokens": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "totalTokens": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "costMicroUsd": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "savedCostMicroUsd": { "$ref": "#/$defs/nullableNonNegativeInteger" }
+      }
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latencyMs", "providerLatencyMs"],
+      "properties": {
+        "latencyMs": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "providerLatencyMs": { "$ref": "#/$defs/nullableNonNegativeInteger" }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "httpStatus", "errorCode", "errorMessage", "errorStage"],
+      "properties": {
+        "status": {
+          "enum": ["success", "cache_hit", "blocked", "rate_limited", "error", "cancelled"]
+        },
+        "httpStatus": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "errorCode": { "$ref": "#/$defs/nullableString" },
+        "errorMessage": { "$ref": "#/$defs/nullableString" },
+        "errorStage": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completedAt"],
+      "properties": {
+        "completedAt": { "$ref": "#/$defs/dateTime" }
+      }
+    }
+  },
+  "$defs": {
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "nullableHash": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "nullableNonNegativeInteger": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "rateLimitDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed",
+        "scope",
+        "scopeId",
+        "limit",
+        "remaining",
+        "windowSeconds",
+        "windowStart",
+        "resetAt",
+        "retryAfterSeconds",
+        "reason",
+        "durationMs"
+      ],
+      "properties": {
+        "allowed": { "type": "boolean" },
+        "scope": { "enum": ["application"] },
+        "scopeId": { "$ref": "#/$defs/nonEmptyString" },
+        "limit": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "remaining": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "windowSeconds": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "windowStart": { "$ref": "#/$defs/dateTime" },
+        "resetAt": { "$ref": "#/$defs/dateTime" },
+        "retryAfterSeconds": { "$ref": "#/$defs/nullableNonNegativeInteger" },
+        "reason": {
+          "enum": [
+            "within_limit",
+            "limit_exceeded",
+            "rate_limit_disabled",
+            "config_missing",
+            "internal_error"
+          ]
+        },
+        "durationMs": { "$ref": "#/$defs/nullableNonNegativeInteger" }
+      }
+    }
+  }
+}

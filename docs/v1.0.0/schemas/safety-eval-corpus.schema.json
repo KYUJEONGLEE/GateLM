@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/contracts/examples/safety-eval-corpus.schema.json",
+  "$id": "https://gatelm.local/docs/v1.0.0/schemas/safety-eval-corpus.schema.json",
   "title": "GateLM v1 Safety Eval Corpus Line",
   "type": "object",
   "additionalProperties": false,
