@@ -258,8 +258,14 @@ function sumMetric(body, metricName, labelMatchers = {}) {
 
 function labelsMatch(labels, matchers) {
   for (const [name, value] of Object.entries(matchers)) {
-    const labelNeedle = `${name}="${escapeLabelNeedle(String(value))}"`;
-    if (!labels.includes(labelNeedle)) {
+    const escapedValue = escapeLabelNeedle(String(value));
+    const pattern = "[{,]\\s*" +
+      escapeRegex(name) +
+      "\\s*=\\s*\"" +
+      escapeRegex(escapedValue) +
+      "\"\\s*[,}]";
+    const regex = new RegExp(pattern);
+    if (!regex.test(labels)) {
       return false;
     }
   }
