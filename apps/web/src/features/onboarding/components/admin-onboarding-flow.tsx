@@ -1,15 +1,16 @@
 import Link from "next/link";
 import type {
-  AdminEndpoint,
   AdminOnboardingModel,
   CredentialIssueResponse,
   CredentialListItem
 } from "@/lib/fixtures/v1-admin-fixtures";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
+import type { Locale } from "@/lib/i18n/locale";
 
 type AdminOnboardingFlowProps = {
   activeStepId: OnboardingStepId;
+  locale: Locale;
   model: AdminOnboardingModel;
 };
 
@@ -23,71 +24,144 @@ export type OnboardingStepId =
 
 type OnboardingStep = {
   id: OnboardingStepId;
-  label: string;
-  summary: string;
+  labels: Record<
+    Locale,
+    {
+      label: string;
+      summary: string;
+    }
+  >;
 };
 
 const onboardingSteps: OnboardingStep[] = [
   {
     id: "project",
-    label: "Project",
-    summary: "Tenant-scoped customer support project"
+    labels: {
+      en: {
+        label: "Project",
+        summary: "Tenant-scoped customer support project"
+      },
+      ko: {
+        label: "프로젝트",
+        summary: "테넌트 범위 고객 지원 프로젝트"
+      }
+    }
   },
   {
     id: "application",
-    label: "Application",
-    summary: "Customer demo app and rate limit scope"
+    labels: {
+      en: {
+        label: "Application",
+        summary: "Customer demo app and rate limit scope"
+      },
+      ko: {
+        label: "애플리케이션",
+        summary: "고객사 데모 앱과 rate limit 범위"
+      }
+    }
   },
   {
     id: "provider",
-    label: "Provider",
-    summary: "Mock provider configuration without direct calls"
+    labels: {
+      en: {
+        label: "Provider",
+        summary: "Mock provider configuration without direct calls"
+      },
+      ko: {
+        label: "Provider",
+        summary: "직접 호출 없는 mock provider 설정"
+      }
+    }
   },
   {
     id: "api-key",
-    label: "API Key",
-    summary: "Gateway API key issue and list states"
+    labels: {
+      en: {
+        label: "API Key",
+        summary: "Gateway API key issue and list states"
+      },
+      ko: {
+        label: "API Key",
+        summary: "Gateway API key 발급과 조회 상태"
+      }
+    }
   },
   {
     id: "app-token",
-    label: "App Token",
-    summary: "Application-bound token issue and list states"
+    labels: {
+      en: {
+        label: "App Token",
+        summary: "Application-bound token issue and list states"
+      },
+      ko: {
+        label: "App Token",
+        summary: "Application에 묶인 token 발급과 조회 상태"
+      }
+    }
   },
   {
     id: "runtime-config",
-    label: "Runtime Config",
-    summary: "Published config consumed by Gateway"
+    labels: {
+      en: {
+        label: "Runtime Config",
+        summary: "Published config consumed by Gateway"
+      },
+      ko: {
+        label: "Runtime Config",
+        summary: "Gateway가 소비하는 publish된 설정"
+      }
+    }
   }
 ];
 
-const endpointByStep: Record<OnboardingStepId, string[]> = {
-  project: ["createProject"],
-  application: ["createApplication"],
-  provider: ["upsertProvider"],
-  "api-key": ["issueApiKey", "listApiKeys"],
-  "app-token": ["issueAppToken", "listAppTokens"],
-  "runtime-config": ["getActiveRuntimeConfig"]
+const onboardingText: Record<
+  Locale,
+  {
+    heroCopy: string;
+    noProviderCall: string;
+    next: string;
+    previous: string;
+    step: string;
+    title: string;
+  }
+> = {
+  en: {
+    heroCopy:
+      "Fixture-backed setup path for Project, Application, Provider, API Key, App Token, and the active Runtime Config consumed by Gateway.",
+    noProviderCall: "No provider call",
+    next: "Next",
+    previous: "Previous",
+    step: "step",
+    title: "Control Plane setup flow"
+  },
+  ko: {
+    heroCopy:
+      "Project, Application, Provider, API Key, App Token, 그리고 Gateway가 소비하는 active Runtime Config 준비 흐름을 fixture로 확인합니다.",
+    noProviderCall: "Provider 직접 호출 없음",
+    next: "다음",
+    previous: "이전",
+    step: "단계",
+    title: "Control Plane 설정 흐름"
+  }
 };
 
-export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlowProps) {
+export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboardingFlowProps) {
   const activeIndex = onboardingSteps.findIndex((step) => step.id === activeStepId);
   const activeStep = onboardingSteps[activeIndex] ?? onboardingSteps[0];
-  const activeEndpoints = getStepEndpoints(model.endpoints, activeStep.id);
   const previousStep = onboardingSteps[activeIndex - 1];
   const nextStep = onboardingSteps[activeIndex + 1];
+  const text = onboardingText[locale];
+  const activeStepLabel = activeStep.labels[locale].label;
 
   return (
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">admin onboarding</p>
-          <h2>Control Plane setup flow</h2>
-          <p>
-            Fixture-backed setup path for Project, Application, Provider, API
-            Key, App Token, and the active Runtime Config consumed by Gateway.
-          </p>
+          <h2>{text.title}</h2>
+          <p>{text.heroCopy}</p>
         </div>
-        <div className="console-context">No provider call</div>
+        <div className="console-context">{text.noProviderCall}</div>
       </section>
 
       <section className="onboarding-layout" aria-label="Admin onboarding flow">
@@ -96,12 +170,13 @@ export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlow
             <Link
               className="onboarding-step"
               data-active={step.id === activeStep.id}
+              data-position={index < activeIndex ? "previous" : "current-or-next"}
               href={getStepPath(model.tenantId, step.id)}
               key={step.id}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{step.label}</strong>
-              <small>{step.summary}</small>
+              <strong>{step.labels[locale].label}</strong>
+              <small>{step.labels[locale].summary}</small>
             </Link>
           ))}
         </aside>
@@ -110,8 +185,10 @@ export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlow
           <article className="console-panel onboarding-panel">
             <div className="panel-heading">
               <div>
-                <p className="console-kicker">step {activeIndex + 1}</p>
-                <h3>{activeStep.label}</h3>
+                <p className="console-kicker">
+                  {text.step} {activeIndex + 1}
+                </p>
+                <h3>{activeStepLabel}</h3>
               </div>
               <span className="status-badge" data-status="success">
                 fixture
@@ -120,35 +197,28 @@ export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlow
 
             {renderStepContent({
               activeStepId: activeStep.id,
+              locale,
               model
             })}
-          </article>
-
-          <article className="console-panel">
-            <div className="panel-heading">
-              <h3>Control Plane contract</h3>
-              <p>Route catalog entries used by this step. No request is sent.</p>
-            </div>
-            <EndpointList endpoints={activeEndpoints} />
           </article>
 
           <div className="onboarding-actions">
             {previousStep ? (
               <Link className="secondary-button" href={getStepPath(model.tenantId, previousStep.id)}>
-                Previous
+                {text.previous}
               </Link>
             ) : (
               <span className="secondary-button" aria-disabled="true">
-                Previous
+                {text.previous}
               </span>
             )}
             {nextStep ? (
               <Link className="primary-button" href={getStepPath(model.tenantId, nextStep.id)}>
-                Next
+                {text.next}
               </Link>
             ) : (
               <span className="primary-button" aria-disabled="true">
-                Next
+                {text.next}
               </span>
             )}
           </div>
@@ -160,9 +230,11 @@ export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlow
 
 function renderStepContent({
   activeStepId,
+  locale,
   model
 }: {
   activeStepId: OnboardingStepId;
+  locale: Locale;
   model: AdminOnboardingModel;
 }) {
   if (activeStepId === "project") {
@@ -213,6 +285,7 @@ function renderStepContent({
       <CredentialStep
         credentialName="API Key"
         issueResponse={model.apiKey.issueResponse}
+        locale={locale}
         listItem={model.apiKey.listItem}
       />
     );
@@ -223,6 +296,7 @@ function renderStepContent({
       <CredentialStep
         credentialName="App Token"
         issueResponse={model.appToken.issueResponse}
+        locale={locale}
         listItem={model.appToken.listItem}
       />
     );
@@ -257,20 +331,30 @@ function renderStepContent({
 function CredentialStep({
   credentialName,
   issueResponse,
+  locale,
   listItem
 }: {
   credentialName: string;
   issueResponse: CredentialIssueResponse;
+  locale: Locale;
   listItem: CredentialListItem;
 }) {
+  const listTitle = locale === "ko" ? "이후 조회 상태" : "Subsequent list state";
+  const listCopy =
+    locale === "ko" ? "평문과 secret hash는 응답에 포함하지 않습니다." : "Plaintext and secret hash are absent.";
+
   return (
     <div className="credential-flow">
-      <CredentialOneTimeSecret credentialName={credentialName} issueResponse={issueResponse} />
+      <CredentialOneTimeSecret
+        credentialName={credentialName}
+        issueResponse={issueResponse}
+        locale={locale}
+      />
 
       <section className="credential-list-state" aria-label={`${credentialName} list state`}>
         <div className="panel-heading">
-          <h4>Subsequent list state</h4>
-          <p>Plaintext and secret hash are absent.</p>
+          <h4>{listTitle}</h4>
+          <p>{listCopy}</p>
         </div>
         <DetailGrid
           rows={[
@@ -300,30 +384,6 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
       ))}
     </dl>
   );
-}
-
-function EndpointList({ endpoints }: { endpoints: AdminEndpoint[] }) {
-  if (endpoints.length === 0) {
-    return <p className="empty-note">No route catalog entry for this step.</p>;
-  }
-
-  return (
-    <div className="endpoint-list">
-      {endpoints.map((endpoint) => (
-        <div className="endpoint-row" key={endpoint.operationId}>
-          <span>{endpoint.method}</span>
-          <strong>{endpoint.operationId}</strong>
-          <code>{endpoint.path}</code>
-          <small>{endpoint.successStatus}</small>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function getStepEndpoints(endpoints: AdminEndpoint[], stepId: OnboardingStepId) {
-  const operationIds = endpointByStep[stepId];
-  return endpoints.filter((endpoint) => operationIds.includes(endpoint.operationId));
 }
 
 export function normalizeOnboardingStepId(value: string | string[] | undefined): OnboardingStepId {

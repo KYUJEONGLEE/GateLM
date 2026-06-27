@@ -5,6 +5,7 @@ import {
   getDashboardOverview,
   getInvocationRecords
 } from "@/lib/fixtures/v1-observability-fixtures";
+import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogsPageProps = {
   params: Promise<{
@@ -14,6 +15,7 @@ type RequestLogsPageProps = {
 
 export default async function RequestLogsPage({ params }: RequestLogsPageProps) {
   const { tenantId } = await params;
+  const locale = await getRequestLocale();
   const overview = getDashboardOverview();
 
   if (tenantId !== overview.filters.tenantId) {
@@ -21,8 +23,14 @@ export default async function RequestLogsPage({ params }: RequestLogsPageProps) 
   }
 
   return (
-    <ConsoleShell activeSection="request-logs" tenantId={tenantId}>
+    <ConsoleShell
+      activeAnalyticsItem="invocation-history"
+      activeSection="analytics"
+      locale={locale}
+      tenantId={tenantId}
+    >
       <RequestLogTable
+        locale={locale}
         records={getInvocationRecords()}
         tenantId={tenantId}
         timezone={overview.range.timezone}

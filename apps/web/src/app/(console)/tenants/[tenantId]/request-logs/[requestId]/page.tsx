@@ -5,6 +5,7 @@ import {
   getDashboardOverview,
   getInvocationRecord
 } from "@/lib/fixtures/v1-observability-fixtures";
+import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogDetailPageProps = {
   params: Promise<{
@@ -15,6 +16,7 @@ type RequestLogDetailPageProps = {
 
 export default async function RequestLogDetailPage({ params }: RequestLogDetailPageProps) {
   const { requestId, tenantId } = await params;
+  const locale = await getRequestLocale();
   const overview = getDashboardOverview();
   const record = getInvocationRecord(requestId);
 
@@ -23,8 +25,18 @@ export default async function RequestLogDetailPage({ params }: RequestLogDetailP
   }
 
   return (
-    <ConsoleShell activeSection="request-logs" tenantId={tenantId}>
-      <RequestLogDetail record={record} tenantId={tenantId} timezone={overview.range.timezone} />
+    <ConsoleShell
+      activeAnalyticsItem="invocation-history"
+      activeSection="analytics"
+      locale={locale}
+      tenantId={tenantId}
+    >
+      <RequestLogDetail
+        locale={locale}
+        record={record}
+        tenantId={tenantId}
+        timezone={overview.range.timezone}
+      />
     </ConsoleShell>
   );
 }

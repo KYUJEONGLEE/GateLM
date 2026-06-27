@@ -6,24 +6,50 @@ import {
   formatLatency,
   nullableText
 } from "@/lib/formatting/formatters";
+import type { Locale } from "@/lib/i18n/locale";
 
 type RequestLogTableProps = {
+  locale: Locale;
   records: InvocationLogRecord[];
   tenantId: string;
   timezone: string;
 };
 
-export function RequestLogTable({ records, tenantId, timezone }: RequestLogTableProps) {
+const requestLogText: Record<
+  Locale,
+  {
+    emptyPreview: string;
+    heroCopy: string;
+    kicker: string;
+    title: string;
+  }
+> = {
+  en: {
+    emptyPreview: "No preview stored",
+    heroCopy:
+      "The list is backed by the v1 invocation log fixture. It shows only sanitized previews and request metadata.",
+    kicker: "request log",
+    title: "Invocation history"
+  },
+  ko: {
+    emptyPreview: "저장된 preview 없음",
+    heroCopy:
+      "이 목록은 v1 invocation log fixture 기반입니다. 정제된 preview와 요청 metadata만 표시합니다.",
+    kicker: "요청 로그",
+    title: "호출 이력"
+  }
+};
+
+export function RequestLogTable({ locale, records, tenantId, timezone }: RequestLogTableProps) {
+  const text = requestLogText[locale];
+
   return (
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">request log</p>
-          <h2>Invocation history</h2>
-          <p>
-            The list is backed by the v1 invocation log fixture. It shows only
-            sanitized previews and request metadata.
-          </p>
+          <p className="console-kicker">{text.kicker}</p>
+          <h2>{text.title}</h2>
+          <p>{text.heroCopy}</p>
         </div>
       </section>
 
@@ -52,7 +78,7 @@ export function RequestLogTable({ records, tenantId, timezone }: RequestLogTable
                     >
                       {record.requestId}
                     </Link>
-                    <span>{nullableText(record.redactedPromptPreview, "No preview stored")}</span>
+                    <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
                   </td>
                   <td>
                     <StatusBadge status={record.status} />
