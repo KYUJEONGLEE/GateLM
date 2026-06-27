@@ -24,6 +24,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
@@ -294,7 +295,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.Status = "success"
 	reqCtx.HTTPStatus = http.StatusOK
 	reqCtx.SavedCostMicroUSD = 0
-	if reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass {
+	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
 	}
@@ -310,6 +311,9 @@ func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	if gatewayCtx == nil {
 		return true
 	}
+	if !gatewayExactCachePolicyAllowsLookup(gatewayCtx) {
+		return false
+	}
 
 	switch gatewayCtx.Cache.CacheStatus {
 	case "", cachestage.CacheStatusBypass:
@@ -317,6 +321,24 @@ func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	default:
 		return false
 	}
+}
+
+func gatewayExactCachePolicyAllowsLookup(gatewayCtx *request.GatewayContext) bool {
+	if gatewayCtx == nil || !gatewayCtx.Runtime.HasCachePolicy {
+		return true
+	}
+	return cachePolicyAllowsExact(gatewayCtx.Runtime.CachePolicy)
+}
+
+func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
+	if reqCtx == nil || !reqCtx.HasRuntimeCachePolicy {
+		return true
+	}
+	return cachePolicyAllowsExact(reqCtx.RuntimeCachePolicy)
+}
+
+func cachePolicyAllowsExact(policy runtimeconfig.CachePolicy) bool {
+	return policy.Enabled && strings.EqualFold(strings.TrimSpace(policy.Type), runtimeconfig.CacheTypeExact)
 }
 
 func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
