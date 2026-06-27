@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -55,6 +56,10 @@ export class ListApplicationsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 50;
+
+  @IsOptional()
+  @IsUUID()
+  cursor?: string;
 }
 
 export interface ApplicationResponseDto {

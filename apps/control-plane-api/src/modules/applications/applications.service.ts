@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Application, Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -41,18 +42,21 @@ export class ApplicationsService {
     const limit = query.limit ?? 50;
     const applications = await this.prisma.application.findMany({
       where: { projectId },
-      orderBy: { createdAt: 'asc' },
-      take: limit,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
+    const hasMore = applications.length > limit;
+    const page = applications.slice(0, limit);
 
     return {
-      data: applications.map((application) =>
+      data: page.map((application) =>
         this.toApplicationResponse(application),
       ),
       pagination: {
         limit,
-        nextCursor: null,
-        hasMore: false,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
       },
     };
   }
@@ -61,8 +65,6 @@ export class ApplicationsService {
     applicationId: string,
     dto: UpdateApplicationDto,
   ): Promise<ApplicationResponseDto> {
-    await this.assertApplicationExists(applicationId);
-
     const data: Prisma.ApplicationUpdateInput = {};
 
     if (dto.name !== undefined) {
@@ -79,12 +81,20 @@ export class ApplicationsService {
       return this.getApplicationOrThrow(applicationId);
     }
 
-    const application = await this.prisma.application.update({
-      where: { id: applicationId },
-      data,
-    });
+    try {
+      const application = await this.prisma.application.update({
+        where: { id: applicationId },
+        data,
+      });
 
-    return this.toApplicationResponse(application);
+      return this.toApplicationResponse(application);
+    } catch (error) {
+      if (this.isRecordNotFoundError(error)) {
+        throw new NotFoundException('Application not found.');
+      }
+
+      throw error;
+    }
   }
 
   private async getProjectOrThrow(
@@ -116,19 +126,16 @@ export class ApplicationsService {
     return this.toApplicationResponse(application);
   }
 
-  private async assertApplicationExists(applicationId: string): Promise<void> {
-    const application = await this.prisma.application.findUnique({
-      where: { id: applicationId },
-      select: { id: true },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Application not found.');
-    }
-  }
-
   private toNullableDescription(value: string | undefined): string | null {
     return value && value.length > 0 ? value : null;
+  }
+
+  private isRecordNotFoundError(
+    error: unknown,
+  ): error is PrismaClientKnownRequestError {
+    return (
+      error instanceof PrismaClientKnownRequestError && error.code === 'P2025'
+    );
   }
 
   private toApplicationResponse(

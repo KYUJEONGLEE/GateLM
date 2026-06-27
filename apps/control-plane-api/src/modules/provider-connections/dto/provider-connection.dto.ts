@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -81,6 +82,10 @@ export class ListProvidersQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 50;
+
+  @IsOptional()
+  @IsUUID()
+  cursor?: string;
 }
 
 export interface ProviderCredentialPreviewDto {

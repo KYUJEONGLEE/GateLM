@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Project } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -41,16 +42,19 @@ export class ProjectsService {
     const limit = query.limit ?? 50;
     const projects = await this.prisma.project.findMany({
       where: { tenantId },
-      orderBy: { createdAt: 'asc' },
-      take: limit,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
+    const hasMore = projects.length > limit;
+    const page = projects.slice(0, limit);
 
     return {
-      data: projects.map((project) => this.toProjectResponse(project)),
+      data: page.map((project) => this.toProjectResponse(project)),
       pagination: {
         limit,
-        nextCursor: null,
-        hasMore: false,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
       },
     };
   }
@@ -59,8 +63,6 @@ export class ProjectsService {
     projectId: string,
     dto: UpdateProjectDto,
   ): Promise<ProjectResponseDto> {
-    await this.assertProjectExists(projectId);
-
     const data: Prisma.ProjectUpdateInput = {};
 
     if (dto.name !== undefined) {
@@ -77,12 +79,20 @@ export class ProjectsService {
       return this.getProjectOrThrow(projectId);
     }
 
-    const project = await this.prisma.project.update({
-      where: { id: projectId },
-      data,
-    });
+    try {
+      const project = await this.prisma.project.update({
+        where: { id: projectId },
+        data,
+      });
 
-    return this.toProjectResponse(project);
+      return this.toProjectResponse(project);
+    } catch (error) {
+      if (this.isRecordNotFoundError(error)) {
+        throw new NotFoundException('Project not found.');
+      }
+
+      throw error;
+    }
   }
 
   private async assertTenantExists(tenantId: string): Promise<void> {
@@ -93,17 +103,6 @@ export class ProjectsService {
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found.');
-    }
-  }
-
-  private async assertProjectExists(projectId: string): Promise<void> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      select: { id: true },
-    });
-
-    if (!project) {
-      throw new NotFoundException('Project not found.');
     }
   }
 
@@ -121,6 +120,14 @@ export class ProjectsService {
 
   private toNullableDescription(value: string | undefined): string | null {
     return value && value.length > 0 ? value : null;
+  }
+
+  private isRecordNotFoundError(
+    error: unknown,
+  ): error is PrismaClientKnownRequestError {
+    return (
+      error instanceof PrismaClientKnownRequestError && error.code === 'P2025'
+    );
   }
 
   private toProjectResponse(project: Project): ProjectResponseDto {

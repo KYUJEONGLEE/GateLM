@@ -7,6 +7,7 @@ import { ProviderConnectionsService } from './provider-connections.service';
 describe('ProviderConnectionsService', () => {
   const projectId = '00000000-0000-4000-8000-000000000200';
   const tenantId = '00000000-0000-4000-8000-000000000100';
+  const createdAt = new Date('2026-06-27T00:00:00.000Z');
 
   function createService(): {
     service: ProviderConnectionsService;
@@ -69,4 +70,46 @@ describe('ProviderConnectionsService', () => {
       last4: '9xA1',
     });
   });
+
+  it('sets hasMore and nextCursor from limit plus one pagination', async () => {
+    const { service, prisma } = createService();
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findMany.mockResolvedValue([
+      providerConnection('00000000-0000-4000-8000-000000000901'),
+      providerConnection('00000000-0000-4000-8000-000000000902'),
+      providerConnection('00000000-0000-4000-8000-000000000903'),
+    ]);
+
+    const result = await service.listProviders(projectId, { limit: 2 });
+
+    expect(prisma.providerConnection.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 3 }),
+    );
+    expect(result.data).toHaveLength(2);
+    expect(result.pagination).toEqual({
+      limit: 2,
+      nextCursor: '00000000-0000-4000-8000-000000000902',
+      hasMore: true,
+    });
+  });
+
+  function providerConnection(id: string) {
+    return {
+      id,
+      tenantId,
+      projectId,
+      provider: 'mock',
+      displayName: 'Mock Provider',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'http://mock-provider:8090',
+      timeoutMs: 30000,
+      secretRef: 'secret/provider/mock',
+      credentialPrefix: 'mock_',
+      credentialLast4: '9xA1',
+      resolver: 'none',
+      providerConfig: { model: 'mock-fast' },
+      createdAt,
+      updatedAt: createdAt,
+    };
+  }
 });

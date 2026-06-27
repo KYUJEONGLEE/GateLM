@@ -66,16 +66,19 @@ export class ProviderConnectionsService {
     const limit = query.limit ?? 50;
     const providers = await this.prisma.providerConnection.findMany({
       where: { projectId },
-      orderBy: { createdAt: 'asc' },
-      take: limit,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
+    const hasMore = providers.length > limit;
+    const page = providers.slice(0, limit);
 
     return {
-      data: providers.map((provider) => this.toProviderResponse(provider)),
+      data: page.map((provider) => this.toProviderResponse(provider)),
       pagination: {
         limit,
-        nextCursor: null,
-        hasMore: false,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
       },
     };
   }
