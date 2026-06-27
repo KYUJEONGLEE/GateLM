@@ -401,8 +401,8 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 }
 
 func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
-var latencies []int64
-var maxCreatedAt time.Time
+	var latencies []int64
+	var maxCreatedAt time.Time
 	aggregate := DashboardOverviewAggregate{
 		StatusCounts:        defaultStatusCounts(),
 		MaskingActionCounts: defaultMaskingActionCounts(),
@@ -440,9 +440,8 @@ var maxCreatedAt time.Time
 		if isLatencyEligibleStatus(log.Status) {
 			latencies = append(latencies, log.LatencyMs)
 		}
-		if !log.CreatedAt.IsZero() && (lastLogCreatedAt == nil || log.CreatedAt.After(*lastLogCreatedAt)) {
-			createdAt := log.CreatedAt
-			lastLogCreatedAt = &createdAt
+		if !log.CreatedAt.IsZero() && log.CreatedAt.After(maxCreatedAt) {
+			maxCreatedAt = log.CreatedAt
 		}
 
 		selectedProvider := firstNonEmptyString(log.SelectedProvider, log.Provider)
@@ -467,9 +466,9 @@ var maxCreatedAt time.Time
 		aggregate.AverageLatencyMs = &averageLatency
 		aggregate.P95LatencyMs = &p95Latency
 	}
-if !maxCreatedAt.IsZero() {
-	aggregate.LastLogCreatedAt = &maxCreatedAt
-}
+	if !maxCreatedAt.IsZero() {
+		aggregate.LastLogCreatedAt = &maxCreatedAt
+	}
 	aggregate.RoutingCountByModel = routingCountsFromMap(routingCounts)
 	aggregate.CostByModel = costCountsFromMap(costCounts)
 
