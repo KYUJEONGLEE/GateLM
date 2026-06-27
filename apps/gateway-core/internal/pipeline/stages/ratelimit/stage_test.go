@@ -44,6 +44,36 @@ func TestStageAllowsRequestWithinLimit(t *testing.T) {
 	}
 }
 
+func TestStageUsesRuntimeRateLimitConfigWhenLoaded(t *testing.T) {
+	// Given fallback config와 다른 runtime rate limit config가 로드되어 있다
+	limiter := &fakeLimiter{
+		decision: ratelimit.Decision{
+			Allowed: true,
+			Reason:  ratelimit.ReasonWithinLimit,
+		},
+	}
+	stage := NewStage(limiter, testConfig())
+	gatewayCtx := testGatewayContext()
+	gatewayCtx.Runtime.RateLimitConfig = ratelimit.Config{
+		Enabled:       true,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     ratelimit.AlgorithmFixedWindow,
+		WindowSeconds: 60,
+		Limit:         7,
+	}
+	gatewayCtx.Runtime.HasRateLimitConfig = true
+
+	// When RateLimit stage가 실행된다
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected runtime config request to pass, got %v", err)
+	}
+
+	// Then limiter에는 runtime config의 limit이 전달된다
+	if limiter.request.Config.Limit != 7 {
+		t.Fatalf("expected runtime limit 7, got %#v", limiter.request.Config)
+	}
+}
+
 func TestStageBlocksRequestWhenLimitExceeded(t *testing.T) {
 	// Given 같은 Application이 이미 limit을 초과했다
 	stage := NewStage(&fakeLimiter{

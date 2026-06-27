@@ -1427,6 +1427,48 @@ func TestChatCompletionsHandlerDoesNotSetHitRequestIDBeforeCachedPayloadDecodes(
 	}
 }
 
+func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_current",
+		TraceID:   "request_current",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	reqCtx.TenantID = testTenantID
+	reqCtx.ProjectID = testProjectID
+	reqCtx.ApplicationID = testAppID
+	reqCtx.SelectedProvider = "mock"
+	reqCtx.SelectedModel = "mock-balanced"
+	reqCtx.RoutingPolicyHash = "hash_routing_policy_test"
+	reqCtx.SecurityPolicyHash = "hash_security_policy_test"
+	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:cache-key"}
+	handler := ChatCompletionsHandler{
+		ExactCacheKeyBuilder: keyBuilder,
+		CachePolicyHash:      "cache_p0_v1",
+	}
+
+	key, err := handler.buildExactCacheKey(
+		context.Background(),
+		reqCtx,
+		provider.ChatCompletionRequest{Model: "mock-balanced"},
+		"Write a short safe cached response.",
+	)
+
+	if err != nil {
+		t.Fatalf("expected cache key build, got %v", err)
+	}
+	if key != "hmac-sha256:cache-key" {
+		t.Fatalf("unexpected cache key: %s", key)
+	}
+	if keyBuilder.material.SecurityPolicyVersionID != "hash_security_policy_test" {
+		t.Fatalf("expected runtime security hash in cache material, got %#v", keyBuilder.material)
+	}
+	if keyBuilder.material.RoutingPolicyVersionID != "hash_routing_policy_test" {
+		t.Fatalf("expected runtime routing hash in cache material, got %#v", keyBuilder.material)
+	}
+}
+
 func TestChatCompletionsHandlerFallsBackToProviderWhenCachedPayloadIsInvalid(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
@@ -1985,13 +2027,15 @@ func (a staticProviderAdapter) CreateChatCompletion(ctx context.Context, req pro
 }
 
 type recordingExactKeyBuilder struct {
-	calls int
-	key   string
-	err   error
+	calls    int
+	key      string
+	err      error
+	material cachekey.KeyMaterial
 }
 
 func (b *recordingExactKeyBuilder) BuildExactKey(ctx context.Context, material cachekey.KeyMaterial) (string, error) {
 	b.calls++
+	b.material = material
 	if b.err != nil {
 		return "", b.err
 	}

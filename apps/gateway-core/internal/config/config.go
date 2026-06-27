@@ -16,7 +16,10 @@ type Config struct {
 	DefaultModel        string
 	LowCostModel        string
 	HighQualityModel    string
+	RuntimeConfigHash   string
+	SecurityPolicyHash  string
 	RoutingPolicyHash   string
+	CachePolicyHash     string
 	ShortPromptMaxChars int
 	DemoAPIKey          string
 	DemoAppToken        string
@@ -45,7 +48,10 @@ func Load() Config {
 		DefaultModel:        envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
 		LowCostModel:        envString("GATEWAY_LOW_COST_MODEL", "mock-fast"),
 		HighQualityModel:    envString("GATEWAY_HIGH_QUALITY_MODEL", "mock-smart"),
-		RoutingPolicyHash:   envString("GATEWAY_ROUTING_POLICY_HASH", "route_p0_v1"),
+		RuntimeConfigHash:   envString("GATEWAY_RUNTIME_CONFIG_HASH", "hash_runtime_config_v1_local"),
+		SecurityPolicyHash:  envString("GATEWAY_SECURITY_POLICY_HASH", "hash_security_policy_v1_local"),
+		RoutingPolicyHash:   envString("GATEWAY_ROUTING_POLICY_HASH", "hash_routing_policy_v1_local"),
+		CachePolicyHash:     envString("GATEWAY_CACHE_POLICY_HASH", "cache_p0_v1"),
 		ShortPromptMaxChars: envInt("GATEWAY_SHORT_PROMPT_MAX_CHARS", 300),
 		DemoAPIKey:          envString("GATELM_DEMO_API_KEY", "glm_api_test_redacted"),
 		DemoAppToken:        envString("GATELM_DEMO_APP_TOKEN", "glm_app_token_test_redacted"),

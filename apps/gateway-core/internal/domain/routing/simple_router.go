@@ -34,57 +34,85 @@ type SimpleRouter struct {
 }
 
 func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
-	router := &SimpleRouter{
-		defaultProvider:     strings.TrimSpace(config.DefaultProvider),
-		defaultModel:        strings.TrimSpace(config.DefaultModel),
-		lowCostModel:        strings.TrimSpace(config.LowCostModel),
-		highQualityModel:    strings.TrimSpace(config.HighQualityModel),
-		policyHash:          strings.TrimSpace(config.PolicyHash),
-		shortPromptMaxChars: config.ShortPromptMaxChars,
+	normalized := normalizeSimpleRouterConfig(config)
+	return &SimpleRouter{
+		defaultProvider:     normalized.DefaultProvider,
+		defaultModel:        normalized.DefaultModel,
+		lowCostModel:        normalized.LowCostModel,
+		highQualityModel:    normalized.HighQualityModel,
+		policyHash:          normalized.PolicyHash,
+		shortPromptMaxChars: normalized.ShortPromptMaxChars,
+	}
+}
+
+func normalizeSimpleRouterConfig(config SimpleRouterConfig) SimpleRouterConfig {
+	config = SimpleRouterConfig{
+		DefaultProvider:     strings.TrimSpace(config.DefaultProvider),
+		DefaultModel:        strings.TrimSpace(config.DefaultModel),
+		LowCostModel:        strings.TrimSpace(config.LowCostModel),
+		HighQualityModel:    strings.TrimSpace(config.HighQualityModel),
+		PolicyHash:          strings.TrimSpace(config.PolicyHash),
+		ShortPromptMaxChars: config.ShortPromptMaxChars,
 	}
 
-	if router.defaultProvider == "" {
-		router.defaultProvider = "mock"
+	if config.DefaultProvider == "" {
+		config.DefaultProvider = "mock"
 	}
-	if router.defaultModel == "" {
-		router.defaultModel = "mock-balanced"
+	if config.DefaultModel == "" {
+		config.DefaultModel = "mock-balanced"
 	}
-	if router.lowCostModel == "" {
-		router.lowCostModel = "mock-fast"
+	if config.LowCostModel == "" {
+		config.LowCostModel = "mock-fast"
 	}
-	if router.highQualityModel == "" {
-		router.highQualityModel = "mock-smart"
+	if config.HighQualityModel == "" {
+		config.HighQualityModel = "mock-smart"
 	}
-	if router.policyHash == "" {
-		router.policyHash = DefaultPolicyHash
+	if config.PolicyHash == "" {
+		config.PolicyHash = DefaultPolicyHash
 	}
-	if router.shortPromptMaxChars <= 0 {
-		router.shortPromptMaxChars = DefaultShortPromptMaxChars
+	if config.ShortPromptMaxChars <= 0 {
+		config.ShortPromptMaxChars = DefaultShortPromptMaxChars
 	}
 
-	return router
+	return config
 }
 
 func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
+	config := SimpleRouterConfig{}
+	if r != nil {
+		config = SimpleRouterConfig{
+			DefaultProvider:     r.defaultProvider,
+			DefaultModel:        r.defaultModel,
+			LowCostModel:        r.lowCostModel,
+			HighQualityModel:    r.highQualityModel,
+			PolicyHash:          r.policyHash,
+			ShortPromptMaxChars: r.shortPromptMaxChars,
+		}
+	}
+	config = normalizeSimpleRouterConfig(config)
+	if req.Config != nil {
+		config = normalizeSimpleRouterConfig(*req.Config)
+	}
+
 	requestedModel := strings.TrimSpace(req.RequestedModel)
 	if requestedModel == "" {
-		requestedModel = r.defaultModel
+		requestedModel = config.DefaultModel
 	}
 
 	decision := Decision{
 		RequestedModel:   requestedModel,
-		SelectedProvider: r.defaultProvider,
-		PolicyHash:       r.policyHash,
+		SelectedProvider: config.DefaultProvider,
+		PolicyHash:       config.PolicyHash,
 	}
 
 	if strings.EqualFold(requestedModel, "auto") {
-		if utf8.RuneCountInString(req.PromptText) <= r.shortPromptMaxChars {
-			decision.SelectedModel = r.lowCostModel
+		if utf8.RuneCountInString(req.PromptText) <= config.ShortPromptMaxChars {
+			decision.SelectedModel = config.LowCostModel
 			decision.RoutingReason = ReasonShortPromptLowCost
 			return decision, nil
 		}
 
-		decision.SelectedModel = r.defaultModel
+		decision.SelectedModel = config.DefaultModel
 		decision.RoutingReason = ReasonDefaultBalanced
 		return decision, nil
 	}

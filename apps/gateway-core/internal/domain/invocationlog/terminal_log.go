@@ -11,15 +11,17 @@ import (
 )
 
 type TerminalLog struct {
-	RequestID     string
-	TraceID       string
-	TenantID      string
-	ProjectID     string
-	ApplicationID string
-	APIKeyID      string
-	AppTokenID    string
-	EndUserID     string
-	FeatureID     string
+	RequestID          string
+	TraceID            string
+	TenantID           string
+	ProjectID          string
+	ApplicationID      string
+	APIKeyID           string
+	AppTokenID         string
+	EndUserID          string
+	FeatureID          string
+	ConfigHash         string
+	SecurityPolicyHash string
 
 	RateLimitDecision *ratelimit.Decision
 
@@ -69,15 +71,17 @@ type TerminalLog struct {
 }
 
 type TerminalLogInput struct {
-	RequestID     string
-	TraceID       string
-	TenantID      string
-	ProjectID     string
-	ApplicationID string
-	APIKeyID      string
-	AppTokenID    string
-	EndUserID     string
-	FeatureID     string
+	RequestID          string
+	TraceID            string
+	TenantID           string
+	ProjectID          string
+	ApplicationID      string
+	APIKeyID           string
+	AppTokenID         string
+	EndUserID          string
+	FeatureID          string
+	ConfigHash         string
+	SecurityPolicyHash string
 
 	RateLimitDecision *ratelimit.Decision
 
@@ -182,19 +186,34 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.RateLimitDecision != nil {
 		metadata["rateLimitDecision"] = *input.RateLimitDecision
 	}
+	runtimeMetadata := map[string]any{}
+	if input.ConfigHash != "" {
+		runtimeMetadata["configHash"] = strings.TrimSpace(input.ConfigHash)
+	}
+	if input.SecurityPolicyHash != "" {
+		runtimeMetadata["securityPolicyHash"] = strings.TrimSpace(input.SecurityPolicyHash)
+	}
+	if input.RoutingPolicyHash != "" {
+		runtimeMetadata["routingPolicyHash"] = strings.TrimSpace(input.RoutingPolicyHash)
+	}
+	if len(runtimeMetadata) > 0 {
+		metadata["runtime"] = runtimeMetadata
+	}
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
 
 	return TerminalLog{
-		RequestID:     requestID,
-		TraceID:       traceID,
-		TenantID:      strings.TrimSpace(input.TenantID),
-		ProjectID:     strings.TrimSpace(input.ProjectID),
-		ApplicationID: strings.TrimSpace(input.ApplicationID),
-		APIKeyID:      strings.TrimSpace(input.APIKeyID),
-		AppTokenID:    strings.TrimSpace(input.AppTokenID),
-		EndUserID:     strings.TrimSpace(input.EndUserID),
-		FeatureID:     strings.TrimSpace(input.FeatureID),
+		RequestID:          requestID,
+		TraceID:            traceID,
+		TenantID:           strings.TrimSpace(input.TenantID),
+		ProjectID:          strings.TrimSpace(input.ProjectID),
+		ApplicationID:      strings.TrimSpace(input.ApplicationID),
+		APIKeyID:           strings.TrimSpace(input.APIKeyID),
+		AppTokenID:         strings.TrimSpace(input.AppTokenID),
+		EndUserID:          strings.TrimSpace(input.EndUserID),
+		FeatureID:          strings.TrimSpace(input.FeatureID),
+		ConfigHash:         strings.TrimSpace(input.ConfigHash),
+		SecurityPolicyHash: strings.TrimSpace(input.SecurityPolicyHash),
 
 		RateLimitDecision: rateLimitDecision,
 

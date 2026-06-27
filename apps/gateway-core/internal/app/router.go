@@ -198,8 +198,8 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExactCacheStore:         routerOptions.ExactCacheStore,
 		ExactCacheKeyBuilder:    exactCacheKeyBuilder,
 		ExactCacheTTL:           cfg.ExactCacheTTL,
-		CachePolicyHash:         "cache_p0_v1",
-		SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
+		CachePolicyHash:         cfg.CachePolicyHash,
+		SecurityPolicyVersionID: cfg.SecurityPolicyHash,
 	}))
 
 	return mux
