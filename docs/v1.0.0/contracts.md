@@ -222,6 +222,8 @@ Gateway error response uses OpenAI-compatible shape.
 | 504 | `provider_timeout` | Y | after miss | `error` |
 | 500 | `internal_error` | depends | depends | `error` |
 
+Credential authentication failures must not reveal the internal credential state to callers. Missing, malformed, mismatched, revoked, disabled, or expired API Keys all return `401 invalid_api_key`; missing, malformed, mismatched, revoked, disabled, or expired App Tokens all return `403 invalid_app_token`. Implementations may keep an internal reason for logs/metrics, but raw credentials, Authorization headers, App Token headers, and credential hashes must not be emitted in responses, logs, metrics, cache entries, or fixtures.
+
 If existing code cannot store `status=rate_limited` yet, it may store `status=error` with `errorCode=rate_limited` during migration. New v1 work should use first-class `rate_limited`.
 
 ## 6. ActiveRuntimeConfig Contract
@@ -304,6 +306,8 @@ Execution rules:
 
 - Gateway consumes only an active published runtime config. `publishState=active` and active tenant/project/application/key/token status are required for the hot path.
 - Draft, superseded, rolled back, disabled, revoked, or missing runtime config must not be silently executed.
+- Credential rotation is a Control Plane operation and is allowed only when the target credential is `active` and not expired, where expired means `expiresAt != null && expiresAt <= now`; otherwise Control Plane returns `409 conflict`.
+- Credential revoke is a final disposal command. It may target active, disabled, expired, or already revoked credentials. If the target is already revoked, Control Plane must preserve the existing `revokedAt` and return the same revoked response without rewriting audit state.
 - Gateway may use a fixture/static `RuntimeConfigProvider` during the first implementation PR, but the interface boundary must match this contract.
 - Runtime config must not contain raw API Key, raw App Token, raw Provider Key, Authorization header, raw prompt, or raw response.
 - Provider credentials are referenced by `secretRef` and optional `credentialPreview` only. Gateway resolves provider credentials through the configured resolver/adapter and must not copy raw provider credentials into `GatewayContext`, logs, metrics, cache, or fixtures.

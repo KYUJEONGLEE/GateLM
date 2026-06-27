@@ -159,7 +159,10 @@
         "successStatus": 201,
         "authRequired": true,
         "idempotency": false,
-        "notes": ["Plaintext API Key appears only in this response."]
+        "notes": [
+          "Plaintext API Key appears only in this response.",
+          "projectId path parameter is the binding input; tenantId/projectId are resolved by DB lookup."
+        ]
       },
       {
         "operationId": "listApiKeys",
@@ -185,7 +188,11 @@
         "successStatus": 200,
         "authRequired": true,
         "idempotency": false,
-        "notes": ["Previous API Key status becomes revoked."]
+        "notes": [
+          "Previous API Key status becomes revoked.",
+          "Only active and unexpired API Keys may be rotated.",
+          "Revoked, disabled, expired, or already-expired API Keys fail with 409 conflict."
+        ]
       },
       {
         "operationId": "revokeApiKey",
@@ -197,8 +204,12 @@
         "responseContract": "CredentialRevokedResponse",
         "successStatus": 200,
         "authRequired": true,
-        "idempotency": false,
-        "notes": ["Gateway must reject revoked API Keys as invalid_api_key."]
+        "idempotency": true,
+        "notes": [
+          "Gateway must reject revoked API Keys as invalid_api_key.",
+          "Revoke is a final disposal command and may target active, disabled, expired, or revoked API Keys.",
+          "If the API Key is already revoked, Control Plane must not update DB state and must return the existing revokedAt."
+        ]
       },
       {
         "operationId": "issueAppToken",
@@ -211,7 +222,10 @@
         "successStatus": 201,
         "authRequired": true,
         "idempotency": false,
-        "notes": ["Plaintext App Token appears only in this response."]
+        "notes": [
+          "Plaintext App Token appears only in this response.",
+          "applicationId path parameter is the binding input; tenantId/projectId/applicationId are resolved by DB lookup."
+        ]
       },
       {
         "operationId": "listAppTokens",
@@ -237,7 +251,11 @@
         "successStatus": 200,
         "authRequired": true,
         "idempotency": false,
-        "notes": ["Previous App Token status becomes revoked."]
+        "notes": [
+          "Previous App Token status becomes revoked.",
+          "Only active and unexpired App Tokens may be rotated.",
+          "Revoked, disabled, expired, or already-expired App Tokens fail with 409 conflict."
+        ]
       },
       {
         "operationId": "revokeAppToken",
@@ -249,8 +267,12 @@
         "responseContract": "CredentialRevokedResponse",
         "successStatus": 200,
         "authRequired": true,
-        "idempotency": false,
-        "notes": ["Gateway must reject revoked App Tokens as invalid_app_token."]
+        "idempotency": true,
+        "notes": [
+          "Gateway must reject revoked App Tokens as invalid_app_token.",
+          "Revoke is a final disposal command and may target active, disabled, expired, or revoked App Tokens.",
+          "If the App Token is already revoked, Control Plane must not update DB state and must return the existing revokedAt."
+        ]
       },
       {
         "operationId": "getActiveRuntimeConfig",
