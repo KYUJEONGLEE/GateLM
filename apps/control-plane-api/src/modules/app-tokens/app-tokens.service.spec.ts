@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { CredentialStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -135,6 +136,57 @@ describe('AppTokensService', () => {
     );
     expect(result.credentialId).toBe('00000000-0000-4000-8000-000000000504');
     expect(result.plaintext).toMatch(/^gat_app_/);
+  });
+
+  it('rejects rotate for revoked App Tokens', async () => {
+    const { service, prisma } = createService();
+    prisma.appToken.findUnique.mockResolvedValue(
+      appToken('00000000-0000-4000-8000-000000000501', {
+        status: CredentialStatus.REVOKED,
+        revokedAt: new Date('2026-06-27T00:10:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.rotateAppToken('00000000-0000-4000-8000-000000000501'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects rotate for expired App Tokens', async () => {
+    const { service, prisma } = createService();
+    prisma.appToken.findUnique.mockResolvedValue(
+      appToken('00000000-0000-4000-8000-000000000501', {
+        expiresAt: new Date('2000-01-01T00:00:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.rotateAppToken('00000000-0000-4000-8000-000000000501'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('preserves revokedAt when revoking an already revoked App Token', async () => {
+    const { service, prisma } = createService();
+    const revokedAt = new Date('2026-06-27T00:10:00.000Z');
+    prisma.appToken.findUnique.mockResolvedValue(
+      appToken('00000000-0000-4000-8000-000000000501', {
+        status: CredentialStatus.REVOKED,
+        revokedAt,
+      }),
+    );
+
+    const result = await service.revokeAppToken(
+      '00000000-0000-4000-8000-000000000501',
+    );
+
+    expect(prisma.appToken.update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      credentialId: '00000000-0000-4000-8000-000000000501',
+      status: 'revoked',
+      revokedAt: '2026-06-27T00:10:00.000Z',
+    });
   });
 
   function appToken(id: string, overrides: Record<string, unknown> = {}) {

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AppToken, CredentialStatus, Prisma } from '@prisma/client';
 
 import { generateCredentialSecret } from '@/common/security/credential-secret';
@@ -77,8 +81,9 @@ export class AppTokensService {
     appTokenId: string,
   ): Promise<OneTimeAppTokenResponseDto> {
     const previous = await this.getAppTokenOrThrow(appTokenId);
-    const secret = generateCredentialSecret(previous.prefix || APP_TOKEN_PREFIX);
     const now = new Date();
+    this.assertRotatableCredential(previous, now);
+    const secret = generateCredentialSecret(previous.prefix || APP_TOKEN_PREFIX);
 
     const rotated = await this.prisma.$transaction(async (tx) => {
       await tx.appToken.update({
@@ -111,7 +116,12 @@ export class AppTokensService {
   async revokeAppToken(
     appTokenId: string,
   ): Promise<AppTokenRevokedResponseDto> {
-    const revokedAt = new Date();
+    const existing = await this.getAppTokenOrThrow(appTokenId);
+    if (existing.status === CredentialStatus.REVOKED && existing.revokedAt) {
+      return this.toRevokedResponse(existing.id, existing.revokedAt);
+    }
+
+    const revokedAt = existing.revokedAt ?? new Date();
     const appToken = await this.prisma.appToken
       .update({
         where: { id: appTokenId },
@@ -128,11 +138,7 @@ export class AppTokensService {
         throw error;
       });
 
-    return {
-      credentialId: appToken.id,
-      status: 'revoked',
-      revokedAt: (appToken.revokedAt ?? revokedAt).toISOString(),
-    };
+    return this.toRevokedResponse(appToken.id, appToken.revokedAt ?? revokedAt);
   }
 
   private async getApplicationOrThrow(
@@ -173,6 +179,26 @@ export class AppTokensService {
 
   private toNullableDate(value: string | null | undefined): Date | null {
     return value ? new Date(value) : null;
+  }
+
+  private assertRotatableCredential(appToken: AppToken, now: Date): void {
+    if (
+      appToken.status !== CredentialStatus.ACTIVE ||
+      (appToken.expiresAt !== null && appToken.expiresAt <= now)
+    ) {
+      throw new ConflictException('App Token cannot be rotated.');
+    }
+  }
+
+  private toRevokedResponse(
+    credentialId: string,
+    revokedAt: Date,
+  ): AppTokenRevokedResponseDto {
+    return {
+      credentialId,
+      status: 'revoked',
+      revokedAt: revokedAt.toISOString(),
+    };
   }
 
   private isRecordNotFoundError(

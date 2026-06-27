@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { CredentialStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -119,6 +120,57 @@ describe('ApiKeysService', () => {
     );
     expect(result.credentialId).toBe('00000000-0000-4000-8000-000000000404');
     expect(result.plaintext).toMatch(/^gsk_live_/);
+  });
+
+  it('rejects rotate for revoked API Keys', async () => {
+    const { service, prisma } = createService();
+    prisma.gatewayApiKey.findUnique.mockResolvedValue(
+      apiKey('00000000-0000-4000-8000-000000000401', {
+        status: CredentialStatus.REVOKED,
+        revokedAt: new Date('2026-06-27T00:10:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.rotateApiKey('00000000-0000-4000-8000-000000000401'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects rotate for expired API Keys', async () => {
+    const { service, prisma } = createService();
+    prisma.gatewayApiKey.findUnique.mockResolvedValue(
+      apiKey('00000000-0000-4000-8000-000000000401', {
+        expiresAt: new Date('2000-01-01T00:00:00.000Z'),
+      }),
+    );
+
+    await expect(
+      service.rotateApiKey('00000000-0000-4000-8000-000000000401'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('preserves revokedAt when revoking an already revoked API Key', async () => {
+    const { service, prisma } = createService();
+    const revokedAt = new Date('2026-06-27T00:10:00.000Z');
+    prisma.gatewayApiKey.findUnique.mockResolvedValue(
+      apiKey('00000000-0000-4000-8000-000000000401', {
+        status: CredentialStatus.REVOKED,
+        revokedAt,
+      }),
+    );
+
+    const result = await service.revokeApiKey(
+      '00000000-0000-4000-8000-000000000401',
+    );
+
+    expect(prisma.gatewayApiKey.update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      credentialId: '00000000-0000-4000-8000-000000000401',
+      status: 'revoked',
+      revokedAt: '2026-06-27T00:10:00.000Z',
+    });
   });
 
   function apiKey(id: string, overrides: Record<string, unknown> = {}) {

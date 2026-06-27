@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CredentialStatus, GatewayApiKey, Prisma } from '@prisma/client';
 
 import { generateCredentialSecret } from '@/common/security/credential-secret';
@@ -74,8 +78,9 @@ export class ApiKeysService {
 
   async rotateApiKey(apiKeyId: string): Promise<OneTimeApiKeyResponseDto> {
     const previous = await this.getApiKeyOrThrow(apiKeyId);
-    const secret = generateCredentialSecret(previous.prefix || API_KEY_PREFIX);
     const now = new Date();
+    this.assertRotatableCredential(previous, now);
+    const secret = generateCredentialSecret(previous.prefix || API_KEY_PREFIX);
 
     const rotated = await this.prisma.$transaction(async (tx) => {
       await tx.gatewayApiKey.update({
@@ -105,7 +110,12 @@ export class ApiKeysService {
   }
 
   async revokeApiKey(apiKeyId: string): Promise<CredentialRevokedResponseDto> {
-    const revokedAt = new Date();
+    const existing = await this.getApiKeyOrThrow(apiKeyId);
+    if (existing.status === CredentialStatus.REVOKED && existing.revokedAt) {
+      return this.toRevokedResponse(existing.id, existing.revokedAt);
+    }
+
+    const revokedAt = existing.revokedAt ?? new Date();
     const apiKey = await this.prisma.gatewayApiKey
       .update({
         where: { id: apiKeyId },
@@ -122,11 +132,7 @@ export class ApiKeysService {
         throw error;
       });
 
-    return {
-      credentialId: apiKey.id,
-      status: 'revoked',
-      revokedAt: (apiKey.revokedAt ?? revokedAt).toISOString(),
-    };
+    return this.toRevokedResponse(apiKey.id, apiKey.revokedAt ?? revokedAt);
   }
 
   private async getProjectOrThrow(
@@ -167,6 +173,29 @@ export class ApiKeysService {
 
   private toNullableDate(value: string | null | undefined): Date | null {
     return value ? new Date(value) : null;
+  }
+
+  private assertRotatableCredential(
+    apiKey: GatewayApiKey,
+    now: Date,
+  ): void {
+    if (
+      apiKey.status !== CredentialStatus.ACTIVE ||
+      (apiKey.expiresAt !== null && apiKey.expiresAt <= now)
+    ) {
+      throw new ConflictException('API Key cannot be rotated.');
+    }
+  }
+
+  private toRevokedResponse(
+    credentialId: string,
+    revokedAt: Date,
+  ): CredentialRevokedResponseDto {
+    return {
+      credentialId,
+      status: 'revoked',
+      revokedAt: revokedAt.toISOString(),
+    };
   }
 
   private isRecordNotFoundError(
