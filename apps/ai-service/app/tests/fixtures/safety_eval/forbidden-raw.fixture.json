@@ -1,0 +1,11 @@
+{
+  "fixtureName": "v1-safety-eval-forbidden-raw",
+  "fixtureVersion": "2026-06-27.v1",
+  "mode": "detector_output",
+  "results": [
+    {
+      "caseId": "safe_none_basic",
+      "rawPrompt": "this field must never appear in an eval fixture"
+    }
+  ]
+}
