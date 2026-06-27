@@ -4,8 +4,9 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 interface ErrorEnvelope {
   error: {
@@ -19,12 +20,18 @@ interface ErrorEnvelope {
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const request = http.getRequest<Request>();
+    const response = http.getResponse<Response>();
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    this.logServerError(exception, status, request);
 
     response.status(status).json(this.toErrorEnvelope(exception));
   }
@@ -77,5 +84,26 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     return 'INTERNAL_ERROR';
+  }
+
+  private logServerError(
+    exception: unknown,
+    status: number,
+    request: Request,
+  ): void {
+    if (status < HttpStatus.INTERNAL_SERVER_ERROR) {
+      return;
+    }
+
+    const message =
+      exception instanceof Error ? exception.message : String(exception);
+    const stack = exception instanceof Error ? exception.stack : undefined;
+    const method = request.method;
+    const url = request.originalUrl ?? request.url;
+
+    this.logger.error(
+      `Control Plane request failed: status=${status} method=${method} url=${url} message=${message}`,
+      stack,
+    );
   }
 }
