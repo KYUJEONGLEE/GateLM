@@ -178,7 +178,7 @@ Provider를 실제로 호출하지 않는 cache hit, policy block, rate limit bl
 | `cost` | string | Y | 표시용 USD 비용. 예: `"0.000123"` |
 | `costMicroUsd` | integer | Y | 저장/집계용 비용. 1 USD = 1,000,000 micro USD |
 | `latencyMs` | integer | Y | 요청 전체 latency, milliseconds |
-| `status` | string | Y | `success`, `error`, `blocked`, `cache_hit`, `cancelled` 등 |
+| `status` | string | Y | `success`, `error`, `blocked`, `rate_limited`, `cache_hit`, `cancelled` 등 |
 | `errorMessage` | string or null | Y | sanitized error message. raw provider body 저장 금지 |
 | `createdAt` | string | Y | 요청 시작 시각. ISO-8601 UTC |
 
@@ -343,7 +343,8 @@ providerLatencyMs = providerEndAt - providerStartAt
 |---|---|
 | `success` | Provider 호출 또는 정상 응답 성공 |
 | `cache_hit` | Gateway cache hit로 Provider 호출 생략 |
-| `blocked` | 정책, 보안, quota, rate limit 등으로 사전 차단 |
+| `blocked` | 민감정보, Runtime Policy, quota 등으로 사전 차단 |
+| `rate_limited` | Rate Limit 정책으로 사전 차단 |
 | `error` | Gateway 또는 Provider 처리 실패 |
 | `cancelled` | client abort 또는 server cancellation |
 | `partial_success` | streaming 일부 전송 후 실패. 확장용 |
@@ -688,7 +689,7 @@ Event name은 MVP 기준 아래 중 하나를 사용한다.
 |---|---|
 | `invocation.completed` | 성공 또는 cache hit |
 | `invocation.failed` | Gateway/Provider 오류 |
-| `invocation.blocked` | policy/rate limit/quota/security 차단 |
+| `invocation.blocked` | policy/quota/security 차단. v1 request status는 rate limit을 `rate_limited`로 분리 |
 | `invocation.cancelled` | client abort/cancel |
 
 Payload는 `LlmRequestLog` 전체 또는 그와 동등한 필드를 포함한다.
@@ -995,6 +996,7 @@ Detail Drawer도 raw prompt/response는 기본 반환하지 않는다.
 | Success Count | count where `status = success` |
 | Error Count | count where `status = error` |
 | Blocked Count | count where `status = blocked` |
+| Rate Limited Count | count where `status = rate_limited` |
 | Cache Hit Count | count where `status = cache_hit` or `cacheStatus = hit` |
 | Total Tokens | sum `totalTokens` |
 | Prompt Tokens | sum `promptTokens` |
@@ -1328,7 +1330,7 @@ Worker는 ClickHouse 저장 전 아래를 검증한다.
 - `costMicroUsd`는 0 이상. refund/correction은 별도 ledger
 - `latencyMs`는 0 이상
 - `createdAt`은 valid UTC datetime
-- `errorCode`는 error/blocked 상태에서 가능하면 존재
+- `errorCode`는 error/blocked/rate_limited 상태에서 가능하면 존재
 - `errorMessage`는 sanitized 및 길이 제한 통과
 
 ## 16.2 Cross-field validation
@@ -1338,6 +1340,7 @@ Worker는 ClickHouse 저장 전 아래를 검증한다.
 | `status = success` | `httpStatus`는 2xx, `errorCode`는 null 권장 |
 | `status = cache_hit` | `cacheStatus = hit`, `costMicroUsd = 0` 권장 |
 | `status = blocked` | `httpStatus`는 4xx, Provider attempt 없어야 함 |
+| `status = rate_limited` | `httpStatus = 429`, `errorCode = rate_limited`, Provider attempt 없어야 함 |
 | `status = error` | `errorCode` 있어야 함 |
 | `maskingAction = blocked` | `status = blocked` |
 | `completionTokens > 0` | Provider success 또는 partial success |

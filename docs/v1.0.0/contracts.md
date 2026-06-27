@@ -6,6 +6,8 @@
 
 `implementation-plan.md`는 실행 계획이고, 이 문서는 구현 경계와 데이터 계약이다. 계약 변경은 기능 PR과 섞지 않고 별도 docs PR에서 처리한다.
 
+As of 2026-06-27, this file is the canonical v1 contract freeze document. Role-specific notes such as `additional-contracts-by-role.md` are supporting coordination notes; if they conflict with this file, this file wins.
+
 ## 2. Frozen Decisions
 
 | Decision | Value |
@@ -46,6 +48,23 @@ Boundary rules:
 - Gateway hot path must not depend on Web Console, Dashboard UI, Python AI service, Redpanda, or ClickHouse.
 - Observability stores and aggregates metadata. It does not invent stage outcomes.
 - Frontend displays API results. It does not calculate canonical cost or call providers.
+
+### 3.1 Gateway Data Plane Contract Freeze (이지섭)
+
+Gateway Data Plane owns runtime execution and governance metadata production. It does not own Control Plane authoring, Dashboard aggregation, or Safety Lab evaluation, but it must produce stable outputs those owners can consume.
+
+For v1 freeze, 이지섭 must lock the following contracts before Gateway implementation work:
+
+| Contract | Gateway responsibility | Cross-owner alignment |
+|---|---|---|
+| Active runtime consumption | Load `ActiveRuntimeConfig` through `RuntimeConfigProvider`; keep `configHash`, `securityPolicyHash`, and `routingPolicyHash` on `GatewayContext` | 재혁님: publish criteria, provider/model config shape, credential hash verification basis |
+| Auth and scope decision | Hash raw API Key/App Token, discard raw values, resolve tenant/project/application IDs, set stable auth failure outcomes | 재혁님: key/token status, scope, rotation/revocation semantics |
+| GatewayContext terminal snapshot | Produce the terminal `GatewayContext` handed to `InvocationLogWriter` with all required groups and nullable skipped-stage values | 이규정: Invocation Log mapping, auth failure log behavior, aggregation inputs |
+| Rate limit decision | Enforce PostgreSQL fixed window by `applicationId`, set `rateLimitDecision`, and terminal `status=rate_limited` on limit exceed | 이규정: rate limit aggregation and metrics interpretation |
+| Safety runtime output | Apply rule-based redaction/block in the hot path and set masking fields, `promptHash`, redacted preview, and `securityPolicyHash` | 이윤지: detector type, action, placeholder, corpus expectations |
+| Routing/cache/provider outcome | Keep provider-specific behavior inside adapters; produce selected provider/model, cache metadata, usage, cost, latency, and terminal status | 김규민: response metadata and demo-visible behavior; 이규정: log/dashboard fields |
+
+Gateway must not add API, DB, event/log, metric, or security-sensitive fields as an implementation shortcut. Any new field or changed meaning requires a separate contract docs change before feature implementation.
 
 ## 4. Required Interfaces
 
@@ -207,6 +226,13 @@ If existing code cannot store `status=rate_limited` yet, it may store `status=er
 
 ## 6. ActiveRuntimeConfig Contract
 
+Canonical artifacts:
+
+```text
+docs/v1.0.0/schemas/runtime-config.schema.json
+docs/v1.0.0/fixtures/runtime-config.fixture.json
+```
+
 Required fields:
 
 ```text
@@ -274,6 +300,16 @@ Minimal cache config:
 }
 ```
 
+Execution rules:
+
+- Gateway consumes only an active published runtime config. `publishState=active` and active tenant/project/application/key/token status are required for the hot path.
+- Draft, superseded, rolled back, disabled, revoked, or missing runtime config must not be silently executed.
+- Gateway may use a fixture/static `RuntimeConfigProvider` during the first implementation PR, but the interface boundary must match this contract.
+- Runtime config must not contain raw API Key, raw App Token, raw Provider Key, Authorization header, raw prompt, or raw response.
+- Provider credentials are referenced by `secretRef` and optional `credentialPreview` only. Gateway resolves provider credentials through the configured resolver/adapter and must not copy raw provider credentials into `GatewayContext`, logs, metrics, cache, or fixtures.
+- `configHash`, `securityPolicyHash`, and `routingPolicyHash` are runtime provenance values. They must be copied into `GatewayContext.runtime` and stored in Invocation Log `metadata.runtime`.
+- If runtime config fetch or provider secret resolution fails before a safe fallback is selected, Gateway fails closed before provider call with `status=error`, `httpStatus=500`, `errorCode=internal_error`, and the relevant `errorStage`.
+
 ## 7. GatewayContext Contract
 
 Gateway stages share one in-memory context.
@@ -282,7 +318,7 @@ Required groups:
 
 ```text
 request:
-  requestId, traceId, startedAt, endpoint, method, source, stream
+  requestId, traceId, startedAt, endpoint, method, source, stream, requestBodyHash
 
 identity:
   tenantId, projectId, applicationId, apiKeyId, appTokenId, endUserId, featureId
@@ -314,6 +350,10 @@ status:
 time:
   completedAt
 ```
+
+The canonical JSON Schema for the terminal GatewayContext snapshot and its fixture wrapper is `docs/v1.0.0/schemas/gateway-context.schema.json`. The canonical fixture example is `docs/v1.0.0/fixtures/gateway-context.fixture.json`.
+
+The schema accepts the fixture wrapper and the nested `gatewayContext` object. The nested context describes the terminal snapshot handed to `InvocationLogWriter`. In-progress stage implementations may use typed optional fields internally, but the writer input must include the required groups and keys; values for stages that did not run may be `null`.
 
 MUST NOT store in GatewayContext:
 
@@ -406,6 +446,19 @@ Recommended counter key:
 ```text
 tenantId + applicationId + windowStart
 ```
+
+Ownership boundary:
+
+- Control Plane owns rate limit configuration in `ActiveRuntimeConfig.rateLimit`.
+- Gateway owns the PostgreSQL counter table and atomic check-and-increment execution.
+- Observability consumes `rateLimitDecision` and terminal status for logs, dashboard, metrics, and k6 interpretation.
+
+Execution rules:
+
+- `enabled=false` allows the request, does not increment a counter, and records reason `rate_limit_disabled`.
+- Missing required rate limit config after active runtime config load is a fail-closed governance error, not an implicit unlimited mode.
+- PostgreSQL counter errors fail closed before cache/provider with `status=error`, `httpStatus=500`, `errorCode=internal_error`, `errorStage=check_rate_limit`, and `rateLimitDecision.reason=internal_error` when a decision object can be produced.
+- Limit exceeded fails before safety/cache/provider with first-class terminal `status=rate_limited`.
 
 Rate-limited response:
 
@@ -537,7 +590,49 @@ createdAt, completedAt
 metadata
 ```
 
+### 12.1 GatewayContext -> Invocation Log Mapping
+
+`GatewayContext` is the in-memory request context used by Gateway stages. Invocation Log is the terminal record written after request handling finishes.
+
+| GatewayContext field | Producer | Invocation Log storage |
+|---|---|---|
+| `request.requestId`, `request.traceId` | `assign_request_id` | `requestId`, `traceId` |
+| `request.startedAt` | `receive_request` | `createdAt` |
+| `time.completedAt` | terminal response/log stage | `completedAt` |
+| `request.endpoint`, `request.method`, `request.source`, `request.stream` | HTTP receive / request classification | `endpoint`, `method`, `source`, `stream` |
+| `request.requestBodyHash` | `parse_openai_compatible_payload` after normalized JSON parse | `requestBodyHash` |
+| `identity.*` | auth, app token validation, context resolver | matching identity fields |
+| `runtime.configHash` | `load_active_runtime_config` / `RuntimeConfigProvider` | `metadata.runtime.configHash` |
+| `runtime.securityPolicyHash` | `evaluate_safety` from active safety policy | `metadata.runtime.securityPolicyHash` |
+| `runtime.routingPolicyHash` | `load_active_runtime_config` or `decide_model_route` | `metadata.runtime.routingPolicyHash` |
+| `governance.rateLimitDecision` | `check_rate_limit` | `rateLimitDecision` |
+| `safety.promptHash` | `evaluate_safety` / `mask_or_block` using the normalized redacted prompt | `promptHash` |
+| `safety.redactedPromptPreview` | `mask_or_block` | `redactedPromptPreview` |
+| `safety.maskingAction`, `safety.maskingDetectedTypes`, `safety.maskingDetectedCount` | `evaluate_safety` / `mask_or_block` | matching masking fields |
+| `routing.*` | `decide_model_route` | matching routing fields |
+| `cache.*` | `build_exact_cache_key`, `exact_cache_lookup` | matching cache fields |
+| `usage.*` | `compute_usage_cost_latency`, cache hit handling | matching usage fields |
+| `latency.*` | pipeline timing / provider adapter timing | matching latency fields |
+| `status.*` | terminal stage or failing stage | matching status/error fields |
+
+`startedAt` MUST be stored as Invocation Log `createdAt`. `completedAt` MUST be stored as Invocation Log `completedAt`.
+
+`requestBodyHash` is produced from the normalized request body, never from raw credentials. `promptHash` is produced from the normalized redacted prompt. `redactedPromptPreview` is produced only after safety redaction. `configHash`, `securityPolicyHash`, and `routingPolicyHash` are runtime provenance values and MUST be stored under Invocation Log `metadata.runtime`.
+
+`InvocationLogWriter` serializes terminal outcomes already present in `GatewayContext`. It MUST NOT invent or infer stage outcomes that are missing from `GatewayContext`.
+
+Required Invocation Log fields are required as keys. Values produced by stages that did not run MAY be `null`. Pre-cache terminal outcomes MUST use `cacheStatus=bypass` and `cacheType=none`. The failing or terminal stage MUST set `status`, `httpStatus`, `errorCode`, and `errorStage`.
+
+This mapping MUST NOT store raw prompt, raw response, raw API Key, raw App Token, raw Provider Key, Authorization header, or raw detected sensitive values.
+
 PostgreSQL is the v1 canonical source. Existing `p0_llm_invocation_logs` may be reused only if migration notes document the v1 mapping.
+
+Auth failure logging:
+
+- Auth failures before tenant/project/application context is known may be written to a sanitized auth failure log path instead of the default invocation log path.
+- If an auth failure is written into the invocation log table, unavailable identity fields must be `null`; `InvocationLogWriter` must not guess tenant/project/application from raw credentials.
+- Default Dashboard Overview excludes unauthenticated auth failures unless a later contract explicitly adds an auth/security view.
+- Raw Authorization header, API Key, App Token, credential hash, and plaintext credential must not be stored in auth failure logs.
 
 MUST NOT create/store:
 
@@ -602,18 +697,27 @@ failedRequests
 blockedRequests
 rateLimitedRequests
 cacheHitRequests
+cacheEligibleRequests
 cacheHitRate
+promptTokens
+completionTokens
 totalTokens
 totalCostMicroUsd
 totalCostUsd
+savedCostMicroUsd
+savedCostUsd
 averageLatencyMs
 p95LatencyMs
 maskingActionCounts
 routingCountByModel
+statusCounts
+costByModel
 dataFreshness
 ```
 
 `blocked` and `rate_limited` are policy outcomes, not product failures.
+
+Fixture files may include `requestIds` for cross-checking Request Log and Dashboard consistency. Production Dashboard Overview API does not need to expose `requestIds` by default.
 
 ## 14. Metrics Contract
 
@@ -762,4 +866,35 @@ Security impact?
 Migration/backfill needed?
 Smoke scenario changed?
 Backward compatible?
+```
+
+## 18. JSON Contract Artifacts
+
+Canonical v1 contract artifacts live under `docs/v1.0.0`:
+
+| Directory | Purpose |
+|---|---|
+| `docs/v1.0.0/fixtures/` | Concrete examples used by demo, smoke, UI, and aggregation checks |
+| `docs/v1.0.0/schemas/` | JSON Schema files that define fixture or payload shape |
+| `docs/v1.0.0/checks/` | Optional checklists or smoke notes when they are added |
+
+`packages/contracts` is reserved for implementation-importable shared contract code after a contract is frozen. v1 freeze fixtures and schemas must not be duplicated under `packages/contracts/examples`.
+
+Schemas define shape and allowed values. Fixtures provide representative examples. A fixture may be updated to add a new scenario only after the corresponding schema/contract change is agreed.
+
+Frozen v1 artifacts:
+
+```text
+fixtures/runtime-config.fixture.json
+fixtures/gateway-context.fixture.json
+fixtures/invocation-log.fixture.json
+fixtures/dashboard-overview.fixture.json
+fixtures/safety-eval-corpus.jsonl
+fixtures/credential-lifecycle.fixture.json
+fixtures/control-plane-admin-api.fixture.json
+schemas/runtime-config.schema.json
+schemas/gateway-context.schema.json
+schemas/safety-eval-corpus.schema.json
+schemas/credential-lifecycle.schema.json
+schemas/control-plane-admin-api.schema.json
 ```

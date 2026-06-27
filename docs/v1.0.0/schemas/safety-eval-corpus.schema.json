@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v1.0.0/schemas/safety-eval-corpus.schema.json",
+  "title": "GateLM v1 Safety Eval Corpus Line",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "caseId",
+    "inputTemplate",
+    "placeholderBindings",
+    "expectedSafetyDecision",
+    "expectedGatewayEffects",
+    "tags"
+  ],
+  "properties": {
+    "caseId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_\\-]*$"
+    },
+    "inputTemplate": {
+      "type": "string",
+      "minLength": 1
+    },
+    "placeholderBindings": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "email",
+          "phone_number",
+          "resident_registration_number",
+          "api_key",
+          "authorization_header",
+          "jwt",
+          "private_key"
+        ]
+      },
+      "propertyNames": {
+        "pattern": "^SYNTHETIC_[A-Z0-9_]+$"
+      }
+    },
+    "expectedSafetyDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "detectedTypes",
+        "detectedCount",
+        "redactedPromptPreview",
+        "blockReason",
+        "securityPolicyHash"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "none",
+            "redacted",
+            "blocked"
+          ]
+        },
+        "detectedTypes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "email",
+              "phone_number",
+              "resident_registration_number",
+              "api_key",
+              "authorization_header",
+              "jwt",
+              "private_key"
+            ]
+          }
+        },
+        "detectedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "redactedPromptPreview": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blockReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "securityPolicyHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "expectedGatewayEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerCalled",
+        "cacheLookup",
+        "terminalStatus",
+        "httpStatus",
+        "errorCode"
+      ],
+      "properties": {
+        "providerCalled": {
+          "type": "boolean"
+        },
+        "cacheLookup": {
+          "type": "boolean"
+        },
+        "terminalStatus": {
+          "enum": [
+            "success",
+            "cache_hit",
+            "blocked",
+            "rate_limited",
+            "error",
+            "cancelled"
+          ]
+        },
+        "httpStatus": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_\\-]*$"
+      }
+    }
+  }
+}
