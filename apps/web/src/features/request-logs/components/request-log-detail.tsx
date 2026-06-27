@@ -74,7 +74,7 @@ export function RequestLogDetail({ record, tenantId, timezone }: RequestLogDetai
           rows={[
             ["Masking action", record.maskingAction],
             ["Detected count", String(record.maskingDetectedCount)],
-            ["Detected types", record.maskingDetectedTypes.join(", ") || "none"],
+            ["Detected types", record.maskingDetectedTypes?.join(", ") || "none"],
             ["Prompt preview", nullableText(record.redactedPromptPreview, "No preview stored")],
             ["Prompt hash", record.promptHash]
           ]}
