@@ -274,12 +274,12 @@ func writeFloatSamples(builder *strings.Builder, metricName string, samples map[
 	}
 }
 
-func writeHistogramSamples(builder *strings.Builder, metricName string, samples map[seriesKey]histogramSeries) {
+func writeHistogramSamples(builder *strings.Builder, metricName string, samples map[seriesKey]histogramSeries) { 
 	keys := sortedSeriesKeys(metricName, samples)
 	for _, key := range keys {
 		series := samples[key]
 		var cumulative uint64
-		for index, bucket := range series.buckets {
+		for index, bucket := range defaultDurationBuckets {
 			cumulative += series.counts[index]
 			labels := appendCanonicalLabel(key.labels, "le", formatFloat(bucket))
 			fmt.Fprintf(builder, "%s_bucket%s %d\n", metricName, formatLabelsWithPrometheusInternal(labels), cumulative)
@@ -289,6 +289,7 @@ func writeHistogramSamples(builder *strings.Builder, metricName string, samples 
 		fmt.Fprintf(builder, "%s_sum%s %s\n", metricName, formatLabels(key.labels), formatFloat(series.sum))
 		fmt.Fprintf(builder, "%s_count%s %d\n", metricName, formatLabels(key.labels), series.count)
 	}
+}
 }
 
 func sortedSeriesKeys[T any](metricName string, samples map[seriesKey]T) []seriesKey {
