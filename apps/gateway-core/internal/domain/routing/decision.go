@@ -3,6 +3,7 @@ package routing
 type Request struct {
 	RequestedModel string
 	PromptText     string
+	Config         *SimpleRouterConfig
 }
 
 type Decision struct {

@@ -13,14 +13,17 @@ import (
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
+	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
+	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -76,16 +79,20 @@ func main() {
 		ApplicationID: cfg.DemoApplicationID,
 	})
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
-	rateLimitPipeline := pipeline.New(ratelimitstage.NewStage(
-		postgresratelimit.NewLimiter(postgresPool),
-		ratelimit.Config{
-			Enabled:       cfg.RateLimitEnabled,
-			Scope:         ratelimit.ScopeApplication,
-			Algorithm:     ratelimit.AlgorithmFixedWindow,
-			WindowSeconds: cfg.RateLimitWindowSecs,
-			Limit:         cfg.RateLimitLimit,
-		},
-	))
+	runtimeConfigProvider := staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg))
+	rateLimitPipeline := pipeline.New(
+		runtimeconfigstage.NewStage(runtimeConfigProvider),
+		ratelimitstage.NewStage(
+			postgresratelimit.NewLimiter(postgresPool),
+			ratelimit.Config{
+				Enabled:       cfg.RateLimitEnabled,
+				Scope:         ratelimit.ScopeApplication,
+				Algorithm:     ratelimit.AlgorithmFixedWindow,
+				WindowSeconds: cfg.RateLimitWindowSecs,
+				Limit:         cfg.RateLimitLimit,
+			},
+		),
+	)
 
 	router := app.NewRouter(
 		cfg,
@@ -131,4 +138,47 @@ func (q invocationLogQueryer) Query(ctx context.Context, sql string, arguments .
 
 func (q invocationLogQueryer) QueryRow(ctx context.Context, sql string, arguments ...any) postgresinvocationlog.Row {
 	return q.pool.QueryRow(ctx, sql, arguments...)
+}
+
+func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
+	return runtimeconfig.ActiveConfig{
+		ConfigVersion:     "runtime_config_v1_local_static",
+		ConfigHash:        cfg.RuntimeConfigHash,
+		PublishState:      runtimeconfig.PublishStateActive,
+		TenantID:          cfg.DemoTenantID,
+		TenantStatus:      runtimeconfig.StatusActive,
+		ProjectID:         cfg.DemoProjectID,
+		ProjectStatus:     runtimeconfig.StatusActive,
+		ApplicationID:     cfg.DemoApplicationID,
+		ApplicationStatus: runtimeconfig.StatusActive,
+		APIKeyID:          cfg.DemoAPIKeyID,
+		APIKeyStatus:      runtimeconfig.StatusActive,
+		AppTokenID:        cfg.DemoAppTokenID,
+		AppTokenStatus:    runtimeconfig.StatusActive,
+		RateLimit: ratelimit.Config{
+			Enabled:       cfg.RateLimitEnabled,
+			Scope:         ratelimit.ScopeApplication,
+			Algorithm:     ratelimit.AlgorithmFixedWindow,
+			WindowSeconds: cfg.RateLimitWindowSecs,
+			Limit:         cfg.RateLimitLimit,
+		},
+		SafetyPolicy: runtimeconfig.SafetyPolicy{
+			SecurityPolicyHash: cfg.SecurityPolicyHash,
+		},
+		RoutingPolicy: runtimeconfig.RoutingPolicy{
+			DefaultProvider:     cfg.DefaultProvider,
+			DefaultModel:        cfg.DefaultModel,
+			LowCostProvider:     cfg.DefaultProvider,
+			LowCostModel:        cfg.LowCostModel,
+			FallbackProvider:    cfg.DefaultProvider,
+			FallbackModel:       cfg.DefaultModel,
+			ShortPromptMaxChars: cfg.ShortPromptMaxChars,
+			RoutingPolicyHash:   cfg.RoutingPolicyHash,
+		},
+		CachePolicy: runtimeconfig.CachePolicy{
+			Enabled:    true,
+			Type:       runtimeconfig.CacheTypeExact,
+			TTLSeconds: int(cfg.ExactCacheTTL.Seconds()),
+		},
+	}
 }

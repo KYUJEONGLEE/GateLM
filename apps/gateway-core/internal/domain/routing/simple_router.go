@@ -65,7 +65,14 @@ func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
 	return router
 }
 
-func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
+func (r *SimpleRouter) DecideRoute(ctx context.Context, req Request) (Decision, error) {
+	if req.Config != nil {
+		return NewSimpleRouter(*req.Config).DecideRoute(ctx, Request{
+			RequestedModel: req.RequestedModel,
+			PromptText:     req.PromptText,
+		})
+	}
+
 	requestedModel := strings.TrimSpace(req.RequestedModel)
 	if requestedModel == "" {
 		requestedModel = r.defaultModel

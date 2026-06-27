@@ -44,11 +44,15 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		nowFn = time.Now
 	}
 	startedAt := time.Now()
+	config := s.config
+	if gatewayCtx.Runtime.HasRateLimitConfig {
+		config = gatewayCtx.Runtime.RateLimitConfig
+	}
 	rateLimitReq := ratelimit.Request{
 		TenantID:      gatewayCtx.Identity.TenantID,
 		ProjectID:     gatewayCtx.Identity.ProjectID,
 		ApplicationID: gatewayCtx.Identity.ApplicationID,
-		Config:        s.config,
+		Config:        config,
 		Now:           nowFn(),
 	}
 	decision, err := s.limiter.Check(ctx, rateLimitReq)
