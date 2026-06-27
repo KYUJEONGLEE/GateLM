@@ -274,7 +274,7 @@ func writeFloatSamples(builder *strings.Builder, metricName string, samples map[
 	}
 }
 
-func writeHistogramSamples(builder *strings.Builder, metricName string, samples map[seriesKey]histogramSeries) { 
+func writeHistogramSamples(builder *strings.Builder, metricName string, samples map[seriesKey]histogramSeries) {
 	keys := sortedSeriesKeys(metricName, samples)
 	for _, key := range keys {
 		series := samples[key]
@@ -289,7 +289,6 @@ func writeHistogramSamples(builder *strings.Builder, metricName string, samples 
 		fmt.Fprintf(builder, "%s_sum%s %s\n", metricName, formatLabels(key.labels), formatFloat(series.sum))
 		fmt.Fprintf(builder, "%s_count%s %d\n", metricName, formatLabels(key.labels), series.count)
 	}
-}
 }
 
 func sortedSeriesKeys[T any](metricName string, samples map[seriesKey]T) []seriesKey {
