@@ -29,6 +29,9 @@ export function WebConsoleInitView() {
             gateway baseline.
           </p>
           <div className="init-actions">
+            <Link className="primary-link" href={`/tenants/${fixtureTenantId}/chat`}>
+              Open customer demo
+            </Link>
             <Link className="primary-link" href={`/tenants/${fixtureTenantId}/onboarding`}>
               Start onboarding
             </Link>
