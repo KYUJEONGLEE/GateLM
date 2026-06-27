@@ -226,6 +226,73 @@ fix/v1-demo-smoke
 
 커밋 메시지는 conventional commit style을 따르며, type을 제외한 subject/body는 한글로 쓴다.
 
+### 9.1 First Implementation PR Merge Unit
+
+첫 구현 PR은 구현 착수를 막지 않는 가장 작은 enterprise-grade vertical slice로 둔다.
+
+Recommended branch:
+
+```text
+feat/gateway-governance-pipeline
+```
+
+Primary owner:
+
+```text
+이지섭 / Gateway Data Plane & Governance
+```
+
+Goal:
+
+- Gateway가 active runtime config를 interface로 소비할 준비를 한다.
+- `applicationId` 기준 PostgreSQL fixed-window RateLimiter를 Provider/cache/safety 전에 실행한다.
+- Rate limit 초과가 `429 rate_limited`와 `rateLimitDecision`으로 로그 가능한 terminal outcome이 된다.
+
+Required scenario:
+
+```text
+Given active runtime config fixture or equivalent static provider
+And valid API Key/App Token for one application
+When Customer Demo App sends a safe chat completion request
+Then Gateway returns 200 through Mock Provider
+And requestId, selectedProvider, selectedModel, routingReason are present
+
+Given the same application exceeds its configured rate limit
+When Customer Demo App sends another chat completion request
+Then Gateway returns 429 rate_limited
+And cache lookup does not run
+And provider call count does not increase
+And terminal log contains status=rate_limited, httpStatus=429, errorStage=check_rate_limit
+```
+
+Must include:
+
+- `RateLimiter` interface and PostgreSQL-backed fixed-window adapter.
+- DB migration for rate limit counters owned by Gateway.
+- Given/When/Then tests for allowed, exceeded, disabled, and internal-error decisions.
+- Handler or pipeline wiring that preserves ProviderAdapter, cache, safety, and logging boundaries.
+- PR evidence showing `go test ./...` and at least one local smoke/curl or handler test result.
+
+Out of scope for first PR:
+
+- Control Plane live API integration.
+- Web Console UI.
+- Python/FastAPI remote safety as a Gateway dependency.
+- Prometheus metrics completeness.
+- k6 baseline report.
+- Real provider becoming the required path.
+
+Parallel work guidance:
+
+| Owner | Can proceed in parallel | Must not block first PR on |
+|---|---|---|
+| 재혁님 | Implement Control Plane Admin API and runtime config publish flow against `runtime-config` and credential fixtures | Gateway live runtime config fetch |
+| 김규민 | Build Demo App, Request Log, Request Detail, Dashboard screens against fixtures/mock APIs | Final Gateway/Observability backend completion |
+| 이윤지 | Build Safety Lab corpus checks, optional RemoteSafetyEngine adapter, and model evaluation experiments | Gateway hot path depending on Python service |
+| 이규정 | Prepare Invocation Log query, Dashboard aggregation, `/metrics`, and k6 scripts against fixtures and Gateway test outputs | First PR exposing full metrics/k6 evidence |
+
+The first PR may use Mock Provider as the visible provider path. Real provider or model experiments may proceed behind adapter boundaries, but they must keep Mock Provider fallback available.
+
 ## 10. Demo Scenario
 
 1. Admin이 Project/Application/Provider를 준비한다.

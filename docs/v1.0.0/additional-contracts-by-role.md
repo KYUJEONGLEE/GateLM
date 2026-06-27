@@ -1,8 +1,8 @@
-# GateLM v1.0.0 Additional Contracts by Role
+# GateLM v1.0.0 Role Coordination Notes
 
 ## 1. Purpose
 
-이 문서는 현재 `contracts.md`에서 부족한 계약을 재혁님 Control Plane & Runtime Policy 관점에서 역할별로 정리한다.
+이 문서는 재혁님 Control Plane & Runtime Policy 관점에서 역할별 확인 사항을 정리한 보조 coordination note다.
 
 목표는 새 기능을 늘리는 것이 아니라, 재혁님이 어떤 역할과 어떤 계약을 추가로 확정해야 독립 구현과 통합이 가능한지 명확히 하는 것이다.
 
@@ -10,6 +10,23 @@
 
 - `docs/v1.0.0/contracts.md`
 - `docs/v1.0.0/implementation-plan.md`
+
+Status:
+
+- This file is not an additional source of truth.
+- Implementation agents must start from `contracts.md` and `implementation-plan.md`.
+- Items marked as "추가로 정해야 할 것" are coordination notes unless they are explicitly frozen in `contracts.md`.
+- As of 2026-06-27, first implementation PR scope is defined in `implementation-plan.md` section 9.1.
+- If this file conflicts with `contracts.md`, `contracts.md` wins.
+
+Closed by final contract freeze:
+
+- ActiveRuntimeConfig canonical artifacts are `schemas/runtime-config.schema.json` and `fixtures/runtime-config.fixture.json`.
+- Gateway executes only active published runtime config and fails closed when required runtime config is unavailable.
+- Provider credentials use `secretRef`/resolver boundaries; raw provider credentials never enter GatewayContext, logs, cache, metrics, or fixtures.
+- Rate limit config is Control Plane owned, while PostgreSQL counter execution is Gateway owned.
+- Rate limit config/storage errors fail closed before cache/provider; explicit `enabled=false` records `rate_limit_disabled`.
+- First implementation PR uses the Gateway governance vertical slice in `implementation-plan.md` section 9.1.
 
 ## 2. Summary
 

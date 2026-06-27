@@ -6,6 +6,8 @@
 
 `implementation-plan.md`는 실행 계획이고, 이 문서는 구현 경계와 데이터 계약이다. 계약 변경은 기능 PR과 섞지 않고 별도 docs PR에서 처리한다.
 
+As of 2026-06-27, this file is the canonical v1 contract freeze document. Role-specific notes such as `additional-contracts-by-role.md` are supporting coordination notes; if they conflict with this file, this file wins.
+
 ## 2. Frozen Decisions
 
 | Decision | Value |
@@ -224,6 +226,13 @@ If existing code cannot store `status=rate_limited` yet, it may store `status=er
 
 ## 6. ActiveRuntimeConfig Contract
 
+Canonical artifacts:
+
+```text
+docs/v1.0.0/schemas/runtime-config.schema.json
+docs/v1.0.0/fixtures/runtime-config.fixture.json
+```
+
 Required fields:
 
 ```text
@@ -290,6 +299,16 @@ Minimal cache config:
   "ttlSeconds": 3600
 }
 ```
+
+Execution rules:
+
+- Gateway consumes only an active published runtime config. `publishState=active` and active tenant/project/application/key/token status are required for the hot path.
+- Draft, superseded, rolled back, disabled, revoked, or missing runtime config must not be silently executed.
+- Gateway may use a fixture/static `RuntimeConfigProvider` during the first implementation PR, but the interface boundary must match this contract.
+- Runtime config must not contain raw API Key, raw App Token, raw Provider Key, Authorization header, raw prompt, or raw response.
+- Provider credentials are referenced by `secretRef` and optional `credentialPreview` only. Gateway resolves provider credentials through the configured resolver/adapter and must not copy raw provider credentials into `GatewayContext`, logs, metrics, cache, or fixtures.
+- `configHash`, `securityPolicyHash`, and `routingPolicyHash` are runtime provenance values. They must be copied into `GatewayContext.runtime` and stored in Invocation Log `metadata.runtime`.
+- If runtime config fetch or provider secret resolution fails before a safe fallback is selected, Gateway fails closed before provider call with `status=error`, `httpStatus=500`, `errorCode=internal_error`, and the relevant `errorStage`.
 
 ## 7. GatewayContext Contract
 
@@ -427,6 +446,19 @@ Recommended counter key:
 ```text
 tenantId + applicationId + windowStart
 ```
+
+Ownership boundary:
+
+- Control Plane owns rate limit configuration in `ActiveRuntimeConfig.rateLimit`.
+- Gateway owns the PostgreSQL counter table and atomic check-and-increment execution.
+- Observability consumes `rateLimitDecision` and terminal status for logs, dashboard, metrics, and k6 interpretation.
+
+Execution rules:
+
+- `enabled=false` allows the request, does not increment a counter, and records reason `rate_limit_disabled`.
+- Missing required rate limit config after active runtime config load is a fail-closed governance error, not an implicit unlimited mode.
+- PostgreSQL counter errors fail closed before cache/provider with `status=error`, `httpStatus=500`, `errorCode=internal_error`, `errorStage=check_rate_limit`, and `rateLimitDecision.reason=internal_error` when a decision object can be produced.
+- Limit exceeded fails before safety/cache/provider with first-class terminal `status=rate_limited`.
 
 Rate-limited response:
 
@@ -594,6 +626,13 @@ Required Invocation Log fields are required as keys. Values produced by stages t
 This mapping MUST NOT store raw prompt, raw response, raw API Key, raw App Token, raw Provider Key, Authorization header, or raw detected sensitive values.
 
 PostgreSQL is the v1 canonical source. Existing `p0_llm_invocation_logs` may be reused only if migration notes document the v1 mapping.
+
+Auth failure logging:
+
+- Auth failures before tenant/project/application context is known may be written to a sanitized auth failure log path instead of the default invocation log path.
+- If an auth failure is written into the invocation log table, unavailable identity fields must be `null`; `InvocationLogWriter` must not guess tenant/project/application from raw credentials.
+- Default Dashboard Overview excludes unauthenticated auth failures unless a later contract explicitly adds an auth/security view.
+- Raw Authorization header, API Key, App Token, credential hash, and plaintext credential must not be stored in auth failure logs.
 
 MUST NOT create/store:
 
@@ -842,3 +881,20 @@ Canonical v1 contract artifacts live under `docs/v1.0.0`:
 `packages/contracts` is reserved for implementation-importable shared contract code after a contract is frozen. v1 freeze fixtures and schemas must not be duplicated under `packages/contracts/examples`.
 
 Schemas define shape and allowed values. Fixtures provide representative examples. A fixture may be updated to add a new scenario only after the corresponding schema/contract change is agreed.
+
+Frozen v1 artifacts:
+
+```text
+fixtures/runtime-config.fixture.json
+fixtures/gateway-context.fixture.json
+fixtures/invocation-log.fixture.json
+fixtures/dashboard-overview.fixture.json
+fixtures/safety-eval-corpus.jsonl
+fixtures/credential-lifecycle.fixture.json
+fixtures/control-plane-admin-api.fixture.json
+schemas/runtime-config.schema.json
+schemas/gateway-context.schema.json
+schemas/safety-eval-corpus.schema.json
+schemas/credential-lifecycle.schema.json
+schemas/control-plane-admin-api.schema.json
+```
