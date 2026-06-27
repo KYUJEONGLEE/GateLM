@@ -285,7 +285,7 @@
       "source": "customer_demo_app",
       "stream": false,
       "requestBodyHash": "hash_request_body_rate_limited_005",
-      "promptHash": null,
+      "promptHash": "hash_prompt_not_evaluated_rate_limited_005",
       "redactedPromptPreview": null,
       "requestedProvider": null,
       "requestedModel": "auto",

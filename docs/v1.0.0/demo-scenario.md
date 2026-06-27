@@ -84,6 +84,8 @@ p95LatencyMs = 1009
 
 `blocked` and `rate_limited` are policy outcomes. They must not be treated as product failures in the default dashboard interpretation.
 
+`cacheHitRate` is calculated as `cacheHitRequests / cacheEligibleRequests`, not `cacheHitRequests / totalRequests`.
+
 ## 8. Metrics Acceptance
 
 The `/metrics` output must make the following visible:
