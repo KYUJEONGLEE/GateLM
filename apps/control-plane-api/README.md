@@ -40,6 +40,10 @@ Seed demo data:
 docker compose run --rm node-toolbox pnpm --filter @gatelm/control-plane-api db:seed
 ```
 
+The seed is idempotent. It prepares the fixed demo Tenant, Project,
+Application, Mock Provider, API Key, App Token, and one active Runtime Config
+(`runtime_config_v1_demo_001`) for Gateway demo readiness.
+
 Run the API:
 
 ```bash
