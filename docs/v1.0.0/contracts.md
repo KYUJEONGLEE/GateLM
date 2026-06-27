@@ -47,6 +47,23 @@ Boundary rules:
 - Observability stores and aggregates metadata. It does not invent stage outcomes.
 - Frontend displays API results. It does not calculate canonical cost or call providers.
 
+### 3.1 Gateway Data Plane Contract Freeze (이지섭)
+
+Gateway Data Plane owns runtime execution and governance metadata production. It does not own Control Plane authoring, Dashboard aggregation, or Safety Lab evaluation, but it must produce stable outputs those owners can consume.
+
+For v1 freeze, 이지섭 must lock the following contracts before Gateway implementation work:
+
+| Contract | Gateway responsibility | Cross-owner alignment |
+|---|---|---|
+| Active runtime consumption | Load `ActiveRuntimeConfig` through `RuntimeConfigProvider`; keep `configHash`, `securityPolicyHash`, and `routingPolicyHash` on `GatewayContext` | 재혁님: publish criteria, provider/model config shape, credential hash verification basis |
+| Auth and scope decision | Hash raw API Key/App Token, discard raw values, resolve tenant/project/application IDs, set stable auth failure outcomes | 재혁님: key/token status, scope, rotation/revocation semantics |
+| GatewayContext terminal snapshot | Produce the terminal `GatewayContext` handed to `InvocationLogWriter` with all required groups and nullable skipped-stage values | 이규정: Invocation Log mapping, auth failure log behavior, aggregation inputs |
+| Rate limit decision | Enforce PostgreSQL fixed window by `applicationId`, set `rateLimitDecision`, and terminal `status=rate_limited` on limit exceed | 이규정: rate limit aggregation and metrics interpretation |
+| Safety runtime output | Apply rule-based redaction/block in the hot path and set masking fields, `promptHash`, redacted preview, and `securityPolicyHash` | 이윤지: detector type, action, placeholder, corpus expectations |
+| Routing/cache/provider outcome | Keep provider-specific behavior inside adapters; produce selected provider/model, cache metadata, usage, cost, latency, and terminal status | 김규민: response metadata and demo-visible behavior; 이규정: log/dashboard fields |
+
+Gateway must not add API, DB, event/log, metric, or security-sensitive fields as an implementation shortcut. Any new field or changed meaning requires a separate contract docs change before feature implementation.
+
 ## 4. Required Interfaces
 
 Names may differ by language, but responsibilities must match.
@@ -315,6 +332,10 @@ time:
   completedAt
 ```
 
+The canonical JSON Schema for the terminal GatewayContext snapshot is `docs/v1.0.0/schemas/gateway-context.schema.json`. The canonical fixture example is `docs/v1.0.0/fixtures/gateway-context.fixture.json`.
+
+The schema describes the terminal snapshot handed to `InvocationLogWriter`. In-progress stage implementations may use typed optional fields internally, but the writer input must include the required groups and keys; values for stages that did not run may be `null`.
+
 MUST NOT store in GatewayContext:
 
 ```text
@@ -568,6 +589,8 @@ metadata
 
 `InvocationLogWriter` serializes terminal outcomes already present in `GatewayContext`. It MUST NOT invent or infer stage outcomes that are missing from `GatewayContext`.
 
+Required Invocation Log fields are required as keys. Values produced by stages that did not run MAY be `null`. Pre-cache terminal outcomes MUST use `cacheStatus=bypass` and `cacheType=none`. The failing or terminal stage MUST set `status`, `httpStatus`, `errorCode`, and `errorStage`.
+
 This mapping MUST NOT store raw prompt, raw response, raw API Key, raw App Token, raw Provider Key, Authorization header, or raw detected sensitive values.
 
 PostgreSQL is the v1 canonical source. Existing `p0_llm_invocation_logs` may be reused only if migration notes document the v1 mapping.
@@ -635,18 +658,27 @@ failedRequests
 blockedRequests
 rateLimitedRequests
 cacheHitRequests
+cacheEligibleRequests
 cacheHitRate
+promptTokens
+completionTokens
 totalTokens
 totalCostMicroUsd
 totalCostUsd
+savedCostMicroUsd
+savedCostUsd
 averageLatencyMs
 p95LatencyMs
 maskingActionCounts
 routingCountByModel
+statusCounts
+costByModel
 dataFreshness
 ```
 
 `blocked` and `rate_limited` are policy outcomes, not product failures.
+
+Fixture files may include `requestIds` for cross-checking Request Log and Dashboard consistency. Production Dashboard Overview API does not need to expose `requestIds` by default.
 
 ## 14. Metrics Contract
 
@@ -796,3 +828,17 @@ Migration/backfill needed?
 Smoke scenario changed?
 Backward compatible?
 ```
+
+## 18. JSON Contract Artifacts
+
+Canonical v1 contract artifacts live under `docs/v1.0.0`:
+
+| Directory | Purpose |
+|---|---|
+| `docs/v1.0.0/fixtures/` | Concrete examples used by demo, smoke, UI, and aggregation checks |
+| `docs/v1.0.0/schemas/` | JSON Schema files that define fixture or payload shape |
+| `docs/v1.0.0/checks/` | Optional checklists or smoke notes when they are added |
+
+`packages/contracts` is reserved for implementation-importable shared contract code after a contract is frozen. v1 freeze fixtures and schemas must not be duplicated under `packages/contracts/examples`.
+
+Schemas define shape and allowed values. Fixtures provide representative examples. A fixture may be updated to add a new scenario only after the corresponding schema/contract change is agreed.
