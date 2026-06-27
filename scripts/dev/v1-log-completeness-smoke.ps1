@@ -24,6 +24,9 @@ Write-Host ""
 Push-Location $gatewayRoot
 try {
     go test ./internal/http/handlers -run TestChatCompletionsLogCompletenessSmoke -v
+    if ($LASTEXITCODE -ne 0) {
+        throw "go test failed with exit code $LASTEXITCODE"
+    }
 }
 finally {
     Pop-Location

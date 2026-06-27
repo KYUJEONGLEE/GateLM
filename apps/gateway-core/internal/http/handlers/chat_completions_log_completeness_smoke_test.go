@@ -119,24 +119,24 @@ func TestChatCompletionsLogCompletenessSmoke(t *testing.T) {
 	itemsByID, detailsByID := logSmokeQueryViews(invocationLogs)
 	overview := invocationlog.BuildDashboardOverview(invocationLogs)
 
-	logSmokeAssertDetail(t, detailsByID[logSmokeSafeMissRequestID], invocationlog.StatusSuccess, http.StatusOK, invocationlog.CacheStatusMiss, "none", "")
-	logSmokeAssertDetail(t, detailsByID[logSmokeCacheHitRequestID], invocationlog.StatusCacheHit, http.StatusOK, invocationlog.CacheStatusHit, "none", "")
+	logSmokeAssertDetail(t, logSmokeSafeMissRequestID, detailsByID[logSmokeSafeMissRequestID], invocationlog.StatusSuccess, http.StatusOK, invocationlog.CacheStatusMiss, "none", "")
+	logSmokeAssertDetail(t, logSmokeCacheHitRequestID, detailsByID[logSmokeCacheHitRequestID], invocationlog.StatusCacheHit, http.StatusOK, invocationlog.CacheStatusHit, "none", "")
 	if detailsByID[logSmokeCacheHitRequestID].Cache.CacheHitRequestID != logSmokeSafeMissRequestID {
 		t.Fatalf("cache hit detail must point to first request, got %#v", detailsByID[logSmokeCacheHitRequestID].Cache)
 	}
-	logSmokeAssertDetail(t, detailsByID[logSmokeRedactedRequestID], invocationlog.StatusSuccess, http.StatusOK, invocationlog.CacheStatusMiss, "redacted", "")
+	logSmokeAssertDetail(t, logSmokeRedactedRequestID, detailsByID[logSmokeRedactedRequestID], invocationlog.StatusSuccess, http.StatusOK, invocationlog.CacheStatusMiss, "redacted", "")
 	if detailsByID[logSmokeRedactedRequestID].Masking.MaskingDetectedCount < 2 {
 		t.Fatalf("expected redacted detail to carry detection count, got %#v", detailsByID[logSmokeRedactedRequestID].Masking)
 	}
-	logSmokeAssertDetail(t, detailsByID[logSmokeBlockedRequestID], invocationlog.StatusBlocked, http.StatusForbidden, invocationlog.CacheStatusBypass, "blocked", "sensitive_data_blocked")
+	logSmokeAssertDetail(t, logSmokeBlockedRequestID, detailsByID[logSmokeBlockedRequestID], invocationlog.StatusBlocked, http.StatusForbidden, invocationlog.CacheStatusBypass, "blocked", "sensitive_data_blocked")
 	if detailsByID[logSmokeBlockedRequestID].Latency.ProviderLatencyMs != nil {
 		t.Fatalf("blocked detail must not include provider latency, got %#v", detailsByID[logSmokeBlockedRequestID].Latency)
 	}
-	logSmokeAssertDetail(t, detailsByID[logSmokeRateLimitRequestID], invocationlog.StatusRateLimited, http.StatusTooManyRequests, invocationlog.CacheStatusBypass, "none", "rate_limited")
+	logSmokeAssertDetail(t, logSmokeRateLimitRequestID, detailsByID[logSmokeRateLimitRequestID], invocationlog.StatusRateLimited, http.StatusTooManyRequests, invocationlog.CacheStatusBypass, "none", "rate_limited")
 	if detailsByID[logSmokeRateLimitRequestID].Latency.ProviderLatencyMs != nil {
 		t.Fatalf("rate limited detail must not include provider latency, got %#v", detailsByID[logSmokeRateLimitRequestID].Latency)
 	}
-	logSmokeAssertDetail(t, detailsByID[logSmokeProviderRequestID], invocationlog.StatusError, http.StatusBadGateway, invocationlog.CacheStatusMiss, "none", "provider_error")
+	logSmokeAssertDetail(t, logSmokeProviderRequestID, detailsByID[logSmokeProviderRequestID], invocationlog.StatusError, http.StatusBadGateway, invocationlog.CacheStatusMiss, "none", "provider_error")
 
 	if overview.TotalRequests != 6 ||
 		overview.SuccessfulRequests != 3 ||
@@ -350,9 +350,15 @@ func logSmokeQueryViews(logs []invocationlog.LlmInvocationLog) (map[string]invoc
 	return itemsByID, detailsByID
 }
 
-func logSmokeAssertDetail(t *testing.T, detail invocationlog.RequestDetail, status string, httpStatus int, cacheStatus string, maskingAction string, errorCode string) {
+func logSmokeAssertDetail(t *testing.T, expectedRequestID string, detail invocationlog.RequestDetail, status string, httpStatus int, cacheStatus string, maskingAction string, errorCode string) {
 	t.Helper()
 
+	if detail.RequestID == "" {
+		t.Fatalf("expected request detail for %s to be present, got empty/missing detail", expectedRequestID)
+	}
+	if detail.RequestID != expectedRequestID {
+		t.Fatalf("expected request detail for %s, got %s: %#v", expectedRequestID, detail.RequestID, detail)
+	}
 	if detail.Status != status || detail.HTTPStatus != httpStatus {
 		t.Fatalf("unexpected detail status for %s: %#v", detail.RequestID, detail)
 	}
