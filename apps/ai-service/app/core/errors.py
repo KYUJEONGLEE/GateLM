@@ -83,7 +83,9 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     )
 
 
-async def unhandled_error_handler(_request: Request, _exc: Exception) -> JSONResponse:
+async def unhandled_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    import logging
+    logging.exception("Unhandled exception in remote safety service")
     return JSONResponse(
         status_code=500,
         content=build_error_payload(
