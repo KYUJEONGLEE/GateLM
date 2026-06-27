@@ -4,6 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.schema';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { AppTokensModule } from './modules/app-tokens/app-tokens.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
@@ -18,6 +20,8 @@ import { ProviderConnectionsModule } from './modules/provider-connections/provid
     ProjectsModule,
     ApplicationsModule,
     ProviderConnectionsModule,
+    ApiKeysModule,
+    AppTokensModule,
     HealthModule,
   ],
 })
