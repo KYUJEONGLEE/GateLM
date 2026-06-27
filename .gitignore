@@ -11,11 +11,15 @@ credentials.json
 service-account.json
 
 node_modules/
+.pnpm-store/
 dist/
 build/
 .next/
 coverage/
+*.tsbuildinfo
 
 .DS_Store
 Thumbs.db
 desktop.ini
+
+.cache/

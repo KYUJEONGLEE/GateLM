@@ -37,6 +37,9 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			EndUserID:     reqCtx.EndUserID,
 			FeatureID:     reqCtx.FeatureID,
 		},
+		Governance: request.GovernanceContext{
+			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
+		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
 			DetectedTypes:           reqCtx.MaskingDetectedTypes,
@@ -80,6 +83,10 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
 	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID
 	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
+
+	if gatewayCtx.Governance.RateLimitDecision != nil {
+		reqCtx.RateLimitDecision = gatewayCtx.Governance.RateLimitDecision.Clone()
+	}
 
 	if gatewayCtx.Masking.Action != "" {
 		reqCtx.MaskingAction = gatewayCtx.Masking.Action

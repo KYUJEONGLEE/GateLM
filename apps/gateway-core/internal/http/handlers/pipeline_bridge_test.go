@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -26,6 +27,14 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	reqCtx.CacheKeyHash = "hmac-sha256:cache-key"
 	reqCtx.CacheHitRequestID = "request_cached"
 	reqCtx.SavedCostMicroUSD = 5
+	reqCtx.RateLimitDecision = &ratelimit.Decision{
+		Allowed:   true,
+		Scope:     ratelimit.ScopeApplication,
+		ScopeID:   "app_demo",
+		Limit:     10,
+		Remaining: 9,
+		Reason:    ratelimit.ReasonWithinLimit,
+	}
 
 	gatewayCtx := newGatewayContext(reqCtx, "system prompt\nuser prompt")
 
@@ -49,6 +58,9 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	}
 	if gatewayCtx.Cache.SavedCostMicroUSD != 5 {
 		t.Fatalf("unexpected saved cost metadata: %#v", gatewayCtx.Cache)
+	}
+	if gatewayCtx.Governance.RateLimitDecision == nil || !gatewayCtx.Governance.RateLimitDecision.Allowed {
+		t.Fatalf("unexpected rate limit metadata: %#v", gatewayCtx.Governance.RateLimitDecision)
 	}
 }
 
@@ -160,6 +172,33 @@ func TestApplyGatewayContextCopiesCacheMetadata(t *testing.T) {
 	}
 	if reqCtx.SavedCostMicroUSD != 11 {
 		t.Fatalf("unexpected saved cost metadata: %#v", reqCtx)
+	}
+}
+
+func TestApplyGatewayContextCopiesRateLimitDecision(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Governance: request.GovernanceContext{
+			RateLimitDecision: &ratelimit.Decision{
+				Allowed:   false,
+				Scope:     ratelimit.ScopeApplication,
+				ScopeID:   "app_demo",
+				Limit:     1,
+				Remaining: 0,
+				Reason:    ratelimit.ReasonLimitExceeded,
+			},
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.RateLimitDecision == nil || reqCtx.RateLimitDecision.Reason != ratelimit.ReasonLimitExceeded {
+		t.Fatalf("unexpected rate limit decision: %#v", reqCtx.RateLimitDecision)
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
 
 func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
@@ -84,5 +86,41 @@ func TestBuildTerminalLogUsesLatencyFallback(t *testing.T) {
 	}
 	if log.CacheStatus != CacheStatusBypass || log.CacheType != CacheTypeNone || log.MaskingAction != "none" {
 		t.Fatalf("unexpected fallback fields: %+v", log)
+	}
+}
+
+func TestBuildTerminalLogCarriesRateLimitDecisionWithoutProviderLatency(t *testing.T) {
+	startedAt := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:   "request_rate_limited",
+		Status:      StatusRateLimited,
+		HTTPStatus:  429,
+		ErrorCode:   "rate_limited",
+		ErrorStage:  "check_rate_limit",
+		CacheStatus: CacheStatusBypass,
+		CacheType:   CacheTypeNone,
+		RateLimitDecision: &ratelimit.Decision{
+			Allowed:           false,
+			Scope:             ratelimit.ScopeApplication,
+			ScopeID:           "app_demo",
+			Limit:             1,
+			Remaining:         0,
+			WindowSeconds:     60,
+			RetryAfterSeconds: 60,
+			Reason:            ratelimit.ReasonLimitExceeded,
+		},
+		StartedAt:   startedAt,
+		CompletedAt: startedAt.Add(3 * time.Millisecond),
+	})
+
+	if log.RateLimitDecision == nil || log.RateLimitDecision.Reason != ratelimit.ReasonLimitExceeded {
+		t.Fatalf("expected rate limit decision, got %#v", log.RateLimitDecision)
+	}
+	if log.ProviderLatencyMs != nil {
+		t.Fatalf("rate limited log must not include provider latency, got %#v", log.ProviderLatencyMs)
+	}
+	metadataDecision, ok := log.Metadata["rateLimitDecision"].(ratelimit.Decision)
+	if !ok || metadataDecision.Reason != ratelimit.ReasonLimitExceeded {
+		t.Fatalf("expected rate limit decision metadata, got %#v", log.Metadata)
 	}
 }

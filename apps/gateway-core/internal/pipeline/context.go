@@ -1,6 +1,10 @@
 package pipeline
 
-import "time"
+import (
+	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+)
 
 type RequestContext struct {
 	RequestID  string
@@ -18,6 +22,8 @@ type RequestContext struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+
+	RateLimitDecision *ratelimit.Decision
 
 	RequestedProvider string
 	RequestedModel    string

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 	"time"
 )
@@ -183,16 +185,82 @@ type ErrorFields struct {
 	ErrorStage   string
 }
 
+type RoutingCountByModel struct {
+	SelectedProvider string
+	SelectedModel    string
+	RoutingReason    string
+	RequestCount     int64
+}
+
+type CostByModel struct {
+	SelectedProvider string
+	SelectedModel    string
+	RequestCount     int64
+	TotalTokens      int64
+	CostMicroUSD     int64
+	CostUSD          string
+}
+
+type DashboardDataFreshness struct {
+	Source           string
+	RecordCount      int64
+	LastLogCreatedAt *time.Time
+	GeneratedAt      time.Time
+}
+
 type DashboardOverviewFields struct {
 	TotalRequests         int64
 	SuccessfulRequests    int64
+	FailedRequests        int64
 	BlockedRequests       int64
+	RateLimitedRequests   int64
 	CacheHitRequests      int64
+	CacheEligibleRequests int64
 	CacheHitRate          *float64
+	PromptTokens          int64
+	CompletionTokens      int64
 	TotalTokens           int64
 	TotalCostMicroUSD     int64
 	TotalCostUSD          string
+	SavedCostMicroUSD     int64
+	SavedCostUSD          string
+	AverageLatencyMs      *float64
+	P95LatencyMs          *float64
 	AverageResponseTimeMs *float64
+	MaskingActionCounts   map[string]int64
+	RoutingCountByModel   []RoutingCountByModel
+	StatusCounts          map[string]int64
+	CostByModel           []CostByModel
+	DataFreshness         DashboardDataFreshness
+}
+
+type DashboardOverviewAggregate struct {
+	TotalRequests         int64
+	SuccessfulRequests    int64
+	FailedRequests        int64
+	BlockedRequests       int64
+	RateLimitedRequests   int64
+	CacheHitRequests      int64
+	CacheEligibleRequests int64
+	PromptTokens          int64
+	CompletionTokens      int64
+	TotalTokens           int64
+	TotalCostMicroUSD     int64
+	SavedCostMicroUSD     int64
+	AverageLatencyMs      *float64
+	P95LatencyMs          *float64
+	MaskingActionCounts   map[string]int64
+	RoutingCountByModel   []RoutingCountByModel
+	StatusCounts          map[string]int64
+	CostByModel           []CostByModel
+	LastLogCreatedAt      *time.Time
+	GeneratedAt           time.Time
+}
+
+type dashboardModelKey struct {
+	provider string
+	model    string
+	reason   string
 }
 
 func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, error) {
@@ -333,50 +401,115 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 }
 
 func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
-	var totalLatency int64
-	overview := DashboardOverviewFields{}
+	var latencies []int64
+	var maxCreatedAt time.Time
+	aggregate := DashboardOverviewAggregate{
+		StatusCounts:        defaultStatusCounts(),
+		MaskingActionCounts: defaultMaskingActionCounts(),
+	}
+	routingCounts := map[dashboardModelKey]int64{}
+	costCounts := map[dashboardModelKey]CostByModel{}
+
 	for _, log := range logs {
-		overview.TotalRequests++
+		aggregate.TotalRequests++
+		incrementCount(aggregate.StatusCounts, log.Status)
+		incrementCount(aggregate.MaskingActionCounts, defaultString(log.MaskingAction, "none"))
 		if isSuccessfulStatus(log.Status) {
-			overview.SuccessfulRequests++
+			aggregate.SuccessfulRequests++
+		}
+		if log.Status == StatusError {
+			aggregate.FailedRequests++
 		}
 		if log.Status == StatusBlocked {
-			overview.BlockedRequests++
+			aggregate.BlockedRequests++
 		}
-		if log.Status == StatusCacheHit || log.CacheStatus == CacheStatusHit {
-			overview.CacheHitRequests++
+		if log.Status == StatusRateLimited {
+			aggregate.RateLimitedRequests++
 		}
-		overview.TotalTokens += log.TotalTokens
-		overview.TotalCostMicroUSD += log.CostMicroUSD
-		totalLatency += log.LatencyMs
+		if isCacheEligible(log.CacheStatus) {
+			aggregate.CacheEligibleRequests++
+		}
+		if isExactCacheHit(log.CacheStatus, log.CacheType) {
+			aggregate.CacheHitRequests++
+		}
+		aggregate.PromptTokens += log.PromptTokens
+		aggregate.CompletionTokens += log.CompletionTokens
+		aggregate.TotalTokens += log.TotalTokens
+		aggregate.TotalCostMicroUSD += log.CostMicroUSD
+		aggregate.SavedCostMicroUSD += log.SavedCostMicroUSD
+		if isLatencyEligibleStatus(log.Status) {
+			latencies = append(latencies, log.LatencyMs)
+		}
+		if !log.CreatedAt.IsZero() && log.CreatedAt.After(maxCreatedAt) {
+			maxCreatedAt = log.CreatedAt
+		}
+
+		selectedProvider := firstNonEmptyString(log.SelectedProvider, log.Provider)
+		selectedModel := firstNonEmptyString(log.SelectedModel, log.Model)
+		if selectedProvider != "" && selectedModel != "" {
+			routingKey := dashboardModelKey{provider: selectedProvider, model: selectedModel, reason: log.RoutingReason}
+			routingCounts[routingKey]++
+			costKey := dashboardModelKey{provider: selectedProvider, model: selectedModel}
+			cost := costCounts[costKey]
+			cost.SelectedProvider = selectedProvider
+			cost.SelectedModel = selectedModel
+			cost.RequestCount++
+			cost.TotalTokens += log.TotalTokens
+			cost.CostMicroUSD += log.CostMicroUSD
+			costCounts[costKey] = cost
+		}
 	}
 
-	overview.TotalCostUSD = FormatCostUSDFromMicroUSD(overview.TotalCostMicroUSD)
-	if overview.TotalRequests > 0 {
-		cacheHitRate := float64(overview.CacheHitRequests) / float64(overview.TotalRequests)
-		averageLatency := float64(totalLatency) / float64(overview.TotalRequests)
-		overview.CacheHitRate = &cacheHitRate
-		overview.AverageResponseTimeMs = &averageLatency
+	if len(latencies) > 0 {
+		averageLatency := averageInt64(latencies)
+		p95Latency := percentileDiscInt64(latencies, 0.95)
+		aggregate.AverageLatencyMs = &averageLatency
+		aggregate.P95LatencyMs = &p95Latency
 	}
+	if !maxCreatedAt.IsZero() {
+		aggregate.LastLogCreatedAt = &maxCreatedAt
+	}
+	aggregate.RoutingCountByModel = routingCountsFromMap(routingCounts)
+	aggregate.CostByModel = costCountsFromMap(costCounts)
 
-	return overview
+	return BuildDashboardOverviewFromAggregate(aggregate)
 }
 
-func BuildDashboardOverviewFromAggregate(totalRequests int64, successfulRequests int64, blockedRequests int64, cacheHitRequests int64, totalTokens int64, totalCostMicroUSD int64, averageResponseTimeMs *float64) DashboardOverviewFields {
+func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) DashboardOverviewFields {
 	overview := DashboardOverviewFields{
-		TotalRequests:         totalRequests,
-		SuccessfulRequests:    successfulRequests,
-		BlockedRequests:       blockedRequests,
-		CacheHitRequests:      cacheHitRequests,
-		TotalTokens:           totalTokens,
-		TotalCostMicroUSD:     totalCostMicroUSD,
-		TotalCostUSD:          FormatCostUSDFromMicroUSD(totalCostMicroUSD),
-		AverageResponseTimeMs: averageResponseTimeMs,
+		TotalRequests:         aggregate.TotalRequests,
+		SuccessfulRequests:    aggregate.SuccessfulRequests,
+		FailedRequests:        aggregate.FailedRequests,
+		BlockedRequests:       aggregate.BlockedRequests,
+		RateLimitedRequests:   aggregate.RateLimitedRequests,
+		CacheHitRequests:      aggregate.CacheHitRequests,
+		CacheEligibleRequests: aggregate.CacheEligibleRequests,
+		PromptTokens:          aggregate.PromptTokens,
+		CompletionTokens:      aggregate.CompletionTokens,
+		TotalTokens:           aggregate.TotalTokens,
+		TotalCostMicroUSD:     aggregate.TotalCostMicroUSD,
+		TotalCostUSD:          FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
+		SavedCostMicroUSD:     aggregate.SavedCostMicroUSD,
+		SavedCostUSD:          FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
+		AverageLatencyMs:      aggregate.AverageLatencyMs,
+		P95LatencyMs:          aggregate.P95LatencyMs,
+		AverageResponseTimeMs: aggregate.AverageLatencyMs,
+		MaskingActionCounts:   mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
+		RoutingCountByModel:   append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
+		StatusCounts:          mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
+		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
+		DataFreshness: DashboardDataFreshness{
+			Source:           "postgresql_request_log",
+			RecordCount:      aggregate.TotalRequests,
+			LastLogCreatedAt: aggregate.LastLogCreatedAt,
+			GeneratedAt:      generatedAtOrNow(aggregate.GeneratedAt),
+		},
 	}
-	if totalRequests > 0 {
-		cacheHitRate := float64(cacheHitRequests) / float64(totalRequests)
-		overview.CacheHitRate = &cacheHitRate
+	cacheHitRate := 0.0
+	if aggregate.CacheEligibleRequests > 0 {
+		cacheHitRate = float64(aggregate.CacheHitRequests) / float64(aggregate.CacheEligibleRequests)
 	}
+	overview.CacheHitRate = &cacheHitRate
 	return overview
 }
 
@@ -409,9 +542,145 @@ func isSuccessfulStatus(status string) bool {
 	return status == StatusSuccess || status == StatusCacheHit
 }
 
+func isLatencyEligibleStatus(status string) bool {
+	return status == StatusSuccess || status == StatusCacheHit || status == StatusError
+}
+
+func isCacheEligible(cacheStatus string) bool {
+	return defaultString(cacheStatus, CacheStatusBypass) != CacheStatusBypass
+}
+
+func isExactCacheHit(cacheStatus string, cacheType string) bool {
+	return defaultString(cacheStatus, CacheStatusBypass) == CacheStatusHit &&
+		defaultString(cacheType, CacheTypeNone) == CacheTypeExact
+}
+
 func defaultString(value string, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
 	}
 	return value
+}
+
+func incrementCount(counts map[string]int64, key string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		key = "none"
+	}
+	counts[key]++
+}
+
+func defaultStatusCounts() map[string]int64 {
+	return map[string]int64{
+		StatusSuccess:     0,
+		StatusCacheHit:    0,
+		StatusBlocked:     0,
+		StatusRateLimited: 0,
+		StatusError:       0,
+		StatusCancelled:   0,
+	}
+}
+
+func defaultMaskingActionCounts() map[string]int64 {
+	return map[string]int64{
+		"none":     0,
+		"redacted": 0,
+		"blocked":  0,
+	}
+}
+
+func mergeDefaultCounts(defaults map[string]int64, values map[string]int64) map[string]int64 {
+	merged := make(map[string]int64, len(defaults)+len(values))
+	for key, value := range defaults {
+		merged[key] = value
+	}
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			key = "none"
+		}
+		merged[key] += value
+	}
+	return merged
+}
+
+func averageInt64(values []int64) float64 {
+	var total int64
+	for _, value := range values {
+		total += value
+	}
+	return float64(total) / float64(len(values))
+}
+
+func percentileDiscInt64(values []int64, percentile float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	ordered := append([]int64(nil), values...)
+	sort.Slice(ordered, func(i int, j int) bool { return ordered[i] < ordered[j] })
+	rank := int(math.Ceil(percentile*float64(len(ordered)))) - 1
+	if rank < 0 {
+		rank = 0
+	}
+	if rank >= len(ordered) {
+		rank = len(ordered) - 1
+	}
+	return float64(ordered[rank])
+}
+
+func routingCountsFromMap(counts map[dashboardModelKey]int64) []RoutingCountByModel {
+	items := make([]RoutingCountByModel, 0, len(counts))
+	for key, count := range counts {
+		items = append(items, RoutingCountByModel{
+			SelectedProvider: key.provider,
+			SelectedModel:    key.model,
+			RoutingReason:    key.reason,
+			RequestCount:     count,
+		})
+	}
+	sort.Slice(items, func(i int, j int) bool {
+		if items[i].RequestCount != items[j].RequestCount {
+			return items[i].RequestCount > items[j].RequestCount
+		}
+		if items[i].SelectedProvider != items[j].SelectedProvider {
+			return items[i].SelectedProvider < items[j].SelectedProvider
+		}
+		if items[i].SelectedModel != items[j].SelectedModel {
+			return items[i].SelectedModel < items[j].SelectedModel
+		}
+		return items[i].RoutingReason < items[j].RoutingReason
+	})
+	return items
+}
+
+func costCountsFromMap(counts map[dashboardModelKey]CostByModel) []CostByModel {
+	items := make([]CostByModel, 0, len(counts))
+	for _, item := range counts {
+		items = append(items, item)
+	}
+	return normalizedCostByModel(items)
+}
+
+func normalizedCostByModel(items []CostByModel) []CostByModel {
+	normalized := append([]CostByModel(nil), items...)
+	for index := range normalized {
+		normalized[index].CostUSD = FormatCostUSDFromMicroUSD(normalized[index].CostMicroUSD)
+	}
+	sort.Slice(normalized, func(i int, j int) bool {
+		if normalized[i].CostMicroUSD != normalized[j].CostMicroUSD {
+			return normalized[i].CostMicroUSD > normalized[j].CostMicroUSD
+		}
+		if normalized[i].SelectedProvider != normalized[j].SelectedProvider {
+			return normalized[i].SelectedProvider < normalized[j].SelectedProvider
+		}
+		return normalized[i].SelectedModel < normalized[j].SelectedModel
+	})
+	return normalized
+}
+
+func generatedAtOrNow(generatedAt time.Time) time.Time {
+	if generatedAt.IsZero() {
+		return time.Now().UTC()
+	}
+	return generatedAt.UTC()
 }
