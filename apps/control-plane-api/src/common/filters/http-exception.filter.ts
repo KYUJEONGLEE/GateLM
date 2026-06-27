@@ -98,12 +98,31 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message =
       exception instanceof Error ? exception.message : String(exception);
     const stack = exception instanceof Error ? exception.stack : undefined;
-    const method = request.method;
-    const url = request.originalUrl ?? request.url;
+    const method = this.sanitizeLogValue(request.method);
+    const url = this.sanitizeLogValue(request.originalUrl ?? request.url);
+    const requestId = this.resolveRequestId(request);
+    const logFields = {
+      status,
+      method,
+      url,
+      requestId,
+      message: this.sanitizeLogValue(message),
+    };
 
     this.logger.error(
-      `Control Plane request failed: status=${status} method=${method} url=${url} message=${message}`,
-      stack,
+      `Control Plane request failed: ${JSON.stringify(logFields)}`,
+      stack ? this.sanitizeLogValue(stack) : undefined,
     );
+  }
+
+  private resolveRequestId(request: Request): string | null {
+    const requestId =
+      request.header('x-gatelm-request-id') ?? request.header('x-request-id');
+
+    return requestId ? this.sanitizeLogValue(requestId) : null;
+  }
+
+  private sanitizeLogValue(value: string): string {
+    return value.replace(/[\r\n]+/g, ' ').trim();
   }
 }

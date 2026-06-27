@@ -111,7 +111,6 @@ model ProviderConnection {
   project Project @relation(fields: [projectId], references: [id])
 
   @@index([tenantId])
-  @@index([projectId])
   @@unique([projectId, provider])
   @@map("provider_connections")
 }
