@@ -401,8 +401,8 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 }
 
 func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
-	var latencies []int64
-	var lastLogCreatedAt *time.Time
+var latencies []int64
+var maxCreatedAt time.Time
 	aggregate := DashboardOverviewAggregate{
 		StatusCounts:        defaultStatusCounts(),
 		MaskingActionCounts: defaultMaskingActionCounts(),
