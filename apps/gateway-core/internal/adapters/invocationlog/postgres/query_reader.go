@@ -567,7 +567,7 @@ func decodeInt64MapJSON(raw []byte) (map[string]int64, error) {
 }
 
 func decodeRoutingCountByModelJSON(raw []byte) ([]invocationlog.RoutingCountByModel, error) {
-	if len(raw) == 0 || string(raw) == "null" {
+	if len(raw) == 0 || (len(raw) == 4 && raw[0] == 'n' && raw[1] == 'u' && raw[2] == 'l' && raw[3] == 'l') {
 		return []invocationlog.RoutingCountByModel{}, nil
 	}
 	var values []invocationlog.RoutingCountByModel
