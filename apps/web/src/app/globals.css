@@ -1,0 +1,129 @@
+:root {
+  color-scheme: light;
+  --background: #f7f8fb;
+  --foreground: #111827;
+  --muted: #5b6475;
+  --surface: #ffffff;
+  --surface-subtle: #f1f4f9;
+  --border: #d9deea;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --shadow: 0 18px 45px rgba(17, 24, 39, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  color: var(--foreground);
+  background: var(--background);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.init-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 48px 24px;
+}
+
+.init-panel {
+  display: grid;
+  width: min(100%, 860px);
+  gap: 36px;
+  padding: 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.init-label {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.init-panel h1 {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 72px);
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.init-copy {
+  max-width: 620px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.readiness-item {
+  min-width: 0;
+  padding: 18px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.readiness-item dt {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.readiness-item dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .init-shell {
+    padding: 24px 16px;
+  }
+
+  .init-panel {
+    padding: 28px;
+  }
+
+  .readiness-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -7,6 +7,10 @@
     "dev:control-plane": "pnpm --filter @gatelm/control-plane-api dev",
     "build:control-plane": "pnpm --filter @gatelm/control-plane-api build",
     "typecheck:control-plane": "pnpm --filter @gatelm/control-plane-api typecheck",
-    "test:control-plane": "pnpm --filter @gatelm/control-plane-api test"
+    "test:control-plane": "pnpm --filter @gatelm/control-plane-api test",
+    "dev:web": "pnpm --filter @gatelm/web dev",
+    "build:web": "pnpm --filter @gatelm/web build",
+    "lint:web": "pnpm --filter @gatelm/web lint",
+    "typecheck:web": "pnpm --filter @gatelm/web typecheck"
   }
 }
