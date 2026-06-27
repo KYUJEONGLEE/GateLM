@@ -24,6 +24,7 @@ type RouterOptions struct {
 	InvocationLogReader  invocationlog.Reader
 	ExactCacheStore      ports.CacheStore
 	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
+	RateLimitPipeline    handlers.GatewayPipeline
 	PreProviderPipeline  handlers.GatewayPipeline
 }
 
@@ -64,6 +65,12 @@ func WithExactCache(store ports.CacheStore, keyBuilder handlers.ExactCacheKeyBui
 func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) RouterOption {
 	return func(options *RouterOptions) {
 		options.PreProviderPipeline = preProviderPipeline
+	}
+}
+
+func WithRateLimitPipeline(rateLimitPipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.RateLimitPipeline = rateLimitPipeline
 	}
 }
 
@@ -169,6 +176,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExpectedTenantID:        cfg.DemoTenantID,
 		ExpectedProjectID:       cfg.DemoProjectID,
 		ExpectedAppID:           cfg.DemoApplicationID,
+		RateLimitPipeline:       routerOptions.RateLimitPipeline,
 		PreProviderPipeline:     preProviderPipeline,
 		AuthFailureLogWriter:    authFailureLogWriter,
 		TerminalLogWriter:       terminalLogWriter,

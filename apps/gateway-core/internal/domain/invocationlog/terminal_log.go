@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
 
 type TerminalLog struct {
@@ -18,6 +20,8 @@ type TerminalLog struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+
+	RateLimitDecision *ratelimit.Decision
 
 	Endpoint          string
 	Method            string
@@ -74,6 +78,8 @@ type TerminalLogInput struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+
+	RateLimitDecision *ratelimit.Decision
 
 	Endpoint          string
 	Method            string
@@ -173,6 +179,11 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.RoutingPolicyHash != "" {
 		metadata["routingPolicyHash"] = strings.TrimSpace(input.RoutingPolicyHash)
 	}
+	if input.RateLimitDecision != nil {
+		metadata["rateLimitDecision"] = *input.RateLimitDecision
+	}
+
+	rateLimitDecision := cloneRateLimitDecision(input.RateLimitDecision)
 
 	return TerminalLog{
 		RequestID:     requestID,
@@ -184,6 +195,8 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		AppTokenID:    strings.TrimSpace(input.AppTokenID),
 		EndUserID:     strings.TrimSpace(input.EndUserID),
 		FeatureID:     strings.TrimSpace(input.FeatureID),
+
+		RateLimitDecision: rateLimitDecision,
 
 		Endpoint:          firstNonEmptyString(input.Endpoint, "/v1/chat/completions"),
 		Method:            firstNonEmptyString(input.Method, "POST"),
@@ -243,4 +256,12 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func cloneRateLimitDecision(decision *ratelimit.Decision) *ratelimit.Decision {
+	if decision == nil {
+		return nil
+	}
+	cloned := *decision
+	return &cloned
 }
