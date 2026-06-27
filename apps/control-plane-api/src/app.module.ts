@@ -9,6 +9,7 @@ import { AppTokensModule } from './modules/app-tokens/app-tokens.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
+import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ProviderConnectionsModule } from './modules/provider-connections/provid
     ProviderConnectionsModule,
     ApiKeysModule,
     AppTokensModule,
+    RuntimeConfigsModule,
     HealthModule,
   ],
 })
