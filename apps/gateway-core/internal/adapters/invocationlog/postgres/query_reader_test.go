@@ -194,15 +194,28 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
+	lastLogCreatedAt := from.Add(30 * time.Minute)
 	db := &fakeQueryer{
 		row: fakeRow{values: []any{
-			int64(4),
+			int64(6),
 			int64(2),
 			int64(1),
 			int64(1),
-			int64(56),
 			int64(1),
-			sql.NullFloat64{Float64: 50, Valid: true},
+			int64(1),
+			int64(3),
+			int64(13),
+			int64(20),
+			int64(33),
+			int64(100),
+			int64(50),
+			sql.NullFloat64{Float64: 63.3333333333, Valid: true},
+			sql.NullFloat64{Float64: 100, Valid: true},
+			[]byte(`{"success":1,"cache_hit":1,"blocked":1,"rate_limited":1,"error":1,"cancelled":1}`),
+			[]byte(`{"none":4,"redacted":1,"blocked":1}`),
+			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
+			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			sql.NullTime{Time: lastLogCreatedAt, Valid: true},
 		}},
 	}
 
@@ -216,14 +229,47 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected dashboard overview to succeed, got %v", err)
 	}
-	if overview.TotalRequests != 4 || overview.SuccessfulRequests != 2 || overview.BlockedRequests != 1 || overview.CacheHitRequests != 1 {
+	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 2 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
 		t.Fatalf("unexpected overview counts: %+v", overview)
 	}
-	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.25) {
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 3 || overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 1.0/3.0) {
 		t.Fatalf("unexpected cache hit rate: %+v", overview.CacheHitRate)
+	}
+	if overview.PromptTokens != 13 || overview.CompletionTokens != 20 || overview.TotalTokens != 33 || overview.TotalCostUSD != "0.000100" || overview.SavedCostUSD != "0.000050" {
+		t.Fatalf("unexpected token/cost totals: %+v", overview)
+	}
+	if overview.AverageLatencyMs == nil || !floatEquals(*overview.AverageLatencyMs, 63.3333333333) || overview.P95LatencyMs == nil || !floatEquals(*overview.P95LatencyMs, 100) {
+		t.Fatalf("unexpected latency metrics: avg=%+v p95=%+v", overview.AverageLatencyMs, overview.P95LatencyMs)
+	}
+	if overview.StatusCounts[invocationlog.StatusRateLimited] != 1 || overview.MaskingActionCounts["redacted"] != 1 {
+		t.Fatalf("unexpected status/masking counts: status=%+v masking=%+v", overview.StatusCounts, overview.MaskingActionCounts)
+	}
+	if len(overview.RoutingCountByModel) != 1 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
+		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
+	}
+	if len(overview.CostByModel) != 1 || overview.CostByModel[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
+	}
+	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
+		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
 	}
 	if !strings.Contains(db.query, "from p0_llm_invocation_logs") || !strings.Contains(db.query, "tenant_id = $3") || !strings.Contains(db.query, "project_id = $4") {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
+	}
+	for _, expected := range []string{
+		"status = 'error'",
+		"status = 'rate_limited'",
+		"cache_eligible_requests",
+		"saved_cost_micro_usd",
+		"percentile_disc(0.95)",
+		"status_counts",
+		"masking_action_counts",
+		"routing_count_by_model",
+		"cost_by_model",
+	} {
+		if !strings.Contains(db.query, expected) {
+			t.Fatalf("expected dashboard query to contain %q, got %s", expected, db.query)
+		}
 	}
 	if len(db.args) != 4 || db.args[2] != "tenant_demo" || db.args[3] != "project_demo" {
 		t.Fatalf("unexpected dashboard query args: %#v", db.args)

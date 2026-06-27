@@ -96,27 +96,84 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	}
 }
 
-func TestBuildDashboardOverviewCountsP0Statuses(t *testing.T) {
+func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
+	createdAt := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
 	logs := []LlmInvocationLog{
-		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, TotalTokens: 10, CostMicroUSD: 2, LatencyMs: 100},
-		{Status: StatusCacheHit, CacheStatus: CacheStatusHit, TotalTokens: 0, CostMicroUSD: 0, LatencyMs: 20},
-		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, TotalTokens: 0, CostMicroUSD: 0, LatencyMs: 10},
-		{Status: StatusError, CacheStatus: CacheStatusBypass, TotalTokens: 0, CostMicroUSD: 0, LatencyMs: 70},
+		{
+			Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
+			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
+			MaskingAction: "none", CreatedAt: createdAt,
+		},
+		{
+			Status: StatusCacheHit, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
+			SavedCostMicroUSD: 50, LatencyMs: 20, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
+			MaskingAction: "none", CreatedAt: createdAt.Add(time.Second),
+		},
+		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "blocked", CreatedAt: createdAt.Add(2 * time.Second)},
+		{
+			Status: StatusError, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, SelectedProvider: "mock", SelectedModel: "mock-balanced",
+			MaskingAction: "redacted", CreatedAt: createdAt.Add(3 * time.Second),
+		},
+		{Status: StatusRateLimited, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "none", CreatedAt: createdAt.Add(4 * time.Second)},
+		{Status: StatusCancelled, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "none", CreatedAt: createdAt.Add(5 * time.Second)},
 	}
 
 	overview := BuildDashboardOverview(logs)
 
-	if overview.TotalRequests != 4 || overview.SuccessfulRequests != 2 || overview.BlockedRequests != 1 || overview.CacheHitRequests != 1 {
+	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 2 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
 		t.Fatalf("unexpected overview counts: %+v", overview)
 	}
-	if overview.TotalTokens != 10 || overview.TotalCostUSD != "0.000002" {
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 3 {
+		t.Fatalf("unexpected cache counts: %+v", overview)
+	}
+	if overview.PromptTokens != 13 || overview.CompletionTokens != 20 || overview.TotalTokens != 33 || overview.TotalCostUSD != "0.000100" || overview.SavedCostUSD != "0.000050" {
 		t.Fatalf("unexpected overview totals: %+v", overview)
 	}
-	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.25) {
+	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 1.0/3.0) {
 		t.Fatalf("unexpected cache hit rate: %+v", overview.CacheHitRate)
 	}
-	if overview.AverageResponseTimeMs == nil || !floatEquals(*overview.AverageResponseTimeMs, 50) {
-		t.Fatalf("unexpected average latency: %+v", overview.AverageResponseTimeMs)
+	if overview.AverageLatencyMs == nil || !floatEquals(*overview.AverageLatencyMs, 190.0/3.0) || overview.P95LatencyMs == nil || !floatEquals(*overview.P95LatencyMs, 100) {
+		t.Fatalf("unexpected latency metrics: avg=%+v p95=%+v", overview.AverageLatencyMs, overview.P95LatencyMs)
+	}
+	if overview.AverageResponseTimeMs == nil || !floatEquals(*overview.AverageResponseTimeMs, *overview.AverageLatencyMs) {
+		t.Fatalf("expected average response time compatibility alias, got %+v", overview.AverageResponseTimeMs)
+	}
+	if overview.StatusCounts[StatusSuccess] != 1 || overview.StatusCounts[StatusCacheHit] != 1 || overview.StatusCounts[StatusBlocked] != 1 || overview.StatusCounts[StatusRateLimited] != 1 || overview.StatusCounts[StatusError] != 1 || overview.StatusCounts[StatusCancelled] != 1 {
+		t.Fatalf("unexpected status counts: %+v", overview.StatusCounts)
+	}
+	if overview.MaskingActionCounts["none"] != 4 || overview.MaskingActionCounts["redacted"] != 1 || overview.MaskingActionCounts["blocked"] != 1 {
+		t.Fatalf("unexpected masking counts: %+v", overview.MaskingActionCounts)
+	}
+	if len(overview.RoutingCountByModel) != 2 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
+		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
+	}
+	if len(overview.CostByModel) != 2 || overview.CostByModel[0].SelectedModel != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
+	}
+	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {
+		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
+	}
+}
+
+func TestBuildDashboardOverviewEmptyRangeReturnsZeroRatesAndNoLatency(t *testing.T) {
+	overview := BuildDashboardOverview(nil)
+
+	if overview.TotalRequests != 0 || overview.CacheEligibleRequests != 0 || overview.CacheHitRequests != 0 {
+		t.Fatalf("unexpected empty overview counts: %+v", overview)
+	}
+	if overview.CacheHitRate == nil || *overview.CacheHitRate != 0 {
+		t.Fatalf("expected zero cache hit rate, got %+v", overview.CacheHitRate)
+	}
+	if overview.AverageLatencyMs != nil || overview.P95LatencyMs != nil {
+		t.Fatalf("expected nil latency metrics for empty range, got avg=%+v p95=%+v", overview.AverageLatencyMs, overview.P95LatencyMs)
+	}
+	if overview.StatusCounts[StatusSuccess] != 0 || overview.MaskingActionCounts["none"] != 0 {
+		t.Fatalf("expected default zero count maps, got status=%+v masking=%+v", overview.StatusCounts, overview.MaskingActionCounts)
+	}
+	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 0 || overview.DataFreshness.LastLogCreatedAt != nil {
+		t.Fatalf("unexpected empty data freshness: %+v", overview.DataFreshness)
 	}
 }
 
