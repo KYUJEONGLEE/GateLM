@@ -11,6 +11,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 )
@@ -103,6 +104,40 @@ func TestChatCompletionsHandlerRateLimitAllowsThenBlocksBeforeProviderCost(t *te
 	}
 	if rateLimitedLog.RateLimitDecision == nil || rateLimitedLog.RateLimitDecision.Reason != ratelimit.ReasonLimitExceeded {
 		t.Fatalf("expected limit_exceeded decision in log, got %#v", rateLimitedLog.RateLimitDecision)
+	}
+}
+
+func TestChatCompletionsHandlerDoesNotExposeRawPromptToRateLimitPipeline(t *testing.T) {
+	// Given masking 전 raw prompt가 포함된 요청이 있다
+	chatCalls := 0
+	rateLimitPipeline := &recordingRateLimitPipeline{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		RateLimitPipeline: rateLimitPipeline,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Contact user@example.com before shipping.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	// When Gateway가 rate limit을 먼저 확인한다
+	handler.ServeHTTP(rr, req)
+
+	// Then RateLimitPipeline에는 prompt text가 전달되지 않는다
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if rateLimitPipeline.calls != 1 {
+		t.Fatalf("expected rate limit pipeline to run once, got %d", rateLimitPipeline.calls)
+	}
+	if rateLimitPipeline.promptText != "" {
+		t.Fatalf("rate limit pipeline must not receive raw prompt, got %q", rateLimitPipeline.promptText)
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected provider call after allowed rate limit, got %d", chatCalls)
 	}
 }
 
@@ -209,6 +244,19 @@ type sequenceRateLimiter struct {
 	decisions []ratelimit.Decision
 	calls     int
 	requests  []ratelimit.Request
+}
+
+type recordingRateLimitPipeline struct {
+	calls      int
+	promptText string
+}
+
+func (p *recordingRateLimitPipeline) Execute(_ context.Context, gatewayCtx *request.GatewayContext) error {
+	p.calls++
+	if gatewayCtx != nil {
+		p.promptText = gatewayCtx.Request.PromptText
+	}
+	return nil
 }
 
 func (l *sequenceRateLimiter) Check(_ context.Context, req ratelimit.Request) (ratelimit.Decision, error) {

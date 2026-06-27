@@ -100,6 +100,34 @@ func TestStageFailsClosedOnLimiterError(t *testing.T) {
 	if gatewayCtx.Governance.RateLimitDecision == nil || gatewayCtx.Governance.RateLimitDecision.Reason != ratelimit.ReasonInternalError {
 		t.Fatalf("expected internal_error decision, got %#v", gatewayCtx.Governance.RateLimitDecision)
 	}
+	if gatewayCtx.Governance.RateLimitDecision.ScopeID != "app_demo" || gatewayCtx.Governance.RateLimitDecision.Limit != 1 {
+		t.Fatalf("expected normalized decision context, got %#v", gatewayCtx.Governance.RateLimitDecision)
+	}
+}
+
+func TestStageUsesDefaultClockWhenConstructedWithoutNewStage(t *testing.T) {
+	// Given Stage가 생성자를 거치지 않아 now 함수가 비어 있다
+	limiter := &fakeLimiter{
+		decision: ratelimit.Decision{
+			Allowed: true,
+			Reason:  ratelimit.ReasonWithinLimit,
+		},
+	}
+	stage := &Stage{
+		limiter: limiter,
+		config:  testConfig(),
+	}
+	gatewayCtx := testGatewayContext()
+
+	// When Gateway가 rate limit을 확인한다
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected stage to use default clock, got %v", err)
+	}
+
+	// Then limiter에는 0 시간이 아닌 현재 시간이 전달된다
+	if limiter.request.Now.IsZero() {
+		t.Fatalf("expected default clock to populate request time")
+	}
 }
 
 type fakeLimiter struct {

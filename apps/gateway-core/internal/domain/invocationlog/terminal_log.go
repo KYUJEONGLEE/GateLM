@@ -183,7 +183,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		metadata["rateLimitDecision"] = *input.RateLimitDecision
 	}
 
-	rateLimitDecision := cloneRateLimitDecision(input.RateLimitDecision)
+	rateLimitDecision := input.RateLimitDecision.Clone()
 
 	return TerminalLog{
 		RequestID:     requestID,
@@ -256,12 +256,4 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func cloneRateLimitDecision(decision *ratelimit.Decision) *ratelimit.Decision {
-	if decision == nil {
-		return nil
-	}
-	cloned := *decision
-	return &cloned
 }

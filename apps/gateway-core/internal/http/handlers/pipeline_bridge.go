@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -39,7 +38,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			FeatureID:     reqCtx.FeatureID,
 		},
 		Governance: request.GovernanceContext{
-			RateLimitDecision: cloneRateLimitDecision(reqCtx.RateLimitDecision),
+			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
 		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
@@ -86,7 +85,7 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
 
 	if gatewayCtx.Governance.RateLimitDecision != nil {
-		reqCtx.RateLimitDecision = cloneRateLimitDecision(gatewayCtx.Governance.RateLimitDecision)
+		reqCtx.RateLimitDecision = gatewayCtx.Governance.RateLimitDecision.Clone()
 	}
 
 	if gatewayCtx.Masking.Action != "" {
@@ -150,14 +149,6 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Status.ErrorStage != "" {
 		reqCtx.ErrorStage = gatewayCtx.Status.ErrorStage
 	}
-}
-
-func cloneRateLimitDecision(decision *ratelimit.Decision) *ratelimit.Decision {
-	if decision == nil {
-		return nil
-	}
-	cloned := *decision
-	return &cloned
 }
 
 func writeGatewayPipelineFailure(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {

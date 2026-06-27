@@ -46,6 +46,14 @@ type Decision struct {
 	DurationMS        int64     `json:"durationMs"`
 }
 
+func (d *Decision) Clone() *Decision {
+	if d == nil {
+		return nil
+	}
+	cloned := *d
+	return &cloned
+}
+
 type Limiter interface {
 	Check(ctx context.Context, req Request) (Decision, error)
 }

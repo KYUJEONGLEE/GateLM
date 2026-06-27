@@ -147,7 +147,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	if h.RateLimitPipeline != nil {
-		gatewayCtx := newGatewayContext(reqCtx, promptText)
+		gatewayCtx := newGatewayContext(reqCtx, "")
 		if err := h.RateLimitPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 			applyGatewayContext(reqCtx, gatewayCtx)
 			writeGatewayPipelineFailure(w, reqCtx, err)
