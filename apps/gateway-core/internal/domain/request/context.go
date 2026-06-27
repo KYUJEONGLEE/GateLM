@@ -1,14 +1,19 @@
 package request
 
-import "time"
+import (
+	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+)
 
 type GatewayContext struct {
-	Request  RequestContext
-	Identity IdentityContext
-	Masking  MaskingContext
-	Routing  RoutingContext
-	Cache    CacheContext
-	Status   StatusContext
+	Request    RequestContext
+	Identity   IdentityContext
+	Governance GovernanceContext
+	Masking    MaskingContext
+	Routing    RoutingContext
+	Cache      CacheContext
+	Status     StatusContext
 }
 
 type RequestContext struct {
@@ -30,6 +35,10 @@ type IdentityContext struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+}
+
+type GovernanceContext struct {
+	RateLimitDecision *ratelimit.Decision
 }
 
 type MaskingContext struct {

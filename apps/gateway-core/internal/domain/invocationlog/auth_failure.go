@@ -10,6 +10,7 @@ const (
 	StatusSuccess     = "success"
 	StatusCacheHit    = "cache_hit"
 	StatusBlocked     = "blocked"
+	StatusRateLimited = "rate_limited"
 	StatusError       = "error"
 	StatusCancelled   = "cancelled"
 	CacheStatusHit    = "hit"

@@ -42,13 +42,20 @@ func writeGatewayErrorWithContext(w http.ResponseWriter, reqCtx *pipeline.Reques
 		return
 	}
 
-	reqCtx.Status = "error"
+	reqCtx.Status = terminalStatusForErrorCode(code)
 	reqCtx.HTTPStatus = status
 	reqCtx.ErrorCode = code
 	reqCtx.ErrorMessage = message
 	reqCtx.ErrorStage = stage
 
 	writeGatewayErrorWithHeaders(w, status, gatewayHeaderValuesFromContext(reqCtx), code, message)
+}
+
+func terminalStatusForErrorCode(code string) string {
+	if code == "rate_limited" {
+		return "rate_limited"
+	}
+	return "error"
 }
 
 func writeGatewayDomainError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) bool {

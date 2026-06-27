@@ -59,6 +59,7 @@ type ChatCompletionsHandler struct {
 	ExpectedTenantID        string
 	ExpectedProjectID       string
 	ExpectedAppID           string
+	RateLimitPipeline       GatewayPipeline
 	PreProviderPipeline     GatewayPipeline
 	AuthFailureLogWriter    invocationlog.AuthFailureLogWriter
 	TerminalLogWriter       invocationlog.TerminalLogWriter
@@ -143,6 +144,16 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "invalid_request_error", "messages content must be text-only.", "parse_openai_compatible_payload")
 		return
+	}
+
+	if h.RateLimitPipeline != nil {
+		gatewayCtx := newGatewayContext(reqCtx, "")
+		if err := h.RateLimitPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+			applyGatewayContext(reqCtx, gatewayCtx)
+			writeGatewayPipelineFailure(w, reqCtx, err)
+			return
+		}
+		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
 	maskingResult, redactedMessages, redactedPrompt, err := h.applyMasking(r.Context(), chatReq.Messages)
@@ -646,6 +657,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		AppTokenID:              reqCtx.AppTokenID,
 		EndUserID:               reqCtx.EndUserID,
 		FeatureID:               reqCtx.FeatureID,
+		RateLimitDecision:       reqCtx.RateLimitDecision,
 		Endpoint:                reqCtx.Endpoint,
 		Method:                  reqCtx.Method,
 		Source:                  invocationlog.SourceCustomerApp,
@@ -697,7 +709,7 @@ func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {
 }
 
 func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
-	if reqCtx == nil || reqCtx.Status == invocationlog.StatusCacheHit || reqCtx.Status == invocationlog.StatusBlocked {
+	if reqCtx == nil || reqCtx.Status == invocationlog.StatusCacheHit || reqCtx.Status == invocationlog.StatusBlocked || reqCtx.Status == invocationlog.StatusRateLimited {
 		return nil
 	}
 	if reqCtx.Provider == "" {
