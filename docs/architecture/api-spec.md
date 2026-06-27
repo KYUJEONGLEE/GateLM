@@ -1,6 +1,6 @@
 # GateLM API Spec
 
-> P0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`의 P0 API 목록을 우선한다. P0 cache status는 `hit/miss/bypass/error`만 사용하고 exact 여부는 `cacheType=exact`로 표현한다. P0 `stream=true` 거부는 HTTP 400 `streaming_not_supported`다. 이 문서의 `MVP` 또는 `1차 구현` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> v1.0.0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 
@@ -3471,7 +3471,7 @@ Error Response:
 ## 14.3 GET `/api/llm-requests/:requestId`
 
 Detail Drawer에 필요한 단일 요청 상세를 조회한다.
-P0 response shape은 `docs/p0/p0-log-event-payload.md`의 Request Detail API 최소 필드를 우선한다.
+v1.0.0 response shape은 `docs/v1.0.0/contracts.md`의 Request Detail / Invocation Log 계약을 우선한다. 과거 P0 response shape은 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
 
 인증: Project Member
 
@@ -4231,7 +4231,7 @@ Error Response:
 
 ## 16.2 POST `/v1/chat/completions`
 
-OpenAI-compatible Chat Completions API다. GateLM은 이 요청 안에서 인증, App Token 검증, 민감정보 마스킹, Cache, Model Routing, Provider 호출, 비동기 이벤트 발행을 수행한다. Rate Limit, Quota, Budget hard block, Runtime Policy 고도화는 P1/P2 후보이며 P0 필수는 아니다.
+OpenAI-compatible Chat Completions API다. GateLM은 이 요청 안에서 인증, App Token 검증, Rate Limit, 민감정보 마스킹, Cache, Model Routing, Provider 호출, 로그/지표 기록을 수행한다. v1.0.0에서는 `applicationId` 기준 PostgreSQL-backed Rate Limit이 필수 pre-check다. Quota, Budget hard block, Runtime Policy 고도화는 v2 후보로 둔다.
 
 인증: Gateway API Key + App Token. Project 정책에 따라 App Token optional 가능하지만 기본은 required.
 
@@ -4387,8 +4387,8 @@ Error Response:
 3. Tenant / Project / Application 식별
 4. App Token 검증
 5. Scope / IP allowlist / status / expiresAt 확인
-6. Rate Limit / Quota / Budget pre-check는 P1/P2 후보. P0에서는 disabled 또는 no-op
-7. Runtime Policy pre-check는 P1/P2 후보. P0에서는 JSON config 기반 최소 정책
+6. Rate Limit pre-check. v1.0.0에서는 `applicationId` 기준 PostgreSQL-backed fixed window를 적용한다. Quota / Budget pre-check는 v2 후보
+7. Runtime Policy pre-check. v1.0.0에서는 ActiveRuntimeConfig 기반 최소 정책을 적용하고, 고도화된 editor/evaluator는 v2 후보
 8. Text-only validation
 9. 민감정보 탐지
 10. Mask 또는 Block

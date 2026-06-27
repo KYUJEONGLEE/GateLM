@@ -1,6 +1,6 @@
 # GateLM DB Schema
 
-> P0 범위 안내: 이 문서는 장기 DB 설계를 포함한다. 현재 구현할 DB 범위는 `docs/p0/p0-contract.md`와 `docs/p0/p0-db-migration-plan.md`를 우선한다. 이 문서의 `MVP` 또는 `필수` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> v1.0.0 범위 안내: 이 문서는 장기 DB 설계를 포함한다. 현재 구현할 DB 범위와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `필수`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 DB 계획은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다.
 
 ## 문서 목적
 
@@ -303,7 +303,7 @@ Provider API Key 원문은 PostgreSQL, Redis, ClickHouse, 로그에 저장하지
 | Policy | `model_allowlist_rules` | 허용 Provider/Model 규칙 | 필수 | 제외 |
 | Policy | `routing_rules` | 모델 라우팅 규칙 | 필수 | simple routing config |
 | Policy | `sensitive_data_rules` | 민감정보 탐지/마스킹 규칙 | 필수 | 기본 rule config |
-| Limit | `rate_limit_rules` | RPM/TPM/동시 요청 제한 | 필수 | P1 |
+| Limit | `rate_limit_rules` | RPM/TPM/동시 요청 제한 | 필수 | v1 필수. `applicationId` 기준 PostgreSQL-backed fixed window |
 | Limit | `quota_rules` | 월/일/사용자별 quota | 필수 | P1 |
 | Budget | `budget_policies` | 예산 정책 | 필수 | P1 |
 | Budget | `budget_ledger_entries` | 예산 차감/보정 ledger | 필수 | 제외 |
@@ -2324,11 +2324,11 @@ create extension if not exists pgcrypto;
 
 ---
 
-# 12. P0 구현 우선순위
+# 12. v1.0.0 구현 우선순위
 
-현재 P0 DB 범위는 `docs/p0/p0-db-migration-plan.md`를 우선한다. 이 장기 DB 문서의 `MVP` 또는 `필수` 표현이 아래 목록과 충돌하면 P1/P2 후보로 본다.
+현재 v1.0.0 DB 범위는 `docs/v1.0.0/contracts.md`를 우선한다. 과거 P0 DB 계획은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다. 이 장기 DB 문서의 `P0`, `MVP`, `필수` 표현이 v1.0.0 계약과 충돌하면 v1.0.0 계약을 우선한다.
 
-## 12.1 P0에서 우선 만들 테이블
+## 12.1 v1.0.0에서 우선 만들 테이블
 
 PostgreSQL:
 

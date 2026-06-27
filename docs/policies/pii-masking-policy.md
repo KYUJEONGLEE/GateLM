@@ -1,6 +1,6 @@
 # GateLM 민감정보 마스킹 정책
 
-> P0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 P0 감지 유형과 action은 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. P0 `sensitive_data_blocked`는 HTTP 403으로 고정한다. 이 문서의 422 예시는 P1/P2 정책 검증 또는 custom detector validation 문맥으로만 본다. 단, raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 P0에서도 낮추지 않는다.
+> v1.0.0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 safety 계약은 `docs/v1.0.0/contracts.md`를 우선한다. v1.0.0 `sensitive_data_blocked`는 HTTP 403으로 고정한다. 이 문서의 422 예시는 v2 정책 검증 또는 custom detector validation 문맥으로만 본다. raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 v1.0.0에서도 낮추지 않는다.
 
 ## 문서 목적
 
@@ -142,13 +142,13 @@ sampleHash = HMAC-SHA256(tenant_salt, normalized_sensitive_value)
 민감정보 감지/마스킹 구현은 아래 순서를 따른다.
 
 ```text
-docs/p0/p0-contract.md
--> docs/p0/implementation-cut.md
--> docs/p0/p0-log-event-payload.md
+docs/v1.0.0/contracts.md
+-> docs/v1.0.0/implementation-plan.md
+-> docs/archive/p0/p0-log-event-payload.md
 -> docs/architecture/gateway-flow.md
 -> docs/policies/pii-masking-policy.md
 -> docs/architecture/llm-log-schema.md
--> docs/p0/p0-db-migration-plan.md
+-> docs/archive/p0/p0-db-migration-plan.md
 -> docs/architecture/api-spec.md
 -> docs/architecture/dashboard-metrics.md
 -> docs/policies/coding-convention.md
@@ -158,12 +158,12 @@ docs/p0/p0-contract.md
 
 충돌 시 기준:
 
-1. P0 범위와 action/status는 `docs/p0/p0-contract.md`를 따른다.
-2. P0 구현 컷라인은 `docs/p0/implementation-cut.md`를 따른다.
-3. P0 로그 필드는 `docs/p0/p0-log-event-payload.md`를 따른다.
+1. v1.0.0 범위와 action/status는 `docs/v1.0.0/contracts.md`를 따른다.
+2. v1.0.0 구현 계획은 `docs/v1.0.0/implementation-plan.md`를 따른다.
+3. 과거 P0 로그 필드는 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
 4. Gateway stage 순서는 `docs/architecture/gateway-flow.md`를 따른다.
 5. 민감정보 detector, action, masking 세부 기준은 이 문서를 따른다.
-6. P0 저장 테이블과 column type은 `docs/p0/p0-db-migration-plan.md`를 따른다.
+6. 저장 테이블과 column type은 v1.0.0 계약을 우선하고, 과거 P0 저장 기준은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다.
 7. 장기 API/DB/Dashboard 설계는 각 architecture 문서를 참고하되 P0 문서와 충돌하면 P1/P2 후보로 본다.
 
 문서에 없는 detector type, action value, log field, API field, DB column을 임의로 추가하지 않는다.

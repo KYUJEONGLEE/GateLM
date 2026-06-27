@@ -1,6 +1,6 @@
 # GateLM Gateway 요청 흐름
 
-> P0 범위 안내: 이 문서는 장기 Gateway pipeline 흐름을 포함한다. 현재 P0 stage와 동작 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. P0 cache status는 `hit/miss/bypass/error`만 저장하고 exact 여부는 `cacheType=exact`로 표현한다. P0 `stream=true`는 HTTP 400 `streaming_not_supported`로 거부한다. 이 문서의 Streaming, Semantic Cache, Rate Limit, Budget 관련 흐름은 P0에서 no-op, disabled, 또는 P1/P2 후보일 수 있다.
+> v1.0.0 범위 안내: 이 문서는 장기 Gateway pipeline 흐름을 포함한다. 현재 Gateway stage와 동작 범위는 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 우선한다. v1.0.0은 text-only, non-stream, rule-based safety, PostgreSQL-backed Rate Limit, Redis Exact Cache를 main path로 둔다. Streaming, Semantic Cache, Budget, Redpanda/ClickHouse 흐름은 v2 후보로 본다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 

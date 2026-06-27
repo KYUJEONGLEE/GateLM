@@ -20,7 +20,7 @@ GateLM은 여러 LLM Provider API를 하나의 Gateway에서 관리하기 위한
 * Docker Desktop
 * VS Code 또는 원하는 IDE
 
-P0 개발/데모/검증의 기준은 Docker Compose입니다.
+v1.0.0 baseline 개발/데모/검증의 기준은 Docker Compose입니다.
 로컬에 설치된 Node.js, Go, Python 버전은 보조 수단이며, 최종 확인은 Docker 컨테이너 기준으로 합니다.
 
 공통 런타임 버전은 아래로 고정합니다.
@@ -91,9 +91,9 @@ cp .env.example .env
 
 ## 4. 로컬 인프라 실행
 
-이 프로젝트는 P0 로컬 개발을 위해 PostgreSQL, Redis, Mock Provider를 Docker Compose로 실행합니다.
+이 프로젝트는 v1.0.0 baseline 로컬 개발을 위해 PostgreSQL, Redis, Mock Provider를 Docker Compose로 실행합니다.
 
-P0 기준 서비스명은 아래로 고정합니다.
+v1.0.0 기준 서비스명은 아래로 고정합니다.
 
 | 서비스 | 이미지 | 포트 |
 |---|---|---:|
@@ -101,7 +101,7 @@ P0 기준 서비스명은 아래로 고정합니다.
 | `redis` | `redis:7-alpine` | 6379 |
 | `mock-provider` | `python:3.12-alpine` | 8090 |
 
-현재 `mock-provider`는 공통 로컬 환경을 빠르게 띄우기 위한 bootstrap mock입니다. P0 acceptance용 mock-provider는 `docs/p0/mock-provider.md` 기준에 맞춰 별도 구현체로 승격할 예정입니다.
+현재 `mock-provider`는 공통 로컬 환경을 빠르게 띄우기 위한 bootstrap mock입니다. v1.0.0 Gateway/Provider 계약은 `docs/v1.0.0/contracts.md`를 우선하고, 과거 P0 mock provider 기준은 `docs/archive/p0/mock-provider.md`에서 참고할 수 있습니다.
 
 Node/Go/Python은 `tools` profile의 toolbox 컨테이너로 고정합니다. 앱 소스가 생기기 전까지는 아래 컨테이너를 공통 개발 런타임으로 사용합니다.
 
@@ -135,7 +135,7 @@ mock-provider
 
 ### 예전 Docker를 이미 띄운 경우
 
-기존 설정에서는 `db` 서비스와 `postgres:15`를 사용했습니다. 현재 P0 기준은 `postgres` 서비스와 `postgres:16`입니다.
+기존 설정에서는 `db` 서비스와 `postgres:15`를 사용했습니다. 현재 v1.0.0 로컬 기준은 `postgres` 서비스와 `postgres:16`입니다.
 
 이미 예전 컨테이너를 띄운 팀원은 아래 명령어로 정리한 뒤 다시 실행합니다.
 
@@ -171,19 +171,21 @@ mock-provider
 팀원은 자기 역할에 맞는 toolbox 컨테이너에 들어가서 작업합니다.
 컨테이너 안의 `/workspace`는 현재 로컬 프로젝트 폴더와 연결되어 있으므로, 컨테이너 안에서 만든 파일은 로컬에도 그대로 남습니다.
 
-| 역할 | 담당 | 들어갈 컨테이너 |
+| Owner | 담당 | 들어갈 컨테이너 |
 |---|---|---|
-| A | Control Plane / DB / Runtime Config | `node-toolbox` |
-| B | Gateway Core / Provider Adapter | `go-toolbox` |
-| C | Gateway Auth / Context / Simple Routing | `go-toolbox` |
-| D | Security / Exact Cache / Safety Test | `go-toolbox` |
-| E | Observability / Web Console / Demo Flow | `node-toolbox` |
+| 김규민 | Product Experience & Demo, Next.js UI | `node-toolbox` |
+| 재혁님 | Control Plane & Runtime Policy, NestJS | `node-toolbox` |
+| 이지섭 | Gateway Data Plane & Governance, Go | `go-toolbox` |
+| 이윤지 | AI Safety & Evaluation Lab, Python/FastAPI | `python-toolbox` |
+| 이규정 | Observability, Data Platform & Performance | `node-toolbox`, 필요 시 `go-toolbox` |
 
-Python은 mock provider 구현, seed/demo script, 간단한 보조 스크립트가 필요할 때만 사용합니다.
+역할별 상세 R&R은 `docs/v1.0.0/implementation-plan.md`와 `docs/v1.0.0/contracts.md`를 우선합니다.
+
+Python/FastAPI safety service는 v1.0.0 main path의 필수 런타임 의존성이 아닙니다. Python은 safety evaluation, mock provider 보조, seed/demo script, 간단한 보조 스크립트가 필요할 때 사용합니다.
 
 #### Node 작업자
 
-A 또는 E 역할은 아래 명령어로 들어갑니다.
+Next.js, NestJS, Dashboard/API 작업자는 아래 명령어로 들어갑니다.
 
 ```powershell
 docker compose run --rm node-toolbox bash
@@ -227,7 +229,7 @@ exit
 
 #### Go 작업자
 
-B, C, D 역할은 아래 명령어로 들어갑니다.
+Gateway 작업자는 아래 명령어로 들어갑니다.
 
 ```powershell
 docker compose run --rm go-toolbox bash
