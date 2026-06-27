@@ -37,6 +37,10 @@ export type CredentialListItem = {
   lastUsedAt: string | null;
 };
 
+type CredentialListItemFixture = Omit<CredentialListItem, "scopes"> & {
+  scopes?: string[] | null;
+};
+
 export type AdminOnboardingModel = {
   tenantId: string;
   project: {
@@ -93,30 +97,30 @@ type RuntimeConfigFixture = {
     projectStatus: string;
     applicationId: string;
     applicationStatus: string;
-    providers: Array<{
+    providers?: Array<{
       providerId: string;
       provider: string;
       displayName: string;
       status: string;
       resolver: string;
       credentialPreview: string | null;
-      models: string[];
+      models?: string[];
     }>;
     rateLimit: {
       scope: string;
       windowSeconds: number;
       limit: number;
     };
-    safetyPolicy: {
+    safetyPolicy?: {
       mode: string;
       securityPolicyHash: string;
-      detectors: unknown[];
+      detectors?: unknown[];
     };
-    cachePolicy: {
+    cachePolicy?: {
       enabled: boolean;
       type: string;
     };
-    routingPolicy: {
+    routingPolicy?: {
       routingPolicyHash: string;
     };
   };
@@ -127,18 +131,18 @@ type CredentialLifecycleFixture = {
     plaintextDisplayPolicy: {
       plaintextShownOnce: boolean;
     };
-    forbiddenAdminResponseFields: string[];
+    forbiddenAdminResponseFields?: string[] | null;
     apiKey: {
       issueExample: {
         response: CredentialIssueResponse;
       };
-      listItemExample: CredentialListItem;
+      listItemExample: CredentialListItemFixture;
     };
     appToken: {
       issueExample: {
         response: CredentialIssueResponse;
       };
-      listItemExample: CredentialListItem;
+      listItemExample: CredentialListItemFixture;
     };
   };
 };
@@ -160,12 +164,29 @@ const onboardingOperationIds = [
   "getActiveRuntimeConfig"
 ];
 
+const unconfiguredProvider = {
+  providerId: "provider_unconfigured",
+  provider: "unconfigured",
+  displayName: "Provider not configured",
+  status: "missing",
+  resolver: "not_configured",
+  credentialPreview: null,
+  models: []
+};
+
+function normalizeCredentialListItem(listItem: CredentialListItemFixture): CredentialListItem {
+  return {
+    ...listItem,
+    scopes: listItem.scopes ?? []
+  };
+}
+
 export function getAdminOnboardingModel(): AdminOnboardingModel {
   const adminApi = controlPlaneAdminApiFixture as ControlPlaneAdminApiFixture;
   const credentials = credentialLifecycleFixture as CredentialLifecycleFixture;
   const runtime = runtimeConfigFixture as RuntimeConfigFixture;
   const runtimeConfig = runtime.runtimeConfig;
-  const provider = runtimeConfig.providers[0];
+  const provider = runtimeConfig.providers?.[0] ?? unconfiguredProvider;
 
   return {
     tenantId: runtimeConfig.tenantId,
@@ -181,37 +202,37 @@ export function getAdminOnboardingModel(): AdminOnboardingModel {
       rateLimitWindowSeconds: runtimeConfig.rateLimit.windowSeconds
     },
     provider: {
-      providerId: provider.providerId,
-      provider: provider.provider,
-      displayName: provider.displayName,
-      status: provider.status,
-      resolver: provider.resolver,
-      credentialPreview: provider.credentialPreview,
-      modelCount: provider.models.length
+      providerId: provider.providerId ?? unconfiguredProvider.providerId,
+      provider: provider.provider ?? unconfiguredProvider.provider,
+      displayName: provider.displayName ?? unconfiguredProvider.displayName,
+      status: provider.status ?? unconfiguredProvider.status,
+      resolver: provider.resolver ?? unconfiguredProvider.resolver,
+      credentialPreview: provider.credentialPreview ?? unconfiguredProvider.credentialPreview,
+      modelCount: provider.models?.length ?? unconfiguredProvider.models.length
     },
     apiKey: {
       issueResponse: credentials.credentialLifecycle.apiKey.issueExample.response,
-      listItem: credentials.credentialLifecycle.apiKey.listItemExample
+      listItem: normalizeCredentialListItem(credentials.credentialLifecycle.apiKey.listItemExample)
     },
     appToken: {
       issueResponse: credentials.credentialLifecycle.appToken.issueExample.response,
-      listItem: credentials.credentialLifecycle.appToken.listItemExample
+      listItem: normalizeCredentialListItem(credentials.credentialLifecycle.appToken.listItemExample)
     },
     runtimeConfig: {
       configVersion: runtimeConfig.configVersion,
       publishState: runtimeConfig.publishState,
       configHash: runtimeConfig.configHash,
-      securityPolicyHash: runtimeConfig.safetyPolicy.securityPolicyHash,
-      routingPolicyHash: runtimeConfig.routingPolicy.routingPolicyHash,
-      cacheType: runtimeConfig.cachePolicy.type,
-      cacheEnabled: runtimeConfig.cachePolicy.enabled,
-      safetyMode: runtimeConfig.safetyPolicy.mode,
-      detectorCount: runtimeConfig.safetyPolicy.detectors.length
+      securityPolicyHash: runtimeConfig.safetyPolicy?.securityPolicyHash ?? "security_policy_missing",
+      routingPolicyHash: runtimeConfig.routingPolicy?.routingPolicyHash ?? "routing_policy_missing",
+      cacheType: runtimeConfig.cachePolicy?.type ?? "unconfigured",
+      cacheEnabled: runtimeConfig.cachePolicy?.enabled ?? false,
+      safetyMode: runtimeConfig.safetyPolicy?.mode ?? "missing",
+      detectorCount: runtimeConfig.safetyPolicy?.detectors?.length ?? 0
     },
     endpoints: adminApi.adminApi.endpoints.filter((endpoint) =>
       onboardingOperationIds.includes(endpoint.operationId)
     ),
-    forbiddenAdminResponseFields: credentials.credentialLifecycle.forbiddenAdminResponseFields,
+    forbiddenAdminResponseFields: credentials.credentialLifecycle.forbiddenAdminResponseFields ?? [],
     plaintextShownOnce:
       credentials.credentialLifecycle.plaintextDisplayPolicy.plaintextShownOnce
   };

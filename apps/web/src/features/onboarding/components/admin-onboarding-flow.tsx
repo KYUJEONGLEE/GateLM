@@ -245,7 +245,7 @@ function renderStepContent({
       <div className="guardrail-list">
         <h4>Forbidden admin response fields</h4>
         <ul>
-          {model.forbiddenAdminResponseFields.map((field) => (
+          {(model.forbiddenAdminResponseFields ?? []).map((field) => (
             <li key={field}>{field}</li>
           ))}
         </ul>
@@ -279,7 +279,7 @@ function CredentialStep({
             ["Status", listItem.status],
             ["Prefix", listItem.prefix],
             ["Last 4", listItem.last4],
-            ["Scopes", listItem.scopes.join(", ")],
+            ["Scopes", (listItem.scopes ?? []).join(", ")],
             ["Created", formatDateTime(listItem.createdAt)],
             ["Last used", formatDateTime(listItem.lastUsedAt)]
           ]}
