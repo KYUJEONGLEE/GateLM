@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import dashboardOverviewFixture from "../../../../../docs/v1.0.0/fixtures/dashboard-overview.fixture.json";
+import invocationLogFixture from "../../../../../docs/v1.0.0/fixtures/invocation-log.fixture.json";
 
 export type RuntimeMetadata = {
   configHash: string;
@@ -144,19 +144,12 @@ export type DashboardOverview = {
   notes: string[];
 };
 
-const FIXTURE_DIR = join(process.cwd(), "../../docs/v1.0.0/fixtures");
-
-function readFixture<T>(fileName: string): T {
-  const fixturePath = join(FIXTURE_DIR, fileName);
-  return JSON.parse(readFileSync(fixturePath, "utf-8")) as T;
-}
-
 export function getDashboardOverview(): DashboardOverview {
-  return readFixture<DashboardOverview>("dashboard-overview.fixture.json");
+  return dashboardOverviewFixture as DashboardOverview;
 }
 
 export function getInvocationLogFixture(): InvocationLogFixture {
-  return readFixture<InvocationLogFixture>("invocation-log.fixture.json");
+  return invocationLogFixture as InvocationLogFixture;
 }
 
 export function getInvocationRecords(): InvocationLogRecord[] {
