@@ -40,6 +40,25 @@ import {
 const DEFAULT_DRAFT_CONFIG_VERSION = 'draft';
 const CONFIG_HASH_ALGORITHM =
   'sha256(canonical_json(runtimeConfig_without_configHash))';
+const ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE =
+  'Active Runtime Config is not executable.';
+const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
+  'secretHash',
+  'plaintext',
+  'authorizationHeader',
+  'rawCredential',
+  'rawProviderKey',
+  'apiKeySecret',
+  'appTokenSecret',
+  'providerKey',
+]);
+
+type RuntimeApplicationContext = NonNullable<
+  Awaited<ReturnType<PrismaService['application']['findUnique']>>
+> & {
+  tenant: { id: string; status: ResourceStatus };
+  project: { id: string; status: ResourceStatus };
+};
 
 @Injectable()
 export class RuntimeConfigsService {
@@ -61,11 +80,12 @@ export class RuntimeConfigsService {
     }
 
     const document = this.toRuntimeConfigDocument(runtimeConfig.document);
-    if (document.publishState !== 'active') {
-      throw new ConflictException(
-        'Active Runtime Config document state is invalid.',
-      );
-    }
+    await this.assertRuntimeConfigExecutable({
+      applicationId,
+      runtimeConfig,
+      document,
+      now: new Date(),
+    });
 
     return document;
   }
@@ -262,6 +282,16 @@ export class RuntimeConfigsService {
       args.dto.routingPolicy?.fallbackProvider ?? defaultModel.provider,
       args.dto.routingPolicy?.fallbackModel,
     );
+    this.assertSelectedProviderConnectionsActive(providers, [
+      defaultModel.provider,
+      lowCostModel.provider,
+      fallbackModel.provider,
+    ]);
+    this.assertSelectedModelsActive([
+      defaultModel,
+      lowCostModel,
+      fallbackModel,
+    ]);
     const effectiveAt = args.dto.effectiveAt
       ? new Date(args.dto.effectiveAt)
       : args.now;
@@ -333,14 +363,302 @@ export class RuntimeConfigsService {
     };
   }
 
-  private async getApplicationContextOrThrow(applicationId: string): Promise<
-    NonNullable<
-      Awaited<ReturnType<PrismaService['application']['findUnique']>>
-    > & {
-      tenant: { id: string; status: ResourceStatus };
-      project: { id: string; status: ResourceStatus };
+  private async assertRuntimeConfigExecutable(args: {
+    applicationId: string;
+    runtimeConfig: RuntimeConfig;
+    document: ActiveRuntimeConfigResponseDto;
+    now: Date;
+  }): Promise<void> {
+    this.assertActiveRuntimeConfigSnapshot(args);
+    this.assertRuntimeConfigPolicyBundle(args.document);
+    this.assertNoForbiddenRuntimeConfigKeys(args.document);
+
+    const context = await this.getApplicationContextOrThrow(args.applicationId);
+    this.assertActiveContext(context);
+    this.assertDocumentMatchesCurrentContext(args.document, context);
+
+    await Promise.all([
+      this.assertCurrentApiKeyExecutable(args.document, context, args.now),
+      this.assertCurrentAppTokenExecutable(args.document, context, args.now),
+      this.assertCurrentRoutingProvidersExecutable(args.document, context),
+    ]);
+  }
+
+  private assertActiveRuntimeConfigSnapshot(args: {
+    applicationId: string;
+    runtimeConfig: RuntimeConfig;
+    document: ActiveRuntimeConfigResponseDto;
+  }): void {
+    const { applicationId, runtimeConfig, document } = args;
+    if (
+      runtimeConfig.publishState !== RuntimeConfigPublishState.ACTIVE ||
+      runtimeConfig.applicationId !== applicationId ||
+      runtimeConfig.applicationId !== document.applicationId ||
+      runtimeConfig.tenantId !== document.tenantId ||
+      runtimeConfig.projectId !== document.projectId ||
+      runtimeConfig.configVersion !== document.configVersion ||
+      runtimeConfig.configHash !== document.configHash ||
+      document.schemaVersion !== 'gatelm.active-runtime-config.v1' ||
+      document.configHashAlgorithm !== CONFIG_HASH_ALGORITHM ||
+      document.publishState !== 'active'
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
     }
-  > {
+  }
+
+  private assertDocumentMatchesCurrentContext(
+    document: ActiveRuntimeConfigResponseDto,
+    context: RuntimeApplicationContext,
+  ): void {
+    if (
+      document.tenantId !== context.tenantId ||
+      document.projectId !== context.projectId ||
+      document.applicationId !== context.id ||
+      document.tenantStatus !== 'active' ||
+      document.projectStatus !== 'active' ||
+      document.applicationStatus !== 'active'
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
+    }
+  }
+
+  private async assertCurrentApiKeyExecutable(
+    document: ActiveRuntimeConfigResponseDto,
+    context: RuntimeApplicationContext,
+    now: Date,
+  ): Promise<void> {
+    const apiKey = await this.prisma.gatewayApiKey.findUnique({
+      where: { id: document.apiKeyId },
+    });
+
+    if (
+      !apiKey ||
+      document.apiKey.id !== document.apiKeyId ||
+      document.apiKey.type !== 'api_key' ||
+      document.apiKeyStatus !== 'active' ||
+      document.apiKey.status !== 'active' ||
+      apiKey.tenantId !== context.tenantId ||
+      apiKey.projectId !== context.projectId ||
+      !this.isCredentialCurrentlyActive(apiKey, now)
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
+    }
+  }
+
+  private async assertCurrentAppTokenExecutable(
+    document: ActiveRuntimeConfigResponseDto,
+    context: RuntimeApplicationContext,
+    now: Date,
+  ): Promise<void> {
+    const appToken = await this.prisma.appToken.findUnique({
+      where: { id: document.appTokenId },
+    });
+
+    if (
+      !appToken ||
+      document.appToken.id !== document.appTokenId ||
+      document.appToken.type !== 'app_token' ||
+      document.appTokenStatus !== 'active' ||
+      document.appToken.status !== 'active' ||
+      appToken.tenantId !== context.tenantId ||
+      appToken.projectId !== context.projectId ||
+      appToken.applicationId !== context.id ||
+      !this.isCredentialCurrentlyActive(appToken, now)
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
+    }
+  }
+
+  private async assertCurrentRoutingProvidersExecutable(
+    document: ActiveRuntimeConfigResponseDto,
+    context: RuntimeApplicationContext,
+  ): Promise<void> {
+    const selectedProviderNames = new Set([
+      document.defaultProvider,
+      document.lowCostProvider,
+      document.fallbackProvider,
+      document.routingPolicy.defaultProvider,
+      document.routingPolicy.lowCostProvider,
+      document.routingPolicy.fallbackProvider,
+    ]);
+    const currentProviders = await this.prisma.providerConnection.findMany({
+      where: {
+        projectId: context.projectId,
+        provider: { in: [...selectedProviderNames] },
+      },
+    });
+    const currentByName = new Map(
+      currentProviders.map((provider) => [provider.provider, provider]),
+    );
+
+    for (const providerName of selectedProviderNames) {
+      const documentProvider = document.providers.find(
+        (provider) => provider.provider === providerName,
+      );
+      const currentProvider = currentByName.get(providerName);
+      if (
+        !documentProvider ||
+        !currentProvider ||
+        documentProvider.providerId !== currentProvider.id ||
+        documentProvider.status !== 'active' ||
+        currentProvider.status !== ProviderConnectionStatus.ACTIVE
+      ) {
+        throw new ConflictException(
+          ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+        );
+      }
+    }
+  }
+
+  private assertRuntimeConfigPolicyBundle(
+    document: ActiveRuntimeConfigResponseDto,
+  ): void {
+    this.assertRuntimeConfigRequiredPolicyShape(document);
+    this.assertSelectedModelIsExecutable(
+      document,
+      document.defaultProvider,
+      document.defaultModel,
+    );
+    this.assertSelectedModelIsExecutable(
+      document,
+      document.lowCostProvider,
+      document.lowCostModel,
+    );
+    this.assertSelectedModelIsExecutable(
+      document,
+      document.fallbackProvider,
+      document.fallbackModel,
+    );
+    this.assertSelectedModelIsExecutable(
+      document,
+      document.routingPolicy.defaultProvider,
+      document.routingPolicy.defaultModel,
+    );
+    this.assertSelectedModelIsExecutable(
+      document,
+      document.routingPolicy.lowCostProvider,
+      document.routingPolicy.lowCostModel,
+    );
+    this.assertSelectedModelIsExecutable(
+      document,
+      document.routingPolicy.fallbackProvider,
+      document.routingPolicy.fallbackModel,
+    );
+
+    if (
+      document.rateLimit.scope !== 'application' ||
+      document.rateLimit.algorithm !== 'fixed_window' ||
+      document.rateLimit.windowSeconds !== 60 ||
+      !Number.isInteger(document.rateLimit.limit) ||
+      document.rateLimit.limit < 1 ||
+      document.cachePolicy.type !== 'exact' ||
+      !Number.isInteger(document.cachePolicy.ttlSeconds) ||
+      document.cachePolicy.ttlSeconds < 1 ||
+      document.safetyPolicy.mode !== 'rule_based' ||
+      !document.safetyPolicy.securityPolicyHash ||
+      !Array.isArray(document.safetyPolicy.detectors) ||
+      document.safetyPolicy.detectors.length === 0 ||
+      document.routingPolicy.type !== 'simple' ||
+      document.routingPolicy.autoModel !== 'auto' ||
+      !document.routingPolicy.routingPolicyHash ||
+      !Array.isArray(document.pricingRules) ||
+      document.pricingRules.length === 0
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
+    }
+  }
+
+  private assertRuntimeConfigRequiredPolicyShape(
+    document: ActiveRuntimeConfigResponseDto,
+  ): void {
+    if (
+      !Array.isArray(document.providers) ||
+      document.providers.length === 0 ||
+      !Array.isArray(document.models) ||
+      document.models.length === 0 ||
+      !document.rateLimit ||
+      !document.cachePolicy ||
+      !document.safetyPolicy ||
+      !document.routingPolicy ||
+      !Array.isArray(document.pricingRules)
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
+    }
+  }
+
+  private assertSelectedModelIsExecutable(
+    document: ActiveRuntimeConfigResponseDto,
+    providerName: string,
+    modelName: string,
+  ): void {
+    const provider = document.providers.find(
+      (candidate) => candidate.provider === providerName,
+    );
+    const model = document.models.find(
+      (candidate) =>
+        candidate.provider === providerName && candidate.model === modelName,
+    );
+
+    if (
+      !provider ||
+      !model ||
+      provider.status !== 'active' ||
+      !provider.models.includes(modelName) ||
+      model.status !== 'active'
+    ) {
+      throw new ConflictException(
+        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+      );
+    }
+  }
+
+  private assertNoForbiddenRuntimeConfigKeys(value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach((item) => this.assertNoForbiddenRuntimeConfigKeys(item));
+      return;
+    }
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    for (const [key, nestedValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (FORBIDDEN_RUNTIME_CONFIG_KEYS.has(key)) {
+        throw new ConflictException(
+          ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
+        );
+      }
+
+      this.assertNoForbiddenRuntimeConfigKeys(nestedValue);
+    }
+  }
+
+  private isCredentialCurrentlyActive(
+    credential: GatewayApiKey | AppToken,
+    now: Date,
+  ): boolean {
+    return (
+      credential.status === CredentialStatus.ACTIVE &&
+      (!credential.expiresAt || credential.expiresAt > now)
+    );
+  }
+
+  private async getApplicationContextOrThrow(
+    applicationId: string,
+  ): Promise<RuntimeApplicationContext> {
     const application = await this.prisma.application.findUnique({
       where: { id: applicationId },
       include: {
@@ -446,6 +764,34 @@ export class RuntimeConfigsService {
     }
 
     return provider;
+  }
+
+  private assertSelectedProviderConnectionsActive(
+    providers: ProviderConnection[],
+    selectedProviderNames: string[],
+  ): void {
+    const providersByName = new Map(
+      providers.map((provider) => [provider.provider, provider]),
+    );
+
+    for (const providerName of selectedProviderNames) {
+      const provider = providersByName.get(providerName);
+      if (!provider || provider.status !== ProviderConnectionStatus.ACTIVE) {
+        throw new ConflictException(
+          'Runtime Config selected providers must be active.',
+        );
+      }
+    }
+  }
+
+  private assertSelectedModelsActive(
+    selectedModels: RuntimeConfigModelResponseDto[],
+  ): void {
+    if (selectedModels.some((model) => model.status !== 'active')) {
+      throw new ConflictException(
+        'Runtime Config selected models must be active.',
+      );
+    }
   }
 
   private resolveModels(

@@ -31,8 +31,8 @@ describe('RuntimeConfigsService', () => {
     service: RuntimeConfigsService;
     prisma: {
       application: { findUnique: jest.Mock };
-      gatewayApiKey: { findFirst: jest.Mock };
-      appToken: { findFirst: jest.Mock };
+      gatewayApiKey: { findFirst: jest.Mock; findUnique: jest.Mock };
+      appToken: { findFirst: jest.Mock; findUnique: jest.Mock };
       providerConnection: { findMany: jest.Mock };
       runtimeConfig: {
         findFirst: jest.Mock;
@@ -49,9 +49,11 @@ describe('RuntimeConfigsService', () => {
       },
       gatewayApiKey: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
       },
       appToken: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
       },
       providerConnection: {
         findMany: jest.fn(),
@@ -172,6 +174,7 @@ describe('RuntimeConfigsService', () => {
 
   it('returns the active runtime config document directly', async () => {
     const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
     const activeDocument = activeRuntimeConfigDocument();
     prisma.runtimeConfig.findFirst.mockResolvedValue(
       runtimeConfigRecord(activeDocument, {
@@ -189,6 +192,17 @@ describe('RuntimeConfigsService', () => {
         },
       }),
     );
+    expect(prisma.application.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: applicationId },
+      }),
+    );
+    expect(prisma.gatewayApiKey.findUnique).toHaveBeenCalledWith({
+      where: { id: apiKeyId },
+    });
+    expect(prisma.appToken.findUnique).toHaveBeenCalledWith({
+      where: { id: appTokenId },
+    });
     expect(result).toEqual(activeDocument);
   });
 
@@ -205,7 +219,94 @@ describe('RuntimeConfigsService', () => {
 
     await expect(
       service.getActiveRuntimeConfig(applicationId),
-    ).rejects.toThrow('Active Runtime Config document state is invalid.');
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+  });
+
+  it('rejects an active runtime config when current application context is not active', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {}, {
+      applicationStatus: ResourceStatus.DISABLED,
+    });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeRuntimeConfigDocument(), {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow(
+      'Runtime Config requires active tenant, project, and application.',
+    );
+  });
+
+  it('rejects an active runtime config when its referenced API Key is no longer executable', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {}, { apiKeyStatus: CredentialStatus.REVOKED });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeRuntimeConfigDocument(), {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+  });
+
+  it('rejects an active runtime config when a selected provider is currently disabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, { status: ProviderConnectionStatus.DISABLED });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeRuntimeConfigDocument(), {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+  });
+
+  it('rejects an active runtime config when a selected model is disabled', async () => {
+    const { service, prisma } = createService();
+    const activeDocument = activeRuntimeConfigDocument();
+    activeDocument.models = activeDocument.models.map((model) => ({
+      ...model,
+      status: 'disabled',
+    }));
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+  });
+
+  it('rejects an active runtime config containing forbidden credential fields', async () => {
+    const { service, prisma } = createService();
+    const activeDocument =
+      activeRuntimeConfigDocument() as ActiveRuntimeConfigResponseDto & {
+        apiKey: ActiveRuntimeConfigResponseDto['apiKey'] & {
+          secretHash: string;
+        };
+      };
+    activeDocument.apiKey = {
+      ...activeDocument.apiKey,
+      secretHash: 'a'.repeat(64),
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.getActiveRuntimeConfig(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
   });
 
   it('serializes canonical JSON with stable key order and Date values', () => {
@@ -318,6 +419,28 @@ describe('RuntimeConfigsService', () => {
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
   });
 
+  it('rejects draft runtime configs that select a disabled model', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        models: [
+          {
+            provider: 'mock',
+            model: 'mock-fast',
+            status: 'disabled',
+          },
+        ],
+        routingPolicy: {
+          defaultProvider: 'mock',
+          defaultModel: 'mock-fast',
+        },
+      }),
+    ).rejects.toThrow('Runtime Config selected models must be active.');
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
   it('returns a sanitized provider and model in unavailable model errors', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -367,6 +490,15 @@ describe('RuntimeConfigsService', () => {
   function mockRuntimeInputs(
     prisma: ReturnType<typeof createService>['prisma'],
     providerOverrides: Record<string, unknown> = {},
+    contextOverrides: {
+      tenantStatus?: ResourceStatus;
+      projectStatus?: ResourceStatus;
+      applicationStatus?: ResourceStatus;
+      apiKeyStatus?: CredentialStatus;
+      appTokenStatus?: CredentialStatus;
+      apiKeyExpiresAt?: Date | null;
+      appTokenExpiresAt?: Date | null;
+    } = {},
   ) {
     prisma.application.findUnique.mockResolvedValue({
       id: applicationId,
@@ -374,13 +506,19 @@ describe('RuntimeConfigsService', () => {
       projectId,
       name: 'Customer Demo App',
       description: null,
-      status: ResourceStatus.ACTIVE,
+      status: contextOverrides.applicationStatus ?? ResourceStatus.ACTIVE,
       createdAt: now,
       updatedAt: now,
-      tenant: { id: tenantId, status: ResourceStatus.ACTIVE },
-      project: { id: projectId, status: ResourceStatus.ACTIVE },
+      tenant: {
+        id: tenantId,
+        status: contextOverrides.tenantStatus ?? ResourceStatus.ACTIVE,
+      },
+      project: {
+        id: projectId,
+        status: contextOverrides.projectStatus ?? ResourceStatus.ACTIVE,
+      },
     });
-    prisma.gatewayApiKey.findFirst.mockResolvedValue({
+    const apiKey = {
       id: apiKeyId,
       tenantId,
       projectId,
@@ -389,15 +527,17 @@ describe('RuntimeConfigsService', () => {
       last4: '9xA1',
       secretHash: 'a'.repeat(64),
       hashAlgorithm: 'sha256',
-      status: CredentialStatus.ACTIVE,
+      status: contextOverrides.apiKeyStatus ?? CredentialStatus.ACTIVE,
       scopes: ['chat:completions', 'models:read'],
-      expiresAt: null,
+      expiresAt: contextOverrides.apiKeyExpiresAt ?? null,
       lastUsedAt: null,
       revokedAt: null,
       createdAt: now,
       updatedAt: now,
-    });
-    prisma.appToken.findFirst.mockResolvedValue({
+    };
+    prisma.gatewayApiKey.findFirst.mockResolvedValue(apiKey);
+    prisma.gatewayApiKey.findUnique.mockResolvedValue(apiKey);
+    const appToken = {
       id: appTokenId,
       tenantId,
       projectId,
@@ -407,14 +547,16 @@ describe('RuntimeConfigsService', () => {
       last4: '4tK2',
       secretHash: 'b'.repeat(64),
       hashAlgorithm: 'sha256',
-      status: CredentialStatus.ACTIVE,
+      status: contextOverrides.appTokenStatus ?? CredentialStatus.ACTIVE,
       scopes: ['gateway:invoke'],
-      expiresAt: null,
+      expiresAt: contextOverrides.appTokenExpiresAt ?? null,
       lastUsedAt: null,
       revokedAt: null,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    prisma.appToken.findFirst.mockResolvedValue(appToken);
+    prisma.appToken.findUnique.mockResolvedValue(appToken);
     prisma.providerConnection.findMany.mockResolvedValue([
       {
         id: providerId,
