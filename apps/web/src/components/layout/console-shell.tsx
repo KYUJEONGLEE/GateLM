@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-type ConsoleSection = "dashboard" | "request-logs";
+type ConsoleSection = "onboarding" | "dashboard" | "request-logs";
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
@@ -14,6 +14,11 @@ const navigationItems: Array<{
   section: ConsoleSection;
   path: (tenantId: string) => string;
 }> = [
+  {
+    label: "Onboarding",
+    section: "onboarding",
+    path: (tenantId) => `/tenants/${tenantId}/onboarding`
+  },
   {
     label: "Dashboard",
     section: "dashboard",
