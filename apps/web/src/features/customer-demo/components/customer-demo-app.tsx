@@ -9,11 +9,15 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  formatDisplayIdentifier,
+  formatTenantDisplayName,
+  sanitizeDisplayValue
+} from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
   type CustomerDemoExchange,
@@ -45,12 +49,8 @@ const customerDemoText: Record<
     };
     detectedNone: string;
     error: string;
-    fixtureMode: string;
     gatewayRequest: string;
-    gatewayRequestCopy: string;
     gatewayResult: string;
-    gatewayResultCopy: string;
-    heroCopy: string;
     language: string;
     payloadPreview: string;
     responsePreview: string;
@@ -58,7 +58,6 @@ const customerDemoText: Record<
       CustomerDemoScenarioId,
       {
         assistantMessage: string;
-        description: string;
         title: string;
       }
     >;
@@ -78,53 +77,42 @@ const customerDemoText: Record<
   en: {
     actions: {
       detail: "Open request detail",
-      loading: "Loading fixture...",
-      replay: "Replay fixture request"
+      loading: "Loading...",
+      replay: "Run again"
     },
     assistantLabel: "Assistant / Gateway outcome",
-    chatPreview: "chat preview",
+    chatPreview: "conversation",
     context: {
       application: "Application",
       project: "Project",
       tenant: "Tenant"
     },
     detectedNone: "none",
-    error: "Unable to load this fixture scenario.",
-    fixtureMode: "Gateway validation mode",
+    error: "Unable to load this request state.",
     gatewayRequest: "Gateway request",
-    gatewayRequestCopy: "Header values are redacted; only prefix/last4 style previews are shown.",
     gatewayResult: "Gateway result",
-    gatewayResultCopy: "Fixture response metadata mirrors the v1 Gateway contract.",
-    heroCopy:
-      "Validate the customer-side Gateway path with controlled governance outcomes before live Gateway integration is enabled.",
-    language: "Demo language",
+    language: "Console language",
     payloadPreview: "Payload preview",
     responsePreview: "Response preview",
     scenarios: {
       blocked: {
-        assistantMessage:
-          "No assistant reply was generated because GateLM blocked the request before provider call.",
-        description: "Credential-like content is blocked before routing, cache, and provider.",
+        assistantMessage: "Request blocked.",
         title: "Blocked"
       },
       "cache-hit": {
-        assistantMessage: "Returned the cached safe answer. Provider call was skipped for this replay.",
-        description: "Same safe request resolves to exact cache hit and provider bypass.",
+        assistantMessage: "Cached answer returned.",
         title: "Cache hit"
       },
       redacted: {
-        assistantMessage:
-          "Generated a support reply after email and phone placeholders replaced sensitive values.",
-        description: "Rule-based safety redacts contact data before provider call.",
+        assistantMessage: "Sensitive values were redacted.",
         title: "Redaction"
       },
       safe: {
-        assistantMessage: "Drafted a concise support reply using the policy-routed mock model.",
-        description: "Allowed request through Gateway governance with exact cache miss.",
+        assistantMessage: "Request completed.",
         title: "Safe request"
       }
     },
-    scenarioSelector: "Scenario selector",
+    scenarioSelector: "Request path",
     summary: {
       application: "Application",
       cache: "Cache",
@@ -132,58 +120,49 @@ const customerDemoText: Record<
       latency: "Latency",
       masking: "Masking"
     },
-    title: "Enterprise Gateway request validation",
+    title: "Gateway request",
     userLabel: "Customer message",
     webConsole: "Web Console"
   },
   ko: {
     actions: {
       detail: "요청 상세 열기",
-      loading: "피스처 로딩 중...",
-      replay: "피스처 요청 다시 실행"
+      loading: "처리 중...",
+      replay: "다시 실행"
     },
     assistantLabel: "Assistant / Gateway 결과",
-    chatPreview: "채팅 미리보기",
+    chatPreview: "대화",
     context: {
       application: "애플리케이션",
       project: "프로젝트",
       tenant: "테넌트"
     },
     detectedNone: "없음",
-    error: "이 피스처 시나리오를 불러오지 못했습니다.",
-    fixtureMode: "Gateway 검증 모드",
+    error: "요청 상태를 불러오지 못했습니다.",
     gatewayRequest: "Gateway 요청",
-    gatewayRequestCopy: "Header 값은 redacted 상태이며 prefix/last4 형식의 preview만 표시합니다.",
     gatewayResult: "Gateway 결과",
-    gatewayResultCopy: "피스처 응답 metadata는 v1 Gateway 계약을 따릅니다.",
-    heroCopy:
-      "실제 Gateway 연동 전, 고객사 요청이 GateLM governance 경로에서 어떻게 판정되는지 통제된 시나리오로 검증합니다.",
-    language: "데모 언어",
+    language: "콘솔 언어",
     payloadPreview: "Payload preview",
     responsePreview: "Response preview",
     scenarios: {
       blocked: {
-        assistantMessage: "GateLM이 Provider 호출 전에 요청을 차단했기 때문에 assistant 응답은 생성되지 않았습니다.",
-        description: "credential처럼 보이는 내용은 routing, cache, provider 전에 차단됩니다.",
+        assistantMessage: "요청이 차단되었습니다.",
         title: "차단"
       },
       "cache-hit": {
-        assistantMessage: "캐시된 safe 응답을 반환했습니다. 이번 replay에서는 Provider 호출을 건너뜁니다.",
-        description: "동일한 safe 요청이 exact cache hit와 provider bypass로 처리됩니다.",
+        assistantMessage: "캐시된 응답을 반환했습니다.",
         title: "캐시 적중"
       },
       redacted: {
-        assistantMessage: "이메일과 전화번호가 placeholder로 대체된 뒤 고객 지원 답변을 생성했습니다.",
-        description: "rule-based safety가 Provider 호출 전 연락처 데이터를 redaction합니다.",
+        assistantMessage: "민감 값이 마스킹되었습니다.",
         title: "Redaction"
       },
       safe: {
-        assistantMessage: "정책 기반 routing을 거친 mock model로 간결한 지원 답변을 작성했습니다.",
-        description: "Gateway governance를 통과한 허용 요청이며 exact cache miss입니다.",
+        assistantMessage: "요청이 완료되었습니다.",
         title: "Safe 요청"
       }
     },
-    scenarioSelector: "시나리오 선택",
+    scenarioSelector: "처리 유형",
     summary: {
       application: "애플리케이션",
       cache: "캐시",
@@ -191,7 +170,7 @@ const customerDemoText: Record<
       latency: "지연 시간",
       masking: "마스킹"
     },
-    title: "엔터프라이즈 Gateway 요청 검증",
+    title: "Gateway 요청",
     userLabel: "고객 메시지",
     webConsole: "웹 콘솔"
   }
@@ -204,6 +183,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const text = customerDemoText[locale];
   const exchangeText = text.scenarios[exchange.scenarioId];
+  const tenantLabel = formatTenantDisplayName(model.tenantId);
 
   async function selectScenario(scenarioId: CustomerDemoScenarioId) {
     if (isLoading) {
@@ -229,9 +209,6 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
           <span>AC</span>
           <strong>Acme Support Desk</strong>
         </Link>
-        <div className="customer-demo-search" aria-label={text.fixtureMode}>
-          <span>{text.fixtureMode}</span>
-        </div>
         <div className="customer-demo-header-meta">
           <LanguageSwitcher ariaLabel={text.language} locale={locale} />
           <Link href={`/tenants/${model.tenantId}/dashboard`}>{text.webConsole}</Link>
@@ -240,14 +217,13 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
 
       <section className="customer-demo-hero">
         <div>
-          <p className="console-kicker">customer demo app</p>
+          <p className="console-kicker">support desk</p>
           <h1>{text.title}</h1>
-          <p>{text.heroCopy}</p>
         </div>
-        <dl className="customer-demo-context" aria-label="Demo application context">
+        <dl className="customer-demo-context" aria-label="Application context">
           <div>
             <dt>{text.context.tenant}</dt>
-            <dd>{model.tenantId}</dd>
+            <dd>{tenantLabel}</dd>
           </div>
           <div>
             <dt>{text.context.project}</dt>
@@ -255,12 +231,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
           </div>
           <div>
             <dt>{text.context.application}</dt>
-            <dd>{model.applicationId}</dd>
+            <dd>{formatDisplayIdentifier(model.applicationId)}</dd>
           </div>
         </dl>
       </section>
 
-      <section className="customer-demo-summary-grid" aria-label="Selected scenario summary">
+      <section className="customer-demo-summary-grid" aria-label="Selected request summary">
         <DemoSummaryCard
           icon="↗"
           label={text.summary.http}
@@ -287,8 +263,8 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         />
       </section>
 
-      <section className="customer-demo-layout" aria-label="Customer demo fixture scenarios">
-        <aside className="customer-demo-scenarios" aria-label="Scenario selector">
+      <section className="customer-demo-layout" aria-label="Gateway request states">
+        <aside className="customer-demo-scenarios" aria-label={text.scenarioSelector}>
           <div className="customer-demo-section-title">
             <h2>{text.scenarioSelector}</h2>
           </div>
@@ -308,7 +284,6 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
               >
                 <Badge variant="secondary">{scenario.httpStatus}</Badge>
                 <strong>{scenarioText.title}</strong>
-                <small>{scenarioText.description}</small>
               </Button>
             );
           })}
@@ -363,7 +338,6 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             <CardHeader className="panel-heading">
               <div>
                 <CardTitle>{text.gatewayRequest}</CardTitle>
-                <CardDescription>{text.gatewayRequestCopy}</CardDescription>
               </div>
               <CardAction>
                 <Badge variant="outline">{exchange.request.method}</Badge>
@@ -384,7 +358,6 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             <CardHeader className="panel-heading">
               <div>
                 <CardTitle>{text.gatewayResult}</CardTitle>
-                <CardDescription>{text.gatewayResultCopy}</CardDescription>
               </div>
               <CardAction>
                 <Badge variant={exchange.status === "success" ? "secondary" : "outline"}>
@@ -395,7 +368,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             <CardContent>
               <dl className="customer-demo-metrics">
                 <Metric label="HTTP" value={String(exchange.httpStatus)} />
-                <Metric label="Request ID" value={exchange.requestId} />
+                <Metric label="Request ID" value={formatDisplayIdentifier(exchange.requestId)} />
                 <Metric label="Cache" value={exchange.cacheStatus} />
                 <Metric label="Masking" value={exchange.maskingAction} />
                 <Metric label="Provider" value={exchange.providerCall} />
@@ -450,7 +423,7 @@ function HeaderList({ headers }: { headers: CustomerDemoHeader[] }) {
       {headers.map((header) => (
         <div key={header.name}>
           <dt>{header.name}</dt>
-          <dd>{header.value}</dd>
+          <dd>{formatDisplayIdentifier(header.value)}</dd>
         </div>
       ))}
     </dl>
@@ -470,7 +443,7 @@ function JsonPreview({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="json-preview">
       <h4>{label}</h4>
-      <pre>{JSON.stringify(value, null, 2)}</pre>
+      <pre>{JSON.stringify(sanitizeDisplayValue(value), null, 2)}</pre>
     </div>
   );
 }

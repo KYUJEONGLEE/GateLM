@@ -8,7 +8,7 @@ const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "GateLM Web Console",
-  description: "GateLM product experience and demo console"
+  description: "GateLM Web Console"
 };
 
 export default async function RootLayout({

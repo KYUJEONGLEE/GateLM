@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   formatDateTime,
   formatInteger,
@@ -19,23 +20,18 @@ const requestLogText: Record<
   Locale,
   {
     emptyPreview: string;
-    heroCopy: string;
     kicker: string;
     title: string;
   }
 > = {
   en: {
     emptyPreview: "No preview stored",
-    heroCopy:
-      "The list is backed by the v1 invocation log fixture. It shows only sanitized previews and request metadata.",
-    kicker: "request log",
+    kicker: "analytics",
     title: "Invocation history"
   },
   ko: {
     emptyPreview: "저장된 preview 없음",
-    heroCopy:
-      "이 목록은 v1 invocation log fixture 기반입니다. 정제된 preview와 요청 metadata만 표시합니다.",
-    kicker: "요청 로그",
+    kicker: "분석",
     title: "호출 이력"
   }
 };
@@ -49,7 +45,6 @@ export function RequestLogTable({ locale, records, tenantId, timezone }: Request
         <div>
           <p className="console-kicker">{text.kicker}</p>
           <h2>{text.title}</h2>
-          <p>{text.heroCopy}</p>
         </div>
       </section>
 
@@ -76,7 +71,7 @@ export function RequestLogTable({ locale, records, tenantId, timezone }: Request
                       className="request-link"
                       href={`/tenants/${tenantId}/request-logs/${record.requestId}`}
                     >
-                      {record.requestId}
+                      {formatDisplayIdentifier(record.requestId)}
                     </Link>
                     <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
                   </td>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ConsoleSection = "dashboard" | "management" | "analytics" | "settings";
@@ -113,20 +114,17 @@ const navigationItems: Array<{
 const shellText: Record<
   Locale,
   {
-    fixtureMode: string;
     language: string;
     planned: string;
     tenant: string;
   }
 > = {
   en: {
-    fixtureMode: "Fixture mode",
     language: "Console language",
     planned: "planned",
     tenant: "tenant"
   },
   ko: {
-    fixtureMode: "피스처 모드",
     language: "콘솔 언어",
     planned: "예정",
     tenant: "테넌트"
@@ -144,6 +142,7 @@ export function ConsoleShell({
   tenantId
 }: ConsoleShellProps) {
   const text = shellText[locale];
+  const tenantLabel = formatTenantDisplayName(tenantId);
   const [openSections, setOpenSections] = useState<ExpandableConsoleSection[]>(() =>
     getActiveOpenSections(activeSection)
   );
@@ -313,11 +312,10 @@ export function ConsoleShell({
         <header className="console-header">
           <div>
             <p className="console-kicker">{text.tenant}</p>
-            <h1>{tenantId}</h1>
+            <h1>{tenantLabel}</h1>
           </div>
           <div className="console-header-actions">
             <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-            <div className="console-context">{text.fixtureMode}</div>
           </div>
         </header>
         {children}

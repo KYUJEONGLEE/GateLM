@@ -5,6 +5,10 @@ import type {
   CredentialListItem
 } from "@/lib/fixtures/v1-admin-fixtures";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
+import {
+  formatDisplayIdentifier,
+  formatTenantDisplayName
+} from "@/lib/formatting/display-identifiers";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -28,7 +32,6 @@ type OnboardingStep = {
     Locale,
     {
       label: string;
-      summary: string;
     }
   >;
 };
@@ -38,12 +41,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "project",
     labels: {
       en: {
-        label: "Project",
-        summary: "Tenant-scoped customer support project"
+        label: "Project"
       },
       ko: {
-        label: "프로젝트",
-        summary: "테넌트 범위 고객 지원 프로젝트"
+        label: "프로젝트"
       }
     }
   },
@@ -51,12 +52,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "application",
     labels: {
       en: {
-        label: "Application",
-        summary: "Customer demo app and rate limit scope"
+        label: "Application"
       },
       ko: {
-        label: "애플리케이션",
-        summary: "고객사 데모 앱과 rate limit 범위"
+        label: "애플리케이션"
       }
     }
   },
@@ -64,12 +63,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "provider",
     labels: {
       en: {
-        label: "Provider",
-        summary: "Mock provider configuration without direct calls"
+        label: "Provider"
       },
       ko: {
-        label: "Provider",
-        summary: "직접 호출 없는 mock provider 설정"
+        label: "Provider"
       }
     }
   },
@@ -77,12 +74,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "api-key",
     labels: {
       en: {
-        label: "API Key",
-        summary: "Gateway API key issue and list states"
+        label: "API Key"
       },
       ko: {
-        label: "API Key",
-        summary: "Gateway API key 발급과 조회 상태"
+        label: "API Key"
       }
     }
   },
@@ -90,12 +85,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "app-token",
     labels: {
       en: {
-        label: "App Token",
-        summary: "Application-bound token issue and list states"
+        label: "App Token"
       },
       ko: {
-        label: "App Token",
-        summary: "Application에 묶인 token 발급과 조회 상태"
+        label: "App Token"
       }
     }
   },
@@ -103,12 +96,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "runtime-config",
     labels: {
       en: {
-        label: "Runtime Config",
-        summary: "Published config consumed by Gateway"
+        label: "Runtime Config"
       },
       ko: {
-        label: "Runtime Config",
-        summary: "Gateway가 소비하는 publish된 설정"
+        label: "Runtime Config"
       }
     }
   }
@@ -117,8 +108,6 @@ const onboardingSteps: OnboardingStep[] = [
 const onboardingText: Record<
   Locale,
   {
-    heroCopy: string;
-    noProviderCall: string;
     next: string;
     previous: string;
     step: string;
@@ -126,22 +115,16 @@ const onboardingText: Record<
   }
 > = {
   en: {
-    heroCopy:
-      "Fixture-backed setup path for Project, Application, Provider, API Key, App Token, and the active Runtime Config consumed by Gateway.",
-    noProviderCall: "No provider call",
     next: "Next",
     previous: "Previous",
     step: "step",
-    title: "Control Plane setup flow"
+    title: "Onboarding"
   },
   ko: {
-    heroCopy:
-      "Project, Application, Provider, API Key, App Token, 그리고 Gateway가 소비하는 active Runtime Config 준비 흐름을 fixture로 확인합니다.",
-    noProviderCall: "Provider 직접 호출 없음",
     next: "다음",
     previous: "이전",
     step: "단계",
-    title: "Control Plane 설정 흐름"
+    title: "온보딩"
   }
 };
 
@@ -157,11 +140,9 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">admin onboarding</p>
+          <p className="console-kicker">management</p>
           <h2>{text.title}</h2>
-          <p>{text.heroCopy}</p>
         </div>
-        <div className="console-context">{text.noProviderCall}</div>
       </section>
 
       <section className="onboarding-layout" aria-label="Admin onboarding flow">
@@ -176,7 +157,6 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
               <strong>{step.labels[locale].label}</strong>
-              <small>{step.labels[locale].summary}</small>
             </Link>
           ))}
         </aside>
@@ -190,9 +170,6 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
                 </p>
                 <h3>{activeStepLabel}</h3>
               </div>
-              <span className="status-badge" data-status="success">
-                fixture
-              </span>
             </div>
 
             {renderStepContent({
@@ -241,10 +218,9 @@ function renderStepContent({
     return (
       <DetailGrid
         rows={[
-          ["Tenant", model.tenantId],
+          ["Tenant", formatTenantDisplayName(model.tenantId)],
           ["Project", model.project.id],
-          ["Status", model.project.status],
-          ["API state", "fixture only"]
+          ["Status", model.project.status]
         ]}
       />
     );
@@ -254,7 +230,7 @@ function renderStepContent({
     return (
       <DetailGrid
         rows={[
-          ["Application", model.application.id],
+          ["Application", formatDisplayIdentifier(model.application.id)],
           ["Status", model.application.status],
           ["Rate limit scope", model.application.rateLimitScope],
           ["Fixed window", `${model.application.rateLimitLimit} / ${model.application.rateLimitWindowSeconds}s`]
@@ -273,8 +249,7 @@ function renderStepContent({
           ["Status", model.provider.status],
           ["Credential preview", nullableText(model.provider.credentialPreview, "none")],
           ["Resolver", model.provider.resolver],
-          ["Models", String(model.provider.modelCount)],
-          ["Provider call", "not executed"]
+          ["Models", String(model.provider.modelCount)]
         ]}
       />
     );
@@ -340,8 +315,6 @@ function CredentialStep({
   listItem: CredentialListItem;
 }) {
   const listTitle = locale === "ko" ? "이후 조회 상태" : "Subsequent list state";
-  const listCopy =
-    locale === "ko" ? "평문과 secret hash는 응답에 포함하지 않습니다." : "Plaintext and secret hash are absent.";
 
   return (
     <div className="credential-flow">
@@ -354,7 +327,6 @@ function CredentialStep({
       <section className="credential-list-state" aria-label={`${credentialName} list state`}>
         <div className="panel-heading">
           <h4>{listTitle}</h4>
-          <p>{listCopy}</p>
         </div>
         <DetailGrid
           rows={[
@@ -376,12 +348,12 @@ function CredentialStep({
 function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
   return (
     <dl className="onboarding-detail-grid">
-      {rows.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{formatDisplayIdentifier(value)}</dd>
+          </div>
+        ))}
     </dl>
   );
 }

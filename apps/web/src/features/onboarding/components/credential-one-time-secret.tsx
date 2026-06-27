@@ -48,7 +48,6 @@ export function CredentialOneTimeSecret({
         <h4>
           {credentialName} {text.plaintext}
         </h4>
-        <p>{issueResponse.warning}</p>
       </div>
       {isStored ? (
         <div className="secret-placeholder">{text.hidden}</div>
