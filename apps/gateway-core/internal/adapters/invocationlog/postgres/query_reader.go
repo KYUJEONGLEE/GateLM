@@ -553,7 +553,7 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 }
 
 func decodeInt64MapJSON(raw []byte) (map[string]int64, error) {
-	if len(raw) == 0 || string(raw) == "null" {
+	if len(raw) == 0 || (len(raw) == 4 && raw[0] == 'n' && raw[1] == 'u' && raw[2] == 'l' && raw[3] == 'l') {
 		return map[string]int64{}, nil
 	}
 	var values map[string]int64
