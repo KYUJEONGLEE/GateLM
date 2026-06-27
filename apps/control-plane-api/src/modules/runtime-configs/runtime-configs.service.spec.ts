@@ -208,6 +208,33 @@ describe('RuntimeConfigsService', () => {
     ).rejects.toThrow('Active Runtime Config document state is invalid.');
   });
 
+  it('serializes canonical JSON with stable key order and Date values', () => {
+    const { service } = createService();
+    const canonicalJson = (
+      service as unknown as {
+        canonicalJson: (value: unknown) => string;
+      }
+    ).canonicalJson.bind(service);
+
+    expect(canonicalJson({ b: 1, a: 2 })).toBe('{"a":2,"b":1}');
+    expect(canonicalJson({ when: now })).toBe(
+      `{"when":${JSON.stringify(now.toISOString())}}`,
+    );
+  });
+
+  it('rejects invalid Date values during canonical JSON serialization', () => {
+    const { service } = createService();
+    const canonicalJson = (
+      service as unknown as {
+        canonicalJson: (value: unknown) => string;
+      }
+    ).canonicalJson.bind(service);
+
+    expect(() => canonicalJson({ when: new Date('invalid') })).toThrow(
+      'Runtime Config contains an invalid Date value.',
+    );
+  });
+
   it('does not overwrite a published config version when upserting a draft', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -271,6 +298,40 @@ describe('RuntimeConfigsService', () => {
         models: [{ provider: 'openai', model: 'gpt-4o-mini' }],
       }),
     ).rejects.toThrow('Runtime Config model provider is not registered.');
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate model entries by provider and model', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        models: [
+          { provider: 'mock', model: 'mock-fast' },
+          { provider: 'mock', model: 'mock-fast' },
+        ],
+      }),
+    ).rejects.toThrow(
+      'Runtime Config model entries must be unique by provider and model.',
+    );
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
+  it('returns a sanitized provider and model in unavailable model errors', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        routingPolicy: {
+          defaultProvider: 'mock',
+          defaultModel: 'missing\n"model"',
+        },
+      }),
+    ).rejects.toThrow(
+      'Runtime Config model is not available for provider "mock" and model "missing _model_".',
+    );
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
   });
 

@@ -457,12 +457,21 @@ export class RuntimeConfigsService {
     );
 
     if (dtoModels?.length) {
+      const modelKeys = new Set<string>();
       for (const model of dtoModels) {
         if (!providerNames.has(model.provider)) {
           throw new ConflictException(
             'Runtime Config model provider is not registered.',
           );
         }
+
+        const modelKey = this.toModelKey(model.provider, model.model);
+        if (modelKeys.has(modelKey)) {
+          throw new ConflictException(
+            'Runtime Config model entries must be unique by provider and model.',
+          );
+        }
+        modelKeys.add(modelKey);
       }
 
       const models = dtoModels.map((model) => ({
@@ -545,7 +554,7 @@ export class RuntimeConfigsService {
     }
 
     throw new ConflictException(
-      'Runtime Config model is not available for provider.',
+      this.toModelUnavailableMessage(provider, requestedModel),
     );
   }
 
@@ -981,6 +990,15 @@ export class RuntimeConfigsService {
     if (value === undefined) {
       return '';
     }
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) {
+        throw new ConflictException(
+          'Runtime Config contains an invalid Date value.',
+        );
+      }
+
+      return JSON.stringify(value.toISOString());
+    }
     if (value === null || typeof value !== 'object') {
       return JSON.stringify(value);
     }
@@ -991,7 +1009,7 @@ export class RuntimeConfigsService {
     const objectValue = value as Record<string, unknown>;
     const entries = Object.entries(objectValue)
       .filter(([, entryValue]) => entryValue !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right));
+      .sort(([left], [right]) => this.compareCanonicalKeys(left, right));
 
     return `{${entries
       .map(
@@ -1007,6 +1025,49 @@ export class RuntimeConfigsService {
 
   private toDate(value: string): Date {
     return new Date(value);
+  }
+
+  private compareCanonicalKeys(left: string, right: string): number {
+    if (left < right) {
+      return -1;
+    }
+    if (left > right) {
+      return 1;
+    }
+
+    return 0;
+  }
+
+  private toModelKey(provider: string, model: string): string {
+    return `${provider}\u0000${model}`;
+  }
+
+  private toModelUnavailableMessage(
+    provider: string,
+    requestedModel: string | undefined,
+  ): string {
+    const providerLabel = this.toDiagnosticValue(provider);
+    if (!requestedModel) {
+      return `Runtime Config model is not available for provider "${providerLabel}".`;
+    }
+
+    return `Runtime Config model is not available for provider "${providerLabel}" and model "${this.toDiagnosticValue(requestedModel)}".`;
+  }
+
+  private toDiagnosticValue(value: string): string {
+    const normalized = value
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/["\\]/g, '_');
+
+    if (normalized.length === 0) {
+      return '<empty>';
+    }
+
+    return normalized.length > 80
+      ? `${normalized.slice(0, 77)}...`
+      : normalized;
   }
 
   private isUniqueConstraintError(
