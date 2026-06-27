@@ -4617,7 +4617,7 @@ Allowed values:
 }
 ```
 
-HTTP status는 기본 `422`를 사용한다. 인증/인가 정책 차단과 결합된 경우 `403`을 사용할 수 있다.
+v1 Gateway hot path에서 HTTP status는 `403`을 사용한다. `422`는 Control Plane policy validation 또는 custom detector validation처럼 요청 설정 자체를 검증하는 문맥에서만 사용한다.
 
 ## 24.3 Analytics masking API 제한
 
