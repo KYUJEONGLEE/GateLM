@@ -568,6 +568,8 @@ metadata
 
 `InvocationLogWriter` serializes terminal outcomes already present in `GatewayContext`. It MUST NOT invent or infer stage outcomes that are missing from `GatewayContext`.
 
+Required Invocation Log fields are required as keys. Values produced by stages that did not run MAY be `null`. Pre-cache terminal outcomes MUST use `cacheStatus=bypass` and `cacheType=none`. The failing or terminal stage MUST set `status`, `httpStatus`, `errorCode`, and `errorStage`.
+
 This mapping MUST NOT store raw prompt, raw response, raw API Key, raw App Token, raw Provider Key, Authorization header, or raw detected sensitive values.
 
 PostgreSQL is the v1 canonical source. Existing `p0_llm_invocation_logs` may be reused only if migration notes document the v1 mapping.
@@ -635,18 +637,27 @@ failedRequests
 blockedRequests
 rateLimitedRequests
 cacheHitRequests
+cacheEligibleRequests
 cacheHitRate
+promptTokens
+completionTokens
 totalTokens
 totalCostMicroUsd
 totalCostUsd
+savedCostMicroUsd
+savedCostUsd
 averageLatencyMs
 p95LatencyMs
 maskingActionCounts
 routingCountByModel
+statusCounts
+costByModel
 dataFreshness
 ```
 
 `blocked` and `rate_limited` are policy outcomes, not product failures.
+
+Fixture files may include `requestIds` for cross-checking Request Log and Dashboard consistency. Production Dashboard Overview API does not need to expose `requestIds` by default.
 
 ## 14. Metrics Contract
 
