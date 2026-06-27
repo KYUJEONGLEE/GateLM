@@ -20,7 +20,7 @@ func (p *Provider) GetActiveConfig(_ context.Context, tenantID string, projectID
 		return runtimeconfig.ActiveConfig{}, runtimeconfig.ErrInactiveConfig
 	}
 
-	config := p.config.Normalize()
+	config := p.config
 	if err := config.ValidateActive(); err != nil {
 		return runtimeconfig.ActiveConfig{}, fmt.Errorf("static active runtime config: %w", err)
 	}

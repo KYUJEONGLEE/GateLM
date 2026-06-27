@@ -28,7 +28,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	}
 	if s == nil || s.provider == nil {
 		gatewayCtx.SetError(500, "internal_error", "Gateway runtime config provider is not initialized.", StageName)
-		setCacheBypass(gatewayCtx)
+		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway runtime config provider is not initialized.", nil)
 	}
 
@@ -40,14 +40,14 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	)
 	if err != nil {
 		gatewayCtx.SetError(500, "internal_error", "Gateway active runtime config load failed.", StageName)
-		setCacheBypass(gatewayCtx)
+		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway active runtime config load failed.", err)
 	}
 
 	config = config.Normalize()
 	if err := config.ValidateActive(); err != nil {
 		gatewayCtx.SetError(500, "internal_error", "Gateway active runtime config is invalid.", StageName)
-		setCacheBypass(gatewayCtx)
+		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway active runtime config is invalid.", err)
 	}
 	gatewayCtx.Runtime = request.RuntimeContext{
@@ -65,12 +65,4 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	gatewayCtx.Masking.SecurityPolicyVersionID = config.SafetyPolicy.SecurityPolicyHash
 	gatewayCtx.Routing.RoutingPolicyHash = config.RoutingPolicy.RoutingPolicyHash
 	return nil
-}
-
-func setCacheBypass(gatewayCtx *request.GatewayContext) {
-	gatewayCtx.Cache.CacheStatus = "bypass"
-	gatewayCtx.Cache.CacheType = "none"
-	gatewayCtx.Cache.CacheKeyHash = ""
-	gatewayCtx.Cache.CacheHitRequestID = ""
-	gatewayCtx.Cache.SavedCostMicroUSD = 0
 }

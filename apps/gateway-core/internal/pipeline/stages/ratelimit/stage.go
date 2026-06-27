@@ -35,7 +35,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	}
 	if s == nil || s.limiter == nil {
 		gatewayCtx.SetError(500, "internal_error", "Gateway rate limiter is not initialized.", StageName)
-		setCacheBypass(gatewayCtx)
+		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway rate limiter is not initialized.", nil)
 	}
 
@@ -68,14 +68,14 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		decision = ratelimit.NormalizeDecision(decision, rateLimitReq)
 		gatewayCtx.Governance.RateLimitDecision = &decision
 		gatewayCtx.SetError(500, "internal_error", "Gateway rate limit check failed.", StageName)
-		setCacheBypass(gatewayCtx)
+		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway rate limit check failed.", err)
 	}
 	if decision.Allowed {
 		return nil
 	}
 
-	setCacheBypass(gatewayCtx)
+	gatewayCtx.BypassCache()
 	switch decision.Reason {
 	case ratelimit.ReasonLimitExceeded:
 		gatewayCtx.Status.Status = "rate_limited"
@@ -88,12 +88,4 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		gatewayCtx.SetError(500, "internal_error", "Gateway rate limit check failed.", StageName)
 		return gatewayerrors.InternalError(StageName, "Gateway rate limit check failed.", nil)
 	}
-}
-
-func setCacheBypass(gatewayCtx *request.GatewayContext) {
-	gatewayCtx.Cache.CacheStatus = "bypass"
-	gatewayCtx.Cache.CacheType = "none"
-	gatewayCtx.Cache.CacheKeyHash = ""
-	gatewayCtx.Cache.CacheHitRequestID = ""
-	gatewayCtx.Cache.SavedCostMicroUSD = 0
 }

@@ -83,6 +83,39 @@ func TestSimpleRouterKeepsExplicitModelPinned(t *testing.T) {
 	})
 }
 
+func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_base",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "short prompt",
+		Config: &SimpleRouterConfig{
+			DefaultProvider:     "runtime-provider",
+			DefaultModel:        "runtime-balanced",
+			LowCostModel:        "runtime-fast",
+			PolicyHash:          "hash_runtime_routing_policy",
+			ShortPromptMaxChars: 20,
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, Decision{
+		RequestedModel:   "auto",
+		SelectedProvider: "runtime-provider",
+		SelectedModel:    "runtime-fast",
+		RoutingReason:    ReasonShortPromptLowCost,
+		PolicyHash:       "hash_runtime_routing_policy",
+	})
+}
+
 func assertDecision(t *testing.T, actual Decision, expected Decision) {
 	t.Helper()
 

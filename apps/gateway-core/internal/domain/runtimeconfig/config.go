@@ -17,10 +17,11 @@ const (
 )
 
 var (
-	ErrMissingScope       = errors.New("runtime config scope is missing")
-	ErrScopeMismatch      = errors.New("runtime config scope mismatch")
-	ErrInactiveConfig     = errors.New("runtime config is not active")
-	ErrMissingRuntimeHash = errors.New("runtime config hash is missing")
+	ErrMissingScope             = errors.New("runtime config scope is missing")
+	ErrScopeMismatch            = errors.New("runtime config scope mismatch")
+	ErrMissingCredentialBinding = errors.New("runtime config credential binding is missing")
+	ErrInactiveConfig           = errors.New("runtime config is not active")
+	ErrMissingRuntimeHash       = errors.New("runtime config hash is missing")
 )
 
 type Provider interface {
@@ -101,6 +102,9 @@ func (c ActiveConfig) ValidateActive() error {
 	c = c.Normalize()
 	if c.TenantID == "" || c.ProjectID == "" || c.ApplicationID == "" {
 		return ErrMissingScope
+	}
+	if c.APIKeyID == "" || c.AppTokenID == "" {
+		return ErrMissingCredentialBinding
 	}
 	if c.ConfigHash == "" || c.SafetyPolicy.SecurityPolicyHash == "" || c.RoutingPolicy.RoutingPolicyHash == "" {
 		return ErrMissingRuntimeHash

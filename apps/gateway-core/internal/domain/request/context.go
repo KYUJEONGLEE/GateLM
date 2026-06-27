@@ -99,3 +99,15 @@ func (c *GatewayContext) SetError(httpStatus int, code string, message string, s
 		ErrorStage:   stage,
 	}
 }
+
+func (c *GatewayContext) BypassCache() {
+	if c == nil {
+		return
+	}
+	c.Cache.CacheStatus = "bypass"
+	c.Cache.CacheType = "none"
+	c.Cache.CacheKeyHash = ""
+	c.Cache.CacheHitRequestID = ""
+	c.Cache.SavedCostMicroUSD = 0
+	c.Cache.Payload = nil
+}
