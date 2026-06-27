@@ -1,0 +1,196 @@
+{
+  "fixtureName": "v1-safety-eval-gateway-output-pass",
+  "fixtureVersion": "2026-06-27.v1",
+  "mode": "gateway_safety_output",
+  "results": [
+    {
+      "caseId": "safe_none_basic",
+      "requestId": "request_safe_none_basic",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "none",
+        "maskingDetectedTypes": [],
+        "maskingDetectedCount": 0,
+        "redactedPromptPreview": "Write a short refund reply for the demo customer.",
+        "promptHash": "hash_safe_none_basic"
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "email_redacts_before_provider",
+      "requestId": "request_email_redacts_before_provider",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "redacted",
+        "maskingDetectedTypes": ["email"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED].",
+        "promptHash": "hash_email_redacts_before_provider"
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "repeated_email_redacts_count",
+      "requestId": "request_repeated_email_redacts_count",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "redacted",
+        "maskingDetectedTypes": ["email"],
+        "maskingDetectedCount": 2,
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED] and cc [EMAIL_REDACTED].",
+        "promptHash": "hash_repeated_email_redacts_count"
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "phone_redacts_before_provider",
+      "requestId": "request_phone_redacts_before_provider",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "redacted",
+        "maskingDetectedTypes": ["phone_number"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Draft a callback note for [PHONE_NUMBER_REDACTED].",
+        "promptHash": "hash_phone_redacts_before_provider"
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "rrn_blocks_before_cache",
+      "requestId": "request_rrn_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": ["resident_registration_number"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Check this national registration number [RESIDENT_REGISTRATION_NUMBER_REDACTED] for the request.",
+        "promptHash": "hash_rrn_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "api_key_blocks_before_cache",
+      "requestId": "request_api_key_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": ["api_key"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Debug this config line: api_key=[API_KEY_REDACTED].",
+        "promptHash": "hash_api_key_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "authorization_header_blocks_before_cache",
+      "requestId": "request_authorization_header_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": ["authorization_header"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Summarize the pasted header [AUTHORIZATION_HEADER_REDACTED].",
+        "promptHash": "hash_authorization_header_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "jwt_blocks_before_cache",
+      "requestId": "request_jwt_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": ["jwt"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Explain whether this token is safe to share: [JWT_REDACTED].",
+        "promptHash": "hash_jwt_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "private_key_blocks_before_cache",
+      "requestId": "request_private_key_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": ["private_key"],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Review this local key material: [SECRET_REDACTED].",
+        "promptHash": "hash_private_key_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    }
+  ]
+}
