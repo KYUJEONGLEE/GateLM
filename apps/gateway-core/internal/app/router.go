@@ -8,6 +8,7 @@ import (
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
@@ -24,6 +25,7 @@ type RouterOptions struct {
 	InvocationLogReader  invocationlog.Reader
 	ExactCacheStore      ports.CacheStore
 	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
+	MetricsRegistry      *metrics.Registry
 	RateLimitPipeline    handlers.GatewayPipeline
 	PreProviderPipeline  handlers.GatewayPipeline
 }
@@ -59,6 +61,12 @@ func WithExactCache(store ports.CacheStore, keyBuilder handlers.ExactCacheKeyBui
 	return func(options *RouterOptions) {
 		options.ExactCacheStore = store
 		options.ExactCacheKeyBuilder = keyBuilder
+	}
+}
+
+func WithMetrics(registry *metrics.Registry) RouterOption {
+	return func(options *RouterOptions) {
+		options.MetricsRegistry = registry
 	}
 }
 
@@ -142,8 +150,13 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	if exactCacheKeyBuilder == nil && cfg.ExactCacheKeySecret != "" {
 		exactCacheKeyBuilder = cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret))
 	}
+	metricsRegistry := routerOptions.MetricsRegistry
+	if metricsRegistry == nil {
+		metricsRegistry = metrics.NewRegistry()
+	}
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
+	mux.Handle("GET /metrics", handlers.MetricsHandler{Registry: metricsRegistry})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
 		Timeout: cfg.ReadinessTimeout,
 		Checks:  readinessChecks,
@@ -181,6 +194,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		AuthFailureLogWriter:    authFailureLogWriter,
 		TerminalLogWriter:       terminalLogWriter,
 		MaskingEngine:           maskdomain.NewP0Engine(),
+		MetricsRegistry:         metricsRegistry,
 		ExactCacheStore:         routerOptions.ExactCacheStore,
 		ExactCacheKeyBuilder:    exactCacheKeyBuilder,
 		ExactCacheTTL:           cfg.ExactCacheTTL,
