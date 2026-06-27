@@ -74,6 +74,7 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 	}
 
 	var requestCount int
+	counted := true
 	if err := l.db.QueryRow(ctx, checkAndIncrementSQL,
 		tenantID,
 		applicationID,
@@ -81,14 +82,29 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 		config.WindowSeconds,
 		config.Limit,
 	).Scan(&requestCount); err != nil {
-		decision.Allowed = false
-		decision.Remaining = 0
-		decision.Reason = ratelimit.ReasonInternalError
-		decision.DurationMS = time.Since(startedAt).Milliseconds()
-		return decision, fmt.Errorf("check postgres rate limit counter: %w", err)
+		if !errors.Is(err, pgx.ErrNoRows) {
+			decision.Allowed = false
+			decision.Remaining = 0
+			decision.Reason = ratelimit.ReasonInternalError
+			decision.DurationMS = time.Since(startedAt).Milliseconds()
+			return decision, fmt.Errorf("check postgres rate limit counter: %w", err)
+		}
+
+		counted = false
+		if err := l.db.QueryRow(ctx, currentCounterSQL,
+			tenantID,
+			applicationID,
+			windowStart,
+		).Scan(&requestCount); err != nil {
+			decision.Allowed = false
+			decision.Remaining = 0
+			decision.Reason = ratelimit.ReasonInternalError
+			decision.DurationMS = time.Since(startedAt).Milliseconds()
+			return decision, fmt.Errorf("read capped postgres rate limit counter: %w", err)
+		}
 	}
 
-	decision.Allowed = requestCount <= config.Limit
+	decision.Allowed = counted && requestCount <= config.Limit
 	decision.Remaining = max(config.Limit-requestCount, 0)
 	if decision.Allowed {
 		decision.RetryAfterSeconds = 0
@@ -165,4 +181,12 @@ do update set
   window_seconds = excluded.window_seconds,
   limit_value = excluded.limit_value,
   updated_at = now()
+where gateway_rate_limit_counters.request_count < excluded.limit_value
 returning request_count`
+
+const currentCounterSQL = `
+select request_count
+from gateway_rate_limit_counters
+where tenant_id = $1::uuid
+  and application_id = $2::uuid
+  and window_start = $3::timestamptz`
