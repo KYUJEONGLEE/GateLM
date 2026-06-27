@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 
@@ -102,37 +103,95 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 
 	var totalRequests int64
 	var successfulRequests int64
+	var failedRequests int64
 	var blockedRequests int64
+	var rateLimitedRequests int64
 	var cacheHitRequests int64
+	var cacheEligibleRequests int64
+	var promptTokens int64
+	var completionTokens int64
 	var totalTokens int64
 	var totalCostMicroUSD int64
-	var averageResponseTimeMs sql.NullFloat64
+	var savedCostMicroUSD int64
+	var averageLatencyMs sql.NullFloat64
+	var p95LatencyMs sql.NullFloat64
+	var statusCountsJSON []byte
+	var maskingActionCountsJSON []byte
+	var routingCountByModelJSON []byte
+	var costByModelJSON []byte
+	var lastLogCreatedAt sql.NullTime
 	if err := r.db.QueryRow(ctx, query, args...).Scan(
 		&totalRequests,
 		&successfulRequests,
+		&failedRequests,
 		&blockedRequests,
+		&rateLimitedRequests,
 		&cacheHitRequests,
+		&cacheEligibleRequests,
+		&promptTokens,
+		&completionTokens,
 		&totalTokens,
 		&totalCostMicroUSD,
-		&averageResponseTimeMs,
+		&savedCostMicroUSD,
+		&averageLatencyMs,
+		&p95LatencyMs,
+		&statusCountsJSON,
+		&maskingActionCountsJSON,
+		&routingCountByModelJSON,
+		&costByModelJSON,
+		&lastLogCreatedAt,
 	); err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
 
-	var averageLatency *float64
-	if averageResponseTimeMs.Valid {
-		averageLatency = &averageResponseTimeMs.Float64
+	statusCounts, err := decodeInt64MapJSON(statusCountsJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	maskingActionCounts, err := decodeInt64MapJSON(maskingActionCountsJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	routingCountByModel, err := decodeRoutingCountByModelJSON(routingCountByModelJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	costByModel, err := decodeCostByModelJSON(costByModelJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
 	}
 
-	return invocationlog.BuildDashboardOverviewFromAggregate(
-		totalRequests,
-		successfulRequests,
-		blockedRequests,
-		cacheHitRequests,
-		totalTokens,
-		totalCostMicroUSD,
-		averageLatency,
-	), nil
+	var averageLatencyPointer *float64
+	if averageLatencyMs.Valid {
+		averageLatencyPointer = &averageLatencyMs.Float64
+	}
+	var p95LatencyPointer *float64
+	if p95LatencyMs.Valid {
+		p95LatencyPointer = &p95LatencyMs.Float64
+	}
+
+	return invocationlog.BuildDashboardOverviewFromAggregate(invocationlog.DashboardOverviewAggregate{
+		TotalRequests:         totalRequests,
+		SuccessfulRequests:    successfulRequests,
+		FailedRequests:        failedRequests,
+		BlockedRequests:       blockedRequests,
+		RateLimitedRequests:   rateLimitedRequests,
+		CacheHitRequests:      cacheHitRequests,
+		CacheEligibleRequests: cacheEligibleRequests,
+		PromptTokens:          promptTokens,
+		CompletionTokens:      completionTokens,
+		TotalTokens:           totalTokens,
+		TotalCostMicroUSD:     totalCostMicroUSD,
+		SavedCostMicroUSD:     savedCostMicroUSD,
+		AverageLatencyMs:      averageLatencyPointer,
+		P95LatencyMs:          p95LatencyPointer,
+		MaskingActionCounts:   maskingActionCounts,
+		RoutingCountByModel:   routingCountByModel,
+		StatusCounts:          statusCounts,
+		CostByModel:           costByModel,
+		LastLogCreatedAt:      nullableTimePointer(lastLogCreatedAt),
+		GeneratedAt:           time.Now().UTC(),
+	}), nil
 }
 
 func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
@@ -206,16 +265,99 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 	}
 
 	query := fmt.Sprintf(`
+with filtered as (
+  select
+    request_id,
+    status,
+    prompt_tokens,
+    completion_tokens,
+    total_tokens,
+    cost_micro_usd,
+    saved_cost_micro_usd,
+    latency_ms,
+    cache_status,
+    cache_type,
+    masking_action,
+    provider,
+    model,
+    selected_provider,
+    selected_model,
+    routing_reason,
+    created_at
+  from p0_llm_invocation_logs
+  where %s
+)
 select
   count(*)::bigint as total_requests,
   count(*) filter (where status in ('success', 'cache_hit'))::bigint as successful_requests,
+  count(*) filter (where status = 'error')::bigint as failed_requests,
   count(*) filter (where status = 'blocked')::bigint as blocked_requests,
-  count(*) filter (where status = 'cache_hit' or cache_status = 'hit')::bigint as cache_hit_requests,
+  count(*) filter (where status = 'rate_limited')::bigint as rate_limited_requests,
+  count(*) filter (where coalesce(nullif(cache_status, ''), 'bypass') = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
+  count(*) filter (where coalesce(nullif(cache_status, ''), 'bypass') <> 'bypass')::bigint as cache_eligible_requests,
+  coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+  coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
   coalesce(sum(cost_micro_usd), 0)::bigint as total_cost_micro_usd,
-  avg(latency_ms)::float8 as average_response_time_ms
-from p0_llm_invocation_logs
-where %s`, strings.Join(where, " and "))
+  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd,
+  (avg(latency_ms) filter (where status in ('success', 'cache_hit', 'error')))::float8 as average_latency_ms,
+  (percentile_disc(0.95) within group (order by latency_ms) filter (where status in ('success', 'cache_hit', 'error')))::float8 as p95_latency_ms,
+  coalesce((
+    select jsonb_object_agg(status_key, request_count)
+    from (
+      select coalesce(nullif(status, ''), 'unknown') as status_key, count(*)::bigint as request_count
+      from filtered
+      group by 1
+    ) status_rollup
+  ), '{}'::jsonb) as status_counts,
+  coalesce((
+    select jsonb_object_agg(masking_action_key, request_count)
+    from (
+      select coalesce(nullif(masking_action, ''), 'none') as masking_action_key, count(*)::bigint as request_count
+      from filtered
+      group by 1
+    ) masking_rollup
+  ), '{}'::jsonb) as masking_action_counts,
+  coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'selectedProvider', selected_provider_key,
+      'selectedModel', selected_model_key,
+      'routingReason', routing_reason_key,
+      'requestCount', request_count
+    ) order by request_count desc, selected_provider_key, selected_model_key, routing_reason_key)
+    from (
+      select
+        coalesce(nullif(selected_provider, ''), nullif(provider, '')) as selected_provider_key,
+        coalesce(nullif(selected_model, ''), nullif(model, '')) as selected_model_key,
+        coalesce(nullif(routing_reason, ''), '') as routing_reason_key,
+        count(*)::bigint as request_count
+      from filtered
+      group by 1, 2, 3
+    ) routing_rollup
+    where selected_provider_key is not null and selected_model_key is not null
+  ), '[]'::jsonb) as routing_count_by_model,
+  coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'selectedProvider', selected_provider_key,
+      'selectedModel', selected_model_key,
+      'requestCount', request_count,
+      'totalTokens', total_tokens,
+      'costMicroUsd', cost_micro_usd
+    ) order by cost_micro_usd desc, selected_provider_key, selected_model_key)
+    from (
+      select
+        coalesce(nullif(selected_provider, ''), nullif(provider, '')) as selected_provider_key,
+        coalesce(nullif(selected_model, ''), nullif(model, '')) as selected_model_key,
+        count(*)::bigint as request_count,
+        coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+        coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
+      from filtered
+      group by 1, 2
+    ) cost_rollup
+    where selected_provider_key is not null and selected_model_key is not null
+  ), '[]'::jsonb) as cost_by_model,
+  max(created_at) as last_log_created_at
+from filtered`, strings.Join(where, " and "))
 
 	return query, args
 }
@@ -389,6 +531,13 @@ func nullableInt64Pointer(value sql.NullInt64) *int64 {
 	return &value.Int64
 }
 
+func nullableTimePointer(value sql.NullTime) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	return &value.Time
+}
+
 func decodeStringArrayJSON(raw []byte) ([]string, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return []string{}, nil
@@ -399,6 +548,48 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 	}
 	if values == nil {
 		return []string{}, nil
+	}
+	return values, nil
+}
+
+func decodeInt64MapJSON(raw []byte) (map[string]int64, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return map[string]int64{}, nil
+	}
+	var values map[string]int64
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, err
+	}
+	if values == nil {
+		return map[string]int64{}, nil
+	}
+	return values, nil
+}
+
+func decodeRoutingCountByModelJSON(raw []byte) ([]invocationlog.RoutingCountByModel, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []invocationlog.RoutingCountByModel{}, nil
+	}
+	var values []invocationlog.RoutingCountByModel
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, err
+	}
+	if values == nil {
+		return []invocationlog.RoutingCountByModel{}, nil
+	}
+	return values, nil
+}
+
+func decodeCostByModelJSON(raw []byte) ([]invocationlog.CostByModel, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []invocationlog.CostByModel{}, nil
+	}
+	var values []invocationlog.CostByModel
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, err
+	}
+	if values == nil {
+		return []invocationlog.CostByModel{}, nil
 	}
 	return values, nil
 }

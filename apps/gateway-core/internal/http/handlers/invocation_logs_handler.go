@@ -70,9 +70,10 @@ type dashboardOverviewResponse struct {
 }
 
 type dashboardOverviewDataResponse struct {
-	Range  dashboardRangeResponse  `json:"range"`
-	Filter dashboardFilterResponse `json:"filters"`
-	Totals dashboardTotalsResponse `json:"totals"`
+	Range         dashboardRangeResponse         `json:"range"`
+	Filter        dashboardFilterResponse        `json:"filters"`
+	Totals        dashboardTotalsResponse        `json:"totals"`
+	DataFreshness dashboardDataFreshnessResponse `json:"dataFreshness"`
 }
 
 type dashboardRangeResponse struct {
@@ -86,15 +87,51 @@ type dashboardFilterResponse struct {
 }
 
 type dashboardTotalsResponse struct {
-	TotalRequests         int64    `json:"totalRequests"`
-	SuccessfulRequests    int64    `json:"successfulRequests"`
-	BlockedRequests       int64    `json:"blockedRequests"`
-	CacheHitRequests      int64    `json:"cacheHitRequests"`
-	CacheHitRate          *float64 `json:"cacheHitRate"`
-	TotalTokens           int64    `json:"totalTokens"`
-	TotalCostMicroUSD     int64    `json:"totalCostMicroUsd"`
-	TotalCostUSD          string   `json:"totalCostUsd"`
-	AverageResponseTimeMs *float64 `json:"averageResponseTimeMs"`
+	TotalRequests         int64                         `json:"totalRequests"`
+	SuccessfulRequests    int64                         `json:"successfulRequests"`
+	FailedRequests        int64                         `json:"failedRequests"`
+	BlockedRequests       int64                         `json:"blockedRequests"`
+	RateLimitedRequests   int64                         `json:"rateLimitedRequests"`
+	CacheHitRequests      int64                         `json:"cacheHitRequests"`
+	CacheEligibleRequests int64                         `json:"cacheEligibleRequests"`
+	CacheHitRate          *float64                      `json:"cacheHitRate"`
+	PromptTokens          int64                         `json:"promptTokens"`
+	CompletionTokens      int64                         `json:"completionTokens"`
+	TotalTokens           int64                         `json:"totalTokens"`
+	TotalCostMicroUSD     int64                         `json:"totalCostMicroUsd"`
+	TotalCostUSD          string                        `json:"totalCostUsd"`
+	SavedCostMicroUSD     int64                         `json:"savedCostMicroUsd"`
+	SavedCostUSD          string                        `json:"savedCostUsd"`
+	AverageLatencyMs      *float64                      `json:"averageLatencyMs"`
+	P95LatencyMs          *float64                      `json:"p95LatencyMs"`
+	AverageResponseTimeMs *float64                      `json:"averageResponseTimeMs"`
+	MaskingActionCounts   map[string]int64              `json:"maskingActionCounts"`
+	RoutingCountByModel   []routingCountByModelResponse `json:"routingCountByModel"`
+	StatusCounts          map[string]int64              `json:"statusCounts"`
+	CostByModel           []costByModelResponse         `json:"costByModel"`
+}
+
+type dashboardDataFreshnessResponse struct {
+	Source           string     `json:"source"`
+	RecordCount      int64      `json:"recordCount"`
+	LastLogCreatedAt *time.Time `json:"lastLogCreatedAt"`
+	GeneratedAt      time.Time  `json:"generatedAt"`
+}
+
+type routingCountByModelResponse struct {
+	SelectedProvider string `json:"selectedProvider"`
+	SelectedModel    string `json:"selectedModel"`
+	RoutingReason    string `json:"routingReason"`
+	RequestCount     int64  `json:"requestCount"`
+}
+
+type costByModelResponse struct {
+	SelectedProvider string `json:"selectedProvider"`
+	SelectedModel    string `json:"selectedModel"`
+	RequestCount     int64  `json:"requestCount"`
+	TotalTokens      int64  `json:"totalTokens"`
+	CostMicroUSD     int64  `json:"costMicroUsd"`
+	CostUSD          string `json:"costUsd"`
 }
 
 type requestDetailDataResponse struct {
@@ -333,13 +370,32 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 		Totals: dashboardTotalsResponse{
 			TotalRequests:         overview.TotalRequests,
 			SuccessfulRequests:    overview.SuccessfulRequests,
+			FailedRequests:        overview.FailedRequests,
 			BlockedRequests:       overview.BlockedRequests,
+			RateLimitedRequests:   overview.RateLimitedRequests,
 			CacheHitRequests:      overview.CacheHitRequests,
+			CacheEligibleRequests: overview.CacheEligibleRequests,
 			CacheHitRate:          overview.CacheHitRate,
+			PromptTokens:          overview.PromptTokens,
+			CompletionTokens:      overview.CompletionTokens,
 			TotalTokens:           overview.TotalTokens,
 			TotalCostMicroUSD:     overview.TotalCostMicroUSD,
 			TotalCostUSD:          overview.TotalCostUSD,
+			SavedCostMicroUSD:     overview.SavedCostMicroUSD,
+			SavedCostUSD:          overview.SavedCostUSD,
+			AverageLatencyMs:      overview.AverageLatencyMs,
+			P95LatencyMs:          overview.P95LatencyMs,
 			AverageResponseTimeMs: overview.AverageResponseTimeMs,
+			MaskingActionCounts:   copyInt64Map(overview.MaskingActionCounts),
+			RoutingCountByModel:   routingCountByModelResponses(overview.RoutingCountByModel),
+			StatusCounts:          copyInt64Map(overview.StatusCounts),
+			CostByModel:           costByModelResponses(overview.CostByModel),
+		},
+		DataFreshness: dashboardDataFreshnessResponse{
+			Source:           overview.DataFreshness.Source,
+			RecordCount:      overview.DataFreshness.RecordCount,
+			LastLogCreatedAt: overview.DataFreshness.LastLogCreatedAt,
+			GeneratedAt:      overview.DataFreshness.GeneratedAt,
 		},
 	}
 }
@@ -426,6 +482,45 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 		})
 	}
 	return responses
+}
+
+func routingCountByModelResponses(items []invocationlog.RoutingCountByModel) []routingCountByModelResponse {
+	responses := make([]routingCountByModelResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, routingCountByModelResponse{
+			SelectedProvider: item.SelectedProvider,
+			SelectedModel:    item.SelectedModel,
+			RoutingReason:    item.RoutingReason,
+			RequestCount:     item.RequestCount,
+		})
+	}
+	return responses
+}
+
+func costByModelResponses(items []invocationlog.CostByModel) []costByModelResponse {
+	responses := make([]costByModelResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, costByModelResponse{
+			SelectedProvider: item.SelectedProvider,
+			SelectedModel:    item.SelectedModel,
+			RequestCount:     item.RequestCount,
+			TotalTokens:      item.TotalTokens,
+			CostMicroUSD:     item.CostMicroUSD,
+			CostUSD:          item.CostUSD,
+		})
+	}
+	return responses
+}
+
+func copyInt64Map(values map[string]int64) map[string]int64 {
+	if values == nil {
+		return map[string]int64{}
+	}
+	copied := make(map[string]int64, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
 }
 
 func stringPointerOrNil(value string) *string {
