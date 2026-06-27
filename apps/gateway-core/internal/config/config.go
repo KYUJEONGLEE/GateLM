@@ -30,6 +30,9 @@ type Config struct {
 	MaxRequestBodyBytes int64
 	ExactCacheTTL       time.Duration
 	ExactCacheKeySecret string
+	RateLimitEnabled    bool
+	RateLimitWindowSecs int
+	RateLimitLimit      int
 }
 
 func Load() Config {
@@ -56,6 +59,9 @@ func Load() Config {
 		MaxRequestBodyBytes: envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),
 		ExactCacheTTL:       envDurationSeconds("GATEWAY_EXACT_CACHE_TTL_SECONDS", 600),
 		ExactCacheKeySecret: envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only"),
+		RateLimitEnabled:    envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
+		RateLimitWindowSecs: envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
+		RateLimitLimit:      envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
 	}
 }
 
@@ -117,6 +123,20 @@ func envInt(key string, fallback int) int {
 
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed < 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
 		return fallback
 	}
 
