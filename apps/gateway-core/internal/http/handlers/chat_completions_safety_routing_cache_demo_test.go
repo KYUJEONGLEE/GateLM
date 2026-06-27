@@ -184,6 +184,37 @@ func TestChatCompletionsHandlerBypassesExactCacheWhenRuntimeCachePolicyDisabled(
 	}
 }
 
+func TestExactCachePolicyAllowsLookupHandlesNilAndLegacyContext(t *testing.T) {
+	if exactCachePolicyAllowsLookup(nil) {
+		t.Fatal("nil request context must not allow exact cache lookup")
+	}
+
+	legacyReqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_legacy_cache_policy",
+		TraceID:   "request_legacy_cache_policy",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	if !exactCachePolicyAllowsLookup(legacyReqCtx) {
+		t.Fatal("missing runtime cache policy must preserve legacy exact cache behavior")
+	}
+
+	disabledReqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_disabled_cache_policy",
+		TraceID:   "request_disabled_cache_policy",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	disabledReqCtx.HasRuntimeCachePolicy = true
+	disabledReqCtx.RuntimeCachePolicy = runtimeconfig.CachePolicy{
+		Enabled: false,
+		Type:    runtimeconfig.CacheTypeExact,
+	}
+	if exactCachePolicyAllowsLookup(disabledReqCtx) {
+		t.Fatal("disabled runtime exact cache policy must not allow lookup")
+	}
+}
+
 type phase3DemoHarness struct {
 	handler          *ChatCompletionsHandler
 	providerCalls    *int

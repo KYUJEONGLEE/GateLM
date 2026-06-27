@@ -331,7 +331,10 @@ func gatewayExactCachePolicyAllowsLookup(gatewayCtx *request.GatewayContext) boo
 }
 
 func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
-	if reqCtx == nil || !reqCtx.HasRuntimeCachePolicy {
+	if reqCtx == nil {
+		return false
+	}
+	if !reqCtx.HasRuntimeCachePolicy {
 		return true
 	}
 	return cachePolicyAllowsExact(reqCtx.RuntimeCachePolicy)
