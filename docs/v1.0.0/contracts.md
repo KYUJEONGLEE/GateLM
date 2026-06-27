@@ -307,7 +307,7 @@ Execution rules:
 - Credential Lifecycle v1 source of truth is this section plus `docs/v1.0.0/fixtures/credential-lifecycle.fixture.json` and `docs/v1.0.0/schemas/credential-lifecycle.schema.json`.
 - Raw API Key and raw App Token values must never be stored, logged, emitted in list/detail responses, metrics, cache entries, GatewayContext, or Invocation Logs.
 - Issue and rotate responses are the only places where plaintext credentials may be returned, and only once with `plaintextShownOnce=true`.
-- `secretHash` means `sha256(trim_utf8(plaintext))`. `secretHash` is the logical API/contract field; physical DB columns may be named `key_hash`, `token_hash`, or `secretHash` depending on the service.
+- `secretHash` means `sha256(trim_utf8(plaintext))`, where `trim_utf8` means: decode plaintext as UTF-8, remove leading and trailing Unicode `White_Space` characters only, preserve internal whitespace, then hash the UTF-8 bytes of the trimmed result. `secretHash` is the logical API/contract field; physical DB columns may be named `key_hash`, `token_hash`, or `secretHash` depending on the service.
 - Credential issue binding is resolved from route parameters plus DB lookup, never from untrusted request body context fields. API Keys bind from `projectId`; App Tokens bind from `applicationId`.
 - Credential rotation is allowed only when `status=active && (expiresAt=null || expiresAt>now)`. Revoked, disabled, expired, or already-expired active credentials fail with `409 conflict`.
 - Credential revoke is a final disposal command and may target active, disabled, expired, or already revoked credentials. If the target is already revoked, Control Plane must not update DB state and must return the existing `revokedAt`.
