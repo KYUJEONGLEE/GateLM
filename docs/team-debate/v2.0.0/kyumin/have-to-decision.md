@@ -17,6 +17,7 @@
 | 8 | Dashboard polling/realtime 범위 | v2.0.0은 polling 우선, realtime은 v2.x 후보 | Web, Observability, Gateway | P1 | 미결정 |
 | 9 | Dashboard aggregate grain | 모든 조합을 열지 않고 Overview/Cost/Safety/Cache/Routing 우선 grain 제한 | Web, Observability, Gateway | P0 | 추천안 있음 |
 | 10 | Request outcome taxonomy | terminal status 유지 + domain별 outcome group 분리 | Gateway, Web, Observability, Safety | P0 | 추천안 있음 |
+| 11 | 권한별 safety detail 노출 | Employee는 최소 안내, Admin만 redacted detail과 policy summary | Web, Gateway, Safety, Observability | P0 | 추천안 있음 |
 
 ## 1. v2 Web Console 정보 구조
 
@@ -300,3 +301,32 @@ v1 terminal status와 error code를 유지한다.
 ### 영향을 받는 역할
 
 이지섭, 이규정, 김규민, 이윤지
+
+## 11. 권한별 safety detail 노출
+
+### 왜 결정해야 하나?
+
+직원 Chat UI와 Admin Request Detail은 같은 safety 결과를 보더라도 노출 목적이 다르다.
+Employee에게 detector detail이나 redacted preview를 과하게 보여주면 우회 힌트가 될 수 있고, Admin에게 너무 적게 보여주면 운영 분석이 어렵다.
+
+### 선택지
+
+| 선택지 | 설명 | 장점 | 단점 |
+| -- | -- | -- | -- |
+| A | 모든 사용자에게 최소 안내만 표시 | 가장 안전함 | Admin 분석력이 약함 |
+| B | Employee에게도 detector detail 표시 | 사용자 교육 가능 | 우회 힌트와 노출 리스크 |
+| C | Employee는 최소 안내, Admin은 redacted detail/policy summary 표시 | 안전성과 운영 분석 균형 | 권한별 UI/read model 필요 |
+
+### 추천안
+
+C안을 추천한다.
+Employee Chat은 짧은 안내와 재작성 유도만 제공하고, Admin Request Detail에서만 redacted preview, detector type summary, policy/snapshot 연결 정보를 제공한다.
+
+### 결정 전까지 안전한 기본값
+
+Employee UI에는 raw value, redacted preview, sample hash, credential prefix/suffix를 노출하지 않는다.
+Admin UI도 raw prompt/raw response/secret 원문은 표시하지 않는다.
+
+### 영향을 받는 역할
+
+김규민, 이윤지, 이지섭, 이규정

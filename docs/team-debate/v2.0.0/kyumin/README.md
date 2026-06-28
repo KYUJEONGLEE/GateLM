@@ -220,3 +220,46 @@ streamingOutcome
 
 내가 제안한 `Dashboard / Management / Analytics / Demo / Settings` 정보 구조가 받아들여진다면, 각 화면에서 필요한 aggregate grain과 drilldown key를 Observability와 함께 표로 고정해야 한다.
 이 결정이 늦어지면 프론트는 임시 fixture 중심으로 흐르고, Observability는 너무 넓은 API를 만들 가능성이 있다.
+
+## 2026-06-29 추가 의견: 이윤지 Safety 의견 반영
+
+윤지님 의견의 핵심인 "v2 safety 목표는 detector 확장이 아니라 판단 가능성과 재현 가능한 evidence"라는 방향에 동의한다.
+프론트도 더 많은 보안 세부 정보를 보여주는 쪽이 아니라, 권한별로 필요한 만큼만 설명하는 쪽으로 가야 한다.
+
+### 1. Employee UI와 Admin UI의 safety 노출은 분리해야 한다
+
+직원 Chat UI는 사용자가 직접 block/redaction을 경험하는 화면이다.
+여기서 detector detail을 과하게 보여주면 우회 힌트가 될 수 있다.
+
+프론트 기준 표시 범위는 아래처럼 나누는 것이 안전하다.
+
+| 화면/권한 | 표시할 수 있는 정보 | 표시하지 않을 정보 |
+| -- | -- | -- |
+| Employee Chat | 짧은 block/redaction 안내, 재작성 유도 | raw value, redacted preview, detector detail, hash |
+| Developer Demo | scenario 결과, masking action summary | raw value, credential/header 원문 |
+| Admin Request Detail | redacted preview, detector type summary, policy/snapshot 연결 | raw prompt, raw response, 실제 sensitive value |
+| Dashboard | redacted/blocked aggregate | sample 원문, high-cardinality label |
+
+이 기준이면 제품은 친절하게 보이면서도 GateLM의 보안 메시지를 깨지 않는다.
+
+### 2. RemoteSafetyEngine은 UI에서도 shadow/evidence로 표현해야 한다
+
+v2.0.0 전까지 RemoteSafetyEngine이 Gateway hot path 필수 dependency가 되면 안 된다는 윤지님 의견에 동의한다.
+Web Console에서도 RemoteSafetyEngine 결과를 보여주더라도 "enforced decision"처럼 보이게 만들면 안 된다.
+
+따라서 UI label은 아래처럼 구분해야 한다.
+
+```text
+Enforced by Gateway policy
+Shadow evaluation
+Evidence only
+```
+
+이 구분이 없으면 관리자는 어떤 판단이 실제 요청을 막았고, 어떤 판단은 실험 결과인지 혼동할 수 있다.
+
+### 3. Streaming safety는 request-side pre-provider 기준부터 보여줘야 한다
+
+Streaming thin slice에서 response-side safety까지 욕심내면 UX와 로그 상태가 동시에 복잡해진다.
+프론트는 v1.x/v2.0.0 초기에 "Provider 호출 전 request-side safety가 적용됐다"는 증거를 먼저 보여주는 것이 좋다.
+
+Response-side scan은 evidence path로 두고, 사용자 응답을 실시간으로 바꾸는 기능처럼 표현하지 않는다.
