@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import traceback
 from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Request
@@ -86,9 +88,12 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     )
 
 
-async def unhandled_error_handler(_request: Request, _exc: Exception) -> JSONResponse:
+async def unhandled_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     logger.error(
-        "Remote safety service failed with sanitized internal error.",
+        "Remote safety service failed with sanitized internal error. "
+        "exception_class=%s traceback_locations=%s",
+        type(exc).__name__,
+        _sanitized_traceback_locations(exc),
         extra={"error_code": ERROR_REMOTE_SAFETY_UNAVAILABLE},
     )
     return JSONResponse(
@@ -100,6 +105,20 @@ async def unhandled_error_handler(_request: Request, _exc: Exception) -> JSONRes
             retryable=True,
             fields=[],
         ),
+    )
+
+
+def _sanitized_traceback_locations(exc: Exception) -> str:
+    if exc.__traceback__ is None:
+        return "none"
+
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return "none"
+
+    return ", ".join(
+        f"{Path(frame.filename).name}:{frame.lineno} in {frame.name}"
+        for frame in frames
     )
 
 
