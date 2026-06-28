@@ -2,8 +2,8 @@ import "server-only";
 
 import { existsSync } from "node:fs";
 
-const DEFAULT_RATE_LIMIT_MAX_ATTEMPTS = 6;
-const HARD_RATE_LIMIT_MAX_ATTEMPTS = 10;
+const DEFAULT_RATE_LIMIT_MAX_ATTEMPTS = 60;
+const HARD_RATE_LIMIT_MAX_ATTEMPTS = 60;
 
 export type LiveGatewayConfig = {
   apiKey: string;
