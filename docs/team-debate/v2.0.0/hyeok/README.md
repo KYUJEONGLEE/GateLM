@@ -74,3 +74,21 @@ Control Plane 관점에서 보완하고 싶은 점은 v2.0.0의 핵심 장면이
 ## 9. 팀 결정 항목
 
 팀 결정이 필요한 항목은 `have-to-decision.md`에 분리합니다.
+
+## 10. 2차 반영 - 관측성 의견 소비
+
+규정님이 추가한 runtime publish/reload 관측성 의견에 동의합니다. Control Plane은 정책을 publish하는 것에서 끝나지 않고, Gateway와 Web/Observability가 "어떤 정책 상태로 요청이 처리됐는지" 설명할 수 있는 최소 evidence를 생산해야 합니다.
+
+### Control Plane이 남겨야 하는 evidence 후보
+
+- publish 성공/실패의 sanitized summary
+- invalid publish가 Gateway runtime에 반영되지 않았다는 근거
+- last known safe 상태가 유지됐다는 근거
+- request detail에서 연결 가능한 runtime provenance 후보
+- provider/fallback, safety, cache, budget 판단이 같은 snapshot 후보를 참조한다는 근거
+
+### 계약 확정 전 안전한 기본값
+
+- event name, metric label, DB field는 여기서 확정하지 않습니다.
+- raw prompt/response, provider key, authorization header, 실제 secret은 evidence에 포함하지 않습니다.
+- v1.x에서는 static snapshot 또는 thin live publish로 먼저 증명하고, v2.0.0에서 publish/reload lifecycle을 공식 계약 후보로 올립니다.
