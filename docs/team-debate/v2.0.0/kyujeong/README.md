@@ -318,3 +318,21 @@ Safety corpus report
 ```
 
 이 연결이 있어야 "왜 막혔는지"뿐 아니라 "이 block count를 믿어도 되는지"까지 설명할 수 있다.
+
+## 2026-06-29 3차 반영 - 화면별 freshness expectation
+
+규민님이 제안한 화면별 freshness expectation에 동의한다.
+Observability 관점에서도 모든 화면을 같은 주기로 갱신하면 query 비용과 데모 안정성 모두 나빠질 수 있다.
+
+v2.0.0에서는 화면별 freshness를 아래처럼 다르게 보는 편이 좋다.
+
+| 화면 | Observability 관점의 기본값 |
+| -- | -- |
+| Demo traffic monitor | demo mode에서 짧은 polling, 일반 운영 화면과 분리 |
+| Dashboard Overview | 수십 초 단위 polling 또는 manual refresh |
+| Cost / Usage | 정확성과 비용 기준이 중요하므로 manual refresh 우선 |
+| Request Log | demo mode polling, 일반 모드 manual refresh 또는 낮은 빈도 polling |
+| Request Detail | 요청 단위 조회 중심, 자동 polling은 streaming/in-progress 상태에만 제한 |
+
+이 기준은 Web UX만의 문제가 아니라 Dashboard query profile과 직접 연결된다.
+따라서 v2 read model을 정할 때 `screen -> aggregate grain -> required filters -> freshness expectation -> query budget`까지 한 줄로 묶어 관리하는 것을 제안한다.
