@@ -19,7 +19,7 @@ Release 후보 기준:
 
 | Evidence | Status | Source |
 |---|---|---|
-| Gateway local stack smoke | Ready | `scripts/dev/v1-local-stack-smoke.sh`, PowerShell wrapper |
+| Gateway local stack smoke | Ready | `scripts/dev/v1-local-stack-smoke.sh`, `scripts/dev/v1-local-stack-smoke.ps1` |
 | k6 release evidence | Ready | `docs/v1.0.0/checks/k6-baseline-report.md` |
 | Safety rule quality | Ready for demo baseline | `docs/v1.0.0/checks/rule-quality-report.md` |
 | Demo scenario | Defined | `docs/v1.0.0/demo-scenario.md` |
