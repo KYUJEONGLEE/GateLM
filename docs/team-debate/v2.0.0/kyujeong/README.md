@@ -388,3 +388,65 @@ Observability에서도 이 둘을 같은 cache hit처럼 집계하면 안 된다
 - request detail evidence checklist.
 - 성능 측정 시나리오와 query profile 결과.
 - 발표에서 보여줄 병목 개선 전후 지표.
+
+## 2026-06-29 5차 반영 - 재혁님/지섭님 문서에 대한 추가 의견
+
+재혁님과 지섭님 문서가 들어오면서 v2.0.0의 중심축이 더 명확해졌다.
+Observability 관점에서는 `RuntimeSnapshot publish/reload`, `redacted evidence`, `provider/fallback`, `streaming thin slice`를 한 요청의 설명 가능한 결과로 연결하는 것이 중요하다.
+
+### 1. publish/reload 실패도 관측 가능한 운영 이벤트여야 한다
+
+재혁님이 제안한 "invalid publish 차단 + last known safe 유지" 방향에 동의한다.
+다만 이 동작은 Control Plane 내부 상태로만 남으면 데모와 운영 설명력이 약하다.
+
+관측성 관점의 evidence는 아래 질문에 답해야 한다.
+
+| 질문 | 필요한 evidence |
+| -- | -- |
+| 정책 publish가 성공했나? | sanitized publish result summary |
+| 실패했다면 Gateway에는 무엇이 적용됐나? | last known safe 유지 여부 |
+| 어떤 요청이 어떤 정책 상태로 처리됐나? | request detail의 runtime provenance |
+| 잘못된 정책 때문에 요청이 위험하게 흘렀나? | invalid publish가 runtime에 미반영됐다는 증거 |
+
+단, 이 문서에서는 event name, DB field, metric label을 확정하지 않는다.
+
+### 2. Gateway redacted summary는 Web과 Observability의 공통 소비 단위여야 한다
+
+지섭님이 말한 redacted evidence 생산 방향에 동의한다.
+Gateway는 raw detail을 넘기지 않고도 다음 결과를 설명할 수 있어야 한다.
+
+```text
+request terminal outcome
+routing/cache/safety/provider/budget summary
+latency/cost/token summary
+runtime provenance
+redacted preview 또는 synthetic evidence
+```
+
+이 단위가 맞아야 Web은 Detail과 Dashboard를 만들고, Observability는 aggregate와 query profile을 안정적으로 잡을 수 있다.
+
+### 3. Provider 1종 + Mock fallback은 관측성 데모에도 필요하다
+
+Mock only는 안정적이지만 v2 제품성이 약하고, multi-provider는 범위가 커진다.
+따라서 지섭님 제안처럼 실제 Provider 1종과 Mock fallback을 병행하는 방향이 관측성에도 가장 좋다.
+
+이렇게 하면 발표에서 아래를 보여줄 수 있다.
+
+- 실제 Provider path의 latency/cost/token evidence
+- Provider error 또는 timeout의 terminal outcome
+- Mock fallback이 살아 있다는 안정성 evidence
+- fallback 전후의 dashboard aggregate 변화
+
+### 4. Streaming thin slice는 final status와 lifecycle evidence를 분리해야 한다
+
+v1.x thin slice에서는 streaming의 모든 lifecycle을 완성하기보다, 최소한 `최종 결과가 무엇인지`와 `측정 가능한 지점이 어디인지`를 분리해야 한다.
+
+Observability는 streaming을 아래처럼 다루는 것이 안전하다.
+
+```text
+v1.x: final terminal state 중심
+v2.0.0: first token latency, completion/abort/timeout 후보를 evidence로 확장
+v2.x: provider별 streaming normalization 검토
+```
+
+이렇게 해야 streaming UX를 보여주면서도 log/detail/dashboard 계약이 과도하게 커지지 않는다.
