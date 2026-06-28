@@ -53,7 +53,8 @@ docker compose up -d postgres redis mock-provider
 다른 PowerShell에서 Gateway 실행:
 
 ```powershell
-cd <repo-root>\apps\gateway-core
+$repoRoot = "C:\path\to\GateLM"
+cd "$repoRoot\apps\gateway-core"
 $env:GATEWAY_PORT="8080"
 go run ./cmd/gateway
 ```
@@ -61,7 +62,8 @@ go run ./cmd/gateway
 v1.0.0 baseline 실행:
 
 ```powershell
-cd <repo-root>
+$repoRoot = "C:\path\to\GateLM"
+cd $repoRoot
 .\scripts\dev\v1-k6-baseline.ps1 -GatewayBaseUrl http://localhost:8080
 ```
 
