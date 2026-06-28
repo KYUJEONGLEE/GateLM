@@ -276,3 +276,18 @@ Streaming thin slice에서 response-side safety까지 욕심내면 UX와 로그 
 프론트는 v1.x/v2.0.0 초기에 "Provider 호출 전 request-side safety가 적용됐다"는 증거를 먼저 보여주는 것이 좋다.
 
 Response-side scan은 evidence path로 두고, 사용자 응답을 실시간으로 바꾸는 기능처럼 표현하지 않는다.
+
+### 4. Semantic Cache는 UI에서도 evidence track으로 구분해야 한다
+
+윤지님과 이규정님이 모두 Semantic Cache를 v2 core가 아니라 evidence track으로 보자는 점에 동의한다.
+프론트도 Semantic Cache 후보를 Exact Cache와 같은 안정된 절감 기능처럼 표현하면 안 된다.
+
+표시가 필요하다면 아래처럼 구분해야 한다.
+
+| cache 구분 | UI 표현 |
+| -- | -- |
+| Exact Cache | v1/v2 main path의 검증된 cache result |
+| Semantic Cache Candidate | evidence/lab result |
+| Semantic Cache Bypassed | policy gate, similarity, safety reason으로 미사용 |
+
+특히 raw prompt embedding이나 raw prompt 기반 cache key를 암시하는 화면은 만들지 않는다.

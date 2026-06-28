@@ -18,6 +18,7 @@
 | 9 | Dashboard aggregate grain | 모든 조합을 열지 않고 Overview/Cost/Safety/Cache/Routing 우선 grain 제한 | Web, Observability, Gateway | P0 | 추천안 있음 |
 | 10 | Request outcome taxonomy | terminal status 유지 + domain별 outcome group 분리 | Gateway, Web, Observability, Safety | P0 | 추천안 있음 |
 | 11 | 권한별 safety detail 노출 | Employee는 최소 안내, Admin만 redacted detail과 policy summary | Web, Gateway, Safety, Observability | P0 | 추천안 있음 |
+| 12 | Semantic Cache UI 표현 범위 | v2 core가 아니라 evidence track으로 표시 | Web, Gateway, Safety, Observability | P1 | 추천안 있음 |
 
 ## 1. v2 Web Console 정보 구조
 
@@ -330,3 +331,32 @@ Admin UI도 raw prompt/raw response/secret 원문은 표시하지 않는다.
 ### 영향을 받는 역할
 
 김규민, 이윤지, 이지섭, 이규정
+
+## 12. Semantic Cache UI 표현 범위
+
+### 왜 결정해야 하나?
+
+Semantic Cache는 비용 절감 메시지가 강하지만 false hit, policy mismatch, raw prompt/embedding material 리스크가 있다.
+UI가 이를 Exact Cache와 같은 안정된 main path 기능처럼 보여주면 제품 신뢰도가 깨질 수 있다.
+
+### 선택지
+
+| 선택지 | 설명 | 장점 | 단점 |
+| -- | -- | -- | -- |
+| A | v2 main Dashboard에 cache 기능으로 노출 | 데모 임팩트 큼 | 안전/품질 근거 전에는 위험 |
+| B | evidence/lab track으로만 표시 | 실험과 제품 기능을 구분 | 데모 임팩트는 낮음 |
+| C | v2에서는 UI 미노출 | 가장 안전 | v2 cache 고도화 논의가 약해짐 |
+
+### 추천안
+
+B안을 추천한다.
+Web에서는 `Exact Cache`와 `Semantic Cache Candidate`를 명확히 구분하고, Semantic Cache는 policy gate와 safety evidence가 붙은 실험 결과로만 표현한다.
+
+### 결정 전까지 안전한 기본값
+
+v2 core 화면에는 Exact Cache saving을 중심으로 표시한다.
+Semantic Cache 후보는 raw prompt/raw response/실제 개인정보/실제 secret 없이 synthetic evidence로만 다룬다.
+
+### 영향을 받는 역할
+
+김규민, 이지섭, 이윤지, 이규정
