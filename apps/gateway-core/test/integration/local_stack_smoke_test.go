@@ -29,7 +29,7 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 
 	cfg := loadLocalStackSmokeConfig()
 	client := &http.Client{Timeout: 10 * time.Second}
-	runStart := time.Now().UTC().Add(-2 * time.Minute)
+	runStart := time.Now().UTC().Add(-24 * time.Hour)
 
 	ids := map[string]string{
 		"safeMiss":    "request_local_stack_" + cfg.runID + "_safe_miss_001",
@@ -217,7 +217,7 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	}))
 	t.Logf("\n[의미]\nRate Limit 초과 요청은 Provider 비용이 발생하기 전에 429 rate_limited terminal outcome으로 끝난다.")
 
-	runEnd := time.Now().UTC().Add(10 * time.Minute)
+	runEnd := time.Now().UTC().Add(24 * time.Hour)
 	logs := getProjectLogs(t, client, cfg, runStart, runEnd)
 	requireLogStatuses(t, logs.Data, map[string]int{
 		"success":      2,
@@ -313,7 +313,7 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 			"forbiddenLabels": "absent",
 		},
 	}))
-	t.Logf("\n[의미]\n실제 Gateway 서버가 만든 terminal outcome이 PostgreSQL Request Log/Detail/Dashboard와 Prometheus-compatible /metrics까지 이어진다. 이 smoke는 v0.1.0 후보 baseline을 Docker local stack에서 반복 재현할 수 있다는 증거다.")
+	t.Logf("\n[의미]\n실제 Gateway 서버가 만든 terminal outcome이 PostgreSQL Request Log/Detail/Dashboard와 Prometheus-compatible /metrics까지 이어진다. 이 smoke는 v1.0.0 release candidate baseline을 Docker local stack에서 반복 재현할 수 있다는 증거다.")
 }
 
 type localStackSmokeConfig struct {

@@ -124,8 +124,12 @@ if curl -fsS "${GATEWAY_BASE_URL}/healthz" >/dev/null 2>&1; then
 fi
 
 mkdir -p "${LOG_DIR}"
+GATEWAY_BIN="${LOG_DIR}/gateway-${RUN_ID}"
 (
   cd "${REPO_ROOT}/apps/gateway-core"
+  go build -o "${GATEWAY_BIN}" ./cmd/gateway
+)
+(
   env \
     GATEWAY_PORT="${GATEWAY_PORT}" \
     DATABASE_URL="${DATABASE_URL}" \
@@ -146,7 +150,7 @@ mkdir -p "${LOG_DIR}"
     GATELM_DEMO_TENANT_ID="${DEMO_TENANT_ID}" \
     GATELM_DEMO_PROJECT_ID="${DEMO_PROJECT_ID}" \
     GATELM_DEMO_APPLICATION_ID="${DEMO_APPLICATION_ID}" \
-    go run ./cmd/gateway
+    "${GATEWAY_BIN}"
 ) >"${GATEWAY_LOG}" 2>&1 &
 GATEWAY_PID=$!
 
