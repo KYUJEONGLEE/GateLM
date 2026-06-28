@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $gatewayDir = Join-Path $repoRoot "apps\gateway-core"
 $env:GOCACHE = Join-Path $repoRoot ".tmp\gocache"
 $env:GOMODCACHE = Join-Path $repoRoot ".tmp\gomodcache"
@@ -21,12 +21,16 @@ Write-Host "GOCACHE=$env:GOCACHE"
 Write-Host "GOMODCACHE=$env:GOMODCACHE"
 Write-Host ""
 
+$exitCode = 0
+
 Push-Location $gatewayDir
 try {
   go test ./internal/app -run TestGatewayV1ReadinessSmoke -v
-  if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
-  }
+  $exitCode = $LASTEXITCODE
 } finally {
   Pop-Location
+}
+
+if ($exitCode -ne 0) {
+  exit $exitCode
 }
