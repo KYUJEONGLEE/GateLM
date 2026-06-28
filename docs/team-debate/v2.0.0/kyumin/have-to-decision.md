@@ -360,3 +360,22 @@ Semantic Cache 후보는 raw prompt/raw response/실제 개인정보/실제 secr
 ### 영향을 받는 역할
 
 김규민, 이지섭, 이윤지, 이규정
+---
+
+## Codex 추가 결정 후보 - 2026-06-29
+
+> 아래 항목은 Product/Web Console 관점의 추가 결정 후보입니다. 실제 필드명이나 API 계약이 아니라 회의용 라벨입니다.
+
+| No | 결정할 것 | 추천안 | 영향 범위 | 우선순위 | 상태 |
+| -- | -- | -- | -- | -- | -- |
+| P-1 | 직원 Chat UI의 Application boundary | v2.0.0은 Application preset 기반, 완전 자유 입력은 데모 후보로 제한 | Web, Gateway, Safety | P0 | 결정 필요 |
+| P-2 | 운영자 화면의 main path | 정책 수정/배포/롤백, 예산 제한, 라우팅/장애 evidence를 한 흐름으로 구성 | Web, Control Plane | P0 | 결정 필요 |
+| P-3 | raw prompt/response 노출 | 기본 미노출, redacted preview와 synthetic evidence 사용 | Web, Safety, 발표 | P0 | 결정 필요 |
+| P-4 | 청중 참여형 데모 입력 | preset + 제한된 자유 입력 중 선택 | Web, 발표, Safety | P1 | 결정 필요 |
+| P-5 | Streaming UI 범위 | 실제 provider 연결이 안정화된 뒤 얇은 UX로 제한 | Web, Gateway | P1 | 보류 |
+
+### 결정 전까지 안전한 기본값
+
+- Web Console은 "운영자가 바꾸고 검증하는 화면"을 중심으로 잡는다.
+- 직원 Chat UI는 v2 evidence 보조 화면으로 두고, 조직/Application 경계가 흔들리면 범위를 줄인다.
+- 원문 노출 없이도 발표 가능한 dashboard, request detail, policy rollout evidence를 우선한다.

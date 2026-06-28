@@ -79,45 +79,47 @@ Tenant
 ```
 
 즉 UI는 `Team`을 보여줄 수 있어도, GatewayContext의 canonical identity로 고정된다고 가정하면 안 된다.
-Dashboard와 Log API는 `scopeType`, `scopeId`, `scopeDisplayName` 정도의 presentation-safe 필드를 주는 편이 좋다.
+Dashboard와 Log 화면에는 scope 종류, scope 식별자, 표시 이름에 해당하는 presentation-safe 정보가 필요해 보인다.
+다만 구체 필드명은 이 문서에서 확정하지 않는다.
 
 ### 3. RuntimeSnapshot은 UI에서 설명 가능한 단위여야 한다
 
 RuntimeSnapshot이 v2의 핵심이라면 Web Console은 단순히 "현재 설정"을 보여주는 데서 끝나면 안 된다.
 요청 결과와 연결되는 snapshot metadata가 필요하다.
 
-프론트가 소비하고 싶은 최소 필드는 아래와 같다.
+프론트가 소비하고 싶은 정보 라벨 후보는 아래와 같다.
+아래 이름은 UI 토론용 후보이며, 공식 필드명으로 확정하지 않는다.
 
-| 필드 | 이유 |
+| 정보 라벨 후보 | 이유 |
 | -- | -- |
-| `runtimeSnapshotId` | 요청 detail과 설정 화면을 연결 |
-| `runtimeSnapshotVersion` | 정책 변경 전후 비교 |
-| `publishedAt` | 데모에서 변경 반영 시점 설명 |
-| `publishedBy` | audit UX |
-| `configHash` | Gateway 응답/로그와 무결성 연결 |
-| `routingPolicyHash` | routing 결과 설명 |
-| `safetyPolicyHash` | redaction/block 결과 설명 |
-| `rateLimitPolicyHash` | rate limit 결과 설명 |
+| snapshot 식별자 | 요청 detail과 설정 화면을 연결 |
+| snapshot version | 정책 변경 전후 비교 |
+| publish 시점 | 데모에서 변경 반영 시점 설명 |
+| publish 주체 | audit UX |
+| config 계열 hash | Gateway 응답/로그와 무결성 연결 |
+| routing policy 계열 hash | routing 결과 설명 |
+| safety policy 계열 hash | redaction/block 결과 설명 |
+| rate limit policy 계열 hash | rate limit 결과 설명 |
 
 단, Web Console은 hash를 계산하지 않고 표시만 해야 한다.
 
 ### 4. Streaming thin slice는 UX 계약을 따로 잡아야 한다
 
 Streaming은 v2 제품 체감에 중요하므로 방향에는 동의한다.
-하지만 streaming을 붙이면 Request Log와 Detail에서 "응답 중", "완료", "중단", "provider timeout", "client aborted" 같은 상태가 생긴다.
+하지만 streaming을 붙이면 Request Log와 Detail에서 응답 중, 완료, 중단, provider timeout, client aborted 같은 상태 표현이 필요해질 수 있다.
 
 따라서 API만 streaming으로 열기보다 UI에 필요한 상태 계약을 같이 잡아야 한다.
 
-필요한 최소 상태:
+필요해 보이는 상태 라벨 후보:
 
-| 상태 | UI 의미 |
+| 상태 라벨 후보 | UI 의미 |
 | -- | -- |
-| `started` | Gateway가 요청을 받음 |
-| `first_token` | Provider 응답이 시작됨 |
-| `completed` | 정상 완료 |
-| `client_aborted` | 사용자가 중단 |
-| `provider_timeout` | Provider 지연/실패 |
-| `policy_blocked` | Provider 호출 전 차단 |
+| started 계열 | Gateway가 요청을 받음 |
+| first-token 계열 | Provider 응답이 시작됨 |
+| completed 계열 | 정상 완료 |
+| client-aborted 계열 | 사용자가 중단 |
+| provider-timeout 계열 | Provider 지연/실패 |
+| policy-blocked 계열 | Provider 호출 전 차단 |
 
 v1.x thin slice에서는 Request Log에 최종 상태만 보여줘도 되지만, v2 계약에는 streaming lifecycle을 확장할 자리를 남겨야 한다.
 

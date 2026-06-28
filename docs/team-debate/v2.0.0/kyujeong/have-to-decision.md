@@ -211,3 +211,21 @@ v2 core는 exact cache policy와 cache saving evidence를 강화하고, semantic
 ### 영향을 받는 역할
 
 Gateway, Safety, Observability, Web.
+---
+
+## Codex 추가 결정 후보 - 2026-06-29
+
+> 아래 항목은 관측성 관점의 추가 결정 후보입니다. 이름과 필드는 공식 계약이 아니라 회의용 라벨입니다.
+
+| No | 결정할 것 | 추천안 | 영향 범위 | 우선순위 | 상태 |
+| -- | -- | -- | -- | -- | -- |
+| O-1 | request detail에 원문을 저장하지 않고도 설명 가능한가 | raw 저장 없이 redacted preview/hash/aggregate 중심 | Gateway, Safety, Web, 발표 | P0 | 결정 필요 |
+| O-2 | dashboard aggregate의 최소 slice | 조직, Application, 정책 버전, provider outcome 후보를 회의에서 확정 | Web, Gateway, DB | P0 | 결정 필요 |
+| O-3 | 성능 개선의 증거 기준 | k6 p95/p99와 DB query profile을 v2 evidence로 사용 | Observability, Backend | P0 | 결정 필요 |
+| O-4 | partition/TimescaleDB 검토 시점 | v2.0.0 필수 제외, 측정 후 병목이면 후속 후보 | DB, Infra, 발표 | P1 | 보류 |
+
+### 결정 전까지 안전한 기본값
+
+- 원문 저장 없이 request outcome, 비용/토큰, latency, 정책 provenance 후보, error/failover outcome만 관측한다.
+- 새 데이터 플랫폼 도입 전에는 현재 PostgreSQL 기반 측정과 인덱스/쿼리 개선을 우선한다.
+- 발표 evidence는 "무엇을 측정했고 무엇이 병목이었는지"를 설명하는 자료로 구성한다.

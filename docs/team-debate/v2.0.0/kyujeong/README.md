@@ -352,3 +352,39 @@ Observability에서도 이 둘을 같은 cache hit처럼 집계하면 안 된다
 
 따라서 v2.0.0 Dashboard의 기본 cache saving은 Exact Cache 중심으로 두고, Semantic Cache는 별도 evidence panel이나 lab report에서 다루는 것이 좋다.
 특히 semantic cache 후보를 일반 cache hit rate에 섞으면 비용 절감 수치가 과장될 수 있으므로, 집계 기준을 반드시 분리해야 한다.
+---
+
+## Codex 추가 의견 - 2026-06-29
+
+> 아래 내용은 현재 Codex가 병렬 토론 초안으로 보탠 의견입니다. 기존 원격 의견을 대체하지 않으며, API/DB/Event/Metrics 필드를 확정하지 않는 working draft입니다.
+
+### 지섭 제안에 대한 보충
+
+- v2.0.0을 "조직 기반 LLMOps Gateway MVP"로 보는 방향에 동의한다.
+- Observability의 v2 기준은 차트 수가 아니라 운영자가 정책 변경, 예산 차단, provider failover, cache 효과를 request trace와 aggregate로 설명할 수 있는지여야 한다.
+- PostgreSQL partition, TimescaleDB, ClickHouse, Redpanda 같은 선택지는 병목 측정 이후의 후보로 두고, v2.0.0 main path에서는 현재 저장소와 쿼리로 evidence를 먼저 만든다.
+
+### 내 역할의 v2.0.0 main path
+
+- Dashboard aggregate가 조직/Application/정책 버전 단위로 어떤 운영 결과를 만들었는지 보여주는 read model을 정리한다.
+- Request detail에서 budget, safety, routing, cache, provider outcome을 한 흐름으로 추적할 수 있는 evidence를 만든다.
+- k6 scenario와 DB query profile을 분리해 p95/p99, slow query, log write 병목을 기록한다.
+
+### 병렬 shadow/evidence 작업
+
+- 다른 역할의 계약 확정 전에도 synthetic traffic, mock provider error, cache hit/miss, budget near-limit 시나리오를 만들어 관측성 fixture를 쌓을 수 있다.
+- TimescaleDB/partition/outbox는 바로 도입하지 말고 query profile 결과와 함께 후속 검토 항목으로 정리한다.
+
+### 소비해야 하는 계약 후보
+
+- Gateway가 생산하는 request terminal outcome 후보.
+- Control Plane의 runtime snapshot/provenance 후보.
+- Safety의 allow/redact/block/monitor 판단 요약 후보.
+- Web Console이 필요로 하는 dashboard slice 후보.
+
+### 생산해야 하는 계약 후보
+
+- 운영 대시보드 집계 의미 초안.
+- request detail evidence checklist.
+- 성능 측정 시나리오와 query profile 결과.
+- 발표에서 보여줄 병목 개선 전후 지표.
