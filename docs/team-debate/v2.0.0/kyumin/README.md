@@ -221,6 +221,19 @@ streamingOutcome
 내가 제안한 `Dashboard / Management / Analytics / Demo / Settings` 정보 구조가 받아들여진다면, 각 화면에서 필요한 aggregate grain과 drilldown key를 Observability와 함께 표로 고정해야 한다.
 이 결정이 늦어지면 프론트는 임시 fixture 중심으로 흐르고, Observability는 너무 넓은 API를 만들 가능성이 있다.
 
+이규정님이 추가로 제안한 `screen -> aggregate grain -> required filters -> freshness expectation` 표에 동의한다.
+프론트 관점에서도 freshness expectation이 없으면 어떤 화면은 polling이 필요하고 어떤 화면은 수동 refresh로 충분한지 판단할 수 없다.
+
+초기 기준은 아래처럼 두는 것이 좋다.
+
+| 화면 | freshness expectation |
+| -- | -- |
+| Demo traffic monitor | demo mode에서 짧은 polling |
+| Dashboard Overview | 수십 초 단위 polling 또는 manual refresh |
+| Cost / Usage | manual refresh 우선 |
+| Request Log | demo mode polling, 일반 모드 manual refresh |
+| Request Detail | 요청 단위 조회, 자동 polling 불필요 |
+
 ## 2026-06-29 추가 의견: 이윤지 Safety 의견 반영
 
 윤지님 의견의 핵심인 "v2 safety 목표는 detector 확장이 아니라 판단 가능성과 재현 가능한 evidence"라는 방향에 동의한다.
