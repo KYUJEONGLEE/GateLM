@@ -110,6 +110,8 @@ RemoteSafetyEngine      # optional, disabled by default
 
 Python/FastAPI RemoteSafetyEngine must not be required for v1 smoke.
 
+RemoteSafetyEngine shadow/evaluation semantics, ctx/input fields, FastAPI endpoint shape, and sanitized error handling are defined in `docs/v1.0.0/remote-safety-engine-contract.md`.
+
 ### 4.4 ProviderAdapter
 
 Producer: 이지섭  
@@ -513,6 +515,7 @@ RemoteSafetyEngine:
 - may run in shadow/evaluation mode.
 - must not decide v1 production blocking unless contract is changed.
 - failure must not break v1 smoke.
+- detailed shadow/evaluation and FastAPI endpoint contract lives in `docs/v1.0.0/remote-safety-engine-contract.md`.
 
 ## 11. Routing and Cache Contract
 

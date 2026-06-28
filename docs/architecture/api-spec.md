@@ -475,7 +475,15 @@ allow, block, warn, mask, route, fallback
 | GET | `/v1/models` | Gateway API Key | 사용 가능한 모델 목록. OpenAI-compatible |
 | POST | `/v1/chat/completions` | Gateway API Key + App Token | Chat Completions. P0는 non-stream, SSE streaming은 P1 |
 
-## 3.13 Health
+## 3.13 Internal AI Service / Remote Safety
+
+| Method | Endpoint | 인증 | 설명 |
+|---|---|---:|---|
+| POST | `/internal/v1/safety/evaluate` | Internal service call | Optional RemoteSafetyEngine shadow/evaluation endpoint. Not required for v1 smoke and not authoritative for Gateway production blocking. |
+
+Request/response schema, versioning, fallback behavior, and sanitized error handling are defined in `docs/v1.0.0/remote-safety-engine-contract.md`.
+
+## 3.14 Health
 
 | Method | Endpoint | 인증 | 설명 |
 |---|---|---:|---|
