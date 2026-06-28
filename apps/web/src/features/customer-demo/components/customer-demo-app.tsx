@@ -53,8 +53,14 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
       return;
     }
 
+    const firstScenarioId = model.scenarios[0]?.scenarioId;
+
+    if (!firstScenarioId) {
+      return;
+    }
+
     initialGatewayRequestSent.current = true;
-    void selectScenario(model.scenarios[0].scenarioId);
+    void selectScenario(firstScenarioId);
   }, [model.integrationMode, model.scenarios, selectScenario]);
 
   return (
