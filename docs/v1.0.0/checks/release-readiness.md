@@ -19,13 +19,13 @@ Release 후보 기준:
 
 | Evidence | Status | Source |
 |---|---|---|
-| Gateway local stack smoke | Ready | `scripts/dev/v1-local-stack-smoke.sh`, `scripts/dev/v1-local-stack-smoke.ps1` |
-| k6 release evidence | Ready | `docs/v1.0.0/checks/k6-baseline-report.md` |
-| Safety rule quality | Ready for demo baseline | `docs/v1.0.0/checks/rule-quality-report.md` |
+| Gateway local stack smoke | Ready as release evidence | `scripts/dev/v1-local-stack-smoke.sh`, `scripts/dev/v1-local-stack-smoke.ps1` |
+| k6 release evidence | Ready as release evidence | `docs/v1.0.0/checks/k6-baseline-report.md` |
+| Safety rule quality | Ready as demo-baseline evidence | `docs/v1.0.0/checks/rule-quality-report.md` |
 | Demo scenario | Defined | `docs/v1.0.0/demo-scenario.md` |
 | RemoteSafetyEngine contract | Defined as optional | `docs/v1.0.0/remote-safety-engine-contract.md` |
 
-각 owner가 자신의 demo path가 이 문서들과 맞는지 확인하면 `v1.0.0-rc.1` 태그를 만들 수 있다.
+각 owner가 자신의 demo path가 이 문서들과 맞고, 최신 `dev` 기준 release evidence를 받아들일 수 있음을 확인하면 `v1.0.0-rc.1` 태그를 만들 수 있다.
 
 ## 3. Must Share With Other Roles
 
@@ -45,7 +45,7 @@ Release 후보 기준:
 |---|---|
 | 김규민 | Demo App은 Gateway만 호출하고, Log/Detail/Dashboard는 raw prompt, raw response, credential을 보여주지 않는다. |
 | 재혁님 | Project/Application/Provider/API Key/App Token/Runtime Config demo 상태가 v1 fixture/contract와 맞는다. |
-| 이지섭 | `dev` 기준 Gateway local stack smoke가 통과하고, release fix가 API/DB/Event/Metrics 계약을 늘리지 않는다. |
+| 이지섭 | `dev` 기준 Gateway local stack smoke evidence가 유효하고, release fix가 API/DB/Event/Metrics 계약을 늘리지 않는다. |
 | 이윤지 | Safety Lab 결과를 demo-baseline evidence로 설명하며, production-grade DLP coverage로 주장하지 않는다. |
 | 이규정 | k6 결과를 release evidence로 설명하고, Dashboard/metrics 해석이 PostgreSQL logs와 `/metrics`에 맞는다. |
 
