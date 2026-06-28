@@ -20,6 +20,7 @@
 | 11 | 권한별 safety detail 노출 | Employee는 최소 안내, Admin만 redacted detail과 policy summary | Web, Gateway, Safety, Observability | P0 | 추천안 있음 |
 | 12 | Semantic Cache UI 표현 범위 | v2 core가 아니라 evidence track으로 표시 | Web, Gateway, Safety, Observability | P1 | 추천안 있음 |
 | 13 | policy publish/reload 실패 UX | invalid publish 차단과 last known safe 상태를 UI에 명확히 표시 | Web, Control Plane, Gateway, Observability | P0 | 추천안 있음 |
+| 14 | Provider/Mock fallback UI 구분 | 실제 Provider path와 Mock fallback path를 Request Detail/Dashboard에서 구분 | Web, Gateway, Observability, Control Plane | P1 | 추천안 있음 |
 
 ## 1. v2 Web Console 정보 구조
 
@@ -390,6 +391,35 @@ live publish 상태가 불명확하면 Web은 "적용됨"처럼 표시하지 않
 ### 영향을 받는 역할
 
 김규민, 재혁님, 이지섭, 이규정
+
+## 14. Provider/Mock fallback UI 구분
+
+### 왜 결정해야 하나?
+
+v2.0.0에서 실제 Provider 1종과 Mock fallback을 같이 가져가면 제품성과 발표 안정성을 동시에 얻을 수 있다.
+하지만 UI가 둘을 구분하지 않으면 실제 Provider path의 evidence와 fallback 안정성 evidence가 섞인다.
+
+### 선택지
+
+| 선택지 | 설명 | 장점 | 단점 |
+| -- | -- | -- | -- |
+| A | 성공/실패만 표시 | 단순함 | 실제 Provider와 fallback 차이가 사라짐 |
+| B | Request Detail에서만 provider/fallback 구분 | 구현 부담 적음 | Dashboard 메시지는 약함 |
+| C | Request Detail과 Dashboard aggregate에서 모두 구분 | 제품 설명력 높음 | Gateway/Observability read model 필요 |
+
+### 추천안
+
+C안을 추천한다.
+Dashboard는 provider path와 fallback path를 aggregate로 보여주고, Request Detail은 실제 Provider, Mock fallback, timeout/error, fallback unavailable 상태를 설명해야 한다.
+
+### 결정 전까지 안전한 기본값
+
+UI는 Provider SDK를 직접 호출하지 않는다.
+Gateway/Observability가 제공한 provider/fallback summary만 표시한다.
+
+### 영향을 받는 역할
+
+김규민, 이지섭, 이규정, 재혁님
 ---
 
 ## Codex 추가 결정 후보 - 2026-06-29

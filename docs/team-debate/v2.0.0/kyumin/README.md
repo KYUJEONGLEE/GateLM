@@ -335,3 +335,17 @@ Gateway가 생산하는 evidence는 모두 한 화면에 노출하는 것이 아
 | Admin Settings | 현재 runtime policy 상태와 publish 결과 |
 
 이 구조가 있어야 Gateway evidence가 보안상 안전하면서도 발표에서 설명 가능한 형태가 된다.
+
+### 3. 실제 Provider와 Mock fallback은 UI에서 구분되어야 한다
+
+지섭님과 이규정님 의견처럼 v2 설득력에는 실제 Provider 1종과 Mock fallback이 모두 필요하다.
+프론트는 둘을 같은 "응답 성공"으로 뭉개면 안 된다.
+
+| 상태 | UI에서 설명할 의미 |
+| -- | -- |
+| Actual provider path | 실제 Provider adapter를 거친 요청 |
+| Mock fallback path | 안정성을 위해 Mock fallback으로 처리된 요청 |
+| Provider timeout/error | Gateway가 감지한 Provider 실패 |
+| Fallback unavailable | fallback도 실패하거나 사용할 수 없는 상태 |
+
+이 구분이 있어야 Provider 장애, fallback 안정성, latency/cost/token evidence를 Dashboard와 Request Detail에서 설명할 수 있다.
