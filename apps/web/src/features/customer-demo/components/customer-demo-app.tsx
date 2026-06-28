@@ -28,6 +28,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const initialGatewayRequestSent = useRef(false);
   const requestInFlight = useRef(false);
+  const hasScenarios = model.scenarios.length > 0;
 
   const selectScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
     if (requestInFlight.current) {
@@ -160,7 +161,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           <div className="customer-demo-actions">
             <button
               className="primary-button"
-              disabled={isLoading}
+              disabled={isLoading || !hasScenarios}
               onClick={() => selectScenario(exchange.scenarioId)}
               type="button"
             >
@@ -219,7 +220,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
 }
 
 function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
-  const base = model.scenarios[0];
+  const base = model.scenarios[0] ?? buildEmptyExchange(model);
 
   if (model.integrationMode !== "gateway") {
     return base;
@@ -292,6 +293,77 @@ function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
     },
     status: "pending",
     title: "Gateway live request"
+  };
+}
+
+function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
+  return {
+    assistantMessage: "No customer demo scenario is configured.",
+    cacheStatus: "not-configured",
+    description: "Customer demo scenarios are not available for this tenant application.",
+    detectedTypes: [],
+    httpStatus: 0,
+    latencyMs: 0,
+    maskingAction: "none",
+    providerCall: "skipped",
+    request: {
+      endpoint: "/v1/chat/completions",
+      method: "POST",
+      headers: [
+        {
+          name: "Authorization",
+          value: "Bearer <redacted>"
+        },
+        {
+          name: "X-GateLM-App-Token",
+          value: "<redacted>"
+        },
+        {
+          name: "Content-Type",
+          value: "application/json"
+        }
+      ],
+      body: {
+        model: "auto",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful customer support assistant."
+          },
+          {
+            role: "user",
+            content: "No customer demo scenario is configured."
+          }
+        ],
+        max_tokens: 128,
+        temperature: 0.2,
+        stream: false,
+        metadata: {
+          source: "web-customer-demo"
+        },
+        gate_lm: {
+          cache: {
+            mode: "auto"
+          },
+          routing: {
+            mode: "auto"
+          },
+          responseMetadata: true
+        }
+      }
+    },
+    requestId: "not-configured",
+    requestLogHref: `/tenants/${model.tenantId}/request-logs`,
+    response: {
+      body: {
+        status: "not-configured"
+      },
+      headers: [],
+      statusCode: 0
+    },
+    scenarioId: "safe",
+    status: "not-configured",
+    title: "No scenario configured"
   };
 }
 
