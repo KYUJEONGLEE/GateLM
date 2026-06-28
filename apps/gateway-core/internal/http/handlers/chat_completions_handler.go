@@ -172,7 +172,11 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.MaskingAction = string(maskingResult.Action)
 	reqCtx.MaskingDetectedTypes = maskingResult.DetectedTypes
 	reqCtx.MaskingDetectedCount = maskingResult.DetectedCount
-	reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
+	if maskingResult.Action == maskdomain.ActionNone {
+		reqCtx.RedactedPromptPreview = ""
+	} else {
+		reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
+	}
 	reqCtx.SecurityPolicyVersionID = maskingResult.SecurityPolicyVersionID
 	terminalLogPrompt = redactedPrompt
 
