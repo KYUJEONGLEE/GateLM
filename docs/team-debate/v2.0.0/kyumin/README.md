@@ -173,3 +173,50 @@ README에는 프론트 관점의 방향과 근거만 남기고, 회의에서 결
 
 Web Console은 Gateway의 정책 판단을 대신하지 않는다.
 대신 Gateway, Control Plane, Observability가 생산한 결과를 관리자가 이해하고 조작할 수 있는 제품 경험으로 묶는 역할을 해야 한다.
+
+## 2026-06-29 추가 의견: 이규정 Observability 의견 반영
+
+이규정님 의견의 핵심인 "v2 Observability는 더 많은 차트가 아니라 설명 가능한 운영 증거여야 한다"는 방향에 동의한다.
+프론트도 같은 기준으로 화면을 설계해야 한다.
+
+특히 아래 두 항목은 Web Console 구현 전에 Observability와 같이 맞춰야 한다.
+
+### 1. Dashboard aggregate grain을 먼저 제한해야 한다
+
+모든 dimension 조합을 열어두면 UI도 복잡해지고, Observability query/read model도 불필요하게 넓어진다.
+v2.0.0에서는 아래 정도의 grain으로 시작하는 것이 좋다.
+
+| 화면 | 우선 grain |
+| -- | -- |
+| Organization Overview | tenant, time window, terminal status |
+| Cost / Usage | budget scope, application, model/provider |
+| Safety | masking action, detector type, policy hash/snapshot |
+| Cache | cache status, cache type, provider bypass count |
+| Routing | selected provider/model, routing reason |
+
+이 범위를 벗어나는 ad-hoc 분석은 v2.0.0 main path가 아니라 후속 Analytics 고도화로 두는 편이 안전하다.
+
+### 2. Request outcome taxonomy는 UI label 전에 합의가 필요하다
+
+v2에서는 failover, streaming, budget guard, semantic cache evidence가 들어올 수 있다.
+이때 Web이 임의로 상태명을 만들면 Dashboard count, Request Log badge, Detail timeline이 서로 다른 의미를 갖게 된다.
+
+프론트 관점에서도 이규정님이 제안한 방식처럼 `terminal status`는 안정적으로 유지하고, domain별 outcome group을 추가하는 방식이 좋다.
+
+```text
+terminalStatus
+cacheOutcome
+safetyOutcome
+routingOutcome
+budgetOutcome
+providerOutcome
+streamingOutcome
+```
+
+이 구조라면 Request Log 목록은 terminal status를 기준으로 간단하게 보여주고, Detail에서는 각 domain outcome을 펼쳐 설명할 수 있다.
+단, 위 이름은 공식 필드 제안이 아니라 논의용 개념이다.
+
+### 3. Web Console IA와 Observability read model은 같이 결정해야 한다
+
+내가 제안한 `Dashboard / Management / Analytics / Demo / Settings` 정보 구조가 받아들여진다면, 각 화면에서 필요한 aggregate grain과 drilldown key를 Observability와 함께 표로 고정해야 한다.
+이 결정이 늦어지면 프론트는 임시 fixture 중심으로 흐르고, Observability는 너무 넓은 API를 만들 가능성이 있다.

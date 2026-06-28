@@ -15,6 +15,8 @@
 | 6 | Streaming 범위와 UI 상태 | v1.x thin slice는 최종 상태, v2는 lifecycle 확장 | Gateway, Web, Observability | P1 | 미결정 |
 | 7 | 청중 참여형 데모 입력 방식 | preset -> controlled input -> limited free input 순서 | Web, Gateway, Safety | P1 | 미결정 |
 | 8 | Dashboard polling/realtime 범위 | v2.0.0은 polling 우선, realtime은 v2.x 후보 | Web, Observability, Gateway | P1 | 미결정 |
+| 9 | Dashboard aggregate grain | 모든 조합을 열지 않고 Overview/Cost/Safety/Cache/Routing 우선 grain 제한 | Web, Observability, Gateway | P0 | 추천안 있음 |
+| 10 | Request outcome taxonomy | terminal status 유지 + domain별 outcome group 분리 | Gateway, Web, Observability, Safety | P0 | 추천안 있음 |
 
 ## 1. v2 Web Console 정보 구조
 
@@ -241,3 +243,60 @@ Web은 polling을 끄고 켤 수 있는 구조로 만들고, fixture fallback에
 ### 영향을 받는 역할
 
 김규민, 이규정, 이지섭
+
+## 9. Dashboard aggregate grain
+
+### 왜 결정해야 하나?
+
+Web Console 화면 구조와 Observability read model이 맞지 않으면 Dashboard는 많은 차트를 갖고도 설명력이 약해진다.
+모든 dimension 조합을 열면 query 비용과 UI 복잡도가 같이 커진다.
+
+### 선택지
+
+| 선택지 | 설명 | 장점 | 단점 |
+| -- | -- | -- | -- |
+| A | v1 overview만 확장 | 빠름 | 조직 기반 LLMOps 메시지가 약함 |
+| B | Overview/Cost/Safety/Cache/Routing 우선 grain 제한 | 제품 메시지와 query profile을 같이 관리 가능 | 화면별 read model 합의 필요 |
+| C | 모든 dimension 조합 지원 | 유연함 | v2.0.0에는 과하고 성능 리스크 큼 |
+
+### 추천안
+
+B안을 추천한다.
+프론트는 `Organization Overview`, `Cost / Usage`, `Safety`, `Cache`, `Routing` 화면별로 필요한 grain을 먼저 고정하고 그 외 ad-hoc 분석은 v2.x로 미룬다.
+
+### 결정 전까지 안전한 기본값
+
+v1 Dashboard overview를 유지하고, 추가 grain은 fixture/read model draft로만 실험한다.
+
+### 영향을 받는 역할
+
+김규민, 이규정, 이지섭, 재혁님
+
+## 10. Request outcome taxonomy
+
+### 왜 결정해야 하나?
+
+v2에서는 cache, safety, routing, budget, provider failover, streaming outcome이 한 요청에 동시에 붙을 수 있다.
+Web이 임의로 badge와 label을 만들면 Dashboard count와 Request Detail 설명이 어긋날 수 있다.
+
+### 선택지
+
+| 선택지 | 설명 | 장점 | 단점 |
+| -- | -- | -- | -- |
+| A | v1 terminal status만 계속 확장 | 단순함 | status가 너무 많은 의미를 떠안음 |
+| B | terminal status는 유지하고 domain별 outcome group 분리 | 목록/집계/상세 설명이 명확 | read model 합의 필요 |
+| C | event timeline 중심으로 전면 재설계 | 장기 확장성 높음 | v2.0.0에는 범위가 큼 |
+
+### 추천안
+
+B안을 추천한다.
+Request Log 목록은 terminal status 중심으로 유지하고, Detail에서 cache/safety/routing/budget/provider/streaming outcome을 나눠 보여주는 구조가 좋다.
+
+### 결정 전까지 안전한 기본값
+
+v1 terminal status와 error code를 유지한다.
+새 outcome은 공식 계약 전까지 fixture나 문서의 후보 개념으로만 둔다.
+
+### 영향을 받는 역할
+
+이지섭, 이규정, 김규민, 이윤지
