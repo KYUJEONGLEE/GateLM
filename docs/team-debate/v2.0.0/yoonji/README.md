@@ -196,6 +196,23 @@ Safety도 redaction/block count를 보여주는 데서 끝나면 안 되고, 어
 Semantic Cache를 v2 core가 아니라 evidence track으로 두자는 의견에도 동의한다.
 Semantic Cache는 raw prompt 저장 금지, redacted prompt 기준 embedding, false hit safety risk, policy gate를 함께 봐야 하므로 Safety Lab이 shadow/evidence 기준을 같이 내야 한다.
 
+### 2026-06-29 pull 반영: enforced와 shadow 구분
+
+규민님과 규정님이 모두 RemoteSafetyEngine 결과를 UI와 Observability에서 shadow/evidence로 구분해야 한다고 적은 점에 동의한다.
+Safety Lab도 이 구분을 강하게 지지한다.
+
+v2 문서가 만들어질 때는 최소한 아래 개념을 섞지 않아야 한다.
+
+| 개념 | 의미 |
+| -- | -- |
+| Gateway enforced safety decision | client response와 terminal outcome에 실제 영향을 준 판단 |
+| RemoteSafetyEngine shadow result | 품질 평가와 evidence를 위한 병렬 판단 |
+| Safety corpus report | detector expectation과 false positive/negative 해석 근거 |
+| Dashboard safety aggregate | 운영자가 보는 redacted/blocked 요약 |
+
+위 이름은 공식 field 제안이 아니라 논의용 구분이다.
+핵심은 "실제로 요청을 막은 판단"과 "나중에 고도화하기 위한 실험 결과"를 같은 badge나 같은 metric처럼 보여주지 않는 것이다.
+
 ## 명시적으로 하지 않을 것
 
 아래 항목은 팀 결정과 공식 계약 없이 진행하면 안 된다.
