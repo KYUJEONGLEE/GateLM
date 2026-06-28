@@ -74,6 +74,7 @@ class SafetyRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400, response.text)
         body_text = json.dumps(response.json(), sort_keys=True)
         self.assertIn("invalid_remote_safety_request", body_text)
+        self.assertEqual(response.json()["error"]["requestId"], "request_remote_safety_test")
         self.assertIn("input.detectors.0.action", body_text)
         self.assertNotIn(SYNTHETIC_EMAIL, body_text)
         self.assertNotIn("Input should be", body_text)
@@ -101,17 +102,27 @@ class SafetyRouteTests(unittest.TestCase):
         )
         client = TestClient(app, raise_server_exceptions=False)
 
-        response = client.post(
-            "/internal/v1/safety/evaluate",
-            json=remote_safety_payload(f"Check {SYNTHETIC_EMAIL} with api_key={SYNTHETIC_SECRET}."),
-        )
+        with self.assertLogs("app.core.errors", level="ERROR") as logs:
+            response = client.post(
+                "/internal/v1/safety/evaluate",
+                json=remote_safety_payload(f"Check {SYNTHETIC_EMAIL} with api_key={SYNTHETIC_SECRET}."),
+            )
 
         self.assertEqual(response.status_code, 500, response.text)
         body_text = json.dumps(response.json(), sort_keys=True)
+        log_text = "\n".join(logs.output)
         self.assertIn("remote_safety_unavailable", body_text)
         self.assertNotIn(SYNTHETIC_EMAIL, body_text)
         self.assertNotIn(SYNTHETIC_SECRET, body_text)
         self.assertNotIn("exploded", body_text)
+        self.assertIn("sanitized internal error", log_text)
+        self.assertIn("RuntimeError", log_text)
+        self.assertIn("test_safety_route.py", log_text)
+        self.assertIn("evaluate", log_text)
+        self.assertNotIn(SYNTHETIC_EMAIL, log_text)
+        self.assertNotIn(SYNTHETIC_SECRET, log_text)
+        self.assertNotIn("exploded", log_text)
+        self.assertNotIn("Traceback", log_text)
 
 
 def remote_safety_payload(prompt_text: str) -> dict[str, object]:

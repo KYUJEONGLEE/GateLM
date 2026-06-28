@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
+import traceback
 from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Request
@@ -10,6 +13,8 @@ from fastapi.responses import JSONResponse
 
 ERROR_INVALID_REMOTE_SAFETY_REQUEST = "invalid_remote_safety_request"
 ERROR_REMOTE_SAFETY_UNAVAILABLE = "remote_safety_unavailable"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -76,7 +81,7 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
         content=build_error_payload(
             code=ERROR_INVALID_REMOTE_SAFETY_REQUEST,
             message="Invalid remote safety request.",
-            request_id=generated_request_id(),
+            request_id=request_id_from_validation_error(exc),
             retryable=False,
             fields=sanitize_validation_errors(exc),
         ),
@@ -84,8 +89,13 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
 
 
 async def unhandled_error_handler(_request: Request, exc: Exception) -> JSONResponse:
-    import logging
-    logging.exception("Unhandled exception in remote safety service")
+    logger.error(
+        "Remote safety service failed with sanitized internal error. "
+        "exception_class=%s traceback_locations=%s",
+        type(exc).__name__,
+        _sanitized_traceback_locations(exc),
+        extra={"error_code": ERROR_REMOTE_SAFETY_UNAVAILABLE},
+    )
     return JSONResponse(
         status_code=500,
         content=build_error_payload(
@@ -96,6 +106,31 @@ async def unhandled_error_handler(_request: Request, exc: Exception) -> JSONResp
             fields=[],
         ),
     )
+
+
+def _sanitized_traceback_locations(exc: Exception) -> str:
+    if exc.__traceback__ is None:
+        return "none"
+
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return "none"
+
+    return ", ".join(
+        f"{Path(frame.filename).name}:{frame.lineno} in {frame.name}"
+        for frame in frames
+    )
+
+
+def request_id_from_validation_error(exc: RequestValidationError) -> str:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        ctx = body.get("ctx")
+        if isinstance(ctx, dict):
+            request_id = ctx.get("requestId")
+            if isinstance(request_id, str) and request_id.strip():
+                return request_id.strip()
+    return generated_request_id()
 
 
 def sanitize_validation_errors(exc: RequestValidationError) -> list[ErrorField]:
