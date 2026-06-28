@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
@@ -26,11 +26,26 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
   const [exchange, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const initialGatewayRequestSent = useRef(false);
   const requestInFlight = useRef(false);
   const hasScenarios = model.scenarios.length > 0;
+  const hasRequestDetail = isRequestDetailAvailable(exchange);
 
-  const selectScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
+  const previewScenario = useCallback((scenarioId: CustomerDemoScenarioId) => {
+    if (requestInFlight.current) {
+      return;
+    }
+
+    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+
+    if (!scenario) {
+      return;
+    }
+
+    setLoadError(null);
+    setExchange(model.integrationMode === "gateway" ? buildPendingExchange(model, scenario) : scenario);
+  }, [model]);
+
+  const sendScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
     if (requestInFlight.current) {
       return;
     }
@@ -48,21 +63,6 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
       setIsLoading(false);
     }
   }, [client]);
-
-  useEffect(() => {
-    if (model.integrationMode !== "gateway" || initialGatewayRequestSent.current) {
-      return;
-    }
-
-    const firstScenarioId = model.scenarios[0]?.scenarioId;
-
-    if (!firstScenarioId) {
-      return;
-    }
-
-    initialGatewayRequestSent.current = true;
-    void selectScenario(firstScenarioId);
-  }, [model.integrationMode, model.scenarios, selectScenario]);
 
   return (
     <main className="customer-demo-shell">
@@ -115,7 +115,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
               data-active={scenario.scenarioId === exchange.scenarioId}
               data-status={scenario.status}
               key={scenario.scenarioId}
-              onClick={() => selectScenario(scenario.scenarioId)}
+              onClick={() => previewScenario(scenario.scenarioId)}
               disabled={isLoading}
               type="button"
             >
@@ -162,7 +162,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
             <button
               className="primary-button"
               disabled={isLoading || !hasScenarios}
-              onClick={() => selectScenario(exchange.scenarioId)}
+              onClick={() => sendScenario(exchange.scenarioId)}
               type="button"
             >
               {isLoading
@@ -173,9 +173,15 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
                   ? "Send Gateway request"
                   : "Replay fixture request"}
             </button>
-            <Link className="secondary-button" href={exchange.requestLogHref}>
-              Open request detail
-            </Link>
+            {hasRequestDetail ? (
+              <Link className="secondary-button" href={exchange.requestLogHref}>
+                Open request detail
+              </Link>
+            ) : (
+              <button className="secondary-button" disabled type="button">
+                Open request detail
+              </button>
+            )}
           </div>
         </section>
 
@@ -226,62 +232,17 @@ function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
     return base;
   }
 
+  return buildPendingExchange(model, base);
+}
+
+function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoExchange): CustomerDemoExchange {
   return {
-    ...base,
-    assistantMessage: "Waiting for the first live Gateway response.",
+    ...scenario,
+    assistantMessage: "Ready to send this scenario through the live Gateway.",
     cacheStatus: "pending",
-    description: "Live Gateway request is being prepared for this tenant application.",
-    detectedTypes: [],
     httpStatus: 0,
     latencyMs: 0,
-    maskingAction: "none",
     providerCall: "skipped",
-    request: {
-      endpoint: "/v1/chat/completions",
-      method: "POST",
-      headers: [
-        {
-          name: "Authorization",
-          value: "Bearer <redacted>"
-        },
-        {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
-        },
-        {
-          name: "Content-Type",
-          value: "application/json"
-        }
-      ],
-      body: {
-        model: "auto",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful customer support assistant."
-          },
-          {
-            role: "user",
-            content: "A live Gateway request will be sent from the selected scenario."
-          }
-        ],
-        max_tokens: 128,
-        temperature: 0.2,
-        stream: false,
-        metadata: {
-          source: "web-customer-demo"
-        },
-        gate_lm: {
-          cache: {
-            mode: "auto"
-          },
-          routing: {
-            mode: "auto"
-          },
-          responseMetadata: true
-        }
-      }
-    },
     requestId: "pending-live-request",
     requestLogHref: `/tenants/${model.tenantId}/request-logs`,
     response: {
@@ -292,8 +253,16 @@ function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
       statusCode: 0
     },
     status: "pending",
-    title: "Gateway live request"
+    title: scenario.title
   };
+}
+
+function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
+  return (
+    exchange.requestId !== "pending-live-request" &&
+    exchange.requestId !== "not-configured" &&
+    exchange.requestLogHref.includes(`/request-logs/${exchange.requestId}`)
+  );
 }
 
 function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
