@@ -177,6 +177,25 @@ Safety Lab이 발표에서 보여주고 싶은 장면은 아래와 같다.
 7. corpus report는 detector별 false positive/false negative 후보와 latency를 보여준다.
 8. RemoteSafetyEngine은 shadow 결과를 남기되 v2 계약 전에는 main path를 깨지 않는다.
 
+## 다른 역할 의견에 대한 초기 반응
+
+### 김규민 의견에 대한 반응
+
+규민님이 Web Console을 `Dashboard / Management / Analytics / Demo / Settings`로 분리하자는 방향에 동의한다.
+Safety 관점에서는 특히 Demo와 Admin Dashboard를 분리해야 한다.
+Demo 입력은 synthetic/preset 중심이어야 하고, Admin Dashboard는 redacted preview와 aggregate만 표시해야 한다.
+
+추가로, Web Console read model을 정할 때 권한별 safety detail 노출 기준이 같이 필요하다.
+Employee에게 detector detail을 많이 보여주면 우회 힌트가 될 수 있고, Admin에게 아무 근거도 보여주지 않으면 운영 설명력이 떨어진다.
+
+### 이규정 의견에 대한 반응
+
+규정님이 v2 Observability를 "더 많은 차트"가 아니라 운영 evidence로 본 점에 동의한다.
+Safety도 redaction/block count를 보여주는 데서 끝나면 안 되고, 어떤 policy provenance와 corpus expectation이 그 판단을 뒷받침하는지 연결해야 한다.
+
+Semantic Cache를 v2 core가 아니라 evidence track으로 두자는 의견에도 동의한다.
+Semantic Cache는 raw prompt 저장 금지, redacted prompt 기준 embedding, false hit safety risk, policy gate를 함께 봐야 하므로 Safety Lab이 shadow/evidence 기준을 같이 내야 한다.
+
 ## 명시적으로 하지 않을 것
 
 아래 항목은 팀 결정과 공식 계약 없이 진행하면 안 된다.
