@@ -61,10 +61,20 @@ Admin이 Project / Application / Provider / API Key / App Token을 준비한다
 - Redis Rate Limit.
 - Redpanda event pipeline.
 - ClickHouse analytics.
-- Semantic Cache.
+- Semantic Cache / Routing Evaluation Evidence.
 - Streaming.
 - Runtime Policy Editor 고도화.
 - RAG/FAQ chatbot은 GateLM core가 아니라 고객사 앱 예시로 둔다.
+
+Semantic Cache / Routing Evaluation Evidence는 v1 PR sequence에서 제외한다.
+
+- v1 main path, v1 smoke, Gateway production blocking 판단에 연결하지 않는다.
+- v1의 필수 cache/routing 범위는 Redis Exact Cache와 simple routing 검증이다.
+- v2 후보 근거가 필요하면 별도 backlog/docs PR로 다룬다.
+- 평가는 redacted synthetic prompt 기준의 offline script 또는 report로 제한한다.
+- raw prompt embedding, raw prompt, raw response, raw vector를 저장하거나 commit하지 않는다.
+- API, DB, Event, Metrics 계약을 변경하지 않는다.
+- 권장 브랜치 예: `docs/v2-semantic-cache-evidence`
 
 ## 5. Team Ownership
 
@@ -75,7 +85,7 @@ Admin이 Project / Application / Provider / API Key / App Token을 준비한다
 | 김규민 | Product Experience & Demo | Next.js | Web Console, Customer Demo App, Dashboard UI, Request Detail UI, demo UX | Gateway 정책 판단, DB counter, Provider call |
 | 재혁님 | Control Plane & Runtime Policy | NestJS | Project/Application/Provider/API Key/App Token 발급, Runtime Config, routing/cache/rate limit/safety config | Gateway request runtime decision |
 | 이지섭 | Gateway Data Plane & Governance | Go | Gateway pipeline, API Key/App Token verification, context resolver, RateLimiter runtime, ProviderAdapter, Mock Provider path | Admin CRUD UI/API ownership |
-| 이윤지 | AI Safety & Evaluation Lab | Python/FastAPI | safety eval corpus, rule 품질 평가, optional RemoteSafetyEngine prototype, semantic cache/routing evaluation | v1 Gateway hot path 필수 의존성 |
+| 이윤지 | AI Safety & Evaluation Lab | Python/FastAPI | safety eval corpus, rule 품질 평가, optional RemoteSafetyEngine prototype | v1 Gateway hot path 필수 의존성, v2 semantic cache/routing evidence |
 | 이규정 | Observability, Data Platform & Performance | PostgreSQL, metrics, k6 | Invocation Log, Detail/Dashboard aggregation backend, `/metrics`, k6 baseline, v2 Redpanda/ClickHouse evidence | UI ownership, Gateway policy decision |
 
 ## 6. Key Boundary Decisions
@@ -107,8 +117,9 @@ Safety Lab
 -> docs/v1.0.0/fixtures/safety-eval-corpus.jsonl
 -> detector quality report
 -> AI detector prototype
--> semantic cache evaluation report
 ```
+
+Semantic Cache / Routing Evaluation Evidence는 v1 Safety Lab PR sequence에 포함하지 않는다. 필요하면 v1 baseline 이후 v2 evidence backlog에서 별도 docs PR로 다룬다.
 
 ### Observability Ownership
 
