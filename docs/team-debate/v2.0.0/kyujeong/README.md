@@ -252,3 +252,69 @@ manual refresh 지원
 모든 dimension 조합을 API로 열면 v2.0.0에서 query와 index 설계가 과도해질 수 있다.
 
 따라서 Web Console IA 결정과 함께 `screen -> aggregate grain -> required filters -> freshness expectation` 표를 만드는 것을 제안한다.
+
+## 2026-06-29 2차 pull 반영 - 윤지님 Safety 의견에 대한 추가 의견
+
+윤지님 의견의 핵심인 "v2 safety는 더 많은 detector가 아니라 설명 가능하고 재현 가능한 안전 판단의 증거"라는 방향에 동의한다.
+Observability도 safety category를 단순 count로만 보여주면 안 되고, raw value 없이도 정책 판단을 설명할 수 있는 evidence 구조를 가져야 한다.
+
+### 1. Safety dashboard는 권한별 노출 정책을 전제로 해야 한다
+
+직원 Chat UI와 Admin Dashboard가 같은 safety detail을 보면 안 된다.
+Observability read model도 처음부터 `누가 볼 수 있는 detail인가`를 고려해야 한다.
+
+안전한 방향은 아래다.
+
+| 사용자 | Observability 표시 수준 |
+| -- | -- |
+| Employee | 짧은 block/redaction 안내, raw/redacted preview 비노출 |
+| Developer | 제한된 masking summary와 requestId 중심 추적 |
+| Project/Tenant Admin | redacted preview, policy provenance, detector type summary |
+| Safety/Admin reviewer | synthetic corpus report, false positive/negative evidence |
+
+단, 위 표는 권한 모델 확정이 아니라 노출 수준 논의를 위한 기준이다.
+RBAC가 v2 main path가 아니더라도 safety detail 노출 경계는 최소한 합의해야 한다.
+
+### 2. RemoteSafetyEngine은 Observability에서도 shadow/evidence로 분리해야 한다
+
+RemoteSafetyEngine 결과를 v2에서 관측하고 싶더라도, 공식 계약 전에는 terminal outcome을 바꾸는 원천으로 취급하면 안 된다.
+Observability 관점의 안전한 표현은 아래다.
+
+```text
+Gateway main safety decision = client response와 terminal status를 결정
+RemoteSafetyEngine shadow result = evaluation evidence, main path 판단 아님
+```
+
+따라서 Dashboard 기본 집계는 Gateway main safety decision 기준으로 두고, remote/shadow 결과는 별도 report나 lab evidence로 분리하는 것이 좋다.
+
+### 3. Streaming safety는 request-side와 response-side를 나눠 집계해야 한다
+
+윤지님 제안처럼 v1.x thin slice에서는 request-side pre-provider safety를 기준으로 두는 것이 안전하다.
+response-side scan은 streaming partial output, latency, client abort와 얽히므로 v2.0.0 main path에 넣기보다 evidence path로 두는 것이 좋다.
+
+Observability는 적어도 아래 구분을 놓치면 안 된다.
+
+```text
+request_side_safety_outcome
+response_side_safety_shadow_outcome
+streaming_terminal_state
+```
+
+이 이름들은 공식 필드 제안이 아니라, 서로 다른 의미를 섞지 않기 위한 개념 구분이다.
+
+### 4. Safety corpus report는 Dashboard 숫자의 해석 근거가 된다
+
+Dashboard에서 blocked/redacted count가 늘었다고 해서 곧바로 서비스 장애나 나쁜 사용성이라고 해석하면 안 된다.
+윤지님이 제안한 corpus, false positive/false negative, latency report가 있어야 dashboard 숫자가 운영 의사결정으로 이어진다.
+
+따라서 v2 evidence pack에는 아래 연결이 필요하다.
+
+```text
+Safety corpus report
+-> detector expected outcome
+-> Gateway safety decision
+-> Request Detail evidence
+-> Dashboard aggregate
+```
+
+이 연결이 있어야 "왜 막혔는지"뿐 아니라 "이 block count를 믿어도 되는지"까지 설명할 수 있다.
