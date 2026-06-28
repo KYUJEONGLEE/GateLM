@@ -1,10 +1,6 @@
-import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RequestLogTable } from "@/features/request-logs/components/request-log-table";
-import {
-  getDashboardOverview,
-  getInvocationRecords
-} from "@/lib/fixtures/v1-observability-fixtures";
+import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogsPageProps = {
@@ -16,11 +12,7 @@ type RequestLogsPageProps = {
 export default async function RequestLogsPage({ params }: RequestLogsPageProps) {
   const { tenantId } = await params;
   const locale = await getRequestLocale();
-  const overview = getDashboardOverview();
-
-  if (tenantId !== overview.filters.tenantId) {
-    notFound();
-  }
+  const records = await getLiveGatewayRequestLogs();
 
   return (
     <ConsoleShell
@@ -31,9 +23,10 @@ export default async function RequestLogsPage({ params }: RequestLogsPageProps) 
     >
       <RequestLogTable
         locale={locale}
-        records={getInvocationRecords()}
+        records={records ?? []}
+        sourceState={records ? "ready" : "unavailable"}
         tenantId={tenantId}
-        timezone={overview.range.timezone}
+        timezone="UTC"
       />
     </ConsoleShell>
   );

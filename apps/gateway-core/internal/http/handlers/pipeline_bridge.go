@@ -37,6 +37,17 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			EndUserID:     reqCtx.EndUserID,
 			FeatureID:     reqCtx.FeatureID,
 		},
+		Runtime: request.RuntimeContext{
+			ConfigHash:         reqCtx.ConfigHash,
+			SecurityPolicyHash: reqCtx.SecurityPolicyHash,
+			RoutingPolicyHash:  reqCtx.RoutingPolicyHash,
+			RateLimitConfig:    reqCtx.RuntimeRateLimit,
+			HasRateLimitConfig: reqCtx.HasRuntimeRateLimit,
+			RoutingPolicy:      reqCtx.RuntimeRoutingPolicy,
+			HasRoutingPolicy:   reqCtx.HasRuntimeRoutingPolicy,
+			CachePolicy:        reqCtx.RuntimeCachePolicy,
+			HasCachePolicy:     reqCtx.HasRuntimeCachePolicy,
+		},
 		Governance: request.GovernanceContext{
 			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
 		},
@@ -83,6 +94,28 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
 	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID
 	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
+
+	if gatewayCtx.Runtime.ConfigHash != "" {
+		reqCtx.ConfigHash = gatewayCtx.Runtime.ConfigHash
+	}
+	if gatewayCtx.Runtime.SecurityPolicyHash != "" {
+		reqCtx.SecurityPolicyHash = gatewayCtx.Runtime.SecurityPolicyHash
+	}
+	if gatewayCtx.Runtime.RoutingPolicyHash != "" {
+		reqCtx.RoutingPolicyHash = gatewayCtx.Runtime.RoutingPolicyHash
+	}
+	if gatewayCtx.Runtime.HasRateLimitConfig {
+		reqCtx.RuntimeRateLimit = gatewayCtx.Runtime.RateLimitConfig
+		reqCtx.HasRuntimeRateLimit = true
+	}
+	if gatewayCtx.Runtime.HasRoutingPolicy {
+		reqCtx.RuntimeRoutingPolicy = gatewayCtx.Runtime.RoutingPolicy
+		reqCtx.HasRuntimeRoutingPolicy = true
+	}
+	if gatewayCtx.Runtime.HasCachePolicy {
+		reqCtx.RuntimeCachePolicy = gatewayCtx.Runtime.CachePolicy
+		reqCtx.HasRuntimeCachePolicy = true
+	}
 
 	if gatewayCtx.Governance.RateLimitDecision != nil {
 		reqCtx.RateLimitDecision = gatewayCtx.Governance.RateLimitDecision.Clone()

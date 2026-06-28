@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 } from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
+  RouteGatewayChatClient,
   type CustomerDemoExchange,
   type CustomerDemoHeader,
   type CustomerDemoModel,
@@ -39,6 +40,7 @@ const customerDemoText: Record<
       detail: string;
       loading: string;
       replay: string;
+      send: string;
     };
     assistantLabel: string;
     chatPreview: string;
@@ -57,13 +59,11 @@ const customerDemoText: Record<
     scenarios: Record<
       CustomerDemoScenarioId,
       {
-        assistantMessage: string;
         title: string;
       }
     >;
     scenarioSelector: string;
     summary: {
-      application: string;
       cache: string;
       http: string;
       latency: string;
@@ -77,8 +77,9 @@ const customerDemoText: Record<
   en: {
     actions: {
       detail: "Open request detail",
-      loading: "Loading...",
-      replay: "Run again"
+      loading: "Processing...",
+      replay: "Replay fixture request",
+      send: "Send Gateway request"
     },
     assistantLabel: "Assistant / Gateway outcome",
     chatPreview: "conversation",
@@ -96,25 +97,23 @@ const customerDemoText: Record<
     responsePreview: "Response preview",
     scenarios: {
       blocked: {
-        assistantMessage: "Request blocked.",
         title: "Blocked"
       },
       "cache-hit": {
-        assistantMessage: "Cached answer returned.",
         title: "Cache hit"
       },
+      "rate-limited": {
+        title: "Rate limit"
+      },
       redacted: {
-        assistantMessage: "Sensitive values were redacted.",
         title: "Redaction"
       },
       safe: {
-        assistantMessage: "Request completed.",
         title: "Safe request"
       }
     },
     scenarioSelector: "Request path",
     summary: {
-      application: "Application",
       cache: "Cache",
       http: "HTTP status",
       latency: "Latency",
@@ -128,7 +127,8 @@ const customerDemoText: Record<
     actions: {
       detail: "요청 상세 열기",
       loading: "처리 중...",
-      replay: "다시 실행"
+      replay: "Fixture 요청 재실행",
+      send: "Gateway 요청 전송"
     },
     assistantLabel: "Assistant / Gateway 결과",
     chatPreview: "대화",
@@ -146,25 +146,23 @@ const customerDemoText: Record<
     responsePreview: "Response preview",
     scenarios: {
       blocked: {
-        assistantMessage: "요청이 차단되었습니다.",
         title: "차단"
       },
       "cache-hit": {
-        assistantMessage: "캐시된 응답을 반환했습니다.",
         title: "캐시 적중"
       },
+      "rate-limited": {
+        title: "Rate limit"
+      },
       redacted: {
-        assistantMessage: "민감 값이 마스킹되었습니다.",
         title: "Redaction"
       },
       safe: {
-        assistantMessage: "요청이 완료되었습니다.",
         title: "Safe 요청"
       }
     },
     scenarioSelector: "처리 유형",
     summary: {
-      application: "애플리케이션",
       cache: "캐시",
       http: "HTTP 상태",
       latency: "지연 시간",
@@ -177,30 +175,56 @@ const customerDemoText: Record<
 };
 
 export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
-  const client = useMemo(() => new FixtureGatewayChatClient(model.scenarios), [model.scenarios]);
-  const [exchange, setExchange] = useState<CustomerDemoExchange>(model.scenarios[0]);
+  const client = useMemo(() => {
+    if (model.integrationMode === "gateway") {
+      return new RouteGatewayChatClient(model.tenantId);
+    }
+
+    return new FixtureGatewayChatClient(model.scenarios);
+  }, [model.integrationMode, model.scenarios, model.tenantId]);
+  const [exchange, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const requestInFlight = useRef(false);
+  const hasScenarios = model.scenarios.length > 0;
+  const hasRequestDetail = isRequestDetailAvailable(exchange);
   const text = customerDemoText[locale];
   const exchangeText = text.scenarios[exchange.scenarioId];
   const tenantLabel = formatTenantDisplayName(model.tenantId);
 
-  async function selectScenario(scenarioId: CustomerDemoScenarioId) {
-    if (isLoading) {
+  const previewScenario = useCallback((scenarioId: CustomerDemoScenarioId) => {
+    if (requestInFlight.current) {
       return;
     }
 
+    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+
+    if (!scenario) {
+      return;
+    }
+
+    setLoadError(null);
+    setExchange(model.integrationMode === "gateway" ? buildPendingExchange(model, scenario) : scenario);
+  }, [model]);
+
+  const sendScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
+    if (requestInFlight.current) {
+      return;
+    }
+
+    requestInFlight.current = true;
     setIsLoading(true);
     setLoadError(null);
 
     try {
       setExchange(await client.sendChatCompletion(scenarioId));
-    } catch {
-      setLoadError(text.error);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : text.error);
     } finally {
+      requestInFlight.current = false;
       setIsLoading(false);
     }
-  }
+  }, [client, text.error]);
 
   return (
     <main className="customer-demo-shell">
@@ -276,11 +300,11 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 className="customer-demo-scenario"
                 data-active={scenario.scenarioId === exchange.scenarioId}
                 data-status={scenario.status}
-                variant="outline"
-                key={scenario.scenarioId}
-                onClick={() => selectScenario(scenario.scenarioId)}
                 disabled={isLoading}
+                key={scenario.scenarioId}
+                onClick={() => previewScenario(scenario.scenarioId)}
                 type="button"
+                variant="outline"
               >
                 <Badge variant="secondary">{scenario.httpStatus}</Badge>
                 <strong>{scenarioText.title}</strong>
@@ -313,22 +337,32 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
               </article>
               <article className="chat-bubble chat-bubble-assistant" data-status={exchange.status}>
                 <span>{text.assistantLabel}</span>
-                <p>{exchangeText.assistantMessage}</p>
+                <p>{exchange.assistantMessage}</p>
               </article>
             </div>
 
             <div className="customer-demo-actions">
               <Button
                 className="primary-button"
-                disabled={isLoading}
-                onClick={() => selectScenario(exchange.scenarioId)}
+                disabled={isLoading || !hasScenarios}
+                onClick={() => sendScenario(exchange.scenarioId)}
                 type="button"
               >
-                {isLoading ? text.actions.loading : text.actions.replay}
+                {isLoading
+                  ? text.actions.loading
+                  : model.integrationMode === "gateway"
+                    ? text.actions.send
+                    : text.actions.replay}
               </Button>
-              <Link className="secondary-button" href={exchange.requestLogHref}>
-                {text.actions.detail}
-              </Link>
+              {hasRequestDetail ? (
+                <Link className="secondary-button" href={exchange.requestLogHref}>
+                  {text.actions.detail}
+                </Link>
+              ) : (
+                <Button className="secondary-button" disabled type="button" variant="outline">
+                  {text.actions.detail}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -391,6 +425,117 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
       </section>
     </main>
   );
+}
+
+function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
+  const base = model.scenarios[0] ?? buildEmptyExchange(model);
+
+  if (model.integrationMode !== "gateway") {
+    return base;
+  }
+
+  return buildPendingExchange(model, base);
+}
+
+function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoExchange): CustomerDemoExchange {
+  return {
+    ...scenario,
+    assistantMessage: "Ready to send this scenario through the live Gateway.",
+    cacheStatus: "pending",
+    httpStatus: 0,
+    latencyMs: 0,
+    providerCall: "skipped",
+    requestId: "pending-live-request",
+    requestLogHref: `/tenants/${model.tenantId}/request-logs`,
+    response: {
+      body: {
+        status: "pending"
+      },
+      headers: [],
+      statusCode: 0
+    },
+    status: "pending",
+    title: scenario.title
+  };
+}
+
+function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
+  return (
+    exchange.requestId !== "pending-live-request" &&
+    exchange.requestId !== "not-configured" &&
+    exchange.requestLogHref.includes(`/request-logs/${exchange.requestId}`)
+  );
+}
+
+function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
+  return {
+    assistantMessage: "No customer demo scenario is configured.",
+    cacheStatus: "not-configured",
+    description: "Customer demo scenarios are not available for this tenant application.",
+    detectedTypes: [],
+    httpStatus: 0,
+    latencyMs: 0,
+    maskingAction: "none",
+    providerCall: "skipped",
+    request: {
+      endpoint: "/v1/chat/completions",
+      method: "POST",
+      headers: [
+        {
+          name: "Authorization",
+          value: "Bearer <redacted>"
+        },
+        {
+          name: "X-GateLM-App-Token",
+          value: "<redacted>"
+        },
+        {
+          name: "Content-Type",
+          value: "application/json"
+        }
+      ],
+      body: {
+        model: "auto",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful customer support assistant."
+          },
+          {
+            role: "user",
+            content: "No customer demo scenario is configured."
+          }
+        ],
+        max_tokens: 128,
+        temperature: 0.2,
+        stream: false,
+        metadata: {
+          source: "web-customer-demo"
+        },
+        gate_lm: {
+          cache: {
+            mode: "auto"
+          },
+          routing: {
+            mode: "auto"
+          },
+          responseMetadata: true
+        }
+      }
+    },
+    requestId: "not-configured",
+    requestLogHref: `/tenants/${model.tenantId}/request-logs`,
+    response: {
+      body: {
+        status: "not-configured"
+      },
+      headers: [],
+      statusCode: 0
+    },
+    scenarioId: "safe",
+    status: "not-configured",
+    title: "No scenario configured"
+  };
 }
 
 function DemoSummaryCard({

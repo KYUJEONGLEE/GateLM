@@ -7,6 +7,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
@@ -27,6 +28,25 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	reqCtx.CacheKeyHash = "hmac-sha256:cache-key"
 	reqCtx.CacheHitRequestID = "request_cached"
 	reqCtx.SavedCostMicroUSD = 5
+	reqCtx.ConfigHash = "hash_runtime_config_test"
+	reqCtx.SecurityPolicyHash = "hash_security_policy_test"
+	reqCtx.RuntimeRateLimit = ratelimit.Config{
+		Enabled:       true,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     ratelimit.AlgorithmFixedWindow,
+		WindowSeconds: 60,
+		Limit:         7,
+	}
+	reqCtx.HasRuntimeRateLimit = true
+	reqCtx.RuntimeRoutingPolicy = runtimeconfig.RoutingPolicy{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock",
+		LowCostModel:        "mock-fast",
+		ShortPromptMaxChars: 500,
+		RoutingPolicyHash:   "hash_routing_policy_test",
+	}
+	reqCtx.HasRuntimeRoutingPolicy = true
 	reqCtx.RateLimitDecision = &ratelimit.Decision{
 		Allowed:   true,
 		Scope:     ratelimit.ScopeApplication,
@@ -58,6 +78,14 @@ func TestNewGatewayContextIncludesPromptText(t *testing.T) {
 	}
 	if gatewayCtx.Cache.SavedCostMicroUSD != 5 {
 		t.Fatalf("unexpected saved cost metadata: %#v", gatewayCtx.Cache)
+	}
+	if gatewayCtx.Runtime.ConfigHash != "hash_runtime_config_test" ||
+		gatewayCtx.Runtime.SecurityPolicyHash != "hash_security_policy_test" ||
+		!gatewayCtx.Runtime.HasRateLimitConfig ||
+		gatewayCtx.Runtime.RateLimitConfig.Limit != 7 ||
+		!gatewayCtx.Runtime.HasRoutingPolicy ||
+		gatewayCtx.Runtime.RoutingPolicy.RoutingPolicyHash != "hash_routing_policy_test" {
+		t.Fatalf("unexpected runtime metadata: %#v", gatewayCtx.Runtime)
 	}
 	if gatewayCtx.Governance.RateLimitDecision == nil || !gatewayCtx.Governance.RateLimitDecision.Allowed {
 		t.Fatalf("unexpected rate limit metadata: %#v", gatewayCtx.Governance.RateLimitDecision)
@@ -199,6 +227,63 @@ func TestApplyGatewayContextCopiesRateLimitDecision(t *testing.T) {
 
 	if reqCtx.RateLimitDecision == nil || reqCtx.RateLimitDecision.Reason != ratelimit.ReasonLimitExceeded {
 		t.Fatalf("unexpected rate limit decision: %#v", reqCtx.RateLimitDecision)
+	}
+}
+
+func TestApplyGatewayContextCopiesRuntimeMetadata(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_test",
+		TraceID:   "request_test",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	gatewayCtx := &request.GatewayContext{
+		Runtime: request.RuntimeContext{
+			ConfigHash:         "hash_runtime_config_test",
+			SecurityPolicyHash: "hash_security_policy_test",
+			RoutingPolicyHash:  "hash_routing_policy_test",
+			RateLimitConfig: ratelimit.Config{
+				Enabled:       true,
+				Scope:         ratelimit.ScopeApplication,
+				Algorithm:     ratelimit.AlgorithmFixedWindow,
+				WindowSeconds: 60,
+				Limit:         7,
+			},
+			HasRateLimitConfig: true,
+			RoutingPolicy: runtimeconfig.RoutingPolicy{
+				DefaultProvider:     "mock",
+				DefaultModel:        "mock-balanced",
+				LowCostProvider:     "mock",
+				LowCostModel:        "mock-fast",
+				ShortPromptMaxChars: 500,
+				RoutingPolicyHash:   "hash_routing_policy_test",
+			},
+			HasRoutingPolicy: true,
+			CachePolicy: runtimeconfig.CachePolicy{
+				Enabled:    true,
+				Type:       runtimeconfig.CacheTypeExact,
+				TTLSeconds: 3600,
+			},
+			HasCachePolicy: true,
+		},
+	}
+
+	applyGatewayContext(reqCtx, gatewayCtx)
+
+	if reqCtx.ConfigHash != "hash_runtime_config_test" || reqCtx.SecurityPolicyHash != "hash_security_policy_test" {
+		t.Fatalf("unexpected runtime hashes: %#v", reqCtx)
+	}
+	if reqCtx.RoutingPolicyHash != "hash_routing_policy_test" {
+		t.Fatalf("unexpected routing policy hash: %s", reqCtx.RoutingPolicyHash)
+	}
+	if !reqCtx.HasRuntimeRateLimit || reqCtx.RuntimeRateLimit.Limit != 7 {
+		t.Fatalf("unexpected runtime rate limit: %#v", reqCtx.RuntimeRateLimit)
+	}
+	if !reqCtx.HasRuntimeRoutingPolicy || reqCtx.RuntimeRoutingPolicy.RoutingPolicyHash != "hash_routing_policy_test" {
+		t.Fatalf("unexpected runtime routing policy: %#v", reqCtx.RuntimeRoutingPolicy)
+	}
+	if !reqCtx.HasRuntimeCachePolicy || reqCtx.RuntimeCachePolicy.TTLSeconds != 3600 {
+		t.Fatalf("unexpected runtime cache policy: %#v", reqCtx.RuntimeCachePolicy)
 	}
 }
 

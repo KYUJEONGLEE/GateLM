@@ -24,6 +24,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
@@ -163,7 +164,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
-	maskingResult, redactedMessages, redactedPrompt, err := h.applyMasking(r.Context(), chatReq.Messages)
+	maskingResult, redactedMessages, redactedPrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID))
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway masking failed.", "mask_or_block")
 		return
@@ -171,7 +172,11 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.MaskingAction = string(maskingResult.Action)
 	reqCtx.MaskingDetectedTypes = maskingResult.DetectedTypes
 	reqCtx.MaskingDetectedCount = maskingResult.DetectedCount
-	reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
+	if maskingResult.Action == maskdomain.ActionNone {
+		reqCtx.RedactedPromptPreview = ""
+	} else {
+		reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
+	}
 	reqCtx.SecurityPolicyVersionID = maskingResult.SecurityPolicyVersionID
 	terminalLogPrompt = redactedPrompt
 
@@ -294,7 +299,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.Status = "success"
 	reqCtx.HTTPStatus = http.StatusOK
 	reqCtx.SavedCostMicroUSD = 0
-	if reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass {
+	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
 	}
@@ -310,6 +315,9 @@ func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	if gatewayCtx == nil {
 		return true
 	}
+	if !gatewayExactCachePolicyAllowsLookup(gatewayCtx) {
+		return false
+	}
 
 	switch gatewayCtx.Cache.CacheStatus {
 	case "", cachestage.CacheStatusBypass:
@@ -317,6 +325,27 @@ func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	default:
 		return false
 	}
+}
+
+func gatewayExactCachePolicyAllowsLookup(gatewayCtx *request.GatewayContext) bool {
+	if gatewayCtx == nil || !gatewayCtx.Runtime.HasCachePolicy {
+		return true
+	}
+	return cachePolicyAllowsExact(gatewayCtx.Runtime.CachePolicy)
+}
+
+func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
+	if reqCtx == nil {
+		return false
+	}
+	if !reqCtx.HasRuntimeCachePolicy {
+		return true
+	}
+	return cachePolicyAllowsExact(reqCtx.RuntimeCachePolicy)
+}
+
+func cachePolicyAllowsExact(policy runtimeconfig.CachePolicy) bool {
+	return policy.Enabled && strings.EqualFold(strings.TrimSpace(policy.Type), runtimeconfig.CacheTypeExact)
 }
 
 func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
@@ -350,10 +379,13 @@ func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
 	}
 }
 
-func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []provider.ChatMessage) (maskdomain.Result, []provider.ChatMessage, string, error) {
+func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []provider.ChatMessage, securityPolicyVersionID string) (maskdomain.Result, []provider.ChatMessage, string, error) {
 	redactedMessages := make([]provider.ChatMessage, len(messages))
 	results := make([]maskdomain.Result, 0, len(messages))
 	redactedPromptParts := make([]string, 0, len(messages))
+	if strings.TrimSpace(securityPolicyVersionID) == "" {
+		securityPolicyVersionID = h.SecurityPolicyVersionID
+	}
 
 	for index, message := range messages {
 		content, err := chatMessageText(message)
@@ -363,7 +395,7 @@ func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []pr
 
 		result, err := h.MaskingEngine.Apply(ctx, maskdomain.ApplyRequest{
 			Prompt:                  content,
-			SecurityPolicyVersionID: h.SecurityPolicyVersionID,
+			SecurityPolicyVersionID: securityPolicyVersionID,
 		})
 		if err != nil {
 			return maskdomain.Result{}, nil, "", err
@@ -380,7 +412,7 @@ func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []pr
 	}
 
 	combinedPrompt := strings.Join(redactedPromptParts, "\n")
-	combined := combineMaskingResults(results, combinedPrompt, h.SecurityPolicyVersionID)
+	combined := combineMaskingResults(results, combinedPrompt, securityPolicyVersionID)
 	return combined, redactedMessages, combinedPrompt, nil
 }
 
@@ -473,7 +505,7 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 		ApplicationID:            reqCtx.ApplicationID,
 		SelectedProvider:         reqCtx.SelectedProvider,
 		SelectedModel:            reqCtx.SelectedModel,
-		SecurityPolicyVersionID:  reqCtx.SecurityPolicyVersionID,
+		SecurityPolicyVersionID:  firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID),
 		RoutingPolicyVersionID:   reqCtx.RoutingPolicyHash,
 		CachePolicyHash:          h.CachePolicyHash,
 		NormalizedRedactedPrompt: redactedPrompt,
@@ -613,6 +645,15 @@ func ensureCacheDefaults(reqCtx *pipeline.RequestContext) {
 	}
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipeline.RequestContext) {
 	if resp == nil || reqCtx == nil {
 		return
@@ -700,6 +741,8 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		AppTokenID:              reqCtx.AppTokenID,
 		EndUserID:               reqCtx.EndUserID,
 		FeatureID:               reqCtx.FeatureID,
+		ConfigHash:              reqCtx.ConfigHash,
+		SecurityPolicyHash:      reqCtx.SecurityPolicyHash,
 		RateLimitDecision:       reqCtx.RateLimitDecision,
 		Endpoint:                reqCtx.Endpoint,
 		Method:                  reqCtx.Method,

@@ -4,11 +4,13 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 type GatewayContext struct {
 	Request    RequestContext
 	Identity   IdentityContext
+	Runtime    RuntimeContext
 	Governance GovernanceContext
 	Masking    MaskingContext
 	Routing    RoutingContext
@@ -35,6 +37,19 @@ type IdentityContext struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+}
+
+type RuntimeContext struct {
+	ConfigHash         string
+	SecurityPolicyHash string
+	RoutingPolicyHash  string
+
+	RateLimitConfig    ratelimit.Config
+	HasRateLimitConfig bool
+	RoutingPolicy      runtimeconfig.RoutingPolicy
+	HasRoutingPolicy   bool
+	CachePolicy        runtimeconfig.CachePolicy
+	HasCachePolicy     bool
 }
 
 type GovernanceContext struct {
@@ -83,4 +98,16 @@ func (c *GatewayContext) SetError(httpStatus int, code string, message string, s
 		ErrorMessage: message,
 		ErrorStage:   stage,
 	}
+}
+
+func (c *GatewayContext) BypassCache() {
+	if c == nil {
+		return
+	}
+	c.Cache.CacheStatus = "bypass"
+	c.Cache.CacheType = "none"
+	c.Cache.CacheKeyHash = ""
+	c.Cache.CacheHitRequestID = ""
+	c.Cache.SavedCostMicroUSD = 0
+	c.Cache.Payload = nil
 }

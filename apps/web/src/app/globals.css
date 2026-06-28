@@ -767,6 +767,32 @@ select {
   justify-self: center;
 }
 
+.onboarding-step-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+}
+
+.onboarding-step-title p,
+.onboarding-step-title h3 {
+  margin: 0;
+}
+
+.onboarding-step-title p {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.onboarding-step-title h3 {
+  color: var(--foreground);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
 .onboarding-panel .panel-heading {
   display: flex;
   align-items: flex-start;
@@ -1191,9 +1217,16 @@ select {
 }
 
 .customer-demo-summary-card[data-tone="blocked"] i,
-.customer-demo-summary-card[data-tone="redacted"] i {
+.customer-demo-summary-card[data-tone="redacted"] i,
+.customer-demo-summary-card[data-tone="rate_limited"] i {
   background: #fff4de;
   color: #f59e0b;
+}
+
+.customer-demo-summary-card[data-tone="pending"] i,
+.customer-demo-summary-card[data-tone="not-configured"] i {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .customer-demo-layout {

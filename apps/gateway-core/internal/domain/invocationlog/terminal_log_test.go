@@ -20,6 +20,8 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		ApplicationID:           " app_demo ",
 		APIKeyID:                " api_key_demo ",
 		AppTokenID:              " app_token_demo ",
+		ConfigHash:              " hash_runtime_config_test ",
+		SecurityPolicyHash:      " hash_security_policy_test ",
 		RequestedModel:          "auto",
 		Provider:                "mock",
 		Model:                   "mock-fast",
@@ -68,6 +70,15 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	}
 	if log.Metadata["schemaVersion"] != 1 || log.Metadata["securityPolicyVersionId"] != "sec_p0_v1" || log.Metadata["routingPolicyHash"] != "route_p0_v1" {
 		t.Fatalf("unexpected metadata: %+v", log.Metadata)
+	}
+	runtimeMetadata, ok := log.Metadata["runtime"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtime metadata, got %+v", log.Metadata)
+	}
+	if runtimeMetadata["configHash"] != "hash_runtime_config_test" ||
+		runtimeMetadata["securityPolicyHash"] != "hash_security_policy_test" ||
+		runtimeMetadata["routingPolicyHash"] != "route_p0_v1" {
+		t.Fatalf("unexpected runtime metadata: %+v", runtimeMetadata)
 	}
 }
 

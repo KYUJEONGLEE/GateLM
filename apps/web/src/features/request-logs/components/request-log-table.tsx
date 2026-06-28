@@ -12,6 +12,7 @@ import type { Locale } from "@/lib/i18n/locale";
 type RequestLogTableProps = {
   locale: Locale;
   records: InvocationLogRecord[];
+  sourceState: "ready" | "unavailable";
   tenantId: string;
   timezone: string;
 };
@@ -36,7 +37,13 @@ const requestLogText: Record<
   }
 };
 
-export function RequestLogTable({ locale, records, tenantId, timezone }: RequestLogTableProps) {
+export function RequestLogTable({
+  locale,
+  records,
+  sourceState,
+  tenantId,
+  timezone
+}: RequestLogTableProps) {
   const text = requestLogText[locale];
 
   return (
@@ -64,6 +71,16 @@ export function RequestLogTable({ locale, records, tenantId, timezone }: Request
               </tr>
             </thead>
             <tbody>
+              {sourceState === "unavailable" ? (
+                <tr>
+                  <td colSpan={8}>Live Gateway request logs are not available right now.</td>
+                </tr>
+              ) : null}
+              {sourceState === "ready" && records.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>No Gateway request logs found for the current range.</td>
+                </tr>
+              ) : null}
               {records.map((record) => (
                 <tr key={record.requestId}>
                   <td>

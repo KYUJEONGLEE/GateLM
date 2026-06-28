@@ -117,7 +117,7 @@ const onboardingText: Record<
   en: {
     next: "Next",
     previous: "Previous",
-    step: "step",
+    step: "Step",
     title: "Onboarding"
   },
   ko: {
@@ -129,7 +129,10 @@ const onboardingText: Record<
 };
 
 export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboardingFlowProps) {
-  const activeIndex = onboardingSteps.findIndex((step) => step.id === activeStepId);
+  const activeIndex = Math.max(
+    onboardingSteps.findIndex((step) => step.id === activeStepId),
+    0
+  );
   const activeStep = onboardingSteps[activeIndex] ?? onboardingSteps[0];
   const previousStep = onboardingSteps[activeIndex - 1];
   const nextStep = onboardingSteps[activeIndex + 1];
@@ -152,6 +155,7 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
               className="onboarding-step"
               data-active={step.id === activeStep.id}
               data-position={index < activeIndex ? "previous" : "current-or-next"}
+              data-state={getStepState(index, activeIndex)}
               href={getStepPath(model.tenantId, step.id)}
               key={step.id}
             >
@@ -162,16 +166,14 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
         </aside>
 
         <div className="onboarding-main">
-          <article className="console-panel onboarding-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="console-kicker">
-                  {text.step} {activeIndex + 1}
-                </p>
-                <h3>{activeStepLabel}</h3>
-              </div>
-            </div>
+          <div className="onboarding-step-title">
+            <p>
+              {text.step} {activeIndex + 1}
+            </p>
+            <h3>{activeStepLabel}</h3>
+          </div>
 
+          <article className="onboarding-panel">
             {renderStepContent({
               activeStepId: activeStep.id,
               locale,
@@ -348,12 +350,12 @@ function CredentialStep({
 function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
   return (
     <dl className="onboarding-detail-grid">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{formatDisplayIdentifier(value)}</dd>
-          </div>
-        ))}
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{formatDisplayIdentifier(value)}</dd>
+        </div>
+      ))}
     </dl>
   );
 }
@@ -367,4 +369,16 @@ export function normalizeOnboardingStepId(value: string | string[] | undefined):
 
 function getStepPath(tenantId: string, stepId: OnboardingStepId) {
   return `/tenants/${tenantId}/onboarding?step=${stepId}`;
+}
+
+function getStepState(index: number, activeIndex: number) {
+  if (index < activeIndex) {
+    return "completed";
+  }
+
+  if (index === activeIndex) {
+    return "current";
+  }
+
+  return "upcoming";
 }

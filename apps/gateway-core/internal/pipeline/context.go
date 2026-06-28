@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 type RequestContext struct {
@@ -22,6 +23,15 @@ type RequestContext struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+
+	ConfigHash              string
+	SecurityPolicyHash      string
+	RuntimeRateLimit        ratelimit.Config
+	HasRuntimeRateLimit     bool
+	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy
+	HasRuntimeRoutingPolicy bool
+	RuntimeCachePolicy      runtimeconfig.CachePolicy
+	HasRuntimeCachePolicy   bool
 
 	RateLimitDecision *ratelimit.Decision
 
