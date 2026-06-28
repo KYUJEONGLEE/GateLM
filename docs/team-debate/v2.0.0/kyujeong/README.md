@@ -215,3 +215,40 @@ Web Console IA가 결정되면, 각 화면에서 필요한 aggregate grain과 dr
 이규정 역할의 핵심은 더 많은 저장소와 차트를 붙이는 것이 아니라, 정책/비용/보안/cache/routing/failover 결과를 측정 가능한 운영 evidence로 연결하는 것이다.
 
 성능 고도화는 PostgreSQL 기반 query profile과 k6 scenario baseline을 먼저 강화하고, 측정된 병목을 근거로 partition, TimescaleDB, outbox, ClickHouse 같은 선택지를 순서대로 검토해야 한다.
+
+## 2026-06-29 1차 pull 반영 - 규민님 have-to-decision에 대한 추가 의견
+
+규민님 `have-to-decision.md`에서 새로 분리된 결정 항목들에 대체로 동의한다.
+관측성 관점에서 특히 중요한 보완점은 아래 세 가지다.
+
+### 1. 직원 Chat UI도 Application boundary를 유지해야 집계가 안전하다
+
+직원 Chat UI가 v2 demo의 중심이 되더라도 Observability는 별도 identity 체계를 새로 발명하지 않는 편이 안전하다.
+Internal Chat Application 같은 형태로 Application boundary를 유지하면, 기존 request log, runtime policy, budget aggregate, k6 scenario가 같은 축으로 이어진다.
+
+다만 UI 표시명과 canonical field는 분리해야 한다.
+`applicationType=internal_chat` 같은 표현은 Web read model 후보로 둘 수 있지만, 공식 필드명은 Gateway/Control Plane 계약 전까지 확정하지 않는 편이 좋다.
+
+### 2. Dashboard polling은 v2.0.0 main path로 충분하다
+
+Realtime dashboard는 발표 체감이 좋지만, v2.0.0에서 SSE/WebSocket까지 필수로 잡으면 Observability와 Web의 범위가 커진다.
+지금 단계에서는 짧은 interval polling을 기준으로 두고, polling interval이 DB query와 Gateway traffic에 주는 영향을 k6/query profile로 같이 측정하는 것이 좋다.
+
+안전한 기본값은 아래다.
+
+```text
+manual refresh 지원
+-> demo mode에서 polling on
+-> query profile로 interval 조정
+-> SSE/WebSocket은 v2.x 후보
+```
+
+### 3. Web Console IA가 정해지면 aggregate grain도 같이 잠가야 한다
+
+`Dashboard / Management / Analytics / Demo / Settings` 분리에는 동의한다.
+다만 Observability가 실질적으로 구현하려면 각 화면이 요구하는 aggregate grain을 같이 정해야 한다.
+
+예를 들어 Dashboard Overview는 조직 수준, Cost 화면은 budget scope 수준, Analytics는 request/detail drilldown 수준처럼 grain을 제한해야 한다.
+모든 dimension 조합을 API로 열면 v2.0.0에서 query와 index 설계가 과도해질 수 있다.
+
+따라서 Web Console IA 결정과 함께 `screen -> aggregate grain -> required filters -> freshness expectation` 표를 만드는 것을 제안한다.
