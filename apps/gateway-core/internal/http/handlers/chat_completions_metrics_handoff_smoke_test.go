@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/domain/metrics"
@@ -190,7 +191,7 @@ func metricsHandoffRateLimitedRequest(t *testing.T, registry *metrics.Registry, 
 func metricsHandoffProviderErrorRequest(t *testing.T, registry *metrics.Registry, logWriter *recordingTerminalLogWriter) (*httptest.ResponseRecorder, int) {
 	t.Helper()
 
-	providerCalls := 0
+	var providerCalls int64
 	handler := ChatCompletionsHandler{
 		Providers:         provider.NewRegistry("nil-provider", metricsHandoffNilProviderAdapter{calls: &providerCalls}),
 		DefaultModel:      "mock-balanced",
@@ -200,7 +201,7 @@ func metricsHandoffProviderErrorRequest(t *testing.T, registry *metrics.Registry
 	}
 	withTestAuth(&handler)
 
-	return metricsHandoffExercise(t, &handler, metricsHandoffProviderRequestID, "Write a short safe response while upstream is unavailable."), providerCalls
+	return metricsHandoffExercise(t, &handler, metricsHandoffProviderRequestID, "Write a short safe response while upstream is unavailable."), int(atomic.LoadInt64(&providerCalls))
 }
 
 func metricsHandoffExercise(t *testing.T, handler *ChatCompletionsHandler, requestID string, prompt string) *httptest.ResponseRecorder {
@@ -447,7 +448,7 @@ func metricsHandoffHasForbiddenLabels(output string) bool {
 }
 
 type metricsHandoffNilProviderAdapter struct {
-	calls *int
+	calls *int64
 }
 
 func (a metricsHandoffNilProviderAdapter) Name() string {
@@ -460,7 +461,7 @@ func (a metricsHandoffNilProviderAdapter) ListModels(ctx context.Context) (*prov
 
 func (a metricsHandoffNilProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	if a.calls != nil {
-		(*a.calls)++
+		atomic.AddInt64(a.calls, 1)
 	}
 	return nil, nil
 }
