@@ -2,6 +2,9 @@ import "server-only";
 
 import { existsSync } from "node:fs";
 
+const DEFAULT_RATE_LIMIT_MAX_ATTEMPTS = 6;
+const HARD_RATE_LIMIT_MAX_ATTEMPTS = 10;
+
 export type LiveGatewayConfig = {
   apiKey: string;
   appToken: string;
@@ -52,11 +55,10 @@ function getRateLimitMaxAttempts() {
   const explicitMaxAttempts = parsePositiveInt(process.env.GATELM_WEB_RATE_LIMIT_MAX_ATTEMPTS);
 
   if (explicitMaxAttempts) {
-    return clamp(explicitMaxAttempts, 2, 100);
+    return clamp(explicitMaxAttempts, 1, HARD_RATE_LIMIT_MAX_ATTEMPTS);
   }
 
-  const configuredGatewayLimit = parsePositiveInt(process.env.GATEWAY_RATE_LIMIT_LIMIT) ?? 60;
-  return clamp(configuredGatewayLimit + 1, 2, 100);
+  return DEFAULT_RATE_LIMIT_MAX_ATTEMPTS;
 }
 
 function parsePositiveInt(value: string | undefined) {

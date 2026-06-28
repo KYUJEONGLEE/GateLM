@@ -132,6 +132,7 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
     let latestResult: GatewayCallResult | null = null;
     const { rateLimitMaxAttempts } = getLiveGatewayConfig();
 
+    // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
       latestResult = await callGateway("rate-limited", String(index + 1));
 
