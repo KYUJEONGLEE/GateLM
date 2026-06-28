@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type {
-  AdminEndpoint,
   AdminOnboardingModel,
   CredentialIssueResponse,
   CredentialListItem
@@ -24,70 +23,59 @@ export type OnboardingStepId =
 type OnboardingStep = {
   id: OnboardingStepId;
   label: string;
-  summary: string;
+  shortLabel: string;
 };
 
 const onboardingSteps: OnboardingStep[] = [
   {
     id: "project",
     label: "Project",
-    summary: "Tenant-scoped customer support project"
+    shortLabel: "Project"
   },
   {
     id: "application",
     label: "Application",
-    summary: "Customer demo app and rate limit scope"
+    shortLabel: "App"
   },
   {
     id: "provider",
     label: "Provider",
-    summary: "Mock provider configuration without direct calls"
+    shortLabel: "Provider"
   },
   {
     id: "api-key",
     label: "API Key",
-    summary: "Gateway API key issue and list states"
+    shortLabel: "API Key"
   },
   {
     id: "app-token",
     label: "App Token",
-    summary: "Application-bound token issue and list states"
+    shortLabel: "Token"
   },
   {
     id: "runtime-config",
     label: "Runtime Config",
-    summary: "Published config consumed by Gateway"
+    shortLabel: "Runtime"
   }
 ];
-
-const endpointByStep: Record<OnboardingStepId, string[]> = {
-  project: ["createProject"],
-  application: ["createApplication"],
-  provider: ["upsertProvider"],
-  "api-key": ["issueApiKey", "listApiKeys"],
-  "app-token": ["issueAppToken", "listAppTokens"],
-  "runtime-config": ["getActiveRuntimeConfig"]
-};
 
 export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlowProps) {
   const activeIndex = onboardingSteps.findIndex((step) => step.id === activeStepId);
   const activeStep = onboardingSteps[activeIndex] ?? onboardingSteps[0];
-  const activeEndpoints = getStepEndpoints(model.endpoints, activeStep.id);
   const previousStep = onboardingSteps[activeIndex - 1];
   const nextStep = onboardingSteps[activeIndex + 1];
 
   return (
     <main className="console-content">
-      <section className="dashboard-hero">
+      <section className="onboarding-hero">
         <div>
           <p className="console-kicker">admin onboarding</p>
-          <h2>Control Plane setup flow</h2>
-          <p>
-            Fixture-backed setup path for Project, Application, Provider, API
-            Key, App Token, and the active Runtime Config consumed by Gateway.
-          </p>
+          <h2>Control Plane setup</h2>
         </div>
-        <div className="console-context">No provider call</div>
+        <div className="onboarding-hero-meta">
+          <span>{model.project.status}</span>
+          <span>{model.application.rateLimitScope} rate limit</span>
+        </div>
       </section>
 
       <section className="onboarding-layout" aria-label="Admin onboarding flow">
@@ -96,25 +84,26 @@ export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlow
             <Link
               className="onboarding-step"
               data-active={step.id === activeStep.id}
+              data-state={getStepState(index, activeIndex)}
               href={getStepPath(model.tenantId, step.id)}
               key={step.id}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{step.label}</strong>
-              <small>{step.summary}</small>
+              <strong>{step.shortLabel}</strong>
             </Link>
           ))}
         </aside>
 
         <div className="onboarding-main">
-          <article className="console-panel onboarding-panel">
+          <div className="onboarding-step-title">
+            <p>Step {activeIndex + 1}</p>
+            <h3>{activeStep.label}</h3>
+          </div>
+
+          <article className="onboarding-panel">
             <div className="panel-heading">
-              <div>
-                <p className="console-kicker">step {activeIndex + 1}</p>
-                <h3>{activeStep.label}</h3>
-              </div>
               <span className="status-badge" data-status="success">
-                fixture
+                configured
               </span>
             </div>
 
@@ -122,14 +111,6 @@ export function AdminOnboardingFlow({ activeStepId, model }: AdminOnboardingFlow
               activeStepId: activeStep.id,
               model
             })}
-          </article>
-
-          <article className="console-panel">
-            <div className="panel-heading">
-              <h3>Control Plane contract</h3>
-              <p>Route catalog entries used by this step. No request is sent.</p>
-            </div>
-            <EndpointList endpoints={activeEndpoints} />
           </article>
 
           <div className="onboarding-actions">
@@ -172,7 +153,7 @@ function renderStepContent({
           ["Tenant", model.tenantId],
           ["Project", model.project.id],
           ["Status", model.project.status],
-          ["API state", "fixture only"]
+          ["Gateway scope", "tenant scoped"]
         ]}
       />
     );
@@ -270,7 +251,6 @@ function CredentialStep({
       <section className="credential-list-state" aria-label={`${credentialName} list state`}>
         <div className="panel-heading">
           <h4>Subsequent list state</h4>
-          <p>Plaintext and secret hash are absent.</p>
         </div>
         <DetailGrid
           rows={[
@@ -295,35 +275,13 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
       {rows.map(([label, value]) => (
         <div key={label}>
           <dt>{label}</dt>
-          <dd>{value}</dd>
+          <dd>
+            <span>{value}</span>
+          </dd>
         </div>
       ))}
     </dl>
   );
-}
-
-function EndpointList({ endpoints }: { endpoints: AdminEndpoint[] }) {
-  if (endpoints.length === 0) {
-    return <p className="empty-note">No route catalog entry for this step.</p>;
-  }
-
-  return (
-    <div className="endpoint-list">
-      {endpoints.map((endpoint) => (
-        <div className="endpoint-row" key={endpoint.operationId}>
-          <span>{endpoint.method}</span>
-          <strong>{endpoint.operationId}</strong>
-          <code>{endpoint.path}</code>
-          <small>{endpoint.successStatus}</small>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function getStepEndpoints(endpoints: AdminEndpoint[], stepId: OnboardingStepId) {
-  const operationIds = endpointByStep[stepId];
-  return endpoints.filter((endpoint) => operationIds.includes(endpoint.operationId));
 }
 
 export function normalizeOnboardingStepId(value: string | string[] | undefined): OnboardingStepId {
@@ -335,4 +293,16 @@ export function normalizeOnboardingStepId(value: string | string[] | undefined):
 
 function getStepPath(tenantId: string, stepId: OnboardingStepId) {
   return `/tenants/${tenantId}/onboarding?step=${stepId}`;
+}
+
+function getStepState(index: number, activeIndex: number) {
+  if (index < activeIndex) {
+    return "completed";
+  }
+
+  if (index === activeIndex) {
+    return "current";
+  }
+
+  return "upcoming";
 }

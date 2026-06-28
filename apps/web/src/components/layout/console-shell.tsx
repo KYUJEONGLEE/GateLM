@@ -64,7 +64,7 @@ export function ConsoleShell({ activeSection, children, tenantId }: ConsoleShell
             <p className="console-kicker">tenant</p>
             <h1>{tenantId}</h1>
           </div>
-          <div className="console-context">Fixture mode</div>
+          <div className="console-context">v1 baseline</div>
         </header>
         {children}
       </div>

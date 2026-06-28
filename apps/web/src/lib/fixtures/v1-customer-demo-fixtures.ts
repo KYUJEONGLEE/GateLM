@@ -96,6 +96,18 @@ const scenarioConfigs: ScenarioConfig[] = [
     recordId: "request_v1_demo_cache_hit_002",
     scenarioId: "cache-hit",
     title: "Cache hit"
+  },
+  {
+    assistantMessage:
+      "No assistant reply was generated because the application exceeded its fixed-window limit.",
+    description: "Application-scoped rate limit stops the request before provider cost.",
+    metadata: {
+      customerTicketId: "ticket-rate-limited-005",
+      demoScenario: "rate-limited"
+    },
+    recordId: "request_v1_demo_rate_limited_005",
+    scenarioId: "rate-limited",
+    title: "Rate limit"
   }
 ];
 
@@ -189,6 +201,8 @@ function buildRequestBody(
         content: record.redactedPromptPreview ?? "Prompt preview not stored for this outcome."
       }
     ],
+    max_tokens: 128,
+    temperature: 0.2,
     stream: false,
     metadata: config.metadata,
     gate_lm: {
@@ -204,13 +218,13 @@ function buildRequestBody(
 }
 
 function buildResponseBody(config: ScenarioConfig, record: InvocationLogRecord) {
-  if (record.status === "blocked") {
+  if (record.httpStatus >= 400) {
     return {
       error: {
-        message: record.errorMessage ?? "Request blocked by GateLM security policy.",
-        type: "gatelm_policy_error",
+        message: record.errorMessage ?? "Gateway request failed.",
+        type: "gatelm_gateway_error",
         param: null,
-        code: record.errorCode ?? "sensitive_data_blocked",
+        code: record.errorCode ?? "gateway_error",
         request_id: record.requestId
       }
     };
@@ -301,6 +315,7 @@ export function getCustomerDemoModel(): CustomerDemoModel {
 
   return {
     applicationId: runtime.runtimeConfig.applicationId,
+    integrationMode: "fixture",
     projectId: runtime.runtimeConfig.projectId,
     scenarios: scenarioConfigs.map((config) => {
       const record = records.find((item) => item.requestId === config.recordId);

@@ -24,8 +24,8 @@ export function DashboardOverviewView({ overview }: DashboardOverviewProps) {
           <p className="console-kicker">v1.0.0 baseline</p>
           <h2>Overview</h2>
           <p>
-            Request metrics are rendered from the PostgreSQL-backed v1 fixture.
-            Costs and savings are displayed from fixture fields, not recalculated in UI.
+            Request metrics are rendered from the Gateway overview path. Costs
+            and savings are displayed from backend fields, not recalculated in UI.
           </p>
         </div>
         <Link
@@ -126,7 +126,7 @@ export function DashboardOverviewView({ overview }: DashboardOverviewProps) {
         <article className="console-panel wide-panel">
           <div className="panel-heading">
             <h3>Cost by model</h3>
-            <p>Canonical cost is fixture-provided micro USD with display USD alongside it.</p>
+            <p>Canonical cost is backend-provided micro USD with display USD alongside it.</p>
           </div>
           <div className="table-wrap">
             <table className="data-table">
@@ -157,7 +157,7 @@ export function DashboardOverviewView({ overview }: DashboardOverviewProps) {
 
       <section className="console-panel">
         <div className="panel-heading">
-          <h3>Fixture freshness</h3>
+          <h3>Data freshness</h3>
           <p>
             {overview.dataFreshness.source} generated at{" "}
             {formatDateTime(overview.dataFreshness.generatedAt, overview.range.timezone)}
