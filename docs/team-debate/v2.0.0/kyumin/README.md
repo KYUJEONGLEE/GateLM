@@ -234,6 +234,10 @@ streamingOutcome
 | Request Log | demo mode polling, 일반 모드 manual refresh |
 | Request Detail | 요청 단위 조회, 자동 polling 불필요 |
 
+이 표는 최종 계약이 아니라 출발점이다.
+다만 v2 read model을 정할 때는 `screen -> aggregate grain -> required filters -> freshness expectation -> query budget`까지 같이 보아야 한다.
+그렇지 않으면 Web은 실시간처럼 보이게 만들고 Observability는 감당하기 어려운 query를 처리해야 하는 구조가 될 수 있다.
+
 ## 2026-06-29 추가 의견: 이윤지 Safety 의견 반영
 
 윤지님 의견의 핵심인 "v2 safety 목표는 detector 확장이 아니라 판단 가능성과 재현 가능한 evidence"라는 방향에 동의한다.
