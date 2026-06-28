@@ -19,6 +19,7 @@
 | 10 | Request outcome taxonomy | terminal status 유지 + domain별 outcome group 분리 | Gateway, Web, Observability, Safety | P0 | 추천안 있음 |
 | 11 | 권한별 safety detail 노출 | Employee는 최소 안내, Admin만 redacted detail과 policy summary | Web, Gateway, Safety, Observability | P0 | 추천안 있음 |
 | 12 | Semantic Cache UI 표현 범위 | v2 core가 아니라 evidence track으로 표시 | Web, Gateway, Safety, Observability | P1 | 추천안 있음 |
+| 13 | policy publish/reload 실패 UX | invalid publish 차단과 last known safe 상태를 UI에 명확히 표시 | Web, Control Plane, Gateway, Observability | P0 | 추천안 있음 |
 
 ## 1. v2 Web Console 정보 구조
 
@@ -360,6 +361,35 @@ Semantic Cache 후보는 raw prompt/raw response/실제 개인정보/실제 secr
 ### 영향을 받는 역할
 
 김규민, 이지섭, 이윤지, 이규정
+
+## 13. policy publish/reload 실패 UX
+
+### 왜 결정해야 하나?
+
+v2의 핵심 장면은 관리자가 만든 정책이 Gateway runtime에 반영되는 것이다.
+하지만 invalid publish, reload failure, stale runtime 상태를 UI가 숨기면 관리자는 정책이 적용됐는지 오해할 수 있다.
+
+### 선택지
+
+| 선택지 | 설명 | 장점 | 단점 |
+| -- | -- | -- | -- |
+| A | 성공 상태만 표시 | 화면 단순 | 실패 시 신뢰도 하락 |
+| B | validation failed/published/last known safe를 구분 | 운영 상태 설명 가능 | Control Plane/Gateway 상태 계약 필요 |
+| C | full audit timeline까지 표시 | 강력한 운영 UX | v2.0.0에는 범위가 클 수 있음 |
+
+### 추천안
+
+B안을 추천한다.
+Web Console은 invalid publish 차단, published 상태, Gateway가 last known safe를 쓰는 상태, fixture fallback 상태를 구분해서 보여줘야 한다.
+
+### 결정 전까지 안전한 기본값
+
+live publish 상태가 불명확하면 Web은 "적용됨"처럼 표시하지 않는다.
+데모에서는 sanitized fixture fallback으로 같은 메시지를 유지한다.
+
+### 영향을 받는 역할
+
+김규민, 재혁님, 이지섭, 이규정
 ---
 
 ## Codex 추가 결정 후보 - 2026-06-29
