@@ -131,7 +131,7 @@ function Assert-K6Installed {
     Write-Host ""
     Write-Host "Then rerun:"
     Write-Host "  .\scripts\dev\v1-k6-baseline.ps1 -GatewayBaseUrl $GatewayBaseUrl"
-    throw "k6 is required for PR3 baseline execution"
+    throw "k6 is required for v1.0.0 baseline execution"
 }
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -181,6 +181,7 @@ if (-not $SkipDbPrepare) {
         "db/migrations/005_harden_config_store_constraints.sql",
         "db/migrations/006_create_p0_invocation_logs_fallback.sql",
         "db/migrations/007_create_gateway_rate_limit_counters.sql",
+        "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
         "db/seeds/001_seed_p0_demo_data.sql"
     )
     Push-Location $repoRoot
