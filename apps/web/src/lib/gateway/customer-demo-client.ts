@@ -1,4 +1,11 @@
-export type CustomerDemoScenarioId = "safe" | "redacted" | "blocked" | "cache-hit";
+export type CustomerDemoScenarioId =
+  | "safe"
+  | "redacted"
+  | "blocked"
+  | "cache-hit"
+  | "rate-limited";
+
+export type CustomerDemoIntegrationMode = "fixture" | "gateway";
 
 export type CustomerDemoHeader = {
   name: string;
@@ -15,6 +22,8 @@ export type CustomerDemoRequest = {
       role: "system" | "user";
       content: string;
     }>;
+    max_tokens?: number;
+    temperature?: number;
     stream: false;
     metadata: Record<string, string>;
     gate_lm: {
@@ -55,6 +64,7 @@ export type CustomerDemoExchange = {
 
 export type CustomerDemoModel = {
   applicationId: string;
+  integrationMode: CustomerDemoIntegrationMode;
   projectId: string;
   scenarios: CustomerDemoExchange[];
   tenantId: string;
@@ -79,5 +89,32 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     }
 
     return scenario;
+  }
+}
+
+export class RouteGatewayChatClient implements GatewayChatClient {
+  constructor(private readonly tenantId: string) {}
+
+  async sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange> {
+    const response = await fetch("/api/customer-demo/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        scenarioId,
+        tenantId: this.tenantId
+      })
+    });
+    const payload = (await response.json()) as {
+      error?: string;
+      exchange?: CustomerDemoExchange;
+    };
+
+    if (!response.ok || !payload.exchange) {
+      throw new Error(payload.error ?? "Gateway integration request failed.");
+    }
+
+    return payload.exchange;
   }
 }

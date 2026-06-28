@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   FixtureGatewayChatClient,
+  RouteGatewayChatClient,
   type CustomerDemoExchange,
   type CustomerDemoHeader,
   type CustomerDemoModel,
@@ -15,27 +16,53 @@ type CustomerDemoAppProps = {
 };
 
 export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
-  const client = useMemo(() => new FixtureGatewayChatClient(model.scenarios), [model.scenarios]);
-  const [exchange, setExchange] = useState<CustomerDemoExchange>(model.scenarios[0]);
+  const client = useMemo(() => {
+    if (model.integrationMode === "gateway") {
+      return new RouteGatewayChatClient(model.tenantId);
+    }
+
+    return new FixtureGatewayChatClient(model.scenarios);
+  }, [model.integrationMode, model.scenarios, model.tenantId]);
+  const [exchange, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const requestInFlight = useRef(false);
+  const hasScenarios = model.scenarios.length > 0;
+  const hasRequestDetail = isRequestDetailAvailable(exchange);
 
-  async function selectScenario(scenarioId: CustomerDemoScenarioId) {
-    if (isLoading) {
+  const previewScenario = useCallback((scenarioId: CustomerDemoScenarioId) => {
+    if (requestInFlight.current) {
       return;
     }
 
+    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+
+    if (!scenario) {
+      return;
+    }
+
+    setLoadError(null);
+    setExchange(model.integrationMode === "gateway" ? buildPendingExchange(model, scenario) : scenario);
+  }, [model]);
+
+  const sendScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
+    if (requestInFlight.current) {
+      return;
+    }
+
+    requestInFlight.current = true;
     setIsLoading(true);
     setLoadError(null);
 
     try {
       setExchange(await client.sendChatCompletion(scenarioId));
-    } catch {
-      setLoadError("Unable to load this fixture scenario.");
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to send Gateway request.");
     } finally {
+      requestInFlight.current = false;
       setIsLoading(false);
     }
-  }
+  }, [client]);
 
   return (
     <main className="customer-demo-shell">
@@ -45,7 +72,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           <strong>Acme Support Desk</strong>
         </Link>
         <div className="customer-demo-header-meta">
-          <span>Gateway fixture mode</span>
+          <span>{model.integrationMode === "gateway" ? "Gateway live mode" : "Gateway fixture mode"}</span>
           <Link href={`/tenants/${model.tenantId}/dashboard`}>Web Console</Link>
         </div>
       </header>
@@ -53,30 +80,34 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
       <section className="customer-demo-hero">
         <div>
           <p className="console-kicker">customer demo app</p>
-          <h1>Text-only support assistant through GateLM</h1>
+          <h1>Support operations through GateLM</h1>
           <p>
-            This app shows the customer-side request shape that will call only
-            the Gateway. Scenarios are fixture-backed until the live Gateway
-            integration PR.
+            This app sends OpenAI-compatible requests through the Gateway and
+            surfaces the returned governance metadata.
           </p>
         </div>
-        <dl className="customer-demo-context" aria-label="Demo application context">
-          <div>
-            <dt>Tenant</dt>
-            <dd>{model.tenantId}</dd>
-          </div>
-          <div>
-            <dt>Project</dt>
-            <dd>{model.projectId}</dd>
-          </div>
-          <div>
-            <dt>Application</dt>
-            <dd>{model.applicationId}</dd>
-          </div>
-        </dl>
+        <div className="customer-demo-hero-side">
+          <GatewayTopology />
+          <dl className="customer-demo-context" aria-label="Demo application context">
+            <div>
+              <dt>Tenant</dt>
+              <dd>{model.tenantId}</dd>
+            </div>
+            <div>
+              <dt>Project</dt>
+              <dd>{model.projectId}</dd>
+            </div>
+            <div>
+              <dt>Application</dt>
+              <dd>{model.applicationId}</dd>
+            </div>
+          </dl>
+        </div>
       </section>
 
-      <section className="customer-demo-layout" aria-label="Customer demo fixture scenarios">
+      <OutcomeSummary exchange={exchange} />
+
+      <section className="customer-demo-layout" aria-label="Customer demo scenarios">
         <aside className="customer-demo-scenarios" aria-label="Scenario selector">
           {model.scenarios.map((scenario) => (
             <button
@@ -84,11 +115,14 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
               data-active={scenario.scenarioId === exchange.scenarioId}
               data-status={scenario.status}
               key={scenario.scenarioId}
-              onClick={() => selectScenario(scenario.scenarioId)}
+              onClick={() => previewScenario(scenario.scenarioId)}
               disabled={isLoading}
               type="button"
             >
-              <span>{scenario.httpStatus}</span>
+              <span>
+                <i aria-hidden="true" />
+                {scenario.httpStatus}
+              </span>
               <strong>{scenario.title}</strong>
               <small>{scenario.description}</small>
             </button>
@@ -110,6 +144,8 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
             </span>
           </div>
 
+          <GatewayFlow exchange={exchange} />
+
           <div className="chat-window">
             {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
             <article className="chat-bubble chat-bubble-user">
@@ -125,15 +161,27 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           <div className="customer-demo-actions">
             <button
               className="primary-button"
-              disabled={isLoading}
-              onClick={() => selectScenario(exchange.scenarioId)}
+              disabled={isLoading || !hasScenarios}
+              onClick={() => sendScenario(exchange.scenarioId)}
               type="button"
             >
-              {isLoading ? "Loading fixture..." : "Replay fixture request"}
+              {isLoading
+                ? model.integrationMode === "gateway"
+                  ? "Sending Gateway request..."
+                  : "Loading fixture..."
+                : model.integrationMode === "gateway"
+                  ? "Send Gateway request"
+                  : "Replay fixture request"}
             </button>
-            <Link className="secondary-button" href={exchange.requestLogHref}>
-              Open request detail
-            </Link>
+            {hasRequestDetail ? (
+              <Link className="secondary-button" href={exchange.requestLogHref}>
+                Open request detail
+              </Link>
+            ) : (
+              <button className="secondary-button" disabled type="button">
+                Open request detail
+              </button>
+            )}
           </div>
         </section>
 
@@ -154,7 +202,7 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           <article className="console-panel">
             <div className="panel-heading">
               <h3>Gateway result</h3>
-              <p>Fixture response metadata mirrors the v1 Gateway contract.</p>
+              <p>Response headers and metadata are returned by the Gateway path.</p>
             </div>
             <dl className="customer-demo-metrics">
               <Metric label="HTTP" value={String(exchange.httpStatus)} />
@@ -174,6 +222,191 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
         </section>
       </section>
     </main>
+  );
+}
+
+function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
+  const base = model.scenarios[0] ?? buildEmptyExchange(model);
+
+  if (model.integrationMode !== "gateway") {
+    return base;
+  }
+
+  return buildPendingExchange(model, base);
+}
+
+function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoExchange): CustomerDemoExchange {
+  return {
+    ...scenario,
+    assistantMessage: "Ready to send this scenario through the live Gateway.",
+    cacheStatus: "pending",
+    httpStatus: 0,
+    latencyMs: 0,
+    providerCall: "skipped",
+    requestId: "pending-live-request",
+    requestLogHref: `/tenants/${model.tenantId}/request-logs`,
+    response: {
+      body: {
+        status: "pending"
+      },
+      headers: [],
+      statusCode: 0
+    },
+    status: "pending",
+    title: scenario.title
+  };
+}
+
+function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
+  return (
+    exchange.requestId !== "pending-live-request" &&
+    exchange.requestId !== "not-configured" &&
+    exchange.requestLogHref.includes(`/request-logs/${exchange.requestId}`)
+  );
+}
+
+function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
+  return {
+    assistantMessage: "No customer demo scenario is configured.",
+    cacheStatus: "not-configured",
+    description: "Customer demo scenarios are not available for this tenant application.",
+    detectedTypes: [],
+    httpStatus: 0,
+    latencyMs: 0,
+    maskingAction: "none",
+    providerCall: "skipped",
+    request: {
+      endpoint: "/v1/chat/completions",
+      method: "POST",
+      headers: [
+        {
+          name: "Authorization",
+          value: "Bearer <redacted>"
+        },
+        {
+          name: "X-GateLM-App-Token",
+          value: "<redacted>"
+        },
+        {
+          name: "Content-Type",
+          value: "application/json"
+        }
+      ],
+      body: {
+        model: "auto",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful customer support assistant."
+          },
+          {
+            role: "user",
+            content: "No customer demo scenario is configured."
+          }
+        ],
+        max_tokens: 128,
+        temperature: 0.2,
+        stream: false,
+        metadata: {
+          source: "web-customer-demo"
+        },
+        gate_lm: {
+          cache: {
+            mode: "auto"
+          },
+          routing: {
+            mode: "auto"
+          },
+          responseMetadata: true
+        }
+      }
+    },
+    requestId: "not-configured",
+    requestLogHref: `/tenants/${model.tenantId}/request-logs`,
+    response: {
+      body: {
+        status: "not-configured"
+      },
+      headers: [],
+      statusCode: 0
+    },
+    scenarioId: "safe",
+    status: "not-configured",
+    title: "No scenario configured"
+  };
+}
+
+function GatewayTopology() {
+  return (
+    <div className="gateway-topology" aria-label="Live Gateway path">
+      {["Client", "Gateway", "Policy", "Provider", "Logs"].map((label) => (
+        <div key={label}>
+          <span aria-hidden="true" />
+          <strong>{label}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OutcomeSummary({ exchange }: { exchange: CustomerDemoExchange }) {
+  const detected = exchange.detectedTypes.length > 0 ? exchange.detectedTypes.join(", ") : "none";
+
+  return (
+    <section className="customer-demo-outcome" aria-label="Current Gateway outcome">
+      <OutcomeCard label="HTTP" value={String(exchange.httpStatus)} tone={exchange.status} />
+      <OutcomeCard label="Cache" value={exchange.cacheStatus} tone={exchange.cacheStatus} />
+      <OutcomeCard label="Masking" value={exchange.maskingAction} tone={exchange.maskingAction} />
+      <OutcomeCard label="Provider" value={exchange.providerCall} tone={exchange.providerCall} />
+      <OutcomeCard label="Detected" value={detected} tone={exchange.maskingAction} />
+    </section>
+  );
+}
+
+function OutcomeCard({ label, tone, value }: { label: string; tone: string; value: string }) {
+  return (
+    <article className="outcome-card" data-tone={tone}>
+      <span aria-hidden="true" />
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}
+
+function GatewayFlow({ exchange }: { exchange: CustomerDemoExchange }) {
+  const flow = [
+    { label: "Client", state: "done", value: exchange.request.method },
+    { label: "Auth", state: "done", value: "scoped" },
+    {
+      label: "Safety",
+      state: exchange.maskingAction === "blocked" ? "blocked" : "done",
+      value: exchange.maskingAction
+    },
+    {
+      label: "Cache",
+      state: exchange.cacheStatus === "hit" ? "hit" : exchange.cacheStatus === "bypass" ? "skipped" : "done",
+      value: exchange.cacheStatus
+    },
+    {
+      label: "Provider",
+      state: exchange.providerCall === "called" ? "done" : "skipped",
+      value: exchange.providerCall
+    },
+    { label: "Log", state: "done", value: "requestId" }
+  ];
+
+  return (
+    <div className="gateway-flow" aria-label="Gateway execution path">
+      {flow.map((step) => (
+        <div className="gateway-flow-step" data-state={step.state} key={step.label}>
+          <span aria-hidden="true" />
+          <strong>{step.label}</strong>
+          <small>{step.value}</small>
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -9,21 +9,24 @@ import {
 
 type RequestLogTableProps = {
   records: InvocationLogRecord[];
+  sourceState: "ready" | "unavailable";
   tenantId: string;
   timezone: string;
 };
 
-export function RequestLogTable({ records, tenantId, timezone }: RequestLogTableProps) {
+export function RequestLogTable({
+  records,
+  sourceState,
+  tenantId,
+  timezone
+}: RequestLogTableProps) {
   return (
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">request log</p>
           <h2>Invocation history</h2>
-          <p>
-            The list is backed by the v1 invocation log fixture. It shows only
-            sanitized previews and request metadata.
-          </p>
+          <p>Gateway request metadata from the PostgreSQL request log.</p>
         </div>
       </section>
 
@@ -43,6 +46,16 @@ export function RequestLogTable({ records, tenantId, timezone }: RequestLogTable
               </tr>
             </thead>
             <tbody>
+              {sourceState === "unavailable" ? (
+                <tr>
+                  <td colSpan={8}>Live Gateway request logs are not available right now.</td>
+                </tr>
+              ) : null}
+              {sourceState === "ready" && records.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>No Gateway request logs found for the current range.</td>
+                </tr>
+              ) : null}
               {records.map((record) => (
                 <tr key={record.requestId}>
                   <td>

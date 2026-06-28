@@ -24,7 +24,7 @@ export function RequestLogDetail({ record, tenantId, timezone }: RequestLogDetai
           </Link>
           <h2>{record.requestId}</h2>
           <p>
-            Detail view uses sanitized fixture fields only. Raw prompt, raw response,
+            Detail view uses sanitized metadata only. Raw prompt, raw response,
             plaintext credentials, and authorization headers are not displayed.
           </p>
         </div>
