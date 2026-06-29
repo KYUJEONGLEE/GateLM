@@ -89,6 +89,8 @@ const dashboardText: Record<
 export function DashboardOverviewView({ locale, overview }: DashboardOverviewProps) {
   const maxStatusCount = Math.max(...Object.values(overview.statusCounts), 1);
   const text = dashboardText[locale];
+  const safetyOutcomes = getSafetyOutcomeCounts(overview.maskingActionCounts);
+  const systemErrorRate = overview.totalRequests > 0 ? overview.failedRequests / overview.totalRequests : 0;
 
   return (
     <main className="console-content">
@@ -115,7 +117,8 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
           value={formatInteger(overview.rateLimitedRequests)}
           tone="warning"
         />
-        <MetricCard label={text.metrics.cacheHitRate} value={formatPercent(overview.cacheHitRate)} />
+        <MetricCard label="Exact cache hit rate" value={formatPercent(overview.cacheHitRate)} />
+        <MetricCard label="System error rate" value={formatPercent(systemErrorRate)} tone="danger" />
         <MetricCard label={text.metrics.totalTokens} value={formatInteger(overview.totalTokens)} />
         <MetricCard label={text.metrics.totalCost} value={formatUsd(overview.totalCostUsd)} />
         <MetricCard label={text.metrics.savedCost} value={formatUsd(overview.savedCostUsd)} tone="success" />
@@ -149,12 +152,12 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
 
         <article className="console-panel">
           <div className="panel-heading">
-            <h3>{text.maskingActions}</h3>
+            <h3>Safety outcomes</h3>
           </div>
           <div className="compact-list">
-            {Object.entries(overview.maskingActionCounts).map(([action, count]) => (
-              <div className="compact-row" key={action}>
-                <span>{action}</span>
+            {Object.entries(safetyOutcomes).map(([outcome, count]) => (
+              <div className="compact-row" key={outcome}>
+                <span>{outcome}</span>
                 <strong>{count}</strong>
               </div>
             ))}
@@ -222,6 +225,14 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
 
     </main>
   );
+}
+
+function getSafetyOutcomeCounts(maskingActionCounts: Record<string, number>) {
+  return {
+    passed: maskingActionCounts.none ?? 0,
+    redacted: maskingActionCounts.redacted ?? 0,
+    blocked: maskingActionCounts.blocked ?? 0
+  };
 }
 
 function MetricCard({

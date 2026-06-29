@@ -194,10 +194,7 @@ func canonicalLabels(labels []Label) string {
 		if _, ok := allowedLabels[name]; !ok {
 			continue
 		}
-		value := strings.TrimSpace(label.Value)
-		if value == "" {
-			value = "none"
-		}
+		value := safeLabelValue(name, label.Value)
 		filtered = append(filtered, Label{Name: name, Value: value})
 	}
 	sort.Slice(filtered, func(i int, j int) bool {
@@ -209,6 +206,127 @@ func canonicalLabels(labels []Label) string {
 		parts = append(parts, label.Name+"="+label.Value)
 	}
 	return strings.Join(parts, "\xff")
+}
+
+func safeLabelValue(name string, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "none"
+	}
+	if metricLabelValueLooksForbidden(value) {
+		switch name {
+		case "status":
+			return "failed"
+		case "http_status":
+			return "0"
+		case "error_code":
+			return "internal_error"
+		default:
+			return "redacted"
+		}
+	}
+	switch name {
+	case "status":
+		switch value {
+		case "success", "blocked", "rate_limited", "failed", "cancelled":
+			return value
+		default:
+			return "failed"
+		}
+	case "http_status":
+		if !isDigits(value) || len(value) > 3 {
+			return "0"
+		}
+		return value
+	case "error_code":
+		if !isSafeMetricToken(value, 64) {
+			return "internal_error"
+		}
+	case "method":
+		value = strings.ToUpper(value)
+		if !isSafeMetricToken(value, 16) {
+			return "UNKNOWN"
+		}
+	case "endpoint":
+		if len(value) > 96 {
+			return "redacted"
+		}
+	default:
+		if !isSafeMetricToken(value, 96) {
+			return "redacted"
+		}
+	}
+	return value
+}
+
+func metricLabelValueLooksForbidden(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	for _, forbidden := range []string{
+		"request_id",
+		"requestid",
+		"trace_id",
+		"traceid",
+		"prompt_hash",
+		"request_body_hash",
+		"cache_key_hash",
+		"credential",
+		"api_key",
+		"app_token",
+		"provider_key",
+		"authorization",
+		"bearer ",
+		"raw_error",
+		"raw error",
+		"sha256:",
+		"hmac-sha256:",
+		"glm_api_",
+		"glm_app_token_",
+		"sk-",
+	} {
+		if strings.Contains(normalized, forbidden) {
+			return true
+		}
+	}
+	if strings.HasPrefix(normalized, "req_") || strings.HasPrefix(normalized, "trace_") {
+		return true
+	}
+	return false
+}
+
+func isSafeMetricToken(value string, maxLen int) bool {
+	if value == "" || len(value) > maxLen {
+		return false
+	}
+	for _, char := range value {
+		if char >= 'a' && char <= 'z' {
+			continue
+		}
+		if char >= 'A' && char <= 'Z' {
+			continue
+		}
+		if char >= '0' && char <= '9' {
+			continue
+		}
+		switch char {
+		case '_', '-', '.', '/', ':':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func formatLabels(canonical string) string {

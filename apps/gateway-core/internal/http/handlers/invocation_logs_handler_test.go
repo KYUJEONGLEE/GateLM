@@ -305,14 +305,17 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	if response.Data.RequestID != "request_001" || response.Data.Routing.SelectedModel == nil || *response.Data.Routing.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected detail response: %+v", response.Data)
 	}
-	if response.Data.TerminalStatus != invocationlog.StatusSuccess || response.Data.Status != invocationlog.StatusSuccess || response.Data.DomainOutcomes.Safety.Outcome != "redacted" {
-		t.Fatalf("expected canonical detail outcome bridge, got terminal=%s status=%s outcomes=%+v", response.Data.TerminalStatus, response.Data.Status, response.Data.DomainOutcomes)
+	if response.Data.TerminalStatus != invocationlog.StatusSuccess || response.Data.DomainOutcomes.Safety.Outcome != "redacted" {
+		t.Fatalf("expected canonical detail outcome bridge, got terminal=%s outcomes=%+v", response.Data.TerminalStatus, response.Data.DomainOutcomes)
 	}
-	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_REDACTED]." {
-		t.Fatalf("expected redacted prompt preview, got %+v", response.Data.Masking)
+	if response.Data.SafetySummary.Outcome != "redacted" || response.Data.SafetySummary.MaskingAction != "redacted" || response.Data.SafetySummary.DetectedCount != 1 {
+		t.Fatalf("expected sanitized safety summary, got %+v", response.Data.SafetySummary)
 	}
-	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
-		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)
+	if len(response.Data.SafetySummary.DetectorCategories) != 1 || response.Data.SafetySummary.DetectorCategories[0] != "email" {
+		t.Fatalf("expected detector category summary, got %+v", response.Data.SafetySummary.DetectorCategories)
+	}
+	if response.Data.ErrorCode != nil || response.Data.UsageSummary.EstimatedCostMicroUSD != 1 || response.Data.LatencySummary.ProviderLatencyMs == nil {
+		t.Fatalf("unexpected optional/summary fields: error=%+v usage=%+v latency=%+v", response.Data.ErrorCode, response.Data.UsageSummary, response.Data.LatencySummary)
 	}
 	if response.Data.RuntimeSnapshot == nil ||
 		response.Data.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_detail_test" ||
@@ -331,6 +334,9 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 		"appTokenPlaintext",
 		"providerApiKey",
 		"metadata",
+		"redactedPromptPreview",
+		"cacheKeyHash",
+		"cacheHitRequestId",
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("response must not include forbidden field %q: %s", forbidden, body)
@@ -411,6 +417,7 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 			FailedRequests:        1,
 			BlockedRequests:       1,
 			RateLimitedRequests:   1,
+			CancelledRequests:     1,
 			CacheHitRequests:      1,
 			CacheEligibleRequests: 4,
 			CacheHitRate:          &cacheHitRate,
@@ -455,6 +462,45 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				LastLogCreatedAt: &lastLogCreatedAt,
 				GeneratedAt:      generatedAt,
 			},
+			GeneratedAt: generatedAt,
+			Freshness: invocationlog.DashboardFreshnessFields{
+				LastIngestedAt:   lastLogCreatedAt,
+				LastAggregatedAt: generatedAt,
+				Source:           "request_log",
+				IsStale:          false,
+			},
+			QueryBudget: invocationlog.DashboardQueryBudgetFields{
+				Status:            "ok",
+				MaxRangeHours:     24,
+				MaxBreakdownItems: 50,
+			},
+			Breakdowns: invocationlog.DashboardBreakdowns{
+				BySafetyOutcome: []invocationlog.OutcomeBreakdown{
+					{Outcome: "passed", RequestCount: 4},
+					{Outcome: "blocked", RequestCount: 1},
+					{Outcome: "redacted", RequestCount: 1},
+				},
+				ByCacheOutcome: []invocationlog.OutcomeBreakdown{
+					{Outcome: "hit", RequestCount: 1},
+					{Outcome: "miss", RequestCount: 3},
+				},
+				ByFallbackOutcome: []invocationlog.OutcomeBreakdown{
+					{Outcome: "success", RequestCount: 1},
+				},
+				ByTerminalStatus: []invocationlog.OutcomeBreakdown{
+					{Outcome: invocationlog.StatusSuccess, RequestCount: 3},
+					{Outcome: invocationlog.StatusBlocked, RequestCount: 1},
+					{Outcome: invocationlog.StatusRateLimited, RequestCount: 1},
+					{Outcome: invocationlog.StatusFailed, RequestCount: 1},
+				},
+			},
+			Performance: invocationlog.DashboardPerformanceFields{
+				P95GatewayInternalLatencyMs: 100,
+				P99GatewayInternalLatencyMs: 100,
+				P95ProviderLatencyMs:        86,
+				P99ProviderLatencyMs:        86,
+				SystemErrorRate:             1.0 / 6.0,
+			},
 		},
 	}
 	handler := DashboardOverviewHandler{
@@ -478,35 +524,29 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	if err := json.NewDecoder(strings.NewReader(body)).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Data.Totals.TotalRequests != 6 || response.Data.Totals.SuccessfulRequests != 2 || response.Data.Totals.FailedRequests != 1 || response.Data.Totals.BlockedRequests != 1 || response.Data.Totals.RateLimitedRequests != 1 {
+	if response.Data.Totals.RequestCount != 6 || response.Data.Totals.SuccessCount != 2 || response.Data.Totals.FailedCount != 1 || response.Data.Totals.BlockedCount != 1 || response.Data.Totals.RateLimitedCount != 1 {
 		t.Fatalf("unexpected dashboard totals: %+v", response.Data.Totals)
 	}
-	if response.Data.Totals.CacheEligibleRequests != 4 || response.Data.Totals.CacheHitRate == nil || *response.Data.Totals.CacheHitRate != 0.25 {
-		t.Fatalf("unexpected cache hit rate: %+v", response.Data.Totals.CacheHitRate)
+	if response.Data.Totals.ExactCacheHitRate != 0.25 {
+		t.Fatalf("unexpected exact cache hit rate: %+v", response.Data.Totals.ExactCacheHitRate)
 	}
-	if response.Data.Totals.PromptTokens != 78 || response.Data.Totals.CompletionTokens != 115 || response.Data.Totals.TotalTokens != 193 || response.Data.Totals.TotalCostUSD != "0.000256" || response.Data.Totals.SavedCostUSD != "0.000120" {
-		t.Fatalf("unexpected token/cost totals: %+v", response.Data.Totals)
+	if response.Data.Totals.EstimatedCostMicroUSD != 256 || response.Data.Totals.FallbackSuccessCount != 1 || response.Data.Totals.CancelledCount != 1 {
+		t.Fatalf("unexpected cost/fallback totals: %+v", response.Data.Totals)
 	}
-	if response.Data.Totals.AverageLatencyMs == nil || *response.Data.Totals.AverageLatencyMs != 50 || response.Data.Totals.P95LatencyMs == nil || *response.Data.Totals.P95LatencyMs != 100 {
-		t.Fatalf("unexpected latency totals: %+v", response.Data.Totals)
+	if response.Data.Performance.P95GatewayInternalLatencyMs != 100 || response.Data.Performance.SystemErrorRate != 1.0/6.0 {
+		t.Fatalf("unexpected performance summary: %+v", response.Data.Performance)
 	}
-	if response.Data.Totals.AverageResponseTimeMs == nil || *response.Data.Totals.AverageResponseTimeMs != 50 {
-		t.Fatalf("expected average response time compatibility field, got %+v", response.Data.Totals.AverageResponseTimeMs)
+	if len(response.Data.Breakdowns.BySafetyOutcome) != 3 || response.Data.Breakdowns.BySafetyOutcome[1].Outcome != "blocked" {
+		t.Fatalf("unexpected safety outcome breakdown: %+v", response.Data.Breakdowns.BySafetyOutcome)
 	}
-	if response.Data.Totals.StatusCounts[invocationlog.StatusRateLimited] != 1 || response.Data.Totals.MaskingActionCounts["blocked"] != 1 {
-		t.Fatalf("unexpected rollup counts: status=%+v masking=%+v", response.Data.Totals.StatusCounts, response.Data.Totals.MaskingActionCounts)
+	if len(response.Data.Breakdowns.ByTerminalStatus) != 4 || response.Data.Breakdowns.ByTerminalStatus[2].Outcome != invocationlog.StatusRateLimited {
+		t.Fatalf("unexpected terminal status breakdown: %+v", response.Data.Breakdowns.ByTerminalStatus)
 	}
-	if len(response.Data.Totals.RoutingCountByModel) != 1 || response.Data.Totals.RoutingCountByModel[0].SelectedModel != "mock-fast" {
-		t.Fatalf("unexpected routing count by model: %+v", response.Data.Totals.RoutingCountByModel)
+	if response.Data.Freshness.Source != "request_log" || !response.Data.Freshness.LastIngestedAt.Equal(lastLogCreatedAt) || !response.Data.GeneratedAt.Equal(generatedAt) {
+		t.Fatalf("unexpected freshness: %+v generated=%s", response.Data.Freshness, response.Data.GeneratedAt)
 	}
-	if len(response.Data.Totals.CostByModel) != 1 || response.Data.Totals.CostByModel[0].CostUSD != "0.000256" {
-		t.Fatalf("unexpected cost by model: %+v", response.Data.Totals.CostByModel)
-	}
-	if response.Data.DataFreshness.Source != "postgresql_request_log" || response.Data.DataFreshness.RecordCount != 6 || response.Data.DataFreshness.LastLogCreatedAt == nil || !response.Data.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || !response.Data.DataFreshness.GeneratedAt.Equal(generatedAt) {
-		t.Fatalf("unexpected data freshness: %+v", response.Data.DataFreshness)
-	}
-	if response.Data.Filter.ProjectID == nil || *response.Data.Filter.ProjectID != "project_demo" {
-		t.Fatalf("unexpected dashboard filter: %+v", response.Data.Filter)
+	if response.Data.Filters.ProjectID == nil || *response.Data.Filters.ProjectID != "project_demo" {
+		t.Fatalf("unexpected dashboard filter: %+v", response.Data.Filters)
 	}
 
 	for _, forbidden := range []string{

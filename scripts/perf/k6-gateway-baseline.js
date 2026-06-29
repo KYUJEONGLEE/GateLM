@@ -23,21 +23,40 @@ const requiredMetricFamilies = [
 
 const forbiddenMetricLabels = [
   "request_id",
+  "requestId",
   "trace_id",
+  "traceId",
   "tenant_id",
   "project_id",
   "application_id",
   "api_key_id",
+  "apiKeyId",
   "app_token_id",
+  "appTokenId",
+  "credential_id",
+  "credentialId",
   "end_user_id",
   "feature_id",
   "prompt",
+  "hash",
   "prompt_hash",
+  "promptHash",
   "request_body_hash",
+  "requestBodyHash",
   "cache_key_hash",
+  "cacheKeyHash",
   "provider_key",
+  "providerKey",
+  "auth_header",
+  "authHeader",
+  "authorization_header",
+  "authorizationHeader",
   "authorization",
   "raw_error_detail",
+  "rawErrorDetail",
+  "rawDetectedValue",
+  "rawOffset",
+  "rawPromptFragment",
 ];
 
 const forbiddenTerminalStatusValues = ["cache_hit", "error", "partial_success"];
@@ -62,9 +81,9 @@ export const options = {
       maxDuration: "45s",
       startTime: "5s",
     },
-    blocked_before_provider: {
+    safety_block_provider_bypass: {
       executor: "shared-iterations",
-      exec: "blocked_before_provider",
+      exec: "safety_block_provider_bypass",
       vus: 1,
       iterations: 1,
       maxDuration: "30s",
@@ -154,32 +173,36 @@ export function safe_cache_hit_baseline(data) {
   sleep(1);
 }
 
-export function blocked_before_provider(data) {
+export function safety_block_provider_bypass(data) {
   const metricsBefore = getMetrics();
   const providerBefore = sumMetric(metricsBefore, "gatelm_provider_requests_total");
   const cacheBefore = sumMetric(metricsBefore, "gatelm_cache_operations_total");
-  const response = chatCompletion(data.blockedPrompt, "k6-blocked-before-provider");
+  const response = chatCompletion(data.blockedPrompt, "k6-safety-block-provider-bypass");
   const metricsAfter = getMetrics();
   const providerAfter = sumMetric(metricsAfter, "gatelm_provider_requests_total");
   const cacheAfter = sumMetric(metricsAfter, "gatelm_cache_operations_total");
 
-  console.log(`metric_delta blocked provider_requests_total ${providerBefore} -> ${providerAfter}`);
-  console.log(`metric_delta blocked cache_operations_total ${cacheBefore} -> ${cacheAfter}`);
+  console.log(`metric_delta safety_block_provider_bypass provider_requests_total ${providerBefore} -> ${providerAfter}`);
+  console.log(`metric_delta safety_block_provider_bypass cache_operations_total ${cacheBefore} -> ${cacheAfter}`);
 
   check(response, {
-    "blocked request returns 403": (r) => r.status === 403,
-    "blocked request error code is sensitive_data_blocked": (r) => errorCode(r.body) === "sensitive_data_blocked",
-    "blocked request bypasses cache": (r) => headerValue(r, "X-GateLM-Cache-Status") === "bypass",
-    "blocked request reports masking blocked": (r) => headerValue(r, "X-GateLM-Masking-Action") === "blocked",
+    "safety block returns 403": (r) => r.status === 403,
+    "safety block error code is sensitive_data_blocked": (r) => errorCode(r.body) === "sensitive_data_blocked",
+    "safety block bypasses cache": (r) => headerValue(r, "X-GateLM-Cache-Status") === "bypass",
+    "safety block reports masking blocked": (r) => headerValue(r, "X-GateLM-Masking-Action") === "blocked",
   });
   check(metricsAfter, {
-    "blocked request does not increment provider metric": () => providerAfter === providerBefore,
-    "blocked request does not increment cache metric": () => cacheAfter === cacheBefore,
-    "blocked request records blocked gateway metric": (body) =>
+    "safety block does not increment provider metric": () => providerAfter === providerBefore,
+    "safety block does not increment cache metric": () => cacheAfter === cacheBefore,
+    "safety block records blocked gateway metric": (body) =>
       sumMetric(body, "gatelm_gateway_requests_total", { status: "blocked", http_status: "403", error_code: "sensitive_data_blocked" }) >= 1,
-    "blocked request records masking metric": (body) =>
+    "safety block records masking metric": (body) =>
       sumMetric(body, "gatelm_masking_actions_total", { masking_action: "blocked" }) >= 1,
   });
+}
+
+export function blocked_before_provider(data) {
+  safety_block_provider_bypass(data);
 }
 
 export function metrics_probe() {

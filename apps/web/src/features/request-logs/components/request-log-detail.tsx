@@ -85,8 +85,6 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Tenant", formatTenantDisplayName(record.tenantId)],
             ["Project", record.projectId],
             ["Application", formatDisplayIdentifier(record.applicationId)],
-            ["API key ID", record.apiKeyId],
-            ["App token ID", record.appTokenId],
             ["End user", nullableText(record.endUserId ? formatDisplayIdentifier(record.endUserId) : null)],
             ["Feature", nullableText(record.featureId)]
           ]}
@@ -104,13 +102,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
               `${record.domainOutcomes.cache.cacheType ?? record.cacheType}:${record.domainOutcomes.cache.outcome}`
             ],
             ["Provider outcome", record.domainOutcomes.provider.outcome],
-            ["Fallback outcome", record.domainOutcomes.fallback.outcome],
-            [
-              "Cache hit request",
-              nullableText(
-                record.cacheHitRequestId ? formatDisplayIdentifier(record.cacheHitRequestId) : null
-              )
-            ]
+            ["Fallback outcome", record.domainOutcomes.fallback.outcome]
           ]}
         />
 
@@ -120,9 +112,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Masking action", record.maskingAction],
             ["Safety outcome", record.domainOutcomes.safety.outcome],
             ["Detected count", String(record.maskingDetectedCount)],
-            ["Detected types", record.maskingDetectedTypes?.join(", ") || text.none],
-            ["Prompt preview", nullableText(record.redactedPromptPreview, text.emptyPreview)],
-            ["Prompt hash", record.promptHash]
+            ["Detector categories", record.maskingDetectedTypes?.join(", ") || text.none]
           ]}
         />
 
@@ -158,8 +148,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
           title="Error"
           rows={[
             ["Error code", nullableText(record.errorCode, text.none)],
-            ["Error stage", nullableText(record.errorStage, text.none)],
-            ["Message", nullableText(record.errorMessage, text.none)]
+            ["Error stage", nullableText(record.errorStage, text.none)]
           ]}
         />
 
@@ -172,12 +161,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Content hash", runtimeSnapshot.contentHash],
             ["Published", formatDateTime(runtimeSnapshot.publishedAt, timezone)],
             ["Published by", runtimeSnapshot.publishedBy],
-            ["Gateway instance", runtimeSnapshot.gatewayInstanceId],
-            ["Legacy config hash", runtimeSnapshot.legacyHashes.configHash],
-            ["Legacy security policy hash", runtimeSnapshot.legacyHashes.securityPolicyHash],
-            ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash],
-            ["Request body hash", record.requestBodyHash],
-            ["Cache key hash", nullableText(record.cacheKeyHash, text.none)]
+            ["Gateway instance", runtimeSnapshot.gatewayInstanceId]
           ]}
         />
       </section>

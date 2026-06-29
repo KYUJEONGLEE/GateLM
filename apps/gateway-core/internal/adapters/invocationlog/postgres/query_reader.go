@@ -192,6 +192,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		FailedRequests:        failedRequests,
 		BlockedRequests:       blockedRequests,
 		RateLimitedRequests:   rateLimitedRequests,
+		CancelledRequests:     statusCounts[invocationlog.StatusCancelled],
 		CacheHitRequests:      cacheHitRequests,
 		CacheEligibleRequests: cacheEligibleRequests,
 		PromptTokens:          promptTokens,
@@ -340,7 +341,7 @@ select
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
   coalesce(sum(cost_micro_usd), 0)::bigint as total_cost_micro_usd,
-  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd,
+  coalesce(sum(saved_cost_micro_usd) filter (where coalesce(nullif(cache_status, ''), 'bypass') = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact'), 0)::bigint as saved_cost_micro_usd,
 	  (avg(latency_ms) filter (where terminal_status in ('success', 'failed')))::float8 as average_latency_ms,
 	  (percentile_disc(0.95) within group (order by latency_ms) filter (where terminal_status in ('success', 'failed')))::float8 as p95_latency_ms,
   coalesce((

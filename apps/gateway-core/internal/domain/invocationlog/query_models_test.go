@@ -118,6 +118,15 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	if detail.Masking.RedactedPromptPreview != "Write a short refund response." {
 		t.Fatalf("unexpected redacted prompt preview: %+v", detail.Masking)
 	}
+	if detail.SafetySummary.Outcome != outcome.SafetyPassed || detail.SafetySummary.MaskingAction != "none" || detail.SafetySummary.DetectedCount != 0 || len(detail.SafetySummary.DetectorCategories) != 0 {
+		t.Fatalf("unexpected sanitized safety summary: %+v", detail.SafetySummary)
+	}
+	if detail.UsageSummary.EstimatedCostMicroUSD != 1 || detail.UsageSummary.SavedCostMicroUSD != 0 {
+		t.Fatalf("unexpected usage summary: %+v", detail.UsageSummary)
+	}
+	if detail.LatencySummary.GatewayInternalLatencyMs != 46 || detail.LatencySummary.TotalLatencyMs != 132 {
+		t.Fatalf("unexpected latency summary: %+v", detail.LatencySummary)
+	}
 	if detail.TerminalStatus != outcome.TerminalStatusSuccess ||
 		detail.Status != outcome.TerminalStatusSuccess ||
 		detail.DomainOutcomes.Provider.Outcome != outcome.ProviderSuccess {
@@ -201,6 +210,39 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	}
 	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
+	}
+	if overview.Performance.SystemErrorRate != 1.0/6.0 {
+		t.Fatalf("system error rate must count failed requests only, got %+v", overview.Performance.SystemErrorRate)
+	}
+	if countOutcome(overview.Breakdowns.BySafetyOutcome, outcome.SafetyBlocked) != 1 || countOutcome(overview.Breakdowns.BySafetyOutcome, outcome.SafetyRedacted) != 1 {
+		t.Fatalf("unexpected safety outcome breakdown: %+v", overview.Breakdowns.BySafetyOutcome)
+	}
+	if countOutcome(overview.Breakdowns.ByCacheOutcome, outcome.CacheHit) != 1 {
+		t.Fatalf("unexpected cache outcome breakdown: %+v", overview.Breakdowns.ByCacheOutcome)
+	}
+}
+
+func TestBuildDashboardOverviewCountsOnlyExactCacheSavedCost(t *testing.T) {
+	overview := BuildDashboardOverview([]LlmInvocationLog{
+		{
+			Status:            StatusSuccess,
+			CacheStatus:       CacheStatusHit,
+			CacheType:         CacheTypeExact,
+			SavedCostMicroUSD: 10,
+		},
+		{
+			Status:            StatusSuccess,
+			CacheStatus:       CacheStatusHit,
+			CacheType:         "semantic",
+			SavedCostMicroUSD: 999,
+		},
+	})
+
+	if overview.SavedCostMicroUSD != 10 || overview.SavedCostUSD != "0.000010" {
+		t.Fatalf("saved cost must include exact cache hits only, got %+v", overview)
+	}
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 2 || overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.5) {
+		t.Fatalf("exact cache hit rate must not include semantic evidence, got %+v", overview)
 	}
 }
 
@@ -386,4 +428,13 @@ func TestNormalizeDashboardOverviewFilterRequiresTenantScope(t *testing.T) {
 
 func floatEquals(a float64, b float64) bool {
 	return math.Abs(a-b) < 0.0000001
+}
+
+func countOutcome(items []OutcomeBreakdown, outcomeValue string) int64 {
+	for _, item := range items {
+		if item.Outcome == outcomeValue {
+			return item.RequestCount
+		}
+	}
+	return 0
 }

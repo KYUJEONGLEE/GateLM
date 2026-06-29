@@ -19,6 +19,7 @@ type GatewayRequestDetailResponse = {
       cacheType?: string;
     };
     completedAt?: string | null;
+    errorCode?: string | null;
     cost?: {
       costMicroUsd?: number;
     };
@@ -30,6 +31,11 @@ type GatewayRequestDetailResponse = {
       errorStage?: string | null;
     };
     httpStatus?: number;
+    latencySummary?: {
+      gatewayInternalLatencyMs?: number;
+      providerLatencyMs?: number | null;
+      totalLatencyMs?: number;
+    };
     latency?: {
       latencyMs?: number;
       providerLatencyMs?: number | null;
@@ -46,9 +52,16 @@ type GatewayRequestDetailResponse = {
     requestedModel?: string;
     requestId?: string;
     routing?: {
+      requestedModel?: string;
       routingReason?: string | null;
       selectedModel?: string | null;
       selectedProvider?: string | null;
+    };
+    safetySummary?: {
+      detectorCategories?: string[];
+      detectedCount?: number;
+      maskingAction?: "none" | "redacted" | "blocked" | null;
+      outcome?: string;
     };
     selectedModel?: string;
     status?: string;
@@ -58,6 +71,13 @@ type GatewayRequestDetailResponse = {
     usage?: {
       completionTokens?: number;
       promptTokens?: number;
+      totalTokens?: number;
+    };
+    usageSummary?: {
+      completionTokens?: number;
+      estimatedCostMicroUsd?: number;
+      promptTokens?: number;
+      savedCostMicroUsd?: number;
       totalTokens?: number;
     };
   };
@@ -99,31 +119,47 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
   const terminalStatus = normalizeLegacyBridgeStatus(data.terminalStatus ?? data.status);
   const cacheStatus = normalizeCacheStatus(data.domainOutcomes?.cache?.outcome, data.cache?.cacheStatus);
   const maskingAction = normalizeMaskingAction(
-    data.domainOutcomes?.safety?.maskingAction ??
+    data.safetySummary?.maskingAction ??
+      data.domainOutcomes?.safety?.maskingAction ??
       maskingActionFromSafetyOutcome(data.domainOutcomes?.safety?.outcome) ??
       data.masking?.maskingAction
   );
   const applicationId = data.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(data.budgetScope, applicationId);
+  const requestedModel = data.routing?.requestedModel ?? data.requestedModel ?? "auto";
+  const selectedModel = data.routing?.selectedModel ?? data.selectedModel ?? data.model ?? null;
+  const selectedProvider = data.routing?.selectedProvider ?? data.provider ?? null;
+  const detectorCategories =
+    data.safetySummary?.detectorCategories ?? data.domainOutcomes?.safety?.detectedTypes ?? data.masking?.maskingDetectedTypes ?? [];
+  const detectedCount =
+    data.safetySummary?.detectedCount ?? data.domainOutcomes?.safety?.detectedCount ?? data.masking?.maskingDetectedCount ?? 0;
+  const providerLatencyMs = data.latencySummary?.providerLatencyMs ?? data.latency?.providerLatencyMs ?? null;
+  const totalLatencyMs = data.latencySummary?.totalLatencyMs ?? data.latency?.latencyMs ?? 0;
+  const promptTokens = data.usageSummary?.promptTokens ?? data.usage?.promptTokens ?? 0;
+  const completionTokens = data.usageSummary?.completionTokens ?? data.usage?.completionTokens ?? 0;
+  const totalTokens = data.usageSummary?.totalTokens ?? data.usage?.totalTokens ?? 0;
+  const costMicroUsd = data.usageSummary?.estimatedCostMicroUsd ?? data.cost?.costMicroUsd ?? 0;
+  const savedCostMicroUsd = data.usageSummary?.savedCostMicroUsd ?? 0;
+  const errorCode = data.errorCode ?? data.error?.errorCode ?? null;
   const domainOutcomes =
     data.domainOutcomes ??
     buildDomainOutcomesBridge({
       applicationId,
       budgetScope,
-      cacheHitRequestId: data.cache?.cacheHitRequestId ?? null,
+      cacheHitRequestId: null,
       cacheStatus,
       cacheType: data.cache?.cacheType ?? "none",
-      errorCode: data.error?.errorCode ?? null,
+      errorCode,
       httpStatus: data.httpStatus ?? 0,
       maskingAction,
-      maskingDetectedCount: data.masking?.maskingDetectedCount ?? 0,
-      maskingDetectedTypes: data.masking?.maskingDetectedTypes ?? [],
-      providerLatencyMs: data.latency?.providerLatencyMs ?? null,
-      redactedPromptPreview: data.masking?.redactedPromptPreview ?? null,
-      requestedModel: data.requestedModel ?? null,
+      maskingDetectedCount: detectedCount,
+      maskingDetectedTypes: detectorCategories,
+      providerLatencyMs,
+      redactedPromptPreview: null,
+      requestedModel,
       routingReason: data.routing?.routingReason ?? null,
-      selectedModel: data.routing?.selectedModel ?? data.selectedModel ?? data.model ?? null,
-      selectedProvider: data.routing?.selectedProvider ?? data.provider ?? null,
+      selectedModel,
+      selectedProvider,
       stream: false,
       terminalStatus
     });
@@ -135,29 +171,29 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     projectId: data.projectId ?? "live_gateway_project",
     applicationId,
     budgetScope,
-    apiKeyId: "live_gateway_api_key",
-    appTokenId: "live_gateway_app_token",
+    apiKeyId: "",
+    appTokenId: "",
     endUserId: "customer_user_demo_live",
     featureId: "support-reply",
     endpoint: "/v1/chat/completions",
     method: "POST",
     source: "customer_demo_app",
     stream: false,
-    requestBodyHash: "not-exposed-by-live-detail",
-    promptHash: "not-exposed-by-live-detail",
-    redactedPromptPreview: data.masking?.redactedPromptPreview ?? null,
+    requestBodyHash: "",
+    promptHash: "",
+    redactedPromptPreview: null,
     requestedProvider: null,
-    requestedModel: data.requestedModel ?? null,
-    selectedProvider: data.routing?.selectedProvider ?? data.provider ?? null,
-    selectedModel: data.routing?.selectedModel ?? data.selectedModel ?? data.model ?? null,
+    requestedModel,
+    selectedProvider,
+    selectedModel,
     routingReason: data.routing?.routingReason ?? null,
     cacheStatus,
     cacheType: data.cache?.cacheType ?? "none",
-    cacheKeyHash: data.cache?.cacheKeyHash ?? null,
-    cacheHitRequestId: data.cache?.cacheHitRequestId ?? null,
+    cacheKeyHash: null,
+    cacheHitRequestId: null,
     maskingAction,
-    maskingDetectedTypes: data.masking?.maskingDetectedTypes ?? [],
-    maskingDetectedCount: data.masking?.maskingDetectedCount ?? 0,
+    maskingDetectedTypes: detectorCategories,
+    maskingDetectedCount: detectedCount,
     rateLimitDecision: {
       allowed: terminalStatus !== "rate_limited",
       scope: budgetScope.budgetScopeType,
@@ -171,18 +207,18 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       reason: terminalStatus === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-detail",
       durationMs: 0
     },
-    promptTokens: data.usage?.promptTokens ?? 0,
-    completionTokens: data.usage?.completionTokens ?? 0,
-    totalTokens: data.usage?.totalTokens ?? 0,
-    costMicroUsd: data.cost?.costMicroUsd ?? 0,
-    savedCostMicroUsd: cacheStatus === "hit" ? data.cost?.costMicroUsd ?? 0 : 0,
-    latencyMs: data.latency?.latencyMs ?? 0,
-    providerLatencyMs: data.latency?.providerLatencyMs ?? null,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    costMicroUsd,
+    savedCostMicroUsd,
+    latencyMs: totalLatencyMs,
+    providerLatencyMs,
     terminalStatus,
     domainOutcomes,
     status: terminalStatus,
     httpStatus: data.httpStatus ?? 0,
-    errorCode: data.error?.errorCode ?? null,
+    errorCode,
     errorMessage: data.error?.errorMessage ?? null,
     errorStage: data.error?.errorStage ?? null,
     createdAt,

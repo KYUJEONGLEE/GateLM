@@ -90,7 +90,6 @@ export function RequestLogTable({
                     >
                       {formatDisplayIdentifier(record.requestId)}
                     </Link>
-                    <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
                   </td>
                   <td>
                     <StatusBadge status={record.terminalStatus} />

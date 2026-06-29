@@ -5,21 +5,59 @@ import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveDashboardOverviewResponse = {
   data?: {
+    breakdowns?: {
+      byCacheOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      byFallbackOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      byProviderModel?: Array<{
+        p95ProviderLatencyMs?: number;
+        requestCount?: number;
+        selectedModel?: string;
+        selectedProvider?: string;
+      }>;
+      bySafetyOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      byTerminalStatus?: Array<{ outcome?: string; requestCount?: number }>;
+    };
     dataFreshness?: {
       generatedAt?: string;
       lastLogCreatedAt?: string | null;
       recordCount?: number;
       source?: string;
     };
+    freshness?: {
+      isStale?: boolean;
+      lastAggregatedAt?: string;
+      lastIngestedAt?: string;
+      source?: string;
+    };
     filters?: {
+      applicationId?: string | null;
       budgetScopeId?: string | null;
       budgetScopeType?: string | null;
       projectId?: string | null;
       resolvedBy?: string | null;
       tenantId?: string;
     };
+    generatedAt?: string;
+    performance?: {
+      p95GatewayInternalLatencyMs?: number;
+      p95ProviderLatencyMs?: number;
+      p99GatewayInternalLatencyMs?: number;
+      p99ProviderLatencyMs?: number;
+      systemErrorRate?: number;
+    };
+    queryBudget?: {
+      guidance?: string | null;
+      maxBreakdownItems?: number;
+      maxRangeHours?: number;
+      status?: string;
+    };
     range?: {
       from?: string;
+      to?: string;
+    };
+    timeRange?: {
+      from?: string;
+      granularity?: string;
       to?: string;
     };
     totals?: {
@@ -39,10 +77,14 @@ type LiveDashboardOverviewResponse = {
         totalTokens?: number;
       }>;
       failedRequests?: number;
+      failedCount?: number;
+      fallbackSuccessCount?: number;
       maskingActionCounts?: Record<string, number>;
       p95LatencyMs?: number | null;
       promptTokens?: number;
       rateLimitedRequests?: number;
+      rateLimitedCount?: number;
+      requestCount?: number;
       routingCountByModel?: Array<{
         requestCount?: number;
         routingReason?: string;
@@ -53,7 +95,12 @@ type LiveDashboardOverviewResponse = {
       savedCostUsd?: string;
       statusCounts?: Record<string, number>;
       successfulRequests?: number;
+      successCount?: number;
       terminalStatusCounts?: Record<string, number>;
+      blockedCount?: number;
+      cancelledCount?: number;
+      estimatedCostMicroUsd?: number;
+      exactCacheHitRate?: number;
       totalCostMicroUsd?: number;
       totalCostUsd?: string;
       totalRequests?: number;
@@ -111,8 +158,19 @@ function toDashboardOverview(
   fallbackTo: string
 ): DashboardOverview {
   const totals = data.totals ?? {};
-  const freshness = data.dataFreshness ?? {};
-  const applicationId = "live_gateway_application";
+  const freshness = data.freshness ?? {};
+  const legacyFreshness = data.dataFreshness ?? {};
+  const applicationId = data.filters?.applicationId ?? "live_gateway_application";
+  const terminalStatusCounts = outcomeBreakdownToRecord(data.breakdowns?.byTerminalStatus);
+  const safetyOutcomeCounts = outcomeBreakdownToRecord(data.breakdowns?.bySafetyOutcome);
+  const providerBreakdown = data.breakdowns?.byProviderModel ?? [];
+  const totalRequests = totals.requestCount ?? totals.totalRequests ?? 0;
+  const successCount = totals.successCount ?? totals.successfulRequests ?? 0;
+  const failedCount = totals.failedCount ?? totals.failedRequests ?? 0;
+  const blockedCount = totals.blockedCount ?? totals.blockedRequests ?? 0;
+  const rateLimitedCount = totals.rateLimitedCount ?? totals.rateLimitedRequests ?? 0;
+  const estimatedCostMicroUsd = totals.estimatedCostMicroUsd ?? totals.totalCostMicroUsd ?? 0;
+  const exactCacheHitRate = totals.exactCacheHitRate ?? totals.cacheHitRate ?? 0;
 
   return {
     fixtureName: "live-dashboard-overview",
@@ -125,10 +183,10 @@ function toDashboardOverview(
       "GET /api/dashboard/overview"
     ],
     range: {
-      from: data.range?.from ?? fallbackFrom,
-      to: data.range?.to ?? fallbackTo,
+      from: data.timeRange?.from ?? data.range?.from ?? fallbackFrom,
+      to: data.timeRange?.to ?? data.range?.to ?? fallbackTo,
       timezone: "UTC",
-      grain: "live"
+      grain: data.timeRange?.granularity ?? "live"
     },
     filters: {
       tenantId,
@@ -140,31 +198,31 @@ function toDashboardOverview(
       provider: null,
       model: null
     },
-    totalRequests: totals.totalRequests ?? 0,
-    successfulRequests: totals.successfulRequests ?? 0,
-    failedRequests: totals.failedRequests ?? 0,
-    blockedRequests: totals.blockedRequests ?? 0,
-    rateLimitedRequests: totals.rateLimitedRequests ?? 0,
+    totalRequests,
+    successfulRequests: successCount,
+    failedRequests: failedCount,
+    blockedRequests: blockedCount,
+    rateLimitedRequests: rateLimitedCount,
     cacheHitRequests: totals.cacheHitRequests ?? 0,
     cacheEligibleRequests: totals.cacheEligibleRequests ?? 0,
-    cacheHitRate: totals.cacheHitRate ?? 0,
+    cacheHitRate: exactCacheHitRate,
     totalTokens: totals.totalTokens ?? 0,
     promptTokens: totals.promptTokens ?? 0,
     completionTokens: totals.completionTokens ?? 0,
-    totalCostMicroUsd: totals.totalCostMicroUsd ?? 0,
-    totalCostUsd: totals.totalCostUsd ?? formatMicroUsd(totals.totalCostMicroUsd ?? 0),
+    totalCostMicroUsd: estimatedCostMicroUsd,
+    totalCostUsd: totals.totalCostUsd ?? formatMicroUsd(estimatedCostMicroUsd),
     savedCostMicroUsd: totals.savedCostMicroUsd ?? 0,
     savedCostUsd: totals.savedCostUsd ?? formatMicroUsd(totals.savedCostMicroUsd ?? 0),
     averageLatencyMs: totals.averageLatencyMs ?? totals.averageResponseTimeMs ?? 0,
-    p95LatencyMs: totals.p95LatencyMs ?? 0,
-    maskingActionCounts: totals.maskingActionCounts ?? {},
-    routingCountByModel: (totals.routingCountByModel ?? []).map((row) => ({
+    p95LatencyMs: data.performance?.p95GatewayInternalLatencyMs ?? totals.p95LatencyMs ?? 0,
+    maskingActionCounts: totals.maskingActionCounts ?? safetyToMaskingCounts(safetyOutcomeCounts),
+    routingCountByModel: (totals.routingCountByModel ?? providerBreakdown).map((row) => ({
       selectedProvider: row.selectedProvider ?? "not-routed",
       selectedModel: row.selectedModel ?? "not-routed",
-      routingReason: row.routingReason ?? "not-set",
+      routingReason: "provider_model_breakdown",
       requestCount: row.requestCount ?? 0
     })),
-    statusCounts: totals.terminalStatusCounts ?? totals.statusCounts ?? {},
+    statusCounts: totals.terminalStatusCounts ?? totals.statusCounts ?? terminalStatusCounts,
     costByModel: (totals.costByModel ?? []).map((row) => ({
       selectedProvider: row.selectedProvider ?? "not-routed",
       selectedModel: row.selectedModel ?? "not-routed",
@@ -175,15 +233,33 @@ function toDashboardOverview(
     })),
     requestIds: [],
     dataFreshness: {
-      source: freshness.source ?? "gateway-postgresql",
-      recordCount: freshness.recordCount ?? 0,
-      lastLogCreatedAt: freshness.lastLogCreatedAt ?? freshness.generatedAt ?? fallbackTo,
-      generatedAt: freshness.generatedAt ?? fallbackTo
+      source: freshness.source ?? legacyFreshness.source ?? "gateway-postgresql",
+      recordCount: totalRequests,
+      lastLogCreatedAt: freshness.lastIngestedAt ?? legacyFreshness.lastLogCreatedAt ?? data.generatedAt ?? fallbackTo,
+      generatedAt: freshness.lastAggregatedAt ?? legacyFreshness.generatedAt ?? data.generatedAt ?? fallbackTo
     },
-    notes: ["Live Gateway overview. Raw prompt, raw response, and credentials are not exposed."]
+    notes: [
+      `Live Gateway overview. systemErrorRate=${formatRate(data.performance?.systemErrorRate ?? 0)} excludes safety block, budget block, and rate_limited outcomes.`
+    ]
   };
 }
 
 function formatMicroUsd(value: number) {
   return (value / 1_000_000).toFixed(6);
+}
+
+function outcomeBreakdownToRecord(rows: Array<{ outcome?: string; requestCount?: number }> | undefined) {
+  return Object.fromEntries((rows ?? []).map((row) => [row.outcome ?? "unknown", row.requestCount ?? 0]));
+}
+
+function safetyToMaskingCounts(counts: Record<string, number>) {
+  return {
+    blocked: counts.blocked ?? 0,
+    none: counts.passed ?? counts.not_checked ?? 0,
+    redacted: counts.redacted ?? 0
+  };
+}
+
+function formatRate(value: number) {
+  return value.toFixed(4);
 }

@@ -69,6 +69,39 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 	}
 }
 
+func TestRegistryRedactsForbiddenHighCardinalityLabelValues(t *testing.T) {
+	registry := NewRegistry()
+	registry.AddCounter(GatewayRequestsTotal, []Label{
+		{Name: "endpoint", Value: "/v1/chat/completions/req_forbidden_123"},
+		{Name: "method", Value: "POST"},
+		{Name: "status", Value: "trace_forbidden_123"},
+		{Name: "http_status", Value: "authorization: Bearer secret"},
+		{Name: "error_code", Value: "raw_error_detail upstream body"},
+	}, 1)
+	registry.AddCounter(ProviderRequestsTotal, []Label{
+		{Name: "selected_provider", Value: "provider_key=secret"},
+		{Name: "selected_model", Value: "sha256:abcdef"},
+		{Name: "status", Value: "success"},
+	}, 1)
+
+	output := registry.RenderPrometheus()
+	for _, forbidden := range []string{
+		"req_forbidden_123",
+		"trace_forbidden_123",
+		"authorization",
+		"Bearer",
+		"raw_error_detail",
+		"provider_key",
+		"sha256:",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("metrics output must redact forbidden label value %q\noutput:\n%s", forbidden, output)
+		}
+	}
+	assertMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="redacted",error_code="internal_error",http_status="0",method="POST",status="failed"} 1`)
+	assertMetricsContains(t, output, `gatelm_provider_requests_total{selected_model="redacted",selected_provider="redacted",status="success"} 1`)
+}
+
 func TestRecorderStatusLabelsUseCanonicalTerminalStatuses(t *testing.T) {
 	registry := NewRegistry()
 	registry.GatewayRequestCompleted(GatewayRequest{
