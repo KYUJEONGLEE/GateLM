@@ -76,6 +76,8 @@ Customer App / Employee Chat
 | PostgreSQL | `16` |
 | Redis | `7` |
 
+루트 `.nvmrc`, `.node-version`, `package.json`의 `engines.node`는 Node `22` 기준을 명시합니다.
+
 루트 `package.json`은 `pnpm@9.15.0`을 사용합니다.
 
 처음 검증할 때는 아래 명령을 우선합니다.
@@ -127,6 +129,7 @@ v2.0.0 구현은 아래 단위로 병렬화합니다.
 | 3 | `feat/v2-budget-safety-cache-routing` | budget, safety, exact cache, routing order |
 | 4 | `feat/streaming-thin-slice` | streaming feel and final outcome logging |
 | 5 | `feat/v2-observability-dashboard-k6` | Request Detail, Dashboard, metrics guard, k6 baseline |
+| 6 | `feat/v2-demo-evidence` | Demo Scenario Runner, preset evidence, final presentation proof |
 
 상세 작업 파일은 `docs/v2.0.0/implementation-tasks.md`를 기준으로 합니다.
 

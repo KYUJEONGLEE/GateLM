@@ -17,17 +17,22 @@ GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비
 3. `docs/v2.0.0/fixtures/*.fixture.json`
 4. `docs/v2.0.0/implementation-plan.md`
 5. `docs/v2.0.0/implementation-tasks.md`
-6. `docs/v2.0.0/p0-legacy-field-cleanup.md`
-7. `docs/v2.0.0/p0-contract-decisions.md`
-8. `docs/architecture/*`
-9. `docs/policies/*`
-10. `docs/archive/*`
+6. `docs/architecture/*`
+7. `docs/policies/*`
+8. `docs/archive/*`
 
 `contracts.md`는 API, DB, Event, Metrics, Security-sensitive field 판단의 최우선 기준이다.
 
 `implementation-plan.md`는 200줄 안팎의 상위 구현 계획서다.
 
 `implementation-tasks.md`는 실제 PR별 작업 위치와 검증 기준을 담은 코딩용 계획서다.
+
+Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
+
+- `docs/v2.0.0/p0-legacy-field-cleanup.md`: legacy field cleanup 참고 문서
+- `docs/v2.0.0/p0-contract-decisions.md`: 공식 계약이 아닌 팀 검토 목록
+
+위 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
 
 ---
 
@@ -141,7 +146,8 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | `docs/v2.0.0/implementation-tasks.md` | PR별 실제 작업 계획 |
 | `docs/v2.0.0/schemas/` | JSON Schema |
 | `docs/v2.0.0/fixtures/` | 최소 fixture |
-| `docs/v2.0.0/legacy-cleanup/` | 역할별 legacy inventory |
+| `docs/v2.0.0/p0-legacy-field-cleanup.md` | legacy field cleanup 기준 참고 문서 |
+| `docs/v2.0.0/p0-contract-decisions.md` | 공식 계약 전 팀 검토 목록 |
 | `docs/archive/` | 과거 P0/v1 기록 |
 
 과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.

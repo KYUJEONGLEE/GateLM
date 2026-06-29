@@ -36,8 +36,8 @@ Likely files:
 
 Tasks:
 
-- Add Node `22` version file.
-- Add `engines.node: ">=22 <23"` to root `package.json`.
+- Keep Node `22` version files in `.nvmrc` and `.node-version`.
+- Keep `engines.node: ">=22 <23"` in root `package.json`.
 - Keep `packageManager` as `pnpm@9.15.0`.
 - Document official install check: `pnpm install --frozen-lockfile`.
 - Update docs so v2 source order is `contracts.md -> schemas/fixtures -> implementation-plan.md -> implementation-tasks.md`.

@@ -26,9 +26,7 @@ Implementation follows this priority order:
 3. `docs/v2.0.0/fixtures/*.fixture.json`
 4. `docs/v2.0.0/implementation-plan.md`
 5. `docs/v2.0.0/implementation-tasks.md`
-6. `docs/v2.0.0/p0-legacy-field-cleanup.md`
-7. `docs/v2.0.0/p0-contract-decisions.md`
-8. `docs/README.md`
+6. `docs/README.md`
 
 Rules:
 
@@ -37,6 +35,12 @@ Rules:
 - Provider and Model are catalog/config data, not DB/code enums.
 - Gateway handler must not branch directly on provider name.
 - Raw prompt, raw response, raw detected value, raw prompt fragment, API Key, App Token, Provider Key, Authorization header, provider raw error body, and actual secrets must not be exposed in DB/log/fixture/API response/metrics label/UI.
+
+Reference / Draft documents:
+
+- `docs/v2.0.0/p0-legacy-field-cleanup.md` is legacy cleanup reference.
+- `docs/v2.0.0/p0-contract-decisions.md` is a team review draft, not an official contract.
+- Candidate terms in reference/draft documents must not be promoted into API, DB, Event, Metrics, or Schema fields without a contract update.
 
 ## 3. P0 Gates Before Feature Code
 
@@ -188,6 +192,7 @@ Done when:
 | 3 | `feat/v2-budget-safety-cache-routing` | budget/rate limit, request-side safety, exact cache, routing order |
 | 4 | `feat/streaming-thin-slice` | streaming feel and final status logging |
 | 5 | `feat/v2-observability-dashboard-k6` | Request Detail, Dashboard, metrics guard, k6 baseline |
+| 6 | `feat/v2-demo-evidence` | Demo Scenario Runner, preset evidence, final presentation proof |
 
 ## 9. Verification
 
