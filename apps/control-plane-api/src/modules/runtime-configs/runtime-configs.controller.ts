@@ -16,6 +16,7 @@ import {
   ActiveRuntimeConfigResponseDto,
   PublishRuntimeConfigDto,
   RuntimeConfigDraftResponseDto,
+  RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
 } from './dto/runtime-config.dto';
 import { RuntimeConfigsService } from './runtime-configs.service';
@@ -30,6 +31,13 @@ export class RuntimeConfigsController {
     @Param('applicationId', ParseUUIDPipe) applicationId: string,
   ): Promise<ActiveRuntimeConfigResponseDto> {
     return this.runtimeConfigsService.getActiveRuntimeConfig(applicationId);
+  }
+
+  @Get('applications/:applicationId/runtime-snapshot/active')
+  async getActiveRuntimeSnapshot(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+  ): Promise<RuntimeSnapshotResponseDto> {
+    return this.runtimeConfigsService.getActiveRuntimeSnapshot(applicationId);
   }
 
   @Post('applications/:applicationId/runtime-config/draft')

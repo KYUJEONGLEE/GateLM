@@ -436,6 +436,106 @@ export interface ActiveRuntimeConfigResponseDto {
   costing: RuntimeConfigCostingDto;
 }
 
+export interface RuntimeSnapshotLookupKeyDto {
+  tenantId: string;
+  projectId: string;
+  applicationId: string;
+}
+
+export interface RuntimeSnapshotBudgetResolutionDto {
+  budgetScopeType: 'application' | 'project' | 'team';
+  budgetScopeId: string;
+  resolvedBy: 'default_application' | 'runtime_snapshot' | 'control_plane_rule';
+  warningThresholdPercent: number;
+}
+
+export interface RuntimeSnapshotProviderCatalogRefDto {
+  catalogId: string;
+  catalogVersion: number;
+  contentHash: string;
+}
+
+export interface RuntimeSnapshotSafetyPolicyDto {
+  enabled: boolean;
+  mode: 'enforce' | 'disabled';
+  requestSideRequired: boolean;
+  policyHash: string;
+  detectorSet: Array<{
+    detectorType: string;
+    action: 'allow' | 'redact' | 'block';
+  }>;
+}
+
+export interface RuntimeSnapshotRoutingPolicyDto {
+  autoModelEnabled: boolean;
+  defaultRequestedModel: string;
+  defaultProvider: string;
+  defaultModel: string;
+  routingPolicyHash: string;
+}
+
+export interface RuntimeSnapshotCachePolicyDto {
+  exactCacheEnabled: boolean;
+  semanticCacheMode: 'evidence_only' | 'disabled';
+  cachePolicyHash: string;
+}
+
+export interface RuntimeSnapshotRateLimitPolicyDto {
+  enabled: boolean;
+  scope: 'application';
+  windowSeconds: number;
+  limit: number;
+}
+
+export interface RuntimeSnapshotBudgetPolicyDto {
+  enabled: boolean;
+  enforcementMode: 'warn' | 'block' | 'disabled';
+  warningThresholdPercent: number;
+}
+
+export interface RuntimeSnapshotFallbackPolicyDto {
+  enabled: boolean;
+  fallbackProvider?: string;
+  fallbackModel?: string;
+  allowedReasons?: Array<'provider_timeout' | 'provider_error'>;
+}
+
+export interface RuntimeSnapshotStreamingPolicyDto {
+  enabled: boolean;
+  thinSliceOnly: true;
+}
+
+export interface RuntimeSnapshotPoliciesDto {
+  safety: RuntimeSnapshotSafetyPolicyDto;
+  routing: RuntimeSnapshotRoutingPolicyDto;
+  cache: RuntimeSnapshotCachePolicyDto;
+  rateLimit: RuntimeSnapshotRateLimitPolicyDto;
+  budget: RuntimeSnapshotBudgetPolicyDto;
+  fallback: RuntimeSnapshotFallbackPolicyDto;
+  streaming: RuntimeSnapshotStreamingPolicyDto;
+}
+
+export interface RuntimeSnapshotLegacyHashesDto {
+  configHash: string;
+  securityPolicyHash: string;
+  routingPolicyHash: string;
+}
+
+export interface RuntimeSnapshotResponseDto {
+  runtimeSnapshotId: string;
+  runtimeSnapshotVersion: number;
+  contentHash: string;
+  runtimeState: 'snapshot_active';
+  publishedAt: string;
+  publishedBy: string;
+  gatewayInstanceId: string;
+  lookupKey: RuntimeSnapshotLookupKeyDto;
+  budgetResolution: RuntimeSnapshotBudgetResolutionDto;
+  providerCatalogRef: RuntimeSnapshotProviderCatalogRefDto;
+  policies: RuntimeSnapshotPoliciesDto;
+  legacyHashes: RuntimeSnapshotLegacyHashesDto;
+}
+
 export interface RuntimeConfigDraftResponseDto {
   id: string;
   tenantId: string;

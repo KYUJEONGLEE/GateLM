@@ -177,6 +177,35 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
+  it('rejects publish when a selected provider is missing required credential binding', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      resolver: 'environment',
+      secretRef: null,
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+    const draft = await service.upsertDraft(applicationId, {});
+
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(draft.runtimeConfig, {
+        id: draft.id,
+        publishState: RuntimeConfigPublishState.DRAFT,
+      }),
+    );
+
+    await expect(
+      service.publishRuntimeConfig(applicationId, {
+        configVersion: 'runtime_config_test_002',
+      }),
+    ).rejects.toThrow(
+      'RuntimeSnapshot publish validation failed: provider credential binding is missing.',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('returns the active runtime config document directly', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -209,6 +238,93 @@ describe('RuntimeConfigsService', () => {
       where: { id: appTokenId },
     });
     expect(result).toEqual(activeDocument);
+  });
+
+  it('returns an active RuntimeSnapshot execution view without copying legacy secret refs', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.runtimeSnapshotId).toBe(
+      '00000000-0000-4000-8000-000000000700',
+    );
+    expect(result.runtimeSnapshotVersion).toBe(1);
+    expect(result.runtimeState).toBe('snapshot_active');
+    expect(result.lookupKey).toEqual({
+      tenantId,
+      projectId,
+      applicationId,
+    });
+    expect(result.lookupKey).not.toHaveProperty('budgetScopeId');
+    expect(result.budgetResolution).toEqual({
+      budgetScopeType: 'application',
+      budgetScopeId: applicationId,
+      resolvedBy: 'default_application',
+      warningThresholdPercent: 80,
+    });
+    expect(result.providerCatalogRef.catalogVersion).toBe(1);
+    expect(result.providerCatalogRef.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.policies.routing.defaultProvider).toBe('mock');
+    expect(result.policies.safety.requestSideRequired).toBe(true);
+    expect(result.legacyHashes).toEqual({
+      configHash: activeDocument.configHash,
+      securityPolicyHash: activeDocument.safetyPolicy.securityPolicyHash,
+      routingPolicyHash: activeDocument.routingPolicy.routingPolicyHash,
+    });
+    expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('disables semantic cache mode when exact cache is disabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      cachePolicy: { enabled: false, type: 'exact' as const, ttlSeconds: 3600 },
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.cache.exactCacheEnabled).toBe(false);
+    expect(result.policies.cache.semanticCacheMode).toBe('disabled');
+  });
+
+  it('uses publishedAt milliseconds for RuntimeSnapshot version fallback', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const publishedAt = new Date('2026-06-27T02:00:00.123Z');
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      configVersion: 'runtime_config_manual',
+      publishedAt: publishedAt.toISOString(),
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.runtimeSnapshotVersion).toBe(publishedAt.getTime());
+    expect(result.providerCatalogRef.catalogVersion).toBe(
+      publishedAt.getTime(),
+    );
   });
 
   it('rejects an active row when its stored document is not active', async () => {
