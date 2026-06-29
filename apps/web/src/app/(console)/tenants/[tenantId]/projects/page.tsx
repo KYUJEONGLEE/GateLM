@@ -12,7 +12,7 @@ type ProjectsPageProps = {
 export default async function ProjectsPage({ params }: ProjectsPageProps) {
   const { tenantId } = await params;
   const locale = await getRequestLocale();
-  const model = await getProjectsModel(tenantId);
+  const projectsModel = await getProjectsModel(tenantId);
 
   return (
     <ConsoleShell
@@ -21,7 +21,7 @@ export default async function ProjectsPage({ params }: ProjectsPageProps) {
       locale={locale}
       tenantId={tenantId}
     >
-      <ProjectManagement locale={locale} model={model} />
+      <ProjectManagement locale={locale} model={projectsModel} />
     </ConsoleShell>
   );
 }

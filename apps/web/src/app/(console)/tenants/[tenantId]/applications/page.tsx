@@ -16,7 +16,7 @@ export default async function ApplicationsPage({ params }: ApplicationsPageProps
 
   return (
     <ConsoleShell
-      activeManagementItem="application"
+      activeManagementItem="project"
       activeSection="management"
       locale={locale}
       tenantId={tenantId}

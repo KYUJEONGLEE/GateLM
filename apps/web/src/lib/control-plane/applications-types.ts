@@ -14,6 +14,7 @@ export type ApplicationRecord = {
 export type ApplicationFormValues = {
   description: string;
   name: string;
+  projectId?: string;
 };
 
 export type ApplicationUpdateValues = ApplicationFormValues & {

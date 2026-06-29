@@ -89,10 +89,6 @@ export function MetricsOverview({ locale, model }: MetricsOverviewProps) {
           <p className="console-kicker">{text.analytics}</p>
           <h2>{text.title}</h2>
         </div>
-        <div className="project-source">
-          <span>{text.source}</span>
-          <strong>Gateway /metrics</strong>
-        </div>
       </section>
 
       {model.loadError ? (

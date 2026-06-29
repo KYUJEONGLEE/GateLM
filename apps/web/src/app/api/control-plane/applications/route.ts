@@ -57,7 +57,11 @@ function isApplicationFormValues(value: unknown): value is ApplicationFormValues
 
   const record = value as Partial<ApplicationFormValues>;
 
-  return typeof record.name === "string" && typeof record.description === "string";
+  return (
+    typeof record.name === "string"
+    && typeof record.description === "string"
+    && (record.projectId === undefined || typeof record.projectId === "string")
+  );
 }
 
 function isApplicationUpdateValues(value: unknown): value is ApplicationUpdateValues {

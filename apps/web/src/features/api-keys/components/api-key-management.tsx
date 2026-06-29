@@ -142,7 +142,6 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
     message: "",
     status: "idle"
   });
-  const sourceLabel = model.source === "control-plane" ? "Control Plane" : "fixture";
   const actionsDisabled = model.source === "fixture";
 
   async function submitIssueApiKey() {
@@ -306,12 +305,6 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
         <div>
           <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
-        </div>
-        <div className="project-source">
-          <span>{text.source}</span>
-          <strong>{sourceLabel}</strong>
-          <span>{text.projectId}</span>
-          <strong>{model.controlPlaneProjectId}</strong>
         </div>
       </section>
 

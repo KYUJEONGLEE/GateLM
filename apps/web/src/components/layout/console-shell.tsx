@@ -14,10 +14,8 @@ export type ManagementNavItem =
   | "api-keys"
   | "app-tokens"
   | "model-catalog"
-  | "onboarding"
   | "policies"
   | "project"
-  | "application"
   | "provider";
 export type AnalyticsNavItem = "health" | "metrics" | "request-logs";
 
@@ -60,11 +58,27 @@ const navigationItems: Array<{
     children: [
       {
         labels: {
-          en: "Onboarding",
-          ko: "온보딩"
+          en: "Project",
+          ko: "Project"
         },
-        item: "onboarding",
-        path: (tenantId) => `/tenants/${tenantId}/onboarding`
+        item: "project",
+        path: (tenantId) => `/tenants/${tenantId}/projects`
+      },
+      {
+        labels: {
+          en: "Providers",
+          ko: "Provider"
+        },
+        item: "provider",
+        path: (tenantId) => `/tenants/${tenantId}/provider-connections`
+      },
+      {
+        labels: {
+          en: "Model Catalog",
+          ko: "Model Catalog"
+        },
+        item: "model-catalog",
+        path: (tenantId) => `/tenants/${tenantId}/model-catalog`
       },
       {
         labels: {
@@ -346,18 +360,15 @@ export function ConsoleShell({
             );
           })}
         </div>
+        <div className="console-sidebar-language" aria-hidden={isSidebarCollapsed}>
+          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+        </div>
+        <div className="console-sidebar-tenant" aria-hidden={isSidebarCollapsed}>
+          <strong>{tenantLabel}</strong>
+        </div>
       </aside>
 
       <div className="console-main">
-        <header className="console-header">
-          <div>
-            <p className="console-kicker">{text.tenant}</p>
-            <h1>{tenantLabel}</h1>
-          </div>
-          <div className="console-header-actions">
-            <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          </div>
-        </header>
         {children}
       </div>
     </div>

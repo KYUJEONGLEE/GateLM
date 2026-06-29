@@ -1,18 +1,18 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type {
   AdminOnboardingModel,
-  AdminProviderModel,
-  CredentialIssueResponse,
-  CredentialListItem
+  AdminProviderModel
 } from "@/lib/fixtures/v1-admin-fixtures";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import {
   formatDisplayIdentifier,
   formatTenantDisplayName
 } from "@/lib/formatting/display-identifiers";
-import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
+import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
+import type { ProjectRecord, ProjectStatus } from "@/lib/control-plane/projects-types";
 import type { Locale } from "@/lib/i18n/locale";
 
 type AdminOnboardingFlowProps = {
@@ -23,10 +23,7 @@ type AdminOnboardingFlowProps = {
 
 export type OnboardingStepId =
   | "project"
-  | "application"
-  | "provider"
-  | "api-key"
-  | "app-token"
+  | "model-selection"
   | "runtime-config";
 
 type OnboardingStep = {
@@ -52,46 +49,13 @@ const onboardingSteps: OnboardingStep[] = [
     }
   },
   {
-    id: "application",
+    id: "model-selection",
     labels: {
       en: {
-        label: "Application"
+        label: "Model Selection"
       },
       ko: {
-        label: "애플리케이션"
-      }
-    }
-  },
-  {
-    id: "provider",
-    labels: {
-      en: {
-        label: "Provider"
-      },
-      ko: {
-        label: "Provider"
-      }
-    }
-  },
-  {
-    id: "api-key",
-    labels: {
-      en: {
-        label: "API Key"
-      },
-      ko: {
-        label: "API Key"
-      }
-    }
-  },
-  {
-    id: "app-token",
-    labels: {
-      en: {
-        label: "App Token"
-      },
-      ko: {
-        label: "App Token"
+        label: "모델 선택"
       }
     }
   },
@@ -99,10 +63,10 @@ const onboardingSteps: OnboardingStep[] = [
     id: "runtime-config",
     labels: {
       en: {
-        label: "Runtime Config"
+        label: "Review"
       },
       ko: {
-        label: "Runtime Config"
+        label: "검토"
       }
     }
   }
@@ -112,62 +76,88 @@ const onboardingText: Record<
   Locale,
   {
     complete: string;
+    createApiKey: string;
+    createProjectError: string;
+    issueApiKeyError: string;
+    issueApiKeyPending: string;
     next: string;
     previous: string;
     saved: string;
     saveNext: string;
+    saveToProjects: string;
+    savingProject: string;
     step: string;
     title: string;
   }
 > = {
   en: {
-    complete: "Save setup",
+    complete: "Complete setup",
+    createApiKey: "Create API Key",
+    createProjectError: "Project creation failed.",
+    issueApiKeyError: "API Key issue failed.",
+    issueApiKeyPending: "Create the project to issue a live API Key. The plaintext appears once.",
     next: "Next",
     previous: "Previous",
     saved: "Saved",
     saveNext: "Save and continue",
+    saveToProjects: "Save and go to Projects",
+    savingProject: "Creating project...",
     step: "Step",
-    title: "Onboarding"
+    title: "Create Project"
   },
   ko: {
-    complete: "설정 저장",
+    complete: "설정 완료",
+    createApiKey: "Create API Key",
+    createProjectError: "Project 생성에 실패했습니다.",
+    issueApiKeyError: "API Key 발급에 실패했습니다.",
+    issueApiKeyPending: "프로젝트를 생성하면 실제 API Key를 발급하고 원문을 한 번만 표시합니다.",
     next: "다음",
     previous: "이전",
     saved: "저장됨",
     saveNext: "저장 후 다음",
+    saveToProjects: "저장 후 Projects로 이동",
+    savingProject: "프로젝트 생성 중...",
     step: "단계",
-    title: "온보딩"
+    title: "Create Project"
   }
 };
 
 type OnboardingDraft = {
   apiKeyDisplayName: string;
-  apiKeyScopes: string;
-  appTokenDisplayName: string;
-  appTokenScopes: string;
-  applicationId: string;
-  applicationName: string;
-  applicationStatus: string;
   cacheEnabled: string;
   cacheType: string;
-  providerCredentialReference: string;
-  providerDisplayName: string;
-  providerId: string;
-  providerName: string;
-  providerResolver: string;
-  providerStatus: string;
-  projectId: string;
+  defaultModel: string;
+  fallbackModel: string;
+  lowCostModel: string;
   projectName: string;
   projectStatus: string;
-  rateLimitLimit: string;
-  rateLimitScope: string;
-  rateLimitWindowSeconds: string;
-  runtimeConfigVersion: string;
   runtimePublishState: string;
   safetyMode: string;
 };
 
-export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboardingFlowProps) {
+type ProjectSetupState = {
+  apiKey: OneTimeApiKeyResponse | null;
+  error: string;
+  project: ProjectRecord | null;
+  status: "error" | "idle" | "issued" | "saving";
+};
+
+type ApiKeyIssuePayload = {
+  apiKey?: OneTimeApiKeyResponse;
+  error?: string;
+};
+
+type ProjectResponsePayload = {
+  error?: string;
+  project?: ProjectRecord;
+};
+
+export function AdminOnboardingFlow({
+  activeStepId,
+  locale,
+  model
+}: AdminOnboardingFlowProps) {
+  const router = useRouter();
   const initialActiveIndex = Math.max(
     onboardingSteps.findIndex((step) => step.id === activeStepId),
     0
@@ -175,12 +165,31 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft(model));
   const [savedStepIds, setSavedStepIds] = useState<Set<OnboardingStepId>>(() => new Set());
+  const [projectSetupState, setProjectSetupState] = useState<ProjectSetupState>({
+    apiKey: null,
+    error: "",
+    project: null,
+    status: "idle"
+  });
   const activeStep = onboardingSteps[activeIndex] ?? onboardingSteps[0];
   const previousStep = onboardingSteps[activeIndex - 1];
   const nextStep = onboardingSteps[activeIndex + 1];
   const text = onboardingText[locale];
   const activeStepLabel = activeStep.labels[locale].label;
-  const isSaved = savedStepIds.has(activeStep.id);
+  const isCreatingCredential = projectSetupState.status === "saving";
+  const isProjectStepIncomplete =
+    activeStep.id === "project" && draft.projectName.trim().length === 0;
+  const isReviewIncomplete =
+    activeStep.id === "runtime-config" && projectSetupState.status !== "issued";
+  const isPrimaryActionDisabled =
+    isCreatingCredential || isProjectStepIncomplete || isReviewIncomplete;
+  const isPreviousActionDisabled =
+    !previousStep || isCreatingCredential || projectSetupState.status === "issued";
+  const isCreateApiKeyDisabled =
+    isCreatingCredential ||
+    projectSetupState.status === "issued" ||
+    draft.projectName.trim().length === 0 ||
+    draft.apiKeyDisplayName.trim().length === 0;
 
   function updateDraft(field: keyof OnboardingDraft, value: string) {
     setDraft((current) => ({
@@ -189,12 +198,149 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
     }));
   }
 
-  function saveCurrentStep(event: FormEvent<HTMLFormElement>) {
+  async function saveCurrentStep(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (activeStep.id === "runtime-config") {
+      if (projectSetupState.status === "issued") {
+        router.push(`/tenants/${model.tenantId}/projects`);
+        router.refresh();
+      }
+      return;
+    }
+
+    if (isProjectStepIncomplete) {
+      return;
+    }
+
     setSavedStepIds((current) => new Set(current).add(activeStep.id));
 
     if (nextStep) {
       setActiveIndex(activeIndex + 1);
+    }
+  }
+
+  async function createProjectAndIssueApiKey() {
+    if (isCreateApiKeyDisabled) {
+      return;
+    }
+
+    setProjectSetupState((current) => ({
+      ...current,
+      error: "",
+      status: "saving"
+    }));
+
+    let project = projectSetupState.project;
+
+    try {
+      if (!project) {
+        const projectResponse = await fetch("/api/control-plane/projects", {
+          body: JSON.stringify({
+            action: "create",
+            values: {
+              description: "",
+              name: draft.projectName
+            }
+          }),
+          headers: {
+            "Content-Type": "application/json"
+          },
+          method: "POST"
+        });
+        const projectPayload = (await projectResponse
+          .json()
+          .catch(() => ({}))) as ProjectResponsePayload;
+
+        if (!projectResponse.ok || !projectPayload.project) {
+          setProjectSetupState({
+            apiKey: null,
+            error: projectPayload.error ?? text.createProjectError,
+            project: null,
+            status: "error"
+          });
+          return;
+        }
+
+        project = projectPayload.project;
+      }
+
+      const selectedProjectStatus = normalizeDraftProjectStatus(draft.projectStatus);
+
+      if (project.status !== selectedProjectStatus) {
+        const updateResponse = await fetch("/api/control-plane/projects", {
+          body: JSON.stringify({
+            action: "update",
+            values: {
+              description: project.description ?? "",
+              name: project.name,
+              projectId: project.id,
+              status: selectedProjectStatus
+            }
+          }),
+          headers: {
+            "Content-Type": "application/json"
+          },
+          method: "POST"
+        });
+        const updatePayload = (await updateResponse
+          .json()
+          .catch(() => ({}))) as ProjectResponsePayload;
+
+        if (!updateResponse.ok || !updatePayload.project) {
+          setProjectSetupState({
+            apiKey: null,
+            error: updatePayload.error ?? text.createProjectError,
+            project,
+            status: "error"
+          });
+          return;
+        }
+
+        project = updatePayload.project;
+      }
+
+      const response = await fetch("/api/control-plane/api-keys", {
+        body: JSON.stringify({
+          action: "issue",
+          values: {
+            displayName: draft.apiKeyDisplayName,
+            expiresAt: "",
+            projectId: project.id,
+            scopes: "gateway:invoke"
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ApiKeyIssuePayload;
+
+      if (!response.ok || !payload.apiKey) {
+        setProjectSetupState({
+          apiKey: null,
+          error: payload.error ?? text.issueApiKeyError,
+          project,
+          status: "error"
+        });
+        return;
+      }
+
+      setProjectSetupState({
+        apiKey: payload.apiKey,
+        error: "",
+        project,
+        status: "issued"
+      });
+      setSavedStepIds((current) => new Set(current).add(activeStep.id));
+    } catch {
+      setProjectSetupState({
+        apiKey: null,
+        error: text.createProjectError,
+        project,
+        status: "error"
+      });
     }
   }
 
@@ -207,8 +353,8 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
         </div>
       </section>
 
-      <section className="onboarding-layout" aria-label="Admin onboarding flow">
-        <ol className="onboarding-rail" aria-label="Onboarding steps">
+      <section className="onboarding-layout" aria-label="Create project flow">
+        <ol className="onboarding-rail" aria-label="Create project steps">
           {onboardingSteps.map((step, index) => (
             <li
               aria-current={step.id === activeStep.id ? "step" : undefined}
@@ -239,9 +385,12 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
               {renderStepContent({
                 activeStepId: activeStep.id,
                 draft,
-                isSaved,
+                isCreateApiKeyDisabled,
                 locale,
                 model,
+                onCreateApiKey: createProjectAndIssueApiKey,
+                projectSetupState,
+                text,
                 updateDraft
               })}
             </article>
@@ -249,14 +398,24 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
             <div className="onboarding-actions">
               <button
                 className="secondary-button"
-                disabled={!previousStep}
+                disabled={isPreviousActionDisabled}
                 onClick={() => setActiveIndex((current) => Math.max(current - 1, 0))}
                 type="button"
               >
                 {text.previous}
               </button>
-              <button className="primary-button" type="submit">
-                {nextStep ? text.saveNext : text.complete}
+              <button
+                className="primary-button"
+                disabled={isPrimaryActionDisabled}
+                type="submit"
+              >
+                {isCreatingCredential
+                  ? text.savingProject
+                  : projectSetupState.status === "issued"
+                    ? text.saveToProjects
+                  : nextStep
+                    ? text.saveNext
+                    : text.complete}
               </button>
             </div>
           </form>
@@ -269,16 +428,22 @@ export function AdminOnboardingFlow({ activeStepId, locale, model }: AdminOnboar
 function renderStepContent({
   activeStepId,
   draft,
-  isSaved,
+  isCreateApiKeyDisabled,
   locale,
   model,
+  onCreateApiKey,
+  projectSetupState,
+  text,
   updateDraft
 }: {
   activeStepId: OnboardingStepId;
   draft: OnboardingDraft;
-  isSaved: boolean;
+  isCreateApiKeyDisabled: boolean;
   locale: Locale;
   model: AdminOnboardingModel;
+  onCreateApiKey: () => void;
+  projectSetupState: ProjectSetupState;
+  text: (typeof onboardingText)[Locale];
   updateDraft: (field: keyof OnboardingDraft, value: string) => void;
 }) {
   if (activeStepId === "project") {
@@ -295,12 +460,6 @@ function renderStepContent({
           onChange={updateDraft}
           value={draft.projectName}
         />
-        <OnboardingField
-          field="projectId"
-          label="Project ID"
-          onChange={updateDraft}
-          value={draft.projectId}
-        />
         <OnboardingSelect
           field="projectStatus"
           label="Status"
@@ -312,175 +471,36 @@ function renderStepContent({
     );
   }
 
-  if (activeStepId === "application") {
+  if (activeStepId === "model-selection") {
     return (
       <div className="onboarding-stack">
-        <OnboardingField
-          field="applicationName"
-          label="Application name"
-          onChange={updateDraft}
-          value={draft.applicationName}
-        />
-        <OnboardingField
-          field="applicationId"
-          label="Application ID"
-          onChange={updateDraft}
-          value={draft.applicationId}
-        />
-        <OnboardingSelect
-          field="applicationStatus"
-          label="Status"
-          onChange={updateDraft}
-          options={["ACTIVE", "DISABLED"]}
-          value={draft.applicationStatus}
-        />
-        <OnboardingField
-          field="rateLimitScope"
-          label="Rate limit scope"
-          onChange={updateDraft}
-          value={draft.rateLimitScope}
-        />
-        <div className="onboarding-form-row">
-          <OnboardingField
-            field="rateLimitLimit"
-            inputMode="numeric"
-            label="Window limit"
-            onChange={updateDraft}
-            value={draft.rateLimitLimit}
-          />
-          <OnboardingField
-            field="rateLimitWindowSeconds"
-            inputMode="numeric"
-            label="Window seconds"
-            onChange={updateDraft}
-            value={draft.rateLimitWindowSeconds}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (activeStepId === "provider") {
-    return (
-      <div className="onboarding-stack">
-        <OnboardingField
-          field="providerDisplayName"
-          label="Display name"
-          onChange={updateDraft}
-          value={draft.providerDisplayName}
-        />
-        <div className="onboarding-form-row">
-          <OnboardingField
-            field="providerId"
-            label="Provider ID"
-            onChange={updateDraft}
-            value={draft.providerId}
-          />
-          <OnboardingField
-            field="providerName"
-            label="Provider"
-            onChange={updateDraft}
-            value={draft.providerName}
-          />
-        </div>
-        <OnboardingSelect
-          field="providerStatus"
-          label="Status"
-          onChange={updateDraft}
-          options={["ACTIVE", "DISABLED", "missing"]}
-          value={draft.providerStatus}
-        />
-        <OnboardingField
-          field="providerResolver"
-          label="Resolver"
-          onChange={updateDraft}
-          value={draft.providerResolver}
-        />
-        <OnboardingField
-          field="providerCredentialReference"
-          label="Credential reference"
-          onChange={updateDraft}
-          value={draft.providerCredentialReference}
-        />
-        <ReadonlySummary
-          rows={[
-            ["Models", String(model.provider.modelCount)]
-          ]}
-        />
-        <ProviderModelList models={model.provider.models} />
-      </div>
-    );
-  }
-
-  if (activeStepId === "api-key") {
-    return (
-      <div className="onboarding-stack">
-        <OnboardingField
-          field="apiKeyDisplayName"
-          label="Display name"
-          onChange={updateDraft}
-          value={draft.apiKeyDisplayName}
-        />
-        <OnboardingField
-          field="apiKeyScopes"
-          label="Scopes"
-          onChange={updateDraft}
-          value={draft.apiKeyScopes}
-        />
-        <CredentialStep
-          credentialName="API Key"
-          isSaved={isSaved}
-          issueResponse={model.apiKey.issueResponse}
-          locale={locale}
-          listItem={model.apiKey.listItem}
-        />
-      </div>
-    );
-  }
-
-  if (activeStepId === "app-token") {
-    return (
-      <div className="onboarding-stack">
-        <OnboardingField
-          field="appTokenDisplayName"
-          label="Display name"
-          onChange={updateDraft}
-          value={draft.appTokenDisplayName}
-        />
-        <OnboardingField
-          field="appTokenScopes"
-          label="Scopes"
-          onChange={updateDraft}
-          value={draft.appTokenScopes}
-        />
-        <CredentialStep
-          credentialName="App Token"
-          isSaved={isSaved}
-          issueResponse={model.appToken.issueResponse}
-          locale={locale}
-          listItem={model.appToken.listItem}
-        />
+        <ModelSelectionFields draft={draft} models={model.provider.models} onChange={updateDraft} />
       </div>
     );
   }
 
   return (
     <div className="onboarding-stack">
-      <div className="onboarding-form-row">
-        <OnboardingField
-          field="runtimeConfigVersion"
-          label="Config version"
-          onChange={updateDraft}
-          value={draft.runtimeConfigVersion}
-        />
-        <OnboardingSelect
-          field="runtimePublishState"
-          label="Publish state"
-          onChange={updateDraft}
-          options={["published", "draft", "validation_failed"]}
-          value={draft.runtimePublishState}
-        />
-      </div>
+      <OnboardingField
+        field="apiKeyDisplayName"
+        label="API Key name"
+        onChange={updateDraft}
+        value={draft.apiKeyDisplayName}
+      />
+      <ApiKeyIssueReview
+        isCreateApiKeyDisabled={isCreateApiKeyDisabled}
+        issueState={projectSetupState}
+        locale={locale}
+        onCreateApiKey={onCreateApiKey}
+        text={text}
+      />
+      <OnboardingSelect
+        field="runtimePublishState"
+        label="Publish state"
+        onChange={updateDraft}
+        options={["published", "draft", "validation_failed"]}
+        value={draft.runtimePublishState}
+      />
       <OnboardingSelect
         field="cacheEnabled"
         label="Cache"
@@ -488,89 +508,67 @@ function renderStepContent({
         options={["enabled", "disabled"]}
         value={draft.cacheEnabled}
       />
-      <OnboardingField
+      <OnboardingSelect
         field="cacheType"
         label="Cache type"
         onChange={updateDraft}
+        options={["exact"]}
         value={draft.cacheType}
       />
-      <OnboardingField
+      <OnboardingSelect
         field="safetyMode"
         label="Safety mode"
         onChange={updateDraft}
+        options={["rule_based"]}
         value={draft.safetyMode}
       />
-      <ReadonlySummary
-        rows={[
-          ["Config hash", model.runtimeConfig.configHash],
-          ["Security policy hash", model.runtimeConfig.securityPolicyHash],
-          ["Routing policy hash", model.runtimeConfig.routingPolicyHash],
-          ["Detectors", String(model.runtimeConfig.detectorCount)]
-        ]}
-      />
-      <div className="guardrail-list">
-        <h4>Forbidden admin response fields</h4>
-        <ul>
-          {(model.forbiddenAdminResponseFields ?? []).map((field) => (
-            <li key={field}>{field}</li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 }
 
-function CredentialStep({
-  credentialName,
-  isSaved,
-  issueResponse,
+function ApiKeyIssueReview({
+  isCreateApiKeyDisabled,
+  issueState,
   locale,
-  listItem
+  onCreateApiKey,
+  text
 }: {
-  credentialName: string;
-  isSaved: boolean;
-  issueResponse: CredentialIssueResponse;
+  isCreateApiKeyDisabled: boolean;
+  issueState: ProjectSetupState;
   locale: Locale;
-  listItem: CredentialListItem;
+  onCreateApiKey: () => void;
+  text: (typeof onboardingText)[Locale];
 }) {
-  const listTitle = locale === "ko" ? "이후 조회 상태" : "Subsequent list state";
-  const pendingText =
-    locale === "ko"
-      ? "저장하면 원문이 한 번만 표시됩니다."
-      : "The plaintext value appears once after saving.";
+  if (issueState.apiKey) {
+    return (
+      <CredentialOneTimeSecret
+        credentialName="API Key"
+        issueResponse={issueState.apiKey}
+        key={issueState.apiKey.credentialId}
+        locale={locale}
+      />
+    );
+  }
 
   return (
-    <div className="credential-flow">
-      {isSaved ? (
-        <CredentialOneTimeSecret
-          credentialName={credentialName}
-          issueResponse={issueResponse}
-          locale={locale}
-        />
-      ) : (
-        <section className="credential-list-state" aria-label={`${credentialName} pending issue`}>
-          <p className="empty-note">{pendingText}</p>
-        </section>
-      )}
-
-      <section className="credential-list-state" aria-label={`${credentialName} list state`}>
-        <div className="panel-heading">
-          <h4>{listTitle}</h4>
-        </div>
-        <ReadonlySummary
-          rows={[
-            ["Credential ID", listItem.credentialId],
-            ["Display name", listItem.displayName],
-            ["Status", listItem.status],
-            ["Prefix", listItem.prefix],
-            ["Last 4", listItem.last4],
-            ["Scopes", (listItem.scopes ?? []).join(", ")],
-            ["Created", formatDateTime(listItem.createdAt)],
-            ["Last used", formatDateTime(listItem.lastUsedAt)]
-          ]}
-        />
-      </section>
-    </div>
+    <section className="credential-list-state" aria-label="API Key issue state">
+      {issueState.error ? (
+        <p className="policy-alert" data-status="error">
+          {issueState.error}
+        </p>
+      ) : null}
+      <div className="secret-placeholder secret-placeholder-action">
+        <span>{issueState.status === "saving" ? text.savingProject : text.issueApiKeyPending}</span>
+        <button
+          className="primary-button"
+          disabled={isCreateApiKeyDisabled}
+          onClick={onCreateApiKey}
+          type="button"
+        >
+          {issueState.status === "saving" ? text.savingProject : text.createApiKey}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -640,15 +638,86 @@ function ReadonlySummary({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
-function ProviderModelList({ models }: { models: AdminProviderModel[] }) {
+function ModelSelectionFields({
+  draft,
+  models,
+  onChange
+}: {
+  draft: OnboardingDraft;
+  models: AdminProviderModel[];
+  onChange: (field: keyof OnboardingDraft, value: string) => void;
+}) {
   if (models.length === 0) {
-    return <p className="empty-state">No provider models configured.</p>;
+    return <p className="empty-state">No registered models are available.</p>;
   }
 
+  const options = models.map((model) => ({
+    label: `${model.displayName} (${model.provider}:${model.model})`,
+    value: getModelOptionValue(model.provider, model.model)
+  }));
+
   return (
-    <section className="onboarding-model-list" aria-label="Provider models">
+    <section className="onboarding-model-list" aria-label="Registered model selection">
+      <div className="onboarding-form-row">
+        <ModelSelect
+          field="defaultModel"
+          label="Default model"
+          onChange={onChange}
+          options={options}
+          value={draft.defaultModel}
+        />
+        <ModelSelect
+          field="lowCostModel"
+          label="Low-cost model"
+          onChange={onChange}
+          options={options}
+          value={draft.lowCostModel}
+        />
+      </div>
+      <ModelSelect
+        field="fallbackModel"
+        label="Fallback model"
+        onChange={onChange}
+        options={options}
+        value={draft.fallbackModel}
+      />
+      <RegisteredModelTable models={models} />
+    </section>
+  );
+}
+
+function ModelSelect({
+  field,
+  label,
+  onChange,
+  options,
+  value
+}: {
+  field: "defaultModel" | "fallbackModel" | "lowCostModel";
+  label: string;
+  onChange: (field: keyof OnboardingDraft, value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+}) {
+  return (
+    <label className="onboarding-field">
+      <span>{label}</span>
+      <select onChange={(event) => onChange(field, event.target.value)} required value={value}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function RegisteredModelTable({ models }: { models: AdminProviderModel[] }) {
+  return (
+    <div>
       <div className="panel-heading">
-        <h4>Provider models</h4>
+        <h4>Registered models</h4>
       </div>
       <div className="table-wrap">
         <table className="data-table">
@@ -684,8 +753,24 @@ function ProviderModelList({ models }: { models: AdminProviderModel[] }) {
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
   );
+}
+
+function getModelOptionValue(provider: string, model: string) {
+  return `${provider}:${model}`;
+}
+
+function normalizeDraftProjectStatus(value: string): ProjectStatus {
+  if (value === "DISABLED" || value === "disabled") {
+    return "DISABLED";
+  }
+
+  if (value === "ARCHIVED" || value === "archived") {
+    return "ARCHIVED";
+  }
+
+  return "ACTIVE";
 }
 
 export function normalizeOnboardingStepId(value: string | string[] | undefined): OnboardingStepId {
@@ -710,27 +795,22 @@ function getStepState(index: number, activeIndex: number) {
 function buildInitialDraft(model: AdminOnboardingModel): OnboardingDraft {
   return {
     apiKeyDisplayName: model.apiKey.listItem.displayName,
-    apiKeyScopes: model.apiKey.listItem.scopes.join(", "),
-    appTokenDisplayName: model.appToken.listItem.displayName,
-    appTokenScopes: model.appToken.listItem.scopes.join(", "),
-    applicationId: model.application.id,
-    applicationName: formatDisplayIdentifier(model.application.id),
-    applicationStatus: model.application.status,
     cacheEnabled: model.runtimeConfig.cacheEnabled ? "enabled" : "disabled",
     cacheType: model.runtimeConfig.cacheType,
-    providerCredentialReference: nullableText(model.provider.credentialPreview, "not-set"),
-    providerDisplayName: model.provider.displayName,
-    providerId: model.provider.providerId,
-    providerName: model.provider.provider,
-    providerResolver: model.provider.resolver,
-    providerStatus: model.provider.status,
-    projectId: model.project.id,
-    projectName: formatDisplayIdentifier(model.project.id),
-    projectStatus: model.project.status,
-    rateLimitLimit: String(model.application.rateLimitLimit),
-    rateLimitScope: model.application.rateLimitScope,
-    rateLimitWindowSeconds: String(model.application.rateLimitWindowSeconds),
-    runtimeConfigVersion: model.runtimeConfig.configVersion,
+    defaultModel: getModelOptionValue(
+      model.modelSelection.defaultProvider,
+      model.modelSelection.defaultModel
+    ),
+    fallbackModel: getModelOptionValue(
+      model.modelSelection.fallbackProvider,
+      model.modelSelection.fallbackModel
+    ),
+    lowCostModel: getModelOptionValue(
+      model.modelSelection.lowCostProvider,
+      model.modelSelection.lowCostModel
+    ),
+    projectName: "",
+    projectStatus: normalizeDraftProjectStatus(model.project.status),
     runtimePublishState: model.runtimeConfig.publishState,
     safetyMode: model.runtimeConfig.safetyMode
   };

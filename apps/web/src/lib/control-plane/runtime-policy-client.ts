@@ -55,6 +55,14 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
   };
 }
 
+export async function getRuntimePolicyConfigForApplication(
+  applicationId: string
+): Promise<RuntimePolicyConfig | null> {
+  const activeConfig = await fetchActiveRuntimeConfig(applicationId);
+
+  return activeConfig.ok ? activeConfig.data : null;
+}
+
 export async function saveRuntimePolicyDraft(
   values: RuntimePolicyDraftValues
 ): Promise<ControlPlaneRequestResult> {

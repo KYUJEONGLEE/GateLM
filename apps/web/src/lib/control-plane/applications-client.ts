@@ -46,9 +46,12 @@ type ApplicationListResult =
       status: number;
     };
 
-export async function getApplicationsModel(routeTenantId: string): Promise<ApplicationsModel> {
+export async function getApplicationsModel(
+  routeTenantId: string,
+  projectId = getControlPlaneProjectId()
+): Promise<ApplicationsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const controlPlaneProjectId = getControlPlaneProjectId();
+  const controlPlaneProjectId = projectId;
   const listResult = await listApplications(controlPlaneProjectId);
 
   if (listResult.ok) {
@@ -75,7 +78,7 @@ export async function getApplicationsModel(routeTenantId: string): Promise<Appli
 export async function createApplication(
   values: ApplicationFormValues
 ): Promise<ApplicationRequestResult> {
-  const projectId = getControlPlaneProjectId();
+  const projectId = values.projectId ?? getControlPlaneProjectId();
 
   try {
     const response = await fetch(

@@ -30,6 +30,7 @@ export type OneTimeApiKeyResponse = {
 export type ApiKeyIssueValues = {
   displayName: string;
   expiresAt: string;
+  projectId?: string;
   scopes: string;
 };
 

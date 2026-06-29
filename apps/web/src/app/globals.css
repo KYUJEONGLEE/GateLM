@@ -39,6 +39,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --console-title-block-height: 140px;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -187,12 +188,18 @@ select {
 }
 
 .console-sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 28px;
+  height: 100vh;
+  min-height: 100vh;
   padding: 24px;
+  padding-bottom: 104px;
   background: #0f172a;
   color: #e5e7eb;
+  overflow-y: auto;
 }
 
 .console-sidebar-topbar {
@@ -269,6 +276,7 @@ select {
 
 .console-shell[data-sidebar-collapsed="true"] .console-sidebar {
   align-items: center;
+  padding-bottom: 24px;
   padding-right: 16px;
   padding-left: 16px;
 }
@@ -279,7 +287,9 @@ select {
 }
 
 .console-shell[data-sidebar-collapsed="true"] .console-brand,
-.console-shell[data-sidebar-collapsed="true"] .console-nav {
+.console-shell[data-sidebar-collapsed="true"] .console-nav,
+.console-shell[data-sidebar-collapsed="true"] .console-sidebar-language,
+.console-shell[data-sidebar-collapsed="true"] .console-sidebar-tenant {
   display: none;
 }
 
@@ -384,6 +394,66 @@ select {
   text-transform: uppercase;
 }
 
+.console-sidebar-language,
+.console-sidebar-tenant {
+  display: grid;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(203, 213, 225, 0.16);
+  border-radius: 8px;
+}
+
+.console-sidebar-language {
+  width: max-content;
+  padding: 4px;
+}
+
+.console-sidebar-tenant {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  left: 24px;
+  padding: 12px;
+}
+
+.console-sidebar-tenant strong {
+  min-width: 0;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.console-sidebar-language .language-switcher {
+  width: auto;
+  padding: 1px;
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(203, 213, 225, 0.18);
+}
+
+.console-sidebar-language .language-option {
+  min-height: 24px;
+  padding: 0 7px;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.console-sidebar-language .language-option[data-active="true"] {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+@media (max-height: 640px) and (min-width: 1101px) {
+  .console-sidebar {
+    padding-bottom: 24px;
+  }
+
+  .console-sidebar-tenant {
+    display: none;
+  }
+}
+
 .console-main {
   min-width: 0;
 }
@@ -444,11 +514,20 @@ select {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  width: 100%;
+  height: var(--console-title-block-height);
+  min-height: var(--console-title-block-height);
+  overflow: hidden;
   gap: 24px;
   padding: 28px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.dashboard-hero > div:first-child,
+.detail-header > div:first-child {
+  min-width: 0;
 }
 
 .dashboard-hero h2,
@@ -457,15 +536,20 @@ select {
   font-size: 34px;
   line-height: 1.05;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-hero p,
 .detail-header p {
+  display: -webkit-box;
   max-width: 760px;
+  overflow: hidden;
   margin: 12px 0 0;
   color: var(--text-muted);
   font-size: 15px;
   line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .primary-link,
@@ -779,20 +863,23 @@ select {
   resize: vertical;
 }
 
-.project-source {
-  display: grid;
-  justify-items: end;
-  gap: 5px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
+.dashboard-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.project-source strong {
-  color: var(--foreground);
-  font-size: 14px;
+.dashboard-hero-actions .primary-button {
+  gap: 8px;
   text-transform: none;
+}
+
+.dashboard-hero-actions .primary-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .project-create-form {
@@ -800,6 +887,49 @@ select {
   grid-template-columns: minmax(180px, 0.65fr) minmax(260px, 1fr) auto;
   gap: 12px;
   align-items: end;
+}
+
+.project-detail-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.project-detail-section {
+  display: grid;
+  gap: 0;
+}
+
+.project-detail-section + .project-detail-section {
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+
+.project-detail-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.project-detail-actions .secondary-button,
+.project-detail-actions .primary-button {
+  gap: 8px;
+  min-width: 104px;
+}
+
+.project-detail-actions .secondary-button svg,
+.project-detail-actions .primary-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.project-danger-button {
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
+.project-danger-button:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
 }
 
 .project-table {
@@ -868,6 +998,28 @@ select {
 .project-row-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.applications-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.applications-panel-heading .panel-heading {
+  margin-bottom: 0;
+}
+
+.applications-panel-heading .primary-button {
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.applications-panel-heading .primary-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .project-empty {
@@ -1052,6 +1204,45 @@ select {
 
 .api-key-table {
   min-width: 1120px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(8px);
+}
+
+.modal-panel {
+  display: grid;
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  gap: 18px;
+  overflow-y: auto;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.modal-panel .panel-heading {
+  margin-bottom: 0;
+}
+
+.modal-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .policy-summary-list {
@@ -1268,8 +1459,10 @@ select {
 
 .onboarding-rail {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: min(720px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  justify-self: center;
 }
 
 .onboarding-step {
@@ -1486,6 +1679,8 @@ select {
 }
 
 .secret-placeholder {
+  display: grid;
+  gap: 12px;
   padding: 13px;
   background: var(--surface);
   border: 1px dashed var(--border);
@@ -1493,6 +1688,14 @@ select {
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.secret-placeholder-action {
+  align-items: start;
+}
+
+.secret-placeholder-action .primary-button {
+  justify-self: start;
 }
 
 .credential-list-state {
@@ -1608,7 +1811,21 @@ select {
 .primary-button[aria-disabled="true"],
 .secondary-button[aria-disabled="true"] {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 1;
+}
+
+.primary-button:disabled,
+.primary-button[aria-disabled="true"] {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #94a3b8;
+}
+
+.secondary-button:disabled,
+.secondary-button[aria-disabled="true"] {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #94a3b8;
 }
 
 .customer-demo-shell {
@@ -2198,7 +2415,10 @@ select {
     justify-content: flex-start;
     gap: 10px;
     width: 100%;
+    height: auto;
+    min-height: 0;
     min-width: 0;
+    overflow: visible;
     padding: 10px 12px;
   }
 
@@ -2266,6 +2486,15 @@ select {
 
   .console-shell[data-sidebar-collapsed="true"] .console-mobile-subnavs {
     display: none;
+  }
+
+  .console-sidebar-language {
+    width: max-content;
+  }
+
+  .console-sidebar-tenant {
+    position: static;
+    margin-top: 0;
   }
 
   .console-mobile-subnavs .console-subnav {
@@ -2467,18 +2696,25 @@ select {
   .provider-form-actions,
   .api-key-form-actions,
   .api-key-row-actions,
+  .project-detail-actions,
+  .applications-panel-heading,
+  .modal-actions,
   .model-catalog-actions {
     flex-direction: column;
   }
 
   .model-catalog-actions,
   .model-catalog-actions .policy-field,
+  .applications-panel-heading .primary-button,
+  .modal-actions button,
+  .project-detail-actions .primary-button,
   .model-catalog-actions button {
     width: 100%;
   }
 
-  .project-source {
-    justify-items: start;
+  .dashboard-hero-actions {
+    align-self: flex-start;
+    justify-content: flex-start;
   }
 
   .onboarding-main {
