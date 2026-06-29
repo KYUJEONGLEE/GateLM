@@ -93,7 +93,8 @@ budgetScopeId = applicationId
 
 - Gateway는 인증 결과와 RuntimeSnapshot/Control Plane 규칙으로 검증된 budget scope만 소비한다.
 - Client가 request body에 budget scope를 보내더라도 Gateway는 이를 신뢰하지 않는다.
-- Request Log/Detail에는 resolved budget scope를 남긴다.
+- GatewayContext, Request Log, Request Detail에는 resolved budget scope와 `resolvedBy`를 남긴다.
+- Dashboard read model은 resolved budget scope를 filter/breakdown grain으로 사용한다.
 - Budget warning threshold는 관리자가 설정할 수 있어야 한다.
 - Budget warning은 기본적으로 Admin/Operator 화면에서만 표시한다.
 
@@ -107,7 +108,7 @@ budgetScopeId = applicationId
 | `runtime_snapshot` | published RuntimeSnapshot이 budget scope를 명시적으로 제공했다. |
 | `control_plane_rule` | Control Plane의 검증된 규칙이 budget scope를 결정했다. |
 
-Gateway는 client-provided budget scope를 신뢰하지 않는다. Request Log/Detail/Dashboard에는 위 resolved source와 최종 resolved budget scope만 남긴다.
+Gateway는 client-provided budget scope를 신뢰하지 않는다. `client_provided` 같은 source 값은 v2.0.0 계약에 넣지 않는다. Request Log/Detail/Dashboard에는 위 resolved source와 최종 resolved budget scope만 남긴다.
 
 ## 4. Employee Chat Boundary
 
@@ -185,6 +186,8 @@ publishedBy
 gatewayInstanceId
 ```
 
+`runtimeSnapshotVersion`은 integer monotonic version이다. UI 표시 문자열이 필요하면 UI/read model에서 format한다.
+
 v1 계열 hash와의 연결:
 
 ```text
@@ -193,9 +196,9 @@ securityPolicyHash
 routingPolicyHash
 ```
 
-위 hash는 v2 RuntimeSnapshot provenance와 연결해야 한다. 중복 또는 rename 여부는 P0 legacy field cleanup에서 최종 정리한다.
+위 hash trio는 v2.0.0 primary provenance가 아니다. 필요하면 compatibility/read model bridge에서 `legacyHashes` 계열로 연결하되, RuntimeSnapshot lookup key나 primary runtime identity로 사용하지 않는다.
 
-RuntimeSnapshot에는 provider credential, API Key, App Token, Authorization header, secret plaintext를 포함하지 않는다. Provider credential은 credential reference 또는 hash 계열 metadata로만 연결한다.
+RuntimeSnapshot에는 provider credential, API Key, App Token, Authorization header, secret plaintext를 포함하지 않는다. Provider credential은 `credentialRef` 또는 metadata reference로만 연결한다. 기존 `secretRef` 이름은 legacy compatibility 후보로만 남기며, RuntimeSnapshot/Provider Catalog의 v2 계약 용어로 승격하지 않는다.
 
 ### 5.5 Publish And Reload Failure
 
@@ -219,6 +222,8 @@ stale_snapshot_used
 ```
 
 `no_snapshot`과 `not_checked`는 실제 RuntimeSnapshot 상태가 아니다. 두 값은 Gateway stage outcome, Request Detail, Dashboard 같은 read model에서만 사용한다.
+
+실제 RuntimeSnapshot/GatewayContext provenance object에는 `no_snapshot` 또는 `not_checked`를 넣지 않는다. 적용 가능한 snapshot이 없으면 runtime domain outcome/read model에서 표현하고 provenance object는 비우거나 별도 null 상태로 둔다.
 
 | Value | Scope |
 |---|---|
@@ -250,6 +255,8 @@ cancelled
 | `failed` | Gateway 또는 Provider 오류로 정상 응답을 전달하지 못함. |
 | `cancelled` | client abort 또는 streaming 취소로 요청이 중단됨. |
 
+`cache_hit`, `error`, `partial_success`는 `terminalStatus` 값으로 사용하지 않는다. Cache hit 여부, provider error 여부, fallback degraded path는 domain outcome으로 표현한다.
+
 ### 6.2 Terminal Status Decision Rules
 
 | Condition | terminalStatus |
@@ -272,6 +279,8 @@ Auth failure는 `terminalStatus=blocked`로 보되 HTTP status와 error code로 
 invalid API Key -> httpStatus=401, errorCode=invalid_api_key
 invalid App Token -> httpStatus=403, errorCode=invalid_app_token
 ```
+
+Exact Cache hit는 `terminalStatus=success`, `cache.outcome=hit`, `provider.outcome=not_called`로 기록한다. `cache_hit`를 terminal status처럼 사용하지 않는다.
 
 ### 6.3 Domain Outcome Groups
 
@@ -349,6 +358,12 @@ Safety block:
 }
 ```
 
+### 6.6 Legacy Outcome Bridge
+
+Gateway는 canonical `terminalStatus`와 `domainOutcomes`를 생산한다. Observability, Request Detail, Dashboard는 이 값을 소비하며 stage 결과를 새로 추측하지 않는다.
+
+Legacy `status`, `cacheStatus`, `maskingAction`은 compatibility mapper 또는 read model bridge에서만 제공할 수 있다. 새 API/Event/Metrics/Schema의 canonical field로 승격하지 않는다.
+
 ## 7. Provider, Model, Routing, Fallback
 
 ### 7.1 Provider And Model Catalog
@@ -423,6 +438,8 @@ Redaction 이후 cache/evidence 입력으로 사용할 수 있는 값은 raw pro
 
 Safety result는 raw value, raw offset, raw prompt fragment를 포함하지 않는다.
 
+`promptHash`, `requestBodyHash`, `cacheKeyHash`는 raw 값은 아니지만 high-cardinality correlation material이다. Internal Gateway context나 evidence storage 후보로만 허용하며, metrics label, Dashboard aggregate label, Employee UI에는 노출하지 않는다. Admin Request Detail 표시 여부는 v2.0.0 freeze 범위 밖의 P1 결정으로 둔다.
+
 ### 8.3 Exact Cache
 
 Exact Cache는 v2.0.0 core cache path다.
@@ -452,6 +469,12 @@ actual provider bypass
 ```
 
 Semantic Cache experiment도 raw prompt를 사용하지 않는다. redaction 이후 normalized prompt만 사용한다.
+
+### 8.5 Safety Summary Visibility
+
+`safety.outcome`이 canonical safety 결과다.
+
+`maskingAction`, `detectedTypes`, `redactedPromptPreview`는 sanitized summary/display 후보이며 raw detected value, raw offset, raw prompt fragment를 포함하지 않는다. Employee UI는 detector detail과 policy internals를 숨긴다. Admin/Developer UI는 계약된 sanitized summary만 볼 수 있다.
 
 ## 9. Streaming Thin Slice
 
@@ -486,6 +509,7 @@ projectId
 applicationId
 budgetScopeType
 budgetScopeId
+budgetScopeResolvedBy
 terminalStatus
 httpStatus
 errorCode
@@ -505,6 +529,10 @@ safety summary
 ```
 
 Request Detail은 full RuntimeSnapshot, raw prompt, raw response, raw provider error body를 포함하지 않는다.
+
+Request Detail 기본 계약은 credential plaintext, API Key/App Token/Provider Key, Authorization header, actual secret을 포함하지 않는다. `apiKeyId`, `appTokenId` 같은 credential ID의 Admin-only 표시 여부는 v2.0.0 freeze 범위 밖의 P1 결정이다.
+
+`cacheHitRequestId`, `promptHash`, `requestBodyHash`, `cacheKeyHash`는 v2.0.0 core Request Detail required field가 아니다. 필요하면 detail-only provenance 후보로 별도 계약에서 검토하며, metrics label이나 Dashboard aggregate label로 사용하지 않는다.
 
 ### 10.2 Dashboard Grain
 
@@ -585,6 +613,10 @@ cache_key_hash
 ```
 
 Tenant/project/application/budgetScope 단위 분석은 기본적으로 Dashboard read model에서 처리한다. Prometheus-compatible metrics label에 raw ID를 직접 넣는 것은 v2.0.0 기본 계약으로 삼지 않는다.
+
+Status 계열 metrics label은 canonical `terminalStatus` 허용 값만 사용한다. Cache hit, provider error, fallback success는 terminal status label로 합치지 않고 domain outcome 또는 Dashboard read model에서 표현한다.
+
+Provider/model metrics label은 controlled low-cardinality catalog label만 허용한다. 실제 provider/model 도입 후 cardinality가 높아지는 값은 Metrics label이 아니라 Dashboard read model로 보낸다.
 
 ### 11.2 Performance Interpretation
 
@@ -679,6 +711,7 @@ safety-domain-outcome.fixture.json
 - `docs/v2.0.0/schemas/draft/`와 `docs/v2.0.0/fixtures/draft/`는 더 이상 기준 위치가 아니다.
 - 계약 변경이 필요하면 schema/fixture를 먼저 바꾸지 않는다. `contracts.md`를 먼저 수정하고, 그 다음 schema/fixture를 갱신한다.
 - Provider/Model은 enum으로 고정하지 않는다.
+- `runtimeSnapshotVersion`은 schema/fixture에서 integer monotonic version으로 통일한다.
 - Fixture는 실제 개인정보, 실제 secret, 실제 Authorization header, 실제 Provider Key를 포함하지 않는다.
 - `demo-scenario.md`와 demo scenario schema는 발표 동선 합의 후 별도 문서/PR에서 정의한다.
 
@@ -697,6 +730,30 @@ v2.0.0 core 범위에 넣지 않는다.
 - department budget scope
 
 ## 15. Implementation Order
+
+### 15.1 P0 Freeze Boundaries
+
+v2.0.0 P0 cleanup 전에 freeze된 계약:
+
+- `terminalStatus + domainOutcomes`가 canonical outcome이다.
+- Legacy `status/cacheStatus/maskingAction`은 compatibility/read model bridge 전용이다.
+- RuntimeSnapshot primary provenance는 `runtimeSnapshotId/runtimeSnapshotVersion/contentHash/runtimeState/publishedAt/publishedBy/gatewayInstanceId`다.
+- v1 hash trio는 primary provenance가 아니며 compatibility/read model bridge로만 둔다.
+- `runtimeSnapshotVersion`은 integer monotonic version이다.
+- Actual runtime provenance state는 `snapshot_active/last_known_safe_used/stale_snapshot_used`만 사용한다.
+- `budgetScopeType/budgetScopeId/resolvedBy`는 GatewayContext, Request Log, Request Detail의 resolved budget scope 계약이다.
+- Metrics label에는 hash, credential ID, raw error detail, high-cardinality request/detail 값을 넣지 않는다.
+
+v2.0.0에서 frozen 계약으로 보지 않는 항목:
+
+- `p0_llm_invocation_logs` 또는 legacy `status` column의 물리 rename
+- `cacheHitRequestId`의 Admin Request Detail 노출 여부
+- `apiKeyId/appTokenId`의 Admin Request Detail 노출 여부
+- hash field의 Admin Request Detail 노출 여부
+- average latency를 Dashboard core KPI로 유지할지 여부
+- Semantic Cache live response path
+
+### 15.2 Documentation And Implementation Order
 
 v2.0.0 구현 전 문서/계약 작업은 아래 순서로 진행한다.
 
