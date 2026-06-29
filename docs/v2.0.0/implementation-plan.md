@@ -19,14 +19,15 @@ This file stays intentionally short. Concrete PR-by-PR file work is in `docs/v2.
 
 ## 2. Source Of Truth
 
-Implementation follows this priority order:
+Read `docs/README.md` first when starting work.
+
+If documents conflict, use this Source Of Truth priority order:
 
 1. `docs/v2.0.0/contracts.md`
 2. `docs/v2.0.0/schemas/*.schema.json`
 3. `docs/v2.0.0/fixtures/*.fixture.json`
 4. `docs/v2.0.0/implementation-plan.md`
 5. `docs/v2.0.0/implementation-tasks.md`
-6. `docs/README.md`
 
 Rules:
 
