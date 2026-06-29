@@ -48,6 +48,8 @@ Customer App / Employee Chat
 
 구체적인 PR별 작업 위치는 `docs/v2.0.0/implementation-tasks.md`를 봅니다.
 
+실제 PR 착수 시에는 `docs/v2.0.0/implementation-pr-packets.md`에서 PR packet을 확인하고, 완료 전에는 `docs/v2.0.0/acceptance-test-matrix.md`로 acceptance를 확인합니다. DB, Prisma schema, SQL migration, Request Log read model 변경은 `docs/v2.0.0/db-migration-plan.md`를 먼저 확인합니다.
+
 ---
 
 ## 3. Repository Layout
@@ -58,7 +60,7 @@ Customer App / Employee Chat
 | `apps/gateway-core` | Gateway data plane, pipeline, auth/context, provider adapter, outcomes |
 | `apps/web` | Admin/Developer/Employee UI, Request Detail, Dashboard, demo surfaces |
 | `apps/ai-service` | Safety/evaluation lab and Python-side evidence work |
-| `docs/v2.0.0` | v2 contracts, schema, fixture, implementation plan |
+| `docs/v2.0.0` | v2 contracts, schema, fixture, implementation plan, PR packets, acceptance matrix, DB migration plan |
 | `scripts/perf` | k6/performance scenario scripts |
 | `db/migrations` | shared SQL migration/evidence path when used |
 
@@ -132,7 +134,7 @@ v2.0.0 구현은 아래 단위로 병렬화합니다.
 | 5 | `feat/v2-observability-dashboard-k6` | Request Detail, Dashboard, metrics guard, k6 baseline |
 | 6 | `feat/v2-demo-evidence` | Demo Scenario Runner, preset evidence, final presentation proof |
 
-상세 작업 파일은 `docs/v2.0.0/implementation-tasks.md`를 기준으로 합니다.
+상세 작업 파일은 `docs/v2.0.0/implementation-tasks.md`를 기준으로 합니다. PR 실행 단위는 `docs/v2.0.0/implementation-pr-packets.md`, 완료 검증은 `docs/v2.0.0/acceptance-test-matrix.md`, DB 변경 검토는 `docs/v2.0.0/db-migration-plan.md`를 함께 봅니다.
 
 ---
 

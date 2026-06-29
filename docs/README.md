@@ -26,6 +26,12 @@ GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비
 
 `implementation-tasks.md`는 실제 PR별 작업 위치와 검증 기준을 담은 코딩용 계획서다.
 
+아래 3개 문서는 `implementation-tasks.md`를 실행 가능한 단위로 보강하는 실행 보조 문서다. 공식 계약이나 schema를 새로 확정하지 않으며, 충돌하면 Source Of Truth 순서를 따른다.
+
+- `docs/v2.0.0/implementation-pr-packets.md`: PR별 실행 패킷
+- `docs/v2.0.0/acceptance-test-matrix.md`: PR별 acceptance/evidence matrix
+- `docs/v2.0.0/db-migration-plan.md`: DB migration 호환성 계획
+
 Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
 
 - `docs/v2.0.0/p0-legacy-field-cleanup.md`: legacy field cleanup 참고 문서
@@ -142,6 +148,9 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | `docs/v2.0.0/contracts.md` | 공식 계약 기준 |
 | `docs/v2.0.0/implementation-plan.md` | 상위 구현 계획 |
 | `docs/v2.0.0/implementation-tasks.md` | PR별 실제 작업 계획 |
+| `docs/v2.0.0/implementation-pr-packets.md` | PR별 실행 패킷 |
+| `docs/v2.0.0/acceptance-test-matrix.md` | PR별 acceptance/evidence matrix |
+| `docs/v2.0.0/db-migration-plan.md` | DB migration 호환성 계획 |
 | `docs/v2.0.0/schemas/` | JSON Schema |
 | `docs/v2.0.0/fixtures/` | 최소 fixture |
 | `docs/v2.0.0/p0-legacy-field-cleanup.md` | legacy field cleanup 기준 참고 문서 |
