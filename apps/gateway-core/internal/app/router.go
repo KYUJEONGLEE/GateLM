@@ -6,10 +6,12 @@ import (
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
@@ -28,6 +30,8 @@ type RouterOptions struct {
 	MetricsRegistry      *metrics.Registry
 	RateLimitPipeline    handlers.GatewayPipeline
 	PreProviderPipeline  handlers.GatewayPipeline
+	ProviderCatalogs     providercatalog.Resolver
+	Credentials          credentials.Resolver
 }
 
 type RouterOption func(*RouterOptions)
@@ -79,6 +83,13 @@ func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) Route
 func WithRateLimitPipeline(rateLimitPipeline handlers.GatewayPipeline) RouterOption {
 	return func(options *RouterOptions) {
 		options.RateLimitPipeline = rateLimitPipeline
+	}
+}
+
+func WithProviderExecution(providerCatalogs providercatalog.Resolver, credentialResolver credentials.Resolver) RouterOption {
+	return func(options *RouterOptions) {
+		options.ProviderCatalogs = providerCatalogs
+		options.Credentials = credentialResolver
 	}
 }
 
@@ -181,6 +192,8 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
 		Providers:               providers,
+		ProviderCatalogResolver: routerOptions.ProviderCatalogs,
+		CredentialResolver:      routerOptions.Credentials,
 		DefaultModel:            cfg.DefaultModel,
 		DefaultProvider:         cfg.DefaultProvider,
 		MaxRequestBodyBytes:     cfg.MaxRequestBodyBytes,

@@ -10,14 +10,19 @@ import (
 	"time"
 
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
+	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
+	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
@@ -33,7 +38,10 @@ func main() {
 	cfg := config.Load()
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
-	providers := provider.NewRegistry(cfg.DefaultProvider, mockAdapter)
+	openAIAdapter := openai.NewAdapter(providerHTTPClient)
+	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter)
+	providerCatalogResolver := staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+	credentialResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
 
 	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
 	if err != nil {
@@ -106,6 +114,7 @@ func main() {
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
 		),
 		app.WithRateLimitPipeline(rateLimitPipeline),
+		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
 	)
 	server := app.NewServer(cfg, router)
 
@@ -155,6 +164,13 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		APIKeyStatus:      runtimeconfig.StatusActive,
 		AppTokenID:        cfg.DemoAppTokenID,
 		AppTokenStatus:    runtimeconfig.StatusActive,
+		Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			ProviderCatalogRef: providercatalog.Reference{
+				CatalogID:      cfg.ProviderCatalogID,
+				CatalogVersion: cfg.ProviderCatalogVersion,
+				ContentHash:    cfg.ProviderCatalogHash,
+			},
+		},
 		RateLimit: ratelimit.Config{
 			Enabled:       cfg.RateLimitEnabled,
 			Scope:         ratelimit.ScopeApplication,
@@ -179,6 +195,110 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			Enabled:    true,
 			Type:       runtimeconfig.CacheTypeExact,
 			TTLSeconds: int(cfg.ExactCacheTTL.Seconds()),
+		},
+	}
+}
+
+func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {
+	return providercatalog.Catalog{
+		CatalogID:      cfg.ProviderCatalogID,
+		CatalogVersion: cfg.ProviderCatalogVersion,
+		ContentHash:    cfg.ProviderCatalogHash,
+		UpdatedAt:      time.Now().UTC(),
+		Providers: []providercatalog.Provider{
+			{
+				ProviderID:         cfg.OpenAIProviderID,
+				ProviderName:       cfg.OpenAIProviderName,
+				AdapterType:        providercatalog.AdapterTypeOpenAICompatible,
+				Enabled:            true,
+				BaseURL:            cfg.OpenAIProviderBaseURL,
+				TimeoutMs:          int(cfg.ProviderTimeout.Milliseconds()),
+				CredentialRequired: true,
+				CredentialRef: &credentials.Ref{
+					CredentialRefID:   cfg.OpenAICredentialRefID,
+					CredentialVersion: 1,
+					CredentialState:   credentials.StateActive,
+				},
+				AdapterConfig: providercatalog.AdapterConfig{
+					RequestFormat: providercatalog.RequestFormatOpenAIChatCompletions,
+				},
+				FallbackEligible: false,
+				Models: []providercatalog.Model{
+					{
+						ModelID:     cfg.OpenAILowCostModelID,
+						ModelName:   cfg.OpenAILowCostModelName,
+						DisplayName: "OpenAI Low Cost",
+						Enabled:     true,
+						Capabilities: providercatalog.ModelCapabilities{
+							StreamingSupported: true,
+							SupportsJSONMode:   true,
+							MaxInputTokens:     8192,
+							MaxOutputTokens:    2048,
+						},
+						Routing: providercatalog.ModelRouting{
+							AutoRoutingEligible: true,
+							CostTier:            "low",
+							FallbackPriority:    0,
+						},
+					},
+					{
+						ModelID:     cfg.OpenAIBalancedModelID,
+						ModelName:   cfg.OpenAIBalancedModelName,
+						DisplayName: "OpenAI Balanced",
+						Enabled:     true,
+						Capabilities: providercatalog.ModelCapabilities{
+							StreamingSupported: true,
+							SupportsJSONMode:   true,
+							MaxInputTokens:     128000,
+							MaxOutputTokens:    4096,
+						},
+						Routing: providercatalog.ModelRouting{
+							AutoRoutingEligible: true,
+							CostTier:            "balanced",
+							FallbackPriority:    1,
+						},
+					},
+				},
+			},
+			{
+				ProviderID:         cfg.MockProviderID,
+				ProviderName:       cfg.MockProviderName,
+				AdapterType:        providercatalog.AdapterTypeMock,
+				Enabled:            true,
+				BaseURL:            cfg.MockProviderBaseURL,
+				TimeoutMs:          int(cfg.ProviderTimeout.Milliseconds()),
+				CredentialRequired: false,
+				CredentialRef:      nil,
+				AdapterConfig: providercatalog.AdapterConfig{
+					RequestFormat: providercatalog.RequestFormatMockChatCompletions,
+				},
+				FallbackEligible: true,
+				Models: []providercatalog.Model{
+					mockCatalogModel(cfg.LowCostModel, "Mock Low Cost", 10),
+					mockCatalogModel(cfg.DefaultModel, "Mock Fallback Chat Model", 20),
+					mockCatalogModel(cfg.HighQualityModel, "Mock High Quality", 30),
+				},
+			},
+		},
+	}
+}
+
+func mockCatalogModel(modelID string, displayName string, fallbackPriority int) providercatalog.Model {
+	return providercatalog.Model{
+		ModelID:     modelID,
+		ModelName:   modelID,
+		DisplayName: displayName,
+		Enabled:     true,
+		Capabilities: providercatalog.ModelCapabilities{
+			StreamingSupported: false,
+			SupportsJSONMode:   false,
+			MaxInputTokens:     4096,
+			MaxOutputTokens:    1024,
+		},
+		Routing: providercatalog.ModelRouting{
+			AutoRoutingEligible: false,
+			CostTier:            "low",
+			FallbackPriority:    fallbackPriority,
 		},
 	}
 }
