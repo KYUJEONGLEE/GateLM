@@ -50,48 +50,44 @@ type ScenarioConfig = {
 
 const scenarioConfigs: ScenarioConfig[] = [
   {
-    assistantMessage:
-      "Drafted a concise support reply using the policy-routed mock model.",
+    assistantMessage: "Request completed.",
     description: "Allowed request through Gateway governance with exact cache miss.",
     metadata: {
       customerTicketId: "ticket-safe-001",
-      demoScenario: "safe"
+      requestPath: "standard"
     },
     recordId: "request_v1_demo_safe_success_001",
     scenarioId: "safe",
     title: "Safe request"
   },
   {
-    assistantMessage:
-      "Generated a support reply after email and phone placeholders replaced sensitive values.",
+    assistantMessage: "Sensitive values were redacted.",
     description: "Rule-based safety redacts contact data before provider call.",
     metadata: {
       customerTicketId: "ticket-redacted-003",
-      demoScenario: "redacted"
+      requestPath: "redaction"
     },
     recordId: "request_v1_demo_redacted_003",
     scenarioId: "redacted",
     title: "Redaction"
   },
   {
-    assistantMessage:
-      "No assistant reply was generated because GateLM blocked the request before provider call.",
+    assistantMessage: "Request blocked.",
     description: "Credential-like content is blocked before routing, cache, and provider.",
     metadata: {
       customerTicketId: "ticket-blocked-004",
-      demoScenario: "blocked"
+      requestPath: "blocked"
     },
     recordId: "request_v1_demo_blocked_004",
     scenarioId: "blocked",
     title: "Blocked"
   },
   {
-    assistantMessage:
-      "Returned the cached safe answer. Provider call was skipped for this replay.",
+    assistantMessage: "Cached answer returned.",
     description: "Same safe request resolves to exact cache hit and provider bypass.",
     metadata: {
       customerTicketId: "ticket-cache-hit-002",
-      demoScenario: "cache-hit"
+      requestPath: "cache-hit"
     },
     recordId: "request_v1_demo_cache_hit_002",
     scenarioId: "cache-hit",
@@ -194,11 +190,11 @@ function buildRequestBody(
     messages: [
       {
         role: "system",
-        content: "You are a helpful customer support assistant."
+        content: "<withheld>"
       },
       {
         role: "user",
-        content: record.redactedPromptPreview ?? "Prompt preview not stored for this outcome."
+        content: "<withheld>"
       }
     ],
     max_tokens: 128,

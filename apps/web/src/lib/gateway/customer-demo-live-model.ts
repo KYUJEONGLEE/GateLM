@@ -167,11 +167,11 @@ function buildLiveRequestBody(template: LiveScenarioTemplate): CustomerDemoReque
     messages: [
       {
         role: "system",
-        content: "You are a helpful customer support assistant."
+        content: "<withheld>"
       },
       {
         role: "user",
-        content: template.promptPreview
+        content: "<withheld>"
       }
     ],
     max_tokens: 128,

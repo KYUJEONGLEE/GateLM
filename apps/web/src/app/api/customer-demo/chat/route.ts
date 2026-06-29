@@ -22,7 +22,6 @@ type GatewayCallResult = {
 
 type LiveScenarioDefinition = {
   detectedTypes: string[];
-  displayPrompt: string;
   gatewayPrompt: string;
 };
 
@@ -43,29 +42,24 @@ const SAFE_PROMPT =
 const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
   safe: {
     detectedTypes: [],
-    displayPrompt: SAFE_PROMPT,
     gatewayPrompt: SAFE_PROMPT
   },
   "cache-hit": {
     detectedTypes: [],
-    displayPrompt: SAFE_PROMPT,
     gatewayPrompt: SAFE_PROMPT
   },
   redacted: {
     detectedTypes: ["email", "phone_number"],
-    displayPrompt: "Write a support note to <email> and ask them to call <phone_number>.",
     gatewayPrompt:
       "Write a support note to minji.kim@example.test and ask them to call 010-0000-1234."
   },
   blocked: {
     detectedTypes: ["credential"],
-    displayPrompt: "Summarize this synthetic config: api_key=<credential_like_secret>",
     gatewayPrompt:
       "Summarize this synthetic config: api_key=test_secret_token_redacted_for_demo_only_abcdef1234567890"
   },
   "rate-limited": {
     detectedTypes: [],
-    displayPrompt: "Write one more local stack response after quota is exhausted.",
     gatewayPrompt: "Write one more local stack response after quota is exhausted."
   }
 };
@@ -177,7 +171,7 @@ async function callGateway(
     headers: response.headers,
     httpStatus: response.status,
     latencyMs: Date.now() - startedAt,
-    requestBody: buildDisplayRequestBody(requestBody, definition.displayPrompt),
+    requestBody: buildDisplayRequestBody(requestBody),
     requestHeaders: buildDisplayRequestHeaders(requestId),
     requestId
   };
@@ -219,18 +213,15 @@ function buildGatewayRequestBody(
 }
 
 function buildDisplayRequestBody(
-  requestBody: CustomerDemoRequest["body"],
-  displayPrompt: string
+  requestBody: CustomerDemoRequest["body"]
 ): CustomerDemoRequest["body"] {
   return {
     ...requestBody,
     messages: requestBody.messages.map((message) =>
-      message.role === "user"
-        ? {
-            ...message,
-            content: displayPrompt
-          }
-        : message
+      ({
+        ...message,
+        content: "<withheld>"
+      })
     )
   };
 }
@@ -292,11 +283,11 @@ function buildLiveExchange({
   const maskingAction = normalizeMaskingAction(
     getGatewayValue(gatewayResult, "maskingAction", "X-GateLM-Masking-Action")
   );
-  const status = getGatewayStatus(gatewayResult, cacheStatus);
+  const status = getGatewayStatus(gatewayResult);
   const actualScenarioId = status === "rate_limited" ? "rate-limited" : scenarioId;
   const displayScenario =
     allScenarios.find((item) => item.scenarioId === actualScenarioId) ?? scenario;
-  const assistantMessage = getAssistantMessage(gatewayResult.body, scenario.assistantMessage);
+  const assistantMessage = getDisplayAssistantMessage(status, scenario.assistantMessage);
 
   return {
     assistantMessage,
@@ -316,7 +307,7 @@ function buildLiveExchange({
     requestId,
     requestLogHref: `/tenants/${tenantId}/request-logs/${requestId}`,
     response: {
-      body: gatewayResult.body,
+      body: buildDisplayResponseBody(gatewayResult.body),
       headers: buildResponseHeaders(gatewayResult.headers),
       statusCode: gatewayResult.httpStatus
     },
@@ -362,6 +353,26 @@ function buildResponseHeaders(headers: Headers): CustomerDemoHeader[] {
   }));
 }
 
+function buildDisplayResponseBody(body: JsonRecord): JsonRecord {
+  const responseBody: JsonRecord = {
+    body: "<withheld>"
+  };
+
+  if (isJsonRecord(body.gate_lm)) {
+    responseBody.gate_lm = body.gate_lm;
+  }
+
+  if (isJsonRecord(body.error)) {
+    responseBody.error = {
+      code: getNestedString(body, ["error", "code"]) ?? "unknown",
+      request_id: getNestedString(body, ["error", "request_id"]) ?? "",
+      type: getNestedString(body, ["error", "type"]) ?? "gatelm_error"
+    };
+  }
+
+  return responseBody;
+}
+
 function getGatewayRequestId(result: GatewayCallResult) {
   return (
     result.headers.get("X-GateLM-Request-Id")
@@ -379,10 +390,7 @@ function getGatewayLatencyMs(result: GatewayCallResult) {
   return getNestedNumber(result.body, ["gate_lm", "latencyMs"]) ?? result.latencyMs;
 }
 
-function getGatewayStatus(
-  result: GatewayCallResult,
-  cacheStatus: string
-): CustomerDemoExchange["status"] {
+function getGatewayStatus(result: GatewayCallResult): CustomerDemoExchange["status"] {
   const errorCode = getNestedString(result.body, ["error", "code"]);
 
   if (result.httpStatus === 429 || errorCode === "rate_limited") {
@@ -408,24 +416,28 @@ function normalizeMaskingAction(value: string | undefined): CustomerDemoExchange
   return "none";
 }
 
-function getAssistantMessage(body: JsonRecord, fallback: string) {
-  const errorMessage = getNestedString(body, ["error", "message"]);
-
-  if (errorMessage) {
-    return errorMessage;
+function getDisplayAssistantMessage(status: CustomerDemoExchange["status"], fallback: string) {
+  if (status === "success") {
+    return "Gateway request completed successfully.";
   }
 
-  const choices = body.choices;
-
-  if (!Array.isArray(choices)) {
-    return fallback;
+  if (status === "cache_hit") {
+    return "Served from exact cache.";
   }
 
-  const firstChoice = isJsonRecord(choices[0]) ? choices[0] : undefined;
-  const message = firstChoice && isJsonRecord(firstChoice.message) ? firstChoice.message : undefined;
-  const content = message?.content;
+  if (status === "blocked") {
+    return "Blocked before provider call.";
+  }
 
-  return typeof content === "string" && content.trim() ? content : fallback;
+  if (status === "rate_limited") {
+    return "Rate limit applied before provider call.";
+  }
+
+  if (status === "error") {
+    return "Gateway returned a sanitized error.";
+  }
+
+  return fallback;
 }
 
 function getNestedString(record: JsonRecord, path: string[]) {

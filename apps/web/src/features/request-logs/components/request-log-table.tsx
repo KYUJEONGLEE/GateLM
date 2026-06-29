@@ -1,32 +1,57 @@
 import Link from "next/link";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   formatDateTime,
   formatInteger,
   formatLatency,
   nullableText
 } from "@/lib/formatting/formatters";
+import type { Locale } from "@/lib/i18n/locale";
 
 type RequestLogTableProps = {
+  locale: Locale;
   records: InvocationLogRecord[];
   sourceState: "ready" | "unavailable";
   tenantId: string;
   timezone: string;
 };
 
+const requestLogText: Record<
+  Locale,
+  {
+    emptyPreview: string;
+    kicker: string;
+    title: string;
+  }
+> = {
+  en: {
+    emptyPreview: "No preview stored",
+    kicker: "analytics",
+    title: "Request logs"
+  },
+  ko: {
+    emptyPreview: "저장된 preview 없음",
+    kicker: "분석",
+    title: "요청 로그"
+  }
+};
+
 export function RequestLogTable({
+  locale,
   records,
   sourceState,
   tenantId,
   timezone
 }: RequestLogTableProps) {
+  const text = requestLogText[locale];
+
   return (
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">request log</p>
-          <h2>Invocation history</h2>
-          <p>Gateway request metadata from the PostgreSQL request log.</p>
+          <p className="console-kicker">{text.kicker}</p>
+          <h2>{text.title}</h2>
         </div>
       </section>
 
@@ -63,9 +88,9 @@ export function RequestLogTable({
                       className="request-link"
                       href={`/tenants/${tenantId}/request-logs/${record.requestId}`}
                     >
-                      {record.requestId}
+                      {formatDisplayIdentifier(record.requestId)}
                     </Link>
-                    <span>{nullableText(record.redactedPromptPreview, "No preview stored")}</span>
+                    <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
                   </td>
                   <td>
                     <StatusBadge status={record.status} />

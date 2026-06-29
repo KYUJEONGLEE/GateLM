@@ -2,6 +2,20 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import {
+  formatDisplayIdentifier,
+  formatTenantDisplayName
+} from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
@@ -10,12 +24,185 @@ import {
   type CustomerDemoModel,
   type CustomerDemoScenarioId
 } from "@/lib/gateway/customer-demo-client";
+import type { Locale } from "@/lib/i18n/locale";
 
 type CustomerDemoAppProps = {
+  locale: Locale;
   model: CustomerDemoModel;
 };
 
-export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
+const customerDemoText: Record<
+  Locale,
+  {
+    actions: {
+      detail: string;
+      loading: string;
+      replay: string;
+      send: string;
+    };
+    assistantLabel: string;
+    chatPreview: string;
+    context: {
+      application: string;
+      project: string;
+      tenant: string;
+    };
+    detectedNone: string;
+    error: string;
+    gatewayRequest: string;
+    gatewayResult: string;
+    language: string;
+    requestMetadata: string;
+    responseMetadata: string;
+    scenarios: Record<
+      CustomerDemoScenarioId,
+      {
+        title: string;
+      }
+    >;
+    scenarioSelector: string;
+    summary: {
+      cache: string;
+      http: string;
+      latency: string;
+      masking: string;
+    };
+    title: string;
+    userLabel: string;
+    withheld: {
+      assistant: string;
+      blocked: string;
+      cacheHit: string;
+      customer: string;
+      error: string;
+      pending: string;
+      rateLimited: string;
+      success: string;
+    };
+    webConsole: string;
+  }
+> = {
+  en: {
+    actions: {
+      detail: "Open request detail",
+      loading: "Processing...",
+      replay: "Replay fixture request",
+      send: "Send Gateway request"
+    },
+    assistantLabel: "Assistant / Gateway outcome",
+    chatPreview: "conversation",
+    context: {
+      application: "Application",
+      project: "Project",
+      tenant: "Tenant"
+    },
+    detectedNone: "none",
+    error: "Unable to load this request state.",
+    gatewayRequest: "Gateway request",
+    gatewayResult: "Gateway result",
+    language: "Console language",
+    requestMetadata: "Request metadata",
+    responseMetadata: "Response metadata",
+    scenarios: {
+      blocked: {
+        title: "Blocked"
+      },
+      "cache-hit": {
+        title: "Cache hit"
+      },
+      "rate-limited": {
+        title: "Rate limit"
+      },
+      redacted: {
+        title: "Redaction"
+      },
+      safe: {
+        title: "Safe request"
+      }
+    },
+    scenarioSelector: "Request path",
+    summary: {
+      cache: "Cache",
+      http: "HTTP status",
+      latency: "Latency",
+      masking: "Masking"
+    },
+    title: "Gateway request",
+    userLabel: "Customer message",
+    withheld: {
+      assistant: "Gateway response content is withheld from the console. Use metadata and request detail for verification.",
+      blocked: "Blocked before provider call.",
+      cacheHit: "Served from exact cache.",
+      customer: "Customer prompt content is withheld from the console.",
+      error: "Gateway returned a sanitized error.",
+      pending: "Ready to send through Gateway.",
+      rateLimited: "Rate limit applied before provider call.",
+      success: "Gateway request completed successfully."
+    },
+    webConsole: "Web Console"
+  },
+  ko: {
+    actions: {
+      detail: "요청 상세 열기",
+      loading: "처리 중...",
+      replay: "Fixture 요청 재실행",
+      send: "Gateway 요청 전송"
+    },
+    assistantLabel: "Assistant / Gateway 결과",
+    chatPreview: "대화",
+    context: {
+      application: "애플리케이션",
+      project: "프로젝트",
+      tenant: "테넌트"
+    },
+    detectedNone: "없음",
+    error: "요청 상태를 불러오지 못했습니다.",
+    gatewayRequest: "Gateway 요청",
+    gatewayResult: "Gateway 결과",
+    language: "콘솔 언어",
+    requestMetadata: "요청 메타데이터",
+    responseMetadata: "응답 메타데이터",
+    scenarios: {
+      blocked: {
+        title: "차단"
+      },
+      "cache-hit": {
+        title: "캐시 적중"
+      },
+      "rate-limited": {
+        title: "Rate limit"
+      },
+      redacted: {
+        title: "Redaction"
+      },
+      safe: {
+        title: "Safe 요청"
+      }
+    },
+    scenarioSelector: "처리 유형",
+    summary: {
+      cache: "캐시",
+      http: "HTTP 상태",
+      latency: "지연 시간",
+      masking: "마스킹"
+    },
+    title: "Gateway 요청",
+    userLabel: "고객 메시지",
+    withheld: {
+      assistant: "Gateway 응답 원문은 콘솔에 표시하지 않습니다. 검증은 metadata와 요청 상세에서 확인합니다.",
+      blocked: "Provider 호출 전에 차단되었습니다.",
+      cacheHit: "Exact Cache에서 응답했습니다.",
+      customer: "고객 prompt 원문은 콘솔에 표시하지 않습니다.",
+      error: "Gateway가 정제된 오류만 반환했습니다.",
+      pending: "Gateway로 전송할 준비가 되었습니다.",
+      rateLimited: "Provider 호출 전에 Rate Limit이 적용되었습니다.",
+      success: "Gateway 요청이 성공적으로 완료되었습니다."
+    },
+    webConsole: "웹 콘솔"
+  }
+};
+
+export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const client = useMemo(() => {
     if (model.integrationMode === "gateway") {
       return new RouteGatewayChatClient(model.tenantId);
@@ -29,6 +216,9 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
   const requestInFlight = useRef(false);
   const hasScenarios = model.scenarios.length > 0;
   const hasRequestDetail = isRequestDetailAvailable(exchange);
+  const text = customerDemoText[locale];
+  const exchangeText = text.scenarios[exchange.scenarioId];
+  const tenantLabel = formatTenantDisplayName(model.tenantId);
 
   const previewScenario = useCallback((scenarioId: CustomerDemoScenarioId) => {
     if (requestInFlight.current) {
@@ -57,12 +247,12 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
     try {
       setExchange(await client.sendChatCompletion(scenarioId));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Unable to send Gateway request.");
+      setLoadError(error instanceof Error ? error.message : text.error);
     } finally {
       requestInFlight.current = false;
       setIsLoading(false);
     }
-  }, [client]);
+  }, [client, text.error]);
 
   return (
     <main className="customer-demo-shell">
@@ -72,153 +262,204 @@ export function CustomerDemoApp({ model }: CustomerDemoAppProps) {
           <strong>Acme Support Desk</strong>
         </Link>
         <div className="customer-demo-header-meta">
-          <span>{model.integrationMode === "gateway" ? "Gateway live mode" : "Gateway fixture mode"}</span>
-          <Link href={`/tenants/${model.tenantId}/dashboard`}>Web Console</Link>
+          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+          <Link href={`/tenants/${model.tenantId}/dashboard`}>{text.webConsole}</Link>
         </div>
       </header>
 
       <section className="customer-demo-hero">
         <div>
-          <p className="console-kicker">customer demo app</p>
-          <h1>Support operations through GateLM</h1>
-          <p>
-            This app sends OpenAI-compatible requests through the Gateway and
-            surfaces the returned governance metadata.
-          </p>
+          <p className="console-kicker">support desk</p>
+          <h1>{text.title}</h1>
         </div>
-        <div className="customer-demo-hero-side">
-          <GatewayTopology />
-          <dl className="customer-demo-context" aria-label="Demo application context">
-            <div>
-              <dt>Tenant</dt>
-              <dd>{model.tenantId}</dd>
-            </div>
-            <div>
-              <dt>Project</dt>
-              <dd>{model.projectId}</dd>
-            </div>
-            <div>
-              <dt>Application</dt>
-              <dd>{model.applicationId}</dd>
-            </div>
-          </dl>
-        </div>
+        <dl className="customer-demo-context" aria-label="Application context">
+          <div>
+            <dt>{text.context.tenant}</dt>
+            <dd>{tenantLabel}</dd>
+          </div>
+          <div>
+            <dt>{text.context.project}</dt>
+            <dd>{model.projectId}</dd>
+          </div>
+          <div>
+            <dt>{text.context.application}</dt>
+            <dd>{formatDisplayIdentifier(model.applicationId)}</dd>
+          </div>
+        </dl>
       </section>
 
-      <OutcomeSummary exchange={exchange} />
+      <section className="customer-demo-summary-grid" aria-label="Selected request summary">
+        <DemoSummaryCard
+          icon="↗"
+          label={text.summary.http}
+          tone={exchange.status}
+          value={String(exchange.httpStatus)}
+        />
+        <DemoSummaryCard
+          icon="◌"
+          label={text.summary.cache}
+          tone={exchange.cacheStatus}
+          value={exchange.cacheStatus}
+        />
+        <DemoSummaryCard
+          icon="◆"
+          label={text.summary.masking}
+          tone={exchange.maskingAction}
+          value={exchange.maskingAction}
+        />
+        <DemoSummaryCard
+          icon="●"
+          label={text.summary.latency}
+          tone="latency"
+          value={`${exchange.latencyMs} ms`}
+        />
+      </section>
 
-      <section className="customer-demo-layout" aria-label="Customer demo scenarios">
-        <aside className="customer-demo-scenarios" aria-label="Scenario selector">
-          {model.scenarios.map((scenario) => (
-            <button
-              className="customer-demo-scenario"
-              data-active={scenario.scenarioId === exchange.scenarioId}
-              data-status={scenario.status}
-              key={scenario.scenarioId}
-              onClick={() => previewScenario(scenario.scenarioId)}
-              disabled={isLoading}
-              type="button"
-            >
-              <span>
-                <i aria-hidden="true" />
-                {scenario.httpStatus}
-              </span>
-              <strong>{scenario.title}</strong>
-              <small>{scenario.description}</small>
-            </button>
-          ))}
+      <section className="customer-demo-layout" aria-label="Gateway request states">
+        <aside className="customer-demo-scenarios" aria-label={text.scenarioSelector}>
+          <div className="customer-demo-section-title">
+            <h2>{text.scenarioSelector}</h2>
+          </div>
+          {model.scenarios.map((scenario) => {
+            const scenarioText = text.scenarios[scenario.scenarioId];
+
+            return (
+              <Button
+                className="customer-demo-scenario"
+                data-active={scenario.scenarioId === exchange.scenarioId}
+                data-status={scenario.status}
+                disabled={isLoading}
+                key={scenario.scenarioId}
+                onClick={() => previewScenario(scenario.scenarioId)}
+                type="button"
+                variant="outline"
+              >
+                <Badge variant="secondary">{scenario.httpStatus}</Badge>
+                <strong>{scenarioText.title}</strong>
+              </Button>
+            );
+          })}
         </aside>
 
-        <section
+        <Card
           className="customer-demo-chat"
           aria-busy={isLoading}
           aria-label="Text-only chat preview"
         >
-          <div className="panel-heading">
+          <CardHeader className="panel-heading">
             <div>
-              <p className="console-kicker">chat preview</p>
-              <h2>{exchange.title}</h2>
+              <p className="console-kicker">{text.chatPreview}</p>
+              <CardTitle>{exchangeText.title}</CardTitle>
             </div>
-            <span className="status-badge" data-status={exchange.status}>
+            <Badge className="status-badge" data-status={exchange.status} variant="secondary">
               {exchange.status}
-            </span>
-          </div>
+            </Badge>
+          </CardHeader>
 
-          <GatewayFlow exchange={exchange} />
+          <CardContent className="customer-demo-chat-content">
+            <div className="chat-window">
+              {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
+              <article className="chat-bubble chat-bubble-user">
+                <span>{text.userLabel}</span>
+                <p>{text.withheld.customer}</p>
+              </article>
+              <article className="chat-bubble chat-bubble-assistant" data-status={exchange.status}>
+                <span>{text.assistantLabel}</span>
+                <p>{getSafeOutcomeMessage(exchange, text.withheld)}</p>
+              </article>
+            </div>
 
-          <div className="chat-window">
-            {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
-            <article className="chat-bubble chat-bubble-user">
-              <span>Customer message</span>
-              <p>{exchange.request.body.messages[1]?.content ?? "No prompt preview stored."}</p>
-            </article>
-            <article className="chat-bubble chat-bubble-assistant" data-status={exchange.status}>
-              <span>Assistant / Gateway outcome</span>
-              <p>{exchange.assistantMessage}</p>
-            </article>
-          </div>
-
-          <div className="customer-demo-actions">
-            <button
-              className="primary-button"
-              disabled={isLoading || !hasScenarios}
-              onClick={() => sendScenario(exchange.scenarioId)}
-              type="button"
-            >
-              {isLoading
-                ? model.integrationMode === "gateway"
-                  ? "Sending Gateway request..."
-                  : "Loading fixture..."
-                : model.integrationMode === "gateway"
-                  ? "Send Gateway request"
-                  : "Replay fixture request"}
-            </button>
-            {hasRequestDetail ? (
-              <Link className="secondary-button" href={exchange.requestLogHref}>
-                Open request detail
-              </Link>
-            ) : (
-              <button className="secondary-button" disabled type="button">
-                Open request detail
-              </button>
-            )}
-          </div>
-        </section>
+            <div className="customer-demo-actions">
+              <Button
+                className="primary-button"
+                disabled={isLoading || !hasScenarios}
+                onClick={() => sendScenario(exchange.scenarioId)}
+                type="button"
+              >
+                {isLoading
+                  ? text.actions.loading
+                  : model.integrationMode === "gateway"
+                    ? text.actions.send
+                    : text.actions.replay}
+              </Button>
+              {hasRequestDetail ? (
+                <Link className="secondary-button" href={exchange.requestLogHref}>
+                  {text.actions.detail}
+                </Link>
+              ) : (
+                <Button className="secondary-button" disabled type="button" variant="outline">
+                  {text.actions.detail}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <section className="customer-demo-inspector" aria-label="Gateway request inspector">
-          <article className="console-panel">
-            <div className="panel-heading">
-              <h3>Gateway request</h3>
-              <p>Header values are redacted; only prefix/last4 style previews are shown.</p>
-            </div>
-            <div className="request-line">
-              <span>{exchange.request.method}</span>
-              <code>{exchange.request.endpoint}</code>
-            </div>
-            <HeaderList headers={exchange.request.headers} />
-            <JsonPreview label="Payload preview" value={exchange.request.body} />
-          </article>
+          <Card className="console-panel customer-demo-inspector-card">
+            <CardHeader className="panel-heading">
+              <div>
+                <CardTitle>{text.gatewayRequest}</CardTitle>
+              </div>
+              <CardAction>
+                <Badge variant="outline">{exchange.request.method}</Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <div className="request-line">
+                <span>{exchange.request.method}</span>
+                <code>{exchange.request.endpoint}</code>
+              </div>
+              <HeaderList headers={exchange.request.headers} />
+              <dl className="customer-demo-metrics" aria-label={text.requestMetadata}>
+                <Metric label="Model" value={exchange.request.body.model} />
+                <Metric label="Messages" value={String(exchange.request.body.messages.length)} />
+                <Metric label="Cache mode" value={exchange.request.body.gate_lm.cache.mode} />
+                <Metric label="Routing mode" value={exchange.request.body.gate_lm.routing.mode} />
+                <Metric label="Stream" value={String(exchange.request.body.stream)} />
+                <Metric label="Prompt" value="withheld" />
+              </dl>
+            </CardContent>
+          </Card>
 
-          <article className="console-panel">
-            <div className="panel-heading">
-              <h3>Gateway result</h3>
-              <p>Response headers and metadata are returned by the Gateway path.</p>
-            </div>
-            <dl className="customer-demo-metrics">
-              <Metric label="HTTP" value={String(exchange.httpStatus)} />
-              <Metric label="Request ID" value={exchange.requestId} />
-              <Metric label="Cache" value={exchange.cacheStatus} />
-              <Metric label="Masking" value={exchange.maskingAction} />
-              <Metric label="Provider" value={exchange.providerCall} />
-              <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
-              <Metric
-                label="Detected"
-                value={exchange.detectedTypes.length > 0 ? exchange.detectedTypes.join(", ") : "none"}
-              />
-            </dl>
-            <HeaderList headers={exchange.response.headers} />
-            <JsonPreview label="Response preview" value={exchange.response.body} />
-          </article>
+          <Card className="console-panel customer-demo-inspector-card">
+            <CardHeader className="panel-heading">
+              <div>
+                <CardTitle>{text.gatewayResult}</CardTitle>
+              </div>
+              <CardAction>
+                <Badge variant={exchange.status === "success" ? "secondary" : "outline"}>
+                  {exchange.status}
+                </Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <dl className="customer-demo-metrics">
+                <Metric label="HTTP" value={String(exchange.httpStatus)} />
+                <Metric label="Request ID" value={formatDisplayIdentifier(exchange.requestId)} />
+                <Metric label="Cache" value={exchange.cacheStatus} />
+                <Metric label="Masking" value={exchange.maskingAction} />
+                <Metric label="Provider" value={exchange.providerCall} />
+                <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
+                <Metric label="Error code" value={getErrorCode(exchange.response.body)} />
+                <Metric
+                  label="Detected"
+                  value={
+                    exchange.detectedTypes.length > 0
+                      ? exchange.detectedTypes.join(", ")
+                      : text.detectedNone
+                  }
+                />
+              </dl>
+              <HeaderList headers={exchange.response.headers} />
+              <dl className="customer-demo-metrics" aria-label={text.responseMetadata}>
+                <Metric label="Body" value="withheld" />
+                <Metric label="Selected provider" value={getResponseHeader(exchange, "X-GateLM-Routed-Provider")} />
+                <Metric label="Selected model" value={getResponseHeader(exchange, "X-GateLM-Routed-Model")} />
+                <Metric label="Cache status" value={getResponseHeader(exchange, "X-GateLM-Cache-Status")} />
+              </dl>
+            </CardContent>
+          </Card>
         </section>
       </section>
     </main>
@@ -336,77 +577,27 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
   };
 }
 
-function GatewayTopology() {
+function DemoSummaryCard({
+  icon,
+  label,
+  tone,
+  value
+}: {
+  icon: string;
+  label: string;
+  tone: string;
+  value: string;
+}) {
   return (
-    <div className="gateway-topology" aria-label="Live Gateway path">
-      {["Client", "Gateway", "Policy", "Provider", "Logs"].map((label) => (
-        <div key={label}>
-          <span aria-hidden="true" />
-          <strong>{label}</strong>
+    <Card className="customer-demo-summary-card" data-tone={tone}>
+      <CardContent className="customer-demo-summary-content">
+        <div>
+          <span>{label}</span>
+          <strong>{value}</strong>
         </div>
-      ))}
-    </div>
-  );
-}
-
-function OutcomeSummary({ exchange }: { exchange: CustomerDemoExchange }) {
-  const detected = exchange.detectedTypes.length > 0 ? exchange.detectedTypes.join(", ") : "none";
-
-  return (
-    <section className="customer-demo-outcome" aria-label="Current Gateway outcome">
-      <OutcomeCard label="HTTP" value={String(exchange.httpStatus)} tone={exchange.status} />
-      <OutcomeCard label="Cache" value={exchange.cacheStatus} tone={exchange.cacheStatus} />
-      <OutcomeCard label="Masking" value={exchange.maskingAction} tone={exchange.maskingAction} />
-      <OutcomeCard label="Provider" value={exchange.providerCall} tone={exchange.providerCall} />
-      <OutcomeCard label="Detected" value={detected} tone={exchange.maskingAction} />
-    </section>
-  );
-}
-
-function OutcomeCard({ label, tone, value }: { label: string; tone: string; value: string }) {
-  return (
-    <article className="outcome-card" data-tone={tone}>
-      <span aria-hidden="true" />
-      <div>
-        <p>{label}</p>
-        <strong>{value}</strong>
-      </div>
-    </article>
-  );
-}
-
-function GatewayFlow({ exchange }: { exchange: CustomerDemoExchange }) {
-  const flow = [
-    { label: "Client", state: "done", value: exchange.request.method },
-    { label: "Auth", state: "done", value: "scoped" },
-    {
-      label: "Safety",
-      state: exchange.maskingAction === "blocked" ? "blocked" : "done",
-      value: exchange.maskingAction
-    },
-    {
-      label: "Cache",
-      state: exchange.cacheStatus === "hit" ? "hit" : exchange.cacheStatus === "bypass" ? "skipped" : "done",
-      value: exchange.cacheStatus
-    },
-    {
-      label: "Provider",
-      state: exchange.providerCall === "called" ? "done" : "skipped",
-      value: exchange.providerCall
-    },
-    { label: "Log", state: "done", value: "requestId" }
-  ];
-
-  return (
-    <div className="gateway-flow" aria-label="Gateway execution path">
-      {flow.map((step) => (
-        <div className="gateway-flow-step" data-state={step.state} key={step.label}>
-          <span aria-hidden="true" />
-          <strong>{step.label}</strong>
-          <small>{step.value}</small>
-        </div>
-      ))}
-    </div>
+        <i aria-hidden="true">{icon}</i>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -416,7 +607,7 @@ function HeaderList({ headers }: { headers: CustomerDemoHeader[] }) {
       {headers.map((header) => (
         <div key={header.name}>
           <dt>{header.name}</dt>
-          <dd>{header.value}</dd>
+          <dd>{formatDisplayIdentifier(header.value)}</dd>
         </div>
       ))}
     </dl>
@@ -432,11 +623,60 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function JsonPreview({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="json-preview">
-      <h4>{label}</h4>
-      <pre>{JSON.stringify(value, null, 2)}</pre>
-    </div>
-  );
+function getSafeOutcomeMessage(
+  exchange: CustomerDemoExchange,
+  text: {
+    assistant: string;
+    blocked: string;
+    cacheHit: string;
+    error: string;
+    pending: string;
+    rateLimited: string;
+    success: string;
+  }
+) {
+  if (exchange.status === "pending") {
+    return text.pending;
+  }
+
+  if (exchange.status === "blocked") {
+    return text.blocked;
+  }
+
+  if (exchange.status === "rate_limited") {
+    return text.rateLimited;
+  }
+
+  if (exchange.status === "cache_hit") {
+    return text.cacheHit;
+  }
+
+  if (exchange.status === "success") {
+    return text.success;
+  }
+
+  if (exchange.status === "error") {
+    return text.error;
+  }
+
+  return text.assistant;
+}
+
+function getResponseHeader(exchange: CustomerDemoExchange, name: string) {
+  return exchange.response.headers.find((header) => header.name === name)?.value ?? "not-set";
+}
+
+function getErrorCode(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return "none";
+  }
+
+  const error = (body as { error?: unknown }).error;
+
+  if (!error || typeof error !== "object" || Array.isArray(error)) {
+    return "none";
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim() ? code : "none";
 }

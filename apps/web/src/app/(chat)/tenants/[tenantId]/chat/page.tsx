@@ -3,6 +3,7 @@ import { CustomerDemoApp } from "@/features/customer-demo/components/customer-de
 import { getCustomerDemoModel } from "@/lib/fixtures/v1-customer-demo-fixtures";
 import type { CustomerDemoIntegrationMode } from "@/lib/gateway/customer-demo-client";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
+import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type CustomerDemoPageProps = {
   params: Promise<{
@@ -12,6 +13,7 @@ type CustomerDemoPageProps = {
 
 export default async function CustomerDemoPage({ params }: CustomerDemoPageProps) {
   const { tenantId } = await params;
+  const locale = await getRequestLocale();
   const integrationMode = getCustomerDemoIntegrationMode();
   const model =
     integrationMode === "fixture" ? getCustomerDemoModel() : getCustomerDemoLiveModel();
@@ -20,7 +22,7 @@ export default async function CustomerDemoPage({ params }: CustomerDemoPageProps
     notFound();
   }
 
-  return <CustomerDemoApp key={tenantId} model={model} />;
+  return <CustomerDemoApp key={tenantId} locale={locale} model={model} />;
 }
 
 function getCustomerDemoIntegrationMode(): CustomerDemoIntegrationMode {
