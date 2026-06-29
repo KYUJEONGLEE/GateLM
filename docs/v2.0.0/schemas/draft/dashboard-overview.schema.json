@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.dev/schemas/v2.0.0/draft/dashboard-overview.schema.json",
+  "title": "GateLM v2.0.0 Dashboard Overview Draft",
+  "description": "Draft schema for the v2 Dashboard Overview read model. This schema represents aggregate operational data with freshness and query budget metadata; it is not a Prometheus metrics-label contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generatedAt",
+    "timeRange",
+    "freshness",
+    "queryBudget",
+    "filters",
+    "totals",
+    "breakdowns",
+    "performance"
+  ],
+  "properties": {
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "timeRange": {
+      "$ref": "#/$defs/timeRange"
+    },
+    "freshness": {
+      "$ref": "#/$defs/freshness"
+    },
+    "queryBudget": {
+      "$ref": "#/$defs/queryBudget"
+    },
+    "filters": {
+      "$ref": "#/$defs/dashboardFilters"
+    },
+    "totals": {
+      "$ref": "#/$defs/dashboardTotals"
+    },
+    "breakdowns": {
+      "$ref": "#/$defs/dashboardBreakdowns"
+    },
+    "performance": {
+      "$ref": "#/$defs/performanceSummary"
+    }
+  },
+  "$defs": {
+    "timeRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "granularity"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "granularity": {
+          "type": "string",
+          "enum": [
+            "minute",
+            "hour",
+            "day"
+          ],
+          "description": "Draft read-model grain. Large ranges should use coarser rollups."
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lastIngestedAt",
+        "lastAggregatedAt",
+        "source",
+        "isStale"
+      ],
+      "properties": {
+        "lastIngestedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastAggregatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Read model source candidate such as request_log or rollup. This is a draft field."
+        },
+        "isStale": {
+          "type": "boolean"
+        }
+      }
+    },
+    "queryBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "maxRangeHours",
+        "maxBreakdownItems"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "too_broad",
+            "partial",
+            "stale",
+            "unavailable"
+          ],
+          "description": "Query budget state from contracts.md. too_broad/partial/stale are not system failures."
+        },
+        "maxRangeHours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxBreakdownItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "guidance": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sanitized UI guidance. Must not include raw error detail."
+        }
+      }
+    },
+    "dashboardFilters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "budgetScopeType",
+        "budgetScopeId"
+      ],
+      "properties": {
+        "tenantId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dashboard read-model filter. Do not use as a default Prometheus-compatible metrics label."
+        },
+        "projectId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "applicationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "budgetScopeType": {
+          "type": "string",
+          "enum": [
+            "application",
+            "project",
+            "team"
+          ]
+        },
+        "budgetScopeId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "dashboardTotals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestCount",
+        "successCount",
+        "blockedCount",
+        "rateLimitedCount",
+        "failedCount",
+        "cancelledCount",
+        "estimatedCostMicroUsd",
+        "exactCacheHitRate",
+        "fallbackSuccessCount"
+      ],
+      "properties": {
+        "requestCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "successCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rateLimitedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "System failure count. Policy results such as safety block and rate limit are counted separately."
+        },
+        "cancelledCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimatedCostMicroUsd": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exactCacheHitRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Exact Cache only. Semantic Cache evidence must not be mixed into this value."
+        },
+        "fallbackSuccessCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "dashboardBreakdowns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byApplication",
+        "byBudgetScope",
+        "byProviderModel",
+        "bySafetyOutcome",
+        "byCacheOutcome",
+        "byFallbackOutcome",
+        "byTerminalStatus"
+      ],
+      "properties": {
+        "byApplication": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/applicationBreakdown"
+          }
+        },
+        "byBudgetScope": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/budgetScopeBreakdown"
+          }
+        },
+        "byProviderModel": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerModelBreakdown"
+          }
+        },
+        "bySafetyOutcome": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/outcomeBreakdown"
+          }
+        },
+        "byCacheOutcome": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/outcomeBreakdown"
+          }
+        },
+        "byFallbackOutcome": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/outcomeBreakdown"
+          }
+        },
+        "byTerminalStatus": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/outcomeBreakdown"
+          }
+        }
+      }
+    },
+    "applicationBreakdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "requestCount",
+        "estimatedCostMicroUsd"
+      ],
+      "properties": {
+        "applicationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimatedCostMicroUsd": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "budgetScopeBreakdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budgetScopeType",
+        "budgetScopeId",
+        "requestCount",
+        "estimatedCostMicroUsd"
+      ],
+      "properties": {
+        "budgetScopeType": {
+          "type": "string",
+          "enum": [
+            "application",
+            "project",
+            "team"
+          ]
+        },
+        "budgetScopeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimatedCostMicroUsd": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "providerModelBreakdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedProvider",
+        "selectedModel",
+        "requestCount",
+        "p95ProviderLatencyMs"
+      ],
+      "properties": {
+        "selectedProvider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provider value is not enum-fixed."
+        },
+        "selectedModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model value is not enum-fixed."
+        },
+        "requestCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p95ProviderLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "outcomeBreakdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "requestCount"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "performanceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p95GatewayInternalLatencyMs",
+        "p99GatewayInternalLatencyMs",
+        "p95ProviderLatencyMs",
+        "p99ProviderLatencyMs",
+        "systemErrorRate"
+      ],
+      "properties": {
+        "p95GatewayInternalLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p99GatewayInternalLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p95ProviderLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p99ProviderLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "systemErrorRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "System failure rate only. Safety block, budget block, and rate limited are policy outcomes and must be separate."
+        }
+      }
+    }
+  }
+}

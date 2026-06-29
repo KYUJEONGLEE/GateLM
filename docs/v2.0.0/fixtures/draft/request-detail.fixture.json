@@ -1,0 +1,109 @@
+{
+  "requestId": "req_synthetic_001",
+  "traceId": "trace_synthetic_001",
+  "tenantId": "tenant_synthetic",
+  "projectId": "project_synthetic",
+  "applicationId": "app_employee_chat_synthetic",
+  "budgetScope": {
+    "budgetScopeType": "application",
+    "budgetScopeId": "app_employee_chat_synthetic"
+  },
+  "terminalStatus": "success",
+  "httpStatus": 200,
+  "errorCode": null,
+  "domainOutcomes": {
+    "auth": {
+      "outcome": "passed",
+      "reason": "authenticated_application_context",
+      "code": null
+    },
+    "runtime": {
+      "outcome": "snapshot_active",
+      "reason": "published_snapshot_loaded",
+      "code": null
+    },
+    "rateLimit": {
+      "outcome": "allowed",
+      "reason": "within_application_window",
+      "code": null
+    },
+    "budget": {
+      "outcome": "allowed",
+      "reason": "within_budget_scope",
+      "code": null
+    },
+    "safety": {
+      "outcome": "passed",
+      "reason": "no_policy_violation_detected",
+      "code": null
+    },
+    "routing": {
+      "outcome": "selected",
+      "reason": "short_prompt_low_cost",
+      "code": null
+    },
+    "cache": {
+      "outcome": "miss",
+      "reason": "exact_cache_no_entry",
+      "code": null
+    },
+    "provider": {
+      "outcome": "success",
+      "reason": "provider_completed",
+      "code": null
+    },
+    "fallback": {
+      "outcome": "not_needed",
+      "reason": "primary_provider_succeeded",
+      "code": null
+    },
+    "streaming": {
+      "outcome": "not_streaming",
+      "reason": "non_streaming_request",
+      "code": null
+    },
+    "logging": {
+      "outcome": "written",
+      "reason": "request_detail_persisted",
+      "code": null
+    }
+  },
+  "runtimeSnapshot": {
+    "runtimeSnapshotId": "snapshot_synthetic_001",
+    "runtimeSnapshotVersion": 3,
+    "contentHash": "sha256:synthetic-runtime-content-hash",
+    "runtimeState": "snapshot_active",
+    "publishedAt": "2026-06-29T06:00:00Z",
+    "publishedBy": "operator_synthetic",
+    "gatewayInstanceId": "gateway_synthetic_001",
+    "configHash": "sha256:synthetic-config-hash",
+    "securityPolicyHash": "sha256:synthetic-security-policy-hash",
+    "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
+  },
+  "routing": {
+    "requestedModel": "auto",
+    "selectedProvider": "provider_synthetic",
+    "selectedModel": "model_low_cost_synthetic",
+    "routingReason": "short_prompt_low_cost"
+  },
+  "latencySummary": {
+    "gatewayInternalLatencyMs": 42,
+    "providerLatencyMs": 320,
+    "totalLatencyMs": 362
+  },
+  "usageSummary": {
+    "promptTokens": 24,
+    "completionTokens": 48,
+    "totalTokens": 72,
+    "estimatedCostMicroUsd": 95,
+    "savedCostMicroUsd": 0
+  },
+  "safetySummary": {
+    "outcome": "passed",
+    "detectedCount": 0,
+    "detectorCategories": [],
+    "maskingAction": "none"
+  },
+  "createdAt": "2026-06-29T06:01:10Z",
+  "completedAt": "2026-06-29T06:01:10Z"
+}

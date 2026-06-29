@@ -1,0 +1,122 @@
+{
+  "generatedAt": "2026-06-29T06:05:00Z",
+  "timeRange": {
+    "from": "2026-06-29T05:00:00Z",
+    "to": "2026-06-29T06:00:00Z",
+    "granularity": "minute"
+  },
+  "freshness": {
+    "lastIngestedAt": "2026-06-29T06:04:50Z",
+    "lastAggregatedAt": "2026-06-29T06:04:55Z",
+    "source": "request_log_rollup_synthetic",
+    "isStale": false
+  },
+  "queryBudget": {
+    "status": "ok",
+    "maxRangeHours": 24,
+    "maxBreakdownItems": 50,
+    "guidance": null
+  },
+  "filters": {
+    "tenantId": "tenant_synthetic",
+    "projectId": "project_synthetic",
+    "applicationId": null,
+    "budgetScopeType": "application",
+    "budgetScopeId": "app_employee_chat_synthetic"
+  },
+  "totals": {
+    "requestCount": 120,
+    "successCount": 106,
+    "blockedCount": 6,
+    "rateLimitedCount": 4,
+    "failedCount": 2,
+    "cancelledCount": 2,
+    "estimatedCostMicroUsd": 12500,
+    "exactCacheHitRate": 0.25,
+    "fallbackSuccessCount": 3
+  },
+  "breakdowns": {
+    "byApplication": [
+      {
+        "applicationId": "app_employee_chat_synthetic",
+        "requestCount": 120,
+        "estimatedCostMicroUsd": 12500
+      }
+    ],
+    "byBudgetScope": [
+      {
+        "budgetScopeType": "application",
+        "budgetScopeId": "app_employee_chat_synthetic",
+        "requestCount": 120,
+        "estimatedCostMicroUsd": 12500
+      }
+    ],
+    "byProviderModel": [
+      {
+        "selectedProvider": "provider_synthetic",
+        "selectedModel": "model_low_cost_synthetic",
+        "requestCount": 80,
+        "p95ProviderLatencyMs": 420
+      }
+    ],
+    "bySafetyOutcome": [
+      {
+        "outcome": "passed",
+        "requestCount": 114
+      },
+      {
+        "outcome": "blocked",
+        "requestCount": 6
+      }
+    ],
+    "byCacheOutcome": [
+      {
+        "outcome": "hit",
+        "requestCount": 30
+      },
+      {
+        "outcome": "miss",
+        "requestCount": 90
+      }
+    ],
+    "byFallbackOutcome": [
+      {
+        "outcome": "not_needed",
+        "requestCount": 117
+      },
+      {
+        "outcome": "success",
+        "requestCount": 3
+      }
+    ],
+    "byTerminalStatus": [
+      {
+        "outcome": "success",
+        "requestCount": 106
+      },
+      {
+        "outcome": "blocked",
+        "requestCount": 6
+      },
+      {
+        "outcome": "rate_limited",
+        "requestCount": 4
+      },
+      {
+        "outcome": "failed",
+        "requestCount": 2
+      },
+      {
+        "outcome": "cancelled",
+        "requestCount": 2
+      }
+    ]
+  },
+  "performance": {
+    "p95GatewayInternalLatencyMs": 55,
+    "p99GatewayInternalLatencyMs": 92,
+    "p95ProviderLatencyMs": 420,
+    "p99ProviderLatencyMs": 900,
+    "systemErrorRate": 0.0167
+  }
+}
