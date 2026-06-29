@@ -58,7 +58,7 @@ export type InvocationLogRecord = {
   savedCostMicroUsd: number;
   latencyMs: number;
   providerLatencyMs: number | null;
-  status: "success" | "cache_hit" | "blocked" | "rate_limited" | "error" | "cancelled";
+  status: "success" | "blocked" | "rate_limited" | "failed" | "cancelled";
   httpStatus: number;
   errorCode: string | null;
   errorMessage: string | null;
@@ -153,11 +153,33 @@ export function getInvocationLogFixture(): InvocationLogFixture {
 }
 
 export function getInvocationRecords(): InvocationLogRecord[] {
-  return [...getInvocationLogFixture().records].sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt)
-  );
+	return getInvocationLogFixture().records.map(normalizeInvocationRecord).sort((left, right) =>
+		right.createdAt.localeCompare(left.createdAt)
+	);
 }
 
 export function getInvocationRecord(requestId: string): InvocationLogRecord | undefined {
-  return getInvocationLogFixture().records.find((record) => record.requestId === requestId);
+	const record = getInvocationLogFixture().records.find((item) => item.requestId === requestId);
+	return record ? normalizeInvocationRecord(record) : undefined;
+}
+
+function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
+	const status = normalizeInvocationStatus(record.status);
+	return status === record.status ? record : { ...record, status };
+}
+
+function normalizeInvocationStatus(status: string): InvocationLogRecord["status"] {
+	if (
+		status === "success" ||
+		status === "blocked" ||
+		status === "rate_limited" ||
+		status === "failed" ||
+		status === "cancelled"
+	) {
+		return status;
+	}
+	if (status === "cache_hit") {
+		return "success";
+	}
+	return "failed";
 }

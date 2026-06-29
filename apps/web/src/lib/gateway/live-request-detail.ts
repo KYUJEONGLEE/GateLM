@@ -82,7 +82,7 @@ export async function getLiveGatewayRequestDetail(
 function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
   const createdAt = data.createdAt ?? new Date().toISOString();
   const completedAt = data.completedAt ?? createdAt;
-  const status = data.status ?? "error";
+	const status = normalizeStatus(data.status);
   const cacheStatus = data.cache?.cacheStatus ?? "bypass";
   const maskingAction = data.masking?.maskingAction ?? "none";
 
@@ -150,4 +150,24 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       }
     }
   };
+}
+
+function normalizeStatus(value: string | undefined): InvocationLogRecord["status"] {
+	if (
+		value === "success" ||
+		value === "blocked" ||
+		value === "rate_limited" ||
+		value === "failed" ||
+		value === "cancelled"
+	) {
+		return value;
+	}
+	if (value === "cache_hit") {
+		return "success";
+	}
+	if (value === "error") {
+		return "failed";
+	}
+
+	return "failed";
 }

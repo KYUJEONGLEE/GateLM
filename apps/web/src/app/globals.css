@@ -506,8 +506,7 @@ select {
   white-space: nowrap;
 }
 
-.status-badge[data-status="success"],
-.status-badge[data-status="cache_hit"] {
+.status-badge[data-status="success"] {
   background: #dcfce7;
   color: #166534;
 }
@@ -518,7 +517,7 @@ select {
   color: #92400e;
 }
 
-.status-badge[data-status="error"] {
+.status-badge[data-status="failed"] {
   background: #fee2e2;
   color: #991b1b;
 }
@@ -1169,13 +1168,11 @@ select {
   background: linear-gradient(135deg, #dcfce7, #86efac);
 }
 
-.outcome-card[data-tone="cache_hit"],
 .outcome-card[data-tone="hit"],
 .outcome-card[data-tone="skipped"] {
   border-left-color: #2563eb;
 }
 
-.outcome-card[data-tone="cache_hit"] > span,
 .outcome-card[data-tone="hit"] > span,
 .outcome-card[data-tone="skipped"] > span {
   background: linear-gradient(135deg, #dbeafe, #93c5fd);
@@ -1261,13 +1258,13 @@ select {
   border-radius: 999px;
 }
 
-.customer-demo-scenario[data-status="success"] span i,
-.customer-demo-scenario[data-status="cache_hit"] span i {
+.customer-demo-scenario[data-status="success"] span i {
   background: #16a34a;
 }
 
 .customer-demo-scenario[data-status="blocked"] span i,
-.customer-demo-scenario[data-status="rate_limited"] span i {
+.customer-demo-scenario[data-status="rate_limited"] span i,
+.customer-demo-scenario[data-status="failed"] span i {
   background: #dc2626;
 }
 

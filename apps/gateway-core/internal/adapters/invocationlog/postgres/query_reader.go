@@ -289,8 +289,8 @@ with filtered as (
 )
 select
   count(*)::bigint as total_requests,
-  count(*) filter (where status in ('success', 'cache_hit'))::bigint as successful_requests,
-  count(*) filter (where status = 'error')::bigint as failed_requests,
+	  count(*) filter (where status = 'success')::bigint as successful_requests,
+	  count(*) filter (where status = 'failed')::bigint as failed_requests,
   count(*) filter (where status = 'blocked')::bigint as blocked_requests,
   count(*) filter (where status = 'rate_limited')::bigint as rate_limited_requests,
   count(*) filter (where coalesce(nullif(cache_status, ''), 'bypass') = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
@@ -300,8 +300,8 @@ select
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
   coalesce(sum(cost_micro_usd), 0)::bigint as total_cost_micro_usd,
   coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd,
-  (avg(latency_ms) filter (where status in ('success', 'cache_hit', 'error')))::float8 as average_latency_ms,
-  (percentile_disc(0.95) within group (order by latency_ms) filter (where status in ('success', 'cache_hit', 'error')))::float8 as p95_latency_ms,
+	  (avg(latency_ms) filter (where status in ('success', 'failed')))::float8 as average_latency_ms,
+	  (percentile_disc(0.95) within group (order by latency_ms) filter (where status in ('success', 'failed')))::float8 as p95_latency_ms,
   coalesce((
     select jsonb_object_agg(status_key, request_count)
     from (

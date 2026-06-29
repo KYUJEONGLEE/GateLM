@@ -712,10 +712,9 @@ func readinessProviderPromptAt(t *testing.T, requests []provider.ChatCompletionR
 
 func readinessExpectedMetricSamples() []string {
 	return []string{
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="invalid_api_key",http_status="401",method="POST",status="error"} 1`,
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="invalid_app_token",http_status="403",method="POST",status="error"} 1`,
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 2`,
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="cache_hit"} 1`,
+		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="invalid_api_key",http_status="401",method="POST",status="blocked"} 1`,
+		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="invalid_app_token",http_status="403",method="POST",status="blocked"} 1`,
+		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 3`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="sensitive_data_blocked",http_status="403",method="POST",status="blocked"} 1`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`,
 		`gatelm_gateway_inflight_requests{endpoint="/v1/chat/completions",method="POST"} 0`,

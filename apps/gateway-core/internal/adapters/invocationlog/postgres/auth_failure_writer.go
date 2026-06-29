@@ -176,7 +176,7 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 		CostMicroUSD:             0,
 		LatencyMs:                log.LatencyMs,
 		ProviderLatencyMs:        log.ProviderLatencyMs,
-		Status:                   invocationlog.StatusError,
+		Status:                   invocationlog.StatusBlocked,
 		HTTPStatus:               log.HTTPStatus,
 		ErrorCode:                strings.TrimSpace(log.ErrorCode),
 		ErrorMessage:             strings.TrimSpace(log.ErrorMessage),

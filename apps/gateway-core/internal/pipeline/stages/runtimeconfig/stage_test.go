@@ -55,7 +55,7 @@ func TestStageFailsClosedWhenRuntimeConfigLoadFails(t *testing.T) {
 	if gatewayErr.Code != "internal_error" || gatewayErr.Stage != StageName {
 		t.Fatalf("unexpected gateway error: %#v", gatewayErr)
 	}
-	if gatewayCtx.Status.Status != "error" || gatewayCtx.Status.HTTPStatus != 500 {
+	if gatewayCtx.Status.Status != "failed" || gatewayCtx.Status.HTTPStatus != 500 {
 		t.Fatalf("unexpected status: %#v", gatewayCtx.Status)
 	}
 	if gatewayCtx.Cache.CacheStatus != "bypass" || gatewayCtx.Cache.CacheType != "none" {

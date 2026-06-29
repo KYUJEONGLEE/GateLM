@@ -196,7 +196,7 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		SavedCostMicroUSD:        log.SavedCostMicroUSD,
 		LatencyMs:                log.LatencyMs,
 		ProviderLatencyMs:        log.ProviderLatencyMs,
-		Status:                   firstNonEmpty(log.Status, invocationlog.StatusError),
+		Status:                   firstNonEmpty(log.Status, invocationlog.StatusFailed),
 		HTTPStatus:               log.HTTPStatus,
 		ErrorCode:                strings.TrimSpace(log.ErrorCode),
 		ErrorMessage:             strings.TrimSpace(log.ErrorMessage),

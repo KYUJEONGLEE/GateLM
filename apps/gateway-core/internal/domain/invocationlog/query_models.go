@@ -417,7 +417,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		if isSuccessfulStatus(log.Status) {
 			aggregate.SuccessfulRequests++
 		}
-		if log.Status == StatusError {
+		if log.Status == StatusFailed {
 			aggregate.FailedRequests++
 		}
 		if log.Status == StatusBlocked {
@@ -539,11 +539,11 @@ func validateTimeRange(from time.Time, to time.Time) error {
 }
 
 func isSuccessfulStatus(status string) bool {
-	return status == StatusSuccess || status == StatusCacheHit
+	return status == StatusSuccess
 }
 
 func isLatencyEligibleStatus(status string) bool {
-	return status == StatusSuccess || status == StatusCacheHit || status == StatusError
+	return status == StatusSuccess || status == StatusFailed
 }
 
 func isCacheEligible(cacheStatus string) bool {
@@ -573,10 +573,9 @@ func incrementCount(counts map[string]int64, key string) {
 func defaultStatusCounts() map[string]int64 {
 	return map[string]int64{
 		StatusSuccess:     0,
-		StatusCacheHit:    0,
 		StatusBlocked:     0,
 		StatusRateLimited: 0,
-		StatusError:       0,
+		StatusFailed:      0,
 		StatusCancelled:   0,
 	}
 }

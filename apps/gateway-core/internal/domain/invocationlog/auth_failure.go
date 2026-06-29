@@ -8,10 +8,9 @@ import (
 
 const (
 	StatusSuccess     = "success"
-	StatusCacheHit    = "cache_hit"
 	StatusBlocked     = "blocked"
 	StatusRateLimited = "rate_limited"
-	StatusError       = "error"
+	StatusFailed      = "failed"
 	StatusCancelled   = "cancelled"
 	CacheStatusHit    = "hit"
 	CacheStatusMiss   = "miss"
@@ -165,7 +164,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		Stream:         input.Stream,
 		RequestedModel: strings.TrimSpace(input.RequestedModel),
 
-		Status:       StatusError,
+		Status:       StatusBlocked,
 		HTTPStatus:   input.HTTPStatus,
 		ErrorCode:    strings.TrimSpace(input.ErrorCode),
 		ErrorMessage: strings.TrimSpace(input.ErrorMessage),

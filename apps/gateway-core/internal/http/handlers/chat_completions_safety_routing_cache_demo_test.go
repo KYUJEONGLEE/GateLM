@@ -64,7 +64,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 		t.Fatalf("cache hit must bypass provider, got provider calls=%d", *demo.providerCalls)
 	}
 	providerCallsAfterSecond := *demo.providerCalls
-	if len(demo.logWriter.logs) < 2 || demo.logWriter.logs[1].Status != invocationlog.StatusCacheHit ||
+	if len(demo.logWriter.logs) < 2 || demo.logWriter.logs[1].Status != invocationlog.StatusSuccess ||
 		demo.logWriter.logs[1].CacheHitRequestID != "request_v1_phase3_safe_miss_001" {
 		t.Fatalf("unexpected cache hit terminal log: %#v", demo.logWriter.logs)
 	}

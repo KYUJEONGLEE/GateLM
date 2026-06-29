@@ -80,8 +80,7 @@ func TestChatCompletionsHandlerRecordsCacheHitWithoutProviderMetricIncrease(t *t
 	}
 
 	output := registry.RenderPrometheus()
-	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 1`)
-	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="cache_hit"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 2`)
 	assertHandlerMetricsContains(t, output, `gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-balanced",selected_provider="mock",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`)
 }

@@ -407,11 +407,10 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				RequestCount:     3,
 			}},
 			StatusCounts: map[string]int64{
-				invocationlog.StatusSuccess:     2,
-				invocationlog.StatusCacheHit:    1,
+				invocationlog.StatusSuccess:     3,
 				invocationlog.StatusBlocked:     1,
 				invocationlog.StatusRateLimited: 1,
-				invocationlog.StatusError:       1,
+				invocationlog.StatusFailed:      1,
 			},
 			CostByModel: []invocationlog.CostByModel{{
 				SelectedProvider: "mock",

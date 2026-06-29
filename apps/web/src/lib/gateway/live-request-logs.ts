@@ -142,18 +142,23 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
 }
 
 function normalizeStatus(value: string | undefined): InvocationLogRecord["status"] {
-  if (
-    value === "success" ||
-    value === "cache_hit" ||
-    value === "blocked" ||
-    value === "rate_limited" ||
-    value === "error" ||
-    value === "cancelled"
-  ) {
-    return value;
-  }
+	if (
+		value === "success" ||
+		value === "blocked" ||
+		value === "rate_limited" ||
+		value === "failed" ||
+		value === "cancelled"
+	) {
+		return value;
+	}
+	if (value === "cache_hit") {
+		return "success";
+	}
+	if (value === "error") {
+		return "failed";
+	}
 
-  return "error";
+	return "failed";
 }
 
 function normalizeMaskingAction(value: string | undefined): InvocationLogRecord["maskingAction"] {

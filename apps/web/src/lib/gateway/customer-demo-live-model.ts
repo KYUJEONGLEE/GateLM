@@ -65,19 +65,19 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
     status: "blocked",
     title: "Blocked"
   },
-  {
-    cacheStatus: "hit",
-    description: "Same safe request resolves to exact cache hit and provider bypass.",
+	{
+		cacheStatus: "hit",
+		description: "Same safe request resolves to exact cache hit and provider bypass.",
     detectedTypes: [],
     httpStatus: 200,
     maskingAction: "none",
     promptPreview:
       "Write a concise support reply for a delayed shipment. Keep it under three sentences.",
-    providerCall: "skipped",
-    scenarioId: "cache-hit",
-    status: "cache_hit",
-    title: "Cache hit"
-  },
+		providerCall: "skipped",
+		scenarioId: "cache-hit",
+		status: "success",
+		title: "Cache hit"
+	},
   {
     cacheStatus: "bypass",
     description: "Application-scoped rate limit stops the request before provider cost.",

@@ -92,7 +92,7 @@ type StatusContext struct {
 
 func (c *GatewayContext) SetError(httpStatus int, code string, message string, stage string) {
 	c.Status = StatusContext{
-		Status:       "error",
+		Status:       "failed",
 		HTTPStatus:   httpStatus,
 		ErrorCode:    code,
 		ErrorMessage: message,

@@ -120,7 +120,7 @@ func TestChatCompletionsLogCompletenessSmoke(t *testing.T) {
 	overview := invocationlog.BuildDashboardOverview(invocationLogs)
 
 	logSmokeAssertDetail(t, logSmokeSafeMissRequestID, detailsByID[logSmokeSafeMissRequestID], invocationlog.StatusSuccess, http.StatusOK, invocationlog.CacheStatusMiss, "none", "")
-	logSmokeAssertDetail(t, logSmokeCacheHitRequestID, detailsByID[logSmokeCacheHitRequestID], invocationlog.StatusCacheHit, http.StatusOK, invocationlog.CacheStatusHit, "none", "")
+	logSmokeAssertDetail(t, logSmokeCacheHitRequestID, detailsByID[logSmokeCacheHitRequestID], invocationlog.StatusSuccess, http.StatusOK, invocationlog.CacheStatusHit, "none", "")
 	if detailsByID[logSmokeCacheHitRequestID].Cache.CacheHitRequestID != logSmokeSafeMissRequestID {
 		t.Fatalf("cache hit detail must point to first request, got %#v", detailsByID[logSmokeCacheHitRequestID].Cache)
 	}
@@ -136,7 +136,7 @@ func TestChatCompletionsLogCompletenessSmoke(t *testing.T) {
 	if detailsByID[logSmokeRateLimitRequestID].Latency.ProviderLatencyMs != nil {
 		t.Fatalf("rate limited detail must not include provider latency, got %#v", detailsByID[logSmokeRateLimitRequestID].Latency)
 	}
-	logSmokeAssertDetail(t, logSmokeProviderRequestID, detailsByID[logSmokeProviderRequestID], invocationlog.StatusError, http.StatusBadGateway, invocationlog.CacheStatusMiss, "none", "provider_error")
+	logSmokeAssertDetail(t, logSmokeProviderRequestID, detailsByID[logSmokeProviderRequestID], invocationlog.StatusFailed, http.StatusBadGateway, invocationlog.CacheStatusMiss, "none", "provider_error")
 
 	if overview.TotalRequests != 6 ||
 		overview.SuccessfulRequests != 3 ||
@@ -146,11 +146,10 @@ func TestChatCompletionsLogCompletenessSmoke(t *testing.T) {
 		overview.CacheHitRequests != 1 {
 		t.Fatalf("unexpected dashboard overview counts: %#v", overview)
 	}
-	if overview.StatusCounts[invocationlog.StatusSuccess] != 2 ||
-		overview.StatusCounts[invocationlog.StatusCacheHit] != 1 ||
+	if overview.StatusCounts[invocationlog.StatusSuccess] != 3 ||
 		overview.StatusCounts[invocationlog.StatusBlocked] != 1 ||
 		overview.StatusCounts[invocationlog.StatusRateLimited] != 1 ||
-		overview.StatusCounts[invocationlog.StatusError] != 1 {
+		overview.StatusCounts[invocationlog.StatusFailed] != 1 {
 		t.Fatalf("unexpected dashboard status counts: %#v", overview.StatusCounts)
 	}
 
@@ -230,7 +229,7 @@ func TestChatCompletionsLogCompletenessSmoke(t *testing.T) {
 			"rawProviderBodyShown": false,
 		}),
 		logSmokeLogDetailOutput(t, itemsByID[logSmokeProviderRequestID], detailsByID[logSmokeProviderRequestID]),
-		"Provider 장애는 policy outcome이 아니라 product failure로 status=error에 집계되고, errorStage로 원인을 추적한다.",
+		"Provider 장애는 policy outcome이 아니라 product failure로 status=failed에 집계되고, errorStage로 원인을 추적한다.",
 	)
 	t.Logf("\n[Then - Dashboard 전체 출력]\n%s", logSmokeDashboardOutput(t, overview))
 }
@@ -478,9 +477,9 @@ func logSmokeDashboardContribution(status string) map[string]any {
 		"explanation":         "이 status는 Dashboard의 기본 statusCounts에 반영된다.",
 	}
 	switch status {
-	case invocationlog.StatusSuccess, invocationlog.StatusCacheHit:
+	case invocationlog.StatusSuccess:
 		contribution["successfulRequests"] = true
-	case invocationlog.StatusError:
+	case invocationlog.StatusFailed:
 		contribution["failedRequests"] = true
 	case invocationlog.StatusBlocked:
 		contribution["blockedRequests"] = true

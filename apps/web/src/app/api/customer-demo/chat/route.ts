@@ -393,15 +393,11 @@ function getGatewayStatus(
     return "blocked";
   }
 
-  if (cacheStatus === "hit") {
-    return "cache_hit";
-  }
-
   if (result.httpStatus >= 200 && result.httpStatus < 300) {
     return "success";
   }
 
-  return "error";
+  return "failed";
 }
 
 function normalizeMaskingAction(value: string | undefined): CustomerDemoExchange["maskingAction"] {

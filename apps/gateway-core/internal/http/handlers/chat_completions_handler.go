@@ -262,7 +262,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
-			Status:           "error",
+			Status:           invocationlog.StatusFailed,
 			HTTPStatus:       http.StatusBadGateway,
 			ErrorCode:        "provider_error",
 			DurationSeconds:  providerDuration.Seconds(),
@@ -274,7 +274,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
-			Status:           "error",
+			Status:           invocationlog.StatusFailed,
 			HTTPStatus:       http.StatusBadGateway,
 			ErrorCode:        "provider_error",
 			DurationSeconds:  providerDuration.Seconds(),
@@ -590,7 +590,7 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	reqCtx.CostMicroUSD = 0
 	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
-	reqCtx.Status = "cache_hit"
+	reqCtx.Status = invocationlog.StatusSuccess
 	reqCtx.HTTPStatus = http.StatusOK
 
 	if reqCtx.SelectedModel != "" {
@@ -796,7 +796,7 @@ func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {
 }
 
 func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
-	if reqCtx == nil || reqCtx.Status == invocationlog.StatusCacheHit || reqCtx.Status == invocationlog.StatusBlocked || reqCtx.Status == invocationlog.StatusRateLimited {
+	if reqCtx == nil || reqCtx.CacheStatus == cachestage.CacheStatusHit || reqCtx.Status == invocationlog.StatusBlocked || reqCtx.Status == invocationlog.StatusRateLimited {
 		return nil
 	}
 	if reqCtx.Provider == "" {
@@ -820,7 +820,7 @@ func (h *ChatCompletionsHandler) recordGatewayRequestCompleted(reqCtx *pipeline.
 
 	status := reqCtx.Status
 	if status == "" {
-		status = "error"
+		status = invocationlog.StatusFailed
 	}
 	h.MetricsRegistry.GatewayRequestCompleted(metrics.GatewayRequest{
 		Endpoint:        reqCtx.Endpoint,
@@ -971,11 +971,7 @@ func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestConte
 		}
 	}
 
-	if gatewayErr.HTTPStatus == gatewayerrors.StatusClientClosedRequest || errors.Is(err, context.Canceled) {
-		reqCtx.Status = "cancelled"
-	} else {
-		reqCtx.Status = "error"
-	}
+	reqCtx.Status = terminalStatusForGatewayError(gatewayErr.HTTPStatus, gatewayErr.Code)
 	reqCtx.HTTPStatus = gatewayErr.HTTPStatus
 	reqCtx.ErrorCode = gatewayErr.Code
 	reqCtx.ErrorMessage = gatewayErr.Message

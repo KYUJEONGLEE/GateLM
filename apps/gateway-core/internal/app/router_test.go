@@ -75,7 +75,7 @@ func TestNewRouterWiresAuthBeforeProviderCall(t *testing.T) {
 		t.Fatalf("expected one auth failure log, got %d", len(authFailureWriter.logs))
 	}
 	authFailureLog := authFailureWriter.logs[0]
-	if authFailureLog.RequestID == "" || authFailureLog.Status != invocationlog.StatusError || authFailureLog.HTTPStatus != http.StatusUnauthorized {
+	if authFailureLog.RequestID == "" || authFailureLog.Status != invocationlog.StatusBlocked || authFailureLog.HTTPStatus != http.StatusUnauthorized {
 		t.Fatalf("unexpected auth failure log: %+v", authFailureLog)
 	}
 	if authFailureLog.ErrorCode != invocationlog.ErrorCodeInvalidAPIKey || authFailureLog.ErrorStage != invocationlog.StageAuthenticateAPIKey {
@@ -269,7 +269,7 @@ func TestNewRouterPersistsInvalidAuthThroughPostgresWriter(t *testing.T) {
 	if len(logDB.args) != 36 {
 		t.Fatalf("expected 36 insert args, got %d", len(logDB.args))
 	}
-	if logDB.args[21] != invocationlog.StatusError || logDB.args[22] != http.StatusUnauthorized || logDB.args[23] != invocationlog.ErrorCodeInvalidAPIKey {
+	if logDB.args[21] != invocationlog.StatusBlocked || logDB.args[22] != http.StatusUnauthorized || logDB.args[23] != invocationlog.ErrorCodeInvalidAPIKey {
 		t.Fatalf("unexpected status/http/error args: %+v", logDB.args[21:24])
 	}
 	if logDB.args[26] != invocationlog.CacheStatusBypass || logDB.args[27] != invocationlog.CacheTypeNone {

@@ -124,7 +124,7 @@ func TestStageFailsClosedOnLimiterError(t *testing.T) {
 	if gatewayErr.Code != "internal_error" || gatewayErr.HTTPStatus != 500 || gatewayErr.Stage != StageName {
 		t.Fatalf("unexpected gateway error: %#v", gatewayErr)
 	}
-	if gatewayCtx.Status.Status != "error" || gatewayCtx.Status.HTTPStatus != 500 {
+	if gatewayCtx.Status.Status != "failed" || gatewayCtx.Status.HTTPStatus != 500 {
 		t.Fatalf("unexpected terminal status: %#v", gatewayCtx.Status)
 	}
 	if gatewayCtx.Governance.RateLimitDecision == nil || gatewayCtx.Governance.RateLimitDecision.Reason != ratelimit.ReasonInternalError {

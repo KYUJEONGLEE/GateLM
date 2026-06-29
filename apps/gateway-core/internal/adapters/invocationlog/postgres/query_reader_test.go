@@ -198,7 +198,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	db := &fakeQueryer{
 		row: fakeRow{values: []any{
 			int64(6),
-			int64(2),
+			int64(3),
 			int64(1),
 			int64(1),
 			int64(1),
@@ -211,7 +211,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(50),
 			sql.NullFloat64{Float64: 63.3333333333, Valid: true},
 			sql.NullFloat64{Float64: 100, Valid: true},
-			[]byte(`{"success":1,"cache_hit":1,"blocked":1,"rate_limited":1,"error":1,"cancelled":1}`),
+			[]byte(`{"success":3,"blocked":1,"rate_limited":1,"failed":1,"cancelled":1}`),
 			[]byte(`{"none":4,"redacted":1,"blocked":1}`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
@@ -229,7 +229,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected dashboard overview to succeed, got %v", err)
 	}
-	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 2 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
+	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 3 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
 		t.Fatalf("unexpected overview counts: %+v", overview)
 	}
 	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 3 || overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 1.0/3.0) {
@@ -257,7 +257,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
 	}
 	for _, expected := range []string{
-		"status = 'error'",
+		"status = 'failed'",
 		"status = 'rate_limited'",
 		"cache_eligible_requests",
 		"saved_cost_micro_usd",

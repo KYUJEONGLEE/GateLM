@@ -106,13 +106,13 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 			MaskingAction: "none", CreatedAt: createdAt,
 		},
 		{
-			Status: StatusCacheHit, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
+			Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
 			SavedCostMicroUSD: 50, LatencyMs: 20, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
 			MaskingAction: "none", CreatedAt: createdAt.Add(time.Second),
 		},
 		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "blocked", CreatedAt: createdAt.Add(2 * time.Second)},
 		{
-			Status: StatusError, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			Status: StatusFailed, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
 			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, SelectedProvider: "mock", SelectedModel: "mock-balanced",
 			MaskingAction: "redacted", CreatedAt: createdAt.Add(3 * time.Second),
 		},
@@ -140,7 +140,7 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if overview.AverageResponseTimeMs == nil || !floatEquals(*overview.AverageResponseTimeMs, *overview.AverageLatencyMs) {
 		t.Fatalf("expected average response time compatibility alias, got %+v", overview.AverageResponseTimeMs)
 	}
-	if overview.StatusCounts[StatusSuccess] != 1 || overview.StatusCounts[StatusCacheHit] != 1 || overview.StatusCounts[StatusBlocked] != 1 || overview.StatusCounts[StatusRateLimited] != 1 || overview.StatusCounts[StatusError] != 1 || overview.StatusCounts[StatusCancelled] != 1 {
+	if overview.StatusCounts[StatusSuccess] != 2 || overview.StatusCounts[StatusBlocked] != 1 || overview.StatusCounts[StatusRateLimited] != 1 || overview.StatusCounts[StatusFailed] != 1 || overview.StatusCounts[StatusCancelled] != 1 {
 		t.Fatalf("unexpected status counts: %+v", overview.StatusCounts)
 	}
 	if overview.MaskingActionCounts["none"] != 4 || overview.MaskingActionCounts["redacted"] != 1 || overview.MaskingActionCounts["blocked"] != 1 {
