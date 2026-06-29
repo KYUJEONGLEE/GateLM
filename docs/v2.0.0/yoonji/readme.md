@@ -21,6 +21,8 @@
 
 - safety decision 후보: `passed`, `redacted`, `blocked`, `not_checked` 등은 공식 필드 확정 전까지 후보로만 둔다.
 - detector result 후보: detector category summary, detected count, masking action, sanitized reason/code.
+- safety result는 raw value, raw offset, raw prompt fragment를 포함하지 않는 방향으로 둔다.
+- remote/shadow safety 실험은 Gateway hot path를 차단하지 않는 evidence track으로 분리하고, core 차단 판단은 published RuntimeSnapshot 정책 기준으로만 한다.
 - redaction/block fixture 후보: 실제 개인정보나 secret 없이 합성 문자열만 사용한다.
 - safety policy validation 후보: RuntimeSnapshot publish 전에 rule config가 비어 있거나 잘못된 경우 실패시키는 최소 기준.
 - evidence report 후보: Semantic Cache candidate, detector precision/false positive sample, 안전한 preset corpus 결과.
@@ -28,6 +30,7 @@
 ## 4. 내가 막히는 dependency
 
 - RuntimeSnapshot 최소 safety policy shape가 없으면 safety engine이 어떤 설정을 소비해야 하는지 고정할 수 없다.
+- RuntimeSnapshot active binding key와 reload 실패 시 last known safe 의미가 없으면 어떤 policy version으로 safety 판단했는지 설명하기 어렵다.
 - Gateway의 domain outcome 구조가 없으면 safety 결과를 Request Log/Detail에 어떤 단위로 넘길지 고정할 수 없다.
 - redacted preview/hash 저장 허용 범위가 없으면 fixture와 dashboard evidence를 확정할 수 없다.
 - Employee Chat 호출 방식(browser direct vs Web BFF/server-side)이 정해지지 않으면 App Token 노출 방지와 사용자 안내 문구 범위를 확정하기 어렵다.
