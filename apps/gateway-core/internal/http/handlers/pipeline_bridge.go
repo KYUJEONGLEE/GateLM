@@ -43,6 +43,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			ConfigHash:         reqCtx.ConfigHash,
 			SecurityPolicyHash: reqCtx.SecurityPolicyHash,
 			RoutingPolicyHash:  reqCtx.RoutingPolicyHash,
+			Snapshot:           reqCtx.RuntimeSnapshot,
 			RateLimitConfig:    reqCtx.RuntimeRateLimit,
 			HasRateLimitConfig: reqCtx.HasRuntimeRateLimit,
 			RoutingPolicy:      reqCtx.RuntimeRoutingPolicy,
@@ -106,6 +107,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	}
 	if gatewayCtx.Runtime.RoutingPolicyHash != "" {
 		reqCtx.RoutingPolicyHash = gatewayCtx.Runtime.RoutingPolicyHash
+	}
+	if gatewayCtx.Runtime.Snapshot.RuntimeSnapshotID != "" {
+		reqCtx.RuntimeSnapshot = gatewayCtx.Runtime.Snapshot
 	}
 	if gatewayCtx.Runtime.HasRateLimitConfig {
 		reqCtx.RuntimeRateLimit = gatewayCtx.Runtime.RateLimitConfig

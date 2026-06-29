@@ -1,10 +1,30 @@
 import dashboardOverviewFixture from "../../../../../docs/v1.0.0/fixtures/dashboard-overview.fixture.json";
 import invocationLogFixture from "../../../../../docs/v1.0.0/fixtures/invocation-log.fixture.json";
 
-export type RuntimeMetadata = {
+export type LegacyRuntimeHashes = {
   configHash: string;
   securityPolicyHash: string;
   routingPolicyHash: string;
+};
+
+export type RuntimeSnapshotState =
+  | "snapshot_active"
+  | "last_known_safe_used"
+  | "stale_snapshot_used";
+
+export type RuntimeSnapshotProvenance = {
+  runtimeSnapshotId: string;
+  runtimeSnapshotVersion: number;
+  contentHash: string;
+  runtimeState: RuntimeSnapshotState;
+  publishedAt: string;
+  publishedBy: string;
+  gatewayInstanceId: string;
+  legacyHashes: LegacyRuntimeHashes;
+};
+
+export type RuntimeMetadata = {
+  runtimeSnapshot: RuntimeSnapshotProvenance;
 };
 
 export type RateLimitDecision = {
@@ -159,7 +179,7 @@ export function getDashboardOverview(): DashboardOverview {
 }
 
 export function getInvocationLogFixture(): InvocationLogFixture {
-  return invocationLogFixture as InvocationLogFixture;
+  return invocationLogFixture as unknown as InvocationLogFixture;
 }
 
 export function getInvocationRecords(): InvocationLogRecord[] {
@@ -176,10 +196,11 @@ export function getInvocationRecord(requestId: string): InvocationLogRecord | un
 function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
 	const status = normalizeInvocationStatus(record.status);
 	const budgetScope = normalizeBudgetScope(record.budgetScope, record.applicationId);
-	if (status === record.status && budgetScope === record.budgetScope) {
+	const runtime = normalizeRuntimeMetadata(record.metadata?.runtime, record.createdAt);
+	if (status === record.status && budgetScope === record.budgetScope && runtime === record.metadata?.runtime) {
 		return record;
 	}
-	return { ...record, budgetScope, status };
+	return { ...record, budgetScope, metadata: { runtime }, status };
 }
 
 function normalizeInvocationStatus(status: string): InvocationLogRecord["status"] {
@@ -209,6 +230,56 @@ function normalizeDashboardOverview(overview: DashboardOverview): DashboardOverv
 			resolvedBy: overview.filters.resolvedBy ?? "default_application"
 		}
 	};
+}
+
+function normalizeRuntimeMetadata(value: unknown, createdAt: string): RuntimeMetadata {
+	const runtime = toRecord(value);
+	const snapshot = toRecord(runtime.runtimeSnapshot);
+	const legacyHashes = normalizeLegacyHashes(snapshot.legacyHashes ?? runtime.legacyHashes ?? runtime);
+	return {
+		runtimeSnapshot: {
+			runtimeSnapshotId: stringOr(snapshot.runtimeSnapshotId, "runtime_snapshot_compat"),
+			runtimeSnapshotVersion: integerOr(snapshot.runtimeSnapshotVersion, 1),
+			contentHash: stringOr(snapshot.contentHash, legacyHashes.configHash),
+			runtimeState: normalizeRuntimeState(snapshot.runtimeState),
+			publishedAt: stringOr(snapshot.publishedAt, createdAt),
+			publishedBy: stringOr(snapshot.publishedBy, "runtime_config_compat"),
+			gatewayInstanceId: stringOr(snapshot.gatewayInstanceId, "gateway_web_compat"),
+			legacyHashes
+		}
+	};
+}
+
+function normalizeLegacyHashes(value: unknown): LegacyRuntimeHashes {
+	const record = toRecord(value);
+	return {
+		configHash: stringOr(record.configHash, "not-exposed"),
+		securityPolicyHash: stringOr(record.securityPolicyHash, "not-exposed"),
+		routingPolicyHash: stringOr(record.routingPolicyHash, "not-exposed")
+	};
+}
+
+function normalizeRuntimeState(value: unknown): RuntimeSnapshotState {
+	if (
+		value === "snapshot_active" ||
+		value === "last_known_safe_used" ||
+		value === "stale_snapshot_used"
+	) {
+		return value;
+	}
+	return "snapshot_active";
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function stringOr(value: unknown, fallback: string): string {
+	return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function integerOr(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 function normalizeBudgetScope(scope: BudgetScope | undefined, applicationId: string): BudgetScope {

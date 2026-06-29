@@ -45,6 +45,7 @@ type RuntimeContext struct {
 	ConfigHash         string
 	SecurityPolicyHash string
 	RoutingPolicyHash  string
+	Snapshot           runtimeconfig.RuntimeSnapshotProvenance
 
 	RateLimitConfig    ratelimit.Config
 	HasRateLimitConfig bool

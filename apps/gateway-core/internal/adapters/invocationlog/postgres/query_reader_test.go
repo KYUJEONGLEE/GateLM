@@ -168,6 +168,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}}}`),
 		}},
 	}
 
@@ -188,6 +189,13 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	}
 	if detail.BudgetScope.Type != "application" || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope detail: %+v", detail.BudgetScope)
+	}
+	if detail.RuntimeSnapshot == nil ||
+		detail.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_query_test" ||
+		detail.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		detail.RuntimeSnapshot.RuntimeState != "snapshot_active" ||
+		detail.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_query_test" {
+		t.Fatalf("unexpected runtime snapshot detail: %+v", detail.RuntimeSnapshot)
 	}
 	for _, expected := range []string{
 		"tenant_id = $1",

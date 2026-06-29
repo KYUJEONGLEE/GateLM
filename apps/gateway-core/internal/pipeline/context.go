@@ -28,6 +28,7 @@ type RequestContext struct {
 
 	ConfigHash              string
 	SecurityPolicyHash      string
+	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
 	RuntimeRateLimit        ratelimit.Config
 	HasRuntimeRateLimit     bool
 	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy

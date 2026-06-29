@@ -34,6 +34,11 @@ func TestStageLoadsActiveRuntimeConfigIntoGatewayContext(t *testing.T) {
 		gatewayCtx.Routing.RoutingPolicyHash != "hash_routing_policy_test" {
 		t.Fatalf("unexpected routing policy hash: %#v %#v", gatewayCtx.Runtime, gatewayCtx.Routing)
 	}
+	if gatewayCtx.Runtime.Snapshot.RuntimeSnapshotVersion != 1 ||
+		gatewayCtx.Runtime.Snapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
+		gatewayCtx.Runtime.Snapshot.LegacyHashes.ConfigHash != "hash_runtime_config_test" {
+		t.Fatalf("unexpected runtime snapshot provenance: %#v", gatewayCtx.Runtime.Snapshot)
+	}
 	if !gatewayCtx.Runtime.HasRateLimitConfig || gatewayCtx.Runtime.RateLimitConfig.Limit != 7 {
 		t.Fatalf("expected runtime rate limit config, got %#v", gatewayCtx.Runtime)
 	}

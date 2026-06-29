@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
@@ -81,8 +82,22 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 		MaskingAction:         "none",
 		MaskingDetectedTypes:  []string{},
 		RedactedPromptPreview: "Write a short refund response.",
-		CreatedAt:             completedAt.Add(-132 * time.Millisecond),
-		CompletedAt:           &completedAt,
+		RuntimeSnapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			RuntimeSnapshotID:      "runtime_snapshot_query_test",
+			RuntimeSnapshotVersion: 2,
+			ContentHash:            "content_hash_query_test",
+			RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+			PublishedAt:            completedAt.Add(-time.Second),
+			PublishedBy:            "runtime_config_compat",
+			GatewayInstanceID:      "gateway_query_test",
+			LegacyHashes: runtimeconfig.LegacyHashes{
+				ConfigHash:         "config_hash_query_test",
+				SecurityPolicyHash: "security_hash_query_test",
+				RoutingPolicyHash:  "route_hash_query_test",
+			},
+		},
+		CreatedAt:   completedAt.Add(-132 * time.Millisecond),
+		CompletedAt: &completedAt,
 	}
 
 	detail := ToRequestDetail(log)
@@ -101,6 +116,13 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	}
 	if detail.BudgetScope.Type != budget.ScopeTypeApplication || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
 		t.Fatalf("unexpected default budget scope: %+v", detail.BudgetScope)
+	}
+	if detail.RuntimeSnapshot == nil ||
+		detail.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_query_test" ||
+		detail.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		detail.RuntimeSnapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
+		detail.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_query_test" {
+		t.Fatalf("unexpected runtime snapshot detail: %+v", detail.RuntimeSnapshot)
 	}
 }
 

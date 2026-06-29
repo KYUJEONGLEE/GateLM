@@ -29,6 +29,8 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 		ApplicationID:           "00000000-0000-4000-8000-000000000300",
 		APIKeyID:                "00000000-0000-4000-8000-000000000400",
 		AppTokenID:              "00000000-0000-4000-8000-000000000500",
+		ConfigHash:              "hash_runtime_config_test",
+		SecurityPolicyHash:      "hash_security_policy_test",
 		RequestedModel:          "auto",
 		Provider:                "mock",
 		Model:                   "mock-fast",
@@ -104,8 +106,22 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	if err := json.Unmarshal(metadata, &decoded); err != nil {
 		t.Fatalf("decode metadata JSON: %v", err)
 	}
-	if decoded["schemaVersion"] != float64(1) || decoded["securityPolicyVersionId"] != "sec_p0_v1" || decoded["routingPolicyHash"] != "route_p0_v1" {
+	if decoded["schemaVersion"] != float64(1) || decoded["securityPolicyVersionId"] != "sec_p0_v1" {
 		t.Fatalf("unexpected metadata: %v", decoded)
+	}
+	if _, exists := decoded["routingPolicyHash"]; exists {
+		t.Fatalf("routingPolicyHash must not be primary metadata: %v", decoded)
+	}
+	runtimeSnapshot, ok := decoded["runtimeSnapshot"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSnapshot metadata, got %v", decoded)
+	}
+	if runtimeSnapshot["runtimeSnapshotVersion"] != float64(1) || runtimeSnapshot["runtimeState"] != "snapshot_active" {
+		t.Fatalf("unexpected runtimeSnapshot metadata: %v", runtimeSnapshot)
+	}
+	legacyHashes, ok := runtimeSnapshot["legacyHashes"].(map[string]any)
+	if !ok || legacyHashes["routingPolicyHash"] != "route_p0_v1" {
+		t.Fatalf("expected legacy hash bridge, got %v", runtimeSnapshot)
 	}
 }
 

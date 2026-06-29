@@ -746,6 +746,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		FeatureID:               reqCtx.FeatureID,
 		ConfigHash:              reqCtx.ConfigHash,
 		SecurityPolicyHash:      reqCtx.SecurityPolicyHash,
+		RuntimeSnapshot:         reqCtx.RuntimeSnapshot,
 		RateLimitDecision:       reqCtx.RateLimitDecision,
 		Endpoint:                reqCtx.Endpoint,
 		Method:                  reqCtx.Method,

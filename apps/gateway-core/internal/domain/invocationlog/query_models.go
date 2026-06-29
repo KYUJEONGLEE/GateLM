@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 var (
@@ -96,6 +97,7 @@ type LlmInvocationLog struct {
 	MaskingDetectedTypes  []string
 	MaskingDetectedCount  int
 	RedactedPromptPreview string
+	RuntimeSnapshot       runtimeconfig.RuntimeSnapshotProvenance
 	CreatedAt             time.Time
 	CompletedAt           *time.Time
 }
@@ -125,27 +127,28 @@ type RequestLogListItem struct {
 }
 
 type RequestDetail struct {
-	RequestID      string
-	TraceID        string
-	TenantID       string
-	ProjectID      string
-	ApplicationID  string
-	BudgetScope    budget.Scope
-	Status         string
-	HTTPStatus     int
-	Provider       string
-	Model          string
-	RequestedModel string
-	SelectedModel  string
-	Usage          UsageFields
-	Cost           CostFields
-	Latency        LatencyFields
-	Cache          CacheFields
-	Routing        RoutingFields
-	Masking        MaskingFields
-	Error          ErrorFields
-	CreatedAt      time.Time
-	CompletedAt    *time.Time
+	RequestID       string
+	TraceID         string
+	TenantID        string
+	ProjectID       string
+	ApplicationID   string
+	BudgetScope     budget.Scope
+	Status          string
+	HTTPStatus      int
+	Provider        string
+	Model           string
+	RequestedModel  string
+	SelectedModel   string
+	Usage           UsageFields
+	Cost            CostFields
+	Latency         LatencyFields
+	Cache           CacheFields
+	Routing         RoutingFields
+	Masking         MaskingFields
+	RuntimeSnapshot *runtimeconfig.RuntimeSnapshotProvenance
+	Error           ErrorFields
+	CreatedAt       time.Time
+	CompletedAt     *time.Time
 }
 
 type UsageFields struct {
@@ -424,6 +427,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 			MaskingDetectedCount:  log.MaskingDetectedCount,
 			RedactedPromptPreview: log.RedactedPromptPreview,
 		},
+		RuntimeSnapshot: runtimeSnapshotPointer(log.RuntimeSnapshot, log.CreatedAt),
 		Error: ErrorFields{
 			ErrorCode:    log.ErrorCode,
 			ErrorMessage: log.ErrorMessage,
@@ -432,6 +436,14 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		CreatedAt:   log.CreatedAt,
 		CompletedAt: log.CompletedAt,
 	}
+}
+
+func runtimeSnapshotPointer(snapshot runtimeconfig.RuntimeSnapshotProvenance, createdAt time.Time) *runtimeconfig.RuntimeSnapshotProvenance {
+	if snapshot.IsZero() {
+		return nil
+	}
+	normalized := snapshot.Normalize(runtimeconfig.ActiveConfig{}, createdAt, runtimeconfig.DefaultGatewayInstanceIDCompat)
+	return &normalized
 }
 
 func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {

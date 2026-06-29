@@ -11,6 +11,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -448,11 +449,12 @@ select
   masking_detected_count,
   redacted_prompt_preview,
   error_code,
-  error_message,
-  error_stage,
-  created_at,
-  completed_at
-from p0_llm_invocation_logs
+	  error_message,
+	  error_stage,
+	  created_at,
+	  completed_at,
+	  metadata
+	from p0_llm_invocation_logs
 where tenant_id = $1
   and project_id = $2
   and request_id = $3
@@ -525,6 +527,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	var errorMessage sql.NullString
 	var errorStage sql.NullString
 	var completedAt sql.NullTime
+	var metadataJSON []byte
 
 	if err := row.Scan(
 		&log.RequestID,
@@ -562,6 +565,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 		&errorStage,
 		&log.CreatedAt,
 		&completedAt,
+		&metadataJSON,
 	); err != nil {
 		return invocationlog.LlmInvocationLog{}, err
 	}
@@ -591,6 +595,10 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	log.ErrorStage = nullableString(errorStage)
 	if completedAt.Valid {
 		log.CompletedAt = &completedAt.Time
+	}
+	log.RuntimeSnapshot, err = decodeRuntimeSnapshotMetadata(metadataJSON, log.CreatedAt)
+	if err != nil {
+		return invocationlog.LlmInvocationLog{}, err
 	}
 	return log, nil
 }
@@ -628,6 +636,86 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 		return []string{}, nil
 	}
 	return values, nil
+}
+
+type invocationMetadataJSON struct {
+	RuntimeSnapshot *runtimeSnapshotMetadataJSON `json:"runtimeSnapshot"`
+	Runtime         *runtimeMetadataJSON         `json:"runtime"`
+}
+
+type runtimeMetadataJSON struct {
+	RuntimeSnapshot    *runtimeSnapshotMetadataJSON `json:"runtimeSnapshot"`
+	LegacyHashes       runtimeconfig.LegacyHashes   `json:"legacyHashes"`
+	ConfigHash         string                       `json:"configHash"`
+	SecurityPolicyHash string                       `json:"securityPolicyHash"`
+	RoutingPolicyHash  string                       `json:"routingPolicyHash"`
+}
+
+type runtimeSnapshotMetadataJSON struct {
+	RuntimeSnapshotID      string                     `json:"runtimeSnapshotId"`
+	RuntimeSnapshotVersion int                        `json:"runtimeSnapshotVersion"`
+	ContentHash            string                     `json:"contentHash"`
+	RuntimeState           string                     `json:"runtimeState"`
+	PublishedAt            *time.Time                 `json:"publishedAt"`
+	PublishedBy            string                     `json:"publishedBy"`
+	GatewayInstanceID      string                     `json:"gatewayInstanceId"`
+	LegacyHashes           runtimeconfig.LegacyHashes `json:"legacyHashes"`
+}
+
+func decodeRuntimeSnapshotMetadata(raw []byte, createdAt time.Time) (runtimeconfig.RuntimeSnapshotProvenance, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return runtimeconfig.RuntimeSnapshotProvenance{}, nil
+	}
+	var metadata invocationMetadataJSON
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return runtimeconfig.RuntimeSnapshotProvenance{}, err
+	}
+	if metadata.RuntimeSnapshot != nil {
+		return metadata.RuntimeSnapshot.toProvenance(createdAt), nil
+	}
+	if metadata.Runtime == nil {
+		return runtimeconfig.RuntimeSnapshotProvenance{}, nil
+	}
+	if metadata.Runtime.RuntimeSnapshot != nil {
+		return metadata.Runtime.RuntimeSnapshot.toProvenance(createdAt), nil
+	}
+	legacyHashes := metadata.Runtime.legacyHashes()
+	if legacyHashes.IsZero() {
+		return runtimeconfig.RuntimeSnapshotProvenance{}, nil
+	}
+	return runtimeconfig.RuntimeSnapshotProvenance{
+		LegacyHashes: legacyHashes,
+	}.Normalize(runtimeconfig.ActiveConfig{}, createdAt, runtimeconfig.DefaultGatewayInstanceIDCompat), nil
+}
+
+func (m runtimeMetadataJSON) legacyHashes() runtimeconfig.LegacyHashes {
+	hashes := m.LegacyHashes.Normalize()
+	if hashes.ConfigHash == "" {
+		hashes.ConfigHash = strings.TrimSpace(m.ConfigHash)
+	}
+	if hashes.SecurityPolicyHash == "" {
+		hashes.SecurityPolicyHash = strings.TrimSpace(m.SecurityPolicyHash)
+	}
+	if hashes.RoutingPolicyHash == "" {
+		hashes.RoutingPolicyHash = strings.TrimSpace(m.RoutingPolicyHash)
+	}
+	return hashes
+}
+
+func (m runtimeSnapshotMetadataJSON) toProvenance(createdAt time.Time) runtimeconfig.RuntimeSnapshotProvenance {
+	provenance := runtimeconfig.RuntimeSnapshotProvenance{
+		RuntimeSnapshotID:      m.RuntimeSnapshotID,
+		RuntimeSnapshotVersion: m.RuntimeSnapshotVersion,
+		ContentHash:            m.ContentHash,
+		RuntimeState:           m.RuntimeState,
+		PublishedBy:            m.PublishedBy,
+		GatewayInstanceID:      m.GatewayInstanceID,
+		LegacyHashes:           m.LegacyHashes,
+	}
+	if m.PublishedAt != nil {
+		provenance.PublishedAt = *m.PublishedAt
+	}
+	return provenance.Normalize(runtimeconfig.ActiveConfig{}, createdAt, runtimeconfig.DefaultGatewayInstanceIDCompat)
 }
 
 func decodeInt64MapJSON(raw []byte) (map[string]int64, error) {

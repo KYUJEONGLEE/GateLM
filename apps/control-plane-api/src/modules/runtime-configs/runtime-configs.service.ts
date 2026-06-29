@@ -87,7 +87,7 @@ export class RuntimeConfigsService {
       now: new Date(),
     });
 
-    return document;
+    return this.withProviderCredentialRefs(document);
   }
 
   async upsertDraft(
@@ -1123,6 +1123,7 @@ export class RuntimeConfigsService {
       status: this.toProviderStatus(provider.status),
       baseUrl: provider.baseUrl,
       timeoutMs: provider.timeoutMs,
+      credentialRef: this.toProviderCredentialRef(provider),
       secretRef: provider.secretRef,
       credentialPreview: this.toProviderCredentialPreview(provider),
       resolver: this.toResolver(provider.resolver),
@@ -1130,6 +1131,27 @@ export class RuntimeConfigsService {
         .filter((model) => model.provider === provider.provider)
         .map((model) => model.model),
       failureMode: this.toFailureMode(provider.providerConfig),
+    };
+  }
+
+  private withProviderCredentialRefs(
+    document: ActiveRuntimeConfigResponseDto,
+  ): ActiveRuntimeConfigResponseDto {
+    return {
+      ...document,
+      providers: document.providers.map((provider) => ({
+        ...provider,
+        credentialRef:
+          provider.credentialRef ??
+          (provider.secretRef
+            ? {
+                credentialRefId: `provider_credential:${provider.providerId}`,
+                credentialVersion: 1,
+                credentialState:
+                  provider.status === 'active' ? 'active' : 'disabled',
+              }
+            : null),
+      })),
     };
   }
 
@@ -1146,6 +1168,22 @@ export class RuntimeConfigsService {
       scopes: credential.scopes,
       expiresAt: credential.expiresAt?.toISOString() ?? null,
       verification: 'prefix_then_hash_compare',
+    };
+  }
+
+  private toProviderCredentialRef(
+    provider: ProviderConnection,
+  ): RuntimeConfigProviderDto['credentialRef'] {
+    if (!provider.secretRef) {
+      return null;
+    }
+    return {
+      credentialRefId: `provider_credential:${provider.id}`,
+      credentialVersion: 1,
+      credentialState:
+        provider.status === ProviderConnectionStatus.ACTIVE
+          ? 'active'
+          : 'disabled',
     };
   }
 

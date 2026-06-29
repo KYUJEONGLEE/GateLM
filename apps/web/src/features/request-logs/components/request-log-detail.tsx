@@ -15,6 +15,8 @@ type RequestLogDetailProps = {
 };
 
 export function RequestLogDetail({ record, tenantId, timezone }: RequestLogDetailProps) {
+  const runtimeSnapshot = record.metadata.runtime.runtimeSnapshot;
+
   return (
     <main className="console-content">
       <section className="detail-header">
@@ -115,11 +117,18 @@ export function RequestLogDetail({ record, tenantId, timezone }: RequestLogDetai
         />
 
         <DetailPanel
-          title="Runtime hashes"
+          title="RuntimeSnapshot provenance"
           rows={[
-            ["Config hash", record.metadata.runtime.configHash],
-            ["Security policy hash", record.metadata.runtime.securityPolicyHash],
-            ["Routing policy hash", record.metadata.runtime.routingPolicyHash],
+            ["Snapshot ID", runtimeSnapshot.runtimeSnapshotId],
+            ["Snapshot version", String(runtimeSnapshot.runtimeSnapshotVersion)],
+            ["Runtime state", runtimeSnapshot.runtimeState],
+            ["Content hash", runtimeSnapshot.contentHash],
+            ["Published", formatDateTime(runtimeSnapshot.publishedAt, timezone)],
+            ["Published by", runtimeSnapshot.publishedBy],
+            ["Gateway instance", runtimeSnapshot.gatewayInstanceId],
+            ["Legacy config hash", runtimeSnapshot.legacyHashes.configHash],
+            ["Legacy security policy hash", runtimeSnapshot.legacyHashes.securityPolicyHash],
+            ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash],
             ["Request body hash", record.requestBodyHash],
             ["Cache key hash", nullableText(record.cacheKeyHash, "none")]
           ]}

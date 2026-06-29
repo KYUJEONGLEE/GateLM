@@ -13,6 +13,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
@@ -154,28 +155,46 @@ type budgetScopeBreakdownResponse struct {
 	CostUSD         string `json:"costUsd"`
 }
 
+type runtimeSnapshotProvenanceResponse struct {
+	RuntimeSnapshotID      string                       `json:"runtimeSnapshotId"`
+	RuntimeSnapshotVersion int                          `json:"runtimeSnapshotVersion"`
+	ContentHash            string                       `json:"contentHash"`
+	RuntimeState           string                       `json:"runtimeState"`
+	PublishedAt            time.Time                    `json:"publishedAt"`
+	PublishedBy            string                       `json:"publishedBy"`
+	GatewayInstanceID      string                       `json:"gatewayInstanceId"`
+	LegacyHashes           *legacyRuntimeHashesResponse `json:"legacyHashes,omitempty"`
+}
+
+type legacyRuntimeHashesResponse struct {
+	ConfigHash         string `json:"configHash"`
+	SecurityPolicyHash string `json:"securityPolicyHash"`
+	RoutingPolicyHash  string `json:"routingPolicyHash"`
+}
+
 type requestDetailDataResponse struct {
-	RequestID      string              `json:"requestId"`
-	TraceID        string              `json:"traceId"`
-	TenantID       string              `json:"tenantId"`
-	ProjectID      string              `json:"projectId"`
-	ApplicationID  *string             `json:"applicationId"`
-	BudgetScope    budgetScopeResponse `json:"budgetScope"`
-	Status         string              `json:"status"`
-	HTTPStatus     int                 `json:"httpStatus"`
-	Provider       string              `json:"provider"`
-	Model          string              `json:"model"`
-	RequestedModel string              `json:"requestedModel"`
-	SelectedModel  string              `json:"selectedModel"`
-	Usage          usageResponse       `json:"usage"`
-	Cost           costResponse        `json:"cost"`
-	Latency        latencyResponse     `json:"latency"`
-	Cache          cacheResponse       `json:"cache"`
-	Routing        routingResponse     `json:"routing"`
-	Masking        maskingResponse     `json:"masking"`
-	Error          detailErrorResponse `json:"error"`
-	CreatedAt      time.Time           `json:"createdAt"`
-	CompletedAt    *time.Time          `json:"completedAt"`
+	RequestID       string                             `json:"requestId"`
+	TraceID         string                             `json:"traceId"`
+	TenantID        string                             `json:"tenantId"`
+	ProjectID       string                             `json:"projectId"`
+	ApplicationID   *string                            `json:"applicationId"`
+	BudgetScope     budgetScopeResponse                `json:"budgetScope"`
+	RuntimeSnapshot *runtimeSnapshotProvenanceResponse `json:"runtimeSnapshot"`
+	Status          string                             `json:"status"`
+	HTTPStatus      int                                `json:"httpStatus"`
+	Provider        string                             `json:"provider"`
+	Model           string                             `json:"model"`
+	RequestedModel  string                             `json:"requestedModel"`
+	SelectedModel   string                             `json:"selectedModel"`
+	Usage           usageResponse                      `json:"usage"`
+	Cost            costResponse                       `json:"cost"`
+	Latency         latencyResponse                    `json:"latency"`
+	Cache           cacheResponse                      `json:"cache"`
+	Routing         routingResponse                    `json:"routing"`
+	Masking         maskingResponse                    `json:"masking"`
+	Error           detailErrorResponse                `json:"error"`
+	CreatedAt       time.Time                          `json:"createdAt"`
+	CompletedAt     *time.Time                         `json:"completedAt"`
 }
 
 type usageResponse struct {
@@ -430,18 +449,19 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 
 func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResponse {
 	return requestDetailDataResponse{
-		RequestID:      detail.RequestID,
-		TraceID:        detail.TraceID,
-		TenantID:       detail.TenantID,
-		ProjectID:      detail.ProjectID,
-		ApplicationID:  stringPointerOrNil(detail.ApplicationID),
-		BudgetScope:    budgetScopeResponseFromScope(detail.BudgetScope, detail.ApplicationID),
-		Status:         detail.Status,
-		HTTPStatus:     detail.HTTPStatus,
-		Provider:       detail.Provider,
-		Model:          detail.Model,
-		RequestedModel: detail.RequestedModel,
-		SelectedModel:  detail.SelectedModel,
+		RequestID:       detail.RequestID,
+		TraceID:         detail.TraceID,
+		TenantID:        detail.TenantID,
+		ProjectID:       detail.ProjectID,
+		ApplicationID:   stringPointerOrNil(detail.ApplicationID),
+		BudgetScope:     budgetScopeResponseFromScope(detail.BudgetScope, detail.ApplicationID),
+		RuntimeSnapshot: runtimeSnapshotResponse(detail.RuntimeSnapshot),
+		Status:          detail.Status,
+		HTTPStatus:      detail.HTTPStatus,
+		Provider:        detail.Provider,
+		Model:           detail.Model,
+		RequestedModel:  detail.RequestedModel,
+		SelectedModel:   detail.SelectedModel,
 		Usage: usageResponse{
 			PromptTokens:     detail.Usage.PromptTokens,
 			CompletionTokens: detail.Usage.CompletionTokens,
@@ -582,6 +602,30 @@ func budgetScopeResponseFromScope(scope budget.Scope, applicationID string) budg
 		BudgetScopeID:   normalized.ID,
 		ResolvedBy:      normalized.ResolvedBy,
 	}
+}
+
+func runtimeSnapshotResponse(snapshot *runtimeconfig.RuntimeSnapshotProvenance) *runtimeSnapshotProvenanceResponse {
+	if snapshot == nil || snapshot.IsZero() {
+		return nil
+	}
+	normalized := snapshot.Normalize(runtimeconfig.ActiveConfig{}, time.Time{}, runtimeconfig.DefaultGatewayInstanceIDCompat)
+	response := &runtimeSnapshotProvenanceResponse{
+		RuntimeSnapshotID:      normalized.RuntimeSnapshotID,
+		RuntimeSnapshotVersion: normalized.RuntimeSnapshotVersion,
+		ContentHash:            normalized.ContentHash,
+		RuntimeState:           normalized.RuntimeState,
+		PublishedAt:            normalized.PublishedAt,
+		PublishedBy:            normalized.PublishedBy,
+		GatewayInstanceID:      normalized.GatewayInstanceID,
+	}
+	if !normalized.LegacyHashes.IsZero() {
+		response.LegacyHashes = &legacyRuntimeHashesResponse{
+			ConfigHash:         normalized.LegacyHashes.ConfigHash,
+			SecurityPolicyHash: normalized.LegacyHashes.SecurityPolicyHash,
+			RoutingPolicyHash:  normalized.LegacyHashes.RoutingPolicyHash,
+		}
+	}
+	return response
 }
 
 func copyInt64Map(values map[string]int64) map[string]int64 {

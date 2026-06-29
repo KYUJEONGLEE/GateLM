@@ -154,9 +154,20 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     completedAt,
     metadata: {
       runtime: {
-        configHash: "live-gateway",
-        securityPolicyHash: "live-gateway",
-        routingPolicyHash: "live-gateway"
+        runtimeSnapshot: {
+          runtimeSnapshotId: "runtime_snapshot_live_gateway",
+          runtimeSnapshotVersion: 1,
+          contentHash: "live-gateway",
+          runtimeState: "snapshot_active",
+          publishedAt: createdAt,
+          publishedBy: "runtime_config_compat",
+          gatewayInstanceId: "gateway_web_live",
+          legacyHashes: {
+            configHash: "live-gateway",
+            securityPolicyHash: "live-gateway",
+            routingPolicyHash: "live-gateway"
+          }
+        }
       }
     }
   };
