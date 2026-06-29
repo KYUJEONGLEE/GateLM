@@ -10,7 +10,7 @@ v2.0.0 extends the v1.0.0 baseline into an organization-based LLMOps Gateway MVP
 Customer App / Employee Chat
 -> Gateway
 -> RuntimeSnapshot policy
--> safety / budget / cache / routing
+-> budget / safety / cache / routing
 -> Actual Provider or Mock fallback
 -> Request Log / Detail / Dashboard / Metrics / k6 evidence
 ```

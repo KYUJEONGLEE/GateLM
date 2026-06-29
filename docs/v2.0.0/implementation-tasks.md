@@ -78,7 +78,7 @@ Likely files:
 Tasks:
 
 - Ensure exact cache hit maps to `success + cache.hit + provider.not_called`.
-- Ensure provider fallback success maps to `success + provider.timeout/error + fallback.success`.
+- Ensure provider fallback success maps to `success + provider.timeout + fallback.success` or `success + provider.error + fallback.success`.
 - Ensure auth failure maps to `blocked` with HTTP 401/403 error code.
 - Ensure Observability does not infer stage outcomes from legacy status.
 - Ensure metrics status labels use canonical terminal status only.
@@ -161,8 +161,9 @@ Tasks:
 - Lookup by `tenantId/projectId/applicationId`.
 - Keep `budgetScopeType/budgetScopeId` out of lookup key.
 - Record provenance: `runtimeSnapshotId/runtimeSnapshotVersion/contentHash/runtimeState/publishedAt/publishedBy/gatewayInstanceId`.
-- Implement publish/reload failure behavior with last loaded snapshot when contractually allowed.
+- Implement load/reload failure behavior with last loaded snapshot when contractually allowed.
 - Keep `legacyHashes` as compatibility bridge only.
+- Treat missing required `credentialRef` or provider credential binding as a distinct validation failure during RuntimeSnapshot publish validation.
 
 Verification:
 

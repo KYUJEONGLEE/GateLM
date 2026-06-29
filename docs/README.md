@@ -61,7 +61,7 @@ v2.0.0 목표는 v1.0.0 baseline을 깨지 않으면서 조직 기반 LLMOps Gat
 Customer App / Employee Chat
 -> Gateway
 -> RuntimeSnapshot policy
--> safety / budget / cache / routing
+-> budget / safety / cache / routing
 -> Actual Provider or Mock fallback
 -> Request Log / Detail / Dashboard / Metrics / k6 evidence
 ```
