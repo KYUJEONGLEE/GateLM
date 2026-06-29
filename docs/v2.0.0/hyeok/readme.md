@@ -124,3 +124,14 @@ validationResult
 - 일부 Gateway만 reload 성공했을 때 Web/Observability에 어떻게 표시할지
 - `policyVersion`, `configHash`, `contentHash` 중 무엇을 최소 provenance로 둘지
 - P0 legacy field cleanup에서 기존 `configHash`, `securityPolicyHash`, `routingPolicyHash`를 어떻게 v2 provenance로 연결할지
+
+## 11. 2차 반영 - Gateway/Safety 의존성
+
+지섭님과 윤지님 의견을 반영하면, Control Plane이 가장 먼저 좁혀야 할 계약은 아래입니다.
+
+- active snapshot lookup key 기준: `tenant/project/application`만 볼지, `budgetScope`까지 포함할지
+- `last_known_safe`가 Gateway runtime 상태이며 Safety 판단 provenance에도 연결된다는 점
+- RuntimeSnapshot 안의 safety policy는 full raw rule dump가 아니라 Gateway/Safety가 검증 가능한 최소 후보 shape로 제공
+- 기존 `configHash`, `securityPolicyHash`, `routingPolicyHash`를 v2 `RuntimeSnapshot` provenance와 어떻게 이어갈지
+
+이 항목들은 contracts.md에서 공식 field로 확정하기 전까지 모두 계약 후보로만 둡니다.
