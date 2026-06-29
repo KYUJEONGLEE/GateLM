@@ -62,7 +62,10 @@ type RequestContext struct {
 	Model             string
 	ProviderLatencyMs int64
 	ProviderOutcome   string
+	ProviderSanitizedErrorCode string
 	FallbackOutcome   string
+	FallbackProvider  string
+	FallbackReason    string
 
 	PromptTokens      int
 	CompletionTokens  int

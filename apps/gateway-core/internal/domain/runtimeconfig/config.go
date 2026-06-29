@@ -15,6 +15,14 @@ const (
 	StatusActive       = "active"
 
 	CacheTypeExact = "exact"
+	SemanticCacheModeEvidenceOnly = "evidence_only"
+	SemanticCacheModeDisabled = "disabled"
+
+	SafetyModeEnforce = "enforce"
+	SafetyModeDisabled = "disabled"
+	SafetyActionAllow = "allow"
+	SafetyActionRedact = "redact"
+	SafetyActionBlock = "block"
 
 	RuntimeStateSnapshotActive     = "snapshot_active"
 	RuntimeStateLastKnownSafeUsed  = "last_known_safe_used"
@@ -29,6 +37,10 @@ var (
 	ErrMissingCredentialBinding = errors.New("runtime config credential binding is missing")
 	ErrInactiveConfig           = errors.New("runtime config is not active")
 	ErrMissingRuntimeHash       = errors.New("runtime config hash is missing")
+	ErrEditableRuntimeConfig    = errors.New("editable runtime config is not executable")
+	ErrMissingRuntimeSnapshot   = errors.New("published runtime snapshot provenance is missing")
+	ErrInvalidSafetyPolicy      = errors.New("runtime snapshot safety policy is invalid")
+	ErrInvalidCachePolicy       = errors.New("runtime snapshot cache policy is invalid")
 )
 
 type Provider interface {
@@ -39,6 +51,7 @@ type ActiveConfig struct {
 	ConfigVersion string
 	ConfigHash    string
 	PublishState  string
+	PublishedRuntimeSnapshot bool
 	Snapshot      RuntimeSnapshotProvenance
 
 	TenantID          string
@@ -77,6 +90,16 @@ type LegacyHashes struct {
 
 type SafetyPolicy struct {
 	SecurityPolicyHash string
+	Enabled            bool
+	Mode               string
+	RequestSideRequired bool
+	PolicyHash         string
+	DetectorSet        []SafetyDetector
+}
+
+type SafetyDetector struct {
+	DetectorType string
+	Action       string
 }
 
 type RoutingPolicy struct {
@@ -91,9 +114,10 @@ type RoutingPolicy struct {
 }
 
 type CachePolicy struct {
-	Enabled    bool
-	Type       string
-	TTLSeconds int
+	Enabled           bool
+	Type              string
+	TTLSeconds        int
+	SemanticCacheMode string
 }
 
 func (c ActiveConfig) Normalize() ActiveConfig {
@@ -112,6 +136,12 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.AppTokenStatus = strings.TrimSpace(c.AppTokenStatus)
 	c.RateLimit = ratelimit.NormalizeConfig(c.RateLimit)
 	c.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(c.SafetyPolicy.SecurityPolicyHash)
+	c.SafetyPolicy.Mode = strings.TrimSpace(c.SafetyPolicy.Mode)
+	c.SafetyPolicy.PolicyHash = strings.TrimSpace(c.SafetyPolicy.PolicyHash)
+	for index := range c.SafetyPolicy.DetectorSet {
+		c.SafetyPolicy.DetectorSet[index].DetectorType = strings.TrimSpace(c.SafetyPolicy.DetectorSet[index].DetectorType)
+		c.SafetyPolicy.DetectorSet[index].Action = strings.TrimSpace(c.SafetyPolicy.DetectorSet[index].Action)
+	}
 	c.RoutingPolicy.DefaultProvider = strings.TrimSpace(c.RoutingPolicy.DefaultProvider)
 	c.RoutingPolicy.DefaultModel = strings.TrimSpace(c.RoutingPolicy.DefaultModel)
 	c.RoutingPolicy.LowCostProvider = strings.TrimSpace(c.RoutingPolicy.LowCostProvider)
@@ -120,11 +150,15 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.RoutingPolicy.FallbackModel = strings.TrimSpace(c.RoutingPolicy.FallbackModel)
 	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
+	c.CachePolicy.SemanticCacheMode = strings.TrimSpace(c.CachePolicy.SemanticCacheMode)
 	return c
 }
 
 func (c ActiveConfig) ValidateActive() error {
 	c = c.Normalize()
+	if !c.PublishedRuntimeSnapshot {
+		return ErrEditableRuntimeConfig
+	}
 	if c.TenantID == "" || c.ProjectID == "" || c.ApplicationID == "" {
 		return ErrMissingScope
 	}
@@ -133,6 +167,15 @@ func (c ActiveConfig) ValidateActive() error {
 	}
 	if c.ConfigHash == "" || c.SafetyPolicy.SecurityPolicyHash == "" || c.RoutingPolicy.RoutingPolicyHash == "" {
 		return ErrMissingRuntimeHash
+	}
+	if c.Snapshot.RuntimeSnapshotID == "" || c.Snapshot.RuntimeSnapshotVersion <= 0 || c.Snapshot.ContentHash == "" {
+		return ErrMissingRuntimeSnapshot
+	}
+	if err := c.SafetyPolicy.Validate(); err != nil {
+		return err
+	}
+	if err := c.CachePolicy.Validate(); err != nil {
+		return err
 	}
 	if c.PublishState != PublishStateActive ||
 		c.TenantStatus != StatusActive ||
@@ -213,6 +256,60 @@ func (p RuntimeSnapshotProvenance) Normalize(config ActiveConfig, publishedAt ti
 	return p
 }
 
+func (p SafetyPolicy) Normalize() SafetyPolicy {
+	p.SecurityPolicyHash = strings.TrimSpace(p.SecurityPolicyHash)
+	p.Mode = strings.TrimSpace(p.Mode)
+	p.PolicyHash = strings.TrimSpace(p.PolicyHash)
+	for index := range p.DetectorSet {
+		p.DetectorSet[index].DetectorType = strings.TrimSpace(p.DetectorSet[index].DetectorType)
+		p.DetectorSet[index].Action = strings.TrimSpace(p.DetectorSet[index].Action)
+	}
+	if p.PolicyHash == "" {
+		p.PolicyHash = p.SecurityPolicyHash
+	}
+	return p
+}
+
+func (p SafetyPolicy) Validate() error {
+	p = p.Normalize()
+	if p.PolicyHash == "" || p.SecurityPolicyHash == "" {
+		return ErrMissingRuntimeHash
+	}
+	if p.Mode != SafetyModeEnforce && p.Mode != SafetyModeDisabled {
+		return ErrInvalidSafetyPolicy
+	}
+	if p.Enabled && p.Mode == SafetyModeDisabled {
+		return ErrInvalidSafetyPolicy
+	}
+	for _, detector := range p.DetectorSet {
+		if !isSanitizedLowCardinalityLabel(detector.DetectorType) {
+			return ErrInvalidSafetyPolicy
+		}
+		switch detector.Action {
+		case SafetyActionAllow, SafetyActionRedact, SafetyActionBlock:
+		default:
+			return ErrInvalidSafetyPolicy
+		}
+	}
+	return nil
+}
+
+func (p CachePolicy) Normalize() CachePolicy {
+	p.Type = strings.TrimSpace(p.Type)
+	p.SemanticCacheMode = strings.TrimSpace(p.SemanticCacheMode)
+	return p
+}
+
+func (p CachePolicy) Validate() error {
+	p = p.Normalize()
+	switch p.SemanticCacheMode {
+	case SemanticCacheModeEvidenceOnly, SemanticCacheModeDisabled:
+		return nil
+	default:
+		return ErrInvalidCachePolicy
+	}
+}
+
 func (p RuntimeSnapshotProvenance) Metadata() map[string]any {
 	metadata := map[string]any{
 		"runtimeSnapshotId":      p.RuntimeSnapshotID,
@@ -274,6 +371,23 @@ func IsActualRuntimeState(value string) bool {
 	default:
 		return false
 	}
+}
+
+func isSanitizedLowCardinalityLabel(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 80 {
+		return false
+	}
+	for index, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9' && index > 0:
+		case r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return value[0] >= 'a' && value[0] <= 'z'
 }
 
 func firstNonEmptyString(values ...string) string {

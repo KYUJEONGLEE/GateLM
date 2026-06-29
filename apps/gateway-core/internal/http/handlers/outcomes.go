@@ -64,8 +64,10 @@ func buildRequestOutcome(reqCtx *pipeline.RequestContext, requestLogWritten bool
 		CacheHitRequestID:          reqCtx.CacheHitRequestID,
 		ProviderOutcome:            reqCtx.ProviderOutcome,
 		ProviderLatencyMs:          providerLatency,
-		ProviderSanitizedErrorCode: providerErrorCodeForOutcome(reqCtx.ErrorCode),
+		ProviderSanitizedErrorCode: firstNonEmpty(reqCtx.ProviderSanitizedErrorCode, providerErrorCodeForOutcome(reqCtx.ErrorCode)),
 		FallbackOutcome:            reqCtx.FallbackOutcome,
+		FallbackProvider:           reqCtx.FallbackProvider,
+		FallbackReason:             reqCtx.FallbackReason,
 		StreamingRequested:         reqCtx.Stream,
 		RequestLogWritten:          requestLogWritten,
 	}

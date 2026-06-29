@@ -143,6 +143,13 @@ func demoActiveConfig() runtimeconfig.ActiveConfig {
 		ConfigVersion:     "runtime_config_demo",
 		ConfigHash:        "hash_runtime_config_demo",
 		PublishState:      runtimeconfig.PublishStateActive,
+		PublishedRuntimeSnapshot: true,
+		Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			RuntimeSnapshotID:      "runtime_snapshot_demo",
+			RuntimeSnapshotVersion: 1,
+			ContentHash:            "hash_runtime_config_demo",
+			RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+		},
 		TenantID:          "tenant_demo",
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         "project_demo",
@@ -162,6 +169,14 @@ func demoActiveConfig() runtimeconfig.ActiveConfig {
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_demo",
+			Enabled:            true,
+			Mode:               runtimeconfig.SafetyModeEnforce,
+			RequestSideRequired: true,
+			PolicyHash:         "hash_security_policy_demo",
+			DetectorSet: []runtimeconfig.SafetyDetector{
+				{DetectorType: "email", Action: runtimeconfig.SafetyActionRedact},
+				{DetectorType: "api_key", Action: runtimeconfig.SafetyActionBlock},
+			},
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
 			DefaultProvider:     "mock",
@@ -174,9 +189,10 @@ func demoActiveConfig() runtimeconfig.ActiveConfig {
 			RoutingPolicyHash:   "hash_routing_policy_demo",
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
-			Enabled:    true,
-			Type:       runtimeconfig.CacheTypeExact,
-			TTLSeconds: 3600,
+			Enabled:           true,
+			Type:              runtimeconfig.CacheTypeExact,
+			TTLSeconds:        3600,
+			SemanticCacheMode: runtimeconfig.SemanticCacheModeEvidenceOnly,
 		},
 	}
 }

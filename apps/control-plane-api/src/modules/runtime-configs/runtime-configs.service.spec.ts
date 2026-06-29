@@ -177,6 +177,38 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
+  it('rejects publish when selected provider credentialRef is missing', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, { secretRef: null });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+    const draft = await service.upsertDraft(applicationId, {
+      routingPolicy: {
+        defaultProvider: 'mock',
+        defaultModel: 'mock-balanced',
+      },
+    });
+
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(draft.runtimeConfig, {
+        id: draft.id,
+        publishState: RuntimeConfigPublishState.DRAFT,
+      }),
+    );
+    prisma.$transaction.mockImplementation((callback) =>
+      callback({ runtimeConfig: { updateMany: jest.fn(), create: jest.fn() } }),
+    );
+
+    await expect(
+      service.publishRuntimeConfig(applicationId, {
+        configVersion: 'runtime_config_missing_provider_credential',
+      }),
+    ).rejects.toThrow('Runtime Config provider credentialRef is required.');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('returns the active runtime config document directly', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -209,6 +241,30 @@ describe('RuntimeConfigsService', () => {
       where: { id: appTokenId },
     });
     expect(result).toEqual(activeDocument);
+  });
+
+  it('bridges legacy provider secretRef before active runtime validation', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    activeDocument.providers = activeDocument.providers.map((provider) => ({
+      ...provider,
+      credentialRef: null,
+    }));
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeConfig(applicationId);
+
+    expect(result.providers[0]?.credentialRef).toEqual({
+      credentialRefId: `provider_credential:${providerId}`,
+      credentialVersion: 1,
+      credentialState: 'active',
+    });
+    expect(result.providers[0]?.secretRef).toBe('secret/provider/mock');
   });
 
   it('rejects an active row when its stored document is not active', async () => {

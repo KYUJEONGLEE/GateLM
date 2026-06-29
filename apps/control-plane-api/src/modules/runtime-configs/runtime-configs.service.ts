@@ -45,9 +45,13 @@ const ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE =
 const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
   'secretHash',
   'plaintext',
+  'authorization',
   'authorizationHeader',
   'rawCredential',
+  'actualSecret',
   'rawProviderKey',
+  'rawProviderErrorBody',
+  'providerRawErrorBody',
   'apiKeySecret',
   'appTokenSecret',
   'providerKey',
@@ -79,7 +83,9 @@ export class RuntimeConfigsService {
       throw new NotFoundException('Active Runtime Config not found.');
     }
 
-    const document = this.toRuntimeConfigDocument(runtimeConfig.document);
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
     await this.assertRuntimeConfigExecutable({
       applicationId,
       runtimeConfig,
@@ -351,6 +357,9 @@ export class RuntimeConfigsService {
       hashing: this.resolveHashing(),
       costing: this.resolveCosting(),
     };
+    if (args.publishState === 'active') {
+      this.assertSelectedProviderCredentialRefs(documentWithoutHash);
+    }
 
     return {
       ...documentWithoutHash,
@@ -552,6 +561,7 @@ export class RuntimeConfigsService {
       document.routingPolicy.fallbackProvider,
       document.routingPolicy.fallbackModel,
     );
+    this.assertSelectedProviderCredentialRefs(document);
 
     if (
       document.rateLimit.scope !== 'application' ||
@@ -575,6 +585,33 @@ export class RuntimeConfigsService {
       throw new ConflictException(
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
       );
+    }
+  }
+
+  private assertSelectedProviderCredentialRefs(
+    document: ActiveRuntimeConfigResponseDto,
+  ): void {
+    const selectedProviderNames = new Set([
+      document.defaultProvider,
+      document.lowCostProvider,
+      document.fallbackProvider,
+      document.routingPolicy.defaultProvider,
+      document.routingPolicy.lowCostProvider,
+      document.routingPolicy.fallbackProvider,
+    ]);
+
+    for (const providerName of selectedProviderNames) {
+      const selectedProvider = document.providers.find(
+        (provider) => provider.provider === providerName,
+      );
+      if (
+        !selectedProvider ||
+        !this.isProviderCredentialRefShape(selectedProvider.credentialRef)
+      ) {
+        throw new ConflictException(
+          'Runtime Config provider credentialRef is required.',
+        );
+      }
     }
   }
 
@@ -649,6 +686,23 @@ export class RuntimeConfigsService {
       value.scopes.every((scope) => this.isNonEmptyString(scope)) &&
       (value.expiresAt === null || this.isNonEmptyString(value.expiresAt)) &&
       value.verification === 'prefix_then_hash_compare'
+    );
+  }
+
+  private isProviderCredentialRefShape(
+    value: unknown,
+  ): value is RuntimeConfigProviderDto['credentialRef'] {
+    if (!this.isRecord(value)) {
+      return false;
+    }
+    const credentialVersion = value.credentialVersion;
+
+    return (
+      this.isNonEmptyString(value.credentialRefId) &&
+      typeof credentialVersion === 'number' &&
+      Number.isInteger(credentialVersion) &&
+      credentialVersion > 0 &&
+      value.credentialState === 'active'
     );
   }
 

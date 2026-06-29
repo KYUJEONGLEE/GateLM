@@ -106,11 +106,75 @@ func TestActiveConfigValidateActiveRejectsInactiveCredentialStatus(t *testing.T)
 	}
 }
 
+func TestActiveConfigValidateActiveRejectsEditableRuntimeConfig(t *testing.T) {
+	config := testActiveConfig()
+	config.PublishedRuntimeSnapshot = false
+
+	err := config.ValidateActive()
+
+	if !errors.Is(err, ErrEditableRuntimeConfig) {
+		t.Fatalf("expected editable runtime config rejection, got %v", err)
+	}
+}
+
+func TestActiveConfigValidateActiveRejectsMissingRuntimeSnapshotProvenance(t *testing.T) {
+	config := testActiveConfig()
+	config.Snapshot = RuntimeSnapshotProvenance{}
+
+	err := config.ValidateActive()
+
+	if !errors.Is(err, ErrMissingRuntimeSnapshot) {
+		t.Fatalf("expected missing runtime snapshot provenance, got %v", err)
+	}
+}
+
+func TestActiveConfigValidateActiveRejectsRawDetectorTypeShape(t *testing.T) {
+	tests := []string{
+		"user@example.test",
+		"contains spaces",
+		"api key",
+		"SECRET_VALUE_ABC",
+	}
+
+	for _, detectorType := range tests {
+		t.Run(detectorType, func(t *testing.T) {
+			config := testActiveConfig()
+			config.SafetyPolicy.DetectorSet = []SafetyDetector{
+				{DetectorType: detectorType, Action: SafetyActionBlock},
+			}
+
+			err := config.ValidateActive()
+
+			if !errors.Is(err, ErrInvalidSafetyPolicy) {
+				t.Fatalf("expected invalid safety policy for %q, got %v", detectorType, err)
+			}
+		})
+	}
+}
+
+func TestActiveConfigValidateActiveRejectsSemanticCacheLiveMode(t *testing.T) {
+	config := testActiveConfig()
+	config.CachePolicy.SemanticCacheMode = "live"
+
+	err := config.ValidateActive()
+
+	if !errors.Is(err, ErrInvalidCachePolicy) {
+		t.Fatalf("expected invalid semantic cache policy, got %v", err)
+	}
+}
+
 func testActiveConfig() ActiveConfig {
 	return ActiveConfig{
 		ConfigVersion:     "runtime_config_test",
 		ConfigHash:        "hash_runtime_config_test",
 		PublishState:      PublishStateActive,
+		PublishedRuntimeSnapshot: true,
+		Snapshot: RuntimeSnapshotProvenance{
+			RuntimeSnapshotID:      "runtime_snapshot_test",
+			RuntimeSnapshotVersion: 1,
+			ContentHash:            "hash_runtime_config_test",
+			RuntimeState:           RuntimeStateSnapshotActive,
+		},
 		TenantID:          "tenant_demo",
 		TenantStatus:      StatusActive,
 		ProjectID:         "project_demo",
@@ -130,6 +194,14 @@ func testActiveConfig() ActiveConfig {
 		},
 		SafetyPolicy: SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",
+			Enabled:            true,
+			Mode:               SafetyModeEnforce,
+			RequestSideRequired: true,
+			PolicyHash:         "hash_security_policy_test",
+			DetectorSet: []SafetyDetector{
+				{DetectorType: "email", Action: SafetyActionRedact},
+				{DetectorType: "api_key", Action: SafetyActionBlock},
+			},
 		},
 		RoutingPolicy: RoutingPolicy{
 			DefaultProvider:     "mock",
@@ -142,9 +214,10 @@ func testActiveConfig() ActiveConfig {
 			RoutingPolicyHash:   "hash_routing_policy_test",
 		},
 		CachePolicy: CachePolicy{
-			Enabled:    true,
-			Type:       CacheTypeExact,
-			TTLSeconds: 3600,
+			Enabled:           true,
+			Type:              CacheTypeExact,
+			TTLSeconds:        3600,
+			SemanticCacheMode: SemanticCacheModeEvidenceOnly,
 		},
 	}
 }

@@ -265,32 +265,13 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	providerDuration := time.Since(providerStartedAt)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
-	if err != nil {
-		reqCtx.ProviderOutcome = outcome.ProviderError
-		reqCtx.FallbackOutcome = outcome.FallbackDisabled
-		h.recordProviderRequest(metrics.ProviderRequest{
-			SelectedProvider: reqCtx.SelectedProvider,
-			SelectedModel:    reqCtx.SelectedModel,
-			Status:           invocationlog.StatusFailed,
-			HTTPStatus:       http.StatusBadGateway,
-			ErrorCode:        "provider_error",
-			DurationSeconds:  providerDuration.Seconds(),
-		})
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_with_timeout_retry_fallback")
-		return
-	}
-	if providerResp == nil {
-		reqCtx.ProviderOutcome = outcome.ProviderError
-		reqCtx.FallbackOutcome = outcome.FallbackDisabled
-		h.recordProviderRequest(metrics.ProviderRequest{
-			SelectedProvider: reqCtx.SelectedProvider,
-			SelectedModel:    reqCtx.SelectedModel,
-			Status:           invocationlog.StatusFailed,
-			HTTPStatus:       http.StatusBadGateway,
-			ErrorCode:        "provider_error",
-			DurationSeconds:  providerDuration.Seconds(),
-		})
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
+	if err != nil || providerResp == nil {
+		if providerResp == nil && err == nil {
+			err = provider.NewFailure(provider.FailureKindError, 0, "chat_completion")
+		}
+		if h.handleProviderFailureWithFallback(w, r.Context(), reqCtx, chatReq, err, providerDuration, startedAt) {
+			return
+		}
 		return
 	}
 	h.recordProviderRequest(metrics.ProviderRequest{
@@ -323,6 +304,143 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func (h *ChatCompletionsHandler) handleProviderFailureWithFallback(w http.ResponseWriter, ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, providerErr error, providerDuration time.Duration, startedAt time.Time) bool {
+	failure := provider.ClassifyFailure(providerErr)
+	sanitizedCode := failure.SanitizedCode()
+	reqCtx.ProviderOutcome = providerOutcomeForFailure(failure)
+	reqCtx.ProviderSanitizedErrorCode = sanitizedCode
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		Status:           invocationlog.StatusFailed,
+		HTTPStatus:       httpStatusForProviderFailure(failure),
+		ErrorCode:        sanitizedCode,
+		DurationSeconds:  providerDuration.Seconds(),
+	})
+
+	fallbackProvider, fallbackModel, fallbackEnabled := fallbackRouteForRequest(reqCtx)
+	if fallbackEnabled && providerFailureAllowsFallback(failure) {
+		fallbackResp, fallbackDuration, fallbackErr := h.callFallbackProvider(ctx, reqCtx, chatReq, fallbackProvider, fallbackModel)
+		if fallbackErr == nil && fallbackResp != nil {
+			reqCtx.FallbackOutcome = outcome.FallbackSuccess
+			reqCtx.FallbackProvider = fallbackProvider
+			reqCtx.FallbackReason = sanitizedCode
+			reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+			reqCtx.TerminalStatus = outcome.TerminalStatusSuccess
+			reqCtx.Status = outcome.TerminalStatusSuccess
+			reqCtx.HTTPStatus = http.StatusOK
+			reqCtx.ErrorCode = ""
+			reqCtx.ErrorMessage = ""
+			reqCtx.ErrorStage = ""
+			if fallbackResp.Usage != nil {
+				reqCtx.PromptTokens = fallbackResp.Usage.PromptTokens
+				reqCtx.CompletionTokens = fallbackResp.Usage.CompletionTokens
+				reqCtx.TotalTokens = fallbackResp.Usage.TotalTokens
+			}
+			reqCtx.SavedCostMicroUSD = 0
+			if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
+				reqCtx.CacheStatus = cachestage.CacheStatusMiss
+				reqCtx.CacheType = cachestage.CacheTypeExact
+			}
+			h.recordProviderRequest(metrics.ProviderRequest{
+				SelectedProvider: fallbackProvider,
+				SelectedModel:    fallbackModel,
+				Status:           invocationlog.StatusSuccess,
+				HTTPStatus:       http.StatusOK,
+				ErrorCode:        "none",
+				DurationSeconds:  fallbackDuration.Seconds(),
+			})
+			attachGateLMMetadata(fallbackResp, reqCtx)
+			setGatewayHeaders(w, reqCtx)
+			writeJSON(w, http.StatusOK, fallbackResp)
+			return true
+		}
+		reqCtx.FallbackOutcome = outcome.FallbackFailed
+		reqCtx.FallbackProvider = fallbackProvider
+		reqCtx.FallbackReason = sanitizedCode
+		if fallbackErr != nil {
+			fallbackFailure := provider.ClassifyFailure(fallbackErr)
+			h.recordProviderRequest(metrics.ProviderRequest{
+				SelectedProvider: fallbackProvider,
+				SelectedModel:    fallbackModel,
+				Status:           invocationlog.StatusFailed,
+				HTTPStatus:       httpStatusForProviderFailure(fallbackFailure),
+				ErrorCode:        fallbackFailure.SanitizedCode(),
+				DurationSeconds:  fallbackDuration.Seconds(),
+			})
+		}
+	} else {
+		reqCtx.FallbackOutcome = outcome.FallbackDisabled
+	}
+
+	writeGatewayErrorWithContext(w, reqCtx, httpStatusForProviderFailure(failure), sanitizedCode, "Provider request failed.", "call_provider_with_timeout_retry_fallback")
+	return true
+}
+
+func (h *ChatCompletionsHandler) callFallbackProvider(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, fallbackProvider string, fallbackModel string) (*provider.ChatCompletionResponse, time.Duration, error) {
+	if h == nil || h.Providers == nil {
+		return nil, 0, provider.NewFailure(provider.FailureKindError, 0, "fallback_chat_completion")
+	}
+	adapter, err := h.Providers.Get(fallbackProvider)
+	if err != nil {
+		return nil, 0, provider.NewFailure(provider.FailureKindError, 0, "fallback_chat_completion")
+	}
+	fallbackReq := chatReq
+	fallbackReq.Model = fallbackModel
+	startedAt := time.Now()
+	resp, err := adapter.CreateChatCompletion(ctx, fallbackReq)
+	duration := time.Since(startedAt)
+	if err != nil {
+		return nil, duration, err
+	}
+	if resp == nil {
+		return nil, duration, provider.NewFailure(provider.FailureKindError, 0, "fallback_chat_completion")
+	}
+	if resp.Model == "" {
+		resp.Model = fallbackModel
+	}
+	return resp, duration, nil
+}
+
+func fallbackRouteForRequest(reqCtx *pipeline.RequestContext) (string, string, bool) {
+	if reqCtx == nil || !reqCtx.HasRuntimeRoutingPolicy {
+		return "", "", false
+	}
+	fallbackProvider := strings.TrimSpace(reqCtx.RuntimeRoutingPolicy.FallbackProvider)
+	fallbackModel := strings.TrimSpace(reqCtx.RuntimeRoutingPolicy.FallbackModel)
+	if fallbackProvider == "" || fallbackModel == "" {
+		return "", "", false
+	}
+	if fallbackProvider == strings.TrimSpace(reqCtx.SelectedProvider) && fallbackModel == strings.TrimSpace(reqCtx.SelectedModel) {
+		return "", "", false
+	}
+	return fallbackProvider, fallbackModel, true
+}
+
+func providerFailureAllowsFallback(failure provider.ProviderError) bool {
+	return failure.Kind == provider.FailureKindTimeout || failure.Kind == provider.FailureKindError
+}
+
+func providerOutcomeForFailure(failure provider.ProviderError) string {
+	switch failure.Kind {
+	case provider.FailureKindTimeout:
+		return outcome.ProviderTimeout
+	case provider.FailureKindUnauthorized:
+		return outcome.ProviderUnauthorized
+	default:
+		return outcome.ProviderError
+	}
+}
+
+func httpStatusForProviderFailure(failure provider.ProviderError) int {
+	switch failure.Kind {
+	case provider.FailureKindTimeout:
+		return http.StatusGatewayTimeout
+	default:
+		return http.StatusBadGateway
+	}
 }
 
 func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {

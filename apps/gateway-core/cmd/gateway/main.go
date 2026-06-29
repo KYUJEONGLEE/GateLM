@@ -12,6 +12,7 @@ import (
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
@@ -34,6 +35,9 @@ func main() {
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	providers := provider.NewRegistry(cfg.DefaultProvider, mockAdapter)
+	if cfg.OpenAIAPIKey != "" {
+		providers.Register(openai.NewAdapter(cfg.OpenAIProviderName, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, providerHTTPClient))
+	}
 
 	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
 	if err != nil {
@@ -145,6 +149,14 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		ConfigVersion:     "runtime_config_v1_local_static",
 		ConfigHash:        cfg.RuntimeConfigHash,
 		PublishState:      runtimeconfig.PublishStateActive,
+		PublishedRuntimeSnapshot: true,
+		Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			RuntimeSnapshotID:      "runtime_snapshot_local_static",
+			RuntimeSnapshotVersion: 1,
+			ContentHash:            cfg.RuntimeConfigHash,
+			RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+			PublishedBy:            runtimeconfig.DefaultPublishedByCompat,
+		},
 		TenantID:          cfg.DemoTenantID,
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         cfg.DemoProjectID,
@@ -164,6 +176,15 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: cfg.SecurityPolicyHash,
+			Enabled:            true,
+			Mode:               runtimeconfig.SafetyModeEnforce,
+			RequestSideRequired: true,
+			PolicyHash:         cfg.SecurityPolicyHash,
+			DetectorSet: []runtimeconfig.SafetyDetector{
+				{DetectorType: "email", Action: runtimeconfig.SafetyActionRedact},
+				{DetectorType: "phone_number", Action: runtimeconfig.SafetyActionRedact},
+				{DetectorType: "api_key", Action: runtimeconfig.SafetyActionBlock},
+			},
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
 			DefaultProvider:     cfg.DefaultProvider,
@@ -176,9 +197,10 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			RoutingPolicyHash:   cfg.RoutingPolicyHash,
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
-			Enabled:    true,
-			Type:       runtimeconfig.CacheTypeExact,
-			TTLSeconds: int(cfg.ExactCacheTTL.Seconds()),
+			Enabled:           true,
+			Type:              runtimeconfig.CacheTypeExact,
+			TTLSeconds:        int(cfg.ExactCacheTTL.Seconds()),
+			SemanticCacheMode: runtimeconfig.SemanticCacheModeEvidenceOnly,
 		},
 	}
 }

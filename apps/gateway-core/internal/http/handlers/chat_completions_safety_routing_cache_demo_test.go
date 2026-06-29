@@ -22,9 +22,10 @@ import (
 
 func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	demo := newPhase3DemoHarness(t, runtimeconfig.CachePolicy{
-		Enabled:    true,
-		Type:       runtimeconfig.CacheTypeExact,
-		TTLSeconds: 600,
+		Enabled:           true,
+		Type:              runtimeconfig.CacheTypeExact,
+		TTLSeconds:        600,
+		SemanticCacheMode: runtimeconfig.SemanticCacheModeEvidenceOnly,
 	})
 
 	safePrompt := "Write a short safe refund response."
@@ -158,9 +159,10 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 
 func TestChatCompletionsHandlerBypassesExactCacheWhenRuntimeCachePolicyDisabled(t *testing.T) {
 	demo := newPhase3DemoHarness(t, runtimeconfig.CachePolicy{
-		Enabled:    false,
-		Type:       runtimeconfig.CacheTypeExact,
-		TTLSeconds: 600,
+		Enabled:           false,
+		Type:              runtimeconfig.CacheTypeExact,
+		TTLSeconds:        600,
+		SemanticCacheMode: runtimeconfig.SemanticCacheModeDisabled,
 	})
 
 	rr := demo.exercise(t, "request_v1_phase3_cache_disabled_001", "Write a short safe response.")
@@ -207,8 +209,9 @@ func TestExactCachePolicyAllowsLookupHandlesNilAndLegacyContext(t *testing.T) {
 	})
 	disabledReqCtx.HasRuntimeCachePolicy = true
 	disabledReqCtx.RuntimeCachePolicy = runtimeconfig.CachePolicy{
-		Enabled: false,
-		Type:    runtimeconfig.CacheTypeExact,
+		Enabled:           false,
+		Type:              runtimeconfig.CacheTypeExact,
+		SemanticCacheMode: runtimeconfig.SemanticCacheModeDisabled,
 	}
 	if exactCachePolicyAllowsLookup(disabledReqCtx) {
 		t.Fatal("disabled runtime exact cache policy must not allow lookup")
@@ -247,6 +250,13 @@ func newPhase3DemoHarness(t *testing.T, cachePolicy runtimeconfig.CachePolicy) p
 			ConfigVersion:     "runtime_config_phase3_demo",
 			ConfigHash:        "hash_runtime_config_phase3_demo",
 			PublishState:      runtimeconfig.PublishStateActive,
+			PublishedRuntimeSnapshot: true,
+			Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+				RuntimeSnapshotID:      "runtime_snapshot_phase3_demo",
+				RuntimeSnapshotVersion: 1,
+				ContentHash:            "hash_runtime_config_phase3_demo",
+				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+			},
 			TenantID:          testTenantID,
 			TenantStatus:      runtimeconfig.StatusActive,
 			ProjectID:         testProjectID,
@@ -259,6 +269,14 @@ func newPhase3DemoHarness(t *testing.T, cachePolicy runtimeconfig.CachePolicy) p
 			AppTokenStatus:    runtimeconfig.StatusActive,
 			SafetyPolicy: runtimeconfig.SafetyPolicy{
 				SecurityPolicyHash: "hash_security_policy_phase3_demo",
+				Enabled:            true,
+				Mode:               runtimeconfig.SafetyModeEnforce,
+				RequestSideRequired: true,
+				PolicyHash:         "hash_security_policy_phase3_demo",
+				DetectorSet: []runtimeconfig.SafetyDetector{
+					{DetectorType: "email", Action: runtimeconfig.SafetyActionRedact},
+					{DetectorType: "api_key", Action: runtimeconfig.SafetyActionBlock},
+				},
 			},
 			RoutingPolicy: runtimeconfig.RoutingPolicy{
 				DefaultProvider:     "mock",

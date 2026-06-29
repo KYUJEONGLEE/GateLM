@@ -17,8 +17,10 @@ import (
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
@@ -441,6 +443,182 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 	if logged.ProviderLatencyMs == nil {
 		t.Fatalf("provider error after adapter call must include provider latency: %+v", logged)
+	}
+}
+
+func TestChatCompletionsHandlerUsesMockFallbackForProviderTimeout(t *testing.T) {
+	primaryCalls := 0
+	fallbackCalls := 0
+	logWriter := &recordingTerminalLogWriter{}
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "primary"
+			gatewayCtx.Routing.SelectedModel = "primary-chat"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+			gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.RoutingPolicy{
+				DefaultProvider:     "primary",
+				DefaultModel:        "primary-chat",
+				FallbackProvider:    "mock",
+				FallbackModel:       "mock-fallback-chat",
+				RoutingPolicyHash:   "hash_routing_policy_test",
+				ShortPromptMaxChars: 300,
+			}
+			gatewayCtx.Runtime.HasRoutingPolicy = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("primary",
+			failingProviderAdapter{
+				name:  "primary",
+				calls: &primaryCalls,
+				err:   provider.NewFailure(provider.FailureKindTimeout, http.StatusGatewayTimeout, "chat_completion"),
+			},
+			namedProviderAdapter{
+				name:  "mock",
+				model: "mock-fallback-chat",
+				calls: &fallbackCalls,
+			},
+		),
+		DefaultModel:         "primary-chat",
+		DefaultProvider:      "primary",
+		PreProviderPipeline:  preflight,
+		TerminalLogWriter:    logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "Write a short refund response."}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected fallback success 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primaryCalls != 1 || fallbackCalls != 1 {
+		t.Fatalf("expected one primary and one fallback call, got primary=%d fallback=%d", primaryCalls, fallbackCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.TerminalStatus != outcome.TerminalStatusSuccess || logged.HTTPStatus != http.StatusOK || logged.ErrorCode != "" {
+		t.Fatalf("fallback success must be a clean user success, got %+v", logged)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != outcome.ProviderTimeout ||
+		logged.DomainOutcomes.Provider.SanitizedErrorCode == nil ||
+		*logged.DomainOutcomes.Provider.SanitizedErrorCode != "provider_timeout" {
+		t.Fatalf("provider timeout outcome not preserved: %+v", logged.DomainOutcomes.Provider)
+	}
+	if logged.DomainOutcomes.Fallback.Outcome != outcome.FallbackSuccess ||
+		logged.DomainOutcomes.Fallback.FallbackProvider == nil ||
+		*logged.DomainOutcomes.Fallback.FallbackProvider != "mock" {
+		t.Fatalf("fallback success outcome not recorded: %+v", logged.DomainOutcomes.Fallback)
+	}
+	if logged.DomainOutcomes.Safety.Outcome == outcome.SafetyBlocked {
+		t.Fatalf("provider fallback must not be confused with safety block: %+v", logged.DomainOutcomes.Safety)
+	}
+}
+
+func TestChatCompletionsHandlerDoesNotFallbackForProviderUnauthorized(t *testing.T) {
+	primaryCalls := 0
+	fallbackCalls := 0
+	logWriter := &recordingTerminalLogWriter{}
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "primary"
+			gatewayCtx.Routing.SelectedModel = "primary-chat"
+			gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.RoutingPolicy{
+				FallbackProvider:  "mock",
+				FallbackModel:     "mock-fallback-chat",
+				RoutingPolicyHash: "hash_routing_policy_test",
+			}
+			gatewayCtx.Runtime.HasRoutingPolicy = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("primary",
+			failingProviderAdapter{
+				name:  "primary",
+				calls: &primaryCalls,
+				err:   provider.NewFailure(provider.FailureKindUnauthorized, http.StatusUnauthorized, "chat_completion"),
+			},
+			namedProviderAdapter{name: "mock", model: "mock-fallback-chat", calls: &fallbackCalls},
+		),
+		DefaultModel:        "primary-chat",
+		DefaultProvider:     "primary",
+		PreProviderPipeline: preflight,
+		TerminalLogWriter:   logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("expected provider unauthorized to fail safely, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primaryCalls != 1 || fallbackCalls != 0 {
+		t.Fatalf("unauthorized provider failure must not call fallback, got primary=%d fallback=%d", primaryCalls, fallbackCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.DomainOutcomes.Provider.Outcome != outcome.ProviderUnauthorized ||
+		logged.DomainOutcomes.Fallback.Outcome != outcome.FallbackDisabled ||
+		logged.DomainOutcomes.Safety.Outcome == outcome.SafetyBlocked {
+		t.Fatalf("unexpected unauthorized provider outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerDoesNotExposeRawProviderErrorBody(t *testing.T) {
+	rawProviderBody := `{"error":"provider raw detail should stay hidden"}`
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("primary", failingProviderAdapter{
+			name: "primary",
+			err:  errors.New(rawProviderBody),
+		}),
+		DefaultModel:       "primary-chat",
+		DefaultProvider:    "primary",
+		TerminalLogWriter:  logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("expected provider failure, got %d: %s", rr.Code, rr.Body.String())
+	}
+	payload := rr.Body.String()
+	if strings.Contains(payload, "provider raw detail") || strings.Contains(payload, rawProviderBody) {
+		t.Fatalf("raw provider error body leaked in API response: %s", payload)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	serializedLog, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal log: %v", err)
+	}
+	if strings.Contains(string(serializedLog), "provider raw detail") || strings.Contains(string(serializedLog), rawProviderBody) {
+		t.Fatalf("raw provider error body leaked in log: %s", string(serializedLog))
+	}
+	if logged.DomainOutcomes.Provider.SanitizedErrorCode == nil ||
+		*logged.DomainOutcomes.Provider.SanitizedErrorCode != "provider_error" {
+		t.Fatalf("expected sanitized provider error code, got %+v", logged.DomainOutcomes.Provider)
 	}
 }
 
@@ -2002,6 +2180,72 @@ func (a recordingProviderAdapter) CreateChatCompletion(ctx context.Context, req 
 			PromptTokens:     4,
 			CompletionTokens: 3,
 			TotalTokens:      7,
+		},
+	}, nil
+}
+
+type failingProviderAdapter struct {
+	name  string
+	calls *int
+	err   error
+}
+
+func (a failingProviderAdapter) Name() string {
+	return a.name
+}
+
+func (a failingProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a failingProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	if a.calls != nil {
+		(*a.calls)++
+	}
+	return nil, a.err
+}
+
+type namedProviderAdapter struct {
+	name  string
+	model string
+	calls *int
+}
+
+func (a namedProviderAdapter) Name() string {
+	return a.name
+}
+
+func (a namedProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a namedProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	if a.calls != nil {
+		(*a.calls)++
+	}
+	model := a.model
+	if model == "" {
+		model = req.Model
+	}
+	return &provider.ChatCompletionResponse{
+		ID:      "chatcmpl_named_provider",
+		Object:  "chat.completion",
+		Created: 1782108000,
+		Model:   model,
+		Choices: []provider.ChatChoice{
+			{
+				Index: 0,
+				Message: provider.ChatMessage{
+					Role:    "assistant",
+					Content: json.RawMessage(`"Fallback response"`),
+				},
+				FinishReason: "stop",
+			},
+		},
+		Usage: &provider.Usage{
+			PromptTokens:     2,
+			CompletionTokens: 3,
+			TotalTokens:      5,
 		},
 	}, nil
 }

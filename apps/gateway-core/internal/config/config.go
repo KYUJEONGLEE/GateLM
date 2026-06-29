@@ -12,6 +12,9 @@ type Config struct {
 	DatabaseURL         string
 	RedisURL            string
 	MockProviderBaseURL string
+	OpenAIProviderName  string
+	OpenAIBaseURL       string
+	OpenAIAPIKey        string
 	DefaultProvider     string
 	DefaultModel        string
 	LowCostModel        string
@@ -44,6 +47,9 @@ func Load() Config {
 		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
 		RedisURL:            envString("REDIS_URL", "redis://localhost:6379"),
 		MockProviderBaseURL: envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
+		OpenAIProviderName:  envString("GATEWAY_OPENAI_PROVIDER_NAME", "openai"),
+		OpenAIBaseURL:       envString("GATEWAY_OPENAI_BASE_URL", "https://api.openai.com"),
+		OpenAIAPIKey:        envString("GATEWAY_OPENAI_API_KEY", ""),
 		DefaultProvider:     envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
 		DefaultModel:        envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
 		LowCostModel:        envString("GATEWAY_LOW_COST_MODEL", "mock-fast"),

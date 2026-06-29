@@ -238,6 +238,13 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 		ConfigVersion:     "runtime_config_v1_readiness",
 		ConfigHash:        cfg.RuntimeConfigHash,
 		PublishState:      runtimeconfig.PublishStateActive,
+		PublishedRuntimeSnapshot: true,
+		Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			RuntimeSnapshotID:      "runtime_snapshot_v1_readiness",
+			RuntimeSnapshotVersion: 1,
+			ContentHash:            cfg.RuntimeConfigHash,
+			RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+		},
 		TenantID:          cfg.DemoTenantID,
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         cfg.DemoProjectID,
@@ -257,6 +264,14 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: cfg.SecurityPolicyHash,
+			Enabled:            true,
+			Mode:               runtimeconfig.SafetyModeEnforce,
+			RequestSideRequired: true,
+			PolicyHash:         cfg.SecurityPolicyHash,
+			DetectorSet: []runtimeconfig.SafetyDetector{
+				{DetectorType: "email", Action: runtimeconfig.SafetyActionRedact},
+				{DetectorType: "api_key", Action: runtimeconfig.SafetyActionBlock},
+			},
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
 			DefaultProvider:     "mock",
@@ -269,9 +284,10 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 			RoutingPolicyHash:   cfg.RoutingPolicyHash,
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
-			Enabled:    true,
-			Type:       runtimeconfig.CacheTypeExact,
-			TTLSeconds: 600,
+			Enabled:           true,
+			Type:              runtimeconfig.CacheTypeExact,
+			TTLSeconds:        600,
+			SemanticCacheMode: runtimeconfig.SemanticCacheModeEvidenceOnly,
 		},
 	})
 	rateLimitPipeline := pipeline.New(

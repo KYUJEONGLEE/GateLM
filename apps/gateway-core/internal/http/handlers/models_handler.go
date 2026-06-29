@@ -53,7 +53,8 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	models, err := adapter.ListModels(r.Context())
 	if err != nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_model_catalog")
+		failure := provider.ClassifyFailure(err)
+		writeGatewayErrorWithContext(w, reqCtx, httpStatusForProviderFailure(failure), failure.SanitizedCode(), "Provider request failed.", "call_provider_model_catalog")
 		return
 	}
 

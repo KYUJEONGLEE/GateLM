@@ -1,4 +1,4 @@
-package mock
+package openai
 
 import (
 	"bytes"
@@ -13,31 +13,51 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 )
 
+const defaultBaseURL = "https://api.openai.com"
+
 type Adapter struct {
+	name       string
 	baseURL    string
+	apiKey     string
 	httpClient *http.Client
 }
 
-func NewAdapter(baseURL string, httpClient *http.Client) *Adapter {
+func NewAdapter(name string, baseURL string, apiKey string, httpClient *http.Client) *Adapter {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "openai"
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
 	return &Adapter{
-		baseURL:    strings.TrimRight(baseURL, "/"),
+		name:       name,
+		baseURL:    baseURL,
+		apiKey:     strings.TrimSpace(apiKey),
 		httpClient: httpClient,
 	}
 }
 
 func (a *Adapter) Name() string {
-	return "mock"
+	if a == nil || strings.TrimSpace(a.name) == "" {
+		return "openai"
+	}
+	return a.name
 }
 
 func (a *Adapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+	if a == nil || a.apiKey == "" {
+		return nil, provider.NewFailure(provider.FailureKindUnauthorized, 0, "list_models")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+"/v1/models", nil)
 	if err != nil {
-		return nil, fmt.Errorf("build mock provider models request: %w", err)
+		return nil, fmt.Errorf("build openai provider models request: %w", err)
 	}
+	a.setHeaders(req)
 
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
@@ -51,22 +71,25 @@ func (a *Adapter) ListModels(ctx context.Context) (*provider.ModelListResponse, 
 
 	var models provider.ModelListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
-		return nil, fmt.Errorf("decode mock provider models response: %w", err)
+		return nil, fmt.Errorf("decode openai provider models response: %w", err)
 	}
-
 	return &models, nil
 }
 
 func (a *Adapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	if a == nil || a.apiKey == "" {
+		return nil, provider.NewFailure(provider.FailureKindUnauthorized, 0, "chat_completion")
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("encode mock provider chat request: %w", err)
+		return nil, fmt.Errorf("encode openai provider chat request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build mock provider chat request: %w", err)
+		return nil, fmt.Errorf("build openai provider chat request: %w", err)
 	}
+	a.setHeaders(httpReq)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-GateLM-Request-Id", req.RequestID)
 
@@ -82,10 +105,13 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, req provider.ChatCom
 
 	var completion provider.ChatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
-		return nil, fmt.Errorf("decode mock provider chat response: %w", err)
+		return nil, fmt.Errorf("decode openai provider chat response: %w", err)
 	}
-
 	return &completion, nil
+}
+
+func (a *Adapter) setHeaders(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 }
 
 func providerFailureFromTransport(err error, op string) provider.ProviderError {
