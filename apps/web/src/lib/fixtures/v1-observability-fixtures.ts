@@ -194,16 +194,17 @@ export function getInvocationRecord(requestId: string): InvocationLogRecord | un
 }
 
 function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
-	const status = normalizeInvocationStatus(record.status);
+	const status = normalizeLegacyBridgeStatus(record.status);
 	const budgetScope = normalizeBudgetScope(record.budgetScope, record.applicationId);
-	const runtime = normalizeRuntimeMetadata(record.metadata?.runtime, record.createdAt);
+	const runtime = normalizeRuntimeMetadataBridge(record.metadata?.runtime, record.createdAt);
 	if (status === record.status && budgetScope === record.budgetScope && runtime === record.metadata?.runtime) {
 		return record;
 	}
 	return { ...record, budgetScope, metadata: { runtime }, status };
 }
 
-function normalizeInvocationStatus(status: string): InvocationLogRecord["status"] {
+// v1 fixture compatibility bridge: legacy status values are normalized to v2 terminal status values.
+function normalizeLegacyBridgeStatus(status: string): InvocationLogRecord["status"] {
 	if (
 		status === "success" ||
 		status === "blocked" ||
@@ -232,7 +233,8 @@ function normalizeDashboardOverview(overview: DashboardOverview): DashboardOverv
 	};
 }
 
-function normalizeRuntimeMetadata(value: unknown, createdAt: string): RuntimeMetadata {
+// v1 fixture compatibility bridge: legacy runtime hashes stay under legacyHashes, not primary provenance.
+function normalizeRuntimeMetadataBridge(value: unknown, createdAt: string): RuntimeMetadata {
 	const runtime = toRecord(value);
 	const snapshot = toRecord(runtime.runtimeSnapshot);
 	const legacyHashes = normalizeLegacyHashes(snapshot.legacyHashes ?? runtime.legacyHashes ?? runtime);
@@ -241,7 +243,7 @@ function normalizeRuntimeMetadata(value: unknown, createdAt: string): RuntimeMet
 			runtimeSnapshotId: stringOr(snapshot.runtimeSnapshotId, "runtime_snapshot_compat"),
 			runtimeSnapshotVersion: integerOr(snapshot.runtimeSnapshotVersion, 1),
 			contentHash: stringOr(snapshot.contentHash, legacyHashes.configHash),
-			runtimeState: normalizeRuntimeState(snapshot.runtimeState),
+			runtimeState: normalizeActualRuntimeStateBridge(snapshot.runtimeState),
 			publishedAt: stringOr(snapshot.publishedAt, createdAt),
 			publishedBy: stringOr(snapshot.publishedBy, "runtime_config_compat"),
 			gatewayInstanceId: stringOr(snapshot.gatewayInstanceId, "gateway_web_compat"),
@@ -259,7 +261,7 @@ function normalizeLegacyHashes(value: unknown): LegacyRuntimeHashes {
 	};
 }
 
-function normalizeRuntimeState(value: unknown): RuntimeSnapshotState {
+function normalizeActualRuntimeStateBridge(value: unknown): RuntimeSnapshotState {
 	if (
 		value === "snapshot_active" ||
 		value === "last_known_safe_used" ||

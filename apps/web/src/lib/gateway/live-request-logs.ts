@@ -79,7 +79,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
   const requestId = item.requestId ?? "";
   const createdAt = item.createdAt ?? new Date().toISOString();
   const cacheStatus = item.cacheStatus ?? "bypass";
-  const status = normalizeStatus(item.status);
+  const status = normalizeLegacyBridgeStatus(item.status);
   const costMicroUsd = item.costMicroUsd ?? 0;
   const applicationId = item.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(item.budgetScope, applicationId);
@@ -178,7 +178,8 @@ function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, application
   };
 }
 
-function normalizeStatus(value: string | undefined): InvocationLogRecord["status"] {
+// Live Gateway list payloads may still carry legacy status names; normalize them for the v2-facing read model.
+function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRecord["status"] {
 	if (
 		value === "success" ||
 		value === "blocked" ||

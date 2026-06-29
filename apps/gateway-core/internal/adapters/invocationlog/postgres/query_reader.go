@@ -596,7 +596,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	if completedAt.Valid {
 		log.CompletedAt = &completedAt.Time
 	}
-	log.RuntimeSnapshot, err = decodeRuntimeSnapshotMetadata(metadataJSON, log.CreatedAt)
+	log.RuntimeSnapshot, err = decodeRuntimeSnapshotBridgeMetadata(metadataJSON, log.CreatedAt)
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
 	}
@@ -662,7 +662,9 @@ type runtimeSnapshotMetadataJSON struct {
 	LegacyHashes           runtimeconfig.LegacyHashes `json:"legacyHashes"`
 }
 
-func decodeRuntimeSnapshotMetadata(raw []byte, createdAt time.Time) (runtimeconfig.RuntimeSnapshotProvenance, error) {
+// decodeRuntimeSnapshotBridgeMetadata accepts v2 RuntimeSnapshot metadata plus v1 runtime hash metadata.
+// Legacy hash trio values stay under legacyHashes and are never promoted to primary provenance.
+func decodeRuntimeSnapshotBridgeMetadata(raw []byte, createdAt time.Time) (runtimeconfig.RuntimeSnapshotProvenance, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return runtimeconfig.RuntimeSnapshotProvenance{}, nil
 	}

@@ -87,7 +87,7 @@ export class RuntimeConfigsService {
       now: new Date(),
     });
 
-    return this.withProviderCredentialRefs(document);
+    return this.withProviderCredentialRefBridge(document);
   }
 
   async upsertDraft(
@@ -1134,7 +1134,8 @@ export class RuntimeConfigsService {
     };
   }
 
-  private withProviderCredentialRefs(
+  // Bridges legacy provider.secretRef into v2-facing credentialRef metadata without exposing credential material.
+  private withProviderCredentialRefBridge(
     document: ActiveRuntimeConfigResponseDto,
   ): ActiveRuntimeConfigResponseDto {
     return {

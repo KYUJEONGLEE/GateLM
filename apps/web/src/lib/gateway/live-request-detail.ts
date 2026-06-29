@@ -89,7 +89,7 @@ export async function getLiveGatewayRequestDetail(
 function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
   const createdAt = data.createdAt ?? new Date().toISOString();
   const completedAt = data.completedAt ?? createdAt;
-  const status = normalizeStatus(data.status);
+  const status = normalizeLegacyBridgeStatus(data.status);
   const cacheStatus = data.cache?.cacheStatus ?? "bypass";
   const maskingAction = data.masking?.maskingAction ?? "none";
   const applicationId = data.applicationId ?? "live_gateway_application";
@@ -189,7 +189,8 @@ function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, application
   };
 }
 
-function normalizeStatus(value: string | undefined): InvocationLogRecord["status"] {
+// Live Gateway detail payloads may still carry legacy status names; normalize them for the v2-facing read model.
+function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRecord["status"] {
 	if (
 		value === "success" ||
 		value === "blocked" ||
