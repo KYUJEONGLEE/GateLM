@@ -26,7 +26,7 @@ v2에서 Gateway가 특히 책임질 부분은 아래와 같다.
 - 실제 Provider 1종과 모델 2개 이상을 adapter 경계로 연결한다.
 - `model=auto` 요청을 Provider/Model catalog와 routing policy로 해석한다.
 - Mock Provider는 데모용 주 경로가 아니라 fallback/evidence 경로로 분리한다.
-- streaming thin slice를 지원하되, request-side safety는 Provider 호출 전에 끝낸다.
+- streaming thin slice를 지원하되, request-side safety는 cache/routing/provider/streaming start 전에 끝낸다.
 - raw prompt, raw response, API Key, App Token, Provider Key, Authorization header는 저장/로그/fixture에 남기지 않는다.
 
 ## 2. 내가 다른 역할에게 받아야 하는 계약
@@ -81,6 +81,7 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 - requestId/traceId 중심 Request Log/Detail mapping
 - `/metrics`로 노출 가능한 Gateway-owned metric evidence
 - local stack smoke와 demo smoke 실행 방법
+- safety block 시 provider call, cache write, streaming start가 모두 일어나지 않는다는 bypass evidence
 
 중요한 원칙:
 
@@ -137,7 +138,8 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 8. `budgetScopeType/budgetScopeId` resolve 규칙
 9. Employee Chat Gateway 호출 경계
 10. streaming thin slice 범위
-11. raw prompt/raw response 저장 금지 유지와 opt-in deferred 조건
+11. redaction 이후 cache/evidence 입력은 raw prompt가 아니라 normalized redacted prompt 계열만 쓴다는 원칙
+12. raw prompt/raw response 저장 금지 유지와 opt-in deferred 조건
 
 ## 8. 아직 공식 필드로 확정하면 안 되는 후보 용어
 
