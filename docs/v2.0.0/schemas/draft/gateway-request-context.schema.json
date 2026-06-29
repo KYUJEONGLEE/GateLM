@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/v2/draft/gateway-request-context.schema.json",
+  "title": "GateLM v2 Gateway Request Context Draft",
+  "description": "Draft schema for the sanitized Gateway in-memory request context produced after auth and runtime resolution. It must not contain raw prompt, raw response, raw credentials, Authorization header, provider keys, or actual secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "requestId",
+    "traceId",
+    "receivedAt",
+    "http",
+    "identity",
+    "budgetScope",
+    "runtimeSnapshot",
+    "requestedModel",
+    "requestBodyHash"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "gatelm.gateway-request-context.v2.draft",
+      "description": "Draft contract marker for schema/fixture alignment."
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Gateway request identifier. It is not allowed as a Prometheus metric label."
+    },
+    "traceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Trace identifier for request correlation. It is not allowed as a Prometheus metric label."
+    },
+    "receivedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Gateway receive timestamp."
+    },
+    "http": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "path",
+        "clientSurface"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clientSurface": {
+          "type": "string",
+          "enum": [
+            "customer_app",
+            "employee_chat",
+            "admin_console",
+            "demo_runner"
+          ],
+          "description": "Draft surface label. Employee Chat must still be inside the Application boundary."
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "projectId",
+        "applicationId"
+      ],
+      "properties": {
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "applicationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "teamId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional organization entity reference. It is not a Gateway core identity key."
+        }
+      }
+    },
+    "budgetScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budgetScopeType",
+        "budgetScopeId",
+        "resolvedBy"
+      ],
+      "properties": {
+        "budgetScopeType": {
+          "type": "string",
+          "enum": [
+            "application",
+            "project",
+            "team"
+          ]
+        },
+        "budgetScopeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Gateway must not trust client-provided budget scope."
+        },
+        "warningThresholdPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Draft optional admin-configured budget warning threshold."
+        }
+      }
+    },
+    "runtimeSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeSnapshotId",
+        "runtimeSnapshotVersion",
+        "contentHash",
+        "runtimeState",
+        "publishedAt",
+        "publishedBy",
+        "gatewayInstanceId",
+        "lookupKey"
+      ],
+      "properties": {
+        "runtimeSnapshotId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSnapshotVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "contentHash": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Synthetic or computed content hash. Do not put raw policy body here."
+        },
+        "runtimeState": {
+          "type": "string",
+          "enum": [
+            "snapshot_active",
+            "last_known_safe_used",
+            "stale_snapshot_used"
+          ]
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "publishedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gatewayInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lookupKey": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tenantId",
+            "projectId",
+            "applicationId"
+          ],
+          "properties": {
+            "tenantId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "projectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "applicationId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "RuntimeSnapshot lookup key. budgetScopeType/budgetScopeId must not be part of this key in v2.0.0."
+        },
+        "legacyHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "v1 hash lineage kept for P0 legacy cleanup alignment. Values are fingerprints only and must not reveal raw policy content.",
+          "properties": {
+            "configHash": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Draft compatibility hash carried forward from v1-style runtime evidence."
+            },
+            "securityPolicyHash": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Draft compatibility hash. Final naming may be changed during P0 legacy cleanup."
+            },
+            "routingPolicyHash": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Draft compatibility hash. Final naming may be changed during P0 legacy cleanup."
+            }
+          }
+        }
+      }
+    },
+    "requestedModel": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Requested model value such as auto or a catalog model id. Provider/Model must not be enum-fixed here."
+    },
+    "requestBodyHash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Sanitized request body hash. Do not use as a metrics label."
+    },
+    "promptHash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional sanitized prompt hash. Do not use as a metrics label and never include raw prompt."
+    }
+  }
+}

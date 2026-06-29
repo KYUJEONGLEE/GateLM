@@ -1,0 +1,78 @@
+{
+  "contractVersion": "gatelm.gateway-stage-outcomes.v2.draft",
+  "requestId": "req_v2_gateway_0001",
+  "traceId": "trace_v2_gateway_0001",
+  "completedAt": "2026-06-29T06:00:01Z",
+  "terminalStatus": "success",
+  "httpStatus": 200,
+  "errorCode": null,
+  "domainOutcomes": {
+    "auth": {
+      "outcome": "passed",
+      "httpStatus": 200,
+      "errorCode": null
+    },
+    "runtime": {
+      "outcome": "snapshot_active",
+      "runtimeSnapshotId": "runtime_snapshot_demo_001",
+      "runtimeSnapshotVersion": 3,
+      "runtimeState": "snapshot_active"
+    },
+    "rateLimit": {
+      "outcome": "allowed",
+      "remaining": 42,
+      "retryAfterSeconds": null
+    },
+    "budget": {
+      "outcome": "allowed",
+      "budgetScopeType": "application",
+      "budgetScopeId": "app_employee_chat_001"
+    },
+    "safety": {
+      "outcome": "redacted",
+      "maskingAction": "redacted",
+      "detectedTypes": [
+        "email"
+      ],
+      "detectedCount": 1,
+      "redactedPromptPreview": "Please summarize the account update for [EMAIL_REDACTED]."
+    },
+    "routing": {
+      "outcome": "selected",
+      "requestedModel": "auto",
+      "selectedProvider": "openai-compatible",
+      "selectedModel": "low-cost-chat-model",
+      "routingReason": "short_prompt_low_cost"
+    },
+    "cache": {
+      "outcome": "miss",
+      "cacheType": "exact",
+      "cacheHitRequestId": null
+    },
+    "provider": {
+      "outcome": "success",
+      "selectedProvider": "openai-compatible",
+      "selectedModel": "low-cost-chat-model",
+      "latencyMs": 820,
+      "sanitizedErrorCode": null
+    },
+    "fallback": {
+      "outcome": "not_needed",
+      "fallbackProvider": null,
+      "reason": null
+    },
+    "streaming": {
+      "outcome": "not_streaming",
+      "streamingRequested": false
+    },
+    "logging": {
+      "outcome": "written",
+      "requestLogWritten": true,
+      "sanitizedErrorCode": null
+    }
+  },
+  "latencySummary": {
+    "gatewayInternalLatencyMs": 34,
+    "providerLatencyMs": 820
+  }
+}
