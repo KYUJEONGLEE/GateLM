@@ -64,6 +64,8 @@ v2에서 Gateway가 특히 책임질 부분은 아래와 같다.
 - Request Log/Detail/Dashboard에서 필요한 최소 필드
 - `/metrics` label 허용 목록과 금지 목록
 - k6 baseline 시나리오와 성공 기준
+- policy result와 system failure를 분리하는 k6/metrics 해석 기준
+- Gateway internal latency와 Provider latency 분리 기준
 - Dashboard freshness/query budget 표현
 - PostgreSQL query/index/partition 검토 기준
 
@@ -140,7 +142,8 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 9. Employee Chat Gateway 호출 경계
 10. streaming thin slice 범위
 11. redaction 이후 cache/evidence 입력은 raw prompt가 아니라 normalized redacted prompt 계열만 쓴다는 원칙
-12. raw prompt/raw response 저장 금지 유지와 opt-in deferred 조건
+12. k6/metrics에서 정책 결과와 시스템 실패를 분리하고 Gateway/Provider latency를 구분하는 기준
+13. raw prompt/raw response 저장 금지 유지와 opt-in deferred 조건
 
 ## 8. 아직 공식 필드로 확정하면 안 되는 후보 용어
 
