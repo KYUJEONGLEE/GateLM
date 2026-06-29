@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
+    "verify:v2-docs": "node scripts/verify-v2-docs.mjs",
     "dev:control-plane": "pnpm --filter @gatelm/control-plane-api dev",
     "build:control-plane": "pnpm --filter @gatelm/control-plane-api build",
     "typecheck:control-plane": "pnpm --filter @gatelm/control-plane-api typecheck",
