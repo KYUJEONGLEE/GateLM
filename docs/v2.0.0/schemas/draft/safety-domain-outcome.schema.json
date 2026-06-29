@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.0.0/schemas/draft/safety-domain-outcome.schema.json",
+  "title": "GateLM v2 Safety Domain Outcome Draft",
+  "description": "Draft supporting schema for the AI Safety & Evaluation Lab slice of the v2 gateway outcome. This describes only the safety domain outcome and is not a standalone API, DB, Event, or Metrics contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "outcome"
+  ],
+  "properties": {
+    "outcome": {
+      "description": "Contracted v2 safety domain outcome. Values follow docs/v2.0.0/contracts.md section 6.4.",
+      "enum": [
+        "passed",
+        "redacted",
+        "blocked",
+        "not_checked"
+      ]
+    },
+    "detectorSummary": {
+      "description": "Draft/candidate field for sanitized detector summary only. It must not contain raw detected values, raw offsets, raw prompt fragments, raw prompt, raw response, credentials, or Authorization header values.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detectedCount"
+      ],
+      "properties": {
+        "detectedCount": {
+          "description": "Draft/candidate count of detections after safety evaluation. This is a count only, not raw detected content.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "detectorCategories": {
+          "description": "Draft/candidate low-cardinality detector category summary. Category values are intentionally strings and not fixed provider/model-style enums, but they must be sanitized labels only.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "policyBasis": {
+      "description": "Draft/candidate provenance hint for the published RuntimeSnapshot policy basis used by safety. Full RuntimeSnapshot body and full policy body must not be copied here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeSnapshotId",
+        "runtimeSnapshotVersion",
+        "securityPolicyHash"
+      ],
+      "properties": {
+        "runtimeSnapshotId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSnapshotVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "securityPolicyHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
