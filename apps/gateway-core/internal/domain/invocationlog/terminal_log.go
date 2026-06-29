@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
 
@@ -16,6 +17,7 @@ type TerminalLog struct {
 	TenantID           string
 	ProjectID          string
 	ApplicationID      string
+	BudgetScope        budget.Scope
 	APIKeyID           string
 	AppTokenID         string
 	EndUserID          string
@@ -76,6 +78,7 @@ type TerminalLogInput struct {
 	TenantID           string
 	ProjectID          string
 	ApplicationID      string
+	BudgetScope        budget.Scope
 	APIKeyID           string
 	AppTokenID         string
 	EndUserID          string
@@ -186,6 +189,8 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.RateLimitDecision != nil {
 		metadata["rateLimitDecision"] = *input.RateLimitDecision
 	}
+	resolvedBudgetScope := budget.NormalizeScope(input.BudgetScope, input.ApplicationID)
+	metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, input.ApplicationID)
 	runtimeMetadata := map[string]any{}
 	if input.ConfigHash != "" {
 		runtimeMetadata["configHash"] = strings.TrimSpace(input.ConfigHash)
@@ -208,6 +213,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		TenantID:           strings.TrimSpace(input.TenantID),
 		ProjectID:          strings.TrimSpace(input.ProjectID),
 		ApplicationID:      strings.TrimSpace(input.ApplicationID),
+		BudgetScope:        resolvedBudgetScope,
 		APIKeyID:           strings.TrimSpace(input.APIKeyID),
 		AppTokenID:         strings.TrimSpace(input.AppTokenID),
 		EndUserID:          strings.TrimSpace(input.EndUserID),

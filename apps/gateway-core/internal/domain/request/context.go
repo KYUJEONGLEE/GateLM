@@ -3,6 +3,7 @@ package request
 import (
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
@@ -10,6 +11,7 @@ import (
 type GatewayContext struct {
 	Request    RequestContext
 	Identity   IdentityContext
+	Budget     budget.Scope
 	Runtime    RuntimeContext
 	Governance GovernanceContext
 	Masking    MaskingContext

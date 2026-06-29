@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
 )
 
 const (
@@ -36,6 +38,7 @@ type AuthFailureLog struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -73,6 +76,7 @@ type AuthFailureInput struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -153,6 +157,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		TenantID:      strings.TrimSpace(input.TenantID),
 		ProjectID:     strings.TrimSpace(input.ProjectID),
 		ApplicationID: strings.TrimSpace(input.ApplicationID),
+		BudgetScope:   budget.NormalizeScope(input.BudgetScope, input.ApplicationID),
 		APIKeyID:      strings.TrimSpace(input.APIKeyID),
 		AppTokenID:    strings.TrimSpace(input.AppTokenID),
 		EndUserID:     strings.TrimSpace(input.EndUserID),

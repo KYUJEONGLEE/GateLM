@@ -21,12 +21,19 @@ export type RateLimitDecision = {
   durationMs: number;
 };
 
+export type BudgetScope = {
+  budgetScopeType: string;
+  budgetScopeId: string;
+  resolvedBy: string;
+};
+
 export type InvocationLogRecord = {
   requestId: string;
   traceId: string;
   tenantId: string;
   projectId: string;
   applicationId: string;
+  budgetScope: BudgetScope;
   apiKeyId: string;
   appTokenId: string;
   endUserId: string | null;
@@ -98,6 +105,9 @@ export type DashboardOverview = {
     tenantId: string;
     projectId: string;
     applicationId: string;
+    budgetScopeType: string;
+    budgetScopeId: string;
+    resolvedBy: string;
     provider: string | null;
     model: string | null;
   };
@@ -145,7 +155,7 @@ export type DashboardOverview = {
 };
 
 export function getDashboardOverview(): DashboardOverview {
-  return dashboardOverviewFixture as DashboardOverview;
+  return normalizeDashboardOverview(dashboardOverviewFixture as unknown as DashboardOverview);
 }
 
 export function getInvocationLogFixture(): InvocationLogFixture {
@@ -165,7 +175,11 @@ export function getInvocationRecord(requestId: string): InvocationLogRecord | un
 
 function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
 	const status = normalizeInvocationStatus(record.status);
-	return status === record.status ? record : { ...record, status };
+	const budgetScope = normalizeBudgetScope(record.budgetScope, record.applicationId);
+	if (status === record.status && budgetScope === record.budgetScope) {
+		return record;
+	}
+	return { ...record, budgetScope, status };
 }
 
 function normalizeInvocationStatus(status: string): InvocationLogRecord["status"] {
@@ -182,4 +196,32 @@ function normalizeInvocationStatus(status: string): InvocationLogRecord["status"
 		return "success";
 	}
 	return "failed";
+}
+
+function normalizeDashboardOverview(overview: DashboardOverview): DashboardOverview {
+	const applicationId = overview.filters.applicationId;
+	return {
+		...overview,
+		filters: {
+			...overview.filters,
+			budgetScopeType: overview.filters.budgetScopeType ?? "application",
+			budgetScopeId: overview.filters.budgetScopeId ?? applicationId,
+			resolvedBy: overview.filters.resolvedBy ?? "default_application"
+		}
+	};
+}
+
+function normalizeBudgetScope(scope: BudgetScope | undefined, applicationId: string): BudgetScope {
+	if (
+		scope?.budgetScopeType &&
+		scope.budgetScopeId &&
+		scope.resolvedBy
+	) {
+		return scope;
+	}
+	return {
+		budgetScopeType: "application",
+		budgetScopeId: applicationId,
+		resolvedBy: "default_application"
+	};
 }

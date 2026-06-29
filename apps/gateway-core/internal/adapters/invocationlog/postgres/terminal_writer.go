@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 )
 
@@ -149,6 +150,8 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 	if tenantID == "" || projectID == "" {
 		return terminalLogRecord{}, errors.New("terminal log requires valid tenant and project UUIDs")
 	}
+	applicationID := firstValidUUID(log.ApplicationID, w.defaults.ApplicationID)
+	resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, applicationID)
 
 	id, err := newUUID()
 	if err != nil {
@@ -162,6 +165,9 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 	if metadata == nil {
 		metadata = map[string]any{"schemaVersion": 1}
 	}
+	if _, exists := metadata["budgetScope"]; !exists {
+		metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, applicationID)
+	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return terminalLogRecord{}, err
@@ -173,7 +179,7 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		TraceID:                  firstNonEmpty(log.TraceID, requestID),
 		TenantID:                 tenantID,
 		ProjectID:                projectID,
-		ApplicationID:            firstValidUUID(log.ApplicationID, w.defaults.ApplicationID),
+		ApplicationID:            applicationID,
 		APIKeyID:                 strings.TrimSpace(log.APIKeyID),
 		AppTokenID:               strings.TrimSpace(log.AppTokenID),
 		EndUserID:                strings.TrimSpace(log.EndUserID),

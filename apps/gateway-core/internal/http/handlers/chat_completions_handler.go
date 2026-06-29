@@ -16,6 +16,7 @@ import (
 
 	cacheadapter "gatelm/apps/gateway-core/internal/adapters/cache/memory"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -701,6 +702,7 @@ func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx
 		TenantID:       reqCtx.TenantID,
 		ProjectID:      reqCtx.ProjectID,
 		ApplicationID:  reqCtx.ApplicationID,
+		BudgetScope:    reqCtx.BudgetScope,
 		APIKeyID:       reqCtx.APIKeyID,
 		AppTokenID:     reqCtx.AppTokenID,
 		EndUserID:      reqCtx.EndUserID,
@@ -737,6 +739,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		TenantID:                reqCtx.TenantID,
 		ProjectID:               reqCtx.ProjectID,
 		ApplicationID:           reqCtx.ApplicationID,
+		BudgetScope:             reqCtx.BudgetScope,
 		APIKeyID:                reqCtx.APIKeyID,
 		AppTokenID:              reqCtx.AppTokenID,
 		EndUserID:               reqCtx.EndUserID,
@@ -906,6 +909,7 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	if apiKeyIdentity.ApplicationID != "" {
 		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
 	}
+	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
 
 	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
 	if err != nil {
@@ -945,6 +949,7 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	if h.ExpectedAppID != "" && reqCtx.ApplicationID != h.ExpectedAppID {
 		return gatewayerrors.ScopeMismatch(identify.StageName)
 	}
+	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
 
 	return nil
 }

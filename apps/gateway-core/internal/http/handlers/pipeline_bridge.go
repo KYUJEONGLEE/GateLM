@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -37,6 +38,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			EndUserID:     reqCtx.EndUserID,
 			FeatureID:     reqCtx.FeatureID,
 		},
+		Budget: budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID),
 		Runtime: request.RuntimeContext{
 			ConfigHash:         reqCtx.ConfigHash,
 			SecurityPolicyHash: reqCtx.SecurityPolicyHash,
@@ -90,6 +92,7 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.TenantID = gatewayCtx.Identity.TenantID
 	reqCtx.ProjectID = gatewayCtx.Identity.ProjectID
 	reqCtx.ApplicationID = gatewayCtx.Identity.ApplicationID
+	reqCtx.BudgetScope = budget.NormalizeScope(gatewayCtx.Budget, reqCtx.ApplicationID)
 	reqCtx.APIKeyID = gatewayCtx.Identity.APIKeyID
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
 	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID

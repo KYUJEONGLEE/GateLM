@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 
 	"github.com/jackc/pgx/v5"
@@ -37,6 +38,12 @@ type QueryReader struct {
 func NewQueryReader(db Queryer) *QueryReader {
 	return &QueryReader{db: db}
 }
+
+const (
+	budgetScopeTypeSQL       = "coalesce(nullif(metadata #>> '{budgetScope,budgetScopeType}', ''), 'application')"
+	budgetScopeIDSQL         = "coalesce(nullif(metadata #>> '{budgetScope,budgetScopeId}', ''), application_id::text)"
+	budgetScopeResolvedBySQL = "coalesce(nullif(metadata #>> '{budgetScope,resolvedBy}', ''), 'default_application')"
+)
 
 func (r *QueryReader) ListProjectLogs(ctx context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
 	if r == nil || r.db == nil {
@@ -119,6 +126,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var maskingActionCountsJSON []byte
 	var routingCountByModelJSON []byte
 	var costByModelJSON []byte
+	var budgetScopeBreakdownJSON []byte
 	var lastLogCreatedAt sql.NullTime
 	if err := r.db.QueryRow(ctx, query, args...).Scan(
 		&totalRequests,
@@ -139,6 +147,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&maskingActionCountsJSON,
 		&routingCountByModelJSON,
 		&costByModelJSON,
+		&budgetScopeBreakdownJSON,
 		&lastLogCreatedAt,
 	); err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
@@ -157,6 +166,10 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		return invocationlog.DashboardOverviewFields{}, err
 	}
 	costByModel, err := decodeCostByModelJSON(costByModelJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	budgetScopeBreakdown, err := decodeBudgetScopeBreakdownJSON(budgetScopeBreakdownJSON)
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
@@ -189,6 +202,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		RoutingCountByModel:   routingCountByModel,
 		StatusCounts:          statusCounts,
 		CostByModel:           costByModel,
+		BudgetScopeBreakdown:  budgetScopeBreakdown,
 		LastLogCreatedAt:      nullableTimePointer(lastLogCreatedAt),
 		GeneratedAt:           time.Now().UTC(),
 	}), nil
@@ -215,6 +229,9 @@ func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []an
 	addOptionalWhere("model", filter.Model)
 	addOptionalWhere("cache_status", filter.CacheStatus)
 	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
+	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
+	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
 	addOptionalWhere("request_id", filter.RequestID)
 
 	args = append(args, filter.Limit)
@@ -225,6 +242,9 @@ select
   request_id,
   project_id::text,
   application_id::text,
+  %s as budget_scope_type,
+  %s as budget_scope_id,
+  %s as budget_scope_resolved_by,
   provider,
   model,
   requested_model,
@@ -244,7 +264,7 @@ select
 from p0_llm_invocation_logs
 where %s
 order by created_at desc, request_id desc
-limit $%d`, strings.Join(where, " and "), limitPlaceholder)
+limit $%d`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "), limitPlaceholder)
 
 	return query, args
 }
@@ -263,6 +283,16 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 		args = append(args, filter.ProjectID)
 		where = append(where, fmt.Sprintf("project_id = $%d", len(args)))
 	}
+	addOptionalWhere := func(expression string, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		args = append(args, value)
+		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
+	}
+	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
+	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
+	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
 
 	query := fmt.Sprintf(`
 with filtered as (
@@ -283,6 +313,9 @@ with filtered as (
     selected_provider,
     selected_model,
     routing_reason,
+    %s as budget_scope_type,
+    %s as budget_scope_id,
+    %s as budget_scope_resolved_by,
     created_at
   from p0_llm_invocation_logs
   where %s
@@ -356,19 +389,42 @@ select
     ) cost_rollup
     where selected_provider_key is not null and selected_model_key is not null
   ), '[]'::jsonb) as cost_by_model,
+  coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'budgetScopeType', budget_scope_type,
+      'budgetScopeId', budget_scope_id,
+      'resolvedBy', budget_scope_resolved_by,
+      'requestCount', request_count,
+      'costMicroUsd', cost_micro_usd
+    ) order by cost_micro_usd desc, budget_scope_type, budget_scope_id, budget_scope_resolved_by)
+    from (
+      select
+        budget_scope_type,
+        budget_scope_id,
+        budget_scope_resolved_by,
+        count(*)::bigint as request_count,
+        coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
+      from filtered
+      group by 1, 2, 3
+    ) budget_rollup
+    where budget_scope_id is not null and budget_scope_id <> ''
+  ), '[]'::jsonb) as budget_scope_breakdown,
   max(created_at) as last_log_created_at
-from filtered`, strings.Join(where, " and "))
+from filtered`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
 
 	return query, args
 }
 
-const requestDetailSQL = `
+var requestDetailSQL = fmt.Sprintf(`
 select
   request_id,
   trace_id,
   tenant_id::text,
   project_id::text,
   application_id::text,
+  %s as budget_scope_type,
+  %s as budget_scope_id,
+  %s as budget_scope_resolved_by,
   status,
   http_status,
   provider,
@@ -400,11 +456,14 @@ from p0_llm_invocation_logs
 where tenant_id = $1
   and project_id = $2
   and request_id = $3
-limit 1`
+limit 1`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL)
 
 func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var log invocationlog.LlmInvocationLog
 	var applicationID sql.NullString
+	var budgetScopeType sql.NullString
+	var budgetScopeID sql.NullString
+	var budgetScopeResolvedBy sql.NullString
 	var requestedModel sql.NullString
 	var selectedModel sql.NullString
 	var routingReason sql.NullString
@@ -412,6 +471,9 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.RequestID,
 		&log.ProjectID,
 		&applicationID,
+		&budgetScopeType,
+		&budgetScopeID,
+		&budgetScopeResolvedBy,
 		&log.Provider,
 		&log.Model,
 		&requestedModel,
@@ -433,6 +495,11 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	}
 
 	log.ApplicationID = nullableString(applicationID)
+	log.BudgetScope = budget.NormalizeScope(budget.Scope{
+		Type:       nullableString(budgetScopeType),
+		ID:         nullableString(budgetScopeID),
+		ResolvedBy: nullableString(budgetScopeResolvedBy),
+	}, log.ApplicationID)
 	log.RequestedModel = nullableString(requestedModel)
 	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
@@ -442,6 +509,9 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	var log invocationlog.LlmInvocationLog
 	var applicationID sql.NullString
+	var budgetScopeType sql.NullString
+	var budgetScopeID sql.NullString
+	var budgetScopeResolvedBy sql.NullString
 	var requestedModel sql.NullString
 	var selectedProvider sql.NullString
 	var selectedModel sql.NullString
@@ -462,6 +532,9 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 		&log.TenantID,
 		&log.ProjectID,
 		&applicationID,
+		&budgetScopeType,
+		&budgetScopeID,
+		&budgetScopeResolvedBy,
 		&log.Status,
 		&log.HTTPStatus,
 		&log.Provider,
@@ -499,6 +572,11 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	}
 
 	log.ApplicationID = nullableString(applicationID)
+	log.BudgetScope = budget.NormalizeScope(budget.Scope{
+		Type:       nullableString(budgetScopeType),
+		ID:         nullableString(budgetScopeID),
+		ResolvedBy: nullableString(budgetScopeResolvedBy),
+	}, log.ApplicationID)
 	log.RequestedModel = nullableString(requestedModel)
 	log.SelectedProvider = nullableString(selectedProvider)
 	log.SelectedModel = nullableString(selectedModel)
@@ -592,4 +670,40 @@ func decodeCostByModelJSON(raw []byte) ([]invocationlog.CostByModel, error) {
 		return []invocationlog.CostByModel{}, nil
 	}
 	return values, nil
+}
+
+func decodeBudgetScopeBreakdownJSON(raw []byte) ([]invocationlog.BudgetScopeBreakdown, error) {
+	if len(raw) == 0 || (len(raw) == 4 && raw[0] == 'n' && raw[1] == 'u' && raw[2] == 'l' && raw[3] == 'l') {
+		return []invocationlog.BudgetScopeBreakdown{}, nil
+	}
+	var rows []struct {
+		BudgetScopeType string `json:"budgetScopeType"`
+		BudgetScopeID   string `json:"budgetScopeId"`
+		ResolvedBy      string `json:"resolvedBy"`
+		RequestCount    int64  `json:"requestCount"`
+		CostMicroUSD    int64  `json:"costMicroUsd"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		return []invocationlog.BudgetScopeBreakdown{}, nil
+	}
+	items := make([]invocationlog.BudgetScopeBreakdown, 0, len(rows))
+	for _, row := range rows {
+		scope := budget.NormalizeScope(budget.Scope{
+			Type:       row.BudgetScopeType,
+			ID:         row.BudgetScopeID,
+			ResolvedBy: row.ResolvedBy,
+		}, "")
+		if scope.ID == "" {
+			continue
+		}
+		items = append(items, invocationlog.BudgetScopeBreakdown{
+			BudgetScope:  scope,
+			RequestCount: row.RequestCount,
+			CostMicroUSD: row.CostMicroUSD,
+		})
+	}
+	return items, nil
 }

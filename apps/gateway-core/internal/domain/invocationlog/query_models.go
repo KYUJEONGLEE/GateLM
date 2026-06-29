@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
 )
 
 var (
@@ -31,6 +33,7 @@ type ProjectLogsFilter struct {
 	Model         string
 	CacheStatus   string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	RequestID     string
 	Limit         int
 }
@@ -42,10 +45,11 @@ type RequestDetailFilter struct {
 }
 
 type DashboardOverviewFilter struct {
-	TenantID  string
-	ProjectID string
-	From      time.Time
-	To        time.Time
+	TenantID    string
+	ProjectID   string
+	BudgetScope budget.Scope
+	From        time.Time
+	To          time.Time
 }
 
 type LlmInvocationLog struct {
@@ -54,6 +58,7 @@ type LlmInvocationLog struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -99,6 +104,7 @@ type RequestLogListItem struct {
 	RequestID        string
 	ProjectID        string
 	ApplicationID    string
+	BudgetScope      budget.Scope
 	Provider         string
 	Model            string
 	RequestedModel   string
@@ -124,6 +130,7 @@ type RequestDetail struct {
 	TenantID       string
 	ProjectID      string
 	ApplicationID  string
+	BudgetScope    budget.Scope
 	Status         string
 	HTTPStatus     int
 	Provider       string
@@ -201,6 +208,13 @@ type CostByModel struct {
 	CostUSD          string
 }
 
+type BudgetScopeBreakdown struct {
+	BudgetScope  budget.Scope
+	RequestCount int64
+	CostMicroUSD int64
+	CostUSD      string
+}
+
 type DashboardDataFreshness struct {
 	Source           string
 	RecordCount      int64
@@ -231,6 +245,7 @@ type DashboardOverviewFields struct {
 	RoutingCountByModel   []RoutingCountByModel
 	StatusCounts          map[string]int64
 	CostByModel           []CostByModel
+	BudgetScopeBreakdown  []BudgetScopeBreakdown
 	DataFreshness         DashboardDataFreshness
 }
 
@@ -253,6 +268,7 @@ type DashboardOverviewAggregate struct {
 	RoutingCountByModel   []RoutingCountByModel
 	StatusCounts          map[string]int64
 	CostByModel           []CostByModel
+	BudgetScopeBreakdown  []BudgetScopeBreakdown
 	LastLogCreatedAt      *time.Time
 	GeneratedAt           time.Time
 }
@@ -261,6 +277,12 @@ type dashboardModelKey struct {
 	provider string
 	model    string
 	reason   string
+}
+
+type budgetScopeKey struct {
+	scopeType  string
+	scopeID    string
+	resolvedBy string
 }
 
 func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, error) {
@@ -272,6 +294,11 @@ func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, er
 	filter.CacheStatus = strings.TrimSpace(filter.CacheStatus)
 	filter.ApplicationID = strings.TrimSpace(filter.ApplicationID)
 	filter.RequestID = strings.TrimSpace(filter.RequestID)
+	var err error
+	filter.BudgetScope, err = normalizeBudgetScopeFilter(filter.BudgetScope)
+	if err != nil {
+		return ProjectLogsFilter{}, err
+	}
 
 	if filter.TenantID == "" {
 		return ProjectLogsFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
@@ -311,6 +338,11 @@ func NormalizeRequestDetailFilter(filter RequestDetailFilter) (RequestDetailFilt
 func NormalizeDashboardOverviewFilter(filter DashboardOverviewFilter) (DashboardOverviewFilter, error) {
 	filter.TenantID = strings.TrimSpace(filter.TenantID)
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
+	var err error
+	filter.BudgetScope, err = normalizeBudgetScopeFilter(filter.BudgetScope)
+	if err != nil {
+		return DashboardOverviewFilter{}, err
+	}
 	if filter.TenantID == "" {
 		return DashboardOverviewFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
 	}
@@ -325,6 +357,7 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		RequestID:        log.RequestID,
 		ProjectID:        log.ProjectID,
 		ApplicationID:    log.ApplicationID,
+		BudgetScope:      budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
 		Provider:         log.Provider,
 		Model:            log.Model,
 		RequestedModel:   log.RequestedModel,
@@ -352,6 +385,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		TenantID:       log.TenantID,
 		ProjectID:      log.ProjectID,
 		ApplicationID:  log.ApplicationID,
+		BudgetScope:    budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
 		Status:         log.Status,
 		HTTPStatus:     log.HTTPStatus,
 		Provider:       log.Provider,
@@ -409,8 +443,10 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	}
 	routingCounts := map[dashboardModelKey]int64{}
 	costCounts := map[dashboardModelKey]CostByModel{}
+	budgetCounts := map[budgetScopeKey]BudgetScopeBreakdown{}
 
 	for _, log := range logs {
+		resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, log.ApplicationID)
 		aggregate.TotalRequests++
 		incrementCount(aggregate.StatusCounts, log.Status)
 		incrementCount(aggregate.MaskingActionCounts, defaultString(log.MaskingAction, "none"))
@@ -437,6 +473,18 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		aggregate.TotalTokens += log.TotalTokens
 		aggregate.TotalCostMicroUSD += log.CostMicroUSD
 		aggregate.SavedCostMicroUSD += log.SavedCostMicroUSD
+		if resolvedBudgetScope.ID != "" {
+			budgetKey := budgetScopeKey{
+				scopeType:  resolvedBudgetScope.Type,
+				scopeID:    resolvedBudgetScope.ID,
+				resolvedBy: resolvedBudgetScope.ResolvedBy,
+			}
+			budgetItem := budgetCounts[budgetKey]
+			budgetItem.BudgetScope = resolvedBudgetScope
+			budgetItem.RequestCount++
+			budgetItem.CostMicroUSD += log.CostMicroUSD
+			budgetCounts[budgetKey] = budgetItem
+		}
 		if isLatencyEligibleStatus(log.Status) {
 			latencies = append(latencies, log.LatencyMs)
 		}
@@ -471,6 +519,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	}
 	aggregate.RoutingCountByModel = routingCountsFromMap(routingCounts)
 	aggregate.CostByModel = costCountsFromMap(costCounts)
+	aggregate.BudgetScopeBreakdown = budgetScopeBreakdownsFromMap(budgetCounts)
 
 	return BuildDashboardOverviewFromAggregate(aggregate)
 }
@@ -498,6 +547,7 @@ func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) D
 		RoutingCountByModel:   append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
 		StatusCounts:          mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
 		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
+		BudgetScopeBreakdown:  normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
 		DataFreshness: DashboardDataFreshness{
 			Source:           "postgresql_request_log",
 			RecordCount:      aggregate.TotalRequests,
@@ -536,6 +586,25 @@ func validateTimeRange(from time.Time, to time.Time) error {
 		return fmt.Errorf("%w: to must be after from", ErrInvalidLogQuery)
 	}
 	return nil
+}
+
+func normalizeBudgetScopeFilter(scope budget.Scope) (budget.Scope, error) {
+	scope.Type = strings.TrimSpace(scope.Type)
+	scope.ID = strings.TrimSpace(scope.ID)
+	scope.ResolvedBy = strings.TrimSpace(scope.ResolvedBy)
+	if scope.Type == "" && scope.ID == "" && scope.ResolvedBy == "" {
+		return budget.Scope{}, nil
+	}
+	if scope.Type == "" || scope.ID == "" || scope.ResolvedBy == "" {
+		return budget.Scope{}, fmt.Errorf("%w: budget scope filter requires budgetScopeType, budgetScopeId, and resolvedBy", ErrInvalidLogQuery)
+	}
+	if !budget.IsAllowedScopeType(scope.Type) {
+		return budget.Scope{}, fmt.Errorf("%w: invalid budget scope type", ErrInvalidLogQuery)
+	}
+	if !budget.IsAllowedResolvedBy(scope.ResolvedBy) {
+		return budget.Scope{}, fmt.Errorf("%w: invalid budget scope resolver", ErrInvalidLogQuery)
+	}
+	return scope, nil
 }
 
 func isSuccessfulStatus(status string) bool {
@@ -673,6 +742,39 @@ func normalizedCostByModel(items []CostByModel) []CostByModel {
 			return normalized[i].SelectedProvider < normalized[j].SelectedProvider
 		}
 		return normalized[i].SelectedModel < normalized[j].SelectedModel
+	})
+	return normalized
+}
+
+func budgetScopeBreakdownsFromMap(counts map[budgetScopeKey]BudgetScopeBreakdown) []BudgetScopeBreakdown {
+	items := make([]BudgetScopeBreakdown, 0, len(counts))
+	for _, item := range counts {
+		items = append(items, item)
+	}
+	return normalizedBudgetScopeBreakdowns(items)
+}
+
+func normalizedBudgetScopeBreakdowns(items []BudgetScopeBreakdown) []BudgetScopeBreakdown {
+	normalized := make([]BudgetScopeBreakdown, 0, len(items))
+	for _, item := range items {
+		item.BudgetScope = budget.NormalizeScope(item.BudgetScope, "")
+		if item.BudgetScope.ID == "" {
+			continue
+		}
+		item.CostUSD = FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		normalized = append(normalized, item)
+	}
+	sort.Slice(normalized, func(i int, j int) bool {
+		if normalized[i].CostMicroUSD != normalized[j].CostMicroUSD {
+			return normalized[i].CostMicroUSD > normalized[j].CostMicroUSD
+		}
+		if normalized[i].BudgetScope.Type != normalized[j].BudgetScope.Type {
+			return normalized[i].BudgetScope.Type < normalized[j].BudgetScope.Type
+		}
+		if normalized[i].BudgetScope.ID != normalized[j].BudgetScope.ID {
+			return normalized[i].BudgetScope.ID < normalized[j].BudgetScope.ID
+		}
+		return normalized[i].BudgetScope.ResolvedBy < normalized[j].BudgetScope.ResolvedBy
 	})
 	return normalized
 }

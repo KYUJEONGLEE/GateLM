@@ -9,6 +9,7 @@ type GatewayProjectLogsResponse = {
 
 type GatewayProjectLogItem = {
   applicationId?: string;
+  budgetScope?: GatewayBudgetScope;
   cacheStatus?: string;
   cacheType?: string;
   completionTokens?: number;
@@ -27,6 +28,12 @@ type GatewayProjectLogItem = {
   selectedModel?: string;
   status?: string;
   totalTokens?: number;
+};
+
+type GatewayBudgetScope = {
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  resolvedBy?: string;
 };
 
 const LIVE_RANGE_HOURS = 24;
@@ -74,13 +81,16 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
   const cacheStatus = item.cacheStatus ?? "bypass";
   const status = normalizeStatus(item.status);
   const costMicroUsd = item.costMicroUsd ?? 0;
+  const applicationId = item.applicationId ?? "live_gateway_application";
+  const budgetScope = normalizeBudgetScope(item.budgetScope, applicationId);
 
   return {
     requestId,
     traceId: requestId,
     tenantId: "live_gateway_tenant",
     projectId: item.projectId ?? projectId,
-    applicationId: item.applicationId ?? "live_gateway_application",
+    applicationId,
+    budgetScope,
     apiKeyId: "live_gateway_api_key",
     appTokenId: "live_gateway_app_token",
     endUserId: null,
@@ -106,8 +116,8 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     maskingDetectedCount: 0,
     rateLimitDecision: {
       allowed: status !== "rate_limited",
-      scope: "application",
-      scopeId: item.applicationId ?? "live_gateway_application",
+      scope: budgetScope.budgetScopeType,
+      scopeId: budgetScope.budgetScopeId,
       limit: 0,
       remaining: 0,
       windowSeconds: 60,
@@ -138,6 +148,22 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
         routingPolicyHash: "live-gateway"
       }
     }
+  };
+}
+
+function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {
+  if (scope?.budgetScopeType && scope.budgetScopeId && scope.resolvedBy) {
+    return {
+      budgetScopeType: scope.budgetScopeType,
+      budgetScopeId: scope.budgetScopeId,
+      resolvedBy: scope.resolvedBy
+    };
+  }
+
+  return {
+    budgetScopeType: "application",
+    budgetScopeId: applicationId,
+    resolvedBy: "default_application"
   };
 }
 
