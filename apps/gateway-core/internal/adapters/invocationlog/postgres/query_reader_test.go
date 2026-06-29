@@ -222,6 +222,32 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	}
 }
 
+func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testing.T) {
+	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":{"safety":{"outcome":"passed","detectedTypes":null,"detectedCount":0}}}`))
+	if err != nil {
+		t.Fatalf("expected decode to succeed, got %v", err)
+	}
+	if outcomes.Safety.DetectedTypes == nil {
+		t.Fatalf("expected detected types to be normalized to an empty slice")
+	}
+	if len(outcomes.Safety.DetectedTypes) != 0 {
+		t.Fatalf("expected empty detected types, got %#v", outcomes.Safety.DetectedTypes)
+	}
+}
+
+func TestDecodeDomainOutcomesMetadataNormalizesNullDomainOutcomes(t *testing.T) {
+	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":null}`))
+	if err != nil {
+		t.Fatalf("expected decode to succeed, got %v", err)
+	}
+	if outcomes.Safety.DetectedTypes == nil {
+		t.Fatalf("expected detected types to be normalized to an empty slice")
+	}
+	if !outcomes.IsZero() {
+		t.Fatalf("expected zero domain outcomes, got %+v", outcomes)
+	}
+}
+
 func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)

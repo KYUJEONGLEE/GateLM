@@ -697,16 +697,23 @@ func decodeRuntimeSnapshotBridgeMetadata(raw []byte, createdAt time.Time) (runti
 
 func decodeDomainOutcomesMetadata(raw []byte) (invocationlog.DomainOutcomes, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return invocationlog.DomainOutcomes{}, nil
+		return normalizeDomainOutcomes(invocationlog.DomainOutcomes{}), nil
 	}
 	var metadata invocationMetadataJSON
 	if err := json.Unmarshal(raw, &metadata); err != nil {
 		return invocationlog.DomainOutcomes{}, err
 	}
 	if metadata.DomainOutcomes == nil {
-		return invocationlog.DomainOutcomes{}, nil
+		return normalizeDomainOutcomes(invocationlog.DomainOutcomes{}), nil
 	}
-	return *metadata.DomainOutcomes, nil
+	return normalizeDomainOutcomes(*metadata.DomainOutcomes), nil
+}
+
+func normalizeDomainOutcomes(outcomes invocationlog.DomainOutcomes) invocationlog.DomainOutcomes {
+	if outcomes.Safety.DetectedTypes == nil {
+		outcomes.Safety.DetectedTypes = []string{}
+	}
+	return outcomes
 }
 
 func (m runtimeMetadataJSON) legacyHashes() runtimeconfig.LegacyHashes {
