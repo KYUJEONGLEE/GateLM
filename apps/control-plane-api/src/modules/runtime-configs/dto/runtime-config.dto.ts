@@ -290,6 +290,12 @@ export interface RuntimeConfigCredentialRefDto {
   verification: 'prefix_then_hash_compare';
 }
 
+export interface RuntimeConfigProviderCredentialRefDto {
+  credentialRefId: string;
+  credentialVersion: number;
+  credentialState: 'active' | 'disabled';
+}
+
 export interface RuntimeConfigProviderDto {
   providerId: string;
   provider: string;
@@ -297,6 +303,8 @@ export interface RuntimeConfigProviderDto {
   status: ProviderStatusDto;
   baseUrl: string;
   timeoutMs: number;
+  credentialRef?: RuntimeConfigProviderCredentialRefDto | null;
+  /** Legacy compatibility field. v2-facing RuntimeSnapshot/Provider Catalog consumers should use credentialRef. */
   secretRef: string | null;
   credentialPreview: RuntimeConfigCredentialPreviewDto | null;
   resolver: 'none' | 'control_plane_secret_store' | 'environment';

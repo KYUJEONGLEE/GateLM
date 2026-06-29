@@ -14,6 +14,9 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		{Name: "http_status", Value: "200"},
 		{Name: "error_code", Value: "none"},
 		{Name: "request_id", Value: "request_forbidden"},
+		{Name: "request_body_hash", Value: "hash_forbidden"},
+		{Name: "provider_key", Value: "provider_key_forbidden"},
+		{Name: "raw_error_detail", Value: "upstream detail forbidden"},
 		{Name: "authorization", Value: "Bearer redacted"},
 	}
 
@@ -87,8 +90,11 @@ func assertMetricsDoesNotContainForbiddenLabels(t *testing.T, output string) {
 		"feature_id",
 		"prompt",
 		"prompt_hash",
+		"request_body_hash",
 		"cache_key_hash",
+		"provider_key",
 		"authorization",
+		"raw_error_detail",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			t.Fatalf("metrics output must not contain forbidden label %q\noutput:\n%s", labelName, output)

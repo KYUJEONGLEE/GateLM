@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 type TerminalLog struct {
@@ -16,12 +18,14 @@ type TerminalLog struct {
 	TenantID           string
 	ProjectID          string
 	ApplicationID      string
+	BudgetScope        budget.Scope
 	APIKeyID           string
 	AppTokenID         string
 	EndUserID          string
 	FeatureID          string
 	ConfigHash         string
 	SecurityPolicyHash string
+	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
 
 	RateLimitDecision *ratelimit.Decision
 
@@ -76,12 +80,14 @@ type TerminalLogInput struct {
 	TenantID           string
 	ProjectID          string
 	ApplicationID      string
+	BudgetScope        budget.Scope
 	APIKeyID           string
 	AppTokenID         string
 	EndUserID          string
 	FeatureID          string
 	ConfigHash         string
 	SecurityPolicyHash string
+	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
 
 	RateLimitDecision *ratelimit.Decision
 
@@ -180,24 +186,23 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.SecurityPolicyVersionID != "" {
 		metadata["securityPolicyVersionId"] = strings.TrimSpace(input.SecurityPolicyVersionID)
 	}
-	if input.RoutingPolicyHash != "" {
-		metadata["routingPolicyHash"] = strings.TrimSpace(input.RoutingPolicyHash)
-	}
 	if input.RateLimitDecision != nil {
 		metadata["rateLimitDecision"] = *input.RateLimitDecision
 	}
-	runtimeMetadata := map[string]any{}
-	if input.ConfigHash != "" {
-		runtimeMetadata["configHash"] = strings.TrimSpace(input.ConfigHash)
-	}
-	if input.SecurityPolicyHash != "" {
-		runtimeMetadata["securityPolicyHash"] = strings.TrimSpace(input.SecurityPolicyHash)
-	}
-	if input.RoutingPolicyHash != "" {
-		runtimeMetadata["routingPolicyHash"] = strings.TrimSpace(input.RoutingPolicyHash)
-	}
-	if len(runtimeMetadata) > 0 {
-		metadata["runtime"] = runtimeMetadata
+	resolvedBudgetScope := budget.NormalizeScope(input.BudgetScope, input.ApplicationID)
+	metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, input.ApplicationID)
+	runtimeSnapshot := input.RuntimeSnapshot.Normalize(runtimeconfig.ActiveConfig{
+		ConfigVersion: strings.TrimSpace(input.ConfigHash),
+		ConfigHash:    strings.TrimSpace(input.ConfigHash),
+		SafetyPolicy: runtimeconfig.SafetyPolicy{
+			SecurityPolicyHash: strings.TrimSpace(input.SecurityPolicyHash),
+		},
+		RoutingPolicy: runtimeconfig.RoutingPolicy{
+			RoutingPolicyHash: strings.TrimSpace(input.RoutingPolicyHash),
+		},
+	}, input.StartedAt, runtimeconfig.DefaultGatewayInstanceIDCompat)
+	if runtimeSnapshot.ContentHash != "" {
+		metadata["runtimeSnapshot"] = runtimeSnapshot.Metadata()
 	}
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
@@ -208,12 +213,14 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		TenantID:           strings.TrimSpace(input.TenantID),
 		ProjectID:          strings.TrimSpace(input.ProjectID),
 		ApplicationID:      strings.TrimSpace(input.ApplicationID),
+		BudgetScope:        resolvedBudgetScope,
 		APIKeyID:           strings.TrimSpace(input.APIKeyID),
 		AppTokenID:         strings.TrimSpace(input.AppTokenID),
 		EndUserID:          strings.TrimSpace(input.EndUserID),
 		FeatureID:          strings.TrimSpace(input.FeatureID),
 		ConfigHash:         strings.TrimSpace(input.ConfigHash),
 		SecurityPolicyHash: strings.TrimSpace(input.SecurityPolicyHash),
+		RuntimeSnapshot:    runtimeSnapshot,
 
 		RateLimitDecision: rateLimitDecision,
 

@@ -80,8 +80,7 @@ func TestChatCompletionsHandlerRecordsCacheHitWithoutProviderMetricIncrease(t *t
 	}
 
 	output := registry.RenderPrometheus()
-	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 1`)
-	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="cache_hit"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 2`)
 	assertHandlerMetricsContains(t, output, `gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-balanced",selected_provider="mock",status="success"} 1`)
 	assertHandlerMetricsContains(t, output, `gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`)
 }
@@ -269,8 +268,11 @@ func assertHandlerMetricsHasNoForbiddenLabels(t *testing.T, output string) {
 		"feature_id",
 		"prompt",
 		"prompt_hash",
+		"request_body_hash",
 		"cache_key_hash",
+		"provider_key",
 		"authorization",
+		"raw_error_detail",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			t.Fatalf("metrics output must not contain forbidden label %q\noutput:\n%s", labelName, output)

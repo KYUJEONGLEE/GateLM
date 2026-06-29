@@ -12,7 +12,7 @@ type DashboardOverviewProps = {
   overview: DashboardOverview;
 };
 
-const statusOrder = ["success", "cache_hit", "blocked", "rate_limited", "error", "cancelled"];
+const statusOrder = ["success", "blocked", "rate_limited", "failed", "cancelled"];
 
 export function DashboardOverviewView({ overview }: DashboardOverviewProps) {
   const maxStatusCount = Math.max(...Object.values(overview.statusCounts), 1);

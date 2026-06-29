@@ -5,6 +5,9 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
@@ -45,6 +48,9 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 	if item.CacheStatus != CacheStatusMiss || item.CacheType != CacheTypeExact {
 		t.Fatalf("unexpected cache fields: %+v", item)
 	}
+	if item.BudgetScope.Type != budget.ScopeTypeApplication || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
+		t.Fatalf("unexpected default budget scope: %+v", item.BudgetScope)
+	}
 }
 
 func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
@@ -76,8 +82,22 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 		MaskingAction:         "none",
 		MaskingDetectedTypes:  []string{},
 		RedactedPromptPreview: "Write a short refund response.",
-		CreatedAt:             completedAt.Add(-132 * time.Millisecond),
-		CompletedAt:           &completedAt,
+		RuntimeSnapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			RuntimeSnapshotID:      "runtime_snapshot_query_test",
+			RuntimeSnapshotVersion: 2,
+			ContentHash:            "content_hash_query_test",
+			RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+			PublishedAt:            completedAt.Add(-time.Second),
+			PublishedBy:            "runtime_config_compat",
+			GatewayInstanceID:      "gateway_query_test",
+			LegacyHashes: runtimeconfig.LegacyHashes{
+				ConfigHash:         "config_hash_query_test",
+				SecurityPolicyHash: "security_hash_query_test",
+				RoutingPolicyHash:  "route_hash_query_test",
+			},
+		},
+		CreatedAt:   completedAt.Add(-132 * time.Millisecond),
+		CompletedAt: &completedAt,
 	}
 
 	detail := ToRequestDetail(log)
@@ -94,6 +114,16 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	if detail.Latency.ProviderLatencyMs == nil || *detail.Latency.ProviderLatencyMs != 86 {
 		t.Fatalf("unexpected provider latency: %+v", detail.Latency)
 	}
+	if detail.BudgetScope.Type != budget.ScopeTypeApplication || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
+		t.Fatalf("unexpected default budget scope: %+v", detail.BudgetScope)
+	}
+	if detail.RuntimeSnapshot == nil ||
+		detail.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_query_test" ||
+		detail.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		detail.RuntimeSnapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
+		detail.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_query_test" {
+		t.Fatalf("unexpected runtime snapshot detail: %+v", detail.RuntimeSnapshot)
+	}
 }
 
 func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
@@ -101,18 +131,20 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	logs := []LlmInvocationLog{
 		{
 			Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
-			PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
+			ApplicationID: "app_demo",
+			PromptTokens:  10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
 			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
 			MaskingAction: "none", CreatedAt: createdAt,
 		},
 		{
-			Status: StatusCacheHit, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
+			Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
+			ApplicationID:     "app_demo",
 			SavedCostMicroUSD: 50, LatencyMs: 20, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
 			MaskingAction: "none", CreatedAt: createdAt.Add(time.Second),
 		},
 		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "blocked", CreatedAt: createdAt.Add(2 * time.Second)},
 		{
-			Status: StatusError, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			Status: StatusFailed, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
 			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, SelectedProvider: "mock", SelectedModel: "mock-balanced",
 			MaskingAction: "redacted", CreatedAt: createdAt.Add(3 * time.Second),
 		},
@@ -140,7 +172,7 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if overview.AverageResponseTimeMs == nil || !floatEquals(*overview.AverageResponseTimeMs, *overview.AverageLatencyMs) {
 		t.Fatalf("expected average response time compatibility alias, got %+v", overview.AverageResponseTimeMs)
 	}
-	if overview.StatusCounts[StatusSuccess] != 1 || overview.StatusCounts[StatusCacheHit] != 1 || overview.StatusCounts[StatusBlocked] != 1 || overview.StatusCounts[StatusRateLimited] != 1 || overview.StatusCounts[StatusError] != 1 || overview.StatusCounts[StatusCancelled] != 1 {
+	if overview.StatusCounts[StatusSuccess] != 2 || overview.StatusCounts[StatusBlocked] != 1 || overview.StatusCounts[StatusRateLimited] != 1 || overview.StatusCounts[StatusFailed] != 1 || overview.StatusCounts[StatusCancelled] != 1 {
 		t.Fatalf("unexpected status counts: %+v", overview.StatusCounts)
 	}
 	if overview.MaskingActionCounts["none"] != 4 || overview.MaskingActionCounts["redacted"] != 1 || overview.MaskingActionCounts["blocked"] != 1 {
@@ -151,6 +183,9 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	}
 	if len(overview.CostByModel) != 2 || overview.CostByModel[0].SelectedModel != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
+	}
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].RequestCount != 2 {
+		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
 	}
 	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
@@ -229,6 +264,37 @@ func TestNormalizeProjectLogsFilterRequiresTenantProjectScopeAndRange(t *testing
 	if filter.TenantID != "tenant_demo" || filter.ProjectID != "project_demo" || filter.Limit != 100 {
 		t.Fatalf("unexpected normalized filter: %+v", filter)
 	}
+
+	filter, err = NormalizeProjectLogsFilter(ProjectLogsFilter{
+		TenantID:    "tenant_demo",
+		ProjectID:   "project_demo",
+		From:        from,
+		To:          to,
+		BudgetScope: budget.Scope{Type: " application ", ID: " app_demo ", ResolvedBy: " default_application "},
+	})
+	if err != nil {
+		t.Fatalf("expected valid budget scope filter, got %v", err)
+	}
+	if filter.BudgetScope.Type != budget.ScopeTypeApplication || filter.BudgetScope.ID != "app_demo" || filter.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
+		t.Fatalf("unexpected normalized budget scope filter: %+v", filter.BudgetScope)
+	}
+
+	for _, invalid := range []budget.Scope{
+		{Type: "department", ID: "dept_demo", ResolvedBy: "control_plane_rule"},
+		{Type: "application", ID: "app_demo", ResolvedBy: "client_provided"},
+		{Type: "application", ID: "", ResolvedBy: "default_application"},
+	} {
+		_, err = NormalizeProjectLogsFilter(ProjectLogsFilter{
+			TenantID:    "tenant_demo",
+			ProjectID:   "project_demo",
+			From:        from,
+			To:          to,
+			BudgetScope: invalid,
+		})
+		if !errors.Is(err, ErrInvalidLogQuery) {
+			t.Fatalf("expected invalid budget scope filter %v to fail, got %v", invalid, err)
+		}
+	}
 }
 
 func TestNormalizeRequestDetailFilterRequiresTenantProjectRequestScope(t *testing.T) {
@@ -293,6 +359,16 @@ func TestNormalizeDashboardOverviewFilterRequiresTenantScope(t *testing.T) {
 	}
 	if filter.TenantID != "tenant_demo" || filter.ProjectID != "project_demo" {
 		t.Fatalf("unexpected normalized dashboard filter: %+v", filter)
+	}
+
+	_, err = NormalizeDashboardOverviewFilter(DashboardOverviewFilter{
+		TenantID:    "tenant_demo",
+		From:        from,
+		To:          to,
+		BudgetScope: budget.Scope{Type: "project", ID: "project_demo", ResolvedBy: "client_provided"},
+	})
+	if !errors.Is(err, ErrInvalidLogQuery) {
+		t.Fatalf("expected invalid dashboard budget resolver to fail, got %v", err)
 	}
 }
 

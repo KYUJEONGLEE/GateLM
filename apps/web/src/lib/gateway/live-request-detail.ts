@@ -6,6 +6,7 @@ import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 type GatewayRequestDetailResponse = {
   data?: {
     applicationId?: string | null;
+    budgetScope?: GatewayBudgetScope;
     cache?: {
       cacheHitRequestId?: string | null;
       cacheKeyHash?: string | null;
@@ -55,6 +56,12 @@ type GatewayRequestDetailResponse = {
   };
 };
 
+type GatewayBudgetScope = {
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  resolvedBy?: string;
+};
+
 export async function getLiveGatewayRequestDetail(
   requestId: string
 ): Promise<InvocationLogRecord | undefined> {
@@ -82,16 +89,19 @@ export async function getLiveGatewayRequestDetail(
 function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
   const createdAt = data.createdAt ?? new Date().toISOString();
   const completedAt = data.completedAt ?? createdAt;
-  const status = data.status ?? "error";
+  const status = normalizeLegacyBridgeStatus(data.status);
   const cacheStatus = data.cache?.cacheStatus ?? "bypass";
   const maskingAction = data.masking?.maskingAction ?? "none";
+  const applicationId = data.applicationId ?? "live_gateway_application";
+  const budgetScope = normalizeBudgetScope(data.budgetScope, applicationId);
 
   return {
     requestId: data.requestId ?? "",
     traceId: data.traceId ?? data.requestId ?? "",
     tenantId: data.tenantId ?? "live_gateway_tenant",
     projectId: data.projectId ?? "live_gateway_project",
-    applicationId: data.applicationId ?? "live_gateway_application",
+    applicationId,
+    budgetScope,
     apiKeyId: "live_gateway_api_key",
     appTokenId: "live_gateway_app_token",
     endUserId: "customer_user_demo_live",
@@ -117,8 +127,8 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     maskingDetectedCount: data.masking?.maskingDetectedCount ?? 0,
     rateLimitDecision: {
       allowed: status !== "rate_limited",
-      scope: "application",
-      scopeId: data.applicationId ?? "live_gateway_application",
+      scope: budgetScope.budgetScopeType,
+      scopeId: budgetScope.budgetScopeId,
       limit: 0,
       remaining: 0,
       windowSeconds: 60,
@@ -144,10 +154,58 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     completedAt,
     metadata: {
       runtime: {
-        configHash: "live-gateway",
-        securityPolicyHash: "live-gateway",
-        routingPolicyHash: "live-gateway"
+        runtimeSnapshot: {
+          runtimeSnapshotId: "runtime_snapshot_live_gateway",
+          runtimeSnapshotVersion: 1,
+          contentHash: "live-gateway",
+          runtimeState: "snapshot_active",
+          publishedAt: createdAt,
+          publishedBy: "runtime_config_compat",
+          gatewayInstanceId: "gateway_web_live",
+          legacyHashes: {
+            configHash: "live-gateway",
+            securityPolicyHash: "live-gateway",
+            routingPolicyHash: "live-gateway"
+          }
+        }
       }
     }
   };
+}
+
+function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {
+  if (scope?.budgetScopeType && scope.budgetScopeId && scope.resolvedBy) {
+    return {
+      budgetScopeType: scope.budgetScopeType,
+      budgetScopeId: scope.budgetScopeId,
+      resolvedBy: scope.resolvedBy
+    };
+  }
+
+  return {
+    budgetScopeType: "application",
+    budgetScopeId: applicationId,
+    resolvedBy: "default_application"
+  };
+}
+
+// Live Gateway detail payloads may still carry legacy status names; normalize them for the v2-facing read model.
+function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRecord["status"] {
+	if (
+		value === "success" ||
+		value === "blocked" ||
+		value === "rate_limited" ||
+		value === "failed" ||
+		value === "cancelled"
+	) {
+		return value;
+	}
+	if (value === "cache_hit") {
+		return "success";
+	}
+	if (value === "error") {
+		return "failed";
+	}
+
+	return "failed";
 }

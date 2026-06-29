@@ -34,6 +34,11 @@ func TestStageLoadsActiveRuntimeConfigIntoGatewayContext(t *testing.T) {
 		gatewayCtx.Routing.RoutingPolicyHash != "hash_routing_policy_test" {
 		t.Fatalf("unexpected routing policy hash: %#v %#v", gatewayCtx.Runtime, gatewayCtx.Routing)
 	}
+	if gatewayCtx.Runtime.Snapshot.RuntimeSnapshotVersion != 1 ||
+		gatewayCtx.Runtime.Snapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
+		gatewayCtx.Runtime.Snapshot.LegacyHashes.ConfigHash != "hash_runtime_config_test" {
+		t.Fatalf("unexpected runtime snapshot provenance: %#v", gatewayCtx.Runtime.Snapshot)
+	}
 	if !gatewayCtx.Runtime.HasRateLimitConfig || gatewayCtx.Runtime.RateLimitConfig.Limit != 7 {
 		t.Fatalf("expected runtime rate limit config, got %#v", gatewayCtx.Runtime)
 	}
@@ -55,7 +60,7 @@ func TestStageFailsClosedWhenRuntimeConfigLoadFails(t *testing.T) {
 	if gatewayErr.Code != "internal_error" || gatewayErr.Stage != StageName {
 		t.Fatalf("unexpected gateway error: %#v", gatewayErr)
 	}
-	if gatewayCtx.Status.Status != "error" || gatewayCtx.Status.HTTPStatus != 500 {
+	if gatewayCtx.Status.Status != "failed" || gatewayCtx.Status.HTTPStatus != 500 {
 		t.Fatalf("unexpected status: %#v", gatewayCtx.Status)
 	}
 	if gatewayCtx.Cache.CacheStatus != "bypass" || gatewayCtx.Cache.CacheType != "none" {

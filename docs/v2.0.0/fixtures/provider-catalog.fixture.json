@@ -1,0 +1,85 @@
+{
+  "catalogId": "provider_catalog_synthetic_001",
+  "catalogVersion": 1,
+  "contentHash": "sha256:synthetic-provider-catalog-content-hash",
+  "updatedAt": "2026-06-29T07:00:00Z",
+  "providers": [
+    {
+      "providerId": "provider_synthetic_primary",
+      "providerName": "synthetic_primary_provider",
+      "adapterType": "openai_compatible",
+      "enabled": true,
+      "credentialRef": {
+        "credentialRefId": "credential_ref_synthetic_primary_001",
+        "credentialVersion": 1,
+        "credentialState": "active",
+        "credentialHash": "sha256:synthetic-credential-reference-hash"
+      },
+      "fallbackEligible": false,
+      "models": [
+        {
+          "modelId": "model_synthetic_low_cost",
+          "modelName": "low_cost_chat_model",
+          "displayName": "Low Cost Chat Model",
+          "enabled": true,
+          "capabilities": {
+            "streamingSupported": true,
+            "maxInputTokens": 8192,
+            "maxOutputTokens": 2048
+          },
+          "routing": {
+            "autoRoutingEligible": true,
+            "costTier": "low",
+            "fallbackPriority": 0
+          }
+        },
+        {
+          "modelId": "model_synthetic_balanced",
+          "modelName": "balanced_chat_model",
+          "displayName": "Balanced Chat Model",
+          "enabled": true,
+          "capabilities": {
+            "streamingSupported": true,
+            "maxInputTokens": 16384,
+            "maxOutputTokens": 4096
+          },
+          "routing": {
+            "autoRoutingEligible": true,
+            "costTier": "balanced",
+            "fallbackPriority": 1
+          }
+        }
+      ]
+    },
+    {
+      "providerId": "provider_synthetic_mock",
+      "providerName": "synthetic_mock_provider",
+      "adapterType": "mock",
+      "enabled": true,
+      "credentialRef": {
+        "credentialRefId": "credential_ref_synthetic_mock_001",
+        "credentialVersion": 1,
+        "credentialState": "active"
+      },
+      "fallbackEligible": true,
+      "models": [
+        {
+          "modelId": "model_synthetic_mock_fallback",
+          "modelName": "mock_fallback_chat_model",
+          "displayName": "Mock Fallback Chat Model",
+          "enabled": true,
+          "capabilities": {
+            "streamingSupported": false,
+            "maxInputTokens": 4096,
+            "maxOutputTokens": 1024
+          },
+          "routing": {
+            "autoRoutingEligible": false,
+            "costTier": "low",
+            "fallbackPriority": 10
+          }
+        }
+      ]
+    }
+  ]
+}

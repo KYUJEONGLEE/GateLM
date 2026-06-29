@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
@@ -256,6 +257,20 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				MaskingDetectedCount:  1,
 				RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
 			},
+			RuntimeSnapshot: &runtimeconfig.RuntimeSnapshotProvenance{
+				RuntimeSnapshotID:      "runtime_snapshot_detail_test",
+				RuntimeSnapshotVersion: 2,
+				ContentHash:            "content_hash_detail_test",
+				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+				PublishedAt:            completedAt.Add(-time.Second),
+				PublishedBy:            "runtime_config_compat",
+				GatewayInstanceID:      "gateway_detail_test",
+				LegacyHashes: runtimeconfig.LegacyHashes{
+					ConfigHash:         "config_hash_detail_test",
+					SecurityPolicyHash: "security_hash_detail_test",
+					RoutingPolicyHash:  "route_hash_detail_test",
+				},
+			},
 			Error:       invocationlog.ErrorFields{},
 			CreatedAt:   completedAt.Add(-132 * time.Millisecond),
 			CompletedAt: &completedAt,
@@ -292,6 +307,14 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	}
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)
+	}
+	if response.Data.RuntimeSnapshot == nil ||
+		response.Data.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_detail_test" ||
+		response.Data.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		response.Data.RuntimeSnapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
+		response.Data.RuntimeSnapshot.LegacyHashes == nil ||
+		response.Data.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_detail_test" {
+		t.Fatalf("unexpected runtime snapshot response: %+v", response.Data.RuntimeSnapshot)
 	}
 
 	for _, forbidden := range []string{
@@ -407,11 +430,10 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				RequestCount:     3,
 			}},
 			StatusCounts: map[string]int64{
-				invocationlog.StatusSuccess:     2,
-				invocationlog.StatusCacheHit:    1,
+				invocationlog.StatusSuccess:     3,
 				invocationlog.StatusBlocked:     1,
 				invocationlog.StatusRateLimited: 1,
-				invocationlog.StatusError:       1,
+				invocationlog.StatusFailed:      1,
 			},
 			CostByModel: []invocationlog.CostByModel{{
 				SelectedProvider: "mock",

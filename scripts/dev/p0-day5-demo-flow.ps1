@@ -436,10 +436,10 @@ Invoke-DemoCase -Name "safe request first pass then exact cache hit" -Body {
     Assert-Equal -Name "provider calls after cache hit" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $secondDetail = Wait-RequestDetail -RequestId $script:SafeHitRequestId
-    Assert-Equal -Name "second detail status" -Expected "cache_hit" -Actual ([string]$secondDetail.data.status)
+    Assert-Equal -Name "second detail status" -Expected "success" -Actual ([string]$secondDetail.data.status)
     Assert-Equal -Name "second detail cache status" -Expected "hit" -Actual ([string]$secondDetail.data.cache.cacheStatus)
     Assert-Equal -Name "second detail cost" -Expected 0 -Actual ([int64]$secondDetail.data.cost.costMicroUsd)
-    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "cache_hit" -ExpectedCacheStatus "hit"
+    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "success" -ExpectedCacheStatus "hit"
 }
 
 Invoke-DemoCase -Name "model auto short prompt routes to mock-fast" -Body {
@@ -514,7 +514,7 @@ Invoke-DemoCase -Name "dashboard reflects Day5 log source" -Body {
     $dashboard = Get-DashboardOverview
     $totals = $dashboard.data.totals
     Assert-True -Name "dashboard totalRequests includes day5 flow" -Condition ([int64]$totals.totalRequests -ge 5)
-    Assert-True -Name "dashboard successfulRequests includes success/cache_hit" -Condition ([int64]$totals.successfulRequests -ge 4)
+    Assert-True -Name "dashboard successfulRequests includes successful cache hit" -Condition ([int64]$totals.successfulRequests -ge 4)
     Assert-True -Name "dashboard blockedRequests includes blocked request" -Condition ([int64]$totals.blockedRequests -ge 1)
     Assert-True -Name "dashboard cacheHitRequests includes cache hit request" -Condition ([int64]$totals.cacheHitRequests -ge 1)
     Assert-True -Name "dashboard totalCostMicroUsd present" -Condition ($null -ne $totals.totalCostMicroUsd)

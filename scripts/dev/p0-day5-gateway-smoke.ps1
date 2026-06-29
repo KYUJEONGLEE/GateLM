@@ -520,10 +520,10 @@ Invoke-SmokeCase -Name "safe request miss then cache hit without provider recall
     Assert-Equal -Name "provider calls after cache hit" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $secondDetail = Wait-RequestDetail -RequestId $script:SafeHitRequestId
-    Assert-Equal -Name "second detail status" -Expected "cache_hit" -Actual ([string]$secondDetail.data.status)
+    Assert-Equal -Name "second detail status" -Expected "success" -Actual ([string]$secondDetail.data.status)
     Assert-Equal -Name "second detail cache status" -Expected "hit" -Actual ([string]$secondDetail.data.cache.cacheStatus)
     Assert-Equal -Name "second detail cost" -Expected 0 -Actual ([int64]$secondDetail.data.cost.costMicroUsd)
-    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "cache_hit" -ExpectedCacheStatus "hit"
+    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "success" -ExpectedCacheStatus "hit"
 }
 
 Invoke-SmokeCase -Name "redaction happens before provider and detail stays redacted" -Body {
@@ -586,7 +586,7 @@ Invoke-SmokeCase -Name "dashboard and log list include day5 request ids" -Body {
     $dashboard = Get-DashboardOverview
     $totals = $dashboard.data.totals
     Assert-True -Name "dashboard totalRequests includes smoke requests" -Condition ([int64]$totals.totalRequests -ge 4)
-    Assert-True -Name "dashboard successfulRequests includes success/cache_hit" -Condition ([int64]$totals.successfulRequests -ge 3)
+    Assert-True -Name "dashboard successfulRequests includes successful cache hit" -Condition ([int64]$totals.successfulRequests -ge 3)
     Assert-True -Name "dashboard blockedRequests includes blocked smoke" -Condition ([int64]$totals.blockedRequests -ge 1)
     Assert-True -Name "dashboard cacheHitRequests includes cache hit smoke" -Condition ([int64]$totals.cacheHitRequests -ge 1)
 

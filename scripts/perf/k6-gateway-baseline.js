@@ -33,8 +33,11 @@ const forbiddenMetricLabels = [
   "feature_id",
   "prompt",
   "prompt_hash",
+  "request_body_hash",
   "cache_key_hash",
+  "provider_key",
   "authorization",
+  "raw_error_detail",
 ];
 
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 403));
@@ -140,8 +143,8 @@ export function safe_cache_hit_baseline(data) {
   });
   check(metricsAfter, {
     "cache hit does not increment provider metric": () => providerAfter === providerBefore,
-    "cache hit records cache_hit request metric": (body) =>
-      sumMetric(body, "gatelm_gateway_requests_total", { status: "cache_hit", http_status: "200" }) >= 1,
+    "cache hit records success request metric": (body) =>
+      sumMetric(body, "gatelm_gateway_requests_total", { status: "success", http_status: "200" }) >= 1,
     "cache hit records cache hit lookup": (body) =>
       sumMetric(body, "gatelm_cache_operations_total", { operation: "lookup", cache_status: "hit", cache_type: "exact" }) >= 1,
   });
