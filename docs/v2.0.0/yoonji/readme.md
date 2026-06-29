@@ -13,7 +13,7 @@
 
 - 재혁님(Control Plane): RuntimeConfig/RuntimeSnapshot에 포함될 safety policy 후보 shape, publish validation 실패 시 동작, snapshot provenance 최소 세트.
 - 이지섭(Gateway): safety stage 호출 위치, safety 결과를 domain outcome/terminal status로 변환하는 규칙, block/redact 시 Provider 호출 bypass 계약.
-- 이규정(Observability): Request Detail/Dashboard에 저장/집계할 safety outcome 후보, redacted preview/hash 노출 범위, freshness/query budget 제약.
+- 이규정(Observability): Request Detail/Dashboard에 저장/집계할 safety outcome 후보, detector summary grain, redacted preview/hash 노출 범위, metrics label 허용/금지 목록, freshness/query budget 제약.
 - 김규민(Product Experience): Employee Chat/Demo UI에서 사용자에게 보여줄 safety 안내 수준, preset demo 입력 범위, 자유 입력 sandbox 여부.
 - 전체: P0 legacy field cleanup inventory 중 safety/log/request detail 관련 필드 확인 범위.
 
@@ -26,6 +26,7 @@
 - redaction/block fixture 후보: 실제 개인정보나 secret 없이 합성 문자열만 사용한다.
 - safety policy validation 후보: RuntimeSnapshot publish 전에 rule config가 비어 있거나 잘못된 경우 실패시키는 최소 기준.
 - evidence report 후보: Semantic Cache candidate, detector precision/false positive sample, 안전한 preset corpus 결과.
+- k6/metrics 해석 후보: safety block/redaction은 기본적으로 정책 결과로 보고, 시스템 error rate와 섞지 않는다.
 
 ## 4. 내가 막히는 dependency
 
@@ -56,6 +57,7 @@
 - safety block 시 Provider 호출, cache write, streaming start가 모두 일어나지 않는다는 계약.
 - redaction 후 cache key/evidence에 사용할 수 있는 입력은 raw prompt가 아니라 normalized redacted prompt 계열이라는 원칙.
 - Request Detail에 허용되는 safety provenance 최소 세트.
+- Metrics label에는 raw/high-cardinality safety 값, prompt hash, error detail을 넣지 않는 기준.
 - RuntimeSnapshot provenance에 safety policy hash/version 계열을 둘지, full policy copy는 금지할지.
 - Auth 실패와 safety block을 같은 `blocked` 계열로 볼지, httpStatus/errorCode와 domain outcome으로 분리할지.
 
