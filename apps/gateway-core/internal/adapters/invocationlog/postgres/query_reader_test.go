@@ -116,6 +116,11 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	if item.BudgetScope.Type != "application" || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope: %+v", item.BudgetScope)
 	}
+	if item.TerminalStatus != invocationlog.StatusSuccess ||
+		item.DomainOutcomes.Provider.Outcome != "success" ||
+		item.DomainOutcomes.Cache.Outcome != "miss" {
+		t.Fatalf("unexpected list item outcomes: %+v", item)
+	}
 	if !strings.Contains(db.query, "order by created_at desc, request_id desc") {
 		t.Fatalf("expected stable descending sort, got %s", db.query)
 	}
@@ -168,7 +173,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
-			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}}}`),
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_REDACTED]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
 		}},
 	}
 
@@ -189,6 +194,12 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	}
 	if detail.BudgetScope.Type != "application" || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope detail: %+v", detail.BudgetScope)
+	}
+	if detail.TerminalStatus != invocationlog.StatusSuccess ||
+		detail.DomainOutcomes.Provider.Outcome != "success" ||
+		detail.DomainOutcomes.Cache.Outcome != "miss" ||
+		detail.DomainOutcomes.Safety.Outcome != "redacted" {
+		t.Fatalf("unexpected detail outcomes: %+v", detail.DomainOutcomes)
 	}
 	if detail.RuntimeSnapshot == nil ||
 		detail.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_query_test" ||

@@ -42,6 +42,11 @@ func TestBuildAuthFailureLogUsesBlockedDefaults(t *testing.T) {
 	if log.Source != SourceCustomerApp {
 		t.Fatalf("expected default source %q, got %q", SourceCustomerApp, log.Source)
 	}
+	if log.DomainOutcomes.Auth.Outcome != "invalid_api_key" ||
+		log.DomainOutcomes.Provider.Outcome != "not_called" ||
+		log.DomainOutcomes.Cache.Outcome != "bypassed" {
+		t.Fatalf("unexpected auth failure domain outcomes: %+v", log.DomainOutcomes)
+	}
 }
 
 func TestIsAuthFailureOnlyMatchesDocumentedAuthFailures(t *testing.T) {

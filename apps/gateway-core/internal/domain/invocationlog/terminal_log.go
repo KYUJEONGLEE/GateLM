@@ -69,6 +69,7 @@ type TerminalLog struct {
 
 	RequestBodyHash string
 	PromptHash      string
+	DomainOutcomes  DomainOutcomes
 	Metadata        map[string]any
 	CreatedAt       time.Time
 	CompletedAt     time.Time
@@ -207,7 +208,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
 
-	return TerminalLog{
+	log := TerminalLog{
 		RequestID:          requestID,
 		TraceID:            traceID,
 		TenantID:           strings.TrimSpace(input.TenantID),
@@ -268,6 +269,11 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		CreatedAt:       input.StartedAt.UTC(),
 		CompletedAt:     completedAt.UTC(),
 	}
+	log.DomainOutcomes = BuildDomainOutcomes(log)
+	log.Metadata["terminalStatus"] = canonicalTerminalStatus(log.Status)
+	log.Metadata["domainOutcomes"] = log.DomainOutcomes
+	log.Metadata["gatewayStageOutcomes"] = BuildGatewayStageOutcomes(log)
+	return log
 }
 
 func logHash(parts ...string) string {

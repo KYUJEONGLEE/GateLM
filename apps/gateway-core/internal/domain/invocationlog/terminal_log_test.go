@@ -59,6 +59,12 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	if log.Status != StatusSuccess || log.CacheStatus != CacheStatusMiss || log.CacheType != CacheTypeExact {
 		t.Fatalf("unexpected terminal fields: %+v", log)
 	}
+	if log.DomainOutcomes.Provider.Outcome != "success" ||
+		log.DomainOutcomes.Cache.Outcome != "miss" ||
+		log.DomainOutcomes.Safety.Outcome != "redacted" ||
+		log.DomainOutcomes.Routing.Outcome != "selected" {
+		t.Fatalf("unexpected domain outcomes: %+v", log.DomainOutcomes)
+	}
 	if log.SavedCostMicroUSD != 9 {
 		t.Fatalf("expected saved cost metadata 9, got %d", log.SavedCostMicroUSD)
 	}
@@ -70,6 +76,13 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	}
 	if log.Metadata["schemaVersion"] != 1 || log.Metadata["securityPolicyVersionId"] != "sec_p0_v1" {
 		t.Fatalf("unexpected metadata: %+v", log.Metadata)
+	}
+	if log.Metadata["terminalStatus"] != StatusSuccess {
+		t.Fatalf("expected terminalStatus metadata, got %+v", log.Metadata)
+	}
+	stageOutcomes, ok := log.Metadata["gatewayStageOutcomes"].(GatewayStageOutcomes)
+	if !ok || stageOutcomes.TerminalStatus != StatusSuccess || stageOutcomes.DomainOutcomes.Provider.Outcome != "success" {
+		t.Fatalf("unexpected gateway stage outcomes metadata: %+v", log.Metadata["gatewayStageOutcomes"])
 	}
 	if _, exists := log.Metadata["routingPolicyHash"]; exists {
 		t.Fatalf("routingPolicyHash must not be primary metadata: %+v", log.Metadata)
@@ -89,6 +102,35 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		legacyHashes["securityPolicyHash"] != "hash_security_policy_test" ||
 		legacyHashes["routingPolicyHash"] != "route_p0_v1" {
 		t.Fatalf("unexpected legacy hash bridge: %+v", legacyHashes)
+	}
+}
+
+func TestBuildTerminalLogMapsExactCacheHitDomainOutcomes(t *testing.T) {
+	startedAt := time.Date(2026, 6, 29, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:         "request_cache_hit",
+		ApplicationID:     "app_demo",
+		RequestedModel:    "auto",
+		SelectedProvider:  "mock",
+		SelectedModel:     "mock-fast",
+		RoutingReason:     "short_prompt_low_cost",
+		Status:            StatusSuccess,
+		HTTPStatus:        200,
+		CacheStatus:       CacheStatusHit,
+		CacheType:         CacheTypeExact,
+		CacheHitRequestID: "request_previous",
+		StartedAt:         startedAt,
+		CompletedAt:       startedAt.Add(4 * time.Millisecond),
+	})
+
+	if log.DomainOutcomes.Cache.Outcome != "hit" {
+		t.Fatalf("expected cache hit outcome, got %+v", log.DomainOutcomes.Cache)
+	}
+	if log.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("cache hit must mark provider not_called, got %+v", log.DomainOutcomes.Provider)
+	}
+	if log.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("cache hit must not evaluate fallback, got %+v", log.DomainOutcomes.Fallback)
 	}
 }
 
