@@ -85,7 +85,7 @@ export async function getApiKeysModel(routeTenantId: string): Promise<ApiKeysMod
 }
 
 export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApiKeyResult> {
-  const projectId = getControlPlaneProjectId();
+  const projectId = values.projectId ?? getControlPlaneProjectId();
 
   try {
     const response = await fetch(

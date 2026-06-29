@@ -87,7 +87,7 @@ export async function getAppTokensModel(routeTenantId: string): Promise<AppToken
 export async function issueAppToken(
   values: AppTokenIssueValues
 ): Promise<OneTimeAppTokenResult> {
-  const applicationId = getControlPlaneApplicationId();
+  const applicationId = values.applicationId ?? getControlPlaneApplicationId();
 
   try {
     const response = await fetch(

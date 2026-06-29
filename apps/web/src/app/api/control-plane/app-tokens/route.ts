@@ -71,6 +71,7 @@ function isAppTokenIssueValues(value: unknown): value is AppTokenIssueValues {
   return (
     typeof record.displayName === "string" &&
     typeof record.expiresAt === "string" &&
-    typeof record.scopes === "string"
+    typeof record.scopes === "string" &&
+    (record.applicationId === undefined || typeof record.applicationId === "string")
   );
 }

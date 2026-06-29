@@ -71,6 +71,7 @@ function isApiKeyIssueValues(value: unknown): value is ApiKeyIssueValues {
   return (
     typeof record.displayName === "string" &&
     typeof record.expiresAt === "string" &&
+    (record.projectId === undefined || typeof record.projectId === "string") &&
     typeof record.scopes === "string"
   );
 }

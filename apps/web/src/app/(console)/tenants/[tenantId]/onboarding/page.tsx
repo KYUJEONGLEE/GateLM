@@ -21,7 +21,7 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
 
   return (
     <ConsoleShell
-      activeManagementItem="onboarding"
+      activeManagementItem="project"
       activeSection="management"
       locale={locale}
       tenantId={tenantId}

@@ -126,10 +126,6 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
           <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
         </div>
-        <div className="project-source">
-          <span>{text.source}</span>
-          <strong>{text.gateway}</strong>
-        </div>
       </section>
 
       {model.loadError ? (

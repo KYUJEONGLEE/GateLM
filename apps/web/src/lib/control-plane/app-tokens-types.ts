@@ -28,6 +28,7 @@ export type OneTimeAppTokenResponse = {
 };
 
 export type AppTokenIssueValues = {
+  applicationId?: string;
   displayName: string;
   expiresAt: string;
   scopes: string;

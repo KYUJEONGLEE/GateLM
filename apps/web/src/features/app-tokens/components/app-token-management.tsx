@@ -142,7 +142,6 @@ export function AppTokenManagement({ locale, model }: AppTokenManagementProps) {
     message: "",
     status: "idle"
   });
-  const sourceLabel = model.source === "control-plane" ? "Control Plane" : "fixture";
   const actionsDisabled = model.source === "fixture";
 
   async function submitIssueAppToken() {
@@ -306,12 +305,6 @@ export function AppTokenManagement({ locale, model }: AppTokenManagementProps) {
         <div>
           <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
-        </div>
-        <div className="project-source">
-          <span>{text.source}</span>
-          <strong>{sourceLabel}</strong>
-          <span>{text.applicationId}</span>
-          <strong>{model.controlPlaneApplicationId}</strong>
         </div>
       </section>
 

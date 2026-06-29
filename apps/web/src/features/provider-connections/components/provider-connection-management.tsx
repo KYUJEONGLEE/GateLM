@@ -134,7 +134,6 @@ export function ProviderConnectionManagement({
     message: "",
     status: "idle"
   });
-  const sourceLabel = model.source === "control-plane" ? "Control Plane" : "fixture";
 
   async function submitProvider() {
     const validationError = validateProviderForm(formValues, locale);
@@ -194,10 +193,6 @@ export function ProviderConnectionManagement({
         <div>
           <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
-        </div>
-        <div className="project-source">
-          <span>{text.source}</span>
-          <strong>{sourceLabel}</strong>
         </div>
       </section>
 

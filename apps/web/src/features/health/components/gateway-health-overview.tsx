@@ -96,10 +96,6 @@ export function GatewayHealthOverview({ locale, model }: GatewayHealthOverviewPr
           <p className="console-kicker">{text.analytics}</p>
           <h2>{text.title}</h2>
         </div>
-        <div className="project-source">
-          <span>{text.source}</span>
-          <strong>Gateway health</strong>
-        </div>
       </section>
 
       {model.healthz.loadError ? (
