@@ -190,11 +190,11 @@ function buildRequestBody(
     messages: [
       {
         role: "system",
-        content: "You are a helpful customer support assistant."
+        content: "<withheld>"
       },
       {
         role: "user",
-        content: record.redactedPromptPreview ?? "Prompt preview not stored for this outcome."
+        content: "<withheld>"
       }
     ],
     max_tokens: 128,

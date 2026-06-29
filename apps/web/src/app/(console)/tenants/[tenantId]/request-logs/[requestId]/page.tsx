@@ -22,7 +22,7 @@ export default async function RequestLogDetailPage({ params }: RequestLogDetailP
 
   return (
     <ConsoleShell
-      activeAnalyticsItem="invocation-history"
+      activeAnalyticsItem="request-logs"
       activeSection="analytics"
       locale={locale}
       tenantId={tenantId}

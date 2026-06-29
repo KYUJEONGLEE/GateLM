@@ -26,7 +26,7 @@ const initText: Record<
       chat: "Gateway request",
       dashboard: "Dashboard",
       onboarding: "Management",
-      requestLogs: "Invocation history"
+      requestLogs: "Request logs"
     },
     language: "Console language",
     title: "Web Console"
@@ -36,7 +36,7 @@ const initText: Record<
       chat: "Gateway 요청",
       dashboard: "대시보드",
       onboarding: "관리",
-      requestLogs: "호출 이력"
+      requestLogs: "요청 로그"
     },
     language: "콘솔 언어",
     title: "웹 콘솔"

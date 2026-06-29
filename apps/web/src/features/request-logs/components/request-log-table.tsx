@@ -28,12 +28,12 @@ const requestLogText: Record<
   en: {
     emptyPreview: "No preview stored",
     kicker: "analytics",
-    title: "Invocation history"
+    title: "Request logs"
   },
   ko: {
     emptyPreview: "저장된 preview 없음",
     kicker: "분석",
-    title: "호출 이력"
+    title: "요청 로그"
   }
 };
 

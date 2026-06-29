@@ -1,5 +1,6 @@
 "use client";
 
+import { Menu } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
@@ -9,8 +10,16 @@ import type { Locale } from "@/lib/i18n/locale";
 type ConsoleSection = "dashboard" | "management" | "analytics" | "settings";
 type ExpandableConsoleSection = "management" | "analytics";
 
-export type ManagementNavItem = "onboarding" | "project" | "application" | "provider";
-export type AnalyticsNavItem = "invocation-history";
+export type ManagementNavItem =
+  | "api-keys"
+  | "app-tokens"
+  | "model-catalog"
+  | "onboarding"
+  | "policies"
+  | "project"
+  | "application"
+  | "provider";
+export type AnalyticsNavItem = "health" | "metrics" | "request-logs";
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
@@ -58,28 +67,12 @@ const navigationItems: Array<{
         path: (tenantId) => `/tenants/${tenantId}/onboarding`
       },
       {
-        disabled: true,
         labels: {
-          en: "Project",
-          ko: "프로젝트"
+          en: "Policies",
+          ko: "정책"
         },
-        item: "project"
-      },
-      {
-        disabled: true,
-        labels: {
-          en: "Application",
-          ko: "애플리케이션"
-        },
-        item: "application"
-      },
-      {
-        disabled: true,
-        labels: {
-          en: "Provider",
-          ko: "Provider"
-        },
-        item: "provider"
+        item: "policies",
+        path: (tenantId) => `/tenants/${tenantId}/policies`
       }
     ],
     section: "management"
@@ -92,10 +85,26 @@ const navigationItems: Array<{
     children: [
       {
         labels: {
-          en: "Invocation History",
-          ko: "호출 이력"
+          en: "Health",
+          ko: "Health"
         },
-        item: "invocation-history",
+        item: "health",
+        path: (tenantId) => `/tenants/${tenantId}/health`
+      },
+      {
+        labels: {
+          en: "Metrics",
+          ko: "Metrics"
+        },
+        item: "metrics",
+        path: (tenantId) => `/tenants/${tenantId}/metrics`
+      },
+      {
+        labels: {
+          en: "Request logs",
+          ko: "요청 로그"
+        },
+        item: "request-logs",
         path: (tenantId) => `/tenants/${tenantId}/request-logs`
       }
     ],
@@ -114,17 +123,23 @@ const navigationItems: Array<{
 const shellText: Record<
   Locale,
   {
+    collapseNavigation: string;
+    expandNavigation: string;
     language: string;
     planned: string;
     tenant: string;
   }
 > = {
   en: {
+    collapseNavigation: "Collapse navigation",
+    expandNavigation: "Expand navigation",
     language: "Console language",
     planned: "planned",
     tenant: "tenant"
   },
   ko: {
+    collapseNavigation: "내비게이션 닫기",
+    expandNavigation: "내비게이션 열기",
     language: "콘솔 언어",
     planned: "예정",
     tenant: "테넌트"
@@ -132,6 +147,7 @@ const shellText: Record<
 };
 
 const openSectionsStorageKey = "gatelm_console_open_sections";
+const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 
 export function ConsoleShell({
   activeAnalyticsItem,
@@ -146,11 +162,28 @@ export function ConsoleShell({
   const [openSections, setOpenSections] = useState<ExpandableConsoleSection[]>(() =>
     getActiveOpenSections(activeSection)
   );
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const storedOpenSections = readStoredOpenSections();
     setOpenSections(mergeOpenSections(storedOpenSections ?? [], getActiveOpenSections(activeSection)));
   }, [activeSection]);
+
+  useEffect(() => {
+    const storedCollapsedState = readStoredSidebarCollapsed();
+
+    if (storedCollapsedState !== null) {
+      setIsSidebarCollapsed(storedCollapsedState);
+    }
+  }, []);
+
+  function toggleSidebar() {
+    setIsSidebarCollapsed((current) => {
+      const next = !current;
+      writeStoredSidebarCollapsed(next);
+      return next;
+    });
+  }
 
   function toggleSection(section: ConsoleSection) {
     if (!isExpandableSection(section)) {
@@ -168,25 +201,69 @@ export function ConsoleShell({
   }
 
   function isChildActive(child: ChildNavigationItem) {
-    if (child.item === "invocation-history") {
+    if (child.item === "health" || child.item === "metrics" || child.item === "request-logs") {
       return child.item === activeAnalyticsItem;
     }
 
     return child.item === activeManagementItem;
   }
 
-  return (
-    <div className="console-shell">
-      <aside className="console-sidebar" aria-label="GateLM console navigation">
-        <Link className="console-brand" href="/">
-          <span className="console-brand-mark">G</span>
-          <span>
-            <strong>GateLM</strong>
-            <small>Web Console</small>
-          </span>
-        </Link>
+  function renderSubnavItems(children: ChildNavigationItem[]) {
+    return children.map((child) => {
+      const childLabel = child.labels[locale];
 
-        <nav className="console-nav">
+      if (child.disabled || !child.path) {
+        return (
+          <span
+            aria-disabled="true"
+            className="console-subnav-link"
+            data-disabled="true"
+            key={child.item}
+          >
+            {childLabel}
+            <small>{text.planned}</small>
+          </span>
+        );
+      }
+
+      return (
+        <Link
+          aria-current={isChildActive(child) ? "page" : undefined}
+          className="console-subnav-link"
+          data-active={isChildActive(child)}
+          href={child.path(tenantId)}
+          key={child.item}
+        >
+          {childLabel}
+        </Link>
+      );
+    });
+  }
+
+  return (
+    <div className="console-shell" data-sidebar-collapsed={isSidebarCollapsed}>
+      <aside className="console-sidebar" aria-label="GateLM console navigation">
+        <div className="console-sidebar-topbar">
+          <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+            <span className="console-brand-mark">G</span>
+            <span className="console-brand-copy">
+              <strong>GateLM</strong>
+              <small>Web Console</small>
+            </span>
+          </Link>
+          <button
+            aria-expanded={!isSidebarCollapsed}
+            aria-label={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
+            className="console-sidebar-toggle"
+            onClick={toggleSidebar}
+            title={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
+            type="button"
+          >
+            <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
+          </button>
+        </div>
+
+        <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {
             const label = item.labels[locale];
 
@@ -209,35 +286,7 @@ export function ConsoleShell({
 
                     {isOpen ? (
                       <div className="console-subnav" aria-label={`${label} navigation`}>
-                        {item.children.map((child) => {
-                          const childLabel = child.labels[locale];
-
-                          if (child.disabled || !child.path) {
-                            return (
-                              <span
-                                aria-disabled="true"
-                                className="console-subnav-link"
-                                data-disabled="true"
-                                key={child.item}
-                              >
-                                {childLabel}
-                                <small>{text.planned}</small>
-                              </span>
-                            );
-                          }
-
-                          return (
-                            <Link
-                              aria-current={isChildActive(child) ? "page" : undefined}
-                              className="console-subnav-link"
-                              data-active={isChildActive(child)}
-                              href={child.path(tenantId)}
-                              key={child.item}
-                            >
-                              {childLabel}
-                            </Link>
-                          );
-                        })}
+                        {renderSubnavItems(item.children)}
                       </div>
                     ) : null}
                   </div>
@@ -271,41 +320,32 @@ export function ConsoleShell({
 
                 {item.children && item.section === activeSection ? (
                   <div className="console-subnav" aria-label={`${label} navigation`}>
-                    {item.children.map((child) => {
-                      const childLabel = child.labels[locale];
-
-                      if (child.disabled || !child.path) {
-                        return (
-                          <span
-                            aria-disabled="true"
-                            className="console-subnav-link"
-                            data-disabled="true"
-                            key={child.item}
-                          >
-                            {childLabel}
-                            <small>{text.planned}</small>
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <Link
-                          aria-current={child.item === activeManagementItem ? "page" : undefined}
-                          className="console-subnav-link"
-                          data-active={child.item === activeManagementItem}
-                          href={child.path(tenantId)}
-                          key={child.item}
-                        >
-                          {childLabel}
-                        </Link>
-                      );
-                    })}
+                    {renderSubnavItems(item.children)}
                   </div>
                 ) : null}
               </div>
             );
           })}
         </nav>
+        <div className="console-mobile-subnavs" aria-hidden={isSidebarCollapsed}>
+          {navigationItems.map((item) => {
+            const label = item.labels[locale];
+            const isOpen =
+              item.children &&
+              isExpandableSection(item.section) &&
+              openSections.includes(item.section);
+
+            if (!item.children || !isOpen) {
+              return null;
+            }
+
+            return (
+              <div className="console-subnav" aria-label={`${label} navigation`} key={item.section}>
+                {renderSubnavItems(item.children)}
+              </div>
+            );
+          })}
+        </div>
       </aside>
 
       <div className="console-main">
@@ -368,4 +408,30 @@ function writeStoredOpenSections(openSections: ExpandableConsoleSection[]) {
   }
 
   window.localStorage.setItem(openSectionsStorageKey, JSON.stringify(openSections));
+}
+
+function readStoredSidebarCollapsed(): boolean | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.localStorage.getItem(sidebarCollapsedStorageKey);
+
+  if (storedValue === "true") {
+    return true;
+  }
+
+  if (storedValue === "false") {
+    return false;
+  }
+
+  return null;
+}
+
+function writeStoredSidebarCollapsed(isCollapsed: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
 }

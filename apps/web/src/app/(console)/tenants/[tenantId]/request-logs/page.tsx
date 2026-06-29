@@ -16,7 +16,7 @@ export default async function RequestLogsPage({ params }: RequestLogsPageProps) 
 
   return (
     <ConsoleShell
-      activeAnalyticsItem="invocation-history"
+      activeAnalyticsItem="request-logs"
       activeSection="analytics"
       locale={locale}
       tenantId={tenantId}

@@ -181,6 +181,15 @@ function normalizeCredentialListItem(listItem: CredentialListItemFixture): Crede
   };
 }
 
+function sanitizeCredentialIssueResponse(
+  issueResponse: CredentialIssueResponse
+): CredentialIssueResponse {
+  return {
+    ...issueResponse,
+    plaintext: "[one-time value returned only by live issue response]"
+  };
+}
+
 export function getAdminOnboardingModel(): AdminOnboardingModel {
   const adminApi = controlPlaneAdminApiFixture as ControlPlaneAdminApiFixture;
   const credentials = credentialLifecycleFixture as CredentialLifecycleFixture;
@@ -211,11 +220,15 @@ export function getAdminOnboardingModel(): AdminOnboardingModel {
       modelCount: provider.models?.length ?? unconfiguredProvider.models.length
     },
     apiKey: {
-      issueResponse: credentials.credentialLifecycle.apiKey.issueExample.response,
+      issueResponse: sanitizeCredentialIssueResponse(
+        credentials.credentialLifecycle.apiKey.issueExample.response
+      ),
       listItem: normalizeCredentialListItem(credentials.credentialLifecycle.apiKey.listItemExample)
     },
     appToken: {
-      issueResponse: credentials.credentialLifecycle.appToken.issueExample.response,
+      issueResponse: sanitizeCredentialIssueResponse(
+        credentials.credentialLifecycle.appToken.issueExample.response
+      ),
       listItem: normalizeCredentialListItem(credentials.credentialLifecycle.appToken.listItemExample)
     },
     runtimeConfig: {

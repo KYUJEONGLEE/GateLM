@@ -12,11 +12,9 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   formatDisplayIdentifier,
-  formatTenantDisplayName,
-  sanitizeDisplayValue
+  formatTenantDisplayName
 } from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
@@ -54,8 +52,8 @@ const customerDemoText: Record<
     gatewayRequest: string;
     gatewayResult: string;
     language: string;
-    payloadPreview: string;
-    responsePreview: string;
+    requestMetadata: string;
+    responseMetadata: string;
     scenarios: Record<
       CustomerDemoScenarioId,
       {
@@ -71,6 +69,16 @@ const customerDemoText: Record<
     };
     title: string;
     userLabel: string;
+    withheld: {
+      assistant: string;
+      blocked: string;
+      cacheHit: string;
+      customer: string;
+      error: string;
+      pending: string;
+      rateLimited: string;
+      success: string;
+    };
     webConsole: string;
   }
 > = {
@@ -93,8 +101,8 @@ const customerDemoText: Record<
     gatewayRequest: "Gateway request",
     gatewayResult: "Gateway result",
     language: "Console language",
-    payloadPreview: "Payload preview",
-    responsePreview: "Response preview",
+    requestMetadata: "Request metadata",
+    responseMetadata: "Response metadata",
     scenarios: {
       blocked: {
         title: "Blocked"
@@ -121,6 +129,16 @@ const customerDemoText: Record<
     },
     title: "Gateway request",
     userLabel: "Customer message",
+    withheld: {
+      assistant: "Gateway response content is withheld from the console. Use metadata and request detail for verification.",
+      blocked: "Blocked before provider call.",
+      cacheHit: "Served from exact cache.",
+      customer: "Customer prompt content is withheld from the console.",
+      error: "Gateway returned a sanitized error.",
+      pending: "Ready to send through Gateway.",
+      rateLimited: "Rate limit applied before provider call.",
+      success: "Gateway request completed successfully."
+    },
     webConsole: "Web Console"
   },
   ko: {
@@ -142,8 +160,8 @@ const customerDemoText: Record<
     gatewayRequest: "Gateway 요청",
     gatewayResult: "Gateway 결과",
     language: "콘솔 언어",
-    payloadPreview: "Payload preview",
-    responsePreview: "Response preview",
+    requestMetadata: "요청 메타데이터",
+    responseMetadata: "응답 메타데이터",
     scenarios: {
       blocked: {
         title: "차단"
@@ -170,6 +188,16 @@ const customerDemoText: Record<
     },
     title: "Gateway 요청",
     userLabel: "고객 메시지",
+    withheld: {
+      assistant: "Gateway 응답 원문은 콘솔에 표시하지 않습니다. 검증은 metadata와 요청 상세에서 확인합니다.",
+      blocked: "Provider 호출 전에 차단되었습니다.",
+      cacheHit: "Exact Cache에서 응답했습니다.",
+      customer: "고객 prompt 원문은 콘솔에 표시하지 않습니다.",
+      error: "Gateway가 정제된 오류만 반환했습니다.",
+      pending: "Gateway로 전송할 준비가 되었습니다.",
+      rateLimited: "Provider 호출 전에 Rate Limit이 적용되었습니다.",
+      success: "Gateway 요청이 성공적으로 완료되었습니다."
+    },
     webConsole: "웹 콘솔"
   }
 };
@@ -333,11 +361,11 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
               {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
               <article className="chat-bubble chat-bubble-user">
                 <span>{text.userLabel}</span>
-                <p>{exchange.request.body.messages[1]?.content ?? text.detectedNone}</p>
+                <p>{text.withheld.customer}</p>
               </article>
               <article className="chat-bubble chat-bubble-assistant" data-status={exchange.status}>
                 <span>{text.assistantLabel}</span>
-                <p>{exchange.assistantMessage}</p>
+                <p>{getSafeOutcomeMessage(exchange, text.withheld)}</p>
               </article>
             </div>
 
@@ -383,8 +411,14 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 <code>{exchange.request.endpoint}</code>
               </div>
               <HeaderList headers={exchange.request.headers} />
-              <Separator className="customer-demo-separator" />
-              <JsonPreview label={text.payloadPreview} value={exchange.request.body} />
+              <dl className="customer-demo-metrics" aria-label={text.requestMetadata}>
+                <Metric label="Model" value={exchange.request.body.model} />
+                <Metric label="Messages" value={String(exchange.request.body.messages.length)} />
+                <Metric label="Cache mode" value={exchange.request.body.gate_lm.cache.mode} />
+                <Metric label="Routing mode" value={exchange.request.body.gate_lm.routing.mode} />
+                <Metric label="Stream" value={String(exchange.request.body.stream)} />
+                <Metric label="Prompt" value="withheld" />
+              </dl>
             </CardContent>
           </Card>
 
@@ -407,6 +441,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 <Metric label="Masking" value={exchange.maskingAction} />
                 <Metric label="Provider" value={exchange.providerCall} />
                 <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
+                <Metric label="Error code" value={getErrorCode(exchange.response.body)} />
                 <Metric
                   label="Detected"
                   value={
@@ -417,8 +452,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 />
               </dl>
               <HeaderList headers={exchange.response.headers} />
-              <Separator className="customer-demo-separator" />
-              <JsonPreview label={text.responsePreview} value={exchange.response.body} />
+              <dl className="customer-demo-metrics" aria-label={text.responseMetadata}>
+                <Metric label="Body" value="withheld" />
+                <Metric label="Selected provider" value={getResponseHeader(exchange, "X-GateLM-Routed-Provider")} />
+                <Metric label="Selected model" value={getResponseHeader(exchange, "X-GateLM-Routed-Model")} />
+                <Metric label="Cache status" value={getResponseHeader(exchange, "X-GateLM-Cache-Status")} />
+              </dl>
             </CardContent>
           </Card>
         </section>
@@ -584,11 +623,60 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function JsonPreview({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="json-preview">
-      <h4>{label}</h4>
-      <pre>{JSON.stringify(sanitizeDisplayValue(value), null, 2)}</pre>
-    </div>
-  );
+function getSafeOutcomeMessage(
+  exchange: CustomerDemoExchange,
+  text: {
+    assistant: string;
+    blocked: string;
+    cacheHit: string;
+    error: string;
+    pending: string;
+    rateLimited: string;
+    success: string;
+  }
+) {
+  if (exchange.status === "pending") {
+    return text.pending;
+  }
+
+  if (exchange.status === "blocked") {
+    return text.blocked;
+  }
+
+  if (exchange.status === "rate_limited") {
+    return text.rateLimited;
+  }
+
+  if (exchange.status === "cache_hit") {
+    return text.cacheHit;
+  }
+
+  if (exchange.status === "success") {
+    return text.success;
+  }
+
+  if (exchange.status === "error") {
+    return text.error;
+  }
+
+  return text.assistant;
+}
+
+function getResponseHeader(exchange: CustomerDemoExchange, name: string) {
+  return exchange.response.headers.find((header) => header.name === name)?.value ?? "not-set";
+}
+
+function getErrorCode(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return "none";
+  }
+
+  const error = (body as { error?: unknown }).error;
+
+  if (!error || typeof error !== "object" || Array.isArray(error)) {
+    return "none";
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code.trim() ? code : "none";
 }
