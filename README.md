@@ -50,6 +50,8 @@ Customer App / Employee Chat
 
 실제 PR 착수 시에는 `docs/v2.0.0/implementation-pr-packets.md`에서 PR packet을 확인하고, 완료 전에는 `docs/v2.0.0/acceptance-test-matrix.md`로 acceptance를 확인합니다. DB, Prisma schema, SQL migration, Request Log read model 변경은 `docs/v2.0.0/db-migration-plan.md`를 먼저 확인합니다.
 
+Reference / Draft 문서는 구현 판단의 보조 자료이며 Source Of Truth가 아닙니다. `docs/v2.0.0/p0-legacy-field-cleanup.md`와 `docs/v2.0.0/p0-contract-decisions.md`의 후보 표현은 별도 계약 변경 없이 API, DB, Event, Metrics, Schema field로 승격하지 않습니다.
+
 ---
 
 ## 3. Repository Layout

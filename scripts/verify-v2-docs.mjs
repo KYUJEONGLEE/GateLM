@@ -29,7 +29,14 @@ const executionDocs = [
   "docs/v2.0.0/db-migration-plan.md",
 ];
 
+const draftReferenceDocs = [
+  "docs/v2.0.0/p0-legacy-field-cleanup.md",
+  "docs/v2.0.0/p0-contract-decisions.md",
+];
+
 const entryDocs = ["AGENTS.md", "README.md", "docs/README.md"];
+const readingOrderDocs = [...entryDocs, "docs/v2.0.0/implementation-plan.md"];
+const appReadmeDocs = ["apps/control-plane-api/README.md", "apps/ai-service/README.md"];
 
 const sensitiveKeyPattern =
   /(rawPrompt|rawResponse|rawDetectedValue|rawPromptFragment|apiKey|appToken|providerKey|authorizationHeader|providerRawErrorBody|actualSecret)/i;
@@ -96,6 +103,26 @@ function assertIncludes(relativePath, expectedText) {
   }
 }
 
+function assertOrderedIncludes(relativePath, expectedReferences, description) {
+  const text = readText(relativePath);
+  let lastIndex = -1;
+
+  for (const expectedReference of expectedReferences) {
+    const index = text.indexOf(expectedReference, lastIndex + 1);
+    if (index === -1) {
+      fail(`${relativePath}: missing ${description} reference "${expectedReference}"`);
+      continue;
+    }
+
+    if (index <= lastIndex) {
+      fail(`${relativePath}: ${description} references are not in the expected order`);
+      return;
+    }
+
+    lastIndex = index;
+  }
+}
+
 function assertRuntimeBaseline() {
   const packageJson = readJson("package.json");
   if (!packageJson) {
@@ -126,9 +153,7 @@ function assertRuntimeBaseline() {
 function assertEntryDocs() {
   for (const doc of entryDocs) {
     assertExists(doc);
-    for (const source of sourceOfTruthDocs) {
-      assertIncludes(doc, source);
-    }
+    assertOrderedIncludes(doc, sourceOfTruthDocs, "Source Of Truth");
   }
 
   for (const doc of entryDocs) {
@@ -136,6 +161,52 @@ function assertEntryDocs() {
       assertIncludes(doc, executionDoc);
     }
   }
+
+  for (const doc of readingOrderDocs) {
+    assertOrderedIncludes(doc, ["docs/README.md", "docs/v2.0.0/contracts.md"], "reading order");
+    assertOrderedIncludes(doc, sourceOfTruthDocs, "Source Of Truth");
+  }
+
+  for (const doc of appReadmeDocs) {
+    if (existsSync(toAbsolute(doc))) {
+      assertIncludes(doc, "docs/README.md");
+      assertIncludes(doc, "docs/v2.0.0/contracts.md");
+    }
+  }
+}
+
+function assertDraftReferencesStayNonAuthoritative() {
+  for (const draftReferenceDoc of draftReferenceDocs) {
+    assertExists(draftReferenceDoc);
+    if (sourceOfTruthDocs.includes(draftReferenceDoc)) {
+      fail(`${draftReferenceDoc}: draft/reference document must not be listed as Source Of Truth`);
+    }
+  }
+
+  for (const doc of readingOrderDocs) {
+    for (const draftReferenceDoc of draftReferenceDocs) {
+      assertIncludes(doc, draftReferenceDoc);
+    }
+    const text = readText(doc).toLowerCase();
+    if (!text.includes("reference") || !text.includes("draft")) {
+      fail(`${doc}: draft/reference documents must be explicitly marked as non-authoritative`);
+    }
+  }
+}
+
+function assertSemanticCacheStaysOutOfCoreResponsePath() {
+  const requiredNonGoalDocs = [
+    "docs/v2.0.0/contracts.md",
+    "docs/README.md",
+    "docs/v2.0.0/implementation-plan.md",
+  ];
+
+  for (const doc of requiredNonGoalDocs) {
+    assertIncludes(doc, "Semantic Cache live response path");
+  }
+
+  assertIncludes("docs/v2.0.0/implementation-tasks.md", "Semantic Cache remains evidence only");
+  assertIncludes("docs/v2.0.0/contracts.md", "core response path");
 }
 
 function assertCiGate() {
@@ -147,7 +218,7 @@ function assertCiGate() {
     "branches: [main, dev]",
     "node-version-file: .node-version",
     "corepack prepare pnpm@9.15.0 --activate",
-    "pnpm verify:v2-docs",
+    "corepack pnpm run verify:v2-docs",
   ]) {
     if (!workflow.includes(expectedText)) {
       fail(`${workflowPath}: missing CI gate "${expectedText}"`);
@@ -448,6 +519,8 @@ function main() {
 
   assertRuntimeBaseline();
   assertEntryDocs();
+  assertDraftReferencesStayNonAuthoritative();
+  assertSemanticCacheStaysOutOfCoreResponsePath();
   assertCiGate();
   assertSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();

@@ -87,6 +87,7 @@ Verification:
 ```powershell
 git diff --check
 corepack pnpm run verify:v2-docs
+pnpm install --frozen-lockfile
 node --version
 corepack pnpm --version
 ```

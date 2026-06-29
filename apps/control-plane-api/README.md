@@ -2,12 +2,14 @@
 
 NestJS workspace for 재혁님's Control Plane and Runtime Policy scope.
 
+Start GateLM work from `docs/README.md`. For v2.0.0, `docs/v2.0.0/contracts.md` is the contract authority, followed by schemas/fixtures, `implementation-plan.md`, and `implementation-tasks.md`. This app README is only an operational pointer and does not redefine RuntimeSnapshot, API, DB, Event, Metrics, or security-sensitive contracts.
+
 ## Scope
 
 - Project, Application, Provider Connection
 - API Key and App Token lifecycle
-- Active Runtime Config publishing
-- Gateway-facing runtime config shape
+- RuntimeConfig validation and RuntimeSnapshot publishing
+- Gateway-facing published RuntimeSnapshot shape
 
 ## Local Commands
 

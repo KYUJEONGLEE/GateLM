@@ -2,6 +2,8 @@
 
 This service owns optional AI Safety and Evaluation Lab work for the v1.0.0 baseline. It is not a required dependency of the Gateway hot path.
 
+Start GateLM work from `docs/README.md`. For v2.0.0, `docs/v2.0.0/contracts.md` is the contract authority, followed by schemas/fixtures, `implementation-plan.md`, and `implementation-tasks.md`. This app README is only an operational pointer and does not redefine API, DB, Event, Metrics, Safety, or security-sensitive contracts.
+
 ## RemoteSafetyEngine Prototype
 
 RemoteSafetyEngine is an internal shadow/evaluation prototype for v2 evidence. It is disabled by default and is not connected to Gateway production blocking.

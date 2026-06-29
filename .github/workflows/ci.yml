@@ -31,7 +31,7 @@ jobs:
           corepack prepare pnpm@9.15.0 --activate
 
       - name: Verify v2 documents
-        run: pnpm verify:v2-docs
+        run: corepack pnpm run verify:v2-docs
 
       - name: Block committed secret files
         shell: bash

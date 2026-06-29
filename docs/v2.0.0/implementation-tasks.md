@@ -50,8 +50,8 @@ Verification:
 - `git diff --check`
 - `corepack pnpm run verify:v2-docs`
 - `pnpm install --frozen-lockfile`
-- `pnpm --version`
 - `node --version`
+- `corepack pnpm --version`
 
 ## PR-1. Gateway Outcome Adoption Gate
 
