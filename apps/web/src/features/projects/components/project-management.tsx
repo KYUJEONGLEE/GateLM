@@ -15,7 +15,6 @@ import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ProjectManagementProps = {
-  applicationCounts: Record<string, number>;
   locale: Locale;
   model: ProjectsModel;
 };
@@ -23,7 +22,7 @@ type ProjectManagementProps = {
 type ProjectDetailManagementProps = {
   locale: Locale;
   project: ProjectRecord;
-  runtimeSettings: ProjectRuntimeSettings;
+  runtimeSettings: ProjectRuntimeSettings | null;
   tenantId: string;
 };
 
@@ -49,7 +48,6 @@ const projectStatuses: ProjectStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
 const projectText: Record<
   Locale,
   {
-    applications: string;
     cache: string;
     cacheType: string;
     createProject: string;
@@ -76,7 +74,6 @@ const projectText: Record<
   }
 > = {
   en: {
-    applications: "Applications",
     cache: "Cache",
     cacheType: "Cache type",
     createProject: "Create Project",
@@ -85,7 +82,7 @@ const projectText: Record<
     edit: "Edit",
     empty: "No projects found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
-    detailSaved: "Project and runtime settings saved.",
+    detailSaved: "Project saved.",
     management: "management",
     name: "Name",
     project: "Project",
@@ -102,7 +99,6 @@ const projectText: Record<
     updated: "Updated"
   },
   ko: {
-    applications: "애플리케이션",
     cache: "Cache",
     cacheType: "Cache type",
     createProject: "Create Project",
@@ -111,7 +107,7 @@ const projectText: Record<
     edit: "수정",
     empty: "프로젝트가 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
-    detailSaved: "Project와 Runtime 설정이 저장되었습니다.",
+    detailSaved: "Project가 저장되었습니다.",
     management: "관리",
     name: "이름",
     project: "Project",
@@ -129,7 +125,7 @@ const projectText: Record<
   }
 };
 
-export function ProjectManagement({ applicationCounts, locale, model }: ProjectManagementProps) {
+export function ProjectManagement({ locale, model }: ProjectManagementProps) {
   const text = projectText[locale];
   const projects = model.projects.filter((project) => project.status !== "ARCHIVED");
 
@@ -168,7 +164,6 @@ export function ProjectManagement({ applicationCounts, locale, model }: ProjectM
                   <th>{text.name}</th>
                   <th>{text.description}</th>
                   <th>{text.status}</th>
-                  <th>{text.applications}</th>
                   <th>{text.updated}</th>
                   <th />
                 </tr>
@@ -189,7 +184,6 @@ export function ProjectManagement({ applicationCounts, locale, model }: ProjectM
                         {formatProjectStatus(project.status)}
                       </Badge>
                     </td>
-                    <td>{applicationCounts[project.id] ?? 0}</td>
                     <td>
                       <span className="project-muted">{formatDateTime(project.updatedAt)}</span>
                       <small className="project-muted">
@@ -225,7 +219,6 @@ export function ProjectDetailManagement({
   const router = useRouter();
   const text = projectText[locale];
   const [values, setValues] = useState<ProjectUpdateValues>(() => getProjectUpdateValues(project));
-  const [settings, setSettings] = useState<ProjectRuntimeSettings>(runtimeSettings);
   const [pendingAction, setPendingAction] = useState<"delete" | "save" | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
@@ -380,72 +373,36 @@ export function ProjectDetailManagement({
           </div>
         </div>
 
-        <div className="project-detail-section">
-          <div className="panel-heading">
-            <h3>{text.runtimeSettings}</h3>
+        {runtimeSettings ? (
+          <div className="project-detail-section">
+            <div className="panel-heading">
+              <h3>{text.runtimeSettings}</h3>
+            </div>
+            <div className="project-create-form">
+              <label className="policy-field">
+                <span>{text.publishState}</span>
+                <input disabled readOnly type="text" value={runtimeSettings.publishState} />
+              </label>
+              <label className="policy-field">
+                <span>{text.cache}</span>
+                <input
+                  disabled
+                  readOnly
+                  type="text"
+                  value={runtimeSettings.cacheEnabled ? "enabled" : "disabled"}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.cacheType}</span>
+                <input disabled readOnly type="text" value={runtimeSettings.cacheType} />
+              </label>
+              <label className="policy-field">
+                <span>{text.safetyMode}</span>
+                <input disabled readOnly type="text" value={runtimeSettings.safetyMode} />
+              </label>
+            </div>
           </div>
-          <div className="project-create-form">
-            <label className="policy-field">
-              <span>{text.publishState}</span>
-              <select
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    publishState: event.target.value
-                  }))
-                }
-                value={settings.publishState}
-              >
-                <option value="published">published</option>
-                <option value="draft">draft</option>
-                <option value="validation_failed">validation_failed</option>
-              </select>
-            </label>
-            <label className="policy-field">
-              <span>{text.cache}</span>
-              <select
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    cacheEnabled: event.target.value === "enabled"
-                  }))
-                }
-                value={settings.cacheEnabled ? "enabled" : "disabled"}
-              >
-                <option value="enabled">enabled</option>
-                <option value="disabled">disabled</option>
-              </select>
-            </label>
-            <label className="policy-field">
-              <span>{text.cacheType}</span>
-              <select
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    cacheType: event.target.value
-                  }))
-                }
-                value={settings.cacheType}
-              >
-                <option value="exact">exact</option>
-              </select>
-            </label>
-            <label className="policy-field">
-              <span>{text.safetyMode}</span>
-              <select
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    safetyMode: event.target.value
-                  }))
-                }
-                value={settings.safetyMode}
-              >
-                <option value="rule_based">rule_based</option>
-              </select>
-            </label>
-          </div>
-        </div>
+        ) : null}
       </section>
       <div className="project-detail-actions">
         <button

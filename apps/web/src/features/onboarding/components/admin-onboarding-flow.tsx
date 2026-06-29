@@ -233,48 +233,81 @@ export function AdminOnboardingFlow({
 
     let project = projectSetupState.project;
 
-    if (!project) {
-      const projectResponse = await fetch("/api/control-plane/projects", {
-        body: JSON.stringify({
-          action: "create",
-          values: {
-            description: "",
-            name: draft.projectName
-          }
-        }),
-        headers: {
-          "Content-Type": "application/json"
-        },
-        method: "POST"
-      });
-      const projectPayload = (await projectResponse
-        .json()
-        .catch(() => ({}))) as ProjectResponsePayload;
-
-      if (!projectResponse.ok || !projectPayload.project) {
-        setProjectSetupState({
-          apiKey: null,
-          error: projectPayload.error ?? text.createProjectError,
-          project: null,
-          status: "error"
+    try {
+      if (!project) {
+        const projectResponse = await fetch("/api/control-plane/projects", {
+          body: JSON.stringify({
+            action: "create",
+            values: {
+              description: "",
+              name: draft.projectName
+            }
+          }),
+          headers: {
+            "Content-Type": "application/json"
+          },
+          method: "POST"
         });
-        return;
+        const projectPayload = (await projectResponse
+          .json()
+          .catch(() => ({}))) as ProjectResponsePayload;
+
+        if (!projectResponse.ok || !projectPayload.project) {
+          setProjectSetupState({
+            apiKey: null,
+            error: projectPayload.error ?? text.createProjectError,
+            project: null,
+            status: "error"
+          });
+          return;
+        }
+
+        project = projectPayload.project;
       }
 
-      project = projectPayload.project;
-    }
+      const selectedProjectStatus = normalizeDraftProjectStatus(draft.projectStatus);
 
-    const selectedProjectStatus = normalizeDraftProjectStatus(draft.projectStatus);
+      if (project.status !== selectedProjectStatus) {
+        const updateResponse = await fetch("/api/control-plane/projects", {
+          body: JSON.stringify({
+            action: "update",
+            values: {
+              description: project.description ?? "",
+              name: project.name,
+              projectId: project.id,
+              status: selectedProjectStatus
+            }
+          }),
+          headers: {
+            "Content-Type": "application/json"
+          },
+          method: "POST"
+        });
+        const updatePayload = (await updateResponse
+          .json()
+          .catch(() => ({}))) as ProjectResponsePayload;
 
-    if (project.status !== selectedProjectStatus) {
-      const updateResponse = await fetch("/api/control-plane/projects", {
+        if (!updateResponse.ok || !updatePayload.project) {
+          setProjectSetupState({
+            apiKey: null,
+            error: updatePayload.error ?? text.createProjectError,
+            project,
+            status: "error"
+          });
+          return;
+        }
+
+        project = updatePayload.project;
+      }
+
+      const response = await fetch("/api/control-plane/api-keys", {
         body: JSON.stringify({
-          action: "update",
+          action: "issue",
           values: {
-            description: project.description ?? "",
-            name: project.name,
+            displayName: draft.apiKeyDisplayName,
+            expiresAt: "",
             projectId: project.id,
-            status: selectedProjectStatus
+            scopes: "gateway:invoke"
           }
         }),
         headers: {
@@ -282,57 +315,33 @@ export function AdminOnboardingFlow({
         },
         method: "POST"
       });
-      const updatePayload = (await updateResponse
-        .json()
-        .catch(() => ({}))) as ProjectResponsePayload;
+      const payload = (await response.json().catch(() => ({}))) as ApiKeyIssuePayload;
 
-      if (!updateResponse.ok || !updatePayload.project) {
+      if (!response.ok || !payload.apiKey) {
         setProjectSetupState({
           apiKey: null,
-          error: updatePayload.error ?? text.createProjectError,
+          error: payload.error ?? text.issueApiKeyError,
           project,
           status: "error"
         });
         return;
       }
 
-      project = updatePayload.project;
-    }
-
-    const response = await fetch("/api/control-plane/api-keys", {
-      body: JSON.stringify({
-        action: "issue",
-        values: {
-          displayName: draft.apiKeyDisplayName,
-          expiresAt: "",
-          projectId: project.id,
-          scopes: "gateway:invoke"
-        }
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ApiKeyIssuePayload;
-
-    if (!response.ok || !payload.apiKey) {
+      setProjectSetupState({
+        apiKey: payload.apiKey,
+        error: "",
+        project,
+        status: "issued"
+      });
+      setSavedStepIds((current) => new Set(current).add(activeStep.id));
+    } catch {
       setProjectSetupState({
         apiKey: null,
-        error: payload.error ?? text.issueApiKeyError,
+        error: text.createProjectError,
         project,
         status: "error"
       });
-      return;
     }
-
-    setProjectSetupState({
-      apiKey: payload.apiKey,
-      error: "",
-      project,
-      status: "issued"
-    });
-    setSavedStepIds((current) => new Set(current).add(activeStep.id));
   }
 
   return (

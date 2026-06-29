@@ -3,8 +3,8 @@ import { ConsoleShell } from "@/components/layout/console-shell";
 import { ApplicationManagement } from "@/features/applications/components/application-management";
 import { ProjectDetailManagement } from "@/features/projects/components/project-management";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
-import { getAdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ProjectDetailPageProps = {
@@ -25,7 +25,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   const applicationsModel = await getApplicationsModel(tenantId, project.id);
-  const runtimeConfig = getAdminOnboardingModel().runtimeConfig;
+  const activeApplication = applicationsModel.applications.find(
+    (application) => application.status === "ACTIVE"
+  );
+  const runtimeConfig = activeApplication
+    ? await getRuntimePolicyConfigForApplication(activeApplication.id)
+    : null;
 
   return (
     <ConsoleShell
@@ -38,12 +43,16 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         locale={locale}
         project={project}
         tenantId={tenantId}
-        runtimeSettings={{
-          cacheEnabled: runtimeConfig.cacheEnabled,
-          cacheType: runtimeConfig.cacheType,
-          publishState: runtimeConfig.publishState,
-          safetyMode: runtimeConfig.safetyMode
-        }}
+        runtimeSettings={
+          runtimeConfig
+            ? {
+                cacheEnabled: runtimeConfig.cachePolicy.enabled,
+                cacheType: runtimeConfig.cachePolicy.type,
+                publishState: runtimeConfig.publishState,
+                safetyMode: runtimeConfig.safetyPolicy.mode
+              }
+            : null
+        }
       />
       <ApplicationManagement locale={locale} model={applicationsModel} />
     </ConsoleShell>

@@ -213,33 +213,37 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
   }
 
   async function issueInitialAppToken(application: ApplicationRecord) {
-    const response = await fetch("/api/control-plane/app-tokens", {
-      body: JSON.stringify({
-        action: "issue",
-        values: {
-          applicationId: application.id,
-          displayName: `${application.name} App Token`,
-          expiresAt: "",
-          scopes: "gateway:invoke"
-        }
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as AppTokenResponsePayload;
+    try {
+      const response = await fetch("/api/control-plane/app-tokens", {
+        body: JSON.stringify({
+          action: "issue",
+          values: {
+            applicationId: application.id,
+            displayName: `${application.name} App Token`,
+            expiresAt: "",
+            scopes: "gateway:invoke"
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as AppTokenResponsePayload;
 
-    if (!response.ok || !payload.appToken) {
+      if (!response.ok || !payload.appToken) {
+        return null;
+      }
+
+      setOneTimeAppToken({
+        applicationName: application.name,
+        appToken: payload.appToken
+      });
+
+      return payload.appToken;
+    } catch {
       return null;
     }
-
-    setOneTimeAppToken({
-      applicationName: application.name,
-      appToken: payload.appToken
-    });
-
-    return payload.appToken;
   }
 
   async function submitUpdateApplication(
