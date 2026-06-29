@@ -27,7 +27,7 @@ v2에서 Gateway가 특히 책임질 부분은 아래와 같다.
 - `model=auto` 요청을 Provider/Model catalog와 routing policy로 해석한다.
 - Mock Provider는 데모용 주 경로가 아니라 fallback/evidence 경로로 분리한다.
 - streaming thin slice를 지원하되, request-side safety는 cache/routing/provider/streaming start 전에 끝낸다.
-- raw prompt, raw response, API Key, App Token, Provider Key, Authorization header는 저장/로그/fixture에 남기지 않는다.
+- raw prompt, raw response, raw detected value, offset, API Key, App Token, Provider Key, Authorization header는 저장/로그/fixture에 남기지 않는다.
 
 ## 2. 내가 다른 역할에게 받아야 하는 계약
 
@@ -82,6 +82,7 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 - `/metrics`로 노출 가능한 Gateway-owned metric evidence
 - local stack smoke와 demo smoke 실행 방법
 - safety block 시 provider call, cache write, streaming start가 모두 일어나지 않는다는 bypass evidence
+- remote/shadow safety 결과는 evidence track으로 분리하고 Gateway core 차단 판단을 대체하지 않는다는 evidence
 
 중요한 원칙:
 
