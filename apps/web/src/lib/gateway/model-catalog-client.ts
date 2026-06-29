@@ -243,5 +243,15 @@ function parseUnixTimestamp(value: unknown) {
     return null;
   }
 
-  return new Date(value * 1000).toISOString();
+  try {
+    const date = new Date(value * 1000);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return date.toISOString();
+  } catch {
+    return null;
+  }
 }

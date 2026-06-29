@@ -30,6 +30,9 @@ type ProviderResponsePayload = {
 };
 
 const providerStatuses: ProviderConnectionStatus[] = ["ACTIVE", "DEGRADED", "DISABLED"];
+const providerKeyPattern = /^[a-z][a-z0-9_-]{1,63}$/;
+const minProviderTimeoutMs = 1000;
+const maxProviderTimeoutMs = 120000;
 
 const emptyProviderForm: ProviderConnectionFormValues = {
   baseUrl: "",
@@ -134,14 +137,10 @@ export function ProviderConnectionManagement({
   const sourceLabel = model.source === "control-plane" ? "Control Plane" : "fixture";
 
   async function submitProvider() {
-    if (!formValues.provider.trim() || !formValues.displayName.trim() || !formValues.baseUrl.trim()) {
-      setSubmitState({
-        message:
-          locale === "ko"
-            ? "Provider key, 표시 이름, Base URL을 입력하세요."
-            : "Provider key, display name, and base URL are required.",
-        status: "error"
-      });
+    const validationError = validateProviderForm(formValues, locale);
+
+    if (validationError) {
+      setSubmitState({ message: validationError, status: "error" });
       return;
     }
 
@@ -225,7 +224,7 @@ export function ProviderConnectionManagement({
               onChange={(event) =>
                 setFormValues((current) => ({
                   ...current,
-                  provider: event.target.value
+                  provider: event.target.value.trim()
                 }))
               }
               pattern="^[a-z][a-z0-9_-]{1,63}$"
@@ -282,8 +281,8 @@ export function ProviderConnectionManagement({
           <label className="policy-field">
             <span>{text.timeoutMs}</span>
             <input
-              max={120000}
-              min={1000}
+              max={maxProviderTimeoutMs}
+              min={minProviderTimeoutMs}
               onChange={(event) =>
                 setFormValues((current) => ({
                   ...current,
@@ -470,4 +469,30 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
 
 function formatProviderStatus(status: ProviderConnectionStatus) {
   return status.toLowerCase();
+}
+
+function validateProviderForm(values: ProviderConnectionFormValues, locale: Locale) {
+  if (!values.provider.trim() || !values.displayName.trim() || !values.baseUrl.trim()) {
+    return locale === "ko"
+      ? "Provider key, 표시 이름, Base URL을 입력하세요."
+      : "Provider key, display name, and base URL are required.";
+  }
+
+  if (!providerKeyPattern.test(values.provider)) {
+    return locale === "ko"
+      ? "Provider key는 소문자로 시작하고 영문/숫자/_/- 조합 2~64자여야 합니다."
+      : "Provider key must start with a lowercase letter and use only lowercase letters, numbers, underscores, or hyphens, 2-64 characters.";
+  }
+
+  if (
+    !Number.isInteger(values.timeoutMs) ||
+    values.timeoutMs < minProviderTimeoutMs ||
+    values.timeoutMs > maxProviderTimeoutMs
+  ) {
+    return locale === "ko"
+      ? "Timeout은 1,000ms에서 120,000ms 사이의 정수여야 합니다."
+      : "Timeout must be an integer between 1,000ms and 120,000ms.";
+  }
+
+  return null;
 }

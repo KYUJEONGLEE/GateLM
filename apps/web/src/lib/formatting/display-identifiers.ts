@@ -26,11 +26,15 @@ export function sanitizeDisplayValue(value: unknown): unknown {
     return value.map((item) => sanitizeDisplayValue(item));
   }
 
-  if (value && typeof value === "object") {
+  if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [key, sanitizeDisplayValue(item)])
     );
   }
 
   return value;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === "[object Object]";
 }

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type {
   AdminOnboardingModel,
+  AdminProviderModel,
   CredentialIssueResponse,
   CredentialListItem
 } from "@/lib/fixtures/v1-admin-fixtures";
@@ -406,6 +407,7 @@ function renderStepContent({
             ["Models", String(model.provider.modelCount)]
           ]}
         />
+        <ProviderModelList models={model.provider.models} />
       </div>
     );
   }
@@ -635,6 +637,54 @@ function ReadonlySummary({ rows }: { rows: Array<[string, string]> }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function ProviderModelList({ models }: { models: AdminProviderModel[] }) {
+  if (models.length === 0) {
+    return <p className="empty-state">No provider models configured.</p>;
+  }
+
+  return (
+    <section className="onboarding-model-list" aria-label="Provider models">
+      <div className="panel-heading">
+        <h4>Provider models</h4>
+      </div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Context</th>
+              <th>Modes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {models.map((model) => (
+              <tr key={`${model.provider}:${model.model}`}>
+                <td>
+                  <strong className="provider-name">{model.displayName}</strong>
+                  <span className="project-muted">{model.model}</span>
+                </td>
+                <td>{model.provider}</td>
+                <td>{model.status}</td>
+                <td>{model.contextWindowTokens.toLocaleString()} tokens</td>
+                <td>
+                  <span className="project-muted">
+                    streaming: {model.supportsStreaming ? "yes" : "no"}
+                  </span>
+                  <span className="project-muted">
+                    json: {model.supportsJsonMode ? "yes" : "no"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

@@ -62,6 +62,7 @@ export type AdminOnboardingModel = {
     resolver: string;
     credentialPreview: string | null;
     modelCount: number;
+    models: AdminProviderModel[];
   };
   apiKey: {
     issueResponse: CredentialIssueResponse;
@@ -87,6 +88,16 @@ export type AdminOnboardingModel = {
   plaintextShownOnce: boolean;
 };
 
+export type AdminProviderModel = {
+  provider: string;
+  model: string;
+  displayName: string;
+  status: string;
+  contextWindowTokens: number;
+  supportsStreaming: boolean;
+  supportsJsonMode: boolean;
+};
+
 type RuntimeConfigFixture = {
   runtimeConfig: {
     configVersion: string;
@@ -106,6 +117,7 @@ type RuntimeConfigFixture = {
       credentialPreview: string | null;
       models?: string[];
     }>;
+    models?: AdminProviderModel[];
     rateLimit: {
       scope: string;
       windowSeconds: number;
@@ -190,12 +202,39 @@ function sanitizeCredentialIssueResponse(
   };
 }
 
+function getProviderModels(
+  runtimeModels: AdminProviderModel[] | undefined,
+  provider: {
+    models?: string[];
+    provider: string;
+    status: string;
+  }
+): AdminProviderModel[] {
+  const detailedModels =
+    runtimeModels?.filter((model) => model.provider === provider.provider) ?? [];
+
+  if (detailedModels.length > 0) {
+    return detailedModels;
+  }
+
+  return (provider.models ?? []).map((model) => ({
+    provider: provider.provider,
+    model,
+    displayName: model,
+    status: provider.status,
+    contextWindowTokens: 0,
+    supportsStreaming: false,
+    supportsJsonMode: false
+  }));
+}
+
 export function getAdminOnboardingModel(): AdminOnboardingModel {
   const adminApi = controlPlaneAdminApiFixture as ControlPlaneAdminApiFixture;
   const credentials = credentialLifecycleFixture as CredentialLifecycleFixture;
   const runtime = runtimeConfigFixture as RuntimeConfigFixture;
   const runtimeConfig = runtime.runtimeConfig;
   const provider = runtimeConfig.providers?.[0] ?? unconfiguredProvider;
+  const providerModels = getProviderModels(runtimeConfig.models, provider);
 
   return {
     tenantId: runtimeConfig.tenantId,
@@ -217,7 +256,8 @@ export function getAdminOnboardingModel(): AdminOnboardingModel {
       status: provider.status ?? unconfiguredProvider.status,
       resolver: provider.resolver ?? unconfiguredProvider.resolver,
       credentialPreview: provider.credentialPreview ?? unconfiguredProvider.credentialPreview,
-      modelCount: provider.models?.length ?? unconfiguredProvider.models.length
+      modelCount: providerModels.length || provider.models?.length || unconfiguredProvider.models.length,
+      models: providerModels
     },
     apiKey: {
       issueResponse: sanitizeCredentialIssueResponse(

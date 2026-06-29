@@ -5,6 +5,9 @@ import type {
   ProviderConnectionStatus
 } from "@/lib/control-plane/provider-connections-types";
 
+const minProviderTimeoutMs = 1000;
+const maxProviderTimeoutMs = 120000;
+
 type RequestPayload = {
   action?: unknown;
   values?: unknown;
@@ -45,12 +48,16 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
   }
 
   const record = value as Partial<ProviderConnectionFormValues>;
+  const timeoutMs = record.timeoutMs;
 
   return (
     typeof record.provider === "string" &&
     typeof record.displayName === "string" &&
     typeof record.baseUrl === "string" &&
-    typeof record.timeoutMs === "number" &&
+    typeof timeoutMs === "number" &&
+    Number.isInteger(timeoutMs) &&
+    timeoutMs >= minProviderTimeoutMs &&
+    timeoutMs <= maxProviderTimeoutMs &&
     typeof record.resolver === "string" &&
     typeof record.secretRef === "string" &&
     typeof record.credentialPrefix === "string" &&
