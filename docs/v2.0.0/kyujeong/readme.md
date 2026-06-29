@@ -149,3 +149,12 @@ dashboardQueryDurationMs
 - auth 실패를 terminal status `blocked` 계열로 볼지, 별도 status 없이 httpStatus/errorCode와 auth outcome으로 설명할지
 - Employee Chat browser direct vs Web BFF/server-side 선택에 따른 request ownership과 metrics grain
 - Dashboard polling 기본값과 stale 기준
+
+## 2차 반영 - RuntimeSnapshot 관측성 의존성
+
+재혁님 런타임 의존성 보강을 반영하면 Observability가 특히 확인해야 할 후보는 아래입니다.
+
+- `last_known_safe`는 snapshot 자체 상태가 아니라 Gateway runtime 상태 후보로 보고, Request Detail에는 실제 사용한 snapshot provenance와 함께 남겨야 합니다.
+- Safety policy는 full raw rule dump가 아니라 hash/version/category summary 후보만 log/detail/dashboard에서 소비하는 방향이 안전합니다.
+- 기존 `configHash`, `securityPolicyHash`, `routingPolicyHash`를 v2 RuntimeSnapshot provenance와 어떻게 이어갈지 P0 cleanup에서 먼저 inventory해야 합니다.
+- active snapshot lookup key에 `budgetScope`가 들어가면 Dashboard grain과 query index 후보도 같이 바뀌므로 contracts.md 전까지 후보로만 둡니다.
