@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.dev/schemas/v2.0.0/draft/dashboard-overview.schema.json",
-  "title": "GateLM v2.0.0 Dashboard Overview Draft",
-  "description": "Draft schema for the v2 Dashboard Overview read model. This schema represents aggregate operational data with freshness and query budget metadata; it is not a Prometheus metrics-label contract.",
+  "$id": "https://gatelm.local/schemas/v2.0.0/dashboard-overview.schema.json",
+  "title": "GateLM v2.0.0 Dashboard Overview",
+  "description": "Schema for the v2 Dashboard Overview read model. This schema represents aggregate operational data with freshness and query budget metadata; it is not a Prometheus metrics-label contract.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -67,7 +67,7 @@
             "hour",
             "day"
           ],
-          "description": "Draft read-model grain. Large ranges should use coarser rollups."
+          "description": "read-model grain. Large ranges should use coarser rollups."
         }
       }
     },
@@ -92,7 +92,7 @@
         "source": {
           "type": "string",
           "minLength": 1,
-          "description": "Read model source candidate such as request_log or rollup. This is a draft field."
+          "description": "Read model source such as request_log or rollup. This is a field."
         },
         "isStale": {
           "type": "boolean"

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/schemas/v2.0.0/draft/runtime-snapshot.schema.json",
-  "title": "GateLM v2.0.0 RuntimeSnapshot Draft",
+  "$id": "https://gatelm.local/schemas/v2.0.0/runtime-snapshot.schema.json",
+  "title": "GateLM v2.0.0 RuntimeSnapshot",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -27,7 +27,7 @@
         "last_known_safe_used",
         "stale_snapshot_used"
       ],
-      "description": "Draft provenance value for the Gateway runtime state observed with this snapshot. last_known_safe_used and stale_snapshot_used are Gateway runtime states, not mutable snapshot statuses."
+      "description": "provenance value for the Gateway runtime state observed with this snapshot. last_known_safe_used and stale_snapshot_used are Gateway runtime states, not mutable snapshot statuses."
     },
     "publishedAt": {
       "type": "string",
@@ -42,7 +42,7 @@
     "gatewayInstanceId": {
       "type": "string",
       "minLength": 1,
-      "description": "Draft request/detail provenance field for the Gateway instance that loaded or used the snapshot."
+      "description": "request/detail provenance field for the Gateway instance that loaded or used the snapshot."
     },
     "lookupKey": {
       "type": "object",
@@ -88,10 +88,11 @@
         "resolvedBy": {
           "type": "string",
           "enum": [
+            "default_application",
             "runtime_snapshot",
             "control_plane_rule"
           ],
-          "description": "Draft/candidate source of the resolved budget scope."
+          "description": "Source of the resolved budget scope. default_application means the v2.0.0 application/applicationId default was applied."
         },
         "warningThresholdPercent": {
           "type": "number",
@@ -334,7 +335,7 @@
           "enum": [
             "application"
           ],
-          "description": "v2.0.0 draft keeps the v1 application-scoped rate limit baseline."
+          "description": "v2.0.0 keeps the v1 application-scoped rate limit baseline."
         },
         "windowSeconds": {
           "type": "integer",

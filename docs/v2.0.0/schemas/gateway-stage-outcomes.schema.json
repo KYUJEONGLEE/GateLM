@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/schemas/v2/draft/gateway-stage-outcomes.schema.json",
-  "title": "GateLM v2 Gateway Stage Outcomes Draft",
-  "description": "Draft schema for Gateway-produced terminal status and domain outcomes. Observability must consume these outcomes instead of inventing stage results. No raw prompt, response, credential, provider key, Authorization header, raw error body, or actual secret is allowed.",
+  "$id": "https://gatelm.local/schemas/v2.0.0/gateway-stage-outcomes.schema.json",
+  "title": "GateLM v2 Gateway Stage Outcomes",
+  "description": "Schema for Gateway-produced terminal status and domain outcomes. Observability must consume these outcomes instead of inventing stage results. No raw prompt, response, credential, provider key, Authorization header, raw error body, or actual secret is allowed.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,8 @@
   "properties": {
     "contractVersion": {
       "type": "string",
-      "const": "gatelm.gateway-stage-outcomes.v2.draft"
+      "const": "gatelm.gateway-stage-outcomes.v2.0.0",
+      "description": "Contract marker for schema/fixture alignment."
     },
     "requestId": {
       "type": "string",
@@ -123,7 +124,7 @@
           "minimum": 0
         }
       },
-      "description": "Draft latency split. Gateway latency and Provider latency must not be collapsed into one ambiguous value."
+      "description": "latency split. Gateway latency and Provider latency must not be collapsed into one ambiguous value."
     }
   },
   "$defs": {

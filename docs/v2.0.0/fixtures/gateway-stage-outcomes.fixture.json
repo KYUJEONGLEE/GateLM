@@ -1,5 +1,5 @@
 {
-  "contractVersion": "gatelm.gateway-stage-outcomes.v2.draft",
+  "contractVersion": "gatelm.gateway-stage-outcomes.v2.0.0",
   "requestId": "req_v2_gateway_0001",
   "traceId": "trace_v2_gateway_0001",
   "completedAt": "2026-06-29T06:00:01Z",

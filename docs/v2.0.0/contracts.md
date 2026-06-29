@@ -23,7 +23,7 @@ v2.0.0은 v1.0.0 baseline을 깨지 않고 다음을 확장한다.
 - Provider와 Model은 DB enum 또는 코드 enum으로 고정하지 않는다.
 - Gateway handler는 특정 provider 이름에 직접 의존하지 않는다.
 - Provider별 호출 로직은 Provider Adapter 안에 둔다.
-- Gateway는 draft RuntimeConfig를 직접 소비하지 않고 published RuntimeSnapshot만 소비한다.
+- Gateway는 editable RuntimeConfig를 직접 소비하지 않고 published RuntimeSnapshot만 소비한다.
 - Observability는 Gateway가 생산한 outcome을 저장/집계한다. Observability가 stage outcome을 새로 추측하지 않는다.
 - Request Log, Request Detail, Dashboard, Metrics는 raw prompt/raw response/raw credential을 저장하거나 출력하지 않는다.
 - Client request body에서 넘어온 budget scope는 신뢰하지 않는다.
@@ -97,6 +97,18 @@ budgetScopeId = applicationId
 - Budget warning threshold는 관리자가 설정할 수 있어야 한다.
 - Budget warning은 기본적으로 Admin/Operator 화면에서만 표시한다.
 
+### 3.4 Budget Resolution Source Values
+
+`budgetScope.resolvedBy`는 아래 값만 사용한다.
+
+| Value | Meaning |
+|---|---|
+| `default_application` | 별도 override가 없어서 v2.0.0 기본값인 `budgetScopeType=application`, `budgetScopeId=applicationId`를 적용했다. |
+| `runtime_snapshot` | published RuntimeSnapshot이 budget scope를 명시적으로 제공했다. |
+| `control_plane_rule` | Control Plane의 검증된 규칙이 budget scope를 결정했다. |
+
+Gateway는 client-provided budget scope를 신뢰하지 않는다. Request Log/Detail/Dashboard에는 위 resolved source와 최종 resolved budget scope만 남긴다.
+
 ## 4. Employee Chat Boundary
 
 Employee Chat은 별도 예외 경로가 아니라 Application boundary 안의 surface로 취급한다.
@@ -133,7 +145,7 @@ Employee Browser
 
 | Concept | Contract |
 |---|---|
-| RuntimeConfig | 관리자가 수정하는 draft/editable 설정 |
+| RuntimeConfig | 관리자가 수정하는 editable 설정 |
 | RuntimeSnapshot | 검증 후 publish되어 Gateway가 실제 사용하는 immutable 실행본 |
 
 ### 5.2 RuntimeSnapshot Consumption
@@ -195,6 +207,26 @@ RuntimeSnapshot에는 provider credential, API Key, App Token, Authorization hea
 | partial Gateway reload | 각 request log/detail에는 실제 사용한 snapshot provenance를 남긴다. |
 
 `lastKnownSafe`는 snapshot 자체 상태가 아니라 Gateway runtime state로 본다.
+
+### 5.6 Runtime State Values
+
+RuntimeSnapshot 자체와 GatewayContext의 실제 runtime provenance에는 아래 값만 사용한다.
+
+```text
+snapshot_active
+last_known_safe_used
+stale_snapshot_used
+```
+
+`no_snapshot`과 `not_checked`는 실제 RuntimeSnapshot 상태가 아니다. 두 값은 Gateway stage outcome, Request Detail, Dashboard 같은 read model에서만 사용한다.
+
+| Value | Scope |
+|---|---|
+| `snapshot_active` | Gateway가 최신 published RuntimeSnapshot을 사용했다. |
+| `last_known_safe_used` | reload 실패 등으로 Gateway가 메모리에 있던 마지막 정상 snapshot을 사용했다. |
+| `stale_snapshot_used` | 최신성은 떨어지지만 계약상 허용된 snapshot을 사용했다. |
+| `no_snapshot` | stage outcome/read model 전용. 적용 가능한 snapshot이 없었다. |
+| `not_checked` | stage outcome/read model 전용. 해당 stage가 실행되지 않았다. |
 
 ## 6. Gateway Outcome Contract
 
@@ -608,18 +640,47 @@ Sandbox mode 최소 조건:
 
 ## 13. JSON Schema And Fixture Targets
 
-이 문서를 기준으로 최소 아래 schema/fixture를 작성한다.
+이 문서의 현재 최종 JSON Schema와 fixture 기준본은 아래 위치에 둔다.
 
 ```text
-runtime-snapshot.schema.json
-provider-catalog.schema.json
-gateway-outcome.schema.json
-request-detail.schema.json
-dashboard-overview.schema.json
-demo-scenario.schema.json
+docs/v2.0.0/schemas/
+docs/v2.0.0/fixtures/
 ```
 
-Fixture는 실제 개인정보, 실제 secret, 실제 Authorization header, 실제 Provider Key를 포함하지 않는다.
+최종 schema 파일:
+
+```text
+dashboard-overview.schema.json
+gateway-request-context.schema.json
+gateway-stage-outcomes.schema.json
+kyumin-frontend-read-model.schema.json
+provider-catalog.schema.json
+request-detail.schema.json
+runtime-snapshot.schema.json
+safety-domain-outcome.schema.json
+```
+
+최종 fixture 파일은 같은 basename에 `.fixture.json` suffix를 사용한다.
+
+```text
+dashboard-overview.fixture.json
+gateway-request-context.fixture.json
+gateway-stage-outcomes.fixture.json
+kyumin-frontend-read-model.fixture.json
+provider-catalog.fixture.json
+request-detail.fixture.json
+runtime-snapshot.fixture.json
+safety-domain-outcome.fixture.json
+```
+
+규칙:
+
+- JSON Schema dialect는 Draft 2020-12를 사용한다. 여기서 `draft`는 JSON Schema 표준명이며 GateLM 계약 초안이라는 뜻이 아니다.
+- `docs/v2.0.0/schemas/draft/`와 `docs/v2.0.0/fixtures/draft/`는 더 이상 기준 위치가 아니다.
+- 계약 변경이 필요하면 schema/fixture를 먼저 바꾸지 않는다. `contracts.md`를 먼저 수정하고, 그 다음 schema/fixture를 갱신한다.
+- Provider/Model은 enum으로 고정하지 않는다.
+- Fixture는 실제 개인정보, 실제 secret, 실제 Authorization header, 실제 Provider Key를 포함하지 않는다.
+- `demo-scenario.md`와 demo scenario schema는 발표 동선 합의 후 별도 문서/PR에서 정의한다.
 
 ## 14. v2.0.0 Non-Goals
 
@@ -640,9 +701,9 @@ v2.0.0 core 범위에 넣지 않는다.
 v2.0.0 구현 전 문서/계약 작업은 아래 순서로 진행한다.
 
 1. P0 legacy field cleanup inventory
-2. JSON Schema와 fixture 작성
-3. `docs/v2.0.0/implementation-plan.md` 작성
-4. `docs/v2.0.0/demo-scenario.md` 작성
+2. `docs/v2.0.0/implementation-plan.md` 작성
+3. `docs/v2.0.0/demo-scenario.md` 작성
+4. schema/fixture 변경이 필요한 경우 `contracts.md`를 먼저 수정한 뒤 schema/fixture를 갱신
 
 권장 v1.x release train:
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/schemas/v2/draft/gateway-request-context.schema.json",
-  "title": "GateLM v2 Gateway Request Context Draft",
-  "description": "Draft schema for the sanitized Gateway in-memory request context produced after auth and runtime resolution. It must not contain raw prompt, raw response, raw credentials, Authorization header, provider keys, or actual secrets.",
+  "$id": "https://gatelm.local/schemas/v2.0.0/gateway-request-context.schema.json",
+  "title": "GateLM v2 Gateway Request Context",
+  "description": "Schema for the sanitized Gateway in-memory request context produced after auth and runtime resolution. It must not contain raw prompt, raw response, raw credentials, Authorization header, provider keys, or actual secrets.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,8 +20,8 @@
   "properties": {
     "contractVersion": {
       "type": "string",
-      "const": "gatelm.gateway-request-context.v2.draft",
-      "description": "Draft contract marker for schema/fixture alignment."
+      "const": "gatelm.gateway-request-context.v2.0.0",
+      "description": "Contract marker for schema/fixture alignment."
     },
     "requestId": {
       "type": "string",
@@ -66,7 +66,7 @@
             "admin_console",
             "demo_runner"
           ],
-          "description": "Draft surface label. Employee Chat must still be inside the Application boundary."
+          "description": "surface label. Employee Chat must still be inside the Application boundary."
         }
       }
     },
@@ -132,7 +132,7 @@
           "type": "number",
           "minimum": 0,
           "maximum": 100,
-          "description": "Draft optional admin-configured budget warning threshold."
+          "description": "optional admin-configured budget warning threshold."
         }
       }
     },
@@ -215,17 +215,17 @@
             "configHash": {
               "type": "string",
               "minLength": 1,
-              "description": "Draft compatibility hash carried forward from v1-style runtime evidence."
+              "description": "compatibility hash carried forward from v1-style runtime evidence."
             },
             "securityPolicyHash": {
               "type": "string",
               "minLength": 1,
-              "description": "Draft compatibility hash. Final naming may be changed during P0 legacy cleanup."
+              "description": "compatibility hash. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
             },
             "routingPolicyHash": {
               "type": "string",
               "minLength": 1,
-              "description": "Draft compatibility hash. Final naming may be changed during P0 legacy cleanup."
+              "description": "compatibility hash. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
             }
           }
         }

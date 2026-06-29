@@ -14,7 +14,7 @@
   "budgetResolution": {
     "budgetScopeType": "application",
     "budgetScopeId": "application_synthetic_001",
-    "resolvedBy": "runtime_snapshot",
+    "resolvedBy": "default_application",
     "warningThresholdPercent": 80
   },
   "providerCatalogRef": {

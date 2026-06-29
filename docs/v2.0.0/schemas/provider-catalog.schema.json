@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/schemas/v2.0.0/draft/provider-catalog.schema.json",
-  "title": "GateLM v2.0.0 Provider Catalog Draft",
+  "$id": "https://gatelm.local/schemas/v2.0.0/provider-catalog.schema.json",
+  "title": "GateLM v2.0.0 Provider Catalog",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -183,7 +183,7 @@
             "balanced",
             "premium"
           ],
-          "description": "Draft routing hint. This is not a provider/model enum."
+          "description": "routing hint. This is not a provider/model enum."
         },
         "fallbackPriority": {
           "type": "integer",

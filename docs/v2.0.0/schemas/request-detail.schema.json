@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.dev/schemas/v2.0.0/draft/request-detail.schema.json",
-  "title": "GateLM v2.0.0 Request Detail Draft",
-  "description": "Draft schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes; it does not include raw prompts, raw responses, credentials, authorization headers, or provider raw error bodies.",
+  "$id": "https://gatelm.local/schemas/v2.0.0/request-detail.schema.json",
+  "title": "GateLM v2.0.0 Request Detail",
+  "description": "Schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes; it does not include raw prompts, raw responses, credentials, authorization headers, or provider raw error bodies.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -27,12 +27,12 @@
     "requestId": {
       "type": "string",
       "minLength": 1,
-      "description": "Opaque request identifier. Candidate field for Request Detail only; do not use as a metrics label."
+      "description": "Opaque request identifier. field for Request Detail only; do not use as a metrics label."
     },
     "traceId": {
       "type": "string",
       "minLength": 1,
-      "description": "Opaque trace identifier. Candidate field for Request Detail only; do not use as a metrics label."
+      "description": "Opaque trace identifier. field for Request Detail only; do not use as a metrics label."
     },
     "tenantId": {
       "type": "string",
@@ -174,7 +174,7 @@
             "stale_snapshot_used",
             "no_snapshot"
           ],
-          "description": "Gateway runtime state candidate aligned with runtime domain outcome."
+          "description": "Gateway runtime state aligned with runtime domain outcome."
         },
         "publishedAt": {
           "type": "string",
@@ -191,15 +191,15 @@
         },
         "configHash": {
           "type": "string",
-          "description": "Legacy hash linkage candidate. Presence and naming may change after P0 legacy cleanup."
+          "description": "Legacy hash linkage field. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
         },
         "securityPolicyHash": {
           "type": "string",
-          "description": "Legacy hash linkage candidate. Presence and naming may change after P0 legacy cleanup."
+          "description": "Legacy hash linkage field. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
         },
         "routingPolicyHash": {
           "type": "string",
-          "description": "Legacy hash linkage candidate. Presence and naming may change after P0 legacy cleanup."
+          "description": "Legacy hash linkage field. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
         }
       }
     },
@@ -297,7 +297,7 @@
         "savedCostMicroUsd": {
           "type": "integer",
           "minimum": 0,
-          "description": "Exact Cache saved cost candidate only. Semantic Cache evidence must not be mixed into this value."
+          "description": "Exact Cache saved cost only. Semantic Cache evidence must not be mixed into this value."
         }
       }
     },
@@ -336,7 +336,7 @@
             "string",
             "null"
           ],
-          "description": "Candidate sanitized masking action such as none, redacted, or blocked."
+          "description": "sanitized masking action such as none, redacted, or blocked."
         }
       }
     },
@@ -407,14 +407,14 @@
             "string",
             "null"
           ],
-          "description": "Sanitized candidate reason. Must not include raw prompt fragments, raw provider error bodies, or secret material."
+          "description": "Sanitized reason. Must not include raw prompt fragments, raw provider error bodies, or secret material."
         },
         "code": {
           "type": [
             "string",
             "null"
           ],
-          "description": "Sanitized candidate code."
+          "description": "Sanitized code."
         }
       }
     },

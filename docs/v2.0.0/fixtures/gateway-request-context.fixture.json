@@ -1,5 +1,5 @@
 {
-  "contractVersion": "gatelm.gateway-request-context.v2.draft",
+  "contractVersion": "gatelm.gateway-request-context.v2.0.0",
   "requestId": "req_v2_gateway_0001",
   "traceId": "trace_v2_gateway_0001",
   "receivedAt": "2026-06-29T06:00:00Z",
