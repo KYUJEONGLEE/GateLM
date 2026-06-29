@@ -600,6 +600,10 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
 	}
+	log.DomainOutcomes, err = decodeDomainOutcomesMetadata(metadataJSON)
+	if err != nil {
+		return invocationlog.LlmInvocationLog{}, err
+	}
 	return log, nil
 }
 
@@ -641,6 +645,7 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 type invocationMetadataJSON struct {
 	RuntimeSnapshot *runtimeSnapshotMetadataJSON `json:"runtimeSnapshot"`
 	Runtime         *runtimeMetadataJSON         `json:"runtime"`
+	DomainOutcomes *invocationlog.DomainOutcomes `json:"domainOutcomes"`
 }
 
 type runtimeMetadataJSON struct {
@@ -688,6 +693,27 @@ func decodeRuntimeSnapshotBridgeMetadata(raw []byte, createdAt time.Time) (runti
 	return runtimeconfig.RuntimeSnapshotProvenance{
 		LegacyHashes: legacyHashes,
 	}.Normalize(runtimeconfig.ActiveConfig{}, createdAt, runtimeconfig.DefaultGatewayInstanceIDCompat), nil
+}
+
+func decodeDomainOutcomesMetadata(raw []byte) (invocationlog.DomainOutcomes, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return normalizeDomainOutcomes(invocationlog.DomainOutcomes{}), nil
+	}
+	var metadata invocationMetadataJSON
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return invocationlog.DomainOutcomes{}, err
+	}
+	if metadata.DomainOutcomes == nil {
+		return normalizeDomainOutcomes(invocationlog.DomainOutcomes{}), nil
+	}
+	return normalizeDomainOutcomes(*metadata.DomainOutcomes), nil
+}
+
+func normalizeDomainOutcomes(outcomes invocationlog.DomainOutcomes) invocationlog.DomainOutcomes {
+	if outcomes.Safety.DetectedTypes == nil {
+		outcomes.Safety.DetectedTypes = []string{}
+	}
+	return outcomes
 }
 
 func (m runtimeMetadataJSON) legacyHashes() runtimeconfig.LegacyHashes {

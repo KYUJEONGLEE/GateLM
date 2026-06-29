@@ -116,6 +116,9 @@ func TestChatCompletionsHandlerCallsMockProvider(t *testing.T) {
 	if resp.GateLM.SelectedProvider != "mock" {
 		t.Fatalf("unexpected selected provider metadata: %s", resp.GateLM.SelectedProvider)
 	}
+	if resp.GateLM.TerminalStatus != invocationlog.StatusSuccess {
+		t.Fatalf("unexpected terminal status metadata: %#v", resp.GateLM)
+	}
 }
 
 func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
@@ -160,6 +163,9 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 	if logged.ProviderLatencyMs == nil {
 		t.Fatalf("success log must include provider latency: %+v", logged)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != "success" || logged.DomainOutcomes.Cache.Outcome != "miss" {
+		t.Fatalf("unexpected success domain outcomes: %+v", logged.DomainOutcomes)
 	}
 	if logged.RequestBodyHash == "" || logged.PromptHash == "" {
 		t.Fatalf("expected request and prompt hashes: %+v", logged)
@@ -1673,6 +1679,9 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	}
 	if logged.ProviderLatencyMs != nil {
 		t.Fatalf("cache hit provider latency must be nil, got %+v", logged.ProviderLatencyMs)
+	}
+	if logged.DomainOutcomes.Cache.Outcome != "hit" || logged.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("unexpected cache hit domain outcomes: %+v", logged.DomainOutcomes)
 	}
 }
 

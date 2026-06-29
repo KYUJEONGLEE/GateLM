@@ -181,6 +181,8 @@ type requestDetailDataResponse struct {
 	BudgetScope     budgetScopeResponse                `json:"budgetScope"`
 	RuntimeSnapshot *runtimeSnapshotProvenanceResponse `json:"runtimeSnapshot"`
 	Status          string                             `json:"status"`
+	TerminalStatus  string                             `json:"terminalStatus"`
+	DomainOutcomes  invocationlog.DomainOutcomes       `json:"domainOutcomes"`
 	HTTPStatus      int                                `json:"httpStatus"`
 	Provider        string                             `json:"provider"`
 	Model           string                             `json:"model"`
@@ -251,6 +253,8 @@ type requestLogListItemResponse struct {
 	RequestedModel   string              `json:"requestedModel"`
 	SelectedModel    string              `json:"selectedModel"`
 	Status           string              `json:"status"`
+	TerminalStatus   string              `json:"terminalStatus"`
+	DomainOutcomes   invocationlog.DomainOutcomes `json:"domainOutcomes"`
 	HTTPStatus       int                 `json:"httpStatus"`
 	PromptTokens     int64               `json:"promptTokens"`
 	CompletionTokens int64               `json:"completionTokens"`
@@ -457,6 +461,8 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		BudgetScope:     budgetScopeResponseFromScope(detail.BudgetScope, detail.ApplicationID),
 		RuntimeSnapshot: runtimeSnapshotResponse(detail.RuntimeSnapshot),
 		Status:          detail.Status,
+		TerminalStatus:  detail.TerminalStatus,
+		DomainOutcomes:  detail.DomainOutcomes,
 		HTTPStatus:      detail.HTTPStatus,
 		Provider:        detail.Provider,
 		Model:           detail.Model,
@@ -517,6 +523,8 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			RequestedModel:   item.RequestedModel,
 			SelectedModel:    item.SelectedModel,
 			Status:           item.Status,
+			TerminalStatus:   item.TerminalStatus,
+			DomainOutcomes:   item.DomainOutcomes,
 			HTTPStatus:       item.HTTPStatus,
 			PromptTokens:     item.PromptTokens,
 			CompletionTokens: item.CompletionTokens,

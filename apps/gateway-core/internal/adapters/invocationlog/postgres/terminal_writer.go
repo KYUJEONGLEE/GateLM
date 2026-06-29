@@ -168,6 +168,18 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 	if _, exists := metadata["budgetScope"]; !exists {
 		metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, applicationID)
 	}
+	if _, exists := metadata["terminalStatus"]; !exists {
+		metadata["terminalStatus"] = log.Status
+	}
+	if _, exists := metadata["domainOutcomes"]; !exists {
+		if log.DomainOutcomes.IsZero() {
+			log.DomainOutcomes = invocationlog.BuildDomainOutcomes(log)
+		}
+		metadata["domainOutcomes"] = log.DomainOutcomes
+	}
+	if _, exists := metadata["gatewayStageOutcomes"]; !exists {
+		metadata["gatewayStageOutcomes"] = invocationlog.BuildGatewayStageOutcomes(log)
+	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return terminalLogRecord{}, err

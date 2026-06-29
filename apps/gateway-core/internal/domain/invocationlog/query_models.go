@@ -98,6 +98,7 @@ type LlmInvocationLog struct {
 	MaskingDetectedCount  int
 	RedactedPromptPreview string
 	RuntimeSnapshot       runtimeconfig.RuntimeSnapshotProvenance
+	DomainOutcomes       DomainOutcomes
 	CreatedAt             time.Time
 	CompletedAt           *time.Time
 }
@@ -112,6 +113,8 @@ type RequestLogListItem struct {
 	RequestedModel   string
 	SelectedModel    string
 	Status           string
+	TerminalStatus   string
+	DomainOutcomes   DomainOutcomes
 	HTTPStatus       int
 	PromptTokens     int64
 	CompletionTokens int64
@@ -134,6 +137,8 @@ type RequestDetail struct {
 	ApplicationID   string
 	BudgetScope     budget.Scope
 	Status          string
+	TerminalStatus  string
+	DomainOutcomes  DomainOutcomes
 	HTTPStatus      int
 	Provider        string
 	Model           string
@@ -366,6 +371,8 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		RequestedModel:   log.RequestedModel,
 		SelectedModel:    log.SelectedModel,
 		Status:           log.Status,
+		TerminalStatus:   canonicalTerminalStatus(log.Status),
+		DomainOutcomes:   DomainOutcomesForInvocationLog(log),
 		HTTPStatus:       log.HTTPStatus,
 		PromptTokens:     log.PromptTokens,
 		CompletionTokens: log.CompletionTokens,
@@ -390,6 +397,8 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		ApplicationID:  log.ApplicationID,
 		BudgetScope:    budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
 		Status:         log.Status,
+		TerminalStatus: canonicalTerminalStatus(log.Status),
+		DomainOutcomes: DomainOutcomesForInvocationLog(log),
 		HTTPStatus:     log.HTTPStatus,
 		Provider:       log.Provider,
 		Model:          log.Model,

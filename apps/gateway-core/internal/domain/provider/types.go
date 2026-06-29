@@ -52,6 +52,8 @@ type GateLMMetadata struct {
 	RequestedModel   string `json:"requestedModel"`
 	SelectedProvider string `json:"selectedProvider"`
 	SelectedModel    string `json:"selectedModel"`
+	TerminalStatus   string `json:"terminalStatus,omitempty"`
+	DomainOutcomes   any    `json:"domainOutcomes,omitempty"`
 	CacheStatus      string `json:"cacheStatus"`
 	RoutingReason    string `json:"routingReason,omitempty"`
 	MaskingAction    string `json:"maskingAction"`

@@ -66,6 +66,8 @@ type AuthFailureLog struct {
 	LatencyMs         int64
 	ProviderLatencyMs *int64
 
+	DomainOutcomes DomainOutcomes
+
 	CreatedAt   time.Time
 	CompletedAt time.Time
 }
@@ -151,7 +153,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		completedAt = input.StartedAt
 	}
 
-	return AuthFailureLog{
+	log := AuthFailureLog{
 		RequestID:     requestID,
 		TraceID:       traceID,
 		TenantID:      strings.TrimSpace(input.TenantID),
@@ -187,6 +189,8 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		CreatedAt:   input.StartedAt.UTC(),
 		CompletedAt: completedAt.UTC(),
 	}
+	log.DomainOutcomes = BuildAuthFailureDomainOutcomes(log)
+	return log
 }
 
 func latencyMillis(startedAt time.Time, completedAt time.Time) int64 {

@@ -668,12 +668,54 @@ func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipelin
 		RequestedModel:   reqCtx.RequestedModel,
 		SelectedProvider: reqCtx.SelectedProvider,
 		SelectedModel:    reqCtx.SelectedModel,
+		TerminalStatus:   reqCtx.Status,
+		DomainOutcomes:   domainOutcomesFromRequestContext(reqCtx),
 		CacheStatus:      reqCtx.CacheStatus,
 		RoutingReason:    reqCtx.RoutingReason,
 		MaskingAction:    reqCtx.MaskingAction,
 		EstimatedCostUSD: formatCostMicroUSD(reqCtx.CostMicroUSD),
 		LatencyMs:        reqCtx.LatencyMs,
 	}
+}
+
+func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {
+	if reqCtx == nil {
+		return invocationlog.DomainOutcomes{}
+	}
+	providerLatencyMs := providerLatencyForLog(reqCtx)
+	return invocationlog.BuildDomainOutcomes(invocationlog.TerminalLog{
+		RequestID:             reqCtx.RequestID,
+		TraceID:               reqCtx.TraceID,
+		ApplicationID:         reqCtx.ApplicationID,
+		BudgetScope:           reqCtx.BudgetScope,
+		ConfigHash:            reqCtx.ConfigHash,
+		SecurityPolicyHash:    reqCtx.SecurityPolicyHash,
+		RuntimeSnapshot:       reqCtx.RuntimeSnapshot,
+		RateLimitDecision:     reqCtx.RateLimitDecision,
+		Stream:                reqCtx.Stream,
+		RequestedModel:        reqCtx.RequestedModel,
+		Provider:              reqCtx.Provider,
+		Model:                 reqCtx.Model,
+		SelectedProvider:      reqCtx.SelectedProvider,
+		SelectedModel:         reqCtx.SelectedModel,
+		RoutingReason:         reqCtx.RoutingReason,
+		RoutingPolicyHash:     reqCtx.RoutingPolicyHash,
+		LatencyMs:             reqCtx.LatencyMs,
+		ProviderLatencyMs:     providerLatencyMs,
+		Status:                reqCtx.Status,
+		HTTPStatus:            reqCtx.HTTPStatus,
+		ErrorCode:             reqCtx.ErrorCode,
+		ErrorStage:            reqCtx.ErrorStage,
+		CacheStatus:           reqCtx.CacheStatus,
+		CacheType:             reqCtx.CacheType,
+		CacheHitRequestID:     reqCtx.CacheHitRequestID,
+		MaskingAction:         reqCtx.MaskingAction,
+		MaskingDetectedTypes:  reqCtx.MaskingDetectedTypes,
+		MaskingDetectedCount:  reqCtx.MaskingDetectedCount,
+		RedactedPromptPreview: reqCtx.RedactedPromptPreview,
+		CreatedAt:             reqCtx.StartedAt.UTC(),
+		CompletedAt:           time.Now().UTC(),
+	})
 }
 
 func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
