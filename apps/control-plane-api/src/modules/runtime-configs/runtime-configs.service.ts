@@ -34,6 +34,7 @@ import {
   RuntimeConfigRoutingPolicyResponseDto,
   RuntimeConfigSafetyDetectorResponseDto,
   RuntimeConfigSafetyPolicyResponseDto,
+  RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
 } from './dto/runtime-config.dto';
 
@@ -42,6 +43,11 @@ const CONFIG_HASH_ALGORITHM =
   'sha256(canonical_json(runtimeConfig_without_configHash))';
 const ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE =
   'Active Runtime Config is not executable.';
+const MISSING_PROVIDER_CREDENTIAL_BINDING_MESSAGE =
+  'RuntimeSnapshot publish validation failed: provider credential binding is missing.';
+const DEFAULT_PUBLISHED_BY = 'control_plane';
+const DEFAULT_GATEWAY_INSTANCE_ID = 'gateway_core_static';
+const DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT = 80;
 const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
   'secretHash',
   'plaintext',
@@ -79,7 +85,9 @@ export class RuntimeConfigsService {
       throw new NotFoundException('Active Runtime Config not found.');
     }
 
-    const document = this.toRuntimeConfigDocument(runtimeConfig.document);
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
     await this.assertRuntimeConfigExecutable({
       applicationId,
       runtimeConfig,
@@ -87,7 +95,35 @@ export class RuntimeConfigsService {
       now: new Date(),
     });
 
-    return this.withProviderCredentialRefBridge(document);
+    return document;
+  }
+
+  async getActiveRuntimeSnapshot(
+    applicationId: string,
+  ): Promise<RuntimeSnapshotResponseDto> {
+    const runtimeConfig = await this.prisma.runtimeConfig.findFirst({
+      where: {
+        applicationId,
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      },
+      orderBy: [{ publishedAt: 'desc' }, { updatedAt: 'desc' }],
+    });
+
+    if (!runtimeConfig) {
+      throw new NotFoundException('Active RuntimeSnapshot not found.');
+    }
+
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
+    await this.assertRuntimeConfigExecutable({
+      applicationId,
+      runtimeConfig,
+      document,
+      now: new Date(),
+    });
+
+    return this.toRuntimeSnapshotResponse(runtimeConfig, document);
   }
 
   async upsertDraft(
@@ -308,6 +344,16 @@ export class RuntimeConfigsService {
     const providersResponse = providers.map((provider) =>
       this.toRuntimeProvider(provider, models),
     );
+    if (args.publishState === 'active') {
+      this.assertRuntimeSnapshotProviderCredentialBindings(
+        providersResponse,
+        [
+          defaultModel.provider,
+          lowCostModel.provider,
+          fallbackModel.provider,
+        ],
+      );
+    }
     const pricingRules = this.resolvePricingRules(
       args.dto.pricingRules,
       models,
@@ -371,6 +417,14 @@ export class RuntimeConfigsService {
   }): Promise<void> {
     this.assertActiveRuntimeConfigSnapshot(args);
     this.assertRuntimeConfigPolicyBundle(args.document);
+    this.assertRuntimeSnapshotProviderCredentialBindings(
+      args.document.providers,
+      [
+        args.document.defaultProvider,
+        args.document.lowCostProvider,
+        args.document.fallbackProvider,
+      ],
+    );
     this.assertNoForbiddenRuntimeConfigKeys(args.document);
 
     const context = await this.getApplicationContextOrThrow(args.applicationId);
@@ -841,6 +895,29 @@ export class RuntimeConfigsService {
     }
   }
 
+  private assertRuntimeSnapshotProviderCredentialBindings(
+    providers: RuntimeConfigProviderDto[],
+    selectedProviderNames: string[],
+  ): void {
+    const selectedProviderSet = new Set(selectedProviderNames);
+    for (const provider of providers) {
+      if (!selectedProviderSet.has(provider.provider)) {
+        continue;
+      }
+      if (provider.resolver === 'none') {
+        continue;
+      }
+      if (
+        !provider.credentialRef ||
+        provider.credentialRef.credentialState !== 'active'
+      ) {
+        throw new ConflictException(
+          MISSING_PROVIDER_CREDENTIAL_BINDING_MESSAGE,
+        );
+      }
+    }
+  }
+
   private resolveModels(
     dtoModels: UpsertRuntimeConfigDraftDto['models'],
     providers: ProviderConnection[],
@@ -1132,6 +1209,165 @@ export class RuntimeConfigsService {
         .map((model) => model.model),
       failureMode: this.toFailureMode(provider.providerConfig),
     };
+  }
+
+  private toRuntimeSnapshotResponse(
+    runtimeConfig: RuntimeConfig,
+    document: ActiveRuntimeConfigResponseDto,
+  ): RuntimeSnapshotResponseDto {
+    const runtimeSnapshotVersion = this.toRuntimeSnapshotVersion(
+      runtimeConfig,
+      document,
+    );
+    const providerCatalogRef = this.toProviderCatalogRef(
+      document,
+      runtimeSnapshotVersion,
+    );
+
+    return {
+      runtimeSnapshotId: runtimeConfig.id,
+      runtimeSnapshotVersion,
+      contentHash: document.configHash,
+      runtimeState: 'snapshot_active',
+      publishedAt:
+        runtimeConfig.publishedAt?.toISOString() ?? document.publishedAt,
+      publishedBy: DEFAULT_PUBLISHED_BY,
+      gatewayInstanceId: DEFAULT_GATEWAY_INSTANCE_ID,
+      lookupKey: {
+        tenantId: document.tenantId,
+        projectId: document.projectId,
+        applicationId: document.applicationId,
+      },
+      budgetResolution: {
+        budgetScopeType: 'application',
+        budgetScopeId: document.applicationId,
+        resolvedBy: 'default_application',
+        warningThresholdPercent:
+          DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+      },
+      providerCatalogRef,
+      policies: {
+        safety: {
+          enabled: document.safetyPolicy.detectors.some(
+            (detector) => detector.enabled,
+          ),
+          mode: document.safetyPolicy.detectors.some(
+            (detector) => detector.enabled,
+          )
+            ? 'enforce'
+            : 'disabled',
+          requestSideRequired: true,
+          policyHash: document.safetyPolicy.securityPolicyHash,
+          detectorSet: document.safetyPolicy.detectors.map((detector) => ({
+            detectorType: detector.type,
+            action: detector.enabled ? detector.action : 'allow',
+          })),
+        },
+        routing: {
+          autoModelEnabled: true,
+          defaultRequestedModel: document.routingPolicy.autoModel,
+          defaultProvider: document.routingPolicy.defaultProvider,
+          defaultModel: document.routingPolicy.defaultModel,
+          routingPolicyHash: document.routingPolicy.routingPolicyHash,
+        },
+        cache: {
+          exactCacheEnabled: document.cachePolicy.enabled,
+          semanticCacheMode: 'evidence_only',
+          cachePolicyHash: this.sha256(
+            this.canonicalJson(document.cachePolicy),
+          ),
+        },
+        rateLimit: {
+          enabled: document.rateLimit.enabled,
+          scope: document.rateLimit.scope,
+          windowSeconds: document.rateLimit.windowSeconds,
+          limit: document.rateLimit.limit,
+        },
+        budget: {
+          enabled: false,
+          enforcementMode: 'disabled',
+          warningThresholdPercent:
+            DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+        },
+        fallback: {
+          enabled: true,
+          fallbackProvider: document.routingPolicy.fallbackProvider,
+          fallbackModel: document.routingPolicy.fallbackModel,
+          allowedReasons: ['provider_timeout', 'provider_error'],
+        },
+        streaming: {
+          enabled: document.models.some((model) => model.supportsStreaming),
+          thinSliceOnly: true,
+        },
+      },
+      legacyHashes: {
+        configHash: document.configHash,
+        securityPolicyHash: document.safetyPolicy.securityPolicyHash,
+        routingPolicyHash: document.routingPolicy.routingPolicyHash,
+      },
+    };
+  }
+
+  private toProviderCatalogRef(
+    document: ActiveRuntimeConfigResponseDto,
+    catalogVersion: number,
+  ): RuntimeSnapshotResponseDto['providerCatalogRef'] {
+    const catalogBody = {
+      providers: document.providers.map((provider) => ({
+        providerId: provider.providerId,
+        providerName: provider.provider,
+        adapterType: provider.provider,
+        enabled: provider.status === 'active',
+        credentialRef: provider.credentialRef,
+        fallbackEligible: provider.failureMode === 'fail_open_to_fallback',
+        models: document.models
+          .filter((model) => model.provider === provider.provider)
+          .map((model) => ({
+            modelId: `${model.provider}:${model.model}`,
+            modelName: model.model,
+            enabled: model.status === 'active',
+            capabilities: {
+              streamingSupported: model.supportsStreaming,
+              maxInputTokens: model.contextWindowTokens,
+            },
+          })),
+      })),
+    };
+
+    return {
+      catalogId: `provider_catalog:${document.projectId}:${catalogVersion}`,
+      catalogVersion,
+      contentHash: this.sha256(this.canonicalJson(catalogBody)),
+    };
+  }
+
+  private toRuntimeSnapshotVersion(
+    runtimeConfig: RuntimeConfig,
+    document: ActiveRuntimeConfigResponseDto,
+  ): number {
+    const fromVersion =
+      this.trailingPositiveInteger(runtimeConfig.configVersion) ??
+      this.trailingPositiveInteger(document.configVersion);
+    if (fromVersion) {
+      return fromVersion;
+    }
+
+    const publishedAt =
+      runtimeConfig.publishedAt ?? new Date(document.publishedAt);
+    if (!Number.isNaN(publishedAt.getTime())) {
+      return Math.max(1, Math.floor(publishedAt.getTime() / 1000));
+    }
+
+    return 1;
+  }
+
+  private trailingPositiveInteger(value: string): number | null {
+    const match = value.match(/(\d+)$/);
+    if (!match?.[1]) {
+      return null;
+    }
+    const parsed = Number.parseInt(match[1], 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }
 
   // Bridges legacy provider.secretRef into v2-facing credentialRef metadata without exposing credential material.
