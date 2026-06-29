@@ -2,9 +2,9 @@
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read
@@ -17,6 +17,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Setup pnpm
+        shell: bash
+        run: |
+          set -e
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+
+      - name: Verify v2 documents
+        run: pnpm verify:v2-docs
 
       - name: Block committed secret files
         shell: bash

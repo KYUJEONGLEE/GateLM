@@ -30,6 +30,7 @@ Likely files:
 | Area | Paths |
 |---|---|
 | root runtime | `.nvmrc`, `.node-version`, `package.json`, `pnpm-lock.yaml` |
+| CI | `.github/workflows/ci.yml`, `scripts/verify-v2-docs.mjs` |
 | docs | `docs/README.md`, `docs/v2.0.0/implementation-plan.md`, `docs/v2.0.0/implementation-tasks.md` |
 | app docs | `apps/control-plane-api/README.md`, app-level README files if present |
 | agent docs | `AGENTS.md` or repo agent instruction file if present |
@@ -39,12 +40,15 @@ Tasks:
 - Keep Node `22` version files in `.nvmrc` and `.node-version`.
 - Keep `engines.node: ">=22 <23"` in root `package.json`.
 - Keep `packageManager` as `pnpm@9.15.0`.
+- Keep `verify:v2-docs` script wired to `scripts/verify-v2-docs.mjs`.
+- Run v2 document verification in CI for `main` and `dev`.
 - Document official install check: `pnpm install --frozen-lockfile`.
 - Update docs so v2 source order is `contracts.md -> schemas/fixtures -> implementation-plan.md -> implementation-tasks.md`.
 
 Verification:
 
 - `git diff --check`
+- `corepack pnpm run verify:v2-docs`
 - `pnpm install --frozen-lockfile`
 - `pnpm --version`
 - `node --version`

@@ -158,3 +158,13 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | `docs/archive/` | 과거 P0/v1 기록 |
 
 과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.
+
+## 9. Required Verification
+
+v2 문서, schema, fixture, entry 문서, Node/pnpm 기준을 바꾸면 아래 검증을 먼저 실행한다.
+
+```powershell
+corepack pnpm run verify:v2-docs
+```
+
+이 검증은 `contracts.md` 우선순위, schema/fixture pairing, fixture validation, forbidden sensitive value shape, Provider/Model enum lock 방지, RuntimeSnapshot lookup key guardrail을 확인한다.

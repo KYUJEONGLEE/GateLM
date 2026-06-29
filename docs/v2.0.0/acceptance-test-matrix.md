@@ -14,7 +14,7 @@
 | sensitive exposure | `rg "raw prompt|raw response|Authorization|Provider Key|App Token|API Key" changed files` | no new forbidden storage/exposure |
 | source priority | docs review | `contracts.md` remains highest authority |
 | provider/model enum | code review | provider/model are catalog/config data |
-| schema drift | schema/fixture validation script when available | fixture still matches schema |
+| v2 document gate | `corepack pnpm run verify:v2-docs` | schema/fixture/entry docs/runtime guardrails pass |
 
 ## PR-0. Environment And Documentation Baseline
 
@@ -25,6 +25,8 @@
 | Node version file | repo root | `.nvmrc` and `.node-version` contain `22` | file content |
 | pnpm baseline | `package.json` | `packageManager` is `pnpm@9.15.0` | file content |
 | engine baseline | `package.json` | `engines.node` is `>=22 <23` | file content |
+| v2 docs verification | `corepack pnpm run verify:v2-docs` | command exits 0 | command output |
+| CI gate | `.github/workflows/ci.yml` | `dev` and `main` PRs run v2 document verification | workflow diff |
 
 ## PR-1. Gateway Outcome Adoption Gate
 

@@ -86,6 +86,7 @@ Customer App / Employee Chat
 처음 검증할 때는 아래 명령을 우선합니다.
 
 ```powershell
+corepack pnpm run verify:v2-docs
 pnpm install --frozen-lockfile
 ```
 

@@ -42,6 +42,8 @@ Primary files:
 - `.nvmrc`
 - `.node-version`
 - `package.json`
+- `.github/workflows/ci.yml`
+- `scripts/verify-v2-docs.mjs`
 - `docs/README.md`
 - `AGENTS.md`
 - `README.md`
@@ -57,27 +59,34 @@ Produces:
 
 - 문서 진입점
 - Node `22` / pnpm `9.15.0` baseline
+- v2 document verification script
+- CI gate for v2 document verification
 - PR 단위 task map
 
 Implementation order:
 
 1. Reading order와 Source Of Truth를 분리한다.
 2. Node/pnpm baseline 파일을 확인한다.
-3. Entry 문서가 v2 source order를 재정의하지 않고 참조하게 한다.
-4. `implementation-plan.md`는 상위 계획으로 유지한다.
-5. 실제 작업 위치는 `implementation-tasks.md`와 이 문서에 둔다.
+3. `scripts/verify-v2-docs.mjs`로 schema/fixture/entry 문서 guardrail을 강제한다.
+4. CI가 `main`과 `dev` PR에서 v2 문서 검증을 실행하게 한다.
+5. Entry 문서가 v2 source order를 재정의하지 않고 참조하게 한다.
+6. `implementation-plan.md`는 상위 계획으로 유지한다.
+7. 실제 작업 위치는 `implementation-tasks.md`와 이 문서에 둔다.
 
 Acceptance:
 
 - 모든 entry 문서가 `docs/README.md`를 먼저 읽으라고 말한다.
 - 충돌 판단 우선순위는 `contracts -> schemas/fixtures -> plan -> tasks`다.
 - Node `22`, pnpm `9.15.0` 기준이 문서와 파일에 모두 있다.
+- `corepack pnpm run verify:v2-docs`가 통과한다.
+- CI가 `dev` 대상 PR에서도 v2 문서 검증을 실행한다.
 - `p0-contract-decisions.md`는 Source Of Truth가 아니라 Reference/Draft다.
 
 Verification:
 
 ```powershell
 git diff --check
+corepack pnpm run verify:v2-docs
 node --version
 corepack pnpm --version
 ```
