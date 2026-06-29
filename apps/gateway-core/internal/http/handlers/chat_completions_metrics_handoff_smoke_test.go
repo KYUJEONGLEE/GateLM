@@ -264,7 +264,7 @@ func metricsHandoffInputOutput(t *testing.T) string {
 				},
 			},
 			{
-				"name": "cache_hit",
+				"name": "cache hit success",
 				"http": "POST /v1/chat/completions",
 				"body": map[string]any{
 					"model":   "auto",
@@ -436,8 +436,11 @@ func metricsHandoffHasForbiddenLabels(output string) bool {
 		"feature_id",
 		"prompt",
 		"prompt_hash",
+		"request_body_hash",
 		"cache_key_hash",
+		"provider_key",
 		"authorization",
+		"raw_error_detail",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			return true

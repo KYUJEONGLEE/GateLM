@@ -268,8 +268,11 @@ func assertHandlerMetricsHasNoForbiddenLabels(t *testing.T, output string) {
 		"feature_id",
 		"prompt",
 		"prompt_hash",
+		"request_body_hash",
 		"cache_key_hash",
+		"provider_key",
 		"authorization",
+		"raw_error_detail",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			t.Fatalf("metrics output must not contain forbidden label %q\noutput:\n%s", labelName, output)

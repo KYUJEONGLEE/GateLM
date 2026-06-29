@@ -428,10 +428,10 @@ Invoke-SmokeCase -Name "safe request logs miss then cache hit" -Body {
     Assert-Equal -Name "provider calls after cache hit" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $secondDetail = Wait-RequestDetail -RequestId $script:SafeHitRequestId
-    Assert-Equal -Name "second detail status" -Expected "cache_hit" -Actual ([string]$secondDetail.data.status)
+    Assert-Equal -Name "second detail status" -Expected "success" -Actual ([string]$secondDetail.data.status)
     Assert-Equal -Name "second detail cache status" -Expected "hit" -Actual ([string]$secondDetail.data.cache.cacheStatus)
     Assert-Equal -Name "second detail cost" -Expected 0 -Actual ([int64]$secondDetail.data.cost.costMicroUsd)
-    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "cache_hit" -ExpectedCacheStatus "hit"
+    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "success" -ExpectedCacheStatus "hit"
 }
 
 Invoke-SmokeCase -Name "redacted request detail has redacted preview only" -Body {
@@ -486,17 +486,17 @@ Invoke-SmokeCase -Name "invalid API key error is logged without provider call" -
     Assert-Equal -Name "provider calls after invalid API key" -Expected 0 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $detail = Wait-RequestDetail -RequestId $script:AuthErrorRequestId
-    Assert-Equal -Name "auth detail status" -Expected "error" -Actual ([string]$detail.data.status)
+    Assert-Equal -Name "auth detail status" -Expected "blocked" -Actual ([string]$detail.data.status)
     Assert-Equal -Name "auth detail HTTP" -Expected 401 -Actual ([int]$detail.data.httpStatus)
     Assert-Equal -Name "auth detail error code" -Expected "invalid_api_key" -Actual ([string]$detail.data.error.errorCode)
-    Assert-LogItem -RequestId $script:AuthErrorRequestId -ExpectedStatus "error" -ExpectedCacheStatus "bypass"
+    Assert-LogItem -RequestId $script:AuthErrorRequestId -ExpectedStatus "blocked" -ExpectedCacheStatus "bypass"
 }
 
 Invoke-SmokeCase -Name "dashboard reflects log canonical source" -Body {
     $dashboard = Get-DashboardOverview
     $totals = $dashboard.data.totals
     Assert-True -Name "dashboard totalRequests >= smoke requests" -Condition ([int64]$totals.totalRequests -ge 5)
-    Assert-True -Name "dashboard successfulRequests includes success/cache_hit" -Condition ([int64]$totals.successfulRequests -ge 3)
+    Assert-True -Name "dashboard successfulRequests includes successful cache hit" -Condition ([int64]$totals.successfulRequests -ge 3)
     Assert-True -Name "dashboard blockedRequests includes blocked smoke" -Condition ([int64]$totals.blockedRequests -ge 1)
     Assert-True -Name "dashboard cacheHitRequests includes cache hit smoke" -Condition ([int64]$totals.cacheHitRequests -ge 1)
     Assert-True -Name "dashboard totalCostMicroUsd present" -Condition ($null -ne $totals.totalCostMicroUsd)

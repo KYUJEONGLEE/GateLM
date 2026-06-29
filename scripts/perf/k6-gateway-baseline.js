@@ -33,8 +33,11 @@ const forbiddenMetricLabels = [
   "feature_id",
   "prompt",
   "prompt_hash",
+  "request_body_hash",
   "cache_key_hash",
+  "provider_key",
   "authorization",
+  "raw_error_detail",
 ];
 
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 403));

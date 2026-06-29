@@ -220,20 +220,19 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	runEnd := time.Now().UTC().Add(24 * time.Hour)
 	logs := getProjectLogs(t, client, cfg, runStart, runEnd)
 	requireLogStatuses(t, logs.Data, map[string]int{
-		"success":      2,
-		"cache_hit":    1,
+		"success":      3,
 		"blocked":      1,
 		"rate_limited": 1,
 	})
 	requireLogItem(t, logs.Data, ids["safeMiss"], "success", "miss")
-	requireLogItem(t, logs.Data, ids["cacheHit"], "cache_hit", "hit")
+	requireLogItem(t, logs.Data, ids["cacheHit"], "success", "hit")
 	requireLogItem(t, logs.Data, ids["redacted"], "success", "miss")
 	requireLogItem(t, logs.Data, ids["blocked"], "blocked", "bypass")
 	requireLogItem(t, logs.Data, ids["rateLimited"], "rate_limited", "bypass")
 
 	detail := getRequestDetail(t, client, cfg, ids["cacheHit"])
 	requireEqual(t, detail.Data.RequestID, ids["cacheHit"], "detail request id")
-	requireEqual(t, detail.Data.Status, "cache_hit", "detail status")
+	requireEqual(t, detail.Data.Status, "success", "detail status")
 	if detail.Data.Cache.CacheHitRequestID == nil || *detail.Data.Cache.CacheHitRequestID != ids["safeMiss"] {
 		t.Fatalf("expected detail cacheHitRequestId=%q, got %#v", ids["safeMiss"], detail.Data.Cache.CacheHitRequestID)
 	}
@@ -248,8 +247,8 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	metrics := doGet(t, client, cfg.gatewayBaseURL+"/metrics", "request_local_stack_"+cfg.runID+"_metrics_006")
 	requireHTTPStatus(t, metrics, http.StatusOK)
 	metricsText := string(metrics.body)
-	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 2`)
-	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="cache_hit"} 1`)
+	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 3`)
+	requireNotContains(t, metricsText, `status="cache_hit"`)
 	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="sensitive_data_blocked",http_status="403",method="POST",status="blocked"} 1`)
 	requireContains(t, metricsText, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`)
 	requireContains(t, metricsText, `gatelm_provider_requests_total`)
@@ -282,7 +281,6 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 			"totalItems": len(logs.Data),
 			"statusCounts": map[string]int{
 				"success":      countLogsByStatus(logs.Data, "success"),
-				"cache_hit":    countLogsByStatus(logs.Data, "cache_hit"),
 				"blocked":      countLogsByStatus(logs.Data, "blocked"),
 				"rate_limited": countLogsByStatus(logs.Data, "rate_limited"),
 			},
@@ -304,8 +302,8 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 			"statusCounts":        dashboard.Data.Totals.StatusCounts,
 		},
 		"metrics": map[string]any{
-			"gatewayRequests": "success/cache_hit/blocked/rate_limited labels present",
-			"providerCalls":   "cache_hit, blocked, rate_limited do not add provider calls",
+			"gatewayRequests": "success/blocked/rate_limited terminal labels present; cache hit is success",
+			"providerCalls":   "cache hit, blocked, rate_limited do not add provider calls",
 			"cache":           "miss/hit/bypass evidence present",
 			"rateLimit":       "allowed=true and allowed=false evidence present",
 			"masking":         "none/redacted/blocked evidence present",
@@ -738,8 +736,11 @@ func requireNoForbiddenMetricLabels(t *testing.T, metricsText string) {
 		"feature_id=",
 		"prompt=",
 		"prompt_hash=",
+		"request_body_hash=",
 		"cache_key_hash=",
+		"provider_key=",
 		"authorization=",
+		"raw_error_detail=",
 	}
 	for _, label := range forbiddenLabels {
 		requireNotContains(t, strings.ToLower(metricsText), label)

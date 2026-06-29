@@ -586,7 +586,7 @@ Invoke-SmokeCase -Name "day5 safe request miss then cache hit" -Body {
     Assert-Equal -Name "provider calls after cache hit" -Expected 1 -Actual (Get-MockCallCount -Stats (Get-MockStats))
 
     $secondDetail = Wait-RequestDetail -RequestId $script:SafeHitRequestId
-    Assert-Equal -Name "second detail status" -Expected "cache_hit" -Actual ([string]$secondDetail.data.status)
+    Assert-Equal -Name "second detail status" -Expected "success" -Actual ([string]$secondDetail.data.status)
     Assert-Equal -Name "second detail cache status" -Expected "hit" -Actual ([string]$secondDetail.data.cache.cacheStatus)
     Assert-Equal -Name "second detail cache type" -Expected "exact" -Actual ([string]$secondDetail.data.cache.cacheType)
     Assert-Equal -Name "second detail cache key hash" -Expected $firstCacheKeyHash -Actual ([string]$secondDetail.data.cache.cacheKeyHash)
@@ -594,7 +594,7 @@ Invoke-SmokeCase -Name "day5 safe request miss then cache hit" -Body {
     Assert-Equal -Name "second detail cost" -Expected 0 -Actual ([int64]$secondDetail.data.cost.costMicroUsd)
     Assert-Equal -Name "second detail masking action" -Expected "none" -Actual ([string]$secondDetail.data.masking.maskingAction)
     Assert-Equal -Name "second detail masking count" -Expected 0 -Actual ([int64]$secondDetail.data.masking.maskingDetectedCount)
-    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "cache_hit" -ExpectedCacheStatus "hit"
+    Assert-LogItem -RequestId $script:SafeHitRequestId -ExpectedStatus "success" -ExpectedCacheStatus "hit"
 }
 
 Invoke-SmokeCase -Name "day5 model auto short prompt routes to mock-fast" -Body {
