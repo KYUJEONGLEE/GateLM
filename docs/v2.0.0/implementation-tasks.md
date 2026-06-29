@@ -122,15 +122,22 @@ Likely files:
 Tasks:
 
 - Add OpenAI adapter behind Provider Adapter interface.
+- Consume Provider Catalog body through RuntimeSnapshot `providerCatalogRef`.
+- Verify catalog `catalogId`, `catalogVersion`, and `contentHash` match the RuntimeSnapshot reference before using it.
+- Dispatch adapters by `adapterType`, not by `providerName`.
+- Use catalog execution config: `baseUrl`, `timeoutMs`, `credentialRef`, and allowlisted `adapterConfig`.
 - Use server-side env/secret/credential reference only; never persist plaintext key in DB/log/fixture/UI.
 - Support at least two model entries through catalog/config data.
+- Treat `modelId` as GateLM internal identity and `modelName` as the provider API model name.
 - Keep Mock fallback path available.
 - Distinguish provider success, timeout, error, unauthorized, fallback disabled/success/failed.
+- Record provider 401/403 as `provider.outcome=unauthorized`; record pre-call credential resolution failure as a sanitized provider failure without a provider call.
 - Sanitize provider error body into safe error code.
 
 Verification:
 
 - Unit tests for provider registry and adapter behavior using fake/synthetic client.
+- Catalog mismatch test for RuntimeSnapshot `providerCatalogRef` vs Provider Catalog body.
 - Handler/pipeline test for provider success and fallback success.
 - Search for forbidden key/header/error body exposure.
 
@@ -164,6 +171,11 @@ Tasks:
 - Add RuntimeSnapshot execution view provider.
 - Lookup by `tenantId/projectId/applicationId`.
 - Keep `budgetScopeType/budgetScopeId` out of lookup key.
+- Keep RuntimeSnapshot body limited to `providerCatalogRef`; do not embed full Provider Catalog body.
+- Add or align Provider Catalog body read model/endpoint so Gateway can fetch the catalog referenced by RuntimeSnapshot.
+- Ensure active catalog convenience reads still allow Gateway to verify `catalogId/catalogVersion/contentHash` against RuntimeSnapshot `providerCatalogRef`.
+- Map provider display name and adapter kind separately: `providerName` remains catalog/display data and `adapterType` is the Gateway adapter kind.
+- Include Provider Catalog execution config fields required by Gateway: `baseUrl`, `timeoutMs`, `credentialRef`, allowlisted `adapterConfig`, and model capability/routing fields.
 - Record provenance: `runtimeSnapshotId/runtimeSnapshotVersion/contentHash/runtimeState/publishedAt/publishedBy/gatewayInstanceId`.
 - Implement load/reload failure behavior with last loaded snapshot when contractually allowed.
 - Keep `legacyHashes` as compatibility bridge only.
