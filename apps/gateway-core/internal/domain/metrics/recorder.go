@@ -82,7 +82,7 @@ func (r *Registry) CacheOperation(operation CacheOperation) {
 		{Name: "operation", Value: operation.Operation},
 		{Name: "cache_status", Value: operation.CacheStatus},
 		{Name: "cache_type", Value: operation.CacheType},
-		{Name: "status", Value: operation.Status},
+		{Name: "status", Value: normalizeStatus(operation.Status)},
 	}
 	r.AddCounter(CacheOperationsTotal, labels, 1)
 }
@@ -90,7 +90,7 @@ func (r *Registry) CacheOperation(operation CacheOperation) {
 func (r *Registry) RateLimitDecision(decision RateLimitDecision) {
 	labels := []Label{
 		{Name: "rate_limit_allowed", Value: strconv.FormatBool(decision.Allowed)},
-		{Name: "status", Value: defaultLabelValue(decision.Reason)},
+		{Name: "status", Value: normalizeRateLimitStatus(decision)},
 	}
 	r.AddCounter(RateLimitDecisionsTotal, labels, 1)
 	r.ObserveHistogram(RateLimitDecisionDurationSeconds, labels, decision.DurationSeconds)
@@ -105,7 +105,7 @@ func (r *Registry) MaskingAction(action string) {
 func (r *Registry) LogWrite(write LogWrite) {
 	labels := []Label{
 		{Name: "operation", Value: write.Operation},
-		{Name: "status", Value: write.Status},
+		{Name: "status", Value: normalizeStatus(write.Status)},
 	}
 	r.AddCounter(LogWritesTotal, labels, 1)
 	r.ObserveHistogram(LogWriteDurationSeconds, labels, write.DurationSeconds)
@@ -131,8 +131,28 @@ func normalizeStatus(status string) string {
 	switch trimmed {
 	case "success", "blocked", "rate_limited", "failed", "cancelled":
 		return trimmed
+	case "cache_hit":
+		return "success"
+	case "error", "partial_success":
+		return "failed"
 	case "":
 		return "failed"
+	default:
+		return "failed"
+	}
+}
+
+func normalizeRateLimitStatus(decision RateLimitDecision) string {
+	if decision.Allowed {
+		return "success"
+	}
+	switch strings.TrimSpace(decision.Reason) {
+	case "rate_limited", "limit_exceeded":
+		return "rate_limited"
+	case "blocked":
+		return "blocked"
+	case "cancelled":
+		return "cancelled"
 	default:
 		return "failed"
 	}

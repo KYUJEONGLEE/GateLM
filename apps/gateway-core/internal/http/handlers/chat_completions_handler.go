@@ -22,6 +22,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
@@ -173,6 +174,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.MaskingAction = string(maskingResult.Action)
 	reqCtx.MaskingDetectedTypes = maskingResult.DetectedTypes
 	reqCtx.MaskingDetectedCount = maskingResult.DetectedCount
+	reqCtx.SafetyChecked = true
 	if maskingResult.Action == maskdomain.ActionNone {
 		reqCtx.RedactedPromptPreview = ""
 	} else {
@@ -182,16 +184,20 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	terminalLogPrompt = redactedPrompt
 
 	if maskingResult.Action == maskdomain.ActionBlocked {
-		reqCtx.Status = "blocked"
+		reqCtx.TerminalStatus = outcome.TerminalStatusBlocked
+		reqCtx.Status = outcome.TerminalStatusBlocked
 		reqCtx.HTTPStatus = http.StatusForbidden
 		reqCtx.ErrorCode = "sensitive_data_blocked"
 		reqCtx.ErrorMessage = "Request blocked by GateLM security policy."
 		reqCtx.ErrorStage = "mask_or_block"
 		reqCtx.CacheStatus = cachestage.CacheStatusBypass
 		reqCtx.CacheType = cachestage.CacheTypeNone
+		reqCtx.ProviderOutcome = outcome.ProviderNotCalled
+		reqCtx.FallbackOutcome = outcome.FallbackNotCalled
 		reqCtx.CostMicroUSD = 0
 		reqCtx.SavedCostMicroUSD = 0
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+		ensureRequestOutcome(reqCtx, false)
 		setGatewayHeaders(w, reqCtx)
 		writeGatewayErrorWithHeaders(w, http.StatusForbidden, gatewayHeaderValuesFromContext(reqCtx), reqCtx.ErrorCode, reqCtx.ErrorMessage)
 		return
@@ -260,6 +266,8 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
+		reqCtx.ProviderOutcome = outcome.ProviderError
+		reqCtx.FallbackOutcome = outcome.FallbackDisabled
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
@@ -272,6 +280,8 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if providerResp == nil {
+		reqCtx.ProviderOutcome = outcome.ProviderError
+		reqCtx.FallbackOutcome = outcome.FallbackDisabled
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
@@ -291,13 +301,16 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		ErrorCode:        "none",
 		DurationSeconds:  providerDuration.Seconds(),
 	})
+	reqCtx.ProviderOutcome = outcome.ProviderSuccess
+	reqCtx.FallbackOutcome = outcome.FallbackNotNeeded
 
 	if providerResp.Usage != nil {
 		reqCtx.PromptTokens = providerResp.Usage.PromptTokens
 		reqCtx.CompletionTokens = providerResp.Usage.CompletionTokens
 		reqCtx.TotalTokens = providerResp.Usage.TotalTokens
 	}
-	reqCtx.Status = "success"
+	reqCtx.TerminalStatus = outcome.TerminalStatusSuccess
+	reqCtx.Status = outcome.TerminalStatusSuccess
 	reqCtx.HTTPStatus = http.StatusOK
 	reqCtx.SavedCostMicroUSD = 0
 	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
@@ -585,14 +598,18 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	reqCtx.Provider = reqCtx.SelectedProvider
 	reqCtx.Model = reqCtx.SelectedModel
 	reqCtx.ProviderLatencyMs = 0
+	reqCtx.ProviderOutcome = outcome.ProviderNotCalled
+	reqCtx.FallbackOutcome = outcome.FallbackNotCalled
 	reqCtx.PromptTokens = 0
 	reqCtx.CompletionTokens = 0
 	reqCtx.TotalTokens = 0
 	reqCtx.CostMicroUSD = 0
 	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	reqCtx.TerminalStatus = outcome.TerminalStatusSuccess
 	reqCtx.Status = invocationlog.StatusSuccess
 	reqCtx.HTTPStatus = http.StatusOK
+	ensureRequestOutcome(reqCtx, false)
 
 	if reqCtx.SelectedModel != "" {
 		cachedResp.Model = reqCtx.SelectedModel
@@ -727,6 +744,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		return
 	}
 
+	ensureRequestOutcome(reqCtx, true)
 	if reqCtx.LatencyMs == 0 {
 		reqCtx.LatencyMs = completedAt.Sub(startedAt).Milliseconds()
 	}
@@ -767,6 +785,8 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		SavedCostMicroUSD:       reqCtx.SavedCostMicroUSD,
 		LatencyMs:               reqCtx.LatencyMs,
 		ProviderLatencyMs:       providerLatencyMs,
+		TerminalStatus:          reqCtx.TerminalStatus,
+		DomainOutcomes:          reqCtx.DomainOutcomes,
 		Status:                  reqCtx.Status,
 		HTTPStatus:              reqCtx.HTTPStatus,
 		ErrorCode:               reqCtx.ErrorCode,
@@ -800,7 +820,7 @@ func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {
 }
 
 func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
-	if reqCtx == nil || reqCtx.CacheStatus == cachestage.CacheStatusHit || reqCtx.Status == invocationlog.StatusBlocked || reqCtx.Status == invocationlog.StatusRateLimited {
+	if reqCtx == nil || reqCtx.CacheStatus == cachestage.CacheStatusHit || reqCtx.TerminalStatus == invocationlog.StatusBlocked || reqCtx.TerminalStatus == invocationlog.StatusRateLimited {
 		return nil
 	}
 	if reqCtx.Provider == "" {
@@ -826,6 +846,8 @@ func (h *ChatCompletionsHandler) recordGatewayRequestCompleted(reqCtx *pipeline.
 	if status == "" {
 		status = invocationlog.StatusFailed
 	}
+	result := ensureRequestOutcome(reqCtx, false)
+	status = result.TerminalStatus
 	h.MetricsRegistry.GatewayRequestCompleted(metrics.GatewayRequest{
 		Endpoint:        reqCtx.Endpoint,
 		Method:          reqCtx.Method,
@@ -977,13 +999,18 @@ func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestConte
 		}
 	}
 
-	reqCtx.Status = terminalStatusForGatewayError(gatewayErr.HTTPStatus, gatewayErr.Code)
+	terminalStatus := terminalStatusForGatewayError(gatewayErr.HTTPStatus, gatewayErr.Code)
+	reqCtx.TerminalStatus = terminalStatus
+	reqCtx.Status = terminalStatus
 	reqCtx.HTTPStatus = gatewayErr.HTTPStatus
 	reqCtx.ErrorCode = gatewayErr.Code
 	reqCtx.ErrorMessage = gatewayErr.Message
 	reqCtx.ErrorStage = gatewayErr.Stage
 	reqCtx.CacheStatus = cachestage.CacheStatusBypass
 	reqCtx.CacheType = cachestage.CacheTypeNone
+	reqCtx.ProviderOutcome = outcome.ProviderNotCalled
+	reqCtx.FallbackOutcome = outcome.FallbackNotCalled
+	ensureRequestOutcome(reqCtx, false)
 
 	logGatewayAuthInternalError(reqCtx, gatewayErr)
 	setGatewayHeaders(w, reqCtx)

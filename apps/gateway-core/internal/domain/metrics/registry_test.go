@@ -46,7 +46,7 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_bucket{endpoint="/v1/chat/completions",error_code="none",http_status="200",le="0.025",method="POST",status="success"} 1`)
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_bucket{endpoint="/v1/chat/completions",error_code="none",http_status="200",le="+Inf",method="POST",status="success"} 1`)
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_sum{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 0.02`)
-	assertMetricsContains(t, first, `gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success\nwith \"quote\""} 1`)
+	assertMetricsContains(t, first, `gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="failed"} 1`)
 	assertMetricsDoesNotContainForbiddenLabels(t, first)
 }
 
@@ -66,6 +66,42 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		LogWriteDurationSeconds,
 	} {
 		assertMetricsContains(t, output, "# TYPE "+metricName)
+	}
+}
+
+func TestRecorderStatusLabelsUseCanonicalTerminalStatuses(t *testing.T) {
+	registry := NewRegistry()
+	registry.GatewayRequestCompleted(GatewayRequest{
+		Endpoint:        "/v1/chat/completions",
+		Method:          "POST",
+		Status:          "cache_hit",
+		HTTPStatus:      200,
+		DurationSeconds: 0.01,
+	})
+	registry.CacheOperation(CacheOperation{
+		Operation:   "lookup",
+		CacheStatus: "error",
+		CacheType:   "exact",
+		Status:      "error",
+	})
+	registry.RateLimitDecision(RateLimitDecision{
+		Allowed: false,
+		Reason:  "limit_exceeded",
+	})
+	registry.LogWrite(LogWrite{
+		Operation: "terminal",
+		Status:    "partial_success",
+	})
+
+	output := registry.RenderPrometheus()
+	assertMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 1`)
+	assertMetricsContains(t, output, `gatelm_cache_operations_total{cache_status="error",cache_type="exact",operation="lookup",status="failed"} 1`)
+	assertMetricsContains(t, output, `gatelm_rate_limit_decisions_total{rate_limit_allowed="false",status="rate_limited"} 1`)
+	assertMetricsContains(t, output, `gatelm_log_writes_total{operation="terminal",status="failed"} 1`)
+	for _, forbidden := range []string{`status="cache_hit"`, `status="error"`, `status="partial_success"`, `status="limit_exceeded"`} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("metrics output must not contain forbidden status label %s\noutput:\n%s", forbidden, output)
+		}
 	}
 }
 

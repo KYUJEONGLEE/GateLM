@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 )
 
 func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
@@ -108,6 +109,16 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	}
 	if decoded["schemaVersion"] != float64(1) || decoded["securityPolicyVersionId"] != "sec_p0_v1" {
 		t.Fatalf("unexpected metadata: %v", decoded)
+	}
+	domainOutcomes, ok := decoded["domainOutcomes"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected domainOutcomes metadata, got %v", decoded)
+	}
+	if safety, ok := domainOutcomes["safety"].(map[string]any); !ok || safety["outcome"] != outcome.SafetyRedacted {
+		t.Fatalf("expected redacted safety outcome, got %v", domainOutcomes)
+	}
+	if provider, ok := domainOutcomes["provider"].(map[string]any); !ok || provider["outcome"] != outcome.ProviderSuccess {
+		t.Fatalf("expected provider success outcome, got %v", domainOutcomes)
 	}
 	if _, exists := decoded["routingPolicyHash"]; exists {
 		t.Fatalf("routingPolicyHash must not be primary metadata: %v", decoded)

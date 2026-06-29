@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -84,6 +85,8 @@ type LlmInvocationLog struct {
 	SavedCostMicroUSD     int64
 	LatencyMs             int64
 	ProviderLatencyMs     *int64
+	TerminalStatus        string
+	DomainOutcomes        outcome.DomainOutcomes
 	Status                string
 	HTTPStatus            int
 	ErrorCode             string
@@ -111,6 +114,8 @@ type RequestLogListItem struct {
 	Model            string
 	RequestedModel   string
 	SelectedModel    string
+	TerminalStatus   string
+	DomainOutcomes   outcome.DomainOutcomes
 	Status           string
 	HTTPStatus       int
 	PromptTokens     int64
@@ -133,6 +138,8 @@ type RequestDetail struct {
 	ProjectID       string
 	ApplicationID   string
 	BudgetScope     budget.Scope
+	TerminalStatus  string
+	DomainOutcomes  outcome.DomainOutcomes
 	Status          string
 	HTTPStatus      int
 	Provider        string
@@ -356,6 +363,8 @@ func NormalizeDashboardOverviewFilter(filter DashboardOverviewFilter) (Dashboard
 }
 
 func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
+	terminalStatus, domainOutcomes := canonicalOutcomeFromLog(log, false)
+	domainOutcomes.Safety.RedactedPromptPreview = nil
 	return RequestLogListItem{
 		RequestID:        log.RequestID,
 		ProjectID:        log.ProjectID,
@@ -365,7 +374,9 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		Model:            log.Model,
 		RequestedModel:   log.RequestedModel,
 		SelectedModel:    log.SelectedModel,
-		Status:           log.Status,
+		TerminalStatus:   terminalStatus,
+		DomainOutcomes:   domainOutcomes,
+		Status:           terminalStatus,
 		HTTPStatus:       log.HTTPStatus,
 		PromptTokens:     log.PromptTokens,
 		CompletionTokens: log.CompletionTokens,
@@ -382,6 +393,7 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 }
 
 func ToRequestDetail(log LlmInvocationLog) RequestDetail {
+	terminalStatus, domainOutcomes := canonicalOutcomeFromLog(log, true)
 	return RequestDetail{
 		RequestID:      log.RequestID,
 		TraceID:        log.TraceID,
@@ -389,7 +401,9 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		ProjectID:      log.ProjectID,
 		ApplicationID:  log.ApplicationID,
 		BudgetScope:    budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
-		Status:         log.Status,
+		TerminalStatus: terminalStatus,
+		DomainOutcomes: domainOutcomes,
+		Status:         terminalStatus,
 		HTTPStatus:     log.HTTPStatus,
 		Provider:       log.Provider,
 		Model:          log.Model,
@@ -438,6 +452,56 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 	}
 }
 
+func canonicalOutcomeFromLog(log LlmInvocationLog, requestLogWritten bool) (string, outcome.DomainOutcomes) {
+	terminalStatus := outcome.CanonicalizeTerminalStatus(defaultString(log.TerminalStatus, log.Status), log.HTTPStatus, log.ErrorCode)
+	if !log.DomainOutcomes.IsZero() {
+		return terminalStatus, log.DomainOutcomes
+	}
+	resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, log.ApplicationID)
+	var remaining *int
+	var retryAfterSeconds *int
+	var rateLimitAllowed bool
+	var rateLimitChecked bool
+	if log.RateLimitDecision != nil {
+		rateLimitChecked = true
+		rateLimitAllowed = log.RateLimitDecision.Allowed
+		remainingValue := log.RateLimitDecision.Remaining
+		retryAfterValue := log.RateLimitDecision.RetryAfterSeconds
+		remaining = &remainingValue
+		retryAfterSeconds = &retryAfterValue
+	}
+	return terminalStatus, outcome.Build(outcome.BuildInput{
+		TerminalStatus:             terminalStatus,
+		HTTPStatus:                 log.HTTPStatus,
+		ErrorCode:                  log.ErrorCode,
+		ApplicationID:              log.ApplicationID,
+		RuntimeSnapshotID:          log.RuntimeSnapshot.RuntimeSnapshotID,
+		RuntimeSnapshotVersion:     log.RuntimeSnapshot.RuntimeSnapshotVersion,
+		RuntimeState:               log.RuntimeSnapshot.RuntimeState,
+		RateLimitChecked:          rateLimitChecked,
+		RateLimitAllowed:          rateLimitAllowed,
+		RateLimitRemaining:        remaining,
+		RateLimitRetryAfterSeconds: retryAfterSeconds,
+		BudgetScopeType:            resolvedBudgetScope.Type,
+		BudgetScopeID:              resolvedBudgetScope.ID,
+		BudgetResolvedBy:           resolvedBudgetScope.ResolvedBy,
+		SafetyChecked:              log.MaskingAction != "",
+		MaskingAction:              log.MaskingAction,
+		DetectedTypes:              log.MaskingDetectedTypes,
+		DetectedCount:              log.MaskingDetectedCount,
+		RedactedPromptPreview:      log.RedactedPromptPreview,
+		RequestedModel:             log.RequestedModel,
+		SelectedProvider:           log.SelectedProvider,
+		SelectedModel:              log.SelectedModel,
+		RoutingReason:              log.RoutingReason,
+		CacheStatus:                log.CacheStatus,
+		CacheType:                  log.CacheType,
+		CacheHitRequestID:          log.CacheHitRequestID,
+		ProviderLatencyMs:          log.ProviderLatencyMs,
+		RequestLogWritten:          requestLogWritten,
+	}).DomainOutcomes
+}
+
 func runtimeSnapshotPointer(snapshot runtimeconfig.RuntimeSnapshotProvenance, createdAt time.Time) *runtimeconfig.RuntimeSnapshotProvenance {
 	if snapshot.IsZero() {
 		return nil
@@ -458,20 +522,21 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	budgetCounts := map[budgetScopeKey]BudgetScopeBreakdown{}
 
 	for _, log := range logs {
+		terminalStatus, _ := canonicalOutcomeFromLog(log, false)
 		resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, log.ApplicationID)
 		aggregate.TotalRequests++
-		incrementCount(aggregate.StatusCounts, log.Status)
+		incrementCount(aggregate.StatusCounts, terminalStatus)
 		incrementCount(aggregate.MaskingActionCounts, defaultString(log.MaskingAction, "none"))
-		if isSuccessfulStatus(log.Status) {
+		if isSuccessfulStatus(terminalStatus) {
 			aggregate.SuccessfulRequests++
 		}
-		if log.Status == StatusFailed {
+		if terminalStatus == StatusFailed {
 			aggregate.FailedRequests++
 		}
-		if log.Status == StatusBlocked {
+		if terminalStatus == StatusBlocked {
 			aggregate.BlockedRequests++
 		}
-		if log.Status == StatusRateLimited {
+		if terminalStatus == StatusRateLimited {
 			aggregate.RateLimitedRequests++
 		}
 		if isCacheEligible(log.CacheStatus) {
@@ -497,7 +562,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 			budgetItem.CostMicroUSD += log.CostMicroUSD
 			budgetCounts[budgetKey] = budgetItem
 		}
-		if isLatencyEligibleStatus(log.Status) {
+		if isLatencyEligibleStatus(terminalStatus) {
 			latencies = append(latencies, log.LatencyMs)
 		}
 		if !log.CreatedAt.IsZero() && log.CreatedAt.After(maxCreatedAt) {

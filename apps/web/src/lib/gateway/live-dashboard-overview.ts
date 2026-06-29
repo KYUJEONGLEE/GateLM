@@ -53,6 +53,7 @@ type LiveDashboardOverviewResponse = {
       savedCostUsd?: string;
       statusCounts?: Record<string, number>;
       successfulRequests?: number;
+      terminalStatusCounts?: Record<string, number>;
       totalCostMicroUsd?: number;
       totalCostUsd?: string;
       totalRequests?: number;
@@ -163,7 +164,7 @@ function toDashboardOverview(
       routingReason: row.routingReason ?? "not-set",
       requestCount: row.requestCount ?? 0
     })),
-    statusCounts: totals.statusCounts ?? {},
+    statusCounts: totals.terminalStatusCounts ?? totals.statusCounts ?? {},
     costByModel: (totals.costByModel ?? []).map((row) => ({
       selectedProvider: row.selectedProvider ?? "not-routed",
       selectedModel: row.selectedModel ?? "not-routed",

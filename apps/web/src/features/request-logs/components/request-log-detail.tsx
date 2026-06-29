@@ -62,7 +62,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
           </Link>
           <h2>{formatDisplayIdentifier(record.requestId)}</h2>
         </div>
-        <StatusBadge status={record.status} />
+        <StatusBadge status={record.terminalStatus} />
       </section>
 
       <section className="detail-grid">
@@ -74,6 +74,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Source", record.source],
             ["Created", formatDateTime(record.createdAt, timezone)],
             ["Completed", formatDateTime(record.completedAt, timezone)],
+            ["Terminal status", record.terminalStatus],
             ["HTTP status", String(record.httpStatus)]
           ]}
         />
@@ -98,7 +99,12 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Selected provider", nullableText(record.selectedProvider)],
             ["Selected model", nullableText(record.selectedModel)],
             ["Routing reason", nullableText(record.routingReason)],
-            ["Cache", `${record.cacheType}:${record.cacheStatus}`],
+            [
+              "Cache",
+              `${record.domainOutcomes.cache.cacheType ?? record.cacheType}:${record.domainOutcomes.cache.outcome}`
+            ],
+            ["Provider outcome", record.domainOutcomes.provider.outcome],
+            ["Fallback outcome", record.domainOutcomes.fallback.outcome],
             [
               "Cache hit request",
               nullableText(
@@ -112,6 +118,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
           title="Safety"
           rows={[
             ["Masking action", record.maskingAction],
+            ["Safety outcome", record.domainOutcomes.safety.outcome],
             ["Detected count", String(record.maskingDetectedCount)],
             ["Detected types", record.maskingDetectedTypes?.join(", ") || text.none],
             ["Prompt preview", nullableText(record.redactedPromptPreview, text.emptyPreview)],

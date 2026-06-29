@@ -723,7 +723,7 @@ func readinessExpectedMetricSamples() []string {
 		`gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 2`,
 		`gatelm_rate_limit_decisions_total{rate_limit_allowed="true",status="within_limit"} 4`,
-		`gatelm_rate_limit_decisions_total{rate_limit_allowed="false",status="limit_exceeded"} 1`,
+		`gatelm_rate_limit_decisions_total{rate_limit_allowed="false",status="rate_limited"} 1`,
 		`gatelm_masking_actions_total{masking_action="none"} 5`,
 		`gatelm_masking_actions_total{masking_action="redacted"} 1`,
 		`gatelm_masking_actions_total{masking_action="blocked"} 1`,

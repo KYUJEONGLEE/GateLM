@@ -93,12 +93,12 @@ export function RequestLogTable({
                     <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
                   </td>
                   <td>
-                    <StatusBadge status={record.status} />
+                    <StatusBadge status={record.terminalStatus} />
                   </td>
                   <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
-                  <td>{record.maskingAction}</td>
+                  <td>{formatSafetyOutcome(record)}</td>
                   <td>
-                    {record.cacheType}:{record.cacheStatus}
+                    {record.domainOutcomes.cache.cacheType ?? record.cacheType}:{record.domainOutcomes.cache.outcome}
                   </td>
                   <td>{formatLatency(record.latencyMs)}</td>
                   <td>{formatInteger(record.totalTokens)}</td>
@@ -113,10 +113,18 @@ export function RequestLogTable({
   );
 }
 
-export function StatusBadge({ status }: { status: InvocationLogRecord["status"] }) {
+export function StatusBadge({ status }: { status: InvocationLogRecord["terminalStatus"] }) {
   return (
     <span className="status-badge" data-status={status}>
       {status}
     </span>
   );
+}
+
+function formatSafetyOutcome(record: InvocationLogRecord) {
+  const outcome = record.domainOutcomes.safety.outcome;
+  if (outcome === "redacted" || outcome === "blocked") {
+    return `${outcome}:${record.maskingAction}`;
+  }
+  return outcome;
 }

@@ -40,6 +40,8 @@ const forbiddenMetricLabels = [
   "raw_error_detail",
 ];
 
+const forbiddenTerminalStatusValues = ["cache_hit", "error", "partial_success"];
+
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 403));
 
 export const options = {
@@ -193,6 +195,7 @@ export function metrics_probe() {
   check(body, {
     "metrics exposes required families": (text) => requiredMetricFamilies.every((name) => text.includes(`# TYPE ${name}`)),
     "metrics has no forbidden labels": (text) => !hasForbiddenMetricLabel(text),
+    "metrics has no forbidden terminal status values": (text) => !hasForbiddenTerminalStatusValue(text),
     "metrics records provider request": (text) => sumMetric(text, "gatelm_provider_requests_total") >= 1,
     "metrics records cache operations": (text) => sumMetric(text, "gatelm_cache_operations_total") >= 2,
     "metrics records log writes": (text) => sumMetric(text, "gatelm_log_writes_total") >= 1,
@@ -277,6 +280,10 @@ function labelsMatch(labels, matchers) {
 
 function hasForbiddenMetricLabel(body) {
   return forbiddenMetricLabels.some((label) => String(body || "").includes(`${label}="`));
+}
+
+function hasForbiddenTerminalStatusValue(body) {
+  return forbiddenTerminalStatusValues.some((status) => String(body || "").includes(`status="${status}"`));
 }
 
 function headerValue(response, name) {

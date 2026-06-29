@@ -75,6 +75,9 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected response item: %+v", item)
 	}
+	if item.TerminalStatus != invocationlog.StatusSuccess || item.Status != invocationlog.StatusSuccess || item.DomainOutcomes.Cache.Outcome != "miss" {
+		t.Fatalf("expected canonical list outcome bridge, got terminal=%s status=%s outcomes=%+v", item.TerminalStatus, item.Status, item.DomainOutcomes)
+	}
 
 	for _, forbidden := range []string{
 		"redactedPromptPreview",
@@ -301,6 +304,9 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	}
 	if response.Data.RequestID != "request_001" || response.Data.Routing.SelectedModel == nil || *response.Data.Routing.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected detail response: %+v", response.Data)
+	}
+	if response.Data.TerminalStatus != invocationlog.StatusSuccess || response.Data.Status != invocationlog.StatusSuccess || response.Data.DomainOutcomes.Safety.Outcome != "redacted" {
+		t.Fatalf("expected canonical detail outcome bridge, got terminal=%s status=%s outcomes=%+v", response.Data.TerminalStatus, response.Data.Status, response.Data.DomainOutcomes)
 	}
 	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_REDACTED]." {
 		t.Fatalf("expected redacted prompt preview, got %+v", response.Data.Masking)

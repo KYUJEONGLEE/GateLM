@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
@@ -50,6 +51,7 @@ type RequestContext struct {
 	MaskingDetectedCount    int
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
+	SafetyChecked           bool
 
 	CacheStatus       string
 	CacheType         string
@@ -59,6 +61,8 @@ type RequestContext struct {
 	Provider          string
 	Model             string
 	ProviderLatencyMs int64
+	ProviderOutcome   string
+	FallbackOutcome   string
 
 	PromptTokens      int
 	CompletionTokens  int
@@ -67,6 +71,8 @@ type RequestContext struct {
 	SavedCostMicroUSD int64
 	LatencyMs         int64
 
+	TerminalStatus string
+	DomainOutcomes outcome.DomainOutcomes
 	Status       string
 	HTTPStatus   int
 	ErrorCode    string

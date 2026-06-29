@@ -11,6 +11,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 
 	"github.com/jackc/pgx/v5"
@@ -44,6 +45,7 @@ const (
 	budgetScopeTypeSQL       = "coalesce(nullif(metadata #>> '{budgetScope,budgetScopeType}', ''), 'application')"
 	budgetScopeIDSQL         = "coalesce(nullif(metadata #>> '{budgetScope,budgetScopeId}', ''), application_id::text)"
 	budgetScopeResolvedBySQL = "coalesce(nullif(metadata #>> '{budgetScope,resolvedBy}', ''), 'default_application')"
+	terminalStatusSQL        = "case when status in ('success', 'blocked', 'rate_limited', 'failed', 'cancelled') then status when status = 'cache_hit' then 'success' when status in ('error', 'partial_success') then 'failed' else 'failed' end"
 )
 
 func (r *QueryReader) ListProjectLogs(ctx context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -225,7 +227,11 @@ func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []an
 		where = append(where, fmt.Sprintf("%s = $%d", column, len(args)))
 	}
 
-	addOptionalWhere("status", filter.Status)
+	statusFilter := ""
+	if strings.TrimSpace(filter.Status) != "" {
+		statusFilter = outcome.CanonicalizeTerminalStatus(filter.Status, 0, "")
+	}
+	addOptionalWhere(terminalStatusSQL, statusFilter)
 	addOptionalWhere("provider", filter.Provider)
 	addOptionalWhere("model", filter.Model)
 	addOptionalWhere("cache_status", filter.CacheStatus)
@@ -261,6 +267,7 @@ select
   cache_type,
   routing_reason,
   masking_action,
+  metadata,
   created_at
 from p0_llm_invocation_logs
 where %s
@@ -299,7 +306,7 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 with filtered as (
   select
     request_id,
-    status,
+    %s as terminal_status,
     prompt_tokens,
     completion_tokens,
     total_tokens,
@@ -323,10 +330,10 @@ with filtered as (
 )
 select
   count(*)::bigint as total_requests,
-	  count(*) filter (where status = 'success')::bigint as successful_requests,
-	  count(*) filter (where status = 'failed')::bigint as failed_requests,
-  count(*) filter (where status = 'blocked')::bigint as blocked_requests,
-  count(*) filter (where status = 'rate_limited')::bigint as rate_limited_requests,
+	  count(*) filter (where terminal_status = 'success')::bigint as successful_requests,
+	  count(*) filter (where terminal_status = 'failed')::bigint as failed_requests,
+  count(*) filter (where terminal_status = 'blocked')::bigint as blocked_requests,
+  count(*) filter (where terminal_status = 'rate_limited')::bigint as rate_limited_requests,
   count(*) filter (where coalesce(nullif(cache_status, ''), 'bypass') = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
   count(*) filter (where coalesce(nullif(cache_status, ''), 'bypass') <> 'bypass')::bigint as cache_eligible_requests,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
@@ -334,12 +341,12 @@ select
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
   coalesce(sum(cost_micro_usd), 0)::bigint as total_cost_micro_usd,
   coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd,
-	  (avg(latency_ms) filter (where status in ('success', 'failed')))::float8 as average_latency_ms,
-	  (percentile_disc(0.95) within group (order by latency_ms) filter (where status in ('success', 'failed')))::float8 as p95_latency_ms,
+	  (avg(latency_ms) filter (where terminal_status in ('success', 'failed')))::float8 as average_latency_ms,
+	  (percentile_disc(0.95) within group (order by latency_ms) filter (where terminal_status in ('success', 'failed')))::float8 as p95_latency_ms,
   coalesce((
-    select jsonb_object_agg(status_key, request_count)
+    select jsonb_object_agg(terminal_status_key, request_count)
     from (
-      select coalesce(nullif(status, ''), 'unknown') as status_key, count(*)::bigint as request_count
+      select terminal_status as terminal_status_key, count(*)::bigint as request_count
       from filtered
       group by 1
     ) status_rollup
@@ -411,7 +418,7 @@ select
     where budget_scope_id is not null and budget_scope_id <> ''
   ), '[]'::jsonb) as budget_scope_breakdown,
   max(created_at) as last_log_created_at
-from filtered`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
+from filtered`, terminalStatusSQL, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
 
 	return query, args
 }
@@ -469,6 +476,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var requestedModel sql.NullString
 	var selectedModel sql.NullString
 	var routingReason sql.NullString
+	var metadataJSON []byte
 	if err := rows.Scan(
 		&log.RequestID,
 		&log.ProjectID,
@@ -491,6 +499,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.CacheType,
 		&routingReason,
 		&log.MaskingAction,
+		&metadataJSON,
 		&log.CreatedAt,
 	); err != nil {
 		return invocationlog.LlmInvocationLog{}, err
@@ -505,6 +514,11 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	log.RequestedModel = nullableString(requestedModel)
 	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
+	var err error
+	log.DomainOutcomes, err = decodeDomainOutcomesBridgeMetadata(metadataJSON)
+	if err != nil {
+		return invocationlog.LlmInvocationLog{}, err
+	}
 	return log, nil
 }
 
@@ -600,6 +614,10 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
 	}
+	log.DomainOutcomes, err = decodeDomainOutcomesBridgeMetadata(metadataJSON)
+	if err != nil {
+		return invocationlog.LlmInvocationLog{}, err
+	}
 	return log, nil
 }
 
@@ -639,6 +657,7 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 }
 
 type invocationMetadataJSON struct {
+	DomainOutcomes  *outcome.DomainOutcomes       `json:"domainOutcomes"`
 	RuntimeSnapshot *runtimeSnapshotMetadataJSON `json:"runtimeSnapshot"`
 	Runtime         *runtimeMetadataJSON         `json:"runtime"`
 }
@@ -688,6 +707,20 @@ func decodeRuntimeSnapshotBridgeMetadata(raw []byte, createdAt time.Time) (runti
 	return runtimeconfig.RuntimeSnapshotProvenance{
 		LegacyHashes: legacyHashes,
 	}.Normalize(runtimeconfig.ActiveConfig{}, createdAt, runtimeconfig.DefaultGatewayInstanceIDCompat), nil
+}
+
+func decodeDomainOutcomesBridgeMetadata(raw []byte) (outcome.DomainOutcomes, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return outcome.DomainOutcomes{}, nil
+	}
+	var metadata invocationMetadataJSON
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return outcome.DomainOutcomes{}, err
+	}
+	if metadata.DomainOutcomes == nil {
+		return outcome.DomainOutcomes{}, nil
+	}
+	return *metadata.DomainOutcomes, nil
 }
 
 func (m runtimeMetadataJSON) legacyHashes() runtimeconfig.LegacyHashes {

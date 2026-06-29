@@ -160,7 +160,7 @@ func TestChatCompletionsHandlerRecordsRateLimitedMetricsBeforeProviderAndCache(t
 
 	output := registry.RenderPrometheus()
 	assertHandlerMetricsContains(t, output, `gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`)
-	assertHandlerMetricsContains(t, output, `gatelm_rate_limit_decisions_total{rate_limit_allowed="false",status="limit_exceeded"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_rate_limit_decisions_total{rate_limit_allowed="false",status="rate_limited"} 1`)
 	assertHandlerMetricsNotContains(t, output, `gatelm_provider_requests_total{`)
 	assertHandlerMetricsNotContains(t, output, `gatelm_cache_operations_total{`)
 }

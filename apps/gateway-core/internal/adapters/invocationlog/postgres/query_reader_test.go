@@ -90,6 +90,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				invocationlog.CacheTypeExact,
 				sql.NullString{String: "low_cost", Valid: true},
 				"none",
+				[]byte(`{"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200},"runtime":{"outcome":"not_checked"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_checked","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"passed","maskingAction":"none","detectedCount":0},"routing":{"outcome":"selected","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact"},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast"},"fallback":{"outcome":"not_needed"},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true}}}`),
 				createdAt,
 			}},
 		},
@@ -112,6 +113,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	item := items[0]
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
+	}
+	if item.TerminalStatus != invocationlog.StatusSuccess || item.DomainOutcomes.Cache.Outcome != "miss" || item.DomainOutcomes.Provider.Outcome != "success" {
+		t.Fatalf("expected canonical list outcomes, got terminal=%s outcomes=%+v", item.TerminalStatus, item.DomainOutcomes)
 	}
 	if item.BudgetScope.Type != "application" || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope: %+v", item.BudgetScope)
@@ -281,8 +285,8 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
 	}
 	for _, expected := range []string{
-		"status = 'failed'",
-		"status = 'rate_limited'",
+		"terminal_status = 'failed'",
+		"terminal_status = 'rate_limited'",
 		"cache_eligible_requests",
 		"saved_cost_micro_usd",
 		"percentile_disc(0.95)",

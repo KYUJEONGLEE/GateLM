@@ -60,6 +60,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			DetectedCount:           reqCtx.MaskingDetectedCount,
 			RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
 			SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
+			SafetyChecked:           reqCtx.SafetyChecked,
 		},
 		Routing: request.RoutingContext{
 			RequestedModel:    reqCtx.RequestedModel,
@@ -76,11 +77,13 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SavedCostMicroUSD: reqCtx.SavedCostMicroUSD,
 		},
 		Status: request.StatusContext{
-			Status:       reqCtx.Status,
-			HTTPStatus:   reqCtx.HTTPStatus,
-			ErrorCode:    reqCtx.ErrorCode,
-			ErrorMessage: reqCtx.ErrorMessage,
-			ErrorStage:   reqCtx.ErrorStage,
+			TerminalStatus: reqCtx.TerminalStatus,
+			DomainOutcomes: reqCtx.DomainOutcomes,
+			Status:         reqCtx.Status,
+			HTTPStatus:     reqCtx.HTTPStatus,
+			ErrorCode:      reqCtx.ErrorCode,
+			ErrorMessage:   reqCtx.ErrorMessage,
+			ErrorStage:     reqCtx.ErrorStage,
 		},
 	}
 }
@@ -143,6 +146,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Masking.SecurityPolicyVersionID != "" {
 		reqCtx.SecurityPolicyVersionID = gatewayCtx.Masking.SecurityPolicyVersionID
 	}
+	if gatewayCtx.Masking.SafetyChecked {
+		reqCtx.SafetyChecked = true
+	}
 
 	if gatewayCtx.Routing.RequestedModel != "" {
 		reqCtx.RequestedModel = gatewayCtx.Routing.RequestedModel
@@ -174,6 +180,12 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	}
 	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 
+	if gatewayCtx.Status.TerminalStatus != "" {
+		reqCtx.TerminalStatus = gatewayCtx.Status.TerminalStatus
+	}
+	if !gatewayCtx.Status.DomainOutcomes.IsZero() {
+		reqCtx.DomainOutcomes = gatewayCtx.Status.DomainOutcomes
+	}
 	if gatewayCtx.Status.Status != "" {
 		reqCtx.Status = gatewayCtx.Status.Status
 	}

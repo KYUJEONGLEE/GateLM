@@ -13,6 +13,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
@@ -180,6 +181,8 @@ type requestDetailDataResponse struct {
 	ApplicationID   *string                            `json:"applicationId"`
 	BudgetScope     budgetScopeResponse                `json:"budgetScope"`
 	RuntimeSnapshot *runtimeSnapshotProvenanceResponse `json:"runtimeSnapshot"`
+	TerminalStatus  string                             `json:"terminalStatus"`
+	DomainOutcomes  outcome.DomainOutcomes             `json:"domainOutcomes"`
 	Status          string                             `json:"status"`
 	HTTPStatus      int                                `json:"httpStatus"`
 	Provider        string                             `json:"provider"`
@@ -250,6 +253,8 @@ type requestLogListItemResponse struct {
 	Model            string              `json:"model"`
 	RequestedModel   string              `json:"requestedModel"`
 	SelectedModel    string              `json:"selectedModel"`
+	TerminalStatus   string              `json:"terminalStatus"`
+	DomainOutcomes   outcome.DomainOutcomes `json:"domainOutcomes"`
 	Status           string              `json:"status"`
 	HTTPStatus       int                 `json:"httpStatus"`
 	PromptTokens     int64               `json:"promptTokens"`
@@ -448,6 +453,7 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 }
 
 func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResponse {
+	terminalStatus, domainOutcomes := canonicalDetailOutcome(detail)
 	return requestDetailDataResponse{
 		RequestID:       detail.RequestID,
 		TraceID:         detail.TraceID,
@@ -456,7 +462,9 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		ApplicationID:   stringPointerOrNil(detail.ApplicationID),
 		BudgetScope:     budgetScopeResponseFromScope(detail.BudgetScope, detail.ApplicationID),
 		RuntimeSnapshot: runtimeSnapshotResponse(detail.RuntimeSnapshot),
-		Status:          detail.Status,
+		TerminalStatus:  terminalStatus,
+		DomainOutcomes:  domainOutcomes,
+		Status:          terminalStatus,
 		HTTPStatus:      detail.HTTPStatus,
 		Provider:        detail.Provider,
 		Model:           detail.Model,
@@ -507,6 +515,7 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []requestLogListItemResponse {
 	responses := make([]requestLogListItemResponse, 0, len(items))
 	for _, item := range items {
+		terminalStatus, domainOutcomes := canonicalListItemOutcome(item)
 		responses = append(responses, requestLogListItemResponse{
 			RequestID:        item.RequestID,
 			ProjectID:        item.ProjectID,
@@ -516,7 +525,9 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			Model:            item.Model,
 			RequestedModel:   item.RequestedModel,
 			SelectedModel:    item.SelectedModel,
-			Status:           item.Status,
+			TerminalStatus:   terminalStatus,
+			DomainOutcomes:   domainOutcomes,
+			Status:           terminalStatus,
 			HTTPStatus:       item.HTTPStatus,
 			PromptTokens:     item.PromptTokens,
 			CompletionTokens: item.CompletionTokens,
@@ -532,6 +543,63 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 		})
 	}
 	return responses
+}
+
+func canonicalDetailOutcome(detail invocationlog.RequestDetail) (string, outcome.DomainOutcomes) {
+	terminalStatus := outcome.CanonicalizeTerminalStatus(firstNonEmpty(detail.TerminalStatus, detail.Status), detail.HTTPStatus, detail.Error.ErrorCode)
+	if !detail.DomainOutcomes.IsZero() {
+		return terminalStatus, detail.DomainOutcomes
+	}
+	return terminalStatus, outcome.Build(outcome.BuildInput{
+		TerminalStatus:        terminalStatus,
+		HTTPStatus:            detail.HTTPStatus,
+		ErrorCode:             detail.Error.ErrorCode,
+		ApplicationID:         detail.ApplicationID,
+		BudgetScopeType:       detail.BudgetScope.Type,
+		BudgetScopeID:         detail.BudgetScope.ID,
+		BudgetResolvedBy:      detail.BudgetScope.ResolvedBy,
+		SafetyChecked:         detail.Masking.MaskingAction != "",
+		MaskingAction:         detail.Masking.MaskingAction,
+		DetectedTypes:         detail.Masking.MaskingDetectedTypes,
+		DetectedCount:         detail.Masking.MaskingDetectedCount,
+		RedactedPromptPreview: detail.Masking.RedactedPromptPreview,
+		RequestedModel:        detail.RequestedModel,
+		SelectedProvider:      detail.Routing.SelectedProvider,
+		SelectedModel:         detail.Routing.SelectedModel,
+		RoutingReason:         detail.Routing.RoutingReason,
+		CacheStatus:           detail.Cache.CacheStatus,
+		CacheType:             detail.Cache.CacheType,
+		CacheHitRequestID:     detail.Cache.CacheHitRequestID,
+		ProviderLatencyMs:     detail.Latency.ProviderLatencyMs,
+		RequestLogWritten:     true,
+	}).DomainOutcomes
+}
+
+func canonicalListItemOutcome(item invocationlog.RequestLogListItem) (string, outcome.DomainOutcomes) {
+	terminalStatus := outcome.CanonicalizeTerminalStatus(firstNonEmpty(item.TerminalStatus, item.Status), item.HTTPStatus, "")
+	if !item.DomainOutcomes.IsZero() {
+		domainOutcomes := item.DomainOutcomes
+		domainOutcomes.Safety.RedactedPromptPreview = nil
+		return terminalStatus, domainOutcomes
+	}
+	domainOutcomes := outcome.Build(outcome.BuildInput{
+		TerminalStatus:   terminalStatus,
+		HTTPStatus:       item.HTTPStatus,
+		ApplicationID:    item.ApplicationID,
+		BudgetScopeType:  item.BudgetScope.Type,
+		BudgetScopeID:    item.BudgetScope.ID,
+		BudgetResolvedBy: item.BudgetScope.ResolvedBy,
+		SafetyChecked:    item.MaskingAction != "",
+		MaskingAction:    item.MaskingAction,
+		RequestedModel:   item.RequestedModel,
+		SelectedModel:    item.SelectedModel,
+		RoutingReason:    item.RoutingReason,
+		CacheStatus:      item.CacheStatus,
+		CacheType:        item.CacheType,
+		RequestLogWritten: true,
+	}).DomainOutcomes
+	domainOutcomes.Safety.RedactedPromptPreview = nil
+	return terminalStatus, domainOutcomes
 }
 
 func budgetScopeFromQuery(query map[string][]string) budget.Scope {

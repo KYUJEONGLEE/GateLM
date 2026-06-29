@@ -3,6 +3,8 @@ package invocationlog
 import (
 	"testing"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 )
 
 func TestBuildAuthFailureLogUsesBlockedDefaults(t *testing.T) {
@@ -23,6 +25,13 @@ func TestBuildAuthFailureLogUsesBlockedDefaults(t *testing.T) {
 	}
 	if log.Status != StatusBlocked || log.HTTPStatus != 401 {
 		t.Fatalf("expected blocked/401, got %s/%d", log.Status, log.HTTPStatus)
+	}
+	if log.TerminalStatus != outcome.TerminalStatusBlocked ||
+		log.DomainOutcomes.Auth.Outcome != outcome.AuthInvalidAPIKey ||
+		log.DomainOutcomes.Safety.Outcome != outcome.SafetyNotChecked ||
+		log.DomainOutcomes.Cache.Outcome != outcome.CacheBypassed ||
+		log.DomainOutcomes.Provider.Outcome != outcome.ProviderNotCalled {
+		t.Fatalf("unexpected canonical auth failure outcomes: terminal=%s outcomes=%+v", log.TerminalStatus, log.DomainOutcomes)
 	}
 	if log.ErrorStage != StageAuthenticateAPIKey {
 		t.Fatalf("expected auth stage %q, got %q", StageAuthenticateAPIKey, log.ErrorStage)

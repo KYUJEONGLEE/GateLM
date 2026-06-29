@@ -47,6 +47,80 @@ export type BudgetScope = {
   resolvedBy: string;
 };
 
+export type TerminalStatus = "success" | "blocked" | "rate_limited" | "failed" | "cancelled";
+
+export type DomainOutcomes = {
+  auth: { outcome: string; httpStatus?: number; errorCode?: string | null };
+  runtime: {
+    outcome: string;
+    runtimeSnapshotId?: string | null;
+    runtimeSnapshotVersion?: number | null;
+    runtimeState?: string | null;
+  };
+  rateLimit: { outcome: string; remaining?: number | null; retryAfterSeconds?: number | null };
+  budget: {
+    outcome: string;
+    budgetScopeType: string;
+    budgetScopeId: string;
+    resolvedBy: string;
+  };
+  safety: {
+    outcome: "passed" | "redacted" | "blocked" | "not_checked";
+    maskingAction?: "none" | "redacted" | "blocked";
+    detectedTypes?: string[];
+    detectedCount: number;
+    redactedPromptPreview?: string | null;
+  };
+  routing: {
+    outcome: string;
+    requestedModel?: string | null;
+    selectedProvider?: string | null;
+    selectedModel?: string | null;
+    routingReason?: string | null;
+  };
+  cache: {
+    outcome: "hit" | "miss" | "bypassed" | "error" | "not_used";
+    cacheType?: string;
+    cacheHitRequestId?: string | null;
+  };
+  provider: {
+    outcome: "success" | "timeout" | "error" | "unauthorized" | "not_called";
+    selectedProvider?: string | null;
+    selectedModel?: string | null;
+    latencyMs?: number | null;
+    sanitizedErrorCode?: string | null;
+  };
+  fallback: {
+    outcome: "not_needed" | "disabled" | "success" | "failed" | "not_called";
+    fallbackProvider?: string | null;
+    reason?: string | null;
+  };
+  streaming: { outcome: string; streamingRequested?: boolean };
+  logging: { outcome: string; requestLogWritten?: boolean; sanitizedErrorCode?: string | null };
+};
+
+export type DomainOutcomesBridgeInput = {
+  applicationId?: string;
+  budgetScope: BudgetScope;
+  cacheHitRequestId?: string | null;
+  cacheStatus?: string;
+  cacheType?: string;
+  errorCode?: string | null;
+  httpStatus?: number;
+  maskingAction?: "none" | "redacted" | "blocked";
+  maskingDetectedCount?: number;
+  maskingDetectedTypes?: string[];
+  providerLatencyMs?: number | null;
+  redactedPromptPreview?: string | null;
+  requestedModel?: string | null;
+  routingReason?: string | null;
+  runtime?: RuntimeMetadata;
+  selectedModel?: string | null;
+  selectedProvider?: string | null;
+  stream?: boolean;
+  terminalStatus: TerminalStatus;
+};
+
 export type InvocationLogRecord = {
   requestId: string;
   traceId: string;
@@ -85,7 +159,9 @@ export type InvocationLogRecord = {
   savedCostMicroUsd: number;
   latencyMs: number;
   providerLatencyMs: number | null;
-  status: "success" | "blocked" | "rate_limited" | "failed" | "cancelled";
+  terminalStatus: TerminalStatus;
+  domainOutcomes: DomainOutcomes;
+  status: TerminalStatus;
   httpStatus: number;
   errorCode: string | null;
   errorMessage: string | null;
@@ -194,13 +270,20 @@ export function getInvocationRecord(requestId: string): InvocationLogRecord | un
 }
 
 function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
-	const status = normalizeLegacyBridgeStatus(record.status);
+	const status = normalizeLegacyBridgeStatus(record.terminalStatus ?? record.status);
 	const budgetScope = normalizeBudgetScope(record.budgetScope, record.applicationId);
 	const runtime = normalizeRuntimeMetadataBridge(record.metadata?.runtime, record.createdAt);
-	if (status === record.status && budgetScope === record.budgetScope && runtime === record.metadata?.runtime) {
+	const domainOutcomes = normalizeDomainOutcomes(record.domainOutcomes, record, status, budgetScope);
+	if (
+		status === record.status &&
+		status === record.terminalStatus &&
+		budgetScope === record.budgetScope &&
+		runtime === record.metadata?.runtime &&
+		domainOutcomes === record.domainOutcomes
+	) {
 		return record;
 	}
-	return { ...record, budgetScope, metadata: { runtime }, status };
+	return { ...record, budgetScope, domainOutcomes, metadata: { runtime }, status, terminalStatus: status };
 }
 
 // v1 fixture compatibility bridge: legacy status values are normalized to v2 terminal status values.
@@ -230,6 +313,122 @@ function normalizeDashboardOverview(overview: DashboardOverview): DashboardOverv
 			budgetScopeId: overview.filters.budgetScopeId ?? applicationId,
 			resolvedBy: overview.filters.resolvedBy ?? "default_application"
 		}
+	};
+}
+
+function normalizeDomainOutcomes(
+	value: DomainOutcomes | undefined,
+	record: InvocationLogRecord,
+	terminalStatus: TerminalStatus,
+	budgetScope: BudgetScope
+): DomainOutcomes {
+	if (value?.cache?.outcome && value.safety?.outcome && value.provider?.outcome) {
+		return value;
+	}
+
+	return buildDomainOutcomesBridge({
+		applicationId: record.applicationId,
+		budgetScope,
+		cacheHitRequestId: record.cacheHitRequestId,
+		cacheStatus: record.cacheStatus,
+		cacheType: record.cacheType,
+		errorCode: record.errorCode,
+		httpStatus: record.httpStatus,
+		maskingAction: record.maskingAction,
+		maskingDetectedCount: record.maskingDetectedCount,
+		maskingDetectedTypes: record.maskingDetectedTypes,
+		providerLatencyMs: record.providerLatencyMs,
+		redactedPromptPreview: record.redactedPromptPreview,
+		requestedModel: record.requestedModel,
+		routingReason: record.routingReason,
+		runtime: record.metadata.runtime,
+		selectedModel: record.selectedModel,
+		selectedProvider: record.selectedProvider,
+		stream: record.stream,
+		terminalStatus
+	});
+}
+
+export function buildDomainOutcomesBridge(input: DomainOutcomesBridgeInput): DomainOutcomes {
+	const safetyOutcome =
+		input.maskingAction === "blocked"
+			? "blocked"
+			: input.maskingAction === "redacted"
+				? "redacted"
+				: "passed";
+	const cacheOutcome =
+		input.cacheStatus === "hit"
+			? "hit"
+			: input.cacheStatus === "miss"
+				? "miss"
+				: input.cacheStatus === "error"
+					? "error"
+					: "bypassed";
+	const providerOutcome =
+		cacheOutcome === "hit" || input.terminalStatus === "blocked" || input.terminalStatus === "rate_limited"
+			? "not_called"
+			: input.terminalStatus === "success"
+				? "success"
+				: "error";
+	const authOutcome =
+		input.errorCode === "invalid_api_key" ||
+		input.errorCode === "invalid_app_token" ||
+		input.errorCode === "scope_mismatch"
+			? input.errorCode
+			: "passed";
+
+	return {
+		auth: {
+			outcome: authOutcome,
+			httpStatus: input.httpStatus,
+			errorCode: authOutcome === "passed" ? null : input.errorCode
+		},
+		runtime: {
+			outcome: input.runtime?.runtimeSnapshot.runtimeState ?? "not_checked",
+			runtimeSnapshotId: input.runtime?.runtimeSnapshot.runtimeSnapshotId ?? null,
+			runtimeSnapshotVersion: input.runtime?.runtimeSnapshot.runtimeSnapshotVersion ?? null,
+			runtimeState: input.runtime?.runtimeSnapshot.runtimeState ?? null
+		},
+		rateLimit: { outcome: input.terminalStatus === "rate_limited" ? "rate_limited" : "not_checked" },
+		budget: {
+			outcome: "not_checked",
+			budgetScopeType: input.budgetScope.budgetScopeType,
+			budgetScopeId: input.budgetScope.budgetScopeId,
+			resolvedBy: input.budgetScope.resolvedBy
+		},
+		safety: {
+			outcome: safetyOutcome,
+			maskingAction: input.maskingAction ?? "none",
+			detectedTypes: input.maskingDetectedTypes ?? [],
+			detectedCount: input.maskingDetectedCount ?? 0,
+			redactedPromptPreview: input.redactedPromptPreview ?? null
+		},
+		routing: {
+			outcome: cacheOutcome === "hit" ? "skipped" : input.selectedModel ? "selected" : "not_checked",
+			requestedModel: input.requestedModel ?? null,
+			selectedProvider: input.selectedProvider ?? null,
+			selectedModel: input.selectedModel ?? null,
+			routingReason: input.routingReason ?? null
+		},
+		cache: {
+			outcome: cacheOutcome,
+			cacheType: input.cacheType ?? "none",
+			cacheHitRequestId: input.cacheHitRequestId ?? null
+		},
+		provider: {
+			outcome: providerOutcome,
+			selectedProvider: input.selectedProvider ?? null,
+			selectedModel: input.selectedModel ?? null,
+			latencyMs: input.providerLatencyMs ?? null,
+			sanitizedErrorCode: input.errorCode ?? null
+		},
+		fallback: {
+			outcome: providerOutcome === "success" ? "not_needed" : "not_called",
+			fallbackProvider: null,
+			reason: null
+		},
+		streaming: { outcome: "not_streaming", streamingRequested: input.stream ?? false },
+		logging: { outcome: "written", requestLogWritten: true, sanitizedErrorCode: null }
 	};
 }
 

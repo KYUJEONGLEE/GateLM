@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 )
 
 const (
@@ -50,6 +51,8 @@ type AuthFailureLog struct {
 	Stream         bool
 	RequestedModel string
 
+	TerminalStatus string
+	DomainOutcomes outcome.DomainOutcomes
 	Status       string
 	HTTPStatus   int
 	ErrorCode    string
@@ -150,6 +153,21 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 	if completedAt.IsZero() {
 		completedAt = input.StartedAt
 	}
+	resolvedBudgetScope := budget.NormalizeScope(input.BudgetScope, input.ApplicationID)
+	terminalStatus := outcome.TerminalStatusBlocked
+	domainOutcomes := outcome.Build(outcome.BuildInput{
+		TerminalStatus:    terminalStatus,
+		HTTPStatus:        input.HTTPStatus,
+		ErrorCode:         input.ErrorCode,
+		ApplicationID:     input.ApplicationID,
+		BudgetScopeType:   resolvedBudgetScope.Type,
+		BudgetScopeID:     resolvedBudgetScope.ID,
+		BudgetResolvedBy:  resolvedBudgetScope.ResolvedBy,
+		SafetyChecked:     false,
+		CacheStatus:       CacheStatusBypass,
+		CacheType:         CacheTypeNone,
+		RequestLogWritten: true,
+	}).DomainOutcomes
 
 	return AuthFailureLog{
 		RequestID:     requestID,
@@ -157,7 +175,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		TenantID:      strings.TrimSpace(input.TenantID),
 		ProjectID:     strings.TrimSpace(input.ProjectID),
 		ApplicationID: strings.TrimSpace(input.ApplicationID),
-		BudgetScope:   budget.NormalizeScope(input.BudgetScope, input.ApplicationID),
+		BudgetScope:   resolvedBudgetScope,
 		APIKeyID:      strings.TrimSpace(input.APIKeyID),
 		AppTokenID:    strings.TrimSpace(input.AppTokenID),
 		EndUserID:     strings.TrimSpace(input.EndUserID),
@@ -169,7 +187,9 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		Stream:         input.Stream,
 		RequestedModel: strings.TrimSpace(input.RequestedModel),
 
-		Status:       StatusBlocked,
+		TerminalStatus: terminalStatus,
+		DomainOutcomes: domainOutcomes,
+		Status:       terminalStatus,
 		HTTPStatus:   input.HTTPStatus,
 		ErrorCode:    strings.TrimSpace(input.ErrorCode),
 		ErrorMessage: strings.TrimSpace(input.ErrorMessage),

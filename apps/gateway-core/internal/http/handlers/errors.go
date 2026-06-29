@@ -43,11 +43,14 @@ func writeGatewayErrorWithContext(w http.ResponseWriter, reqCtx *pipeline.Reques
 		return
 	}
 
-	reqCtx.Status = terminalStatusForGatewayError(status, code)
+	terminalStatus := terminalStatusForGatewayError(status, code)
+	reqCtx.TerminalStatus = terminalStatus
+	reqCtx.Status = terminalStatus
 	reqCtx.HTTPStatus = status
 	reqCtx.ErrorCode = code
 	reqCtx.ErrorMessage = message
 	reqCtx.ErrorStage = stage
+	ensureRequestOutcome(reqCtx, false)
 
 	writeGatewayErrorWithHeaders(w, status, gatewayHeaderValuesFromContext(reqCtx), code, message)
 }

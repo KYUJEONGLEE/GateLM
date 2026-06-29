@@ -151,8 +151,9 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 	applicationID := firstValidUUID(log.ApplicationID, w.defaults.ApplicationID)
 	resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, applicationID)
 	metadataJSON, err := json.Marshal(map[string]any{
-		"schemaVersion": 1,
-		"budgetScope":   budget.ToMetadata(resolvedBudgetScope, applicationID),
+		"schemaVersion":   1,
+		"budgetScope":     budget.ToMetadata(resolvedBudgetScope, applicationID),
+		"domainOutcomes":  log.DomainOutcomes,
 	})
 	if err != nil {
 		return authFailureRecord{}, err

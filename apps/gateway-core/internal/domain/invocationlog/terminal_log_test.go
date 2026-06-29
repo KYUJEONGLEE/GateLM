@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
 
@@ -59,6 +60,11 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	if log.Status != StatusSuccess || log.CacheStatus != CacheStatusMiss || log.CacheType != CacheTypeExact {
 		t.Fatalf("unexpected terminal fields: %+v", log)
 	}
+	if log.TerminalStatus != outcome.TerminalStatusSuccess ||
+		log.DomainOutcomes.Safety.Outcome != outcome.SafetyRedacted ||
+		log.DomainOutcomes.Provider.Outcome != outcome.ProviderSuccess {
+		t.Fatalf("unexpected canonical outcomes: terminal=%s outcomes=%+v", log.TerminalStatus, log.DomainOutcomes)
+	}
 	if log.SavedCostMicroUSD != 9 {
 		t.Fatalf("expected saved cost metadata 9, got %d", log.SavedCostMicroUSD)
 	}
@@ -70,6 +76,9 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	}
 	if log.Metadata["schemaVersion"] != 1 || log.Metadata["securityPolicyVersionId"] != "sec_p0_v1" {
 		t.Fatalf("unexpected metadata: %+v", log.Metadata)
+	}
+	if metadataOutcomes, ok := log.Metadata["domainOutcomes"].(outcome.DomainOutcomes); !ok || metadataOutcomes.Safety.Outcome != outcome.SafetyRedacted {
+		t.Fatalf("expected canonical domain outcomes metadata, got %+v", log.Metadata["domainOutcomes"])
 	}
 	if _, exists := log.Metadata["routingPolicyHash"]; exists {
 		t.Fatalf("routingPolicyHash must not be primary metadata: %+v", log.Metadata)
@@ -139,6 +148,11 @@ func TestBuildTerminalLogCarriesRateLimitDecisionWithoutProviderLatency(t *testi
 	}
 	if log.ProviderLatencyMs != nil {
 		t.Fatalf("rate limited log must not include provider latency, got %#v", log.ProviderLatencyMs)
+	}
+	if log.TerminalStatus != outcome.TerminalStatusRateLimited ||
+		log.DomainOutcomes.RateLimit.Outcome != outcome.RateLimitRateLimited ||
+		log.DomainOutcomes.Provider.Outcome != outcome.ProviderNotCalled {
+		t.Fatalf("unexpected rate limited canonical outcomes: terminal=%s outcomes=%+v", log.TerminalStatus, log.DomainOutcomes)
 	}
 	metadataDecision, ok := log.Metadata["rateLimitDecision"].(ratelimit.Decision)
 	if !ok || metadataDecision.Reason != ratelimit.ReasonLimitExceeded {

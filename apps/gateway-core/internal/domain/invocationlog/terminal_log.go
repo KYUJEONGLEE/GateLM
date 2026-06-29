@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
@@ -50,6 +51,8 @@ type TerminalLog struct {
 	LatencyMs         int64
 	ProviderLatencyMs *int64
 
+	TerminalStatus string
+	DomainOutcomes outcome.DomainOutcomes
 	Status       string
 	HTTPStatus   int
 	ErrorCode    string
@@ -112,6 +115,8 @@ type TerminalLogInput struct {
 	LatencyMs         int64
 	ProviderLatencyMs *int64
 
+	TerminalStatus string
+	DomainOutcomes outcome.DomainOutcomes
 	Status       string
 	HTTPStatus   int
 	ErrorCode    string
@@ -206,6 +211,53 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	}
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
+	terminalStatus := outcome.CanonicalizeTerminalStatus(firstNonEmptyString(input.TerminalStatus, input.Status), input.HTTPStatus, input.ErrorCode)
+	domainOutcomes := input.DomainOutcomes
+	if domainOutcomes.IsZero() {
+		var remaining *int
+		var retryAfterSeconds *int
+		var rateLimitAllowed bool
+		var rateLimitChecked bool
+		if rateLimitDecision != nil {
+			rateLimitChecked = true
+			rateLimitAllowed = rateLimitDecision.Allowed
+			remainingValue := rateLimitDecision.Remaining
+			retryAfterValue := rateLimitDecision.RetryAfterSeconds
+			remaining = &remainingValue
+			retryAfterSeconds = &retryAfterValue
+		}
+		domainOutcomes = outcome.Build(outcome.BuildInput{
+			TerminalStatus:             terminalStatus,
+			HTTPStatus:                 input.HTTPStatus,
+			ErrorCode:                  input.ErrorCode,
+			ApplicationID:              input.ApplicationID,
+			RuntimeSnapshotID:          runtimeSnapshot.RuntimeSnapshotID,
+			RuntimeSnapshotVersion:     runtimeSnapshot.RuntimeSnapshotVersion,
+			RuntimeState:               runtimeSnapshot.RuntimeState,
+			RateLimitChecked:          rateLimitChecked,
+			RateLimitAllowed:          rateLimitAllowed,
+			RateLimitRemaining:        remaining,
+			RateLimitRetryAfterSeconds: retryAfterSeconds,
+			BudgetScopeType:            resolvedBudgetScope.Type,
+			BudgetScopeID:              resolvedBudgetScope.ID,
+			BudgetResolvedBy:           resolvedBudgetScope.ResolvedBy,
+			SafetyChecked:              input.MaskingAction != "",
+			MaskingAction:              input.MaskingAction,
+			DetectedTypes:              input.MaskingDetectedTypes,
+			DetectedCount:              input.MaskingDetectedCount,
+			RedactedPromptPreview:      input.RedactedPromptPreview,
+			RequestedModel:             input.RequestedModel,
+			SelectedProvider:           input.SelectedProvider,
+			SelectedModel:              input.SelectedModel,
+			RoutingReason:              input.RoutingReason,
+			CacheStatus:                input.CacheStatus,
+			CacheType:                  input.CacheType,
+			CacheHitRequestID:          input.CacheHitRequestID,
+			ProviderLatencyMs:          input.ProviderLatencyMs,
+			RequestLogWritten:          true,
+		}).DomainOutcomes
+	}
+	metadata["domainOutcomes"] = domainOutcomes
 
 	return TerminalLog{
 		RequestID:          requestID,
@@ -245,7 +297,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		LatencyMs:         latencyMs,
 		ProviderLatencyMs: input.ProviderLatencyMs,
 
-		Status:       strings.TrimSpace(input.Status),
+		TerminalStatus: terminalStatus,
+		DomainOutcomes: domainOutcomes,
+		Status:       terminalStatus,
 		HTTPStatus:   input.HTTPStatus,
 		ErrorCode:    strings.TrimSpace(input.ErrorCode),
 		ErrorMessage: strings.TrimSpace(input.ErrorMessage),

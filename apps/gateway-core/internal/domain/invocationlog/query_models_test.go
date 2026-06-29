@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -47,6 +48,12 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 	}
 	if item.CacheStatus != CacheStatusMiss || item.CacheType != CacheTypeExact {
 		t.Fatalf("unexpected cache fields: %+v", item)
+	}
+	if item.TerminalStatus != outcome.TerminalStatusSuccess ||
+		item.Status != outcome.TerminalStatusSuccess ||
+		item.DomainOutcomes.Safety.Outcome != outcome.SafetyRedacted ||
+		item.DomainOutcomes.Safety.RedactedPromptPreview != nil {
+		t.Fatalf("unexpected canonical list outcome bridge: terminal=%s status=%s outcomes=%+v", item.TerminalStatus, item.Status, item.DomainOutcomes)
 	}
 	if item.BudgetScope.Type != budget.ScopeTypeApplication || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
 		t.Fatalf("unexpected default budget scope: %+v", item.BudgetScope)
@@ -110,6 +117,11 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	}
 	if detail.Masking.RedactedPromptPreview != "Write a short refund response." {
 		t.Fatalf("unexpected redacted prompt preview: %+v", detail.Masking)
+	}
+	if detail.TerminalStatus != outcome.TerminalStatusSuccess ||
+		detail.Status != outcome.TerminalStatusSuccess ||
+		detail.DomainOutcomes.Provider.Outcome != outcome.ProviderSuccess {
+		t.Fatalf("unexpected canonical detail outcome bridge: terminal=%s status=%s outcomes=%+v", detail.TerminalStatus, detail.Status, detail.DomainOutcomes)
 	}
 	if detail.Latency.ProviderLatencyMs == nil || *detail.Latency.ProviderLatencyMs != 86 {
 		t.Fatalf("unexpected provider latency: %+v", detail.Latency)

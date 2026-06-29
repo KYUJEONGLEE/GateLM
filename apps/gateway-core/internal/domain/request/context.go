@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
@@ -66,6 +67,7 @@ type MaskingContext struct {
 	RedactedPrompt          string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
+	SafetyChecked           bool
 }
 
 type RoutingContext struct {
@@ -86,6 +88,8 @@ type CacheContext struct {
 }
 
 type StatusContext struct {
+	TerminalStatus string
+	DomainOutcomes outcome.DomainOutcomes
 	Status       string
 	HTTPStatus   int
 	ErrorCode    string
@@ -94,8 +98,10 @@ type StatusContext struct {
 }
 
 func (c *GatewayContext) SetError(httpStatus int, code string, message string, stage string) {
+	terminalStatus := outcome.CanonicalizeTerminalStatus("", httpStatus, code)
 	c.Status = StatusContext{
-		Status:       "failed",
+		TerminalStatus: terminalStatus,
+		Status:       terminalStatus,
 		HTTPStatus:   httpStatus,
 		ErrorCode:    code,
 		ErrorMessage: message,

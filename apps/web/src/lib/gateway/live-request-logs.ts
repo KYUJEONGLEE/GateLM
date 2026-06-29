@@ -1,6 +1,11 @@
 import "server-only";
 
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import {
+  buildDomainOutcomesBridge,
+  type DomainOutcomes,
+  type InvocationLogRecord,
+  type TerminalStatus
+} from "@/lib/fixtures/v1-observability-fixtures";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayProjectLogsResponse = {
@@ -15,6 +20,7 @@ type GatewayProjectLogItem = {
   completionTokens?: number;
   costMicroUsd?: number;
   createdAt?: string;
+  domainOutcomes?: DomainOutcomes;
   httpStatus?: number;
   latencyMs?: number;
   maskingAction?: string;
@@ -27,6 +33,7 @@ type GatewayProjectLogItem = {
   routingReason?: string;
   selectedModel?: string;
   status?: string;
+  terminalStatus?: string;
   totalTokens?: number;
 };
 
@@ -78,11 +85,33 @@ function getLiveRange() {
 function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): InvocationLogRecord {
   const requestId = item.requestId ?? "";
   const createdAt = item.createdAt ?? new Date().toISOString();
-  const cacheStatus = item.cacheStatus ?? "bypass";
-  const status = normalizeLegacyBridgeStatus(item.status);
+  const terminalStatus = normalizeLegacyBridgeStatus(item.terminalStatus ?? item.status);
+  const cacheStatus = normalizeCacheStatus(item.domainOutcomes?.cache?.outcome, item.cacheStatus);
   const costMicroUsd = item.costMicroUsd ?? 0;
   const applicationId = item.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(item.budgetScope, applicationId);
+  const maskingAction = normalizeMaskingAction(
+    item.domainOutcomes?.safety?.maskingAction ??
+      maskingActionFromSafetyOutcome(item.domainOutcomes?.safety?.outcome) ??
+      item.maskingAction
+  );
+  const domainOutcomes =
+    item.domainOutcomes ??
+    buildDomainOutcomesBridge({
+      applicationId,
+      budgetScope,
+      cacheStatus,
+      cacheType: item.cacheType ?? "none",
+      httpStatus: item.httpStatus ?? 0,
+      maskingAction,
+      providerLatencyMs: null,
+      requestedModel: item.requestedModel ?? null,
+      routingReason: item.routingReason || null,
+      selectedModel: item.selectedModel || item.model || null,
+      selectedProvider: item.provider || null,
+      stream: false,
+      terminalStatus
+    });
 
   return {
     requestId,
@@ -111,11 +140,11 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     cacheType: item.cacheType ?? "none",
     cacheKeyHash: null,
     cacheHitRequestId: null,
-    maskingAction: normalizeMaskingAction(item.maskingAction),
+    maskingAction,
     maskingDetectedTypes: [],
     maskingDetectedCount: 0,
     rateLimitDecision: {
-      allowed: status !== "rate_limited",
+      allowed: terminalStatus !== "rate_limited",
       scope: budgetScope.budgetScopeType,
       scopeId: budgetScope.budgetScopeId,
       limit: 0,
@@ -124,7 +153,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
       windowStart: createdAt,
       resetAt: createdAt,
       retryAfterSeconds: 0,
-      reason: status === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-list",
+      reason: terminalStatus === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-list",
       durationMs: 0
     },
     promptTokens: item.promptTokens ?? 0,
@@ -134,7 +163,9 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     savedCostMicroUsd: cacheStatus === "hit" ? costMicroUsd : 0,
     latencyMs: item.latencyMs ?? 0,
     providerLatencyMs: null,
-    status,
+    terminalStatus,
+    domainOutcomes,
+    status: terminalStatus,
     httpStatus: item.httpStatus ?? 0,
     errorCode: null,
     errorMessage: null,
@@ -179,7 +210,7 @@ function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, application
 }
 
 // Live Gateway list payloads may still carry legacy status names; normalize them for the v2-facing read model.
-function normalizeLegacyBridgeStatus(value: string | undefined): InvocationLogRecord["status"] {
+function normalizeLegacyBridgeStatus(value: string | undefined): TerminalStatus {
 	if (
 		value === "success" ||
 		value === "blocked" ||
@@ -205,4 +236,27 @@ function normalizeMaskingAction(value: string | undefined): InvocationLogRecord[
   }
 
   return "none";
+}
+
+function normalizeCacheStatus(value: string | undefined, fallback: string | undefined) {
+  switch (value) {
+    case "hit":
+    case "miss":
+    case "error":
+      return value;
+    case "bypassed":
+      return "bypass";
+    default:
+      return fallback ?? "bypass";
+  }
+}
+
+function maskingActionFromSafetyOutcome(value: string | undefined) {
+  if (value === "blocked" || value === "redacted") {
+    return value;
+  }
+  if (value === "passed") {
+    return "none";
+  }
+  return undefined;
 }

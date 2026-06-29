@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/outcome"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -96,6 +97,16 @@ func TestAuthFailureWriterMapsInvalidAPIKeyToP0InvocationLog(t *testing.T) {
 	}
 	if decoded["schemaVersion"] != float64(1) {
 		t.Fatalf("expected schemaVersion metadata, got %v", decoded)
+	}
+	domainOutcomes, ok := decoded["domainOutcomes"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected domainOutcomes metadata, got %v", decoded)
+	}
+	if auth, ok := domainOutcomes["auth"].(map[string]any); !ok || auth["outcome"] != outcome.AuthInvalidAPIKey {
+		t.Fatalf("expected invalid_api_key auth outcome, got %v", domainOutcomes)
+	}
+	if safety, ok := domainOutcomes["safety"].(map[string]any); !ok || safety["outcome"] != outcome.SafetyNotChecked {
+		t.Fatalf("expected safety not_checked outcome, got %v", domainOutcomes)
 	}
 }
 

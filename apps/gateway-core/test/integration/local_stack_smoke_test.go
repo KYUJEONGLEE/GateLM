@@ -257,7 +257,7 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	requireContains(t, metricsText, `cache_status="hit"`)
 	requireContains(t, metricsText, `gatelm_rate_limit_decisions_total`)
 	requireContains(t, metricsText, `rate_limit_allowed="false"`)
-	requireContains(t, metricsText, `status="limit_exceeded"`)
+	requireContains(t, metricsText, `status="rate_limited"`)
 	requireContains(t, metricsText, `gatelm_masking_actions_total`)
 	requireContains(t, metricsText, `masking_action="redacted"`)
 	requireContains(t, metricsText, `masking_action="blocked"`)
