@@ -117,11 +117,12 @@ type TerminalLogInput struct {
 
 	TerminalStatus string
 	DomainOutcomes outcome.DomainOutcomes
-	Status       string
-	HTTPStatus   int
-	ErrorCode    string
-	ErrorMessage string
-	ErrorStage   string
+	Status           string
+	HTTPStatus       int
+	ErrorCode        string
+	ErrorMessage     string
+	ErrorStage       string
+	StreamingOutcome string
 
 	CacheStatus       string
 	CacheType         string
@@ -254,6 +255,8 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 			CacheType:                  input.CacheType,
 			CacheHitRequestID:          input.CacheHitRequestID,
 			ProviderLatencyMs:          input.ProviderLatencyMs,
+			StreamingRequested:         input.Stream,
+			StreamingOutcome:           input.StreamingOutcome,
 			RequestLogWritten:          true,
 		}).DomainOutcomes
 	}

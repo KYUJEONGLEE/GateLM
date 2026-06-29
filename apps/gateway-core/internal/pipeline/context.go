@@ -69,6 +69,7 @@ type RequestContext struct {
 	FallbackOutcome   string
 	FallbackProvider  string
 	FallbackReason    string
+	StreamingOutcome  string
 
 	PromptTokens      int
 	CompletionTokens  int

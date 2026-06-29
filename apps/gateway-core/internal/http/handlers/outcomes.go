@@ -70,6 +70,7 @@ func buildRequestOutcome(reqCtx *pipeline.RequestContext, requestLogWritten bool
 		FallbackProvider:           reqCtx.FallbackProvider,
 		FallbackReason:             reqCtx.FallbackReason,
 		StreamingRequested:         reqCtx.Stream,
+		StreamingOutcome:           reqCtx.StreamingOutcome,
 		RequestLogWritten:          requestLogWritten,
 	}
 	if input.TerminalStatus == "" && reqCtx.HTTPStatus == 0 {

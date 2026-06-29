@@ -248,9 +248,12 @@ func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.
 	}
 }
 
-func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
+func TestChatCompletionsHandlerStreamsWithStreamingAdapter(t *testing.T) {
+	adapter := &scriptedStreamingAdapter{
+		frames: [][]byte{[]byte("data: {\"id\":\"stream_test\"}\n\n")},
+	}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("mock"),
+		Providers:       provider.NewRegistry("mock", adapter),
 		DefaultModel:    "mock-balanced",
 		DefaultProvider: "mock",
 	}
@@ -266,20 +269,21 @@ func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-
-	var resp gatewayErrorResponse
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error response: %v", err)
+	if !strings.HasPrefix(rr.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("expected event stream content type, got %q", rr.Header().Get("Content-Type"))
 	}
-	if resp.Error.Code != "streaming_not_supported" {
-		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	if !rr.Flushed || !strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("expected flushed SSE body, flushed=%t body=%q", rr.Flushed, rr.Body.String())
+	}
+	if adapter.streamCalls != 1 || adapter.chatCalls != 0 {
+		t.Fatalf("expected one streaming provider call and no non-stream call, stream=%d chat=%d", adapter.streamCalls, adapter.chatCalls)
 	}
 }
 
-func TestChatCompletionsHandlerAuthenticatesBeforeRejectingStreaming(t *testing.T) {
+func TestChatCompletionsHandlerAuthenticatesBeforeStartingStreaming(t *testing.T) {
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock"),
 		DefaultModel:    "mock-balanced",

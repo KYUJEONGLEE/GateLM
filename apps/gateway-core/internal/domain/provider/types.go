@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 )
 
@@ -78,6 +80,58 @@ type Adapter interface {
 	Name() string
 	ListModels(ctx context.Context) (*ModelListResponse, error)
 	CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error)
+}
+
+type StreamingAdapter interface {
+	CreateChatCompletionStream(ctx context.Context, req ChatCompletionRequest) (ChatCompletionStream, error)
+}
+
+type ChatCompletionStream interface {
+	Recv(ctx context.Context) (ChatCompletionStreamFrame, error)
+	Close() error
+}
+
+type ChatCompletionStreamFrame struct {
+	Payload []byte
+}
+
+func NewReadCloserStream(body io.ReadCloser) ChatCompletionStream {
+	return &readCloserStream{
+		reader: bufio.NewReader(body),
+		body:   body,
+	}
+}
+
+type readCloserStream struct {
+	reader *bufio.Reader
+	body   io.ReadCloser
+}
+
+func (s *readCloserStream) Recv(ctx context.Context) (ChatCompletionStreamFrame, error) {
+	if s == nil || s.reader == nil {
+		return ChatCompletionStreamFrame{}, io.EOF
+	}
+	select {
+	case <-ctx.Done():
+		return ChatCompletionStreamFrame{}, ctx.Err()
+	default:
+	}
+
+	payload, err := s.reader.ReadBytes('\n')
+	if len(payload) > 0 {
+		return ChatCompletionStreamFrame{Payload: payload}, nil
+	}
+	if err != nil {
+		return ChatCompletionStreamFrame{}, err
+	}
+	return ChatCompletionStreamFrame{}, nil
+}
+
+func (s *readCloserStream) Close() error {
+	if s == nil || s.body == nil {
+		return nil
+	}
+	return s.body.Close()
 }
 
 type FailureKind string

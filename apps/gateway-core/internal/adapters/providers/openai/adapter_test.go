@@ -64,6 +64,48 @@ func TestAdapterCreateChatCompletionSuccessUsesInternalAuthorization(t *testing.
 	}
 }
 
+func TestAdapterCreateChatCompletionStreamPassesThroughSSE(t *testing.T) {
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected path: %s", req.URL.Path)
+		}
+		if req.Header.Get("Authorization") != "Bearer test-provider-key" {
+			t.Fatalf("missing provider authorization header")
+		}
+		if req.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("expected event stream accept header, got %q", req.Header.Get("Accept"))
+		}
+		var upstreamReq provider.ChatCompletionRequest
+		if err := json.NewDecoder(req.Body).Decode(&upstreamReq); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		if !upstreamReq.Stream {
+			t.Fatal("expected stream flag to be sent to provider")
+		}
+		return stringResponse(http.StatusOK, "data: {\"delta\":\"sentinel\"}\n\n"), nil
+	})
+	adapter := NewAdapter("openai", "https://provider.test", "test-provider-key", &http.Client{Transport: transport})
+
+	stream, err := adapter.CreateChatCompletionStream(context.Background(), provider.ChatCompletionRequest{
+		RequestID: "req_openai_stream",
+		Model:     "gpt-test-low-cost",
+		Messages: []provider.ChatMessage{
+			{Role: "user", Content: json.RawMessage(`"Hello"`)}},
+	})
+	if err != nil {
+		t.Fatalf("expected stream success, got %v", err)
+	}
+	defer stream.Close()
+
+	frame, err := stream.Recv(context.Background())
+	if err != nil {
+		t.Fatalf("recv stream frame: %v", err)
+	}
+	if string(frame.Payload) != "data: {\"delta\":\"sentinel\"}\n" {
+		t.Fatalf("expected raw SSE pass-through frame, got %q", frame.Payload)
+	}
+}
+
 func TestAdapterSanitizesProviderErrorBody(t *testing.T) {
 	const rawBody = `{"error":{"message":"provider raw detail should stay hidden","code":"too_much_detail"}}`
 	adapter := NewAdapter("openai", "https://provider.test", "test-provider-key", &http.Client{

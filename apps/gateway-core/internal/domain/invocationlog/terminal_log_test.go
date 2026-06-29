@@ -119,6 +119,34 @@ func TestBuildTerminalLogUsesLatencyFallback(t *testing.T) {
 	}
 }
 
+func TestBuildTerminalLogCarriesStreamingOutcome(t *testing.T) {
+	startedAt := time.Date(2026, 6, 30, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:        "request_streaming",
+		Stream:           true,
+		Status:           StatusSuccess,
+		HTTPStatus:       200,
+		SelectedProvider: "mock",
+		SelectedModel:    "mock-fast",
+		StreamingOutcome: outcome.StreamingCompleted,
+		StartedAt:        startedAt,
+		CompletedAt:      startedAt.Add(21 * time.Millisecond),
+	})
+
+	if !log.Stream {
+		t.Fatal("expected terminal log to preserve stream request flag")
+	}
+	if log.DomainOutcomes.Streaming.Outcome != outcome.StreamingCompleted ||
+		log.DomainOutcomes.Streaming.StreamingRequested != true {
+		t.Fatalf("unexpected streaming outcome: %+v", log.DomainOutcomes.Streaming)
+	}
+	if metadataOutcomes, ok := log.Metadata["domainOutcomes"].(outcome.DomainOutcomes); !ok ||
+		metadataOutcomes.Streaming.Outcome != outcome.StreamingCompleted ||
+		metadataOutcomes.Streaming.StreamingRequested != true {
+		t.Fatalf("expected streaming metadata outcome, got %+v", log.Metadata["domainOutcomes"])
+	}
+}
+
 func TestBuildTerminalLogCarriesRateLimitDecisionWithoutProviderLatency(t *testing.T) {
 	startedAt := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
 	log := BuildTerminalLog(TerminalLogInput{

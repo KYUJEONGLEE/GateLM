@@ -31,6 +31,24 @@ func TestSafetyBlockMapper(t *testing.T) {
 	}
 }
 
+func TestStreamingRequestedBlockedMapsToNotStreaming(t *testing.T) {
+	got := Build(BuildInput{
+		TerminalStatus:     TerminalStatusBlocked,
+		HTTPStatus:         403,
+		ErrorCode:          "budget_blocked",
+		ApplicationID:      "app_demo",
+		StreamingRequested: true,
+		CacheStatus:        "bypass",
+		CacheType:          "none",
+	})
+
+	if got.DomainOutcomes.Streaming.Outcome != StreamingNotStreaming ||
+		got.DomainOutcomes.Streaming.StreamingRequested != true ||
+		got.DomainOutcomes.Provider.Outcome != ProviderNotCalled {
+		t.Fatalf("expected blocked stream request to remain not_streaming with provider bypass, got %+v", got.DomainOutcomes)
+	}
+}
+
 func TestSafetyRedactionMapper(t *testing.T) {
 	got := Build(BuildInput{
 		TerminalStatus:         TerminalStatusSuccess,

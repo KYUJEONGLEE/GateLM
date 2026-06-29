@@ -62,7 +62,8 @@ func terminalStatusForGatewayError(status int, code string) string {
 	case invocationlog.ErrorCodeInvalidAPIKey,
 		invocationlog.ErrorCodeInvalidAppToken,
 		"scope_mismatch",
-		"sensitive_data_blocked":
+		"sensitive_data_blocked",
+		"budget_blocked":
 		return invocationlog.StatusBlocked
 	}
 	if status == gatewayerrors.StatusClientClosedRequest {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -203,11 +204,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	gatewayCtx := newGatewayContext(reqCtx, promptText)
 
-	if chatReq.Stream {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
-		return
-	}
-
 	if shouldLookupExactCache(gatewayCtx) {
 		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
 		if cacheHit {
@@ -265,6 +261,11 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.Model = reqCtx.SelectedModel
 	ensureCacheDefaults(reqCtx)
 
+	if chatReq.Stream {
+		h.writeStreamingChatCompletion(w, r.Context(), reqCtx, adapter, chatReq, startedAt)
+		return
+	}
+
 	providerStartedAt := time.Now()
 	providerResp, err := adapter.CreateChatCompletion(r.Context(), chatReq)
 	providerDuration := time.Since(providerStartedAt)
@@ -309,6 +310,114 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, providerResp)
+}
+
+func (h *ChatCompletionsHandler) writeStreamingChatCompletion(w http.ResponseWriter, ctx context.Context, reqCtx *pipeline.RequestContext, adapter provider.Adapter, chatReq provider.ChatCompletionRequest, startedAt time.Time) {
+	streamingAdapter, ok := adapter.(provider.StreamingAdapter)
+	if !ok {
+		reqCtx.ProviderOutcome = outcome.ProviderNotCalled
+		reqCtx.FallbackOutcome = outcome.FallbackNotCalled
+		reqCtx.StreamingOutcome = outcome.StreamingNotStreaming
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported by the selected provider.", "provider_streaming_boundary")
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		reqCtx.ProviderOutcome = outcome.ProviderNotCalled
+		reqCtx.FallbackOutcome = outcome.FallbackNotCalled
+		reqCtx.StreamingOutcome = outcome.StreamingNotStreaming
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Streaming response writer is not available.", "provider_streaming_boundary")
+		return
+	}
+
+	providerStartedAt := time.Now()
+	stream, err := streamingAdapter.CreateChatCompletionStream(ctx, chatReq)
+	providerDuration := time.Since(providerStartedAt)
+	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	if err != nil || stream == nil {
+		if stream == nil && err == nil {
+			err = provider.NewFailure(provider.FailureKindError, 0, "chat_completion_stream")
+		}
+		if isContextCancelled(ctx, err) {
+			markStreamingCancelled(reqCtx, startedAt, "provider_streaming_boundary")
+			return
+		}
+		h.handleProviderFailureWithFallback(w, ctx, reqCtx, chatReq, err, providerDuration, startedAt)
+		return
+	}
+	defer stream.Close()
+
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		Status:           invocationlog.StatusSuccess,
+		HTTPStatus:       http.StatusOK,
+		ErrorCode:        "none",
+		DurationSeconds:  providerDuration.Seconds(),
+	})
+	reqCtx.ProviderOutcome = outcome.ProviderSuccess
+	reqCtx.FallbackOutcome = outcome.FallbackNotNeeded
+	reqCtx.TerminalStatus = outcome.TerminalStatusSuccess
+	reqCtx.Status = outcome.TerminalStatusSuccess
+	reqCtx.HTTPStatus = http.StatusOK
+	reqCtx.ErrorCode = ""
+	reqCtx.ErrorMessage = ""
+	reqCtx.ErrorStage = ""
+	reqCtx.SavedCostMicroUSD = 0
+	reqCtx.StreamingOutcome = outcome.StreamingStarted
+	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
+		reqCtx.CacheStatus = cachestage.CacheStatusMiss
+		reqCtx.CacheType = cachestage.CacheTypeExact
+	}
+
+	setGatewayHeaders(w, reqCtx)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	for {
+		frame, err := stream.Recv(ctx)
+		if len(frame.Payload) > 0 {
+			if _, writeErr := w.Write(frame.Payload); writeErr != nil {
+				markStreamingCancelled(reqCtx, startedAt, "stream_response")
+				return
+			}
+			flusher.Flush()
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if isContextCancelled(ctx, err) {
+			markStreamingCancelled(reqCtx, startedAt, "stream_response")
+			return
+		}
+		reqCtx.TerminalStatus = outcome.TerminalStatusFailed
+		reqCtx.Status = outcome.TerminalStatusFailed
+		reqCtx.HTTPStatus = http.StatusBadGateway
+		reqCtx.ErrorCode = "provider_error"
+		reqCtx.ErrorMessage = "Provider stream was interrupted."
+		reqCtx.ErrorStage = "stream_response"
+		reqCtx.StreamingOutcome = outcome.StreamingInterrupted
+		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+		ensureRequestOutcome(reqCtx, false)
+		return
+	}
+
+	reqCtx.TerminalStatus = outcome.TerminalStatusSuccess
+	reqCtx.Status = outcome.TerminalStatusSuccess
+	reqCtx.HTTPStatus = http.StatusOK
+	reqCtx.ErrorCode = ""
+	reqCtx.ErrorMessage = ""
+	reqCtx.ErrorStage = ""
+	reqCtx.StreamingOutcome = outcome.StreamingCompleted
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	ensureRequestOutcome(reqCtx, false)
 }
 
 func (h *ChatCompletionsHandler) handleProviderFailureWithFallback(w http.ResponseWriter, ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, providerErr error, providerDuration time.Duration, startedAt time.Time) bool {
@@ -426,6 +535,28 @@ func fallbackRouteForRequest(reqCtx *pipeline.RequestContext) (string, string, b
 
 func providerFailureAllowsFallback(failure provider.ProviderError) bool {
 	return failure.Kind == provider.FailureKindTimeout || failure.Kind == provider.FailureKindError
+}
+
+func isContextCancelled(ctx context.Context, err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return ctx != nil && (errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded))
+}
+
+func markStreamingCancelled(reqCtx *pipeline.RequestContext, startedAt time.Time, stage string) {
+	if reqCtx == nil {
+		return
+	}
+	reqCtx.TerminalStatus = outcome.TerminalStatusCancelled
+	reqCtx.Status = outcome.TerminalStatusCancelled
+	reqCtx.HTTPStatus = gatewayerrors.StatusClientClosedRequest
+	reqCtx.ErrorCode = "client_cancelled"
+	reqCtx.ErrorMessage = "Client cancelled the streaming request."
+	reqCtx.ErrorStage = stage
+	reqCtx.StreamingOutcome = outcome.StreamingCancelled
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	ensureRequestOutcome(reqCtx, false)
 }
 
 func providerOutcomeForFailure(failure provider.ProviderError) string {
@@ -914,6 +1045,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		ErrorCode:               reqCtx.ErrorCode,
 		ErrorMessage:            reqCtx.ErrorMessage,
 		ErrorStage:              reqCtx.ErrorStage,
+		StreamingOutcome:        reqCtx.StreamingOutcome,
 		CacheStatus:             reqCtx.CacheStatus,
 		CacheType:               reqCtx.CacheType,
 		CacheKeyHash:            reqCtx.CacheKeyHash,

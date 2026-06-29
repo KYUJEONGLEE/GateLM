@@ -88,6 +88,34 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, req provider.ChatCom
 	return &completion, nil
 }
 
+func (a *Adapter) CreateChatCompletionStream(ctx context.Context, req provider.ChatCompletionRequest) (provider.ChatCompletionStream, error) {
+	req.Stream = true
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("encode mock provider stream request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build mock provider stream request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("X-GateLM-Request-Id", req.RequestID)
+
+	resp, err := a.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, providerFailureFromTransport(err, "chat_completion_stream")
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		return nil, provider.FailureFromHTTPStatus(resp.StatusCode, "chat_completion_stream")
+	}
+
+	return provider.NewReadCloserStream(resp.Body), nil
+}
+
 func providerFailureFromTransport(err error, op string) provider.ProviderError {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return provider.NewFailure(provider.FailureKindTimeout, 0, op)
