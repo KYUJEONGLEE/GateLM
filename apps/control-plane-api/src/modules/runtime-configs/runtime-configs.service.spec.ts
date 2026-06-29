@@ -283,6 +283,50 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
+  it('disables semantic cache mode when exact cache is disabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      cachePolicy: { enabled: false, type: 'exact' as const, ttlSeconds: 3600 },
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.cache.exactCacheEnabled).toBe(false);
+    expect(result.policies.cache.semanticCacheMode).toBe('disabled');
+  });
+
+  it('uses publishedAt milliseconds for RuntimeSnapshot version fallback', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const publishedAt = new Date('2026-06-27T02:00:00.123Z');
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      configVersion: 'runtime_config_manual',
+      publishedAt: publishedAt.toISOString(),
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.runtimeSnapshotVersion).toBe(publishedAt.getTime());
+    expect(result.providerCatalogRef.catalogVersion).toBe(
+      publishedAt.getTime(),
+    );
+  });
+
   it('rejects an active row when its stored document is not active', async () => {
     const { service, prisma } = createService();
     prisma.runtimeConfig.findFirst.mockResolvedValue(

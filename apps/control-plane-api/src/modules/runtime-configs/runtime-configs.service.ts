@@ -1272,7 +1272,9 @@ export class RuntimeConfigsService {
         },
         cache: {
           exactCacheEnabled: document.cachePolicy.enabled,
-          semanticCacheMode: 'evidence_only',
+          semanticCacheMode: document.cachePolicy.enabled
+            ? 'evidence_only'
+            : 'disabled',
           cachePolicyHash: this.sha256(
             this.canonicalJson(document.cachePolicy),
           ),
@@ -1355,7 +1357,7 @@ export class RuntimeConfigsService {
     const publishedAt =
       runtimeConfig.publishedAt ?? new Date(document.publishedAt);
     if (!Number.isNaN(publishedAt.getTime())) {
-      return Math.max(1, Math.floor(publishedAt.getTime() / 1000));
+      return Math.max(1, publishedAt.getTime());
     }
 
     return 1;
