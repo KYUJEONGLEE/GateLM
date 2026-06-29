@@ -11,6 +11,7 @@
       "enabled": true,
       "baseUrl": "https://api.openai.com/v1",
       "timeoutMs": 30000,
+      "credentialRequired": true,
       "credentialRef": {
         "credentialRefId": "credential_ref_synthetic_primary_001",
         "credentialVersion": 1,
@@ -65,11 +66,8 @@
       "enabled": true,
       "baseUrl": "http://mock-provider:8090/v1",
       "timeoutMs": 5000,
-      "credentialRef": {
-        "credentialRefId": "credential_ref_synthetic_mock_001",
-        "credentialVersion": 1,
-        "credentialState": "active"
-      },
+      "credentialRequired": false,
+      "credentialRef": null,
       "adapterConfig": {
         "requestFormat": "mock_chat_completions"
       },

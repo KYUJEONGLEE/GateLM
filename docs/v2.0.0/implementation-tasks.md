@@ -124,8 +124,9 @@ Tasks:
 - Add OpenAI adapter behind Provider Adapter interface.
 - Consume Provider Catalog body through RuntimeSnapshot `providerCatalogRef`.
 - Verify catalog `catalogId`, `catalogVersion`, and `contentHash` match the RuntimeSnapshot reference before using it.
+- Fail before provider/fallback call when no matching Provider Catalog body is available.
 - Dispatch adapters by `adapterType`, not by `providerName`.
-- Use catalog execution config: `baseUrl`, `timeoutMs`, `credentialRef`, and allowlisted `adapterConfig`.
+- Use catalog execution config: `baseUrl`, `timeoutMs`, `credentialRequired`, `credentialRef`, and allowlisted `adapterConfig`.
 - Use server-side env/secret/credential reference only; never persist plaintext key in DB/log/fixture/UI.
 - Support at least two model entries through catalog/config data.
 - Treat `modelId` as GateLM internal identity and `modelName` as the provider API model name.
@@ -138,6 +139,7 @@ Verification:
 
 - Unit tests for provider registry and adapter behavior using fake/synthetic client.
 - Catalog mismatch test for RuntimeSnapshot `providerCatalogRef` vs Provider Catalog body.
+- No-credential provider test with `credentialRequired=false` and `credentialRef=null`.
 - Handler/pipeline test for provider success and fallback success.
 - Search for forbidden key/header/error body exposure.
 
@@ -175,7 +177,8 @@ Tasks:
 - Add or align Provider Catalog body read model/endpoint so Gateway can fetch the catalog referenced by RuntimeSnapshot.
 - Ensure active catalog convenience reads still allow Gateway to verify `catalogId/catalogVersion/contentHash` against RuntimeSnapshot `providerCatalogRef`.
 - Map provider display name and adapter kind separately: `providerName` remains catalog/display data and `adapterType` is the Gateway adapter kind.
-- Include Provider Catalog execution config fields required by Gateway: `baseUrl`, `timeoutMs`, `credentialRef`, allowlisted `adapterConfig`, and model capability/routing fields.
+- Include Provider Catalog execution config fields required by Gateway: `baseUrl`, `timeoutMs`, `credentialRequired`, `credentialRef`, allowlisted `adapterConfig`, and model capability/routing fields.
+- Distinguish required credential binding failures with a safe validation error such as `missing_provider_credential_binding`.
 - Record provenance: `runtimeSnapshotId/runtimeSnapshotVersion/contentHash/runtimeState/publishedAt/publishedBy/gatewayInstanceId`.
 - Implement load/reload failure behavior with last loaded snapshot when contractually allowed.
 - Keep `legacyHashes` as compatibility bridge only.

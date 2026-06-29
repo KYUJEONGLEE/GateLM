@@ -401,6 +401,9 @@ GET admin/v1/applications/:applicationId/provider-catalog/active
 - `GET admin/v1/applications/:applicationId/provider-catalog/active`는 application 기준 active catalog를 가져오는 convenience path다.
 - Gateway가 active catalog convenience path를 사용하더라도 응답의 `catalogId`, `catalogVersion`, `contentHash`가 RuntimeSnapshot의 `providerCatalogRef`와 모두 일치해야 한다.
 - 위 세 값 중 하나라도 일치하지 않으면 Gateway는 해당 Provider Catalog를 사용하지 않는다.
+- Gateway는 현재 RuntimeSnapshot의 `providerCatalogRef`와 정확히 일치하는 previously loaded Provider Catalog body가 있으면 그 catalog body를 사용할 수 있다.
+- 정확히 일치하는 Provider Catalog body를 조회하거나 재사용할 수 없으면 Gateway는 provider call과 fallback call을 시작하지 않고 요청을 실패 처리한다.
+- Provider Catalog mismatch/unavailable failure는 `terminalStatus=failed`, `provider.outcome=not_called`, `fallback.outcome=not_called`, safe error code `provider_catalog_unavailable` 또는 `provider_catalog_mismatch`로 기록한다.
 - Provider Catalog 조회는 Gateway 같은 server-side trusted boundary에서만 수행한다. Browser/Employee UI/Customer App이 raw catalog execution config를 직접 조회하지 않는다.
 - Application 기준 조회는 tenant/project/application context를 함께 검증해야 하며, `applicationId` 단독 문자열을 client-trusted authorization boundary로 보지 않는다.
 
@@ -414,6 +417,7 @@ Provider Catalog provider entry는 Gateway 실행에 필요한 sanitized executi
   "enabled": true,
   "baseUrl": "https://api.openai.com/v1",
   "timeoutMs": 30000,
+  "credentialRequired": true,
   "credentialRef": {
     "credentialRefId": "credential_ref_synthetic_primary_001",
     "credentialVersion": 1,
@@ -435,11 +439,16 @@ Provider entry rules:
 - v2.0.0 fixture는 `openai_compatible`과 `mock` adapter type을 포함한다.
 - `baseUrl`과 `timeoutMs`는 provider 호출 execution config다.
 - `adapterConfig`는 자유 JSON이 아니라 schema allowlist field만 허용한다.
+- `adapterConfig.apiVersion`은 Azure-style OpenAI-compatible endpoints 같은 versioned provider APIs를 위한 allowlisted string field다.
+- `adapterConfig`는 v2.0.0 core에서 arbitrary headers나 free-form query parameters를 허용하지 않는다.
 - Provider Catalog에는 raw Provider Key, Authorization header, secret plaintext, provider raw error body를 넣지 않는다.
 
 Credential boundary:
 
-- Control Plane publish validation은 selected/default/low-cost/fallback provider에 필요한 `credentialRef` 누락, non-active credential state, 지원하지 않는 resolver configuration을 publish 전에 차단한다.
+- `credentialRequired=true`인 provider는 active `credentialRef`가 필요하다.
+- `credentialRequired=false`인 provider는 `credentialRef=null`을 사용할 수 있다. 이 값은 Mock/local/no-auth provider를 위한 명시적 no-credential path이며, raw credential material을 대체하는 dummy reference를 요구하지 않는다.
+- Control Plane publish validation은 selected/default/low-cost/fallback provider 중 `credentialRequired=true`인 provider의 `credentialRef` 누락, non-active credential state, 지원하지 않는 resolver configuration을 publish 전에 차단한다.
+- 필수 provider credential binding 누락은 일반적인 disabled/inactive 상태로 합치지 않고 distinct validation failure로 처리한다. Safe validation error code 후보는 `missing_provider_credential_binding`이다.
 - Gateway는 `credentialRef`를 server-side credential resolver로만 해석한다.
 - Gateway가 provider call 전에 credential을 resolve하지 못하면 provider call은 발생하지 않으며 safe error code로 기록한다.
 - 실제 provider가 401 또는 403을 반환한 경우 `provider.outcome=unauthorized`로 기록한다.

@@ -68,11 +68,23 @@
         "timeoutMs": {
           "type": "integer",
           "minimum": 1000,
-          "maximum": 120000,
+          "maximum": 300000,
           "description": "Provider call timeout in milliseconds."
         },
+        "credentialRequired": {
+          "type": "boolean",
+          "description": "Whether this provider requires a credentialRef before Gateway may call it. false is reserved for Mock, local, or explicitly no-auth providers."
+        },
         "credentialRef": {
-          "$ref": "#/$defs/credentialRef"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/credentialRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reference or metadata only when credentials are required. Null is allowed only for explicit no-credential provider paths."
         },
         "adapterConfig": {
           "$ref": "#/$defs/adapterConfig"
@@ -95,6 +107,7 @@
         "enabled",
         "baseUrl",
         "timeoutMs",
+        "credentialRequired",
         "credentialRef",
         "adapterConfig",
         "models"
@@ -112,6 +125,13 @@
             "mock_chat_completions"
           ],
           "description": "Wire request format used by the Provider Adapter."
+        },
+        "apiVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "description": "Optional allowlisted provider API version, for example Azure-style OpenAI-compatible endpoints. It must not contain credentials, headers, or free-form query material."
         }
       },
       "required": [
