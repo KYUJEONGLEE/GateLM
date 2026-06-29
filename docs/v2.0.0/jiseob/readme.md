@@ -36,6 +36,7 @@ v2에서 Gateway가 특히 책임질 부분은 아래와 같다.
 - Gateway가 소비할 `RuntimeSnapshot` 최소 schema
 - `RuntimeSnapshot` publish/reload 실패 시 상태 표현
 - active snapshot pointer 조회 방식
+- active snapshot lookup key 기준
 - Provider/Model catalog shape
 - Provider credential reference shape
 - API Key/App Token 검증 결과와 Application binding
@@ -93,6 +94,7 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 
 - P0 legacy field cleanup inventory
 - `RuntimeSnapshot` 최소 schema와 provenance field
+- active snapshot lookup key: `tenant/project/application` 기준인지, budget scope까지 포함하는지
 - publish 실패, reload 실패, last known safe 상태 계약
 - Provider/Model catalog와 credential reference 계약
 - Actual Provider 1종과 모델 2개 이상 범위
@@ -129,12 +131,13 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 2. terminal status와 domain outcome 구조
 3. RuntimeConfig/RuntimeSnapshot 경계
 4. RuntimeSnapshot publish/reload/last known safe 계약
-5. Provider/Model catalog와 credential reference 계약
-6. Actual Provider 1종, 모델 2개 이상, Mock fallback 범위
-7. `budgetScopeType/budgetScopeId` resolve 규칙
-8. Employee Chat Gateway 호출 경계
-9. streaming thin slice 범위
-10. raw prompt/raw response 저장 금지 유지와 opt-in deferred 조건
+5. active snapshot lookup key와 기존 `configHash/securityPolicyHash/routingPolicyHash`의 v2 provenance 연결
+6. Provider/Model catalog와 credential reference 계약
+7. Actual Provider 1종, 모델 2개 이상, Mock fallback 범위
+8. `budgetScopeType/budgetScopeId` resolve 규칙
+9. Employee Chat Gateway 호출 경계
+10. streaming thin slice 범위
+11. raw prompt/raw response 저장 금지 유지와 opt-in deferred 조건
 
 ## 8. 아직 공식 필드로 확정하면 안 되는 후보 용어
 
@@ -172,4 +175,3 @@ Gateway는 아래 계약 후보를 생산해야 한다.
 9. k6 scenario 강화와 dashboard query profile handoff
 
 첫 구현은 기능 욕심을 줄이고, `P0 legacy cleanup -> Actual Provider adapter -> RuntimeSnapshot live thin slice` 순서가 안전하다.
-
