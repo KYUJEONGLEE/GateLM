@@ -22,7 +22,8 @@
     "projectId": "project_synthetic",
     "applicationId": null,
     "budgetScopeType": "application",
-    "budgetScopeId": "app_employee_chat_synthetic"
+    "budgetScopeId": "app_employee_chat_synthetic",
+    "resolvedBy": "default_application"
   },
   "totals": {
     "requestCount": 120,
@@ -47,6 +48,7 @@
       {
         "budgetScopeType": "application",
         "budgetScopeId": "app_employee_chat_synthetic",
+        "resolvedBy": "default_application",
         "requestCount": 120,
         "estimatedCostMicroUsd": 12500
       }

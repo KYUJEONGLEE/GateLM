@@ -6,7 +6,8 @@
   "applicationId": "app_employee_chat_synthetic",
   "budgetScope": {
     "budgetScopeType": "application",
-    "budgetScopeId": "app_employee_chat_synthetic"
+    "budgetScopeId": "app_employee_chat_synthetic",
+    "resolvedBy": "default_application"
   },
   "terminalStatus": "success",
   "httpStatus": 200,
@@ -76,9 +77,11 @@
     "publishedAt": "2026-06-29T06:00:00Z",
     "publishedBy": "operator_synthetic",
     "gatewayInstanceId": "gateway_synthetic_001",
-    "configHash": "sha256:synthetic-config-hash",
-    "securityPolicyHash": "sha256:synthetic-security-policy-hash",
-    "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
+    "legacyHashes": {
+      "configHash": "sha256:synthetic-config-hash",
+      "securityPolicyHash": "sha256:synthetic-security-policy-hash",
+      "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
+    }
   },
   "routing": {
     "requestedModel": "auto",

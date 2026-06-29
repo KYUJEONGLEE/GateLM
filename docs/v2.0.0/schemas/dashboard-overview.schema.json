@@ -142,7 +142,8 @@
       "required": [
         "tenantId",
         "budgetScopeType",
-        "budgetScopeId"
+        "budgetScopeId",
+        "resolvedBy"
       ],
       "properties": {
         "tenantId": {
@@ -173,6 +174,15 @@
         "budgetScopeId": {
           "type": "string",
           "minLength": 1
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope represented by this dashboard filter."
         }
       }
     },
@@ -318,6 +328,7 @@
       "required": [
         "budgetScopeType",
         "budgetScopeId",
+        "resolvedBy",
         "requestCount",
         "estimatedCostMicroUsd"
       ],
@@ -333,6 +344,15 @@
         "budgetScopeId": {
           "type": "string",
           "minLength": 1
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope for this aggregate row."
         },
         "requestCount": {
           "type": "integer",

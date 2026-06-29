@@ -121,7 +121,8 @@
       "additionalProperties": false,
       "required": [
         "budgetScopeType",
-        "budgetScopeId"
+        "budgetScopeId",
+        "resolvedBy"
       ],
       "properties": {
         "budgetScopeType": {
@@ -137,6 +138,15 @@
           "type": "string",
           "minLength": 1,
           "description": "Resolved budget scope identifier from Control Plane/RuntimeSnapshot rules."
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope. Client-provided budget scope is not trusted."
         }
       }
     },
@@ -171,10 +181,9 @@
           "enum": [
             "snapshot_active",
             "last_known_safe_used",
-            "stale_snapshot_used",
-            "no_snapshot"
+            "stale_snapshot_used"
           ],
-          "description": "Gateway runtime state aligned with runtime domain outcome."
+          "description": "Actual RuntimeSnapshot provenance state. no_snapshot/not_checked are stage outcome or read-model states, not provenance values."
         },
         "publishedAt": {
           "type": "string",
@@ -189,17 +198,29 @@
           "type": "string",
           "minLength": 1
         },
-        "configHash": {
-          "type": "string",
-          "description": "Legacy hash linkage field. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
-        },
-        "securityPolicyHash": {
-          "type": "string",
-          "description": "Legacy hash linkage field. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
-        },
-        "routingPolicyHash": {
-          "type": "string",
-          "description": "Legacy hash linkage field. Naming is preserved for v1 compatibility until the P0 legacy field cleanup inventory explicitly changes it."
+        "legacyHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Compatibility/read-model bridge for v1 hash lineage. These hashes are not primary RuntimeSnapshot provenance and must not be used as metrics labels.",
+          "properties": {
+            "configHash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "securityPolicyHash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "routingPolicyHash": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "configHash",
+            "securityPolicyHash",
+            "routingPolicyHash"
+          ]
         }
       }
     },

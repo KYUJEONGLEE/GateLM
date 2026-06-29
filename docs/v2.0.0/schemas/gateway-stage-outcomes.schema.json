@@ -204,7 +204,14 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "enum": [
+            "snapshot_active",
+            "last_known_safe_used",
+            "stale_snapshot_used",
+            null
+          ],
+          "description": "Actual RuntimeSnapshot provenance state when a snapshot was used. no_snapshot/not_checked stay in the runtime outcome field."
         }
       }
     },
@@ -247,7 +254,8 @@
       "required": [
         "outcome",
         "budgetScopeType",
-        "budgetScopeId"
+        "budgetScopeId",
+        "resolvedBy"
       ],
       "properties": {
         "outcome": {
@@ -271,6 +279,15 @@
         "budgetScopeId": {
           "type": "string",
           "minLength": 1
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope. client_provided is not allowed."
         }
       }
     },

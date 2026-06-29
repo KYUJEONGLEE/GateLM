@@ -82,6 +82,10 @@
       "type": "integer",
       "minimum": 0
     },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
     "nonNegativeNumber": {
       "type": "number",
       "minimum": 0
@@ -117,12 +121,20 @@
       ]
     },
     "runtimeState": {
+      "description": "Runtime domain outcome/read-model state. no_snapshot/not_checked are not allowed inside RuntimeSnapshot provenance.",
       "enum": [
         "snapshot_active",
         "last_known_safe_used",
         "stale_snapshot_used",
         "no_snapshot",
         "not_checked"
+      ]
+    },
+    "runtimeProvenanceState": {
+      "enum": [
+        "snapshot_active",
+        "last_known_safe_used",
+        "stale_snapshot_used"
       ]
     },
     "identity": {
@@ -150,7 +162,8 @@
       "additionalProperties": false,
       "required": [
         "budgetScopeType",
-        "budgetScopeId"
+        "budgetScopeId",
+        "resolvedBy"
       ],
       "properties": {
         "budgetScopeType": {
@@ -158,6 +171,14 @@
         },
         "budgetScopeId": {
           "$ref": "#/$defs/nonEmptyString"
+        },
+        "resolvedBy": {
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Resolved budget scope source. client_provided is not a v2.0.0 contract value."
         },
         "displayName": {
           "description": "display label for frontend only; not a DB or API field contract.",
@@ -182,13 +203,13 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "runtimeSnapshotVersion": {
-          "$ref": "#/$defs/nonEmptyString"
+          "$ref": "#/$defs/positiveInteger"
         },
         "contentHash": {
           "$ref": "#/$defs/nonEmptyString"
         },
         "runtimeState": {
-          "$ref": "#/$defs/runtimeState"
+          "$ref": "#/$defs/runtimeProvenanceState"
         },
         "publishedAt": {
           "$ref": "#/$defs/dateTime"
@@ -199,17 +220,26 @@
         "gatewayInstanceId": {
           "$ref": "#/$defs/nonEmptyString"
         },
-        "configHash": {
-          "description": "v1 cleanup bridge from contracts.md section 5.4.",
-          "$ref": "#/$defs/nullableString"
-        },
-        "securityPolicyHash": {
-          "description": "v1 cleanup bridge from contracts.md section 5.4.",
-          "$ref": "#/$defs/nullableString"
-        },
-        "routingPolicyHash": {
-          "description": "v1 cleanup bridge from contracts.md section 5.4.",
-          "$ref": "#/$defs/nullableString"
+        "legacyHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Compatibility/read-model bridge for v1 hash lineage. Not primary RuntimeSnapshot provenance and not a metrics label source.",
+          "properties": {
+            "configHash": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "securityPolicyHash": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "routingPolicyHash": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          },
+          "required": [
+            "configHash",
+            "securityPolicyHash",
+            "routingPolicyHash"
+          ]
         }
       }
     },
@@ -647,7 +677,14 @@
           "$ref": "#/$defs/nullableString"
         },
         "runtimeSnapshot": {
-          "$ref": "#/$defs/runtimeSnapshotProvenance"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/runtimeSnapshotProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "outcomes": {
           "$ref": "#/$defs/domainOutcomeSummary"
