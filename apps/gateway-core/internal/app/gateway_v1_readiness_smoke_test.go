@@ -13,6 +13,7 @@ import (
 
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/config"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -22,6 +23,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
+	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/ports"
@@ -249,6 +251,11 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         cfg.DemoProjectID,
 		ProjectStatus:     runtimeconfig.StatusActive,
+		BudgetResolution: budget.Scope{
+			Type:       budget.ScopeTypeApplication,
+			ID:         cfg.DemoApplicationID,
+			ResolvedBy: budget.ResolvedByRuntimeSnapshot,
+		},
 		ApplicationID:     cfg.DemoApplicationID,
 		ApplicationStatus: runtimeconfig.StatusActive,
 		APIKeyID:          cfg.DemoAPIKeyID,
@@ -261,6 +268,11 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 			Algorithm:     ratelimit.AlgorithmFixedWindow,
 			WindowSeconds: 60,
 			Limit:         4,
+		},
+		BudgetPolicy: budget.Policy{
+			Enabled:                 true,
+			EnforcementMode:         budget.EnforcementModeWarn,
+			WarningThresholdPercent: 80,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: cfg.SecurityPolicyHash,
@@ -292,6 +304,7 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	})
 	rateLimitPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeConfigProvider),
+		budgetstage.NewStage(nil),
 		ratelimitstage.NewStage(limiter, ratelimit.Config{
 			Enabled:       true,
 			Scope:         ratelimit.ScopeApplication,

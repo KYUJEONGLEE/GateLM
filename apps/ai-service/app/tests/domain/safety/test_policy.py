@@ -3,10 +3,17 @@ from __future__ import annotations
 import re
 import unittest
 
+from pydantic import ValidationError
+
 from app.adapters.safety.noop_evaluator import NoopSafetyEvaluator
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator, RegexDetector
 from app.domain.safety.policy import PREVIEW_MAX_CHARS
-from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
+from app.schemas.safety import (
+    RemoteSafetyContext,
+    RemoteSafetyInput,
+    SafetyDetector,
+    SafetyDomainOutcome,
+)
 
 
 class RemoteSafetyPolicyTests(unittest.TestCase):
@@ -83,6 +90,36 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(decision.action, "none")
         self.assertEqual(decision.detected_count, 0)
         self.assertIsNone(decision.redacted_prompt_preview)
+
+    def test_safety_domain_outcome_allows_only_sanitized_summary(self) -> None:
+        outcome = SafetyDomainOutcome(
+            outcome="redacted",
+            detectorSummary={
+                "detectedCount": 2,
+                "detectorCategories": ["email", "phone_number"],
+            },
+        )
+
+        self.assertEqual(outcome.outcome, "redacted")
+        self.assertIsNotNone(outcome.detector_summary)
+        self.assertEqual(outcome.detector_summary.detected_count, 2)
+        self.assertEqual(outcome.detector_summary.detector_categories, ["email", "phone_number"])
+
+        with self.assertRaises(ValidationError):
+            SafetyDomainOutcome(
+                outcome="partial_success",
+                detectorSummary={"detectedCount": 1, "detectorCategories": ["email"]},
+            )
+
+        with self.assertRaises(ValidationError):
+            SafetyDomainOutcome(
+                outcome="blocked",
+                detectorSummary={
+                    "detectedCount": 1,
+                    "detectorCategories": ["email"],
+                    "rawDetectedValue": "alex@example.test",
+                },
+            )
 
 
 def remote_context() -> RemoteSafetyContext:

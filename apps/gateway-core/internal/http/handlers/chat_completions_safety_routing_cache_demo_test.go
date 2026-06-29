@@ -16,6 +16,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
+	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/ports"
 )
@@ -186,6 +187,34 @@ func TestChatCompletionsHandlerBypassesExactCacheWhenRuntimeCachePolicyDisabled(
 	}
 }
 
+func TestSemanticCacheEvidenceOnlyDoesNotCreateActualProviderBypass(t *testing.T) {
+	demo := newPhase3DemoHarness(t, runtimeconfig.CachePolicy{
+		Enabled:           true,
+		Type:              runtimeconfig.CacheTypeExact,
+		TTLSeconds:        600,
+		SemanticCacheMode: runtimeconfig.SemanticCacheModeEvidenceOnly,
+	})
+
+	first := demo.exercise(t, "request_v1_phase3_semantic_evidence_001", "Write a short safe refund response.")
+	second := demo.exercise(t, "request_v1_phase3_semantic_evidence_002", "Compose a short safe refund response.")
+
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("expected both semantic evidence-only requests to succeed, first=%d second=%d", first.Code, second.Code)
+	}
+	if first.Header().Get("X-GateLM-Cache-Status") != "miss" || second.Header().Get("X-GateLM-Cache-Status") != "miss" {
+		t.Fatalf("semantic evidence-only must not become an actual cache hit, first=%q second=%q",
+			first.Header().Get("X-GateLM-Cache-Status"),
+			second.Header().Get("X-GateLM-Cache-Status"),
+		)
+	}
+	if *demo.providerCalls != 2 || demo.cacheStore.setCalls != 2 {
+		t.Fatalf("semantic evidence-only must not bypass provider or exact cache write accounting, provider=%d set=%d",
+			*demo.providerCalls,
+			demo.cacheStore.setCalls,
+		)
+	}
+}
+
 func TestExactCachePolicyAllowsLookupHandlesNilAndLegacyContext(t *testing.T) {
 	if exactCachePolicyAllowsLookup(nil) {
 		t.Fatal("nil request context must not allow exact cache lookup")
@@ -246,50 +275,53 @@ func newPhase3DemoHarness(t *testing.T, cachePolicy runtimeconfig.CachePolicy) p
 		ExactCacheKeyBuilder: keyBuilder,
 		CachePolicyHash:      "cache_policy_phase3_demo",
 		TerminalLogWriter:    logWriter,
-		RateLimitPipeline: pipeline.New(runtimeconfigstage.NewStage(staticruntimeconfig.NewProvider(runtimeconfig.ActiveConfig{
-			ConfigVersion:     "runtime_config_phase3_demo",
-			ConfigHash:        "hash_runtime_config_phase3_demo",
-			PublishState:      runtimeconfig.PublishStateActive,
-			PublishedRuntimeSnapshot: true,
-			Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
-				RuntimeSnapshotID:      "runtime_snapshot_phase3_demo",
-				RuntimeSnapshotVersion: 1,
-				ContentHash:            "hash_runtime_config_phase3_demo",
-				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
-			},
-			TenantID:          testTenantID,
-			TenantStatus:      runtimeconfig.StatusActive,
-			ProjectID:         testProjectID,
-			ProjectStatus:     runtimeconfig.StatusActive,
-			ApplicationID:     testAppID,
-			ApplicationStatus: runtimeconfig.StatusActive,
-			APIKeyID:          testAPIKeyID,
-			APIKeyStatus:      runtimeconfig.StatusActive,
-			AppTokenID:        testAppTokenID,
-			AppTokenStatus:    runtimeconfig.StatusActive,
-			SafetyPolicy: runtimeconfig.SafetyPolicy{
-				SecurityPolicyHash: "hash_security_policy_phase3_demo",
-				Enabled:            true,
-				Mode:               runtimeconfig.SafetyModeEnforce,
-				RequestSideRequired: true,
-				PolicyHash:         "hash_security_policy_phase3_demo",
-				DetectorSet: []runtimeconfig.SafetyDetector{
-					{DetectorType: "email", Action: runtimeconfig.SafetyActionRedact},
-					{DetectorType: "api_key", Action: runtimeconfig.SafetyActionBlock},
+		RateLimitPipeline: pipeline.New(
+			runtimeconfigstage.NewStage(staticruntimeconfig.NewProvider(runtimeconfig.ActiveConfig{
+				ConfigVersion:            "runtime_config_phase3_demo",
+				ConfigHash:               "hash_runtime_config_phase3_demo",
+				PublishState:             runtimeconfig.PublishStateActive,
+				PublishedRuntimeSnapshot: true,
+				Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+					RuntimeSnapshotID:      "runtime_snapshot_phase3_demo",
+					RuntimeSnapshotVersion: 1,
+					ContentHash:            "hash_runtime_config_phase3_demo",
+					RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
 				},
-			},
-			RoutingPolicy: runtimeconfig.RoutingPolicy{
-				DefaultProvider:     "mock",
-				DefaultModel:        "mock-balanced",
-				LowCostProvider:     "mock",
-				LowCostModel:        "mock-fast",
-				FallbackProvider:    "mock",
-				FallbackModel:       "mock-balanced",
-				ShortPromptMaxChars: 300,
-				RoutingPolicyHash:   "hash_routing_policy_phase3_demo",
-			},
-			CachePolicy: cachePolicy,
-		}))),
+				TenantID:          testTenantID,
+				TenantStatus:      runtimeconfig.StatusActive,
+				ProjectID:         testProjectID,
+				ProjectStatus:     runtimeconfig.StatusActive,
+				ApplicationID:     testAppID,
+				ApplicationStatus: runtimeconfig.StatusActive,
+				APIKeyID:          testAPIKeyID,
+				APIKeyStatus:      runtimeconfig.StatusActive,
+				AppTokenID:        testAppTokenID,
+				AppTokenStatus:    runtimeconfig.StatusActive,
+				SafetyPolicy: runtimeconfig.SafetyPolicy{
+					SecurityPolicyHash: "hash_security_policy_phase3_demo",
+					Enabled:            true,
+					Mode:               runtimeconfig.SafetyModeEnforce,
+					RequestSideRequired: true,
+					PolicyHash:         "hash_security_policy_phase3_demo",
+					DetectorSet: []runtimeconfig.SafetyDetector{
+						{DetectorType: "email", Action: runtimeconfig.SafetyActionRedact},
+						{DetectorType: "api_key", Action: runtimeconfig.SafetyActionBlock},
+					},
+				},
+				RoutingPolicy: runtimeconfig.RoutingPolicy{
+					DefaultProvider:     "mock",
+					DefaultModel:        "mock-balanced",
+					LowCostProvider:     "mock",
+					LowCostModel:        "mock-fast",
+					FallbackProvider:    "mock",
+					FallbackModel:       "mock-balanced",
+					ShortPromptMaxChars: 300,
+					RoutingPolicyHash:   "hash_routing_policy_phase3_demo",
+				},
+				CachePolicy: cachePolicy,
+			})),
+			budgetstage.NewStage(nil),
+		),
 	}
 	withTestAuth(handler)
 

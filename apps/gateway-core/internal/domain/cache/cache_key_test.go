@@ -47,12 +47,8 @@ func TestBuildExactKeyChangesWhenMaterialChanges(t *testing.T) {
 			material.ApplicationID = "app_other"
 			return material
 		},
-		"provider": func(material KeyMaterial) KeyMaterial {
-			material.SelectedProvider = "other-provider"
-			return material
-		},
-		"model": func(material KeyMaterial) KeyMaterial {
-			material.SelectedModel = "mock-balanced"
+		"requested model": func(material KeyMaterial) KeyMaterial {
+			material.RequestedModel = "mock-balanced"
 			return material
 		},
 		"security policy": func(material KeyMaterial) KeyMaterial {
@@ -153,8 +149,7 @@ func validKeyMaterial() KeyMaterial {
 		TenantID:                 "tenant_01J_DEMO",
 		ProjectID:                "project_01J_DEMO",
 		ApplicationID:            "app_01J_DEMO",
-		SelectedProvider:         "mock",
-		SelectedModel:            "mock-fast",
+		RequestedModel:           "auto",
 		SecurityPolicyVersionID:  "security_policy_p0_v1",
 		RoutingPolicyVersionID:   "routing_policy_p0_v1",
 		CachePolicyHash:          "cache_p0_v1",

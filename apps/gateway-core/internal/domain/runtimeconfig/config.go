@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 )
@@ -41,6 +42,7 @@ var (
 	ErrMissingRuntimeSnapshot   = errors.New("published runtime snapshot provenance is missing")
 	ErrInvalidSafetyPolicy      = errors.New("runtime snapshot safety policy is invalid")
 	ErrInvalidCachePolicy       = errors.New("runtime snapshot cache policy is invalid")
+	ErrInvalidBudgetPolicy      = errors.New("runtime snapshot budget policy is invalid")
 )
 
 type Provider interface {
@@ -53,6 +55,7 @@ type ActiveConfig struct {
 	PublishState  string
 	PublishedRuntimeSnapshot bool
 	Snapshot      RuntimeSnapshotProvenance
+	BudgetResolution budget.Scope
 
 	TenantID          string
 	TenantStatus      string
@@ -66,6 +69,7 @@ type ActiveConfig struct {
 	AppTokenStatus    string
 
 	RateLimit     ratelimit.Config
+	BudgetPolicy  budget.Policy
 	SafetyPolicy  SafetyPolicy
 	RoutingPolicy RoutingPolicy
 	CachePolicy   CachePolicy
@@ -129,12 +133,14 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.ProjectID = strings.TrimSpace(c.ProjectID)
 	c.ProjectStatus = strings.TrimSpace(c.ProjectStatus)
 	c.ApplicationID = strings.TrimSpace(c.ApplicationID)
+	c.BudgetResolution = budget.NormalizeScope(c.BudgetResolution, c.ApplicationID)
 	c.ApplicationStatus = strings.TrimSpace(c.ApplicationStatus)
 	c.APIKeyID = strings.TrimSpace(c.APIKeyID)
 	c.APIKeyStatus = strings.TrimSpace(c.APIKeyStatus)
 	c.AppTokenID = strings.TrimSpace(c.AppTokenID)
 	c.AppTokenStatus = strings.TrimSpace(c.AppTokenStatus)
 	c.RateLimit = ratelimit.NormalizeConfig(c.RateLimit)
+	c.BudgetPolicy = budget.NormalizePolicy(c.BudgetPolicy)
 	c.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(c.SafetyPolicy.SecurityPolicyHash)
 	c.SafetyPolicy.Mode = strings.TrimSpace(c.SafetyPolicy.Mode)
 	c.SafetyPolicy.PolicyHash = strings.TrimSpace(c.SafetyPolicy.PolicyHash)
@@ -155,6 +161,9 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 }
 
 func (c ActiveConfig) ValidateActive() error {
+	if err := validateBudgetPolicy(c.BudgetPolicy); err != nil {
+		return err
+	}
 	c = c.Normalize()
 	if !c.PublishedRuntimeSnapshot {
 		return ErrEditableRuntimeConfig
@@ -175,6 +184,9 @@ func (c ActiveConfig) ValidateActive() error {
 		return err
 	}
 	if err := c.CachePolicy.Validate(); err != nil {
+		return err
+	}
+	if err := validateBudgetPolicy(c.BudgetPolicy); err != nil {
 		return err
 	}
 	if c.PublishState != PublishStateActive ||
@@ -308,6 +320,14 @@ func (p CachePolicy) Validate() error {
 	default:
 		return ErrInvalidCachePolicy
 	}
+}
+
+func validateBudgetPolicy(policy budget.Policy) error {
+	mode := strings.TrimSpace(policy.EnforcementMode)
+	if mode != "" && !budget.IsAllowedEnforcementMode(mode) {
+		return ErrInvalidBudgetPolicy
+	}
+	return nil
 }
 
 func (p RuntimeSnapshotProvenance) Metadata() map[string]any {

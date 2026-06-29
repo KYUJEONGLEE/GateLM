@@ -58,11 +58,14 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		Snapshot:           config.RuntimeSnapshotProvenance(time.Now().UTC(), runtimeconfig.DefaultGatewayInstanceIDCompat),
 		RateLimitConfig:    config.RateLimit,
 		HasRateLimitConfig: true,
+		BudgetPolicy:       config.BudgetPolicy,
+		HasBudgetPolicy:    true,
 		RoutingPolicy:      config.RoutingPolicy,
 		HasRoutingPolicy:   true,
 		CachePolicy:        config.CachePolicy,
 		HasCachePolicy:     true,
 	}
+	gatewayCtx.Budget = config.BudgetResolution
 
 	gatewayCtx.Masking.SecurityPolicyVersionID = config.SafetyPolicy.SecurityPolicyHash
 	gatewayCtx.Routing.RoutingPolicyHash = config.RoutingPolicy.RoutingPolicyHash

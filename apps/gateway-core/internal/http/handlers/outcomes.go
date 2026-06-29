@@ -47,6 +47,7 @@ func buildRequestOutcome(reqCtx *pipeline.RequestContext, requestLogWritten bool
 		RateLimitAllowed:          reqCtx.RateLimitDecision != nil && reqCtx.RateLimitDecision.Allowed,
 		RateLimitRemaining:        remaining,
 		RateLimitRetryAfterSeconds: retryAfterSeconds,
+		BudgetOutcome:              reqCtx.BudgetOutcome,
 		BudgetScopeType:            resolvedBudgetScope.Type,
 		BudgetScopeID:              resolvedBudgetScope.ID,
 		BudgetResolvedBy:           resolvedBudgetScope.ResolvedBy,

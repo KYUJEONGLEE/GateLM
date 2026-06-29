@@ -136,11 +136,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	terminalLogEnabled = true
 
-	if chatReq.Stream {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
-		return
-	}
-
 	if chatReq.Model == "" {
 		chatReq.Model = h.DefaultModel
 		reqCtx.RequestedModel = h.DefaultModel
@@ -207,13 +202,10 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	promptText = redactedPrompt
 
 	gatewayCtx := newGatewayContext(reqCtx, promptText)
-	if h.PreProviderPipeline != nil {
-		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
-			applyGatewayContext(reqCtx, gatewayCtx)
-			writeGatewayPipelineFailure(w, reqCtx, err)
-			return
-		}
-		applyGatewayContext(reqCtx, gatewayCtx)
+
+	if chatReq.Stream {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
+		return
 	}
 
 	if shouldLookupExactCache(gatewayCtx) {
@@ -228,6 +220,19 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	if h.writeCachedChatCompletionIfHit(w, reqCtx, gatewayCtx, chatReq.Model, startedAt) {
 		return
+	}
+
+	if h.PreProviderPipeline != nil {
+		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+			applyGatewayContext(reqCtx, gatewayCtx)
+			reqCtx.CacheStatus = cachestage.CacheStatusBypass
+			reqCtx.CacheType = cachestage.CacheTypeNone
+			reqCtx.CacheKeyHash = ""
+			reqCtx.CacheHitRequestID = ""
+			writeGatewayPipelineFailure(w, reqCtx, err)
+			return
+		}
+		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
 	if h.Providers == nil {
@@ -635,10 +640,9 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 		TenantID:                 reqCtx.TenantID,
 		ProjectID:                reqCtx.ProjectID,
 		ApplicationID:            reqCtx.ApplicationID,
-		SelectedProvider:         reqCtx.SelectedProvider,
-		SelectedModel:            reqCtx.SelectedModel,
+		RequestedModel:           firstNonEmpty(chatReq.Model, reqCtx.RequestedModel),
 		SecurityPolicyVersionID:  firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID),
-		RoutingPolicyVersionID:   reqCtx.RoutingPolicyHash,
+		RoutingPolicyVersionID:   firstNonEmpty(reqCtx.RoutingPolicyHash, routingdomain.DefaultPolicyHash),
 		CachePolicyHash:          h.CachePolicyHash,
 		NormalizedRedactedPrompt: redactedPrompt,
 		RequestParamsHash:        requestParamsHash(chatReq),
@@ -647,6 +651,14 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 
 func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
 	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil {
+		return
+	}
+	if reqCtx.TerminalStatus != "" && reqCtx.TerminalStatus != outcome.TerminalStatusSuccess {
+		return
+	}
+	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) ||
+		reqCtx.ProviderOutcome == outcome.ProviderNotCalled ||
+		reqCtx.Stream {
 		return
 	}
 
@@ -704,17 +716,9 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	if gatewayCtx.Cache.CacheHitRequestID != "" {
 		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
 	}
-	if reqCtx.SelectedProvider == "" {
-		reqCtx.SelectedProvider = h.DefaultProvider
-	}
-	if reqCtx.SelectedModel == "" {
-		reqCtx.SelectedModel = requestedModel
-	}
 	if reqCtx.RoutingReason == "" {
-		reqCtx.RoutingReason = "not_routed"
+		reqCtx.RoutingReason = "exact_cache_hit_provider_bypass"
 	}
-	reqCtx.Provider = reqCtx.SelectedProvider
-	reqCtx.Model = reqCtx.SelectedModel
 	reqCtx.ProviderLatencyMs = 0
 	reqCtx.ProviderOutcome = outcome.ProviderNotCalled
 	reqCtx.FallbackOutcome = outcome.FallbackNotCalled
@@ -729,8 +733,8 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	reqCtx.HTTPStatus = http.StatusOK
 	ensureRequestOutcome(reqCtx, false)
 
-	if reqCtx.SelectedModel != "" {
-		cachedResp.Model = reqCtx.SelectedModel
+	if strings.TrimSpace(cachedResp.Model) == "" {
+		cachedResp.Model = requestedModel
 	}
 	cachedResp.Usage = &provider.Usage{}
 	attachGateLMMetadata(cachedResp, reqCtx)

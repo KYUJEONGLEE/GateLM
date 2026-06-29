@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
@@ -25,6 +26,9 @@ func TestProviderReturnsActiveConfigForMatchingScope(t *testing.T) {
 	}
 	if config.RateLimit.Limit != 7 {
 		t.Fatalf("expected runtime rate limit 7, got %#v", config.RateLimit)
+	}
+	if config.BudgetPolicy.EnforcementMode != budget.EnforcementModeWarn || config.BudgetResolution.ID != "app_demo" {
+		t.Fatalf("expected runtime budget defaults, got policy=%#v scope=%#v", config.BudgetPolicy, config.BudgetResolution)
 	}
 }
 
@@ -72,6 +76,11 @@ func testActiveConfig() runtimeconfig.ActiveConfig {
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         "project_demo",
 		ProjectStatus:     runtimeconfig.StatusActive,
+		BudgetResolution: budget.Scope{
+			Type:       budget.ScopeTypeApplication,
+			ID:         "app_demo",
+			ResolvedBy: budget.ResolvedByRuntimeSnapshot,
+		},
 		ApplicationID:     "app_demo",
 		ApplicationStatus: runtimeconfig.StatusActive,
 		APIKeyID:          "api_key_demo",
@@ -84,6 +93,11 @@ func testActiveConfig() runtimeconfig.ActiveConfig {
 			Algorithm:     ratelimit.AlgorithmFixedWindow,
 			WindowSeconds: 60,
 			Limit:         7,
+		},
+		BudgetPolicy: budget.Policy{
+			Enabled:                 true,
+			EnforcementMode:         budget.EnforcementModeWarn,
+			WarningThresholdPercent: 80,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",

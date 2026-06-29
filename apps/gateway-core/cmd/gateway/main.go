@@ -17,12 +17,14 @@ import (
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
+	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
 	ratelimitstage "gatelm/apps/gateway-core/internal/pipeline/stages/ratelimit"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 
@@ -86,6 +88,7 @@ func main() {
 	runtimeConfigProvider := staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg))
 	rateLimitPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeConfigProvider),
+		budgetstage.NewStage(nil),
 		ratelimitstage.NewStage(
 			postgresratelimit.NewLimiter(postgresPool),
 			ratelimit.Config{
@@ -161,6 +164,11 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         cfg.DemoProjectID,
 		ProjectStatus:     runtimeconfig.StatusActive,
+		BudgetResolution: budget.Scope{
+			Type:       budget.ScopeTypeApplication,
+			ID:         cfg.DemoApplicationID,
+			ResolvedBy: budget.ResolvedByRuntimeSnapshot,
+		},
 		ApplicationID:     cfg.DemoApplicationID,
 		ApplicationStatus: runtimeconfig.StatusActive,
 		APIKeyID:          cfg.DemoAPIKeyID,
@@ -173,6 +181,11 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			Algorithm:     ratelimit.AlgorithmFixedWindow,
 			WindowSeconds: cfg.RateLimitWindowSecs,
 			Limit:         cfg.RateLimitLimit,
+		},
+		BudgetPolicy: budget.Policy{
+			Enabled:                 true,
+			EnforcementMode:         budget.EnforcementModeWarn,
+			WarningThresholdPercent: 80,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: cfg.SecurityPolicyHash,

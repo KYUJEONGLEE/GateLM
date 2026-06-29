@@ -26,14 +26,13 @@ const (
 	TypeSemantic Type = "semantic"
 )
 
-const ExactKeyMaterialVersion = "p0-exact-v2"
+const ExactKeyMaterialVersion = "v2-exact-pre-routing"
 
 type KeyMaterial struct {
 	TenantID                 string `json:"tenantId"`
 	ProjectID                string `json:"projectId"`
 	ApplicationID            string `json:"applicationId"`
-	SelectedProvider         string `json:"selectedProvider"`
-	SelectedModel            string `json:"selectedModel"`
+	RequestedModel           string `json:"requestedModel"`
 	SecurityPolicyVersionID  string `json:"securityPolicyVersionId"`
 	RoutingPolicyVersionID   string `json:"routingPolicyVersionId"`
 	CachePolicyHash          string `json:"cachePolicyHash"`
@@ -72,8 +71,7 @@ func canonicalMaterialBytes(material KeyMaterial) ([]byte, error) {
 	material.TenantID = strings.TrimSpace(material.TenantID)
 	material.ProjectID = strings.TrimSpace(material.ProjectID)
 	material.ApplicationID = strings.TrimSpace(material.ApplicationID)
-	material.SelectedProvider = strings.TrimSpace(material.SelectedProvider)
-	material.SelectedModel = strings.TrimSpace(material.SelectedModel)
+	material.RequestedModel = strings.TrimSpace(material.RequestedModel)
 	material.SecurityPolicyVersionID = strings.TrimSpace(material.SecurityPolicyVersionID)
 	material.RoutingPolicyVersionID = strings.TrimSpace(material.RoutingPolicyVersionID)
 	material.CachePolicyHash = strings.TrimSpace(material.CachePolicyHash)
@@ -89,11 +87,8 @@ func canonicalMaterialBytes(material KeyMaterial) ([]byte, error) {
 	if material.ApplicationID == "" {
 		return nil, errors.New("application id is required")
 	}
-	if material.SelectedProvider == "" {
-		return nil, errors.New("selected provider is required")
-	}
-	if material.SelectedModel == "" {
-		return nil, errors.New("selected model is required")
+	if material.RequestedModel == "" {
+		return nil, errors.New("requested model is required")
 	}
 	if material.SecurityPolicyVersionID == "" {
 		return nil, errors.New("security policy version id is required")

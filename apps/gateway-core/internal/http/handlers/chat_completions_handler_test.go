@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -1307,6 +1308,70 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 	}
 }
 
+func TestChatCompletionsHandlerRunsSafetyBeforeExactCacheAndRouting(t *testing.T) {
+	events := []string{}
+	rawEmail := "user@example.invalid"
+	redactedPrompt := "Send [EMAIL_REDACTED] a short update."
+	chatCalls := 0
+	keyBuilder := &eventExactKeyBuilder{
+		events: &events,
+		key:    "hmac-sha256:ordered-cache-key",
+		check: func(material cachekey.KeyMaterial) error {
+			if strings.Contains(material.NormalizedRedactedPrompt, rawEmail) {
+				return fmt.Errorf("cache key material contains raw email: %#v", material)
+			}
+			if material.NormalizedRedactedPrompt != redactedPrompt {
+				return fmt.Errorf("expected redacted cache prompt %q, got %#v", redactedPrompt, material)
+			}
+			if material.RequestedModel != "auto" {
+				return fmt.Errorf("expected requested model in pre-routing cache key, got %#v", material)
+			}
+			return nil
+		},
+	}
+	cacheStore := &eventExactCacheStore{events: &events}
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			events = append(events, "routing")
+			if strings.Contains(gatewayCtx.Request.PromptText, rawEmail) || gatewayCtx.Request.PromptText != redactedPrompt {
+				t.Fatalf("routing must receive redacted prompt, got %q", gatewayCtx.Request.PromptText)
+			}
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-fast"
+			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls: &chatCalls,
+		}),
+		DefaultModel:         "mock-balanced",
+		DefaultProvider:      "mock",
+		MaskingEngine:        &eventMaskingEngine{events: &events, redactedPrompt: redactedPrompt},
+		ExactCacheStore:      cacheStore,
+		ExactCacheKeyBuilder: keyBuilder,
+		PreProviderPipeline:  preflight,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Send "+rawEmail+" a short update.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call after miss and routing, got %d", chatCalls)
+	}
+	want := []string{"safety", "cache_key", "cache_lookup", "routing"}
+	if strings.Join(events, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected safety/cache/routing order %v, got %v", want, events)
+	}
+}
+
 func TestChatCompletionsHandlerBlocksSensitiveDataBeforeProviderCall(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1364,6 +1429,55 @@ func TestChatCompletionsHandlerBlocksSensitiveDataBeforeProviderCall(t *testing.
 			assertGatewayErrorCode(t, rr, "sensitive_data_blocked")
 		})
 	}
+}
+
+func TestChatCompletionsHandlerBlocksUnsafeStreamingBeforeProviderCacheOrStreamingStart(t *testing.T) {
+	chatCalls := 0
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:must-not-build"}
+	cacheStore := &recordingExactCacheStore{}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:         "mock-balanced",
+		DefaultProvider:      "mock",
+		ExactCacheStore:      cacheStore,
+		ExactCacheKeyBuilder: keyBuilder,
+		TerminalLogWriter:    logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"stream": true,
+		"messages": [{"role": "user", "content": "Summarize api_key=test_secret_token_redacted_for_demo_only_1234567890"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected safety block 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 || keyBuilder.calls != 0 || cacheStore.getCalls != 0 || cacheStore.setCalls != 0 {
+		t.Fatalf("unsafe streaming safety block must stop provider/cache first, provider=%d key=%d get=%d set=%d",
+			chatCalls,
+			keyBuilder.calls,
+			cacheStore.getCalls,
+			cacheStore.setCalls,
+		)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.DomainOutcomes.Safety.Outcome != outcome.SafetyBlocked ||
+		logged.DomainOutcomes.Provider.Outcome != outcome.ProviderNotCalled ||
+		logged.DomainOutcomes.Cache.Outcome != outcome.CacheBypassed ||
+		logged.DomainOutcomes.Streaming.Outcome != outcome.StreamingNotStreaming {
+		t.Fatalf("unexpected unsafe streaming block outcomes: %+v", logged.DomainOutcomes)
+	}
+	assertGatewayErrorCode(t, rr, "sensitive_data_blocked")
 }
 
 func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) {
@@ -1645,6 +1759,9 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	if keyBuilder.material.RoutingPolicyVersionID != "hash_routing_policy_test" {
 		t.Fatalf("expected runtime routing hash in cache material, got %#v", keyBuilder.material)
 	}
+	if keyBuilder.material.RequestedModel != "mock-balanced" {
+		t.Fatalf("expected requested model in pre-routing cache material, got %#v", keyBuilder.material)
+	}
 }
 
 func TestChatCompletionsHandlerFallsBackToProviderWhenCachedPayloadIsInvalid(t *testing.T) {
@@ -1788,7 +1905,10 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if resp.GateLM.RequestID != "request_current" {
 		t.Fatalf("expected current request id on cache hit, got %q", resp.GateLM.RequestID)
 	}
-	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-balanced" {
+	if resp.GateLM.CacheStatus != "hit" ||
+		resp.GateLM.SelectedProvider != "" ||
+		resp.GateLM.SelectedModel != "" ||
+		resp.GateLM.RoutingReason != "exact_cache_hit_provider_bypass" {
 		t.Fatalf("unexpected gate_lm cache/routing metadata: %#v", resp.GateLM)
 	}
 }
@@ -1881,23 +2001,21 @@ func TestChatCompletionsHandlerReturnsCacheHitWithoutProviderCall(t *testing.T) 
 			CacheStatus: "miss",
 		},
 	})
-	preflight := &fakeGatewayPipeline{
-		mutate: func(gatewayCtx *request.GatewayContext) {
-			gatewayCtx.Routing.SelectedProvider = "mock"
-			gatewayCtx.Routing.SelectedModel = "mock-fast"
-			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
-			gatewayCtx.Cache.CacheStatus = "hit"
-			gatewayCtx.Cache.CacheType = "exact"
-			gatewayCtx.Cache.CacheKeyHash = "hmac-sha256:cache-key"
-			gatewayCtx.Cache.CacheHitRequestID = "request_previous"
-			gatewayCtx.Cache.Payload = cachedPayload
+	preflight := &fakeGatewayPipeline{}
+	cacheStore := &recordingExactCacheStore{
+		result: ports.CacheLookupResult{
+			Hit:               true,
+			CacheHitRequestID: "request_previous",
+			Payload:           cachedPayload,
 		},
 	}
 	handler := ChatCompletionsHandler{
-		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
-		PreProviderPipeline: preflight,
+		Providers:            provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:         "mock-balanced",
+		DefaultProvider:      "mock",
+		PreProviderPipeline:  preflight,
+		ExactCacheStore:      cacheStore,
+		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-key"},
 	}
 	withTestAuth(&handler)
 
@@ -1913,8 +2031,8 @@ func TestChatCompletionsHandlerReturnsCacheHitWithoutProviderCall(t *testing.T) 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if preflight.calls != 1 {
-		t.Fatalf("expected pre-provider pipeline to be called once, got %d", preflight.calls)
+	if preflight.calls != 0 {
+		t.Fatalf("cache hit must bypass routing pipeline, got %d pre-provider calls", preflight.calls)
 	}
 	if chatCalls != 0 {
 		t.Fatalf("expected provider not to be called on cache hit, got %d", chatCalls)
@@ -1922,7 +2040,7 @@ func TestChatCompletionsHandlerReturnsCacheHitWithoutProviderCall(t *testing.T) 
 	if rr.Header().Get("X-GateLM-Cache-Status") != "hit" {
 		t.Fatalf("unexpected cache status header: %s", rr.Header().Get("X-GateLM-Cache-Status"))
 	}
-	if rr.Header().Get("X-GateLM-Routed-Model") != "mock-fast" {
+	if rr.Header().Get("X-GateLM-Routed-Model") != "" {
 		t.Fatalf("unexpected routed model header: %s", rr.Header().Get("X-GateLM-Routed-Model"))
 	}
 
@@ -1933,8 +2051,8 @@ func TestChatCompletionsHandlerReturnsCacheHitWithoutProviderCall(t *testing.T) 
 	if resp.ID != "cached_chatcmpl_previous" || resp.Object != "chat.completion" {
 		t.Fatalf("unexpected cached response shape: %#v", resp)
 	}
-	if resp.Model != "mock-fast" {
-		t.Fatalf("expected cached response model to use routed model, got %s", resp.Model)
+	if resp.Model != "mock-balanced" {
+		t.Fatalf("expected cached response model to remain cached model, got %s", resp.Model)
 	}
 	if resp.Usage == nil || resp.Usage.PromptTokens != 0 || resp.Usage.CompletionTokens != 0 || resp.Usage.TotalTokens != 0 {
 		t.Fatalf("expected cache hit usage to be zeroed, got %#v", resp.Usage)
@@ -1945,7 +2063,10 @@ func TestChatCompletionsHandlerReturnsCacheHitWithoutProviderCall(t *testing.T) 
 	if resp.GateLM.RequestID == "request_previous" || resp.GateLM.RequestID != rr.Header().Get(middleware.RequestIDHeader) {
 		t.Fatalf("expected current request id in gate_lm metadata, got %#v", resp.GateLM)
 	}
-	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedModel != "mock-fast" || resp.GateLM.EstimatedCostUSD != "0.000000" {
+	if resp.GateLM.CacheStatus != "hit" ||
+		resp.GateLM.SelectedModel != "" ||
+		resp.GateLM.RoutingReason != "exact_cache_hit_provider_bypass" ||
+		resp.GateLM.EstimatedCostUSD != "0.000000" {
 		t.Fatalf("unexpected gate_lm cache metadata: %#v", resp.GateLM)
 	}
 }
@@ -2039,17 +2160,21 @@ func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.
 			gatewayCtx.Routing.SelectedProvider = "mock"
 			gatewayCtx.Routing.SelectedModel = "mock-fast"
 			gatewayCtx.Routing.RoutingReason = "short_prompt_low_cost"
-			gatewayCtx.Cache.CacheStatus = "hit"
-			gatewayCtx.Cache.CacheType = "exact"
-			gatewayCtx.Cache.CacheKeyHash = "hmac-sha256:cache-key"
-			gatewayCtx.Cache.Payload = []byte(`{"unexpected":"shape"}`)
+		},
+	}
+	cacheStore := &recordingExactCacheStore{
+		result: ports.CacheLookupResult{
+			Hit:     true,
+			Payload: []byte(`{"unexpected":"shape"}`),
 		},
 	}
 	handler := ChatCompletionsHandler{
-		Providers:           provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
-		DefaultModel:        "mock-balanced",
-		DefaultProvider:     "mock",
-		PreProviderPipeline: preflight,
+		Providers:            provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:         "mock-balanced",
+		DefaultProvider:      "mock",
+		PreProviderPipeline:  preflight,
+		ExactCacheStore:      cacheStore,
+		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-key"},
 	}
 	withTestAuth(&handler)
 
@@ -2289,6 +2414,46 @@ func (b *recordingExactKeyBuilder) BuildExactKey(ctx context.Context, material c
 	return b.key, nil
 }
 
+type eventMaskingEngine struct {
+	events         *[]string
+	redactedPrompt string
+}
+
+func (e *eventMaskingEngine) Apply(_ context.Context, req maskdomain.ApplyRequest) (maskdomain.Result, error) {
+	if e.events != nil {
+		*e.events = append(*e.events, "safety")
+	}
+	return maskdomain.Result{
+		Action:                  maskdomain.ActionRedacted,
+		DetectedTypes:           []string{"email"},
+		DetectedCount:           1,
+		RedactedPrompt:          e.redactedPrompt,
+		RedactedPromptPreview:   maskdomain.PreviewRedactedPrompt(e.redactedPrompt),
+		SecurityPolicyVersionID: req.SecurityPolicyVersionID,
+	}, nil
+}
+
+type eventExactKeyBuilder struct {
+	events *[]string
+	key    string
+	check  func(cachekey.KeyMaterial) error
+}
+
+func (b *eventExactKeyBuilder) BuildExactKey(_ context.Context, material cachekey.KeyMaterial) (string, error) {
+	if b.events != nil {
+		*b.events = append(*b.events, "cache_key")
+	}
+	if b.check != nil {
+		if err := b.check(material); err != nil {
+			return "", err
+		}
+	}
+	if b.key == "" {
+		return "hmac-sha256:event-cache-key", nil
+	}
+	return b.key, nil
+}
+
 type recordingExactCacheStore struct {
 	getCalls int
 	setCalls int
@@ -2296,6 +2461,21 @@ type recordingExactCacheStore struct {
 	getErr   error
 	setErr   error
 	entries  []ports.CacheEntry
+}
+
+type eventExactCacheStore struct {
+	events *[]string
+}
+
+func (s *eventExactCacheStore) GetExact(context.Context, string) (ports.CacheLookupResult, error) {
+	if s.events != nil {
+		*s.events = append(*s.events, "cache_lookup")
+	}
+	return ports.CacheLookupResult{}, nil
+}
+
+func (s *eventExactCacheStore) SetExact(context.Context, ports.CacheEntry) error {
+	return nil
 }
 
 func (s *recordingExactCacheStore) GetExact(ctx context.Context, keyHash string) (ports.CacheLookupResult, error) {

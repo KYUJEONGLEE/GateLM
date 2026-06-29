@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
 
@@ -163,6 +164,17 @@ func TestActiveConfigValidateActiveRejectsSemanticCacheLiveMode(t *testing.T) {
 	}
 }
 
+func TestActiveConfigValidateActiveRejectsInvalidBudgetPolicy(t *testing.T) {
+	config := testActiveConfig()
+	config.BudgetPolicy.EnforcementMode = "strict"
+
+	err := config.ValidateActive()
+
+	if !errors.Is(err, ErrInvalidBudgetPolicy) {
+		t.Fatalf("expected invalid budget policy, got %v", err)
+	}
+}
+
 func testActiveConfig() ActiveConfig {
 	return ActiveConfig{
 		ConfigVersion:     "runtime_config_test",
@@ -179,6 +191,11 @@ func testActiveConfig() ActiveConfig {
 		TenantStatus:      StatusActive,
 		ProjectID:         "project_demo",
 		ProjectStatus:     StatusActive,
+		BudgetResolution: budget.Scope{
+			Type:       budget.ScopeTypeApplication,
+			ID:         "app_demo",
+			ResolvedBy: budget.ResolvedByRuntimeSnapshot,
+		},
 		ApplicationID:     "app_demo",
 		ApplicationStatus: StatusActive,
 		APIKeyID:          "api_key_demo",
@@ -191,6 +208,11 @@ func testActiveConfig() ActiveConfig {
 			Algorithm:     ratelimit.AlgorithmFixedWindow,
 			WindowSeconds: 60,
 			Limit:         7,
+		},
+		BudgetPolicy: budget.Policy{
+			Enabled:                 true,
+			EnforcementMode:         budget.EnforcementModeWarn,
+			WarningThresholdPercent: 80,
 		},
 		SafetyPolicy: SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",

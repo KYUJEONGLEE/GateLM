@@ -1,3 +1,10 @@
 {
-  "outcome": "redacted"
+  "outcome": "redacted",
+  "detectorSummary": {
+    "detectedCount": 2,
+    "detectorCategories": [
+      "email",
+      "phone_number"
+    ]
+  }
 }

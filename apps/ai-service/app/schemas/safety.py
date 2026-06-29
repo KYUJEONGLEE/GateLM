@@ -72,6 +72,24 @@ class SafetyDecisionResponse(CamelModel):
     security_policy_hash: str = Field(alias="securityPolicyHash")
 
 
+class SafetyDetectorSummary(CamelModel):
+    detected_count: int = Field(alias="detectedCount", ge=0)
+    detector_categories: list[str] = Field(alias="detectorCategories", default_factory=list)
+
+    @field_validator("detector_categories")
+    @classmethod
+    def validate_detector_categories(cls, values: list[str]) -> list[str]:
+        for value in values:
+            if value not in ALLOWED_DETECTOR_TYPES:
+                raise PydanticCustomError("unsupported_detector_type", "Unsupported detector type.")
+        return values
+
+
+class SafetyDomainOutcome(CamelModel):
+    outcome: Literal["passed", "redacted", "blocked", "not_checked"]
+    detector_summary: SafetyDetectorSummary | None = Field(alias="detectorSummary", default=None)
+
+
 class RemoteSafetyMetadata(CamelModel):
     contract_version: str = Field(alias="contractVersion", default=CONTRACT_VERSION)
     engine_version: str = Field(alias="engineVersion", default=ENGINE_VERSION)
