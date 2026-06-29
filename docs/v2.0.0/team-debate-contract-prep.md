@@ -15,13 +15,24 @@ v1.0.0 baseline
 -> docs/v2.0.0/implementation-plan.md
 ```
 
+공식 문서 구조 후보:
+
+```text
+docs/v2.0.0/README.md
+docs/v2.0.0/contracts.md
+docs/v2.0.0/implementation-plan.md
+docs/v2.0.0/demo-scenario.md
+```
+
+`demo-scenario.md`의 상세 방향은 데모 동선이 더 정리된 뒤 별도로 조정한다. JSON Schema와 fixture는 `contracts.md` 합의 이후에 만든다.
+
 ## 2. v2.0.0 Direction
 
 v2.0.0은 v1.0.0의 B2B LLM Gateway baseline을 운영 가능한 제품 구조로 확장한다.
 
 핵심 방향:
 
-- terminal status와 domain outcome 분리를 계약 후보로 검토한다.
+- terminal status와 domain outcome 분리를 계약 방향으로 정리하되, 구체 필드명은 `contracts.md`에서 확정한다.
 - RuntimeConfig와 RuntimeSnapshot의 역할을 분리한다.
 - Actual Provider 1종과 모델 2개 이상을 붙이되 Mock fallback을 유지한다.
 - teamId는 조직 구조로 두고, 비용/쿼터/대시보드 귀속은 budgetScope로 일반화한다.
@@ -582,24 +593,26 @@ Employee Chat이 브라우저에서 Gateway를 직접 호출할지, Web BFF/serv
 
 ## 15. Contract Decisions Needed Before Implementation Plan
 
-v2.0.0 implementation plan 전에 아래 질문을 먼저 확정한다. 아래 항목은 현재 계약 후보이며, 이 문서에서 필드명이나 저장 구조를 확정하지 않는다.
+v2.0.0 implementation plan 전에 아래 방향을 계약 초안으로 옮긴다. 아래 항목은 planning decision이며, 구체 필드명이나 저장 구조는 `contracts.md`에서 확정한다.
 
-1. `cache_hit`을 terminal status에서 제거하고 `success + cache.outcome=hit`로 볼 것인가?
-2. auth 실패를 `blocked`로 볼 것인가, `failed`로 볼 것인가, 별도 terminal status로 둘 것인가?
-3. 미실행 stage 표현을 `not_called`, `not_checked`, `not_used`로 나눌 것인가?
-4. `budgetScopeType`은 `application/project/team`까지만 둘 것인가?
-5. fallback success는 항상 `terminalStatus=success`로 볼 것인가?
-6. streaming 중 client abort와 provider interruption을 각각 어떤 terminal status로 남길 것인가?
-7. RuntimeSnapshot provenance 필드를 어디까지 Request Detail/Dashboard에 노출할 것인가?
-8. Provider/Model catalog는 Control Plane DB에서 관리하고 RuntimeSnapshot에 포함할 것인가? 이때 Provider credential은 reference/hash로만 연결할 것인가?
-9. Budget warning은 사용자 응답에 표시할 것인가, 운영자 화면에만 표시할 것인가?
-10. Dashboard freshness와 query budget을 API 계약에 포함할 것인가?
-11. Employee Chat의 Gateway 호출은 브라우저 direct 방식인가, Web BFF/server-side 방식인가?
-12. P0 legacy field cleanup을 Actual Provider와 RuntimeSnapshot live 작업 전에 먼저 끝낼 것인가?
+| No | Topic | Planning direction |
+|---|---|---|
+| 1 | `cache_hit` 위치 | terminal status에서 제거하고 `terminalStatus=success`, `cache.outcome=hit`, `provider.outcome=not_called`로 표현한다. |
+| 2 | Auth 실패 | 정책/권한 차단 계열로 보되, `httpStatus`와 `errorCode`로 `401 invalid_api_key`, `403 invalid_app_token`을 구분한다. |
+| 3 | 미실행 stage | `not_called`, `not_checked`, `not_used`를 구분한다. |
+| 4 | `budgetScopeType` 범위 | v2.0.0은 `application/project/team`까지만 둔다. `department`는 의미 경계가 모호하므로 v2.x 후보로 둔다. |
+| 5 | Fallback success | 사용자 관점에서는 `terminalStatus=success`로 보고, provider/fallback outcome으로 degraded path를 설명한다. |
+| 6 | Streaming 중단/실패 | client abort는 `cancelled`, provider interruption으로 응답 실패 시 `failed`, fallback 성공 시 `success`로 본다. |
+| 7 | RuntimeSnapshot provenance | Request Detail/Dashboard에는 full snapshot을 복사하지 않고 id/version/hash/runtimeState 계열 provenance만 노출한다. |
+| 8 | Provider/Model catalog | Control Plane DB를 source of truth로 두고 RuntimeSnapshot이 Gateway 소비 형태를 제공한다. Provider credential은 reference/hash로만 연결한다. |
+| 9 | Budget warning | 기본적으로 운영자/Admin 화면에만 표시한다. warning threshold는 관리자가 설정할 수 있어야 한다. |
+| 10 | Dashboard freshness/query budget | API 계약에 freshness/query budget 메타데이터 후보를 포함한다. |
 
-우선 검토할 항목 중 하나는 `cache_hit`의 위치다.
+아직 남은 open question:
 
-`cache_hit`을 terminal status에서 domain outcome으로 내리면 v2.0.0의 상태 체계가 단순해지고, fallback, streaming, provider timeout도 같은 방식으로 설명할 수 있다.
+1. Employee Chat의 Gateway 호출은 브라우저 direct 방식인가, Web BFF/server-side 방식인가?
+2. P0 legacy field cleanup의 정확한 inventory와 역할별 확인 범위는 무엇인가?
+3. `demo-scenario.md`는 어떤 발표 동선과 청중 참여 범위를 기준으로 작성할 것인가?
 
 ## 16. Suggested v2.0.0 Planning Order
 
@@ -614,6 +627,17 @@ v2.0.0 구현 계획은 아래 순서로 짜는 것이 좋다. 구현 시작 전
 7. Streaming thin slice 범위 확정
 8. k6 baseline/query profile 기준 확정
 9. Semantic Cache evidence track 분리 확정
+
+## 16.1 Suggested v1.x Release Train Toward v2.0.0
+
+v2.0.0은 목표 버전이고, v1.x는 그 목표로 가는 과정이다. 데모 완성도를 위해 아래 순서로 작은 PR을 쌓는 방향을 권장한다.
+
+1. P0 legacy field cleanup
+2. Actual Provider 1종 + 모델 2개 이상 + Mock fallback
+3. RuntimeConfig/RuntimeSnapshot live thin slice
+4. Streaming thin slice
+5. Traffic simulator + stronger k6/query profile
+6. v2.0.0 조직 기반 LLMOps Gateway MVP 문서/데모 freeze
 
 ## 17. Non Goals For v2.0.0 Core
 
