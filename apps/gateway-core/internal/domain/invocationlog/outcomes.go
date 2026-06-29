@@ -433,7 +433,7 @@ func providerOutcome(log TerminalLog) ProviderOutcome {
 		base.SanitizedErrorCode = stringPointer(log.ErrorCode)
 		return base
 	}
-	base.Outcome = "not_called"
+	base.Outcome = "error"
 	return base
 }
 
