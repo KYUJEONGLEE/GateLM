@@ -372,8 +372,85 @@ Legacy `status`, `cacheStatus`, `maskingAction`은 compatibility mapper 또는 r
 - 모델은 최소 2개 이상을 지원한다.
 - Mock Provider는 fallback/evidence path로 유지한다.
 - Provider/Model catalog의 source of truth는 Control Plane DB다.
-- RuntimeSnapshot은 Gateway가 소비할 Provider/Model catalog shape을 제공한다.
+- RuntimeSnapshot은 Provider Catalog 전체 body를 복사하지 않고 `providerCatalogRef`만 제공한다.
+- Gateway는 RuntimeSnapshot의 `providerCatalogRef`로 Provider Catalog body를 별도 조회한다.
 - Provider/Model은 enum으로 고정하지 않는다.
+
+RuntimeSnapshot의 Provider Catalog reference 최소 shape:
+
+```json
+{
+  "providerCatalogRef": {
+    "catalogId": "provider_catalog_synthetic_001",
+    "catalogVersion": 1,
+    "contentHash": "sha256:synthetic-provider-catalog-content-hash"
+  }
+}
+```
+
+Provider Catalog body 조회 경로:
+
+```text
+GET admin/v1/provider-catalogs/:catalogId
+GET admin/v1/applications/:applicationId/provider-catalog/active
+```
+
+원칙:
+
+- `GET admin/v1/provider-catalogs/:catalogId`는 RuntimeSnapshot의 `providerCatalogRef.catalogId`로 조회하는 canonical path다.
+- `GET admin/v1/applications/:applicationId/provider-catalog/active`는 application 기준 active catalog를 가져오는 convenience path다.
+- Gateway가 active catalog convenience path를 사용하더라도 응답의 `catalogId`, `catalogVersion`, `contentHash`가 RuntimeSnapshot의 `providerCatalogRef`와 모두 일치해야 한다.
+- 위 세 값 중 하나라도 일치하지 않으면 Gateway는 해당 Provider Catalog를 사용하지 않는다.
+- Provider Catalog 조회는 Gateway 같은 server-side trusted boundary에서만 수행한다. Browser/Employee UI/Customer App이 raw catalog execution config를 직접 조회하지 않는다.
+- Application 기준 조회는 tenant/project/application context를 함께 검증해야 하며, `applicationId` 단독 문자열을 client-trusted authorization boundary로 보지 않는다.
+
+Provider Catalog provider entry는 Gateway 실행에 필요한 sanitized execution config를 제공한다.
+
+```json
+{
+  "providerId": "provider_synthetic_primary",
+  "providerName": "openai-main",
+  "adapterType": "openai_compatible",
+  "enabled": true,
+  "baseUrl": "https://api.openai.com/v1",
+  "timeoutMs": 30000,
+  "credentialRef": {
+    "credentialRefId": "credential_ref_synthetic_primary_001",
+    "credentialVersion": 1,
+    "credentialState": "active"
+  },
+  "adapterConfig": {
+    "requestFormat": "openai_chat_completions"
+  },
+  "fallbackEligible": false
+}
+```
+
+Provider entry rules:
+
+- `providerName`은 관리자가 보는 provider/catalog 이름이며 Gateway adapter dispatch key가 아니다.
+- `adapterType`은 Gateway가 Provider Adapter를 선택할 때 사용하는 adapter kind다.
+- Gateway dispatch는 `providerName`이 아니라 `adapterType` 기준으로 수행한다.
+- `adapterType` 값은 catalog/config data이며 DB enum 또는 code enum으로 고정하지 않는다.
+- v2.0.0 fixture는 `openai_compatible`과 `mock` adapter type을 포함한다.
+- `baseUrl`과 `timeoutMs`는 provider 호출 execution config다.
+- `adapterConfig`는 자유 JSON이 아니라 schema allowlist field만 허용한다.
+- Provider Catalog에는 raw Provider Key, Authorization header, secret plaintext, provider raw error body를 넣지 않는다.
+
+Credential boundary:
+
+- Control Plane publish validation은 selected/default/low-cost/fallback provider에 필요한 `credentialRef` 누락, non-active credential state, 지원하지 않는 resolver configuration을 publish 전에 차단한다.
+- Gateway는 `credentialRef`를 server-side credential resolver로만 해석한다.
+- Gateway가 provider call 전에 credential을 resolve하지 못하면 provider call은 발생하지 않으며 safe error code로 기록한다.
+- 실제 provider가 401 또는 403을 반환한 경우 `provider.outcome=unauthorized`로 기록한다.
+- Provider timeout은 `provider.outcome=timeout`, 기타 sanitized provider failure는 `provider.outcome=error`로 기록한다.
+
+Model entry rules:
+
+- `modelId`는 GateLM 내부 식별자다.
+- `modelName`은 provider API에 실제로 보내는 모델명이다.
+- `displayName`은 UI 표시명이다.
+- Gateway가 의존할 수 있는 model fields는 `modelId`, `modelName`, `enabled`, `capabilities.streamingSupported`, `capabilities.maxInputTokens`, `capabilities.maxOutputTokens`, `capabilities.supportsJsonMode`, `routing.autoRoutingEligible`, `routing.costTier`, `routing.fallbackPriority`다.
 
 ### 7.2 Routing
 
