@@ -8,18 +8,17 @@ GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비
 
 ---
 
-## 1. Current Source Of Truth
+## 1. Reading Order And Source Of Truth
 
-문서끼리 충돌하면 아래 순서로 판단한다.
+작업을 시작할 때는 먼저 `docs/README.md`를 읽는다.
+
+문서끼리 충돌하면 아래 Source Of Truth 순서로 판단한다.
 
 1. `docs/v2.0.0/contracts.md`
 2. `docs/v2.0.0/schemas/*.schema.json`
 3. `docs/v2.0.0/fixtures/*.fixture.json`
 4. `docs/v2.0.0/implementation-plan.md`
 5. `docs/v2.0.0/implementation-tasks.md`
-6. `docs/architecture/*`
-7. `docs/policies/*`
-8. `docs/archive/*`
 
 `contracts.md`는 API, DB, Event, Metrics, Security-sensitive field 판단의 최우선 기준이다.
 
@@ -36,16 +35,15 @@ Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
 
 ---
 
-## 2. Required Reading Order
+## 2. Supporting References
 
-작업 전 아래 순서로 확인한다.
+작업 범위에 따라 아래 문서를 추가로 확인한다.
 
-1. `docs/README.md`
-2. `docs/v2.0.0/contracts.md`
-3. `docs/v2.0.0/implementation-plan.md`
-4. `docs/v2.0.0/implementation-tasks.md`
-5. 작업 범위에 해당하는 schema/fixture
-6. 작업 범위에 해당하는 app/module 문서
+- 작업 범위에 해당하는 schema/fixture
+- 작업 범위에 해당하는 app/module 문서
+- `docs/architecture/*`
+- `docs/policies/*`
+- `docs/archive/*`
 
 역할별 토론 문서는 working draft다.
 

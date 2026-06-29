@@ -6,16 +6,17 @@
 
 v1.0.0 baseline은 깨지지 않아야 하지만, 새 구현 판단의 우선 기준은 v2 문서다.
 
-## 1. Source Of Truth
+## 1. Reading Order And Source Of Truth
 
-작업 전 아래 순서로 확인한다.
+작업을 시작할 때는 먼저 `docs/README.md`를 읽는다.
+
+문서끼리 충돌하면 아래 Source Of Truth 순서로 판단한다.
 
 1. `docs/v2.0.0/contracts.md`
 2. `docs/v2.0.0/schemas/*.schema.json`
 3. `docs/v2.0.0/fixtures/*.fixture.json`
 4. `docs/v2.0.0/implementation-plan.md`
 5. `docs/v2.0.0/implementation-tasks.md`
-6. `docs/README.md`
 
 충돌하면 항상 `contracts.md`를 우선한다.
 

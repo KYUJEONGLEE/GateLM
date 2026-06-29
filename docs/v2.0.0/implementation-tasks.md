@@ -271,7 +271,7 @@ Likely files:
 | Web Request Log/Detail | `apps/web/src/lib/gateway/live-request-logs.ts`, `apps/web/src/lib/gateway/live-request-detail.ts`, `apps/web/src/features/request-logs/components/*` |
 | Web Dashboard | `apps/web/src/lib/gateway/live-dashboard-overview.ts`, `apps/web/src/features/dashboard/components/dashboard-overview.tsx`, `apps/web/src/app/(console)/tenants/[tenantId]/dashboard/page.tsx` |
 | k6/perf | `scripts/perf/k6-gateway-baseline.js`, `scripts/dev/v1-k6-baseline.ps1` if retained as compatibility wrapper |
-| Docs/schema | `docs/v2.0.0/schemas/request-detail.schema.json`, `dashboard-overview.schema.json`, fixtures with same basenames |
+| Docs/schema | `docs/v2.0.0/schemas/request-detail.schema.json`, `docs/v2.0.0/schemas/dashboard-overview.schema.json`, fixtures with same basenames |
 
 Tasks:
 
