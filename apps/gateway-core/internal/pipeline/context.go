@@ -3,6 +3,7 @@ package pipeline
 import (
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
@@ -19,6 +20,7 @@ type RequestContext struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -26,6 +28,7 @@ type RequestContext struct {
 
 	ConfigHash              string
 	SecurityPolicyHash      string
+	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
 	RuntimeRateLimit        ratelimit.Config
 	HasRuntimeRateLimit     bool
 	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy

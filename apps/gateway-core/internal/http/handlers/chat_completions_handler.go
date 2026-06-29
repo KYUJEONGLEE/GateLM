@@ -16,6 +16,7 @@ import (
 
 	cacheadapter "gatelm/apps/gateway-core/internal/adapters/cache/memory"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -262,7 +263,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
-			Status:           "error",
+			Status:           invocationlog.StatusFailed,
 			HTTPStatus:       http.StatusBadGateway,
 			ErrorCode:        "provider_error",
 			DurationSeconds:  providerDuration.Seconds(),
@@ -274,7 +275,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
-			Status:           "error",
+			Status:           invocationlog.StatusFailed,
 			HTTPStatus:       http.StatusBadGateway,
 			ErrorCode:        "provider_error",
 			DurationSeconds:  providerDuration.Seconds(),
@@ -590,7 +591,7 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 	reqCtx.CostMicroUSD = 0
 	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
-	reqCtx.Status = "cache_hit"
+	reqCtx.Status = invocationlog.StatusSuccess
 	reqCtx.HTTPStatus = http.StatusOK
 
 	if reqCtx.SelectedModel != "" {
@@ -701,6 +702,7 @@ func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx
 		TenantID:       reqCtx.TenantID,
 		ProjectID:      reqCtx.ProjectID,
 		ApplicationID:  reqCtx.ApplicationID,
+		BudgetScope:    reqCtx.BudgetScope,
 		APIKeyID:       reqCtx.APIKeyID,
 		AppTokenID:     reqCtx.AppTokenID,
 		EndUserID:      reqCtx.EndUserID,
@@ -737,12 +739,14 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		TenantID:                reqCtx.TenantID,
 		ProjectID:               reqCtx.ProjectID,
 		ApplicationID:           reqCtx.ApplicationID,
+		BudgetScope:             reqCtx.BudgetScope,
 		APIKeyID:                reqCtx.APIKeyID,
 		AppTokenID:              reqCtx.AppTokenID,
 		EndUserID:               reqCtx.EndUserID,
 		FeatureID:               reqCtx.FeatureID,
 		ConfigHash:              reqCtx.ConfigHash,
 		SecurityPolicyHash:      reqCtx.SecurityPolicyHash,
+		RuntimeSnapshot:         reqCtx.RuntimeSnapshot,
 		RateLimitDecision:       reqCtx.RateLimitDecision,
 		Endpoint:                reqCtx.Endpoint,
 		Method:                  reqCtx.Method,
@@ -796,7 +800,7 @@ func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {
 }
 
 func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
-	if reqCtx == nil || reqCtx.Status == invocationlog.StatusCacheHit || reqCtx.Status == invocationlog.StatusBlocked || reqCtx.Status == invocationlog.StatusRateLimited {
+	if reqCtx == nil || reqCtx.CacheStatus == cachestage.CacheStatusHit || reqCtx.Status == invocationlog.StatusBlocked || reqCtx.Status == invocationlog.StatusRateLimited {
 		return nil
 	}
 	if reqCtx.Provider == "" {
@@ -820,7 +824,7 @@ func (h *ChatCompletionsHandler) recordGatewayRequestCompleted(reqCtx *pipeline.
 
 	status := reqCtx.Status
 	if status == "" {
-		status = "error"
+		status = invocationlog.StatusFailed
 	}
 	h.MetricsRegistry.GatewayRequestCompleted(metrics.GatewayRequest{
 		Endpoint:        reqCtx.Endpoint,
@@ -906,6 +910,7 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	if apiKeyIdentity.ApplicationID != "" {
 		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
 	}
+	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
 
 	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
 	if err != nil {
@@ -945,6 +950,7 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	if h.ExpectedAppID != "" && reqCtx.ApplicationID != h.ExpectedAppID {
 		return gatewayerrors.ScopeMismatch(identify.StageName)
 	}
+	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
 
 	return nil
 }
@@ -971,11 +977,7 @@ func handleGatewayAuthError(w http.ResponseWriter, reqCtx *pipeline.RequestConte
 		}
 	}
 
-	if gatewayErr.HTTPStatus == gatewayerrors.StatusClientClosedRequest || errors.Is(err, context.Canceled) {
-		reqCtx.Status = "cancelled"
-	} else {
-		reqCtx.Status = "error"
-	}
+	reqCtx.Status = terminalStatusForGatewayError(gatewayErr.HTTPStatus, gatewayErr.Code)
 	reqCtx.HTTPStatus = gatewayErr.HTTPStatus
 	reqCtx.ErrorCode = gatewayErr.Code
 	reqCtx.ErrorMessage = gatewayErr.Message

@@ -68,17 +68,27 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 	if strings.Contains(log.RequestBodyHash, "EMAIL") || strings.Contains(log.PromptHash, "EMAIL") {
 		t.Fatalf("hash fields must not contain prompt material: %+v", log)
 	}
-	if log.Metadata["schemaVersion"] != 1 || log.Metadata["securityPolicyVersionId"] != "sec_p0_v1" || log.Metadata["routingPolicyHash"] != "route_p0_v1" {
+	if log.Metadata["schemaVersion"] != 1 || log.Metadata["securityPolicyVersionId"] != "sec_p0_v1" {
 		t.Fatalf("unexpected metadata: %+v", log.Metadata)
 	}
-	runtimeMetadata, ok := log.Metadata["runtime"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected runtime metadata, got %+v", log.Metadata)
+	if _, exists := log.Metadata["routingPolicyHash"]; exists {
+		t.Fatalf("routingPolicyHash must not be primary metadata: %+v", log.Metadata)
 	}
-	if runtimeMetadata["configHash"] != "hash_runtime_config_test" ||
-		runtimeMetadata["securityPolicyHash"] != "hash_security_policy_test" ||
-		runtimeMetadata["routingPolicyHash"] != "route_p0_v1" {
-		t.Fatalf("unexpected runtime metadata: %+v", runtimeMetadata)
+	runtimeSnapshot, ok := log.Metadata["runtimeSnapshot"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtime snapshot metadata, got %+v", log.Metadata)
+	}
+	if runtimeSnapshot["runtimeSnapshotVersion"] != 1 || runtimeSnapshot["runtimeState"] != "snapshot_active" {
+		t.Fatalf("unexpected runtime snapshot metadata: %+v", runtimeSnapshot)
+	}
+	legacyHashes, ok := runtimeSnapshot["legacyHashes"].(map[string]string)
+	if !ok {
+		t.Fatalf("expected legacy hash bridge, got %+v", runtimeSnapshot)
+	}
+	if legacyHashes["configHash"] != "hash_runtime_config_test" ||
+		legacyHashes["securityPolicyHash"] != "hash_security_policy_test" ||
+		legacyHashes["routingPolicyHash"] != "route_p0_v1" {
+		t.Fatalf("unexpected legacy hash bridge: %+v", legacyHashes)
 	}
 }
 

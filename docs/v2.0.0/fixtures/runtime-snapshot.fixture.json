@@ -1,0 +1,84 @@
+{
+  "runtimeSnapshotId": "runtime_snapshot_synthetic_001",
+  "runtimeSnapshotVersion": 1,
+  "contentHash": "sha256:synthetic-runtime-snapshot-content-hash",
+  "runtimeState": "snapshot_active",
+  "publishedAt": "2026-06-29T07:00:00Z",
+  "publishedBy": "operator_synthetic",
+  "gatewayInstanceId": "gateway_synthetic_001",
+  "lookupKey": {
+    "tenantId": "tenant_synthetic_001",
+    "projectId": "project_synthetic_001",
+    "applicationId": "application_synthetic_001"
+  },
+  "budgetResolution": {
+    "budgetScopeType": "application",
+    "budgetScopeId": "application_synthetic_001",
+    "resolvedBy": "default_application",
+    "warningThresholdPercent": 80
+  },
+  "providerCatalogRef": {
+    "catalogId": "provider_catalog_synthetic_001",
+    "catalogVersion": 1,
+    "contentHash": "sha256:synthetic-provider-catalog-content-hash"
+  },
+  "policies": {
+    "safety": {
+      "enabled": true,
+      "mode": "enforce",
+      "requestSideRequired": true,
+      "policyHash": "sha256:synthetic-security-policy-hash",
+      "detectorSet": [
+        {
+          "detectorType": "synthetic_pii_category",
+          "action": "redact"
+        },
+        {
+          "detectorType": "synthetic_secret_category",
+          "action": "block"
+        }
+      ]
+    },
+    "routing": {
+      "autoModelEnabled": true,
+      "defaultRequestedModel": "auto",
+      "defaultProvider": "synthetic_primary_provider",
+      "defaultModel": "low_cost_chat_model",
+      "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
+    },
+    "cache": {
+      "exactCacheEnabled": true,
+      "semanticCacheMode": "evidence_only",
+      "cachePolicyHash": "sha256:synthetic-cache-policy-hash"
+    },
+    "rateLimit": {
+      "enabled": true,
+      "scope": "application",
+      "windowSeconds": 60,
+      "limit": 120
+    },
+    "budget": {
+      "enabled": true,
+      "enforcementMode": "block",
+      "warningThresholdPercent": 80
+    },
+    "fallback": {
+      "enabled": true,
+      "fallbackProvider": "synthetic_mock_provider",
+      "fallbackModel": "mock_fallback_chat_model",
+      "allowedReasons": [
+        "provider_timeout",
+        "provider_error"
+      ]
+    },
+    "streaming": {
+      "enabled": true,
+      "thinSliceOnly": true
+    }
+  },
+  "legacyHashes": {
+    "configHash": "sha256:synthetic-v1-config-hash",
+    "securityPolicyHash": "sha256:synthetic-v1-security-policy-hash",
+    "routingPolicyHash": "sha256:synthetic-v1-routing-policy-hash"
+  }
+}

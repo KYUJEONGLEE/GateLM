@@ -4,14 +4,15 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
 )
 
 const (
 	StatusSuccess     = "success"
-	StatusCacheHit    = "cache_hit"
 	StatusBlocked     = "blocked"
 	StatusRateLimited = "rate_limited"
-	StatusError       = "error"
+	StatusFailed      = "failed"
 	StatusCancelled   = "cancelled"
 	CacheStatusHit    = "hit"
 	CacheStatusMiss   = "miss"
@@ -37,6 +38,7 @@ type AuthFailureLog struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -74,6 +76,7 @@ type AuthFailureInput struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -154,6 +157,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		TenantID:      strings.TrimSpace(input.TenantID),
 		ProjectID:     strings.TrimSpace(input.ProjectID),
 		ApplicationID: strings.TrimSpace(input.ApplicationID),
+		BudgetScope:   budget.NormalizeScope(input.BudgetScope, input.ApplicationID),
 		APIKeyID:      strings.TrimSpace(input.APIKeyID),
 		AppTokenID:    strings.TrimSpace(input.AppTokenID),
 		EndUserID:     strings.TrimSpace(input.EndUserID),
@@ -165,7 +169,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		Stream:         input.Stream,
 		RequestedModel: strings.TrimSpace(input.RequestedModel),
 
-		Status:       StatusError,
+		Status:       StatusBlocked,
 		HTTPStatus:   input.HTTPStatus,
 		ErrorCode:    strings.TrimSpace(input.ErrorCode),
 		ErrorMessage: strings.TrimSpace(input.ErrorMessage),

@@ -12,7 +12,10 @@ type LiveDashboardOverviewResponse = {
       source?: string;
     };
     filters?: {
+      budgetScopeId?: string | null;
+      budgetScopeType?: string | null;
       projectId?: string | null;
+      resolvedBy?: string | null;
       tenantId?: string;
     };
     range?: {
@@ -108,6 +111,7 @@ function toDashboardOverview(
 ): DashboardOverview {
   const totals = data.totals ?? {};
   const freshness = data.dataFreshness ?? {};
+  const applicationId = "live_gateway_application";
 
   return {
     fixtureName: "live-dashboard-overview",
@@ -128,7 +132,10 @@ function toDashboardOverview(
     filters: {
       tenantId,
       projectId: data.filters?.projectId ?? "live_gateway_project",
-      applicationId: "live_gateway_application",
+      applicationId,
+      budgetScopeType: data.filters?.budgetScopeType ?? "application",
+      budgetScopeId: data.filters?.budgetScopeId ?? applicationId,
+      resolvedBy: data.filters?.resolvedBy ?? "default_application",
       provider: null,
       model: null
     },

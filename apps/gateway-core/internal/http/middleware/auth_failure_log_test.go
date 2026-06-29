@@ -87,7 +87,7 @@ func TestAuthFailureLogMiddlewareRecordsInvalidAPIKey(t *testing.T) {
 	}
 
 	log := writer.logs[0]
-	if log.RequestID != "request_auth_401" || log.Status != invocationlog.StatusError || log.HTTPStatus != http.StatusUnauthorized {
+	if log.RequestID != "request_auth_401" || log.Status != invocationlog.StatusBlocked || log.HTTPStatus != http.StatusUnauthorized {
 		t.Fatalf("unexpected auth failure log identity/status: %+v", log)
 	}
 	if log.ErrorCode != invocationlog.ErrorCodeInvalidAPIKey || log.ErrorStage != invocationlog.StageAuthenticateAPIKey {

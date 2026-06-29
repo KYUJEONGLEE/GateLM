@@ -3,6 +3,7 @@ package runtimeconfig
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
@@ -40,6 +41,32 @@ func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
 				t.Fatalf("expected missing credential binding, got %v", err)
 			}
 		})
+	}
+}
+
+func TestRuntimeSnapshotProvenanceNormalizesV2FacingFields(t *testing.T) {
+	publishedAt := time.Date(2026, 6, 29, 1, 2, 3, 0, time.UTC)
+	config := testActiveConfig()
+	config.Snapshot = RuntimeSnapshotProvenance{
+		RuntimeSnapshotVersion: 7,
+		RuntimeState:           "no_snapshot",
+	}
+
+	provenance := config.RuntimeSnapshotProvenance(publishedAt, "gateway_instance_test")
+
+	if provenance.RuntimeSnapshotVersion != 7 {
+		t.Fatalf("expected integer snapshot version 7, got %d", provenance.RuntimeSnapshotVersion)
+	}
+	if provenance.RuntimeState != RuntimeStateSnapshotActive {
+		t.Fatalf("no_snapshot must not be actual provenance state, got %s", provenance.RuntimeState)
+	}
+	if !provenance.PublishedAt.Equal(publishedAt) || provenance.GatewayInstanceID != "gateway_instance_test" {
+		t.Fatalf("unexpected provenance source fields: %+v", provenance)
+	}
+	if provenance.LegacyHashes.ConfigHash != "hash_runtime_config_test" ||
+		provenance.LegacyHashes.SecurityPolicyHash != "hash_security_policy_test" ||
+		provenance.LegacyHashes.RoutingPolicyHash != "hash_routing_policy_test" {
+		t.Fatalf("unexpected legacy hash bridge: %+v", provenance.LegacyHashes)
 	}
 }
 

@@ -13,7 +13,7 @@ type DashboardOverviewProps = {
   overview: DashboardOverview;
 };
 
-const statusOrder = ["success", "cache_hit", "blocked", "rate_limited", "error", "cancelled"];
+const statusOrder = ["success", "blocked", "rate_limited", "failed", "cancelled"];
 
 const dashboardText: Record<
   Locale,

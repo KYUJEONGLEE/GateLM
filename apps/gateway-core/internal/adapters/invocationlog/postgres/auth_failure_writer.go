@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -147,8 +148,11 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 	if err != nil {
 		return authFailureRecord{}, err
 	}
+	applicationID := firstValidUUID(log.ApplicationID, w.defaults.ApplicationID)
+	resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, applicationID)
 	metadataJSON, err := json.Marshal(map[string]any{
 		"schemaVersion": 1,
+		"budgetScope":   budget.ToMetadata(resolvedBudgetScope, applicationID),
 	})
 	if err != nil {
 		return authFailureRecord{}, err
@@ -160,7 +164,7 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 		TraceID:                  firstNonEmpty(log.TraceID, requestID),
 		TenantID:                 tenantID,
 		ProjectID:                projectID,
-		ApplicationID:            firstValidUUID(log.ApplicationID, w.defaults.ApplicationID),
+		ApplicationID:            applicationID,
 		APIKeyID:                 strings.TrimSpace(log.APIKeyID),
 		AppTokenID:               strings.TrimSpace(log.AppTokenID),
 		EndUserID:                strings.TrimSpace(log.EndUserID),
@@ -176,7 +180,7 @@ func (w *AuthFailureWriter) record(log invocationlog.AuthFailureLog) (authFailur
 		CostMicroUSD:             0,
 		LatencyMs:                log.LatencyMs,
 		ProviderLatencyMs:        log.ProviderLatencyMs,
-		Status:                   invocationlog.StatusError,
+		Status:                   invocationlog.StatusBlocked,
 		HTTPStatus:               log.HTTPStatus,
 		ErrorCode:                strings.TrimSpace(log.ErrorCode),
 		ErrorMessage:             strings.TrimSpace(log.ErrorMessage),

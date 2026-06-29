@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/request"
 )
@@ -56,6 +57,7 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	if identity.ApplicationID != "" {
 		gatewayCtx.Identity.ApplicationID = identity.ApplicationID
 	}
+	gatewayCtx.Budget = budget.NormalizeScope(gatewayCtx.Budget, gatewayCtx.Identity.ApplicationID)
 
 	return nil
 }

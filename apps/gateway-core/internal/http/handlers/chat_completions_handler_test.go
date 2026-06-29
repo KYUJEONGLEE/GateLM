@@ -430,7 +430,7 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 	logged := logWriter.logs[0]
 	assertTerminalLogMatchesGatewayErrorResponse(t, logged, rr, resp)
-	if logged.Status != invocationlog.StatusError || logged.HTTPStatus != http.StatusBadGateway {
+	if logged.Status != invocationlog.StatusFailed || logged.HTTPStatus != http.StatusBadGateway {
 		t.Fatalf("unexpected provider error log status: %+v", logged)
 	}
 	if logged.ErrorCode != "provider_error" || logged.ErrorStage != "call_provider_with_timeout_retry_fallback" {
@@ -792,7 +792,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForPipelineFailure(t *testing.T)
 	}
 	logged := logWriter.logs[0]
 	assertTerminalLogMatchesGatewayErrorResponse(t, logged, rr, resp)
-	if logged.Status != invocationlog.StatusError || logged.HTTPStatus != http.StatusInternalServerError {
+	if logged.Status != invocationlog.StatusFailed || logged.HTTPStatus != http.StatusInternalServerError {
 		t.Fatalf("unexpected pipeline failure status: %+v", logged)
 	}
 	if logged.ErrorCode != "internal_error" || logged.ErrorStage != "gateway_pipeline" {
@@ -1659,7 +1659,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	resp := decodeChatCompletionResponse(t, rr)
 	logged := logWriter.logs[0]
 	assertTerminalLogMatchesSuccessResponse(t, logged, rr, resp)
-	if logged.Status != invocationlog.StatusCacheHit || logged.CacheStatus != invocationlog.CacheStatusHit {
+	if logged.Status != invocationlog.StatusSuccess || logged.CacheStatus != invocationlog.CacheStatusHit {
 		t.Fatalf("unexpected cache hit log status: %+v", logged)
 	}
 	if logged.CacheType != invocationlog.CacheTypeExact || logged.CacheKeyHash != "hmac-sha256:cache-key" || logged.CacheHitRequestID != "request_previous" {

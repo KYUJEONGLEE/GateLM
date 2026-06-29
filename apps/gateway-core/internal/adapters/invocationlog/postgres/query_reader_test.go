@@ -72,6 +72,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				"request_001",
 				"project_demo",
 				sql.NullString{String: "app_demo", Valid: true},
+				sql.NullString{String: "application", Valid: true},
+				sql.NullString{String: "app_demo", Valid: true},
+				sql.NullString{String: "default_application", Valid: true},
 				"mock",
 				"mock-fast",
 				sql.NullString{String: "auto", Valid: true},
@@ -110,6 +113,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
 	}
+	if item.BudgetScope.Type != "application" || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != "default_application" {
+		t.Fatalf("unexpected budget scope: %+v", item.BudgetScope)
+	}
 	if !strings.Contains(db.query, "order by created_at desc, request_id desc") {
 		t.Fatalf("expected stable descending sort, got %s", db.query)
 	}
@@ -132,6 +138,9 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			"tenant_demo",
 			"project_demo",
 			sql.NullString{String: "app_demo", Valid: true},
+			sql.NullString{String: "application", Valid: true},
+			sql.NullString{String: "app_demo", Valid: true},
+			sql.NullString{String: "default_application", Valid: true},
 			invocationlog.StatusSuccess,
 			200,
 			"mock",
@@ -159,6 +168,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}}}`),
 		}},
 	}
 
@@ -176,6 +186,16 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	}
 	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.SelectedProvider != "mock" {
 		t.Fatalf("unexpected cache/routing detail: %+v %+v", detail.Cache, detail.Routing)
+	}
+	if detail.BudgetScope.Type != "application" || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != "default_application" {
+		t.Fatalf("unexpected budget scope detail: %+v", detail.BudgetScope)
+	}
+	if detail.RuntimeSnapshot == nil ||
+		detail.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_query_test" ||
+		detail.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		detail.RuntimeSnapshot.RuntimeState != "snapshot_active" ||
+		detail.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_query_test" {
+		t.Fatalf("unexpected runtime snapshot detail: %+v", detail.RuntimeSnapshot)
 	}
 	for _, expected := range []string{
 		"tenant_id = $1",
@@ -198,7 +218,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	db := &fakeQueryer{
 		row: fakeRow{values: []any{
 			int64(6),
-			int64(2),
+			int64(3),
 			int64(1),
 			int64(1),
 			int64(1),
@@ -211,10 +231,11 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(50),
 			sql.NullFloat64{Float64: 63.3333333333, Valid: true},
 			sql.NullFloat64{Float64: 100, Valid: true},
-			[]byte(`{"success":1,"cache_hit":1,"blocked":1,"rate_limited":1,"error":1,"cancelled":1}`),
+			[]byte(`{"success":3,"blocked":1,"rate_limited":1,"failed":1,"cancelled":1}`),
 			[]byte(`{"none":4,"redacted":1,"blocked":1}`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			[]byte(`[{"budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application","requestCount":6,"costMicroUsd":100}]`),
 			sql.NullTime{Time: lastLogCreatedAt, Valid: true},
 		}},
 	}
@@ -229,7 +250,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected dashboard overview to succeed, got %v", err)
 	}
-	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 2 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
+	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 3 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
 		t.Fatalf("unexpected overview counts: %+v", overview)
 	}
 	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 3 || overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 1.0/3.0) {
@@ -250,6 +271,9 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if len(overview.CostByModel) != 1 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
 	}
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
+	}
 	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
 	}
@@ -257,7 +281,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
 	}
 	for _, expected := range []string{
-		"status = 'error'",
+		"status = 'failed'",
 		"status = 'rate_limited'",
 		"cache_eligible_requests",
 		"saved_cost_micro_usd",
@@ -266,6 +290,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"masking_action_counts",
 		"routing_count_by_model",
 		"cost_by_model",
+		"budget_scope_breakdown",
 	} {
 		if !strings.Contains(db.query, expected) {
 			t.Fatalf("expected dashboard query to contain %q, got %s", expected, db.query)

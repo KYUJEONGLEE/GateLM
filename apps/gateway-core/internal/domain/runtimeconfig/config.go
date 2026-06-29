@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
@@ -14,6 +15,12 @@ const (
 	StatusActive       = "active"
 
 	CacheTypeExact = "exact"
+
+	RuntimeStateSnapshotActive     = "snapshot_active"
+	RuntimeStateLastKnownSafeUsed  = "last_known_safe_used"
+	RuntimeStateStaleSnapshotUsed  = "stale_snapshot_used"
+	DefaultGatewayInstanceIDCompat = "gateway_core_static"
+	DefaultPublishedByCompat       = "runtime_config_compat"
 )
 
 var (
@@ -32,6 +39,7 @@ type ActiveConfig struct {
 	ConfigVersion string
 	ConfigHash    string
 	PublishState  string
+	Snapshot      RuntimeSnapshotProvenance
 
 	TenantID          string
 	TenantStatus      string
@@ -48,6 +56,23 @@ type ActiveConfig struct {
 	SafetyPolicy  SafetyPolicy
 	RoutingPolicy RoutingPolicy
 	CachePolicy   CachePolicy
+}
+
+type RuntimeSnapshotProvenance struct {
+	RuntimeSnapshotID      string
+	RuntimeSnapshotVersion int
+	ContentHash            string
+	RuntimeState           string
+	PublishedAt            time.Time
+	PublishedBy            string
+	GatewayInstanceID      string
+	LegacyHashes           LegacyHashes
+}
+
+type LegacyHashes struct {
+	ConfigHash         string
+	SecurityPolicyHash string
+	RoutingPolicyHash  string
 }
 
 type SafetyPolicy struct {
@@ -136,4 +161,126 @@ func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
 		PolicyHash:          p.RoutingPolicyHash,
 		ShortPromptMaxChars: p.ShortPromptMaxChars,
 	}
+}
+
+func (c ActiveConfig) RuntimeSnapshotProvenance(publishedAt time.Time, gatewayInstanceID string) RuntimeSnapshotProvenance {
+	return c.Snapshot.Normalize(c, publishedAt, gatewayInstanceID)
+}
+
+func (p RuntimeSnapshotProvenance) Normalize(config ActiveConfig, publishedAt time.Time, gatewayInstanceID string) RuntimeSnapshotProvenance {
+	p.RuntimeSnapshotID = strings.TrimSpace(p.RuntimeSnapshotID)
+	p.ContentHash = strings.TrimSpace(p.ContentHash)
+	p.RuntimeState = strings.TrimSpace(p.RuntimeState)
+	p.PublishedBy = strings.TrimSpace(p.PublishedBy)
+	p.GatewayInstanceID = strings.TrimSpace(p.GatewayInstanceID)
+	p.LegacyHashes = p.LegacyHashes.Normalize()
+
+	if p.RuntimeSnapshotID == "" {
+		p.RuntimeSnapshotID = firstNonEmptyString(config.ConfigVersion, "runtime_snapshot_compat")
+	}
+	if p.RuntimeSnapshotVersion <= 0 {
+		p.RuntimeSnapshotVersion = 1
+	}
+	if p.ContentHash == "" {
+		p.ContentHash = firstNonEmptyString(config.ConfigHash, p.LegacyHashes.ConfigHash)
+	}
+	if !IsActualRuntimeState(p.RuntimeState) {
+		p.RuntimeState = RuntimeStateSnapshotActive
+	}
+	if p.PublishedAt.IsZero() {
+		p.PublishedAt = publishedAt
+	}
+	if p.PublishedAt.IsZero() {
+		p.PublishedAt = time.Unix(0, 0).UTC()
+	} else {
+		p.PublishedAt = p.PublishedAt.UTC()
+	}
+	if p.PublishedBy == "" {
+		p.PublishedBy = DefaultPublishedByCompat
+	}
+	if p.GatewayInstanceID == "" {
+		p.GatewayInstanceID = firstNonEmptyString(gatewayInstanceID, DefaultGatewayInstanceIDCompat)
+	}
+	if p.LegacyHashes.ConfigHash == "" {
+		p.LegacyHashes.ConfigHash = strings.TrimSpace(config.ConfigHash)
+	}
+	if p.LegacyHashes.SecurityPolicyHash == "" {
+		p.LegacyHashes.SecurityPolicyHash = strings.TrimSpace(config.SafetyPolicy.SecurityPolicyHash)
+	}
+	if p.LegacyHashes.RoutingPolicyHash == "" {
+		p.LegacyHashes.RoutingPolicyHash = strings.TrimSpace(config.RoutingPolicy.RoutingPolicyHash)
+	}
+	return p
+}
+
+func (p RuntimeSnapshotProvenance) Metadata() map[string]any {
+	metadata := map[string]any{
+		"runtimeSnapshotId":      p.RuntimeSnapshotID,
+		"runtimeSnapshotVersion": p.RuntimeSnapshotVersion,
+		"contentHash":            p.ContentHash,
+		"runtimeState":           p.RuntimeState,
+		"publishedAt":            p.PublishedAt.UTC().Format(time.RFC3339Nano),
+		"publishedBy":            p.PublishedBy,
+		"gatewayInstanceId":      p.GatewayInstanceID,
+	}
+	if !p.LegacyHashes.IsZero() {
+		metadata["legacyHashes"] = p.LegacyHashes.Metadata()
+	}
+	return metadata
+}
+
+func (p RuntimeSnapshotProvenance) IsZero() bool {
+	p.RuntimeSnapshotID = strings.TrimSpace(p.RuntimeSnapshotID)
+	p.ContentHash = strings.TrimSpace(p.ContentHash)
+	p.RuntimeState = strings.TrimSpace(p.RuntimeState)
+	p.PublishedBy = strings.TrimSpace(p.PublishedBy)
+	p.GatewayInstanceID = strings.TrimSpace(p.GatewayInstanceID)
+	return p.RuntimeSnapshotID == "" &&
+		p.RuntimeSnapshotVersion == 0 &&
+		p.ContentHash == "" &&
+		p.RuntimeState == "" &&
+		p.PublishedAt.IsZero() &&
+		p.PublishedBy == "" &&
+		p.GatewayInstanceID == "" &&
+		p.LegacyHashes.IsZero()
+}
+
+func (h LegacyHashes) Normalize() LegacyHashes {
+	return LegacyHashes{
+		ConfigHash:         strings.TrimSpace(h.ConfigHash),
+		SecurityPolicyHash: strings.TrimSpace(h.SecurityPolicyHash),
+		RoutingPolicyHash:  strings.TrimSpace(h.RoutingPolicyHash),
+	}
+}
+
+func (h LegacyHashes) IsZero() bool {
+	h = h.Normalize()
+	return h.ConfigHash == "" && h.SecurityPolicyHash == "" && h.RoutingPolicyHash == ""
+}
+
+func (h LegacyHashes) Metadata() map[string]string {
+	h = h.Normalize()
+	return map[string]string{
+		"configHash":         h.ConfigHash,
+		"securityPolicyHash": h.SecurityPolicyHash,
+		"routingPolicyHash":  h.RoutingPolicyHash,
+	}
+}
+
+func IsActualRuntimeState(value string) bool {
+	switch strings.TrimSpace(value) {
+	case RuntimeStateSnapshotActive, RuntimeStateLastKnownSafeUsed, RuntimeStateStaleSnapshotUsed:
+		return true
+	default:
+		return false
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

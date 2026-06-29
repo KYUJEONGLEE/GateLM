@@ -1,0 +1,547 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/v2.0.0/gateway-stage-outcomes.schema.json",
+  "title": "GateLM v2 Gateway Stage Outcomes",
+  "description": "Schema for Gateway-produced terminal status and domain outcomes. Observability must consume these outcomes instead of inventing stage results. No raw prompt, response, credential, provider key, Authorization header, raw error body, or actual secret is allowed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "requestId",
+    "traceId",
+    "completedAt",
+    "terminalStatus",
+    "httpStatus",
+    "domainOutcomes"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "gatelm.gateway-stage-outcomes.v2.0.0",
+      "description": "Contract marker for schema/fixture alignment."
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Gateway request id. It is not allowed as a Prometheus metric label."
+    },
+    "traceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Trace id. It is not allowed as a Prometheus metric label."
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "terminalStatus": {
+      "type": "string",
+      "enum": [
+        "success",
+        "blocked",
+        "rate_limited",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "httpStatus": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Sanitized error code only. Do not put raw provider error text or raw input here."
+    },
+    "domainOutcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "runtime",
+        "rateLimit",
+        "budget",
+        "safety",
+        "routing",
+        "cache",
+        "provider",
+        "fallback",
+        "streaming",
+        "logging"
+      ],
+      "properties": {
+        "auth": {
+          "$ref": "#/$defs/authOutcome"
+        },
+        "runtime": {
+          "$ref": "#/$defs/runtimeOutcome"
+        },
+        "rateLimit": {
+          "$ref": "#/$defs/rateLimitOutcome"
+        },
+        "budget": {
+          "$ref": "#/$defs/budgetOutcome"
+        },
+        "safety": {
+          "$ref": "#/$defs/safetyOutcome"
+        },
+        "routing": {
+          "$ref": "#/$defs/routingOutcome"
+        },
+        "cache": {
+          "$ref": "#/$defs/cacheOutcome"
+        },
+        "provider": {
+          "$ref": "#/$defs/providerOutcome"
+        },
+        "fallback": {
+          "$ref": "#/$defs/fallbackOutcome"
+        },
+        "streaming": {
+          "$ref": "#/$defs/streamingOutcome"
+        },
+        "logging": {
+          "$ref": "#/$defs/loggingOutcome"
+        }
+      }
+    },
+    "latencySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gatewayInternalLatencyMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "providerLatencyMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "description": "latency split. Gateway latency and Provider latency must not be collapsed into one ambiguous value."
+    }
+  },
+  "$defs": {
+    "safeMetadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      },
+      "description": "Sanitized low-cardinality metadata only. Do not include raw prompt, raw response, raw error detail, hashes intended for metrics labels, or secrets."
+    },
+    "authOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "invalid_api_key",
+            "invalid_app_token",
+            "scope_mismatch",
+            "not_checked"
+          ]
+        },
+        "httpStatus": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "runtimeOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "snapshot_active",
+            "last_known_safe_used",
+            "stale_snapshot_used",
+            "no_snapshot",
+            "not_checked"
+          ]
+        },
+        "runtimeSnapshotId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtimeSnapshotVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "runtimeState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "snapshot_active",
+            "last_known_safe_used",
+            "stale_snapshot_used",
+            null
+          ],
+          "description": "Actual RuntimeSnapshot provenance state when a snapshot was used. no_snapshot/not_checked stay in the runtime outcome field."
+        }
+      }
+    },
+    "rateLimitOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "allowed",
+            "rate_limited",
+            "disabled",
+            "error",
+            "not_checked"
+          ]
+        },
+        "remaining": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "retryAfterSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "budgetOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "budgetScopeType",
+        "budgetScopeId",
+        "resolvedBy"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "allowed",
+            "warned",
+            "blocked",
+            "not_used",
+            "not_checked"
+          ]
+        },
+        "budgetScopeType": {
+          "type": "string",
+          "enum": [
+            "application",
+            "project",
+            "team"
+          ]
+        },
+        "budgetScopeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope. client_provided is not allowed."
+        }
+      }
+    },
+    "safetyOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "detectedCount"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "redacted",
+            "blocked",
+            "not_checked"
+          ]
+        },
+        "maskingAction": {
+          "type": "string",
+          "enum": [
+            "none",
+            "redacted",
+            "blocked"
+          ]
+        },
+        "detectedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "detectedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "redactedPromptPreview": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sanitized preview only. Do not include raw detected value or raw prompt fragment."
+        }
+      }
+    },
+    "routingOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "selected",
+            "skipped",
+            "failed",
+            "not_checked"
+          ]
+        },
+        "requestedModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Provider/Model must not be enum-fixed."
+        },
+        "selectedProvider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Provider id/name from catalog. Must not be enum-fixed."
+        },
+        "selectedModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Model id/name from catalog. Must not be enum-fixed."
+        },
+        "routingReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "cacheOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "hit",
+            "miss",
+            "bypassed",
+            "error",
+            "not_used"
+          ]
+        },
+        "cacheType": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "none"
+          ]
+        },
+        "cacheHitRequestId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional request reference. It is not allowed as a metrics label."
+        }
+      }
+    },
+    "providerOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "success",
+            "timeout",
+            "error",
+            "unauthorized",
+            "not_called"
+          ]
+        },
+        "selectedProvider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Provider id/name from catalog. Must not be enum-fixed."
+        },
+        "selectedModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Model id/name from catalog. Must not be enum-fixed."
+        },
+        "latencyMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sanitizedErrorCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sanitized error code only. Do not include raw provider error body."
+        }
+      }
+    },
+    "fallbackOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "not_needed",
+            "disabled",
+            "success",
+            "failed",
+            "not_called"
+          ]
+        },
+        "fallbackProvider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Fallback provider id/name from catalog. Must not be enum-fixed."
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "streamingOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "not_streaming",
+            "started",
+            "completed",
+            "interrupted",
+            "cancelled"
+          ]
+        },
+        "streamingRequested": {
+          "type": "boolean"
+        }
+      }
+    },
+    "loggingOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "written",
+            "failed",
+            "deferred",
+            "not_called"
+          ]
+        },
+        "requestLogWritten": {
+          "type": "boolean"
+        },
+        "sanitizedErrorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

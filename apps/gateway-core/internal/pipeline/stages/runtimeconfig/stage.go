@@ -2,6 +2,7 @@ package runtimeconfigstage
 
 import (
 	"context"
+	"time"
 
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/request"
@@ -54,6 +55,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		ConfigHash:         config.ConfigHash,
 		SecurityPolicyHash: config.SafetyPolicy.SecurityPolicyHash,
 		RoutingPolicyHash:  config.RoutingPolicy.RoutingPolicyHash,
+		Snapshot:           config.RuntimeSnapshotProvenance(time.Now().UTC(), runtimeconfig.DefaultGatewayInstanceIDCompat),
 		RateLimitConfig:    config.RateLimit,
 		HasRateLimitConfig: true,
 		RoutingPolicy:      config.RoutingPolicy,

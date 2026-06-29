@@ -168,6 +168,11 @@ describe('RuntimeConfigsService', () => {
     expect(result.configVersion).toBe('runtime_config_test_001');
     expect(result.publishState).toBe('active');
     expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v1');
+    expect(result.providers[0]?.credentialRef).toEqual({
+      credentialRefId: `provider_credential:${providerId}`,
+      credentialVersion: 1,
+      credentialState: 'active',
+    });
     expect(result.providers[0]?.secretRef).toBe('secret/provider/mock');
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
@@ -692,6 +697,11 @@ describe('RuntimeConfigsService', () => {
           status: 'active',
           baseUrl: 'http://mock-provider:8090',
           timeoutMs: 30000,
+          credentialRef: {
+            credentialRefId: `provider_credential:${providerId}`,
+            credentialVersion: 1,
+            credentialState: 'active',
+          },
           secretRef: 'secret/provider/mock',
           credentialPreview: { prefix: 'mock_', last4: '9xA1' },
           resolver: 'none',

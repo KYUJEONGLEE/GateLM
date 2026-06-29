@@ -232,14 +232,13 @@ func metricsHandoffRenderMetrics(t *testing.T, registry *metrics.Registry) strin
 
 func metricsHandoffExpectedSamples() []string {
 	return []string{
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 2`,
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="cache_hit"} 1`,
+		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 3`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="sensitive_data_blocked",http_status="403",method="POST",status="blocked"} 1`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`,
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="provider_error",http_status="502",method="POST",status="error"} 1`,
+		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="provider_error",http_status="502",method="POST",status="failed"} 1`,
 		`gatelm_gateway_inflight_requests{endpoint="/v1/chat/completions",method="POST"} 0`,
 		`gatelm_provider_requests_total{error_code="none",http_status="200",selected_model="mock-fast",selected_provider="mock",status="success"} 2`,
-		`gatelm_provider_requests_total{error_code="provider_error",http_status="502",selected_model="mock-fast",selected_provider="nil-provider",status="error"} 1`,
+		`gatelm_provider_requests_total{error_code="provider_error",http_status="502",selected_model="mock-fast",selected_provider="nil-provider",status="failed"} 1`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success"} 3`,
 		`gatelm_cache_operations_total{cache_status="hit",cache_type="exact",operation="lookup",status="success"} 1`,
 		`gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="write",status="success"} 2`,
@@ -265,7 +264,7 @@ func metricsHandoffInputOutput(t *testing.T) string {
 				},
 			},
 			{
-				"name": "cache_hit",
+				"name": "cache hit success",
 				"http": "POST /v1/chat/completions",
 				"body": map[string]any{
 					"model":   "auto",
@@ -437,8 +436,11 @@ func metricsHandoffHasForbiddenLabels(output string) bool {
 		"feature_id",
 		"prompt",
 		"prompt_hash",
+		"request_body_hash",
 		"cache_key_hash",
+		"provider_key",
 		"authorization",
+		"raw_error_detail",
 	} {
 		if strings.Contains(output, labelName+"=") || strings.Contains(output, labelName+"=\"") {
 			return true
