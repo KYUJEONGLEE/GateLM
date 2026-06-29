@@ -351,11 +351,11 @@ type readinessProviderAdapter struct {
 	chatRequests []provider.ChatCompletionRequest
 }
 
-func (a *readinessProviderAdapter) Name() string {
+func (a *readinessProviderAdapter) AdapterType() string {
 	return "mock"
 }
 
-func (a *readinessProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+func (a *readinessProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.modelCalls++
@@ -369,7 +369,7 @@ func (a *readinessProviderAdapter) ListModels(ctx context.Context) (*provider.Mo
 	}, nil
 }
 
-func (a *readinessProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (a *readinessProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	a.mu.Lock()
 	a.chatRequests = append(a.chatRequests, req)
 	a.mu.Unlock()

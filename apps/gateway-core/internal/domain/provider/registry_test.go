@@ -15,8 +15,8 @@ func TestRegistryRegisterInitializesZeroValueAdapters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get registered adapter: %v", err)
 	}
-	if got.Name() != "mock" {
-		t.Fatalf("unexpected adapter name: %s", got.Name())
+	if got.AdapterType() != "mock" {
+		t.Fatalf("unexpected adapter type: %s", got.AdapterType())
 	}
 }
 
@@ -24,14 +24,14 @@ type registryTestAdapter struct {
 	name string
 }
 
-func (a registryTestAdapter) Name() string {
+func (a registryTestAdapter) AdapterType() string {
 	return a.name
 }
 
-func (a registryTestAdapter) ListModels(ctx context.Context) (*ModelListResponse, error) {
+func (a registryTestAdapter) ListModels(ctx context.Context, config ExecutionConfig) (*ModelListResponse, error) {
 	return &ModelListResponse{}, nil
 }
 
-func (a registryTestAdapter) CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
+func (a registryTestAdapter) CreateChatCompletion(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	return &ChatCompletionResponse{}, nil
 }
