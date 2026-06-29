@@ -49,18 +49,45 @@
         "providerName": {
           "type": "string",
           "minLength": 1,
-          "description": "Provider name is data and must not be represented as a DB/code enum."
+          "description": "Admin/catalog-facing provider name. It is data and must not be represented as a DB/code enum. Gateway adapter dispatch must not use this field."
         },
         "adapterType": {
           "type": "string",
           "minLength": 1,
-          "description": "Adapter type is a catalog value. Gateway dispatch should go through Provider Adapter boundaries."
+          "description": "Gateway adapter kind such as openai_compatible or mock. This is catalog/config data, not a DB/code enum."
         },
         "enabled": {
           "type": "boolean"
         },
+        "baseUrl": {
+          "type": "string",
+          "minLength": 1,
+          "format": "uri",
+          "description": "Provider API base URL used by the Gateway adapter. It must not contain credentials or Authorization material."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000,
+          "description": "Provider call timeout in milliseconds."
+        },
+        "credentialRequired": {
+          "type": "boolean",
+          "description": "Whether this provider requires a credentialRef before Gateway may call it. false is reserved for Mock, local, or explicitly no-auth providers."
+        },
         "credentialRef": {
-          "$ref": "#/$defs/credentialRef"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/credentialRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reference or metadata only when credentials are required. Null is allowed only for explicit no-credential provider paths."
+        },
+        "adapterConfig": {
+          "$ref": "#/$defs/adapterConfig"
         },
         "fallbackEligible": {
           "type": "boolean"
@@ -78,8 +105,37 @@
         "providerName",
         "adapterType",
         "enabled",
+        "baseUrl",
+        "timeoutMs",
+        "credentialRequired",
         "credentialRef",
+        "adapterConfig",
         "models"
+      ]
+    },
+    "adapterConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Allowlisted adapter execution config. It must not contain provider keys, Authorization headers, secret plaintext, or raw provider error bodies.",
+      "properties": {
+        "requestFormat": {
+          "type": "string",
+          "enum": [
+            "openai_chat_completions",
+            "mock_chat_completions"
+          ],
+          "description": "Wire request format used by the Provider Adapter."
+        },
+        "apiVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "description": "Optional allowlisted provider API version, for example Azure-style OpenAI-compatible endpoints. It must not contain credentials, headers, or free-form query material."
+        }
+      },
+      "required": [
+        "requestFormat"
       ]
     },
     "credentialRef": {
@@ -121,12 +177,13 @@
       "properties": {
         "modelId": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "GateLM internal model identifier. This value is not necessarily sent to the upstream provider."
         },
         "modelName": {
           "type": "string",
           "minLength": 1,
-          "description": "Model name is data and must not be represented as a DB/code enum."
+          "description": "Provider API model name. This value is data and must not be represented as a DB/code enum."
         },
         "displayName": {
           "type": "string",
@@ -156,6 +213,9 @@
         "streamingSupported": {
           "type": "boolean"
         },
+        "supportsJsonMode": {
+          "type": "boolean"
+        },
         "maxInputTokens": {
           "type": "integer",
           "minimum": 1
@@ -166,7 +226,10 @@
         }
       },
       "required": [
-        "streamingSupported"
+        "streamingSupported",
+        "supportsJsonMode",
+        "maxInputTokens",
+        "maxOutputTokens"
       ]
     },
     "modelRouting": {

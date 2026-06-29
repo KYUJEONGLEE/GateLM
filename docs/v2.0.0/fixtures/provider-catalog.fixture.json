@@ -6,24 +6,31 @@
   "providers": [
     {
       "providerId": "provider_synthetic_primary",
-      "providerName": "synthetic_primary_provider",
+      "providerName": "openai-main",
       "adapterType": "openai_compatible",
       "enabled": true,
+      "baseUrl": "https://api.openai.com/v1",
+      "timeoutMs": 30000,
+      "credentialRequired": true,
       "credentialRef": {
         "credentialRefId": "credential_ref_synthetic_primary_001",
         "credentialVersion": 1,
         "credentialState": "active",
         "credentialHash": "sha256:synthetic-credential-reference-hash"
       },
+      "adapterConfig": {
+        "requestFormat": "openai_chat_completions"
+      },
       "fallbackEligible": false,
       "models": [
         {
           "modelId": "model_synthetic_low_cost",
-          "modelName": "low_cost_chat_model",
-          "displayName": "Low Cost Chat Model",
+          "modelName": "gpt-synthetic-low-cost",
+          "displayName": "Synthetic Low Cost Model",
           "enabled": true,
           "capabilities": {
             "streamingSupported": true,
+            "supportsJsonMode": true,
             "maxInputTokens": 8192,
             "maxOutputTokens": 2048
           },
@@ -35,11 +42,12 @@
         },
         {
           "modelId": "model_synthetic_balanced",
-          "modelName": "balanced_chat_model",
-          "displayName": "Balanced Chat Model",
+          "modelName": "gpt-synthetic-balanced",
+          "displayName": "Synthetic Balanced Model",
           "enabled": true,
           "capabilities": {
             "streamingSupported": true,
+            "supportsJsonMode": true,
             "maxInputTokens": 16384,
             "maxOutputTokens": 4096
           },
@@ -56,10 +64,12 @@
       "providerName": "synthetic_mock_provider",
       "adapterType": "mock",
       "enabled": true,
-      "credentialRef": {
-        "credentialRefId": "credential_ref_synthetic_mock_001",
-        "credentialVersion": 1,
-        "credentialState": "active"
+      "baseUrl": "http://mock-provider:8090/v1",
+      "timeoutMs": 5000,
+      "credentialRequired": false,
+      "credentialRef": null,
+      "adapterConfig": {
+        "requestFormat": "mock_chat_completions"
       },
       "fallbackEligible": true,
       "models": [
@@ -70,6 +80,7 @@
           "enabled": true,
           "capabilities": {
             "streamingSupported": false,
+            "supportsJsonMode": false,
             "maxInputTokens": 4096,
             "maxOutputTokens": 1024
           },

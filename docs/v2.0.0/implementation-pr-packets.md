@@ -198,14 +198,25 @@ Implementation order:
 1. Keep provider/model as catalog/config data, not enum.
 2. Add OpenAI adapter behind Provider Adapter interface.
 3. Keep Mock adapter available.
-4. Load credential through server-side reference only.
-5. Distinguish success, timeout, error, unauthorized, fallback disabled, fallback success, fallback failed.
-6. Sanitize provider raw errors before any response/log/metric.
+4. Load Provider Catalog body through RuntimeSnapshot `providerCatalogRef`.
+5. Verify catalog `catalogId`, `catalogVersion`, and `contentHash` match the RuntimeSnapshot reference before using it.
+6. Fail before provider/fallback call when no matching Provider Catalog body is available.
+7. Dispatch by Provider Catalog `adapterType`, not by `providerName`.
+8. Use catalog execution config: `baseUrl`, `timeoutMs`, `credentialRequired`, `credentialRef`, and allowlisted `adapterConfig`.
+9. Treat `modelId` as GateLM internal identity and `modelName` as the provider API model name.
+10. Load credential through server-side reference only.
+11. Distinguish success, timeout, error, unauthorized, fallback disabled, fallback success, fallback failed.
+12. Sanitize provider raw errors before any response/log/metric.
 
 Acceptance:
 
 - At least two model entries are data-driven.
 - Gateway handler does not branch directly on provider name.
+- Gateway does not use a Provider Catalog body whose `catalogId/catalogVersion/contentHash` differs from the RuntimeSnapshot `providerCatalogRef`.
+- Gateway fails before provider/fallback call if it cannot fetch or reuse a matching Provider Catalog body.
+- Gateway adapter dispatch uses `adapterType`; `providerName` remains display/catalog data.
+- Provider 401/403 maps to `provider.outcome=unauthorized`; pre-call credential resolution failure is sanitized and does not expose credential material.
+- No-credential providers can use `credentialRequired=false` and `credentialRef=null` without dummy credentials.
 - Raw provider key and Authorization header never enter DB/log/fixture/UI.
 - Fallback success is observable as degraded but successful user outcome.
 
@@ -262,13 +273,21 @@ Implementation order:
 1. Add RuntimeSnapshot read model without deleting RuntimeConfig.
 2. Lookup active snapshot by `tenantId/projectId/applicationId`.
 3. Keep `budgetScopeType/budgetScopeId` out of lookup key.
-4. Validate required `credentialRef` or provider credential binding before publishing snapshot.
-5. Store provenance only, not full snapshot body, in Request Detail/log read model.
-6. Implement Gateway load/reload failure behavior with last loaded snapshot when allowed.
+4. Keep RuntimeSnapshot limited to `providerCatalogRef`; do not embed full Provider Catalog body.
+5. Add or align Provider Catalog body read model/endpoint for the referenced catalog.
+6. Ensure active catalog convenience reads still expose `catalogId/catalogVersion/contentHash` so Gateway can verify them against RuntimeSnapshot `providerCatalogRef`.
+7. Map provider display/catalog name and adapter kind separately: `providerName` is not the Gateway adapter dispatch key; `adapterType` is.
+8. Include Provider Catalog execution config fields required by Gateway: `baseUrl`, `timeoutMs`, `credentialRequired`, `credentialRef`, allowlisted `adapterConfig`, and model capability/routing fields.
+9. Validate required `credentialRef` or provider credential binding before publishing snapshot.
+10. Distinguish required credential binding failures with a safe validation error such as `missing_provider_credential_binding`.
+11. Store provenance only, not full snapshot body, in Request Detail/log read model.
+12. Implement Gateway load/reload failure behavior with last loaded snapshot when allowed.
 
 Acceptance:
 
 - Gateway never consumes editable RuntimeConfig directly.
+- RuntimeSnapshot contains Provider Catalog reference/provenance, not full catalog body.
+- Provider Catalog body can be fetched and verified against `providerCatalogRef`.
 - Validation failure creates no RuntimeSnapshot.
 - Publish failure does not change active pointer.
 - Reload failure can continue with last loaded snapshot.
