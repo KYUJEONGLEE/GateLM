@@ -13,6 +13,7 @@ type Config struct {
 	RedisURL                 string
 	ControlPlaneBaseURL      string
 	ControlPlaneTimeout      time.Duration
+	AuthSource               string
 	MockProviderBaseURL      string
 	DefaultProvider          string
 	DefaultModel             string
@@ -61,6 +62,7 @@ func Load() Config {
 		RedisURL:                 envString("REDIS_URL", "redis://localhost:6379"),
 		ControlPlaneBaseURL:      envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
 		ControlPlaneTimeout:      envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
+		AuthSource:               envString("GATEWAY_AUTH_SOURCE", "database"),
 		MockProviderBaseURL:      envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:          envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
 		DefaultModel:             envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),

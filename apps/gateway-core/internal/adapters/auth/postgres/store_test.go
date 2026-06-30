@@ -1,0 +1,197 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"gatelm/apps/gateway-core/internal/domain/auth"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+func TestStoreAuthenticatesAPIKeyWithHashCandidate(t *testing.T) {
+	plaintext := "gsk_live_test_secret_1234"
+	queryer := &fakeQueryer{
+		rows: newFakeRows([]credentialCandidate{{
+			id:         "00000000-0000-4000-8000-000000000400",
+			tenantID:   "00000000-0000-4000-8000-000000000100",
+			projectID:  "00000000-0000-4000-8000-000000000200",
+			secretHash: credentialHash(plaintext),
+		}}),
+	}
+
+	identity, err := NewStore(queryer).AuthenticateAPIKey(context.Background(), plaintext)
+	if err != nil {
+		t.Fatalf("AuthenticateAPIKey returned error: %v", err)
+	}
+
+	if identity.APIKeyID != "00000000-0000-4000-8000-000000000400" ||
+		identity.TenantID != "00000000-0000-4000-8000-000000000100" ||
+		identity.ProjectID != "00000000-0000-4000-8000-000000000200" ||
+		identity.ApplicationID != "" {
+		t.Fatalf("unexpected api key identity: %+v", identity)
+	}
+	assertLookupArgs(t, queryer, "gsk_live_", "1234")
+}
+
+func TestStoreRejectsAPIKeyHashMismatch(t *testing.T) {
+	queryer := &fakeQueryer{
+		rows: newFakeRows([]credentialCandidate{{
+			id:         "00000000-0000-4000-8000-000000000400",
+			tenantID:   "00000000-0000-4000-8000-000000000100",
+			projectID:  "00000000-0000-4000-8000-000000000200",
+			secretHash: credentialHash("gsk_live_other_secret_1234"),
+		}}),
+	}
+
+	_, err := NewStore(queryer).AuthenticateAPIKey(context.Background(), "gsk_live_test_secret_1234")
+	if !errors.Is(err, auth.ErrInvalidAPIKey) {
+		t.Fatalf("expected invalid api key error, got %v", err)
+	}
+}
+
+func TestStoreValidatesAppTokenWithApplicationScope(t *testing.T) {
+	plaintext := "gat_app_test_secret_5678"
+	queryer := &fakeQueryer{
+		rows: newFakeRows([]credentialCandidate{{
+			id:            "00000000-0000-4000-8000-000000000500",
+			tenantID:      "00000000-0000-4000-8000-000000000100",
+			projectID:     "00000000-0000-4000-8000-000000000200",
+			applicationID: "00000000-0000-4000-8000-000000000300",
+			secretHash:    credentialHash(plaintext),
+		}}),
+	}
+
+	identity, err := NewStore(queryer).ValidateAppToken(context.Background(), plaintext)
+	if err != nil {
+		t.Fatalf("ValidateAppToken returned error: %v", err)
+	}
+
+	if identity.AppTokenID != "00000000-0000-4000-8000-000000000500" ||
+		identity.TenantID != "00000000-0000-4000-8000-000000000100" ||
+		identity.ProjectID != "00000000-0000-4000-8000-000000000200" ||
+		identity.ApplicationID != "00000000-0000-4000-8000-000000000300" {
+		t.Fatalf("unexpected app token identity: %+v", identity)
+	}
+	assertLookupArgs(t, queryer, "gat_app_", "5678")
+}
+
+func TestStoreRejectsMalformedCredentialWithoutQuery(t *testing.T) {
+	queryer := &fakeQueryer{}
+
+	_, err := NewStore(queryer).AuthenticateAPIKey(context.Background(), "not-a-gatelm-key")
+	if !errors.Is(err, auth.ErrInvalidAPIKey) {
+		t.Fatalf("expected invalid api key error, got %v", err)
+	}
+	if queryer.called {
+		t.Fatal("malformed credential should not query database")
+	}
+}
+
+func TestStoreReturnsQueryFailureWithoutMappingToInvalidCredential(t *testing.T) {
+	queryErr := errors.New("database unavailable")
+	queryer := &fakeQueryer{err: queryErr}
+
+	_, err := NewStore(queryer).ValidateAppToken(context.Background(), "gat_app_test_secret_5678")
+	if !errors.Is(err, queryErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+	if errors.Is(err, auth.ErrInvalidAppToken) {
+		t.Fatal("database failures must not be reported as invalid app tokens")
+	}
+}
+
+func assertLookupArgs(t *testing.T, queryer *fakeQueryer, prefix string, last4 string) {
+	t.Helper()
+	if !queryer.called {
+		t.Fatal("expected database query")
+	}
+	if len(queryer.args) != 2 {
+		t.Fatalf("expected 2 query args, got %d", len(queryer.args))
+	}
+	if queryer.args[0] != prefix || queryer.args[1] != last4 {
+		t.Fatalf("unexpected query args: %+v", queryer.args)
+	}
+}
+
+type fakeQueryer struct {
+	rows   pgx.Rows
+	err    error
+	called bool
+	args   []any
+}
+
+func (q *fakeQueryer) Query(_ context.Context, _ string, arguments ...any) (pgx.Rows, error) {
+	q.called = true
+	q.args = append([]any(nil), arguments...)
+	if q.err != nil {
+		return nil, q.err
+	}
+	return q.rows, nil
+}
+
+type fakeRows struct {
+	candidates []credentialCandidate
+	index      int
+	err        error
+	closed     bool
+}
+
+func newFakeRows(candidates []credentialCandidate) *fakeRows {
+	return &fakeRows{candidates: candidates, index: -1}
+}
+
+func (r *fakeRows) Close() {
+	r.closed = true
+}
+
+func (r *fakeRows) Err() error {
+	return r.err
+}
+
+func (r *fakeRows) CommandTag() pgconn.CommandTag {
+	return pgconn.CommandTag{}
+}
+
+func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription {
+	return nil
+}
+
+func (r *fakeRows) Next() bool {
+	r.index++
+	if r.index >= len(r.candidates) {
+		r.Close()
+		return false
+	}
+	return true
+}
+
+func (r *fakeRows) Scan(dest ...any) error {
+	if r.index < 0 || r.index >= len(r.candidates) {
+		return errors.New("scan called without current row")
+	}
+	if len(dest) != 5 {
+		return errors.New("unexpected scan destination count")
+	}
+	candidate := r.candidates[r.index]
+	*(dest[0].(*string)) = candidate.id
+	*(dest[1].(*string)) = candidate.tenantID
+	*(dest[2].(*string)) = candidate.projectID
+	*(dest[3].(*string)) = candidate.applicationID
+	*(dest[4].(*string)) = candidate.secretHash
+	return nil
+}
+
+func (r *fakeRows) Values() ([]any, error) {
+	return nil, nil
+}
+
+func (r *fakeRows) RawValues() [][]byte {
+	return nil
+}
+
+func (r *fakeRows) Conn() *pgx.Conn {
+	return nil
+}
