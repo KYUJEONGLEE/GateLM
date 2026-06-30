@@ -50,6 +50,9 @@ const DEFAULT_PUBLISHED_BY = 'control_plane';
 const DEFAULT_GATEWAY_INSTANCE_ID = 'gateway_core_static';
 const DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT = 80;
 const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
 const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
   'secretHash',
   'plaintext',
@@ -1232,7 +1235,7 @@ export class RuntimeConfigsService {
       displayName: provider.displayName,
       status: this.toProviderStatus(provider.status),
       adapterType,
-      baseUrl: provider.baseUrl,
+      baseUrl: this.toSafeProviderBaseUrl(provider.baseUrl),
       timeoutMs: provider.timeoutMs,
       credentialRequired:
         this.toProviderConnectionCredentialRequired(provider),
@@ -1365,6 +1368,19 @@ export class RuntimeConfigsService {
     );
     const updatedAt =
       runtimeConfig.publishedAt?.toISOString() ?? document.publishedAt;
+    const providers = document.providers
+      .filter((provider) =>
+        this.isProviderCatalogProviderExecutable(provider),
+      )
+      .map((provider) =>
+        this.toProviderCatalogProvider(provider, document),
+      );
+    if (providers.length === 0) {
+      throw new ConflictException(
+        'Provider Catalog has no executable providers.',
+      );
+    }
+
     const catalogBodyWithoutHash = {
       catalogId: this.toProviderCatalogId(
         document.applicationId,
@@ -1372,15 +1388,29 @@ export class RuntimeConfigsService {
       ),
       catalogVersion,
       updatedAt,
-      providers: document.providers.map((provider) =>
-        this.toProviderCatalogProvider(provider, document),
-      ),
+      providers,
     };
 
     return {
       ...catalogBodyWithoutHash,
       contentHash: this.sha256(this.canonicalJson(catalogBodyWithoutHash)),
     };
+  }
+
+  private isProviderCatalogProviderExecutable(
+    provider: RuntimeConfigProviderDto,
+  ): boolean {
+    if (provider.status !== 'active') {
+      return false;
+    }
+
+    const credentialRequired =
+      provider.credentialRequired ?? provider.resolver !== 'none';
+    if (!credentialRequired) {
+      return true;
+    }
+
+    return provider.credentialRef?.credentialState === 'active';
   }
 
   private toProviderCatalogProvider(
@@ -1470,13 +1500,22 @@ export class RuntimeConfigsService {
       throw new NotFoundException('Provider Catalog not found.');
     }
 
-    const catalogVersion = Number.parseInt(parts[2] ?? '', 10);
-    if (!parts[1] || !Number.isInteger(catalogVersion) || catalogVersion < 1) {
+    const applicationId = parts[1] ?? '';
+    const catalogVersionValue = parts[2] ?? '';
+    if (
+      !UUID_PATTERN.test(applicationId) ||
+      !POSITIVE_INTEGER_PATTERN.test(catalogVersionValue)
+    ) {
+      throw new NotFoundException('Provider Catalog not found.');
+    }
+
+    const catalogVersion = Number.parseInt(catalogVersionValue, 10);
+    if (!Number.isSafeInteger(catalogVersion) || catalogVersion < 1) {
       throw new NotFoundException('Provider Catalog not found.');
     }
 
     return {
-      applicationId: parts[1],
+      applicationId,
       catalogVersion,
     };
   }
