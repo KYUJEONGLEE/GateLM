@@ -25,6 +25,18 @@ REQUIRED_TOP_LEVEL_FIELDS = {
     "expectedGatewayEffects",
     "tags",
 }
+REDACT_DETECTOR_TYPES = {
+    "email",
+    "phone_number",
+    "postal_address",
+    "date_of_birth",
+    "person_name",
+    "customer_id",
+    "employee_id",
+    "account_id",
+    "ip_address",
+}
+BLOCK_DETECTOR_TYPES = DETECTOR_TYPES - REDACT_DETECTOR_TYPES
 
 
 def load_corpus(corpus_path: Path, schema_path: Path | None = None) -> list[CorpusCase]:
@@ -168,8 +180,8 @@ def validate_case_semantics(
     elif decision.action == "redacted":
         if not detected_types:
             raise SafetyEvalError(f"{case_id}: redacted action requires detections")
-        if not detected_types.issubset({"email", "phone_number"}):
-            raise SafetyEvalError(f"{case_id}: v1 redacted corpus may only use email or phone_number")
+        if not detected_types.issubset(REDACT_DETECTOR_TYPES):
+            raise SafetyEvalError(f"{case_id}: redacted action contains non-redacting detector type")
         if decision.block_reason is not None:
             raise SafetyEvalError(f"{case_id}: redacted action must not have blockReason")
         if effects != GatewayEffects(True, True, "success", 200, None):
@@ -177,7 +189,7 @@ def validate_case_semantics(
     elif decision.action == "blocked":
         if not detected_types:
             raise SafetyEvalError(f"{case_id}: blocked action requires detections")
-        if not detected_types.issubset(DETECTOR_TYPES - {"email", "phone_number"}):
+        if not detected_types.issubset(BLOCK_DETECTOR_TYPES):
             raise SafetyEvalError(f"{case_id}: blocked action contains non-blocking detector type")
         if decision.block_reason != "sensitive_data_blocked":
             raise SafetyEvalError(f"{case_id}: blocked action blockReason must be sensitive_data_blocked")

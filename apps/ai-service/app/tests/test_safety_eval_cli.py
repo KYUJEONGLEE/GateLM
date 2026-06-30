@@ -30,7 +30,7 @@ class SafetyEvalCliTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("9/9 passed", result.stdout)
+            self.assertIn("28/28 passed", result.stdout)
             self.assertTrue((Path(temp_dir) / "safety-eval-report.json").exists())
 
     def test_cli_gateway_v2_fixture_with_semantic_cache_evidence_exits_zero(self) -> None:
@@ -50,7 +50,7 @@ class SafetyEvalCliTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("9/9 passed", result.stdout)
+            self.assertIn("28/28 passed", result.stdout)
 
     def test_cli_mismatch_fixture_exits_one_unless_overridden(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -93,7 +93,7 @@ class SafetyEvalCliTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("v1 safety eval corpus smoke passed: 9 cases", result.stdout)
+        self.assertIn("v1 safety eval corpus smoke passed: 28 cases", result.stdout)
 
     def test_cli_io_failure_exits_two_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

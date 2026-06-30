@@ -17,7 +17,7 @@ SCHEMA_PATH = REPO_ROOT / "docs" / "v1.0.0" / "schemas" / "safety-eval-corpus.sc
 class SafetyEvalCorpusTests(unittest.TestCase):
     def test_loads_v1_docs_corpus(self) -> None:
         cases = load_corpus(CORPUS_PATH, SCHEMA_PATH)
-        self.assertEqual(len(cases), 9)
+        self.assertEqual(len(cases), 28)
         repeated = next(case for case in cases if case.case_id == "repeated_email_redacts_count")
         self.assertEqual(repeated.expected_type_counts, {"email": 2})
         self.assertEqual(repeated.expected_safety_decision.detected_count, 2)
