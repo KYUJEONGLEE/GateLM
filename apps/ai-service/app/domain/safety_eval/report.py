@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.domain.safety_eval.evaluator import EvaluationResult
-from app.schemas.safety_eval import REPORT_VERSION, SafetyEvalError
+from app.schemas.safety_eval import REPORT_VERSION, REPORT_VERSION_V2, SafetyEvalError
 
 
 FORBIDDEN_FIELD_NAMES = {
@@ -28,6 +28,12 @@ FORBIDDEN_FIELD_NAMES = {
     "matchText",
     "detectedValue",
     "sampleHash",
+    "actualCacheHitRate",
+    "actualSavedCost",
+    "actualProviderBypass",
+    "cacheHitRate",
+    "savedCost",
+    "providerBypass",
 }
 
 FORBIDDEN_LITERAL_PATTERNS = {
@@ -52,11 +58,12 @@ def build_report(
     mode: str,
     fixture_name: str | None,
     fixture_version: str | None,
+    semantic_cache_evidence: dict[str, Any] | None = None,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     generated = generated_at or datetime.now(tz=timezone.utc)
-    return {
-        "reportVersion": REPORT_VERSION,
+    report = {
+        "reportVersion": report_version_for_mode(mode),
         "generatedAt": generated.isoformat().replace("+00:00", "Z"),
         "corpus": {
             "path": str(corpus_path),
@@ -75,6 +82,56 @@ def build_report(
         ],
         "cases": evaluation.cases,
     }
+    if semantic_cache_evidence is not None:
+        validate_semantic_cache_evidence_shape(semantic_cache_evidence, "semantic cache evidence")
+        report["semanticCacheEvidence"] = semantic_cache_evidence
+    return report
+
+
+def report_version_for_mode(mode: str) -> str:
+    return REPORT_VERSION_V2 if mode.replace("-", "_").endswith("_v2") else REPORT_VERSION
+
+
+def load_semantic_cache_evidence_fixture(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise SafetyEvalError(f"semantic cache evidence fixture not found: {path}")
+    try:
+        raw_fixture = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SafetyEvalError(f"semantic cache evidence JSON parse failed: {exc}") from exc
+    validate_semantic_cache_evidence_shape(raw_fixture, str(path))
+    return raw_fixture
+
+
+def validate_semantic_cache_evidence_shape(value: dict[str, Any], label: str) -> None:
+    if not isinstance(value, dict) or set(value) != {"fixtureName", "fixtureVersion", "mode", "evidence"}:
+        raise SafetyEvalError(f"{label}: semantic cache evidence fields mismatch")
+    if value["mode"] != "semantic_cache_evidence_v2":
+        raise SafetyEvalError(f"{label}: semantic cache evidence mode mismatch")
+    for field_name in ("fixtureName", "fixtureVersion"):
+        field_value = value[field_name]
+        if not isinstance(field_value, str) or not field_value:
+            raise SafetyEvalError(f"{label}: {field_name} must be a non-empty string")
+    evidence = value["evidence"]
+    if not isinstance(evidence, dict) or set(evidence) != {
+        "evidenceOnly",
+        "normalizedRedactedPromptOnly",
+        "candidateCount",
+        "wouldHaveMatchedCount",
+    }:
+        raise SafetyEvalError(f"{label}: semantic cache evidence payload fields mismatch")
+    if evidence["evidenceOnly"] is not True:
+        raise SafetyEvalError(f"{label}: evidenceOnly must be true")
+    if evidence["normalizedRedactedPromptOnly"] is not True:
+        raise SafetyEvalError(f"{label}: normalizedRedactedPromptOnly must be true")
+    candidate_count = evidence["candidateCount"]
+    would_have_matched_count = evidence["wouldHaveMatchedCount"]
+    if not isinstance(candidate_count, int) or candidate_count < 0:
+        raise SafetyEvalError(f"{label}: candidateCount must be non-negative integer")
+    if not isinstance(would_have_matched_count, int) or would_have_matched_count < 0:
+        raise SafetyEvalError(f"{label}: wouldHaveMatchedCount must be non-negative integer")
+    if would_have_matched_count > candidate_count:
+        raise SafetyEvalError(f"{label}: wouldHaveMatchedCount cannot exceed candidateCount")
 
 
 def render_markdown_report(report: dict[str, Any]) -> str:
@@ -102,6 +159,18 @@ def render_markdown_report(report: dict[str, Any]) -> str:
     ]:
         lines.append(f"| {key} | {summary[key]} |")
     lines.append("")
+    semantic_cache_evidence = report.get("semanticCacheEvidence")
+    if semantic_cache_evidence is not None:
+        evidence = semantic_cache_evidence["evidence"]
+        lines.append("## Semantic Cache Evidence")
+        lines.append("")
+        lines.append("| Field | Value |")
+        lines.append("|---|---:|")
+        lines.append(f"| evidenceOnly | {evidence['evidenceOnly']} |")
+        lines.append(f"| normalizedRedactedPromptOnly | {evidence['normalizedRedactedPromptOnly']} |")
+        lines.append(f"| candidateCount | {evidence['candidateCount']} |")
+        lines.append(f"| wouldHaveMatchedCount | {evidence['wouldHaveMatchedCount']} |")
+        lines.append("")
     lines.append("## Detector Results")
     lines.append("")
     lines.append("| Detector | TP | FP | FN | TN | Precision | Recall | Count Mismatch |")
