@@ -69,6 +69,8 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		Snapshot:           snapshot.Snapshot,
 		RateLimitConfig:    snapshot.RateLimit,
 		HasRateLimitConfig: true,
+		BudgetPolicy:       snapshot.BudgetPolicy,
+		HasBudgetPolicy:    true,
 		RoutingPolicy:      snapshot.RoutingPolicy,
 		HasRoutingPolicy:   true,
 		CachePolicy:        snapshot.CachePolicy,

@@ -59,6 +59,7 @@ type ActiveConfig struct {
 	AppTokenStatus    string
 
 	RateLimit     ratelimit.Config
+	BudgetPolicy  budget.Policy
 	SafetyPolicy  SafetyPolicy
 	RoutingPolicy RoutingPolicy
 	CachePolicy   CachePolicy
@@ -73,6 +74,7 @@ type ExecutionSnapshot struct {
 	Snapshot      RuntimeSnapshotProvenance
 
 	RateLimit     ratelimit.Config
+	BudgetPolicy  budget.Policy
 	SafetyPolicy  SafetyPolicy
 	RoutingPolicy RoutingPolicy
 	CachePolicy   CachePolicy
@@ -133,6 +135,7 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.AppTokenID = strings.TrimSpace(c.AppTokenID)
 	c.AppTokenStatus = strings.TrimSpace(c.AppTokenStatus)
 	c.RateLimit = ratelimit.NormalizeConfig(c.RateLimit)
+	c.BudgetPolicy = budget.NormalizePolicy(c.BudgetPolicy)
 	c.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(c.SafetyPolicy.SecurityPolicyHash)
 	c.RoutingPolicy.DefaultProvider = strings.TrimSpace(c.RoutingPolicy.DefaultProvider)
 	c.RoutingPolicy.DefaultModel = strings.TrimSpace(c.RoutingPolicy.DefaultModel)
@@ -185,6 +188,7 @@ func (c ActiveConfig) ExecutionSnapshot() ExecutionSnapshot {
 		BudgetScope:   budget.DefaultScope(c.ApplicationID),
 		Snapshot:      c.Snapshot,
 		RateLimit:     c.RateLimit,
+		BudgetPolicy:  c.BudgetPolicy,
 		SafetyPolicy:  c.SafetyPolicy,
 		RoutingPolicy: c.RoutingPolicy,
 		CachePolicy:   c.CachePolicy,
@@ -198,6 +202,7 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.ApplicationID = strings.TrimSpace(s.ApplicationID)
 	s.BudgetScope = budget.NormalizeScope(s.BudgetScope, s.ApplicationID)
 	s.RateLimit = ratelimit.NormalizeConfig(s.RateLimit)
+	s.BudgetPolicy = budget.NormalizePolicy(s.BudgetPolicy)
 	s.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(s.SafetyPolicy.SecurityPolicyHash)
 	s.RoutingPolicy.DefaultProvider = strings.TrimSpace(s.RoutingPolicy.DefaultProvider)
 	s.RoutingPolicy.DefaultModel = strings.TrimSpace(s.RoutingPolicy.DefaultModel)
