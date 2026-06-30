@@ -165,6 +165,9 @@ func (p Provider) Normalize() Provider {
 	p.BaseURL = strings.TrimSpace(p.BaseURL)
 	p.AdapterConfig.RequestFormat = strings.TrimSpace(p.AdapterConfig.RequestFormat)
 	p.AdapterConfig.APIVersion = strings.TrimSpace(p.AdapterConfig.APIVersion)
+	if p.Models == nil {
+		p.Models = []Model{}
+	}
 	for i := range p.Models {
 		p.Models[i] = p.Models[i].Normalize()
 	}

@@ -20,18 +20,19 @@ import (
 )
 
 type RouterOptions struct {
-	APIKeyAuthenticator  handlers.APIKeyAuthenticator
-	AppTokenValidator    handlers.AppTokenValidator
-	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
-	TerminalLogWriter    invocationlog.TerminalLogWriter
-	InvocationLogReader  invocationlog.Reader
-	ExactCacheStore      ports.CacheStore
-	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
-	MetricsRegistry      *metrics.Registry
-	RateLimitPipeline    handlers.GatewayPipeline
-	PreProviderPipeline  handlers.GatewayPipeline
-	ProviderCatalogs     providercatalog.Resolver
-	Credentials          credentials.Resolver
+	APIKeyAuthenticator   handlers.APIKeyAuthenticator
+	AppTokenValidator     handlers.AppTokenValidator
+	AuthFailureLogWriter  invocationlog.AuthFailureLogWriter
+	TerminalLogWriter     invocationlog.TerminalLogWriter
+	InvocationLogReader   invocationlog.Reader
+	ExactCacheStore       ports.CacheStore
+	ExactCacheKeyBuilder  handlers.ExactCacheKeyBuilder
+	MetricsRegistry       *metrics.Registry
+	RateLimitPipeline     handlers.GatewayPipeline
+	RuntimePolicyPipeline handlers.GatewayPipeline
+	PreProviderPipeline   handlers.GatewayPipeline
+	ProviderCatalogs      providercatalog.Resolver
+	Credentials           credentials.Resolver
 }
 
 type RouterOption func(*RouterOptions)
@@ -83,6 +84,13 @@ func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) Route
 func WithRateLimitPipeline(rateLimitPipeline handlers.GatewayPipeline) RouterOption {
 	return func(options *RouterOptions) {
 		options.RateLimitPipeline = rateLimitPipeline
+		options.RuntimePolicyPipeline = rateLimitPipeline
+	}
+}
+
+func WithRuntimePolicyPipeline(runtimePolicyPipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.RuntimePolicyPipeline = runtimePolicyPipeline
 	}
 }
 
@@ -202,6 +210,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		ExpectedTenantID:        cfg.DemoTenantID,
 		ExpectedProjectID:       cfg.DemoProjectID,
 		ExpectedAppID:           cfg.DemoApplicationID,
+		RuntimePolicyPipeline:   firstNonNilPipeline(routerOptions.RuntimePolicyPipeline, routerOptions.RateLimitPipeline),
 		RateLimitPipeline:       routerOptions.RateLimitPipeline,
 		PreProviderPipeline:     preProviderPipeline,
 		AuthFailureLogWriter:    authFailureLogWriter,
@@ -216,4 +225,13 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	}))
 
 	return mux
+}
+
+func firstNonNilPipeline(pipelines ...handlers.GatewayPipeline) handlers.GatewayPipeline {
+	for _, pipeline := range pipelines {
+		if pipeline != nil {
+			return pipeline
+		}
+	}
+	return nil
 }

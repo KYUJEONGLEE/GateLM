@@ -66,6 +66,7 @@ type ChatCompletionsHandler struct {
 	ExpectedTenantID        string
 	ExpectedProjectID       string
 	ExpectedAppID           string
+	RuntimePolicyPipeline   GatewayPipeline
 	RateLimitPipeline       GatewayPipeline
 	PreProviderPipeline     GatewayPipeline
 	AuthFailureLogWriter    invocationlog.AuthFailureLogWriter
@@ -159,9 +160,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.RateLimitPipeline != nil {
+	if runtimePolicyPipeline := h.runtimePolicyPipeline(); runtimePolicyPipeline != nil {
 		gatewayCtx := newGatewayContext(reqCtx, "")
-		if err := h.RateLimitPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+		if err := runtimePolicyPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 			applyGatewayContext(reqCtx, gatewayCtx)
 			writeGatewayPipelineFailure(w, reqCtx, err)
 			return
@@ -335,6 +336,16 @@ func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
 
 func cachePolicyAllowsExact(policy runtimeconfig.CachePolicy) bool {
 	return policy.Enabled && strings.EqualFold(strings.TrimSpace(policy.Type), runtimeconfig.CacheTypeExact)
+}
+
+func (h *ChatCompletionsHandler) runtimePolicyPipeline() GatewayPipeline {
+	if h == nil {
+		return nil
+	}
+	if h.RuntimePolicyPipeline != nil {
+		return h.RuntimePolicyPipeline
+	}
+	return h.RateLimitPipeline
 }
 
 type providerCallTarget struct {
@@ -849,7 +860,7 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 		SelectedModel:            reqCtx.SelectedModel,
 		SecurityPolicyVersionID:  firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID),
 		RoutingPolicyVersionID:   reqCtx.RoutingPolicyHash,
-		CachePolicyHash:          h.CachePolicyHash,
+		CachePolicyHash:          firstNonEmpty(reqCtx.RuntimeCachePolicy.CachePolicyHash, h.CachePolicyHash),
 		NormalizedRedactedPrompt: redactedPrompt,
 		RequestParamsHash:        requestParamsHash(chatReq),
 	})

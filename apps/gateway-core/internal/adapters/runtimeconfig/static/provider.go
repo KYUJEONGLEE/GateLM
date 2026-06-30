@@ -30,3 +30,11 @@ func (p *Provider) GetActiveConfig(_ context.Context, tenantID string, projectID
 
 	return config, nil
 }
+
+func (p *Provider) GetExecutionSnapshot(ctx context.Context, tenantID string, projectID string, applicationID string) (runtimeconfig.ExecutionSnapshot, error) {
+	config, err := p.GetActiveConfig(ctx, tenantID, projectID, applicationID)
+	if err != nil {
+		return runtimeconfig.ExecutionSnapshot{}, err
+	}
+	return config.ExecutionSnapshot(), nil
+}

@@ -109,7 +109,18 @@ type demoRuntimeProvider struct {
 }
 
 func (p *demoRuntimeProvider) GetActiveConfig(_ context.Context, _ string, _ string, _ string) (runtimeconfig.ActiveConfig, error) {
+	if err := p.config.ValidateActive(); err != nil {
+		return runtimeconfig.ActiveConfig{}, err
+	}
 	return p.config, nil
+}
+
+func (p *demoRuntimeProvider) GetExecutionSnapshot(ctx context.Context, tenantID string, projectID string, applicationID string) (runtimeconfig.ExecutionSnapshot, error) {
+	config, err := p.GetActiveConfig(ctx, tenantID, projectID, applicationID)
+	if err != nil {
+		return runtimeconfig.ExecutionSnapshot{}, err
+	}
+	return config.ExecutionSnapshot(), nil
 }
 
 type demoLimiter struct {

@@ -12,10 +12,10 @@ import (
 const StageName = "load_active_runtime_config"
 
 type Stage struct {
-	provider runtimeconfig.Provider
+	provider runtimeconfig.SnapshotProvider
 }
 
-func NewStage(provider runtimeconfig.Provider) *Stage {
+func NewStage(provider runtimeconfig.SnapshotProvider) *Stage {
 	return &Stage{provider: provider}
 }
 
@@ -33,7 +33,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		return gatewayerrors.InternalError(StageName, "Gateway runtime config provider is not initialized.", nil)
 	}
 
-	config, err := s.provider.GetActiveConfig(
+	snapshot, err := s.provider.GetExecutionSnapshot(
 		ctx,
 		gatewayCtx.Identity.TenantID,
 		gatewayCtx.Identity.ProjectID,
@@ -45,26 +45,37 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		return gatewayerrors.InternalError(StageName, "Gateway active runtime config load failed.", err)
 	}
 
-	config = config.Normalize()
-	if err := config.ValidateActive(); err != nil {
+	snapshot = snapshot.Normalize(time.Now().UTC(), runtimeconfig.DefaultGatewayInstanceIDCompat)
+	if err := snapshot.Validate(); err != nil {
 		gatewayCtx.SetError(500, "internal_error", "Gateway active runtime config is invalid.", StageName)
 		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway active runtime config is invalid.", err)
 	}
+	if !snapshot.MatchesScope(
+		gatewayCtx.Identity.TenantID,
+		gatewayCtx.Identity.ProjectID,
+		gatewayCtx.Identity.ApplicationID,
+	) {
+		gatewayCtx.SetError(500, "internal_error", "Gateway active runtime config scope mismatch.", StageName)
+		gatewayCtx.BypassCache()
+		return gatewayerrors.InternalError(StageName, "Gateway active runtime config scope mismatch.", runtimeconfig.ErrScopeMismatch)
+	}
+
+	gatewayCtx.Budget = snapshot.BudgetScope
 	gatewayCtx.Runtime = request.RuntimeContext{
-		ConfigHash:         config.ConfigHash,
-		SecurityPolicyHash: config.SafetyPolicy.SecurityPolicyHash,
-		RoutingPolicyHash:  config.RoutingPolicy.RoutingPolicyHash,
-		Snapshot:           config.RuntimeSnapshotProvenance(time.Now().UTC(), runtimeconfig.DefaultGatewayInstanceIDCompat),
-		RateLimitConfig:    config.RateLimit,
+		ConfigHash:         snapshot.ConfigHash,
+		SecurityPolicyHash: snapshot.SafetyPolicy.SecurityPolicyHash,
+		RoutingPolicyHash:  snapshot.RoutingPolicy.RoutingPolicyHash,
+		Snapshot:           snapshot.Snapshot,
+		RateLimitConfig:    snapshot.RateLimit,
 		HasRateLimitConfig: true,
-		RoutingPolicy:      config.RoutingPolicy,
+		RoutingPolicy:      snapshot.RoutingPolicy,
 		HasRoutingPolicy:   true,
-		CachePolicy:        config.CachePolicy,
+		CachePolicy:        snapshot.CachePolicy,
 		HasCachePolicy:     true,
 	}
 
-	gatewayCtx.Masking.SecurityPolicyVersionID = config.SafetyPolicy.SecurityPolicyHash
-	gatewayCtx.Routing.RoutingPolicyHash = config.RoutingPolicy.RoutingPolicyHash
+	gatewayCtx.Masking.SecurityPolicyVersionID = snapshot.SafetyPolicy.SecurityPolicyHash
+	gatewayCtx.Routing.RoutingPolicyHash = snapshot.RoutingPolicy.RoutingPolicyHash
 	return nil
 }

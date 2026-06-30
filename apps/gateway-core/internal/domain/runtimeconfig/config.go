@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
@@ -36,6 +37,10 @@ type Provider interface {
 	GetActiveConfig(ctx context.Context, tenantID string, projectID string, applicationID string) (ActiveConfig, error)
 }
 
+type SnapshotProvider interface {
+	GetExecutionSnapshot(ctx context.Context, tenantID string, projectID string, applicationID string) (ExecutionSnapshot, error)
+}
+
 type ActiveConfig struct {
 	ConfigVersion string
 	ConfigHash    string
@@ -52,6 +57,20 @@ type ActiveConfig struct {
 	APIKeyStatus      string
 	AppTokenID        string
 	AppTokenStatus    string
+
+	RateLimit     ratelimit.Config
+	SafetyPolicy  SafetyPolicy
+	RoutingPolicy RoutingPolicy
+	CachePolicy   CachePolicy
+}
+
+type ExecutionSnapshot struct {
+	ConfigHash    string
+	TenantID      string
+	ProjectID     string
+	ApplicationID string
+	BudgetScope   budget.Scope
+	Snapshot      RuntimeSnapshotProvenance
 
 	RateLimit     ratelimit.Config
 	SafetyPolicy  SafetyPolicy
@@ -93,9 +112,10 @@ type RoutingPolicy struct {
 }
 
 type CachePolicy struct {
-	Enabled    bool
-	Type       string
-	TTLSeconds int
+	Enabled         bool
+	Type            string
+	TTLSeconds      int
+	CachePolicyHash string
 }
 
 func (c ActiveConfig) Normalize() ActiveConfig {
@@ -122,6 +142,7 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.RoutingPolicy.FallbackModel = strings.TrimSpace(c.RoutingPolicy.FallbackModel)
 	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
+	c.CachePolicy.CachePolicyHash = strings.TrimSpace(c.CachePolicy.CachePolicyHash)
 	return c
 }
 
@@ -152,6 +173,65 @@ func (c ActiveConfig) MatchesScope(tenantID string, projectID string, applicatio
 	return c.TenantID == strings.TrimSpace(tenantID) &&
 		c.ProjectID == strings.TrimSpace(projectID) &&
 		c.ApplicationID == strings.TrimSpace(applicationID)
+}
+
+func (c ActiveConfig) ExecutionSnapshot() ExecutionSnapshot {
+	c = c.Normalize()
+	return ExecutionSnapshot{
+		ConfigHash:    c.ConfigHash,
+		TenantID:      c.TenantID,
+		ProjectID:     c.ProjectID,
+		ApplicationID: c.ApplicationID,
+		BudgetScope:   budget.DefaultScope(c.ApplicationID),
+		Snapshot:      c.Snapshot,
+		RateLimit:     c.RateLimit,
+		SafetyPolicy:  c.SafetyPolicy,
+		RoutingPolicy: c.RoutingPolicy,
+		CachePolicy:   c.CachePolicy,
+	}
+}
+
+func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID string) ExecutionSnapshot {
+	s.ConfigHash = strings.TrimSpace(s.ConfigHash)
+	s.TenantID = strings.TrimSpace(s.TenantID)
+	s.ProjectID = strings.TrimSpace(s.ProjectID)
+	s.ApplicationID = strings.TrimSpace(s.ApplicationID)
+	s.BudgetScope = budget.NormalizeScope(s.BudgetScope, s.ApplicationID)
+	s.RateLimit = ratelimit.NormalizeConfig(s.RateLimit)
+	s.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(s.SafetyPolicy.SecurityPolicyHash)
+	s.RoutingPolicy.DefaultProvider = strings.TrimSpace(s.RoutingPolicy.DefaultProvider)
+	s.RoutingPolicy.DefaultModel = strings.TrimSpace(s.RoutingPolicy.DefaultModel)
+	s.RoutingPolicy.LowCostProvider = strings.TrimSpace(s.RoutingPolicy.LowCostProvider)
+	s.RoutingPolicy.LowCostModel = strings.TrimSpace(s.RoutingPolicy.LowCostModel)
+	s.RoutingPolicy.FallbackProvider = strings.TrimSpace(s.RoutingPolicy.FallbackProvider)
+	s.RoutingPolicy.FallbackModel = strings.TrimSpace(s.RoutingPolicy.FallbackModel)
+	s.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash)
+	s.CachePolicy.Type = strings.TrimSpace(s.CachePolicy.Type)
+	s.CachePolicy.CachePolicyHash = strings.TrimSpace(s.CachePolicy.CachePolicyHash)
+	s.Snapshot = s.Snapshot.Normalize(ActiveConfig{
+		ConfigHash:    s.ConfigHash,
+		SafetyPolicy:  s.SafetyPolicy,
+		RoutingPolicy: s.RoutingPolicy,
+	}, publishedAt, gatewayInstanceID)
+	return s
+}
+
+func (s ExecutionSnapshot) Validate() error {
+	s = s.Normalize(time.Time{}, "")
+	if s.TenantID == "" || s.ProjectID == "" || s.ApplicationID == "" {
+		return ErrMissingScope
+	}
+	if s.ConfigHash == "" || s.SafetyPolicy.SecurityPolicyHash == "" || s.RoutingPolicy.RoutingPolicyHash == "" {
+		return ErrMissingRuntimeHash
+	}
+	return nil
+}
+
+func (s ExecutionSnapshot) MatchesScope(tenantID string, projectID string, applicationID string) bool {
+	s = s.Normalize(time.Time{}, "")
+	return s.TenantID == strings.TrimSpace(tenantID) &&
+		s.ProjectID == strings.TrimSpace(projectID) &&
+		s.ApplicationID == strings.TrimSpace(applicationID)
 }
 
 func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
