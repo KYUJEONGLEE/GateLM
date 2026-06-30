@@ -11,8 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
@@ -26,6 +28,7 @@ import (
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/ports"
 )
 
@@ -1972,6 +1975,59 @@ func TestChatCompletionsHandlerDispatchesByCatalogAdapterTypeAndUsesModelName(t 
 	}
 }
 
+func TestChatCompletionsHandlerUsesLiveRuntimeSnapshotAndProviderCatalog(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.CatalogID = "provider_catalog:" + testAppID + ":1"
+	catalog.ContentHash = "sha256:provider-catalog-live-handler-test"
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/v1/applications/" + testAppID + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayload(catalog.Reference()))
+		case "/admin/v1/provider-catalogs/" + catalog.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalog))
+		default:
+			t.Fatalf("unexpected control plane path: %s", r.URL.Path)
+		}
+	}))
+	defer controlPlane.Close()
+
+	runtimeSnapshotProvider := controlplaneruntimeconfig.NewProvider(controlPlane.URL, controlPlane.Client())
+	providerCatalogResolver := controlplaneprovidercatalog.NewResolver(controlPlane.URL, controlPlane.Client())
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: providerCatalogResolver,
+		CredentialResolver:      staticCredentialResolver{},
+		RuntimePolicyPipeline:   pipeline.New(runtimeconfigstage.NewStage(runtimeSnapshotProvider)),
+		DefaultProvider:         "mock",
+		DefaultModel:            "mock-balanced",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBodyWithModel("auto", "safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 {
+		t.Fatalf("expected primary provider call, got %d", primary.calls)
+	}
+	if primary.lastConfig.AdapterType != providercatalog.AdapterTypeOpenAICompatible {
+		t.Fatalf("expected live catalog adapterType dispatch, got %s", primary.lastConfig.AdapterType)
+	}
+	if primary.lastConfig.ProviderName != "openai-main" {
+		t.Fatalf("expected live catalog providerName, got %s", primary.lastConfig.ProviderName)
+	}
+	if primary.lastRequest.Model != "provider-low" {
+		t.Fatalf("expected provider API modelName provider-low, got %s", primary.lastRequest.Model)
+	}
+}
+
 func TestChatCompletionsHandlerRejectsMismatchedProviderCatalogBeforeProviderCall(t *testing.T) {
 	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
 	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
@@ -2587,9 +2643,22 @@ func setValidGatewayAuthHeaders(req *http.Request) {
 	req.Header.Set("X-GateLM-App-Token", testAppToken)
 }
 
+func writeTestJSON(t *testing.T, w http.ResponseWriter, status int, payload any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		t.Fatalf("encode test json: %v", err)
+	}
+}
+
 func chatCompletionBody(prompt string) string {
+	return chatCompletionBodyWithModel("mock-balanced", prompt)
+}
+
+func chatCompletionBodyWithModel(model string, prompt string) string {
 	body, err := json.Marshal(provider.ChatCompletionRequest{
-		Model: "mock-balanced",
+		Model: model,
 		Messages: []provider.ChatMessage{
 			{
 				Role:    "user",
@@ -2601,6 +2670,136 @@ func chatCompletionBody(prompt string) string {
 		panic(err)
 	}
 	return string(body)
+}
+
+func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
+	return map[string]any{
+		"runtimeSnapshotId":      "runtime_snapshot_live_handler_test",
+		"runtimeSnapshotVersion": 1,
+		"contentHash":            "hash_runtime_snapshot_live_handler",
+		"runtimeState":           runtimeconfig.RuntimeStateSnapshotActive,
+		"publishedAt":            "2026-06-30T00:00:00Z",
+		"publishedBy":            "control_plane_test",
+		"gatewayInstanceId":      "gateway_core_test",
+		"lookupKey": map[string]any{
+			"tenantId":      testTenantID,
+			"projectId":     testProjectID,
+			"applicationId": testAppID,
+		},
+		"budgetResolution": map[string]any{
+			"budgetScopeType":         "application",
+			"budgetScopeId":           testAppID,
+			"resolvedBy":              "default_application",
+			"warningThresholdPercent": 80,
+		},
+		"providerCatalogRef": map[string]any{
+			"catalogId":      ref.CatalogID,
+			"catalogVersion": ref.CatalogVersion,
+			"contentHash":    ref.ContentHash,
+		},
+		"policies": map[string]any{
+			"safety": map[string]any{
+				"enabled":             true,
+				"mode":                "enforce",
+				"requestSideRequired": true,
+				"policyHash":          "hash_security_policy_live_handler",
+			},
+			"routing": map[string]any{
+				"autoModelEnabled":      true,
+				"defaultRequestedModel": "auto",
+				"defaultProvider":       "openai-main",
+				"defaultModel":          "model_low",
+				"routingPolicyHash":     "hash_routing_policy_live_handler",
+			},
+			"cache": map[string]any{
+				"exactCacheEnabled": true,
+				"semanticCacheMode": "evidence_only",
+				"cachePolicyHash":   "hash_cache_policy_live_handler",
+			},
+			"rateLimit": map[string]any{
+				"enabled":       false,
+				"scope":         "application",
+				"windowSeconds": 60,
+				"limit":         60,
+			},
+			"budget": map[string]any{
+				"enabled":                 false,
+				"enforcementMode":         "disabled",
+				"warningThresholdPercent": 80,
+			},
+			"fallback": map[string]any{
+				"enabled":          true,
+				"fallbackProvider": "mock-fallback",
+				"fallbackModel":    "model_mock_fallback",
+			},
+			"streaming": map[string]any{
+				"enabled":       false,
+				"thinSliceOnly": true,
+			},
+		},
+		"legacyHashes": map[string]any{
+			"configHash":         "hash_runtime_snapshot_live_handler",
+			"securityPolicyHash": "hash_security_policy_live_handler",
+			"routingPolicyHash":  "hash_routing_policy_live_handler",
+		},
+	}
+}
+
+func liveProviderCatalogPayload(catalog providercatalog.Catalog) map[string]any {
+	providers := make([]map[string]any, 0, len(catalog.Providers))
+	for _, provider := range catalog.Providers {
+		models := make([]map[string]any, 0, len(provider.Models))
+		for _, model := range provider.Models {
+			models = append(models, map[string]any{
+				"modelId":     model.ModelID,
+				"modelName":   model.ModelName,
+				"displayName": model.DisplayName,
+				"enabled":     model.Enabled,
+				"capabilities": map[string]any{
+					"streamingSupported": model.Capabilities.StreamingSupported,
+					"supportsJsonMode":   model.Capabilities.SupportsJSONMode,
+					"maxInputTokens":     model.Capabilities.MaxInputTokens,
+					"maxOutputTokens":    model.Capabilities.MaxOutputTokens,
+				},
+				"routing": map[string]any{
+					"autoRoutingEligible": model.Routing.AutoRoutingEligible,
+					"costTier":            model.Routing.CostTier,
+					"fallbackPriority":    model.Routing.FallbackPriority,
+				},
+			})
+		}
+		var credentialRef any
+		if provider.CredentialRef != nil {
+			credentialRef = map[string]any{
+				"credentialRefId":   provider.CredentialRef.CredentialRefID,
+				"credentialVersion": provider.CredentialRef.CredentialVersion,
+				"credentialState":   provider.CredentialRef.CredentialState,
+			}
+		}
+		providers = append(providers, map[string]any{
+			"providerId":         provider.ProviderID,
+			"providerName":       provider.ProviderName,
+			"adapterType":        provider.AdapterType,
+			"enabled":            provider.Enabled,
+			"baseUrl":            provider.BaseURL,
+			"timeoutMs":          provider.TimeoutMs,
+			"credentialRequired": provider.CredentialRequired,
+			"credentialRef":      credentialRef,
+			"adapterConfig": map[string]any{
+				"requestFormat": provider.AdapterConfig.RequestFormat,
+				"apiVersion":    provider.AdapterConfig.APIVersion,
+			},
+			"fallbackEligible": provider.FallbackEligible,
+			"models":           models,
+		})
+	}
+	return map[string]any{
+		"catalogId":      catalog.CatalogID,
+		"catalogVersion": catalog.CatalogVersion,
+		"contentHash":    catalog.ContentHash,
+		"updatedAt":      "2026-06-30T00:00:00Z",
+		"providers":      providers,
+	}
 }
 
 func jsonStringLiteral(value string) string {
