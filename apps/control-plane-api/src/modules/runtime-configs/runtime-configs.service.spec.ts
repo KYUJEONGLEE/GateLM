@@ -298,6 +298,29 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
+  it('uses disabled budget policy defaults for legacy Runtime Config documents', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as Partial<
+      ActiveRuntimeConfigResponseDto
+    >;
+    delete activeDocument.budgetPolicy;
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument as ActiveRuntimeConfigResponseDto, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.budget).toEqual({
+      enabled: false,
+      enforcementMode: 'disabled',
+      warningThresholdPercent: 80,
+    });
+  });
+
   it('reflects active budget policy in the RuntimeSnapshot execution view', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -329,6 +352,29 @@ describe('RuntimeConfigsService', () => {
       enforcementMode: 'block',
       warningThresholdPercent: 75,
     });
+  });
+
+  it('rejects partial stored budget policy documents', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.budgetPolicy = { enabled: true };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    await expect(
+      service.getActiveRuntimeSnapshot(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
   });
 
   it('disables semantic cache mode when exact cache is disabled', async () => {

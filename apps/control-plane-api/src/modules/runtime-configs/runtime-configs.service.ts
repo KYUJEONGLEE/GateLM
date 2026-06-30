@@ -1924,12 +1924,14 @@ export class RuntimeConfigsService {
       throw new ConflictException('Runtime Config document is invalid.');
     }
 
+    const runtimeDocument = value as Record<string, unknown>;
     const document = value as unknown as ActiveRuntimeConfigResponseDto;
 
     return {
       ...document,
-      budgetPolicy:
-        document.budgetPolicy ?? this.defaultRuntimeConfigBudgetPolicy(),
+      budgetPolicy: this.normalizeRuntimeConfigBudgetPolicy(
+        runtimeDocument,
+      ),
     };
   }
 
@@ -1957,6 +1959,44 @@ export class RuntimeConfigsService {
         ? budgetPolicy.enforcementMode !== 'disabled'
         : budgetPolicy.enforcementMode === 'disabled')
     );
+  }
+
+  private normalizeRuntimeConfigBudgetPolicy(
+    runtimeDocument: Record<string, unknown>,
+  ): RuntimeConfigBudgetPolicyResponseDto {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        runtimeDocument,
+        'budgetPolicy',
+      )
+    ) {
+      return this.defaultRuntimeConfigBudgetPolicy();
+    }
+
+    const budgetPolicy = runtimeDocument.budgetPolicy;
+    if (
+      !budgetPolicy ||
+      typeof budgetPolicy !== 'object' ||
+      Array.isArray(budgetPolicy)
+    ) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    const candidate = budgetPolicy as Record<string, unknown>;
+    const normalized: RuntimeConfigBudgetPolicyResponseDto = {
+      enabled:
+        candidate.enabled as RuntimeConfigBudgetPolicyResponseDto['enabled'],
+      enforcementMode:
+        candidate.enforcementMode as RuntimeConfigBudgetPolicyResponseDto['enforcementMode'],
+      warningThresholdPercent:
+        candidate.warningThresholdPercent as RuntimeConfigBudgetPolicyResponseDto['warningThresholdPercent'],
+    };
+
+    if (!this.isExecutableBudgetPolicy(normalized)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    return normalized;
   }
 
   private toInputJsonObject(
