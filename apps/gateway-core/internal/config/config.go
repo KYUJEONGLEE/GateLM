@@ -44,6 +44,9 @@ type Config struct {
 	DemoApplicationID        string
 	DemoAPIKeyID             string
 	DemoAppTokenID           string
+	ExpectedTenantID         string
+	ExpectedProjectID        string
+	ExpectedApplicationID    string
 	ReadinessTimeout         time.Duration
 	ProviderTimeout          time.Duration
 	MaxRequestBodyBytes      int64
@@ -92,6 +95,9 @@ func Load() Config {
 		DemoApplicationID:        envString("GATELM_DEMO_APPLICATION_ID", "00000000-0000-4000-8000-000000000300"),
 		DemoAPIKeyID:             envString("GATELM_DEMO_API_KEY_ID", "00000000-0000-4000-8000-000000000400"),
 		DemoAppTokenID:           envString("GATELM_DEMO_APP_TOKEN_ID", "00000000-0000-4000-8000-000000000500"),
+		ExpectedTenantID:         envString("GATEWAY_EXPECTED_TENANT_ID", ""),
+		ExpectedProjectID:        envString("GATEWAY_EXPECTED_PROJECT_ID", ""),
+		ExpectedApplicationID:    envString("GATEWAY_EXPECTED_APPLICATION_ID", ""),
 		ReadinessTimeout:         envDurationMillis("GATEWAY_READINESS_TIMEOUT_MS", 1000),
 		ProviderTimeout:          envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
 		MaxRequestBodyBytes:      envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),

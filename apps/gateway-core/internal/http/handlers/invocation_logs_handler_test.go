@@ -92,6 +92,26 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	}
 }
 
+func TestProjectLogsHandlerUsesTenantQueryOverride(t *testing.T) {
+	reader := &recordingProjectLogsReader{}
+	handler := ProjectLogsHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_live/logs?tenantId=tenant_live&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	req.SetPathValue("projectId", "project_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" {
+		t.Fatalf("expected query tenant and path project scope, got %+v", reader.filter)
+	}
+}
+
 func TestProjectLogsHandlerRejectsMissingRange(t *testing.T) {
 	handler := ProjectLogsHandler{
 		Reader:   &recordingProjectLogsReader{},
@@ -332,6 +352,36 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	}
 }
 
+func TestRequestDetailHandlerUsesTenantProjectQueryOverride(t *testing.T) {
+	reader := &recordingRequestDetailReader{
+		detail: invocationlog.RequestDetail{
+			RequestID:  "request_live",
+			TenantID:   "tenant_live",
+			ProjectID:  "project_live",
+			Status:     invocationlog.StatusSuccess,
+			HTTPStatus: http.StatusOK,
+			Masking:    invocationlog.MaskingFields{MaskingAction: "none"},
+		},
+	}
+	handler := RequestDetailHandler{
+		Reader:    reader,
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/llm-requests/request_live?tenantId=tenant_live&projectId=project_live", nil)
+	req.SetPathValue("requestId", "request_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" || reader.filter.RequestID != "request_live" {
+		t.Fatalf("expected query tenant/project and path request scope, got %+v", reader.filter)
+	}
+}
+
 func TestRequestDetailHandlerMapsNotFoundTo404(t *testing.T) {
 	handler := RequestDetailHandler{
 		Reader:    &recordingRequestDetailReader{err: invocationlog.ErrLogNotFound},
@@ -516,6 +566,25 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("response must not include forbidden field %q: %s", forbidden, body)
 		}
+	}
+}
+
+func TestDashboardOverviewHandlerUsesTenantQueryOverride(t *testing.T) {
+	reader := &recordingDashboardOverviewReader{}
+	handler := DashboardOverviewHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/overview?tenantId=tenant_live&projectId=project_live&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" {
+		t.Fatalf("expected query tenant/project dashboard scope, got %+v", reader.filter)
 	}
 }
 
