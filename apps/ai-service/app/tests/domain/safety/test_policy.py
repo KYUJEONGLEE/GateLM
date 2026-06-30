@@ -100,6 +100,144 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
                 self.assertEqual(decision.detected_count, 0)
                 self.assertIsNone(decision.redacted_prompt_preview)
 
+    def test_secret_block_detectors_block_high_confidence_values(self) -> None:
+        cases = [
+            (
+                "provider_api_key",
+                "[PROVIDER_API_KEY_REDACTED]",
+                "sk-redactedDemoProviderKey1234567890",
+                "Provider key sk-redactedDemoProviderKey1234567890 was pasted.",
+            ),
+            (
+                "cloud_access_key",
+                "[CLOUD_ACCESS_KEY_REDACTED]",
+                "AKIAREDACTEDDEMO1234",
+                "Cloud key AKIAREDACTEDDEMO1234 was pasted.",
+            ),
+            (
+                "github_token",
+                "[GITHUB_TOKEN_REDACTED]",
+                "ghp_redactedDemoToken1234567890",
+                "GitHub token ghp_redactedDemoToken1234567890 was pasted.",
+            ),
+            (
+                "slack_token",
+                "[SLACK_TOKEN_REDACTED]",
+                "xoxb-redacted-demo-token-1234567890",
+                "Slack token xoxb-redacted-demo-token-1234567890 was pasted.",
+            ),
+            (
+                "database_url",
+                "[DATABASE_URL_REDACTED]",
+                "postgres://demo_user:demoPass123456@db.local/app",
+                "DATABASE_URL=postgres://demo_user:demoPass123456@db.local/app",
+            ),
+            (
+                "webhook_url",
+                "[WEBHOOK_URL_REDACTED]",
+                "https://hooks.slack.com/services/T00000000/B00000000/redactedWebhookToken1234567890",
+                "Webhook https://hooks.slack.com/services/T00000000/B00000000/redactedWebhookToken1234567890",
+            ),
+            (
+                "password_assignment",
+                "[PASSWORD_REDACTED]",
+                "demoPassword123456!",
+                "password=demoPassword123456!",
+            ),
+            (
+                "session_cookie",
+                "[SESSION_COOKIE_REDACTED]",
+                "demoSessionToken1234567890abcdef",
+                "Cookie: session=demoSessionToken1234567890abcdef",
+            ),
+        ]
+
+        for detector_type, placeholder, raw_value, prompt in cases:
+            with self.subTest(detector_type=detector_type):
+                assert_blocked_detector(self, prompt, detector_type, placeholder, raw_value)
+
+    def test_secret_block_detectors_ignore_low_confidence_values(self) -> None:
+        cases = {
+            "provider_api_key": [
+                "sketch-123",
+                "hf model name",
+                "sk-demo",
+            ],
+            "cloud_access_key": [
+                "asia region",
+                "akia",
+                "cloud_access_key=short_demo",
+            ],
+            "github_token": [
+                "github token required",
+                "ghp_short",
+                "github_pat_short",
+            ],
+            "slack_token": [
+                "xoxb-short",
+                "slack token xoxb missing",
+            ],
+            "database_url": [
+                "postgres://localhost/app",
+                "postgres://demo_user@localhost/app",
+            ],
+            "webhook_url": [
+                "https://api.github.com/repos/acme/demo/hooks/123",
+                "https://discord.com/api/webhooks/123/short",
+            ],
+            "password_assignment": [
+                "password is required",
+                "password=short",
+                "password=internal note",
+            ],
+            "session_cookie": [
+                "Cookie: theme=dark",
+                "Set-Cookie: session=short",
+            ],
+        }
+
+        for detector_type, prompts in cases.items():
+            with self.subTest(detector_type=detector_type):
+                assert_ignored_prompts(self, detector_type, prompts)
+
+    def test_structural_secret_detectors_win_over_inner_token_matches(self) -> None:
+        jwt_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.synthetic_signature_1234567890"
+        cases = [
+            (
+                "session_cookie",
+                "Cookie: access_token=test_access_token_redacted_demo_1234567890abcdef",
+                [
+                    detector("session_cookie", "block", "[SESSION_COOKIE_REDACTED]"),
+                    detector("api_key", "block", "[API_KEY_REDACTED]"),
+                ],
+            ),
+            (
+                "database_url",
+                "postgres://demo_user:password123456@db.local/app",
+                [
+                    detector("database_url", "block", "[DATABASE_URL_REDACTED]"),
+                    detector("password_assignment", "block", "[PASSWORD_REDACTED]"),
+                ],
+            ),
+            (
+                "authorization_header",
+                f"Authorization: Bearer {jwt_token}",
+                [
+                    detector("authorization_header", "block", "[AUTHORIZATION_HEADER_REDACTED]"),
+                    detector("jwt", "block", "[JWT_REDACTED]"),
+                ],
+            ),
+        ]
+
+        evaluator = HeuristicSafetyEvaluator()
+        for expected_type, prompt, detectors in cases:
+            with self.subTest(expected_type=expected_type):
+                decision = evaluator.evaluate(remote_context(), remote_input(prompt, detectors))
+
+                self.assertEqual(decision.action, "blocked")
+                self.assertEqual(decision.detected_types, (expected_type,))
+                self.assertEqual(decision.detected_count, 1)
+
     def test_disabled_detector_is_ignored(self) -> None:
         evaluator = HeuristicSafetyEvaluator()
         decision = evaluator.evaluate(
@@ -176,6 +314,43 @@ def remote_input(prompt_text: str, detectors: list[SafetyDetector]) -> RemoteSaf
         requestedModel="auto",
         detectors=detectors,
     )
+
+
+def assert_blocked_detector(
+    test_case: unittest.TestCase,
+    prompt: str,
+    detector_type: str,
+    placeholder: str,
+    raw_value: str,
+) -> None:
+    evaluator = HeuristicSafetyEvaluator()
+    decision = evaluator.evaluate(
+        remote_context(),
+        remote_input(prompt, [detector(detector_type, "block", placeholder)]),
+    )
+
+    test_case.assertEqual(decision.action, "blocked")
+    test_case.assertEqual(decision.detected_types, (detector_type,))
+    test_case.assertEqual(decision.detected_count, 1)
+    test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")
+    test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
+
+
+def assert_ignored_prompts(
+    test_case: unittest.TestCase,
+    detector_type: str,
+    prompts: list[str],
+) -> None:
+    evaluator = HeuristicSafetyEvaluator()
+    for prompt in prompts:
+        decision = evaluator.evaluate(
+            remote_context(),
+            remote_input(prompt, [detector(detector_type, "block", f"[{detector_type.upper()}_REDACTED]")]),
+        )
+
+        test_case.assertEqual(decision.action, "none", prompt)
+        test_case.assertEqual(decision.detected_count, 0, prompt)
+        test_case.assertIsNone(decision.redacted_prompt_preview, prompt)
 
 
 def detector(
