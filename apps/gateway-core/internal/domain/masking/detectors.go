@@ -7,6 +7,14 @@ import (
 	"unicode"
 )
 
+var documentationAddressPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("2001:db8::/32"),
+}
+
 type RegexDetector struct {
 	detectorType string
 	pattern      *regexp.Regexp
@@ -358,9 +366,10 @@ func isDigitByte(value byte) bool {
 
 func digitsOnly(value string) string {
 	var builder strings.Builder
-	for _, char := range value {
-		if unicode.IsDigit(char) {
-			builder.WriteRune(char)
+	for index := 0; index < len(value); index++ {
+		char := value[index]
+		if isDigitByte(char) {
+			builder.WriteByte(char)
 		}
 	}
 	return builder.String()
@@ -402,20 +411,10 @@ func isPublicIPAddress(value string) bool {
 }
 
 func isDocumentationAddress(addr netip.Addr) bool {
-	for _, prefix := range documentationAddressPrefixes() {
+	for _, prefix := range documentationAddressPrefixes {
 		if prefix.Contains(addr) {
 			return true
 		}
 	}
 	return false
-}
-
-func documentationAddressPrefixes() []netip.Prefix {
-	return []netip.Prefix{
-		netip.MustParsePrefix("192.0.2.0/24"),
-		netip.MustParsePrefix("198.51.100.0/24"),
-		netip.MustParsePrefix("203.0.113.0/24"),
-		netip.MustParsePrefix("100.64.0.0/10"),
-		netip.MustParsePrefix("2001:db8::/32"),
-	}
 }
