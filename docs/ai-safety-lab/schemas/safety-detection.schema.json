@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/ai-safety-lab/safety-detection.schema.json",
+  "title": "GateLM AI Safety Lab Safety Detection",
+  "description": "Sanitized Lab/eval detection result. This schema intentionally excludes raw detected values, raw prompt fragments, raw offsets, and raw spans.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "detectorType",
+    "source",
+    "action",
+    "mode"
+  ],
+  "properties": {
+    "detectorType": {
+      "description": "GateLM-normalized detector category label. The schema keeps this open by pattern rather than closing detector types as an enum.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "source": {
+      "description": "Sanitized detector or adapter source label.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_./-]*$"
+    },
+    "action": {
+      "description": "Action candidate after policy evaluation.",
+      "enum": [
+        "allow",
+        "redact",
+        "block"
+      ]
+    },
+    "mode": {
+      "description": "Whether this detection affected enforcement or was collected as shadow evidence.",
+      "enum": [
+        "enforce",
+        "shadow"
+      ]
+    },
+    "confidence": {
+      "description": "Lab/eval-only model confidence. Gateway/API/UI summaries should not expose this by default.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "modelVersion": {
+      "description": "Sanitized model or detector version label. This must not contain raw prompt or detected content.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
+    },
+    "modelLabel": {
+      "description": "Raw model taxonomy label such as private_email. This is a sanitized label, not a detected value.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "modelId": {
+      "description": "Model id such as openai/privacy-filter.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_./:-]*$"
+    },
+    "runtime": {
+      "enum": [
+        "cpu_only"
+      ]
+    }
+  }
+}

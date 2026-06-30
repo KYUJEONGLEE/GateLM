@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/ai-safety-lab/safety-summary.schema.json",
+  "title": "GateLM AI Safety Lab Safety Summary",
+  "description": "Sanitized safety summary candidate for Lab evidence and future read models. It must not include raw detected values, raw prompt fragments, raw offsets, raw spans, credentials, or prompt hashes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "outcome",
+    "detectorSummary"
+  ],
+  "properties": {
+    "outcome": {
+      "enum": [
+        "passed",
+        "redacted",
+        "blocked",
+        "not_checked"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "enforce",
+        "shadow",
+        "mixed"
+      ]
+    },
+    "redactedPromptPreview": {
+      "description": "Optional sanitized preview containing placeholders only. It must not contain raw sensitive values or prompt fragments.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "detectorSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detectedCount",
+        "detectorCategories"
+      ],
+      "properties": {
+        "detectedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detectorCategories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

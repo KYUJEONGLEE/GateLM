@@ -30,6 +30,64 @@ POST /internal/v1/safety/evaluate
 
 The endpoint accepts `remote-safety.v1` requests and returns non-authoritative safety metadata. It must not store raw prompt, raw response, credentials, Authorization headers, or raw detected values.
 
+## Optional NER / Token Classification Detector
+
+The safety lab includes an optional local token-classification adapter for sidecar experiments:
+
+```text
+prompt
+-> regex detectors
+-> PrivacyFilterAdapter.detect()
+-> GateLM detector type normalization
+-> overlap merge / dedupe
+-> policy evaluator
+-> redaction preview
+```
+
+Install ML dependencies only in a local sidecar image or experiment environment:
+
+```bash
+cd apps/ai-service
+python -m pip install -e ".[ml,test]"
+```
+
+`PrivacyFilterAdapter` lazy-loads `transformers.pipeline(task="token-classification")` and is not wired into the default evaluator unless it is explicitly injected. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
+
+## AI Safety Detector Sidecar
+
+The local detector sidecar endpoint is available at:
+
+```text
+POST /internal/ai-safety/v1/detect
+```
+
+It uses the `ai-safety-detector.v1` draft contract and returns `redactedPrompt`, `detectorSummary`, and sanitized `detections`. The endpoint is `shadow` mode by default and uses a CPU-only local `openai/privacy-filter` adapter. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+
+Example request shape:
+
+```json
+{
+  "contractVersion": "ai-safety-detector.v1",
+  "mode": "shadow",
+  "input": {
+    "promptText": "Use synthetic text only.",
+    "locale": "en-US"
+  },
+  "detectorConfig": {
+    "detectorSet": "privacy-filter-default",
+    "returnConfidence": true
+  }
+}
+```
+
+Run locally with ML dependencies installed:
+
+```bash
+cd apps/ai-service
+python -m pip install -e ".[ml,test]"
+python -m app.main
+```
+
 ## Safety Eval Runner
 
 Run detector-output fixture evaluation:

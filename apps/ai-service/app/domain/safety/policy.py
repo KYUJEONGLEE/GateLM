@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import Counter
 
 from app.domain.safety.decision import (
@@ -71,6 +72,7 @@ def effective_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
         key=lambda signal: (
             -_action_rank(signal.action),
             signal.priority,
+            -_confidence_rank(signal.confidence),
             -signal.length,
             signal.start,
         )
@@ -114,6 +116,16 @@ def _action_rank(action: str) -> int:
     if action == "redact":
         return 1
     return 0
+
+
+def _confidence_rank(confidence: float) -> float:
+    if not math.isfinite(confidence):
+        return 0
+    if confidence < 0:
+        return 0
+    if confidence > 1:
+        return 1
+    return confidence
 
 
 def _overlaps(left: SafetySignal, right: SafetySignal) -> bool:
