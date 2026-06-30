@@ -16,7 +16,9 @@ import {
   ActiveRuntimeConfigResponseDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
+  RollbackRuntimeConfigDto,
   RuntimeConfigDraftResponseDto,
+  RuntimeConfigHistoryResponseDto,
   RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
 } from './dto/runtime-config.dto';
@@ -32,6 +34,13 @@ export class RuntimeConfigsController {
     @Param('applicationId', ParseUUIDPipe) applicationId: string,
   ): Promise<ActiveRuntimeConfigResponseDto> {
     return this.runtimeConfigsService.getActiveRuntimeConfig(applicationId);
+  }
+
+  @Get('applications/:applicationId/runtime-config/history')
+  async listRuntimeConfigHistory(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+  ): Promise<RuntimeConfigHistoryResponseDto> {
+    return this.runtimeConfigsService.listRuntimeConfigHistory(applicationId);
   }
 
   @Get('applications/:applicationId/runtime-snapshot/active')
@@ -71,6 +80,18 @@ export class RuntimeConfigsController {
     @Body() body: PublishRuntimeConfigDto,
   ): Promise<ActiveRuntimeConfigResponseDto> {
     return this.runtimeConfigsService.publishRuntimeConfig(
+      applicationId,
+      body,
+    );
+  }
+
+  @Post('applications/:applicationId/runtime-config/rollback')
+  @HttpCode(HttpStatus.OK)
+  async rollbackRuntimeConfig(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Body() body: RollbackRuntimeConfigDto,
+  ): Promise<ActiveRuntimeConfigResponseDto> {
+    return this.runtimeConfigsService.rollbackRuntimeConfig(
       applicationId,
       body,
     );

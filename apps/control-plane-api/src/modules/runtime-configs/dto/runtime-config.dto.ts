@@ -296,6 +296,23 @@ export class PublishRuntimeConfigDto {
   effectiveAt?: string;
 }
 
+export class RollbackRuntimeConfigDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  targetConfigVersion!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  rollbackConfigVersion?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  effectiveAt?: string;
+}
+
 export interface RuntimeConfigCredentialPreviewDto {
   prefix: string;
   last4: string;
@@ -636,4 +653,21 @@ export interface RuntimeConfigDraftResponseDto {
   createdAt: string;
   updatedAt: string;
   runtimeConfig: ActiveRuntimeConfigResponseDto;
+}
+
+export interface RuntimeConfigHistoryItemDto {
+  id: string;
+  configVersion: string;
+  configHash: string;
+  publishState: RuntimeConfigPublishStateDto;
+  effectiveAt: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canRollback: boolean;
+}
+
+export interface RuntimeConfigHistoryResponseDto {
+  applicationId: string;
+  items: RuntimeConfigHistoryItemDto[];
 }

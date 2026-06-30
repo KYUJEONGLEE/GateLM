@@ -36,6 +36,7 @@ describe('RuntimeConfigsService', () => {
       providerConnection: { findMany: jest.Mock };
       runtimeConfig: {
         findFirst: jest.Mock;
+        findMany: jest.Mock;
         findUnique: jest.Mock;
         create: jest.Mock;
         update: jest.Mock;
@@ -60,6 +61,7 @@ describe('RuntimeConfigsService', () => {
       },
       runtimeConfig: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
@@ -185,6 +187,211 @@ describe('RuntimeConfigsService', () => {
     });
     expect(result.providers[0]?.secretRef).toBe('secret/provider/mock');
     expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('lists runtime config history without returning full runtime documents', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    const supersededDocument = {
+      ...activeRuntimeConfigDocument(),
+      configVersion: 'runtime_config_previous',
+      configHash: 'd'.repeat(64),
+    };
+    const draftDocument = {
+      ...activeRuntimeConfigDocument(),
+      configVersion: 'draft',
+      configHash: 'e'.repeat(64),
+      publishState: 'draft' as const,
+    };
+    prisma.runtimeConfig.findMany.mockResolvedValue([
+      runtimeConfigRecord(activeDocument, {
+        id: '00000000-0000-4000-8000-000000000701',
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+      runtimeConfigRecord(supersededDocument, {
+        id: '00000000-0000-4000-8000-000000000702',
+        publishState: RuntimeConfigPublishState.SUPERSEDED,
+        publishedAt: new Date('2026-06-27T01:00:00.000Z'),
+      }),
+      runtimeConfigRecord(draftDocument as ActiveRuntimeConfigResponseDto, {
+        id: '00000000-0000-4000-8000-000000000703',
+        publishState: RuntimeConfigPublishState.DRAFT,
+        publishedAt: null,
+      }),
+    ]);
+
+    const result = await service.listRuntimeConfigHistory(applicationId);
+
+    expect(prisma.runtimeConfig.findMany).toHaveBeenCalledWith({
+      where: { applicationId },
+      orderBy: [
+        { publishedAt: 'desc' },
+        { updatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+    expect(result).toEqual({
+      applicationId,
+      items: [
+        expect.objectContaining({
+          configVersion: 'runtime_config_test_001',
+          publishState: 'active',
+          canRollback: false,
+        }),
+        expect.objectContaining({
+          configVersion: 'runtime_config_previous',
+          publishState: 'superseded',
+          canRollback: true,
+        }),
+        expect.objectContaining({
+          configVersion: 'draft',
+          publishState: 'draft',
+          publishedAt: null,
+          canRollback: false,
+        }),
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('providers');
+  });
+
+  it('rolls back by creating a new active runtime config from a previous published version', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const targetDocument = {
+      ...activeRuntimeConfigDocument(),
+      configVersion: 'runtime_config_previous',
+      configHash: 'd'.repeat(64),
+      budgetPolicy: {
+        enabled: true,
+        enforcementMode: 'block' as const,
+        warningThresholdPercent: 70,
+      },
+    };
+    const tx = {
+      runtimeConfig: {
+        updateMany: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+    prisma.runtimeConfig.findUnique.mockResolvedValue(
+      runtimeConfigRecord(targetDocument, {
+        id: '00000000-0000-4000-8000-000000000702',
+        configVersion: 'runtime_config_previous',
+        publishState: RuntimeConfigPublishState.SUPERSEDED,
+        publishedAt: new Date('2026-06-27T01:00:00.000Z'),
+      }),
+    );
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
+
+    const result = await service.rollbackRuntimeConfig(applicationId, {
+      targetConfigVersion: 'runtime_config_previous',
+      rollbackConfigVersion: 'runtime_config_rollback_manual',
+    });
+
+    expect(tx.runtimeConfig.updateMany).toHaveBeenCalledWith({
+      where: {
+        applicationId,
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      },
+      data: {
+        publishState: RuntimeConfigPublishState.ROLLED_BACK,
+      },
+    });
+    expect(tx.runtimeConfig.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          applicationId,
+          configVersion: 'runtime_config_rollback_manual',
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        }),
+      }),
+    );
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        isolationLevel: 'Serializable',
+      }),
+    );
+    const createdDocument = tx.runtimeConfig.create.mock.calls[0][0].data
+      .document as ActiveRuntimeConfigResponseDto;
+    expect(result.configVersion).toBe('runtime_config_rollback_manual');
+    expect(result.effectiveAt).toBe(now.toISOString());
+    expect(result.budgetPolicy).toEqual({
+      enabled: true,
+      enforcementMode: 'block',
+      warningThresholdPercent: 70,
+    });
+    expect(createdDocument.configVersion).toBe(
+      'runtime_config_rollback_manual',
+    );
+    expect(createdDocument.configHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(createdDocument)).not.toContain('secretHash');
+  });
+
+  it('rejects rollback to a draft or current active runtime config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValueOnce(
+      runtimeConfigRecord(
+        { ...activeRuntimeConfigDocument(), publishState: 'draft' },
+        {
+          publishState: RuntimeConfigPublishState.DRAFT,
+        },
+      ),
+    );
+    prisma.runtimeConfig.findUnique.mockResolvedValueOnce(
+      runtimeConfigRecord(activeRuntimeConfigDocument(), {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      }),
+    );
+
+    await expect(
+      service.rollbackRuntimeConfig(applicationId, {
+        targetConfigVersion: 'draft',
+      }),
+    ).rejects.toThrow(
+      'Runtime Config rollback target must be a previous published version.',
+    );
+    await expect(
+      service.rollbackRuntimeConfig(applicationId, {
+        targetConfigVersion: 'runtime_config_test_001',
+      }),
+    ).rejects.toThrow(
+      'Runtime Config rollback target must be a previous published version.',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects rollback when the target runtime config document is not executable', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const targetDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    targetDocument.configVersion = 'runtime_config_broken_previous';
+    targetDocument.budgetPolicy = { enabled: true };
+    prisma.runtimeConfig.findUnique.mockResolvedValue(
+      runtimeConfigRecord(
+        targetDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          configVersion: 'runtime_config_broken_previous',
+          publishState: RuntimeConfigPublishState.SUPERSEDED,
+          publishedAt: new Date('2026-06-27T01:00:00.000Z'),
+        },
+      ),
+    );
+
+    await expect(
+      service.rollbackRuntimeConfig(applicationId, {
+        targetConfigVersion: 'runtime_config_broken_previous',
+      }),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('rejects publish when a selected provider is missing required credential binding', async () => {

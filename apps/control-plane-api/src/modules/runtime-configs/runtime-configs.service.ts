@@ -22,6 +22,7 @@ import {
   ActiveRuntimeConfigResponseDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
+  RollbackRuntimeConfigDto,
   ResourceStatusDto,
   RuntimeConfigBudgetPolicyResponseDto,
   RuntimeConfigCachePolicyResponseDto,
@@ -29,6 +30,8 @@ import {
   RuntimeConfigCredentialRefDto,
   RuntimeConfigDraftResponseDto,
   RuntimeConfigHashingDto,
+  RuntimeConfigHistoryItemDto,
+  RuntimeConfigHistoryResponseDto,
   RuntimeConfigModelResponseDto,
   RuntimeConfigPricingRuleResponseDto,
   RuntimeConfigProviderDto,
@@ -85,6 +88,27 @@ export class RuntimeConfigsService {
     });
 
     return document;
+  }
+
+  async listRuntimeConfigHistory(
+    applicationId: string,
+  ): Promise<RuntimeConfigHistoryResponseDto> {
+    await this.getApplicationContextOrThrow(applicationId);
+    const runtimeConfigs = await this.prisma.runtimeConfig.findMany({
+      where: { applicationId },
+      orderBy: [
+        { publishedAt: 'desc' },
+        { updatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    return {
+      applicationId,
+      items: runtimeConfigs.map((runtimeConfig) =>
+        this.toRuntimeConfigHistoryItem(runtimeConfig),
+      ),
+    };
   }
 
   async getActiveRuntimeSnapshot(
@@ -312,6 +336,108 @@ export class RuntimeConfigsService {
       if (this.isConcurrentWriteError(error)) {
         throw new ConflictException(
           'Runtime Config publish conflicted. Retry the request.',
+        );
+      }
+
+      throw error;
+    }
+
+    return activeDocument;
+  }
+
+  async rollbackRuntimeConfig(
+    applicationId: string,
+    dto: RollbackRuntimeConfigDto,
+  ): Promise<ActiveRuntimeConfigResponseDto> {
+    const now = new Date();
+    const targetConfigVersion = dto.targetConfigVersion?.trim();
+    if (!targetConfigVersion) {
+      throw new ConflictException(
+        'Runtime Config rollback target version is required.',
+      );
+    }
+    const target = await this.prisma.runtimeConfig.findUnique({
+      where: {
+        applicationId_configVersion: {
+          applicationId,
+          configVersion: targetConfigVersion,
+        },
+      },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Runtime Config rollback target not found.');
+    }
+    if (
+      target.publishState !== RuntimeConfigPublishState.SUPERSEDED &&
+      target.publishState !== RuntimeConfigPublishState.ROLLED_BACK
+    ) {
+      throw new ConflictException(
+        'Runtime Config rollback target must be a previous published version.',
+      );
+    }
+
+    const targetDocument = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(target.document),
+    );
+    const rollbackConfigVersion =
+      dto.rollbackConfigVersion?.trim() ||
+      this.createRollbackConfigVersion(target.configVersion, now);
+    if (rollbackConfigVersion === target.configVersion) {
+      throw new ConflictException(
+        'Rollback Runtime Config version must differ from the target version.',
+      );
+    }
+
+    const activeDocument = await this.buildRuntimeConfigDocument({
+      applicationId,
+      configVersion: rollbackConfigVersion,
+      dto: this.toDraftDto(targetDocument, dto.effectiveAt ?? now.toISOString()),
+      publishState: 'active',
+      now,
+      publishedAt: now,
+    });
+
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          await tx.runtimeConfig.updateMany({
+            where: {
+              applicationId,
+              publishState: RuntimeConfigPublishState.ACTIVE,
+            },
+            data: {
+              publishState: RuntimeConfigPublishState.ROLLED_BACK,
+            },
+          });
+
+          await tx.runtimeConfig.create({
+            data: {
+              tenantId: activeDocument.tenantId,
+              projectId: activeDocument.projectId,
+              applicationId: activeDocument.applicationId,
+              configVersion: activeDocument.configVersion,
+              configHash: activeDocument.configHash,
+              publishState: RuntimeConfigPublishState.ACTIVE,
+              document: this.toInputJsonObject(activeDocument),
+              effectiveAt: this.toDate(activeDocument.effectiveAt),
+              publishedAt: this.toDate(activeDocument.publishedAt),
+            },
+          });
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException(
+          'Runtime Config version already exists for this application.',
+        );
+      }
+      if (this.isConcurrentWriteError(error)) {
+        throw new ConflictException(
+          'Runtime Config rollback conflicted. Retry the request.',
         );
       }
 
@@ -1917,6 +2043,26 @@ export class RuntimeConfigsService {
     };
   }
 
+  private toRuntimeConfigHistoryItem(
+    runtimeConfig: RuntimeConfig,
+  ): RuntimeConfigHistoryItemDto {
+    return {
+      id: runtimeConfig.id,
+      configVersion: runtimeConfig.configVersion,
+      configHash: runtimeConfig.configHash,
+      publishState: this.toRuntimeConfigPublishState(
+        runtimeConfig.publishState,
+      ),
+      effectiveAt: runtimeConfig.effectiveAt?.toISOString() ?? null,
+      publishedAt: runtimeConfig.publishedAt?.toISOString() ?? null,
+      createdAt: runtimeConfig.createdAt.toISOString(),
+      updatedAt: runtimeConfig.updatedAt.toISOString(),
+      canRollback:
+        runtimeConfig.publishState === RuntimeConfigPublishState.SUPERSEDED ||
+        runtimeConfig.publishState === RuntimeConfigPublishState.ROLLED_BACK,
+    };
+  }
+
   private toRuntimeConfigDocument(
     value: Prisma.JsonValue,
   ): ActiveRuntimeConfigResponseDto {
@@ -2066,6 +2212,12 @@ export class RuntimeConfigsService {
     return status.toLowerCase() as ResourceStatusDto;
   }
 
+  private toRuntimeConfigPublishState(
+    status: RuntimeConfigPublishState,
+  ): RuntimeConfigHistoryItemDto['publishState'] {
+    return status.toLowerCase() as RuntimeConfigHistoryItemDto['publishState'];
+  }
+
   private toPricingRuleId(provider: string, model: string): string {
     return `price_${provider}_${model}_v1`.replace(/[^a-zA-Z0-9_-]/g, '_');
   }
@@ -2076,6 +2228,16 @@ export class RuntimeConfigsService {
 
   private createPublishedConfigVersion(now: Date): string {
     return `runtime_config_${now.getTime()}`;
+  }
+
+  private createRollbackConfigVersion(
+    targetConfigVersion: string,
+    now: Date,
+  ): string {
+    const safeTarget = targetConfigVersion
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 80);
+    return `runtime_config_rollback_${safeTarget}_${now.getTime()}`;
   }
 
   private defaultSafetyDetectors(): RuntimeConfigSafetyDetectorResponseDto[] {
