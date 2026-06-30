@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 )
 
@@ -185,5 +186,42 @@ func TestBuildTerminalLogCarriesRateLimitDecisionWithoutProviderLatency(t *testi
 	metadataDecision, ok := log.Metadata["rateLimitDecision"].(ratelimit.Decision)
 	if !ok || metadataDecision.Reason != ratelimit.ReasonLimitExceeded {
 		t.Fatalf("expected rate limit decision metadata, got %#v", log.Metadata)
+	}
+}
+
+func TestBuildTerminalLogCarriesBudgetBlockedDecisionBeforeProviderPath(t *testing.T) {
+	startedAt := time.Date(2026, 6, 30, 9, 0, 0, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:      "request_budget_blocked",
+		ApplicationID:  "app_demo",
+		Status:         StatusBlocked,
+		HTTPStatus:     403,
+		ErrorCode:      "budget_blocked",
+		ErrorStage:     "check_budget",
+		CacheStatus:    CacheStatusBypass,
+		CacheType:      CacheTypeNone,
+		BudgetScope:    budget.DefaultScope("app_demo"),
+		BudgetDecision: &budget.Decision{Allowed: false, Outcome: budget.OutcomeBlocked, Reason: "monthly_limit_exceeded"},
+		StartedAt:      startedAt,
+		CompletedAt:    startedAt.Add(2 * time.Millisecond),
+	})
+
+	if log.BudgetDecision == nil || log.BudgetDecision.Outcome != budget.OutcomeBlocked {
+		t.Fatalf("expected budget decision, got %#v", log.BudgetDecision)
+	}
+	if log.ProviderLatencyMs != nil {
+		t.Fatalf("budget blocked log must not include provider latency, got %#v", log.ProviderLatencyMs)
+	}
+	if log.DomainOutcomes.Budget.Outcome != budget.OutcomeBlocked ||
+		log.DomainOutcomes.Cache.Outcome != "bypassed" ||
+		log.DomainOutcomes.Safety.Outcome != "not_checked" ||
+		log.DomainOutcomes.Routing.Outcome != "not_checked" ||
+		log.DomainOutcomes.Provider.Outcome != "not_called" ||
+		log.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("unexpected budget blocked outcomes: %+v", log.DomainOutcomes)
+	}
+	metadataDecision, ok := log.Metadata["budgetDecision"].(budget.Decision)
+	if !ok || metadataDecision.Outcome != budget.OutcomeBlocked {
+		t.Fatalf("expected budget decision metadata, got %#v", log.Metadata)
 	}
 }

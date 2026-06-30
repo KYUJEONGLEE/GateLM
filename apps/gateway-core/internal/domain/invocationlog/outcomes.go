@@ -366,7 +366,7 @@ func safetyOutcome(log TerminalLog) SafetyOutcome {
 		outcome = "blocked"
 		action = "blocked"
 	}
-	if isPreSafetyAuthOrRateLimit(log) {
+	if isPreSafetyTerminal(log) {
 		outcome = "not_checked"
 		action = ""
 	}
@@ -500,8 +500,14 @@ func isPreSafetyAuthOrRateLimit(log TerminalLog) bool {
 		log.Status == StatusRateLimited
 }
 
-func isPreRoutingTerminal(log TerminalLog) bool {
+func isPreSafetyTerminal(log TerminalLog) bool {
 	return isPreSafetyAuthOrRateLimit(log) ||
+		strings.TrimSpace(log.ErrorCode) == "budget_blocked" ||
+		strings.TrimSpace(log.ErrorStage) == "check_budget"
+}
+
+func isPreRoutingTerminal(log TerminalLog) bool {
+	return isPreSafetyTerminal(log) ||
 		strings.TrimSpace(log.ErrorCode) == "sensitive_data_blocked"
 }
 

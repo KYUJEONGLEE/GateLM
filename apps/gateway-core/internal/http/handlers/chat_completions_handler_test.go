@@ -16,6 +16,7 @@ import (
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
@@ -28,6 +29,7 @@ import (
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
 	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/ports"
 )
@@ -1821,6 +1823,65 @@ func TestChatCompletionsHandlerBypassesCacheForBlockedRequestBeforeKeyBuilderAnd
 	}
 }
 
+func TestChatCompletionsHandlerBudgetBlockStopsBeforeCacheRoutingAndProvider(t *testing.T) {
+	chatCalls := 0
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:must-not-build"}
+	cacheStore := &recordingExactCacheStore{}
+	preflight := &fakeGatewayPipeline{}
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := pipeline.New(budgetstage.NewStage(handlerBudgetChecker{decision: budget.Decision{
+		Allowed: false,
+		Outcome: budget.OutcomeBlocked,
+		Reason:  "monthly_limit_exceeded",
+	}}))
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		PreProviderPipeline:   preflight,
+		ExactCacheStore:       cacheStore,
+		ExactCacheKeyBuilder:  keyBuilder,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "short prompt"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("budget block must not call provider, got %d provider calls", chatCalls)
+	}
+	if preflight.calls != 0 {
+		t.Fatalf("budget block must stop before pre-provider pipeline, got %d calls", preflight.calls)
+	}
+	if keyBuilder.calls != 0 || cacheStore.getCalls != 0 || cacheStore.setCalls != 0 {
+		t.Fatalf("budget block must bypass key builder and cache store, got key=%d get=%d set=%d", keyBuilder.calls, cacheStore.getCalls, cacheStore.setCalls)
+	}
+	if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "bypass" {
+		t.Fatalf("expected cache bypass header, got %q", got)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.DomainOutcomes.Budget.Outcome != budget.OutcomeBlocked ||
+		logged.DomainOutcomes.Cache.Outcome != "bypassed" ||
+		logged.DomainOutcomes.Provider.Outcome != "not_called" ||
+		logged.DomainOutcomes.Routing.Outcome != "not_checked" {
+		t.Fatalf("unexpected budget blocked domain outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
 func TestChatCompletionsHandlerPreservesCacheMissAndCallsProvider(t *testing.T) {
 	chatCalls := 0
 	preflight := &fakeGatewayPipeline{
@@ -2608,6 +2669,18 @@ func (p *fakeGatewayPipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 		p.mutate(gatewayCtx)
 	}
 	return p.err
+}
+
+type handlerBudgetChecker struct {
+	decision budget.Decision
+	err      error
+}
+
+func (c handlerBudgetChecker) Check(_ context.Context, req budget.Request) (budget.Decision, error) {
+	decision := c.decision
+	decision.Scope = req.Scope
+	decision.Policy = req.Policy
+	return decision, c.err
 }
 
 func withTestAuth(handler *ChatCompletionsHandler) {
