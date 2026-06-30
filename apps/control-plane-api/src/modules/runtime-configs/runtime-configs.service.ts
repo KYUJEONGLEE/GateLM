@@ -30,6 +30,7 @@ import {
   RuntimeConfigCredentialRefDto,
   RuntimeConfigDraftResponseDto,
   RuntimeConfigHashingDto,
+  RuntimeConfigHistoryDetailResponseDto,
   RuntimeConfigHistoryItemDto,
   RuntimeConfigHistoryResponseDto,
   RuntimeConfigModelResponseDto,
@@ -118,6 +119,57 @@ export class RuntimeConfigsService {
       items: runtimeConfigs.map((runtimeConfig) =>
         this.toRuntimeConfigHistoryItem(runtimeConfig),
       ),
+    };
+  }
+
+  async getRuntimeConfigHistoryDetail(
+    applicationId: string,
+    configVersion: string,
+  ): Promise<RuntimeConfigHistoryDetailResponseDto> {
+    await this.getApplicationContextOrThrow(applicationId);
+    const requestedConfigVersion = configVersion.trim();
+    if (!requestedConfigVersion) {
+      throw new NotFoundException('Runtime Config history item not found.');
+    }
+
+    const runtimeConfig = await this.prisma.runtimeConfig.findUnique({
+      where: {
+        applicationId_configVersion: {
+          applicationId,
+          configVersion: requestedConfigVersion,
+        },
+      },
+      select: {
+        id: true,
+        configVersion: true,
+        configHash: true,
+        publishState: true,
+        document: true,
+        effectiveAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!runtimeConfig) {
+      throw new NotFoundException('Runtime Config history item not found.');
+    }
+
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
+    this.assertNoForbiddenRuntimeConfigKeys(document);
+
+    return {
+      applicationId,
+      item: this.toRuntimeConfigHistoryItem(runtimeConfig),
+      runtimeConfig: {
+        ...document,
+        publishState: this.toRuntimeConfigPublishState(
+          runtimeConfig.publishState,
+        ),
+      },
     };
   }
 

@@ -671,3 +671,9 @@ export interface RuntimeConfigHistoryResponseDto {
   applicationId: string;
   items: RuntimeConfigHistoryItemDto[];
 }
+
+export interface RuntimeConfigHistoryDetailResponseDto {
+  applicationId: string;
+  item: RuntimeConfigHistoryItemDto;
+  runtimeConfig: ActiveRuntimeConfigResponseDto;
+}

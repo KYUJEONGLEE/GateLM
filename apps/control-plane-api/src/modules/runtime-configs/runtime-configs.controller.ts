@@ -18,6 +18,7 @@ import {
   ProviderCatalogResponseDto,
   RollbackRuntimeConfigDto,
   RuntimeConfigDraftResponseDto,
+  RuntimeConfigHistoryDetailResponseDto,
   RuntimeConfigHistoryResponseDto,
   RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
@@ -41,6 +42,17 @@ export class RuntimeConfigsController {
     @Param('applicationId', ParseUUIDPipe) applicationId: string,
   ): Promise<RuntimeConfigHistoryResponseDto> {
     return this.runtimeConfigsService.listRuntimeConfigHistory(applicationId);
+  }
+
+  @Get('applications/:applicationId/runtime-config/history/:configVersion')
+  async getRuntimeConfigHistoryDetail(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Param('configVersion') configVersion: string,
+  ): Promise<RuntimeConfigHistoryDetailResponseDto> {
+    return this.runtimeConfigsService.getRuntimeConfigHistoryDetail(
+      applicationId,
+      configVersion,
+    );
   }
 
   @Get('applications/:applicationId/runtime-snapshot/active')

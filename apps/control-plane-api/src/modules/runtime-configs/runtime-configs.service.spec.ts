@@ -267,6 +267,91 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result)).not.toContain('providers');
   });
 
+  it('returns runtime config history detail with the sanitized policy document', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const supersededDocument = {
+      ...activeRuntimeConfigDocument(),
+      configVersion: 'runtime_config_previous',
+      configHash: 'd'.repeat(64),
+      budgetPolicy: {
+        enabled: true,
+        enforcementMode: 'warn' as const,
+        warningThresholdPercent: 75,
+      },
+    };
+    prisma.runtimeConfig.findUnique.mockResolvedValue(
+      runtimeConfigRecord(supersededDocument, {
+        id: '00000000-0000-4000-8000-000000000702',
+        publishState: RuntimeConfigPublishState.SUPERSEDED,
+        publishedAt: new Date('2026-06-27T01:00:00.000Z'),
+      }),
+    );
+
+    const result = await service.getRuntimeConfigHistoryDetail(
+      applicationId,
+      'runtime_config_previous',
+    );
+
+    expect(prisma.runtimeConfig.findUnique).toHaveBeenCalledWith({
+      where: {
+        applicationId_configVersion: {
+          applicationId,
+          configVersion: 'runtime_config_previous',
+        },
+      },
+      select: {
+        id: true,
+        configVersion: true,
+        configHash: true,
+        publishState: true,
+        document: true,
+        effectiveAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    expect(result.item).toEqual(
+      expect.objectContaining({
+        configVersion: 'runtime_config_previous',
+        publishState: 'superseded',
+        canRollback: true,
+      }),
+    );
+    expect(result.runtimeConfig).toEqual(
+      expect.objectContaining({
+        configVersion: 'runtime_config_previous',
+        publishState: 'superseded',
+        budgetPolicy: {
+          enabled: true,
+          enforcementMode: 'warn',
+          warningThresholdPercent: 75,
+        },
+      }),
+    );
+    expect(result.runtimeConfig.providers[0]?.credentialRef).toEqual({
+      credentialRefId: `provider_credential:${providerId}`,
+      credentialVersion: 1,
+      credentialState: 'active',
+    });
+    expect(JSON.stringify(result)).not.toContain('secretHash');
+    expect(JSON.stringify(result)).not.toContain('rawProviderKey');
+  });
+
+  it('returns not found for a missing runtime config history detail', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.getRuntimeConfigHistoryDetail(
+        applicationId,
+        'runtime_config_missing',
+      ),
+    ).rejects.toThrow('Runtime Config history item not found.');
+  });
+
   it('rolls back by creating a new active runtime config from a previous published version', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
