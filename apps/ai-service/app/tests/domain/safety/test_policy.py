@@ -200,6 +200,72 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             with self.subTest(detector_type=detector_type):
                 assert_ignored_prompts(self, detector_type, prompts)
 
+    def test_financial_and_identity_block_detectors_block_high_confidence_values(self) -> None:
+        cases = [
+            (
+                "credit_card",
+                "[CREDIT_CARD_REDACTED]",
+                "4111 1111 1111 1111",
+                "card_number=4111 1111 1111 1111",
+            ),
+            (
+                "credit_card",
+                "[CREDIT_CARD_REDACTED]",
+                "5555-5555-5555-4444",
+                "payment card: 5555-5555-5555-4444",
+            ),
+            (
+                "bank_account",
+                "[BANK_ACCOUNT_REDACTED]",
+                "110-123-456789",
+                "계좌번호: 110-123-456789",
+            ),
+            (
+                "passport_number",
+                "[PASSPORT_NUMBER_REDACTED]",
+                "M12345678",
+                "passport_no=M12345678",
+            ),
+            (
+                "driver_license",
+                "[DRIVER_LICENSE_REDACTED]",
+                "12-34-567890-12",
+                "driver_license=12-34-567890-12",
+            ),
+        ]
+
+        for detector_type, placeholder, raw_value, prompt in cases:
+            with self.subTest(detector_type=detector_type, raw_value=raw_value):
+                assert_blocked_detector(self, prompt, detector_type, placeholder, raw_value)
+
+    def test_financial_and_identity_block_detectors_ignore_low_confidence_values(self) -> None:
+        cases = {
+            "credit_card": [
+                "order_id=1234567890123456",
+                "card number is required",
+                "card_number=4111 1111 1111 1112",
+            ],
+            "bank_account": [
+                "account is required",
+                "account_id=acct_1234567890",
+                "주문번호: 123456789012",
+            ],
+            "passport_number": [
+                "passport renewal guide",
+                "M12345678",
+                "문서번호: M12345678",
+            ],
+            "driver_license": [
+                "driver license is required",
+                "123456789012",
+                "ticket_number=123456789012",
+            ],
+        }
+
+        for detector_type, prompts in cases.items():
+            with self.subTest(detector_type=detector_type):
+                assert_ignored_prompts(self, detector_type, prompts)
+
     def test_pii_redact_detectors_redact_high_confidence_values(self) -> None:
         cases = [
             (

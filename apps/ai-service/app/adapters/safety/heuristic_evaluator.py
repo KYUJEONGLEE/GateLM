@@ -21,6 +21,7 @@ IP_ADDRESS_CANDIDATE_PATTERN = re.compile(
     r")"
     r"(?![A-Za-z0-9_.:-])"
 )
+CREDIT_CARD_CANDIDATE_PATTERN = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")
 
 
 class PromptDetector(Protocol):
@@ -65,6 +66,33 @@ class PublicIPAddressDetector:
             except ValueError:
                 continue
             if not address.is_global:
+                continue
+            signals.append(
+                SafetySignal(
+                    detector_type=self.detector_type,
+                    start=match.start(),
+                    end=match.end(),
+                    action=config.action,
+                    placeholder=config.placeholder,
+                    priority=self.priority,
+                )
+            )
+        return signals
+
+
+@dataclass(frozen=True)
+class CreditCardDetector:
+    detector_type: str
+    pattern: Pattern[str]
+    priority: int
+
+    def detect(self, prompt_text: str, config: SafetyDetector) -> list[SafetySignal]:
+        signals: list[SafetySignal] = []
+        for match in self.pattern.finditer(prompt_text):
+            digits = re.sub(r"\D", "", match.group(0))
+            if not 13 <= len(digits) <= 19:
+                continue
+            if not passes_luhn_check(digits):
                 continue
             signals.append(
                 SafetySignal(
@@ -190,6 +218,21 @@ def default_detectors() -> list[PromptDetector]:
             re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])"),
             12,
         ),
+        CreditCardDetector(
+            "credit_card",
+            CREDIT_CARD_CANDIDATE_PATTERN,
+            13,
+        ),
+        RegexDetector(
+            "bank_account",
+            re.compile(
+                r"\b(?:bank[_ -]?account|bank[_ -]?account[_ -]?number|account[_ -]?number|계좌번호|은행계좌)\b"
+                r"\s*[:=]?\s*['\"]?"
+                r"(?:\d{2,6}[- ]?){2,5}\d{2,6}",
+                re.IGNORECASE,
+            ),
+            14,
+        ),
         RegexDetector(
             "password_assignment",
             re.compile(
@@ -201,6 +244,27 @@ def default_detectors() -> list[PromptDetector]:
                 re.IGNORECASE,
             ),
             15,
+        ),
+        RegexDetector(
+            "passport_number",
+            re.compile(
+                r"\b(?:passport[_ -]?(?:no|number)|passport[_ -]?id)\s*[:=]\s*['\"]?[A-Z][A-Z0-9]{7,8}\b"
+                r"|"
+                r"(?:여권번호)\s*[:=]?\s*['\"]?[A-Z][A-Z0-9]{7,8}\b",
+                re.IGNORECASE,
+            ),
+            16,
+        ),
+        RegexDetector(
+            "driver_license",
+            re.compile(
+                r"\b(?:driver[_ -]?license(?:[_ -]?(?:no|number))?)\s*[:=]\s*['\"]?"
+                r"(?:\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}|\d{12})\b"
+                r"|"
+                r"(?:운전면허번호)\s*[:=]?\s*['\"]?(?:\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}|\d{12})\b",
+                re.IGNORECASE,
+            ),
+            17,
         ),
         RegexDetector(
             "date_of_birth",
@@ -285,3 +349,17 @@ def default_detectors() -> list[PromptDetector]:
             50,
         ),
     ]
+
+
+def passes_luhn_check(digits: str) -> bool:
+    total = 0
+    double_next = False
+    for char in reversed(digits):
+        value = int(char)
+        if double_next:
+            value *= 2
+            if value > 9:
+                value -= 9
+        total += value
+        double_next = not double_next
+    return total % 10 == 0
