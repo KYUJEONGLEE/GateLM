@@ -45,6 +45,9 @@ services:
 
         port = int(os.getenv("MOCK_PROVIDER_PORT", "8090"))
         latency_ms = int(os.getenv("MOCK_PROVIDER_DEFAULT_LATENCY_MS", "150"))
+        initial_error_mode = os.getenv("MOCK_PROVIDER_ERROR_MODE", "off").strip().lower()
+        if initial_error_mode not in ["off", "error", "timeout"]:
+            initial_error_mode = "off"
         stats_hash_secret = os.getenv("MOCK_PROVIDER_STATS_HASH_SECRET", "mock_provider_stats_hash_secret_for_p0_demo_only").encode("utf-8")
         raw_sensitive_patterns = [
             re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"),
@@ -53,13 +56,38 @@ services:
             re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
             re.compile(r"(?i)\b(api[_-]?key|secret|token|access[_-]?key|client[_-]?secret)\s*[:=]\s*['\"]?[A-Za-z0-9_\-.]{20,}"),
         ]
-        state = {"calls": 0, "data": {"totalCalls": 0, "callsByModel": {}, "lastCalls": []}}
+        state = {
+            "calls": 0,
+            "config": {"mode": initial_error_mode, "failModels": []},
+            "data": {"totalCalls": 0, "callsByModel": {}, "lastCalls": []}
+        }
 
         def reset_state():
             state["calls"] = 0
             state["data"]["totalCalls"] = 0
             state["data"]["callsByModel"] = {}
             state["data"]["lastCalls"] = []
+
+        def configure_failure(payload):
+            mode = str(payload.get("mode", "off")).strip().lower()
+            if mode not in ["off", "error", "timeout"]:
+                return False
+            fail_models = payload.get("failModels") or []
+            if not isinstance(fail_models, list):
+                return False
+            state["config"] = {
+                "mode": mode,
+                "failModels": [str(model).strip() for model in fail_models if str(model).strip()]
+            }
+            return True
+
+        def should_fail_model(model):
+            config = state.get("config", {})
+            mode = config.get("mode", "off")
+            if mode == "off":
+                return False
+            fail_models = config.get("failModels") or []
+            return not fail_models or model in fail_models
 
         def prompt_hash(prompt):
             digest = hmac.new(stats_hash_secret, prompt.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -123,6 +151,9 @@ services:
                     self.send_json(200, {"ok": True})
                     return
                 if self.path == "/__mock/config":
+                    if not configure_failure(payload):
+                        self.send_json(400, {"error": {"code": "invalid_mock_config"}})
+                        return
                     self.send_json(200, {"ok": True})
                     return
                 if self.path == "/v1/chat/completions":
@@ -133,6 +164,12 @@ services:
                     model = payload.get("model") or "mock-balanced"
                     messages = payload.get("messages") or []
                     prompt = " ".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
+                    if should_fail_model(model):
+                        mode = state["config"]["mode"]
+                        status = 504 if mode == "timeout" else 500
+                        code = "provider_timeout" if mode == "timeout" else "provider_error"
+                        self.send_json(status, {"error": {"code": code, "message": "Synthetic provider failure for GateLM evidence."}})
+                        return
                     record_call(self.headers.get("X-GateLM-Request-Id", ""), model, prompt)
                     self.send_json(200, {
                         "id": "mock_chatcmpl_local",
