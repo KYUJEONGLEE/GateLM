@@ -77,7 +77,18 @@ func (p *fakeProvider) GetActiveConfig(_ context.Context, _ string, _ string, _ 
 	if p.err != nil {
 		return runtimeconfig.ActiveConfig{}, p.err
 	}
+	if err := p.config.ValidateActive(); err != nil {
+		return runtimeconfig.ActiveConfig{}, err
+	}
 	return p.config, nil
+}
+
+func (p *fakeProvider) GetExecutionSnapshot(ctx context.Context, tenantID string, projectID string, applicationID string) (runtimeconfig.ExecutionSnapshot, error) {
+	config, err := p.GetActiveConfig(ctx, tenantID, projectID, applicationID)
+	if err != nil {
+		return runtimeconfig.ExecutionSnapshot{}, err
+	}
+	return config.ExecutionSnapshot(), nil
 }
 
 func testGatewayContext() *request.GatewayContext {
