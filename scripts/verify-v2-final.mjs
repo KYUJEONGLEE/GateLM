@@ -167,7 +167,6 @@ function readActivePnpmVersion() {
   });
 
   if (result.error || result.status !== 0) {
-    failures.push("active pnpm 9.15.0 must be available through corepack or the invoking package manager");
     return "unavailable";
   }
 

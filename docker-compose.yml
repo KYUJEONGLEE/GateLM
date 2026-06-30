@@ -69,6 +69,8 @@ services:
             state["data"]["lastCalls"] = []
 
         def configure_failure(payload):
+            if not isinstance(payload, dict):
+                return False
             mode = str(payload.get("mode", "off")).strip().lower()
             if mode not in ["off", "error", "timeout"]:
                 return False
@@ -87,7 +89,8 @@ services:
             if mode == "off":
                 return False
             fail_models = config.get("failModels") or []
-            return not fail_models or model in fail_models
+            model_name = str(model).strip()
+            return not fail_models or model_name in fail_models
 
         def prompt_hash(prompt):
             digest = hmac.new(stats_hash_secret, prompt.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -157,11 +160,14 @@ services:
                     self.send_json(200, {"ok": True})
                     return
                 if self.path == "/v1/chat/completions":
+                    if not isinstance(payload, dict):
+                        self.send_json(400, {"error": {"code": "invalid_request"}})
+                        return
                     if payload.get("stream") is True:
                         self.send_json(400, {"error": {"code": "streaming_not_supported", "message": "Streaming is not supported in P0."}})
                         return
                     time.sleep(latency_ms / 1000)
-                    model = payload.get("model") or "mock-balanced"
+                    model = str(payload.get("model") or "mock-balanced").strip() or "mock-balanced"
                     messages = payload.get("messages") or []
                     prompt = " ".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
                     if should_fail_model(model):
