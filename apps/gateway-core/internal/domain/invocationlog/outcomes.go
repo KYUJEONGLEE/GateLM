@@ -25,7 +25,7 @@ type GatewayStageOutcomes struct {
 
 type LatencySummary struct {
 	GatewayInternalLatencyMs int64  `json:"gatewayInternalLatencyMs"`
-	ProviderLatencyMs       *int64 `json:"providerLatencyMs"`
+	ProviderLatencyMs        *int64 `json:"providerLatencyMs"`
 }
 
 type DomainOutcomes struct {
@@ -69,11 +69,11 @@ type BudgetOutcome struct {
 }
 
 type SafetyOutcome struct {
-	Outcome                string   `json:"outcome"`
-	MaskingAction          string   `json:"maskingAction,omitempty"`
-	DetectedTypes          []string `json:"detectedTypes,omitempty"`
-	DetectedCount          int      `json:"detectedCount"`
-	RedactedPromptPreview  *string  `json:"redactedPromptPreview"`
+	Outcome               string   `json:"outcome"`
+	MaskingAction         string   `json:"maskingAction,omitempty"`
+	DetectedTypes         []string `json:"detectedTypes,omitempty"`
+	DetectedCount         int      `json:"detectedCount"`
+	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
 }
 
 type RoutingOutcome struct {
@@ -95,7 +95,7 @@ type ProviderOutcome struct {
 	SelectedProvider   *string `json:"selectedProvider"`
 	SelectedModel      *string `json:"selectedModel"`
 	LatencyMs          *int64  `json:"latencyMs"`
-	SanitizedErrorCode  *string `json:"sanitizedErrorCode"`
+	SanitizedErrorCode *string `json:"sanitizedErrorCode"`
 }
 
 type FallbackOutcome struct {
@@ -135,7 +135,7 @@ func BuildGatewayStageOutcomes(log TerminalLog) GatewayStageOutcomes {
 		DomainOutcomes:  domainOutcomes,
 		LatencySummary: LatencySummary{
 			GatewayInternalLatencyMs: log.LatencyMs,
-			ProviderLatencyMs:       log.ProviderLatencyMs,
+			ProviderLatencyMs:        log.ProviderLatencyMs,
 		},
 	}
 }
@@ -153,7 +153,7 @@ func BuildAuthFailureGatewayStageOutcomes(log AuthFailureLog) GatewayStageOutcom
 		DomainOutcomes:  domainOutcomes,
 		LatencySummary: LatencySummary{
 			GatewayInternalLatencyMs: log.LatencyMs,
-			ProviderLatencyMs:       log.ProviderLatencyMs,
+			ProviderLatencyMs:        log.ProviderLatencyMs,
 		},
 	}
 }
@@ -163,7 +163,7 @@ func BuildDomainOutcomes(log TerminalLog) DomainOutcomes {
 		Auth:      authOutcome(log.HTTPStatus, log.ErrorCode),
 		Runtime:   runtimeOutcome(log),
 		RateLimit: rateLimitOutcome(log.RateLimitDecision),
-		Budget:    budgetOutcome(log.BudgetScope, log.ApplicationID),
+		Budget:    budgetOutcome(log.BudgetScope, log.ApplicationID, log.BudgetDecision),
 		Safety:    safetyOutcome(log),
 		Routing:   routingOutcome(log),
 		Cache:     cacheOutcome(log.CacheStatus, log.CacheType, log.CacheHitRequestID),
@@ -179,7 +179,7 @@ func BuildAuthFailureDomainOutcomes(log AuthFailureLog) DomainOutcomes {
 		Auth:      authOutcome(log.HTTPStatus, log.ErrorCode),
 		Runtime:   RuntimeOutcome{Outcome: "not_checked"},
 		RateLimit: RateLimitOutcome{Outcome: "not_checked"},
-		Budget:    budgetOutcome(log.BudgetScope, log.ApplicationID),
+		Budget:    budgetOutcome(log.BudgetScope, log.ApplicationID, nil),
 		Safety:    SafetyOutcome{Outcome: "not_checked", DetectedCount: 0},
 		Routing:   RoutingOutcome{Outcome: "not_checked"},
 		Cache:     CacheOutcome{Outcome: "bypassed", CacheType: CacheTypeNone},
@@ -195,33 +195,33 @@ func DomainOutcomesForInvocationLog(log LlmInvocationLog) DomainOutcomes {
 		return log.DomainOutcomes
 	}
 	terminal := TerminalLog{
-		RequestID:              log.RequestID,
-		TraceID:                log.TraceID,
-		ApplicationID:          log.ApplicationID,
-		BudgetScope:            log.BudgetScope,
-		RuntimeSnapshot:        log.RuntimeSnapshot,
-		RateLimitDecision:      nil,
-		Stream:                 log.Stream,
-		RequestedModel:         log.RequestedModel,
-		Provider:               log.Provider,
-		Model:                  log.Model,
-		SelectedProvider:       log.SelectedProvider,
-		SelectedModel:          log.SelectedModel,
-		RoutingReason:          log.RoutingReason,
-		ProviderLatencyMs:      log.ProviderLatencyMs,
-		Status:                 log.Status,
-		HTTPStatus:             log.HTTPStatus,
-		ErrorCode:              log.ErrorCode,
-		ErrorStage:             log.ErrorStage,
-		CacheStatus:            log.CacheStatus,
-		CacheType:              log.CacheType,
-		CacheHitRequestID:      log.CacheHitRequestID,
-		MaskingAction:          log.MaskingAction,
-		MaskingDetectedTypes:   log.MaskingDetectedTypes,
-		MaskingDetectedCount:   log.MaskingDetectedCount,
-		RedactedPromptPreview:  log.RedactedPromptPreview,
-		LatencyMs:              log.LatencyMs,
-		CreatedAt:              log.CreatedAt,
+		RequestID:             log.RequestID,
+		TraceID:               log.TraceID,
+		ApplicationID:         log.ApplicationID,
+		BudgetScope:           log.BudgetScope,
+		RuntimeSnapshot:       log.RuntimeSnapshot,
+		RateLimitDecision:     nil,
+		Stream:                log.Stream,
+		RequestedModel:        log.RequestedModel,
+		Provider:              log.Provider,
+		Model:                 log.Model,
+		SelectedProvider:      log.SelectedProvider,
+		SelectedModel:         log.SelectedModel,
+		RoutingReason:         log.RoutingReason,
+		ProviderLatencyMs:     log.ProviderLatencyMs,
+		Status:                log.Status,
+		HTTPStatus:            log.HTTPStatus,
+		ErrorCode:             log.ErrorCode,
+		ErrorStage:            log.ErrorStage,
+		CacheStatus:           log.CacheStatus,
+		CacheType:             log.CacheType,
+		CacheHitRequestID:     log.CacheHitRequestID,
+		MaskingAction:         log.MaskingAction,
+		MaskingDetectedTypes:  log.MaskingDetectedTypes,
+		MaskingDetectedCount:  log.MaskingDetectedCount,
+		RedactedPromptPreview: log.RedactedPromptPreview,
+		LatencyMs:             log.LatencyMs,
+		CreatedAt:             log.CreatedAt,
 	}
 	if log.CompletedAt != nil {
 		terminal.CompletedAt = *log.CompletedAt
@@ -317,8 +317,25 @@ func rateLimitOutcome(decision *ratelimit.Decision) RateLimitOutcome {
 	}
 }
 
-func budgetOutcome(scope budget.Scope, applicationID string) BudgetOutcome {
+func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.Decision) BudgetOutcome {
 	normalized := budget.NormalizeScope(scope, applicationID)
+	outcome := budget.OutcomeNotUsed
+	if decision != nil {
+		decisionScope := budget.NormalizeScope(decision.Scope, applicationID)
+		if strings.TrimSpace(decisionScope.ID) != "" {
+			normalized = decisionScope
+		}
+		switch strings.TrimSpace(decision.Outcome) {
+		case budget.OutcomeAllowed, budget.OutcomeWarned, budget.OutcomeBlocked, budget.OutcomeNotUsed, budget.OutcomeNotChecked:
+			outcome = strings.TrimSpace(decision.Outcome)
+		default:
+			if decision.Allowed {
+				outcome = budget.OutcomeAllowed
+			} else {
+				outcome = budget.OutcomeBlocked
+			}
+		}
+	}
 	if strings.TrimSpace(normalized.ID) == "" {
 		normalized.ID = "unknown_application"
 	}
@@ -329,7 +346,7 @@ func budgetOutcome(scope budget.Scope, applicationID string) BudgetOutcome {
 		normalized.ResolvedBy = budget.ResolvedByDefaultApplication
 	}
 	return BudgetOutcome{
-		Outcome:         "not_used",
+		Outcome:         outcome,
 		BudgetScopeType: normalized.Type,
 		BudgetScopeID:   normalized.ID,
 		ResolvedBy:      normalized.ResolvedBy,
@@ -405,9 +422,9 @@ func providerOutcome(log TerminalLog) ProviderOutcome {
 	selectedProvider := firstNonEmptyString(log.SelectedProvider, log.Provider)
 	selectedModel := firstNonEmptyString(log.SelectedModel, log.Model)
 	base := ProviderOutcome{
-		SelectedProvider:  stringPointer(selectedProvider),
-		SelectedModel:     stringPointer(selectedModel),
-		LatencyMs:         log.ProviderLatencyMs,
+		SelectedProvider:   stringPointer(selectedProvider),
+		SelectedModel:      stringPointer(selectedModel),
+		LatencyMs:          log.ProviderLatencyMs,
 		SanitizedErrorCode: nil,
 	}
 	if providerWasNotCalled(log) {

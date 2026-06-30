@@ -28,6 +28,7 @@ type TerminalLog struct {
 	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
 
 	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 
 	Endpoint          string
 	Method            string
@@ -91,6 +92,7 @@ type TerminalLogInput struct {
 	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
 
 	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 
 	Endpoint          string
 	Method            string
@@ -191,6 +193,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.RateLimitDecision != nil {
 		metadata["rateLimitDecision"] = *input.RateLimitDecision
 	}
+	if input.BudgetDecision != nil {
+		metadata["budgetDecision"] = *input.BudgetDecision
+	}
 	resolvedBudgetScope := budget.NormalizeScope(input.BudgetScope, input.ApplicationID)
 	metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, input.ApplicationID)
 	runtimeSnapshot := input.RuntimeSnapshot.Normalize(runtimeconfig.ActiveConfig{
@@ -208,6 +213,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	}
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
+	budgetDecision := input.BudgetDecision.Clone()
 
 	log := TerminalLog{
 		RequestID:          requestID,
@@ -225,6 +231,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		RuntimeSnapshot:    runtimeSnapshot,
 
 		RateLimitDecision: rateLimitDecision,
+		BudgetDecision:    budgetDecision,
 
 		Endpoint:          firstNonEmptyString(input.Endpoint, "/v1/chat/completions"),
 		Method:            firstNonEmptyString(input.Method, "POST"),
