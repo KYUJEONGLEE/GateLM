@@ -242,11 +242,11 @@ def parse_v2_safety_domain_outcome(value: Any, label: str) -> dict[str, Any]:
         raise SafetyEvalError(f"{label}: detectedCount must be non-negative integer")
     if not isinstance(detector_categories, list):
         raise SafetyEvalError(f"{label}: detectorCategories must be an array")
-    if len(detector_categories) != len(set(detector_categories)):
-        raise SafetyEvalError(f"{label}: detectorCategories must be unique")
     for category in detector_categories:
         if not isinstance(category, str) or not SANITIZED_CATEGORY_PATTERN.fullmatch(category):
             raise SafetyEvalError(f"{label}: invalid detector category {category!r}")
+    if len(detector_categories) != len(set(detector_categories)):
+        raise SafetyEvalError(f"{label}: detectorCategories must be unique")
     if detected_count < len(detector_categories):
         raise SafetyEvalError(f"{label}: detectedCount cannot be less than detectorCategories length")
 

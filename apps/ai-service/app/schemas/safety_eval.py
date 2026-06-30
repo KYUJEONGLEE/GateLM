@@ -63,6 +63,8 @@ class GatewayEffects:
         *,
         contract_version: str = "v1",
     ) -> GatewayEffects:
+        if not isinstance(value, dict):
+            raise SafetyEvalError(f"{label}: must be an object")
         expected_fields = {
             "providerCalled",
             "cacheLookup",

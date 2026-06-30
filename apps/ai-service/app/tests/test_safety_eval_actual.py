@@ -60,6 +60,31 @@ class SafetyEvalActualFixtureTests(unittest.TestCase):
                 with self.assertRaisesRegex(SafetyEvalError, "invalid terminalStatus"):
                     load_actual_fixture(fixture_path, "gateway-safety-output-v2")
 
+    def test_gateway_safety_output_v2_rejects_non_object_gateway_effects(self) -> None:
+        raw_fixture = json.loads((FIXTURE_DIR / "gateway-safety-output-v2.fixture.json").read_text(encoding="utf-8"))
+        raw_fixture["results"][0]["gatewayEffects"] = None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixture_path = Path(temp_dir) / "bad-gateway-effects.fixture.json"
+            fixture_path.write_text(json.dumps(raw_fixture), encoding="utf-8")
+
+            with self.assertRaisesRegex(SafetyEvalError, "gatewayEffects: must be an object"):
+                load_actual_fixture(fixture_path, "gateway-safety-output-v2")
+
+    def test_gateway_safety_output_v2_rejects_invalid_detector_category_without_type_error(self) -> None:
+        raw_fixture = json.loads((FIXTURE_DIR / "gateway-safety-output-v2.fixture.json").read_text(encoding="utf-8"))
+        raw_fixture["results"][0]["domainOutcomes"]["safety"]["detectorSummary"]["detectorCategories"] = [
+            "email",
+            {"nested": "not_allowed"},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixture_path = Path(temp_dir) / "bad-detector-category.fixture.json"
+            fixture_path.write_text(json.dumps(raw_fixture), encoding="utf-8")
+
+            with self.assertRaisesRegex(SafetyEvalError, "invalid detector category"):
+                load_actual_fixture(fixture_path, "gateway-safety-output-v2")
+
     def test_gateway_safety_output_v2_supports_not_checked_outcome(self) -> None:
         raw_fixture = {
             "fixtureName": "v2-safety-eval-not-checked-probe",
