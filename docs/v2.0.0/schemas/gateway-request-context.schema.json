@@ -129,7 +129,7 @@
           "description": "Gateway must not trust client-provided budget scope."
         },
         "warningThresholdPercent": {
-          "type": "number",
+          "type": "integer",
           "minimum": 0,
           "maximum": 100,
           "description": "optional admin-configured budget warning threshold."

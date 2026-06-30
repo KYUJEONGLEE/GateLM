@@ -321,6 +321,42 @@ describe('RuntimeConfigsService', () => {
     });
   });
 
+  it('uses the default warning threshold for legacy budget policies that only miss the threshold', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.budgetPolicy = {
+      enabled: true,
+      enforcementMode: 'warn',
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.budget).toEqual({
+      enabled: true,
+      enforcementMode: 'warn',
+      warningThresholdPercent: 80,
+    });
+    expect(result.budgetResolution).toEqual({
+      budgetScopeType: 'application',
+      budgetScopeId: applicationId,
+      resolvedBy: 'default_application',
+      warningThresholdPercent: 80,
+    });
+  });
+
   it('reflects active budget policy in the RuntimeSnapshot execution view', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);

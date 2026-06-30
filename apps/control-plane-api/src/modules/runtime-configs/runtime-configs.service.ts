@@ -1983,13 +1983,19 @@ export class RuntimeConfigsService {
     }
 
     const candidate = budgetPolicy as Record<string, unknown>;
+    const warningThresholdPercent = Object.prototype.hasOwnProperty.call(
+      candidate,
+      'warningThresholdPercent',
+    )
+      ? candidate.warningThresholdPercent
+      : DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT;
     const normalized: RuntimeConfigBudgetPolicyResponseDto = {
       enabled:
         candidate.enabled as RuntimeConfigBudgetPolicyResponseDto['enabled'],
       enforcementMode:
         candidate.enforcementMode as RuntimeConfigBudgetPolicyResponseDto['enforcementMode'],
       warningThresholdPercent:
-        candidate.warningThresholdPercent as RuntimeConfigBudgetPolicyResponseDto['warningThresholdPercent'],
+        warningThresholdPercent as RuntimeConfigBudgetPolicyResponseDto['warningThresholdPercent'],
     };
 
     if (!this.isExecutableBudgetPolicy(normalized)) {
