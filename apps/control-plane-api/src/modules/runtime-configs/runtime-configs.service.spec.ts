@@ -7,7 +7,10 @@ import {
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
-import { ActiveRuntimeConfigResponseDto } from './dto/runtime-config.dto';
+import {
+  ActiveRuntimeConfigResponseDto,
+  RuntimeSnapshotResponseDto,
+} from './dto/runtime-config.dto';
 import { RuntimeConfigsService } from './runtime-configs.service';
 
 describe('RuntimeConfigsService', () => {
@@ -41,6 +44,13 @@ describe('RuntimeConfigsService', () => {
         create: jest.Mock;
         update: jest.Mock;
       };
+      runtimeSnapshot: {
+        create: jest.Mock;
+      };
+      activeRuntimeSnapshot: {
+        findUnique: jest.Mock;
+        upsert: jest.Mock;
+      };
       $transaction: jest.Mock;
     };
   } {
@@ -65,6 +75,13 @@ describe('RuntimeConfigsService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+      },
+      runtimeSnapshot: {
+        create: jest.fn(),
+      },
+      activeRuntimeSnapshot: {
+        findUnique: jest.fn(),
+        upsert: jest.fn(),
       },
       $transaction: jest.fn(),
     };
@@ -137,7 +154,16 @@ describe('RuntimeConfigsService', () => {
         updateMany: jest.fn(),
         create: jest.fn(),
       },
+      runtimeSnapshot: {
+        create: jest.fn(),
+      },
+      activeRuntimeSnapshot: {
+        upsert: jest.fn(),
+      },
     };
+    tx.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
 
     prisma.runtimeConfig.findFirst.mockResolvedValue(
       runtimeConfigRecord(draft.runtimeConfig, {
@@ -168,6 +194,47 @@ describe('RuntimeConfigsService', () => {
           configVersion: 'runtime_config_test_001',
           publishState: RuntimeConfigPublishState.ACTIVE,
           publishedAt: now,
+        }),
+      }),
+    );
+    expect(tx.runtimeSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenantId,
+          projectId,
+          applicationId,
+          runtimeConfigId: '00000000-0000-4000-8000-000000000700',
+          version: BigInt(1),
+          contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          snapshotBody: expect.objectContaining({
+            runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+            runtimeSnapshotVersion: 1,
+            runtimeState: 'snapshot_active',
+          }),
+          publishedAt: now,
+          publishedBy: 'control_plane',
+        }),
+      }),
+    );
+    expect(tx.activeRuntimeSnapshot.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId_projectId_applicationId: {
+            tenantId,
+            projectId,
+            applicationId,
+          },
+        },
+        update: expect.objectContaining({
+          runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+          updatedBy: 'control_plane',
+        }),
+        create: expect.objectContaining({
+          tenantId,
+          projectId,
+          applicationId,
+          runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+          updatedBy: 'control_plane',
         }),
       }),
     );
@@ -383,7 +450,16 @@ describe('RuntimeConfigsService', () => {
         updateMany: jest.fn(),
         create: jest.fn(),
       },
+      runtimeSnapshot: {
+        create: jest.fn(),
+      },
+      activeRuntimeSnapshot: {
+        upsert: jest.fn(),
+      },
     };
+    tx.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
     prisma.runtimeConfig.findUnique.mockResolvedValue(
       runtimeConfigRecord(targetDocument, {
         id: '00000000-0000-4000-8000-000000000702',
@@ -415,6 +491,47 @@ describe('RuntimeConfigsService', () => {
           configVersion: 'runtime_config_rollback_manual',
           publishState: RuntimeConfigPublishState.ACTIVE,
           publishedAt: now,
+        }),
+      }),
+    );
+    expect(tx.runtimeSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenantId,
+          projectId,
+          applicationId,
+          runtimeConfigId: '00000000-0000-4000-8000-000000000700',
+          version: BigInt(now.getTime()),
+          contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          snapshotBody: expect.objectContaining({
+            runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+            runtimeSnapshotVersion: now.getTime(),
+            runtimeState: 'snapshot_active',
+          }),
+          publishedAt: now,
+          publishedBy: 'control_plane',
+        }),
+      }),
+    );
+    expect(tx.activeRuntimeSnapshot.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId_projectId_applicationId: {
+            tenantId,
+            projectId,
+            applicationId,
+          },
+        },
+        update: expect.objectContaining({
+          runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+          updatedBy: 'control_plane',
+        }),
+        create: expect.objectContaining({
+          tenantId,
+          projectId,
+          applicationId,
+          runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+          updatedBy: 'control_plane',
         }),
       }),
     );
@@ -597,6 +714,8 @@ describe('RuntimeConfigsService', () => {
     });
     expect(result.providerCatalogRef.catalogVersion).toBe(1);
     expect(result.providerCatalogRef.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.contentHash).not.toBe(activeDocument.configHash);
     expect(result.policies.budget).toEqual({
       enabled: false,
       enforcementMode: 'disabled',
@@ -610,6 +729,51 @@ describe('RuntimeConfigsService', () => {
       routingPolicyHash: activeDocument.routingPolicy.routingPolicyHash,
     });
     expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('returns the persisted active RuntimeSnapshot before falling back to Runtime Config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const snapshotBody = runtimeSnapshotBody();
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue({
+      tenantId,
+      projectId,
+      applicationId,
+      runtimeSnapshotId: snapshotBody.runtimeSnapshotId,
+      updatedAt: now,
+      updatedBy: 'control_plane',
+      runtimeSnapshot: {
+        id: snapshotBody.runtimeSnapshotId,
+        tenantId,
+        projectId,
+        applicationId,
+        runtimeConfigId: '00000000-0000-4000-8000-000000000700',
+        version: BigInt(snapshotBody.runtimeSnapshotVersion),
+        contentHash: snapshotBody.contentHash,
+        snapshotBody,
+        publishedAt: now,
+        publishedBy: 'control_plane',
+        createdAt: now,
+      },
+    });
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result).toEqual(snapshotBody);
+    expect(prisma.activeRuntimeSnapshot.findUnique).toHaveBeenCalledWith({
+      where: {
+        tenantId_projectId_applicationId: {
+          tenantId,
+          projectId,
+          applicationId,
+        },
+      },
+      include: {
+        runtimeSnapshot: true,
+      },
+    });
+    expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
@@ -1425,6 +1589,84 @@ describe('RuntimeConfigsService', () => {
       publishedAt: null,
       createdAt: now,
       updatedAt: now,
+      ...overrides,
+    };
+  }
+
+  function runtimeSnapshotBody(
+    overrides: Partial<RuntimeSnapshotResponseDto> = {},
+  ): RuntimeSnapshotResponseDto {
+    return {
+      runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
+      runtimeSnapshotVersion: 1,
+      contentHash: 'c'.repeat(64),
+      runtimeState: 'snapshot_active',
+      publishedAt: now.toISOString(),
+      publishedBy: 'control_plane',
+      gatewayInstanceId: 'gateway_core_static',
+      lookupKey: {
+        tenantId,
+        projectId,
+        applicationId,
+      },
+      budgetResolution: {
+        budgetScopeType: 'application',
+        budgetScopeId: applicationId,
+        resolvedBy: 'default_application',
+        warningThresholdPercent: 80,
+      },
+      providerCatalogRef: {
+        catalogId: `provider_catalog:${applicationId}:1`,
+        catalogVersion: 1,
+        contentHash: 'f'.repeat(64),
+      },
+      policies: {
+        safety: {
+          enabled: true,
+          mode: 'enforce',
+          requestSideRequired: true,
+          policyHash: 'd'.repeat(64),
+          detectorSet: [{ detectorType: 'email', action: 'redact' }],
+        },
+        routing: {
+          autoModelEnabled: true,
+          defaultRequestedModel: 'auto',
+          defaultProvider: 'mock',
+          defaultModel: 'mock-fast',
+          routingPolicyHash: 'e'.repeat(64),
+        },
+        cache: {
+          exactCacheEnabled: true,
+          semanticCacheMode: 'evidence_only',
+          cachePolicyHash: 'a'.repeat(64),
+        },
+        rateLimit: {
+          enabled: true,
+          scope: 'application',
+          windowSeconds: 60,
+          limit: 60,
+        },
+        budget: {
+          enabled: false,
+          enforcementMode: 'disabled',
+          warningThresholdPercent: 80,
+        },
+        fallback: {
+          enabled: true,
+          fallbackProvider: 'mock',
+          fallbackModel: 'mock-fast',
+          allowedReasons: ['provider_timeout', 'provider_error'],
+        },
+        streaming: {
+          enabled: false,
+          thinSliceOnly: true,
+        },
+      },
+      legacyHashes: {
+        configHash: 'c'.repeat(64),
+        securityPolicyHash: 'd'.repeat(64),
+        routingPolicyHash: 'e'.repeat(64),
+      },
       ...overrides,
     };
   }

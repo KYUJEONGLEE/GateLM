@@ -46,6 +46,8 @@ model Tenant {
   apiKeys             GatewayApiKey[]
   appTokens           AppToken[]
   runtimeConfigs      RuntimeConfig[]
+  runtimeSnapshots    RuntimeSnapshot[]
+  activeSnapshots     ActiveRuntimeSnapshot[]
 
   @@map("tenants")
 }
@@ -65,6 +67,8 @@ model Project {
   apiKeys             GatewayApiKey[]
   appTokens           AppToken[]
   runtimeConfigs      RuntimeConfig[]
+  runtimeSnapshots    RuntimeSnapshot[]
+  activeSnapshots     ActiveRuntimeSnapshot[]
 
   @@index([tenantId])
   @@map("projects")
@@ -84,6 +88,8 @@ model Application {
   project        Project         @relation(fields: [projectId], references: [id])
   appTokens      AppToken[]
   runtimeConfigs RuntimeConfig[]
+  runtimeSnapshots RuntimeSnapshot[]
+  activeSnapshots  ActiveRuntimeSnapshot[]
 
   @@index([tenantId])
   @@index([projectId])
@@ -184,9 +190,10 @@ model RuntimeConfig {
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  project     Project     @relation(fields: [projectId], references: [id])
-  application Application @relation(fields: [applicationId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  project          Project           @relation(fields: [projectId], references: [id])
+  application      Application       @relation(fields: [applicationId], references: [id])
+  runtimeSnapshots RuntimeSnapshot[]
 
   @@index([tenantId])
   @@index([projectId])
@@ -194,4 +201,49 @@ model RuntimeConfig {
   @@index([publishState])
   @@unique([applicationId, configVersion])
   @@map("runtime_configs")
+}
+
+model RuntimeSnapshot {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  projectId       String   @db.Uuid
+  applicationId   String   @db.Uuid
+  runtimeConfigId String?  @db.Uuid
+  version         BigInt
+  contentHash     String
+  snapshotBody    Json
+  publishedAt     DateTime
+  publishedBy     String
+  createdAt       DateTime @default(now())
+
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id])
+  project        Project                 @relation(fields: [projectId], references: [id])
+  application    Application             @relation(fields: [applicationId], references: [id])
+  runtimeConfig  RuntimeConfig?          @relation(fields: [runtimeConfigId], references: [id], onDelete: SetNull)
+  activePointers ActiveRuntimeSnapshot[]
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([applicationId])
+  @@index([tenantId, projectId, applicationId, version])
+  @@unique([applicationId, version])
+  @@map("runtime_snapshots")
+}
+
+model ActiveRuntimeSnapshot {
+  tenantId          String   @db.Uuid
+  projectId         String   @db.Uuid
+  applicationId     String   @db.Uuid
+  runtimeSnapshotId String   @db.Uuid
+  updatedAt         DateTime @updatedAt
+  updatedBy         String
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  project         Project         @relation(fields: [projectId], references: [id])
+  application     Application     @relation(fields: [applicationId], references: [id])
+  runtimeSnapshot RuntimeSnapshot @relation(fields: [runtimeSnapshotId], references: [id])
+
+  @@id([tenantId, projectId, applicationId])
+  @@index([runtimeSnapshotId])
+  @@map("active_runtime_snapshots")
 }
