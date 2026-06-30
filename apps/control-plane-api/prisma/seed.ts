@@ -4,13 +4,16 @@ import {
   PrismaClient,
   ProviderConnectionStatus,
   ResourceStatus,
+  RuntimeConfig,
   RuntimeConfigPublishState,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
 import type {
   ActiveRuntimeConfigResponseDto,
+  ProviderCatalogResponseDto,
   RuntimeConfigSafetyDetectorResponseDto,
+  RuntimeSnapshotResponseDto,
 } from '../src/modules/runtime-configs/dto/runtime-config.dto';
 
 const prisma = new PrismaClient();
@@ -24,10 +27,6 @@ export const DEMO_MOCK_PROVIDER_ID = '00000000-0000-4000-8000-000000000600';
 export const DEMO_OPENAI_PROVIDER_ID = '00000000-0000-4000-8000-000000000601';
 export const DEMO_RUNTIME_CONFIG_VERSION = 'runtime_config_v1_demo_001';
 
-const DEMO_API_KEY_SECRET_HASH =
-  '530ac6a98774a6a0d7b1b880ec696d040bcb317abf2c1ca246f37c67ba6576df';
-const DEMO_APP_TOKEN_SECRET_HASH =
-  '525420fa732030cf3d3da44e077628b53fdf3503f772b21e8b14b1fc1b354862';
 const DEMO_PROVIDER = 'mock';
 const DEMO_PROVIDER_BASE_URL = 'http://mock-provider:8090';
 const DEMO_OPENAI_PROVIDER = 'openai-main';
@@ -35,6 +34,9 @@ const DEMO_OPENAI_PROVIDER_BASE_URL = 'https://api.openai.com/v1';
 const DEMO_OPENAI_LOW_COST_MODEL = 'gpt-4o-mini';
 const DEMO_OPENAI_BALANCED_MODEL = 'gpt-4o';
 const DEMO_GENERATED_AT = '2026-06-27T02:00:00.000Z';
+const DEMO_PUBLISHED_BY = 'control_plane';
+const DEMO_GATEWAY_INSTANCE_ID = 'gateway_core_static';
+const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
 const CONFIG_HASH_ALGORITHM =
   'sha256(canonical_json(runtimeConfig_without_configHash))';
 const DEMO_MODELS = ['mock-fast', 'mock-balanced'] as const;
@@ -48,6 +50,10 @@ interface DemoRuntimeConfigOptions {
   openAIBaseUrl?: string;
   openAILowCostModel?: string;
   openAIBalancedModel?: string;
+  apiKeyPrefix?: string;
+  apiKeyLast4?: string;
+  appTokenPrefix?: string;
+  appTokenLast4?: string;
 }
 
 export function credentialHash(plaintext: string): string {
@@ -72,6 +78,10 @@ export function buildDemoRuntimeConfigDocument(
     options.openAILowCostModel ?? DEMO_OPENAI_LOW_COST_MODEL;
   const openAIBalancedModel =
     options.openAIBalancedModel ?? DEMO_OPENAI_BALANCED_MODEL;
+  const apiKeyPrefix = options.apiKeyPrefix ?? 'gsk_live_';
+  const apiKeyLast4 = options.apiKeyLast4 ?? '9xA1';
+  const appTokenPrefix = options.appTokenPrefix ?? 'gat_app_';
+  const appTokenLast4 = options.appTokenLast4 ?? '4tK2';
   const safetyPolicy = buildSafetyPolicy();
   const routingPolicy =
     providerMode === 'actual'
@@ -179,8 +189,8 @@ export function buildDemoRuntimeConfigDocument(
       id: DEMO_API_KEY_ID,
       type: 'api_key',
       status: 'active',
-      prefix: 'gsk_live_',
-      last4: '9xA1',
+      prefix: apiKeyPrefix,
+      last4: apiKeyLast4,
       scopes: ['chat:completions', 'models:read'],
       expiresAt: null,
       verification: 'prefix_then_hash_compare',
@@ -189,8 +199,8 @@ export function buildDemoRuntimeConfigDocument(
       id: DEMO_APP_TOKEN_ID,
       type: 'app_token',
       status: 'active',
-      prefix: 'gat_app_',
-      last4: '4tK2',
+      prefix: appTokenPrefix,
+      last4: appTokenLast4,
       scopes: ['gateway:invoke'],
       expiresAt: null,
       verification: 'prefix_then_hash_compare',
@@ -343,6 +353,16 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       'GATELM_DEMO_OPENAI_BALANCED_MODEL',
       DEMO_OPENAI_BALANCED_MODEL,
     );
+    const demoApiKey = readEnvString(
+      'GATELM_DEMO_API_KEY',
+      'glm_api_test_redacted',
+    );
+    const demoAppToken = readEnvString(
+      'GATELM_DEMO_APP_TOKEN',
+      'glm_app_token_test_redacted',
+    );
+    const apiKeyPreview = credentialPreview(demoApiKey, 'gsk_live_');
+    const appTokenPreview = credentialPreview(demoAppToken, 'gat_app_');
 
     const provider = await tx.providerConnection.upsert({
       where: {
@@ -431,9 +451,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         tenantId: DEMO_TENANT_ID,
         projectId: DEMO_PROJECT_ID,
         displayName: 'Demo API Key',
-        prefix: 'gsk_live_',
-        last4: '9xA1',
-        secretHash: DEMO_API_KEY_SECRET_HASH,
+        prefix: apiKeyPreview.prefix,
+        last4: apiKeyPreview.last4,
+        secretHash: credentialHash(demoApiKey),
         hashAlgorithm: 'sha256',
         status: CredentialStatus.ACTIVE,
         scopes: ['chat:completions', 'models:read'],
@@ -445,9 +465,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         tenantId: DEMO_TENANT_ID,
         projectId: DEMO_PROJECT_ID,
         displayName: 'Demo API Key',
-        prefix: 'gsk_live_',
-        last4: '9xA1',
-        secretHash: DEMO_API_KEY_SECRET_HASH,
+        prefix: apiKeyPreview.prefix,
+        last4: apiKeyPreview.last4,
+        secretHash: credentialHash(demoApiKey),
         hashAlgorithm: 'sha256',
         status: CredentialStatus.ACTIVE,
         scopes: ['chat:completions', 'models:read'],
@@ -462,9 +482,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         projectId: DEMO_PROJECT_ID,
         applicationId: DEMO_APPLICATION_ID,
         displayName: 'Demo App Token',
-        prefix: 'gat_app_',
-        last4: '4tK2',
-        secretHash: DEMO_APP_TOKEN_SECRET_HASH,
+        prefix: appTokenPreview.prefix,
+        last4: appTokenPreview.last4,
+        secretHash: credentialHash(demoAppToken),
         hashAlgorithm: 'sha256',
         status: CredentialStatus.ACTIVE,
         scopes: ['gateway:invoke'],
@@ -477,9 +497,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         projectId: DEMO_PROJECT_ID,
         applicationId: DEMO_APPLICATION_ID,
         displayName: 'Demo App Token',
-        prefix: 'gat_app_',
-        last4: '4tK2',
-        secretHash: DEMO_APP_TOKEN_SECRET_HASH,
+        prefix: appTokenPreview.prefix,
+        last4: appTokenPreview.last4,
+        secretHash: credentialHash(demoAppToken),
         hashAlgorithm: 'sha256',
         status: CredentialStatus.ACTIVE,
         scopes: ['gateway:invoke'],
@@ -494,6 +514,10 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       openAIBaseUrl,
       openAILowCostModel,
       openAIBalancedModel,
+      apiKeyPrefix: apiKeyPreview.prefix,
+      apiKeyLast4: apiKeyPreview.last4,
+      appTokenPrefix: appTokenPreview.prefix,
+      appTokenLast4: appTokenPreview.last4,
     });
     await tx.runtimeConfig.updateMany({
       where: {
@@ -506,7 +530,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       },
     });
 
-    await tx.runtimeConfig.upsert({
+    const savedRuntimeConfig = await tx.runtimeConfig.upsert({
       where: {
         applicationId_configVersion: {
           applicationId: DEMO_APPLICATION_ID,
@@ -534,7 +558,364 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         publishedAt: new Date(DEMO_GENERATED_AT),
       },
     });
+    const runtimeSnapshot = buildDemoRuntimeSnapshot(
+      savedRuntimeConfig,
+      runtimeConfig,
+    );
+    const savedRuntimeSnapshot = await tx.runtimeSnapshot.upsert({
+      where: {
+        applicationId_version: {
+          applicationId: runtimeSnapshot.lookupKey.applicationId,
+          version: BigInt(runtimeSnapshot.runtimeSnapshotVersion),
+        },
+      },
+      update: {
+        tenantId: runtimeSnapshot.lookupKey.tenantId,
+        projectId: runtimeSnapshot.lookupKey.projectId,
+        runtimeConfigId: savedRuntimeConfig.id,
+        contentHash: runtimeSnapshot.contentHash,
+        snapshotBody: toInputJsonObject(runtimeSnapshot),
+        publishedAt: new Date(runtimeSnapshot.publishedAt),
+        publishedBy: runtimeSnapshot.publishedBy,
+      },
+      create: {
+        id: savedRuntimeConfig.id,
+        tenantId: runtimeSnapshot.lookupKey.tenantId,
+        projectId: runtimeSnapshot.lookupKey.projectId,
+        applicationId: runtimeSnapshot.lookupKey.applicationId,
+        runtimeConfigId: savedRuntimeConfig.id,
+        version: BigInt(runtimeSnapshot.runtimeSnapshotVersion),
+        contentHash: runtimeSnapshot.contentHash,
+        snapshotBody: toInputJsonObject(runtimeSnapshot),
+        publishedAt: new Date(runtimeSnapshot.publishedAt),
+        publishedBy: runtimeSnapshot.publishedBy,
+      },
+    });
+    await tx.activeRuntimeSnapshot.upsert({
+      where: {
+        tenantId_projectId_applicationId: {
+          tenantId: runtimeSnapshot.lookupKey.tenantId,
+          projectId: runtimeSnapshot.lookupKey.projectId,
+          applicationId: runtimeSnapshot.lookupKey.applicationId,
+        },
+      },
+      update: {
+        runtimeSnapshotId: savedRuntimeSnapshot.id,
+        updatedBy: runtimeSnapshot.publishedBy,
+      },
+      create: {
+        tenantId: runtimeSnapshot.lookupKey.tenantId,
+        projectId: runtimeSnapshot.lookupKey.projectId,
+        applicationId: runtimeSnapshot.lookupKey.applicationId,
+        runtimeSnapshotId: savedRuntimeSnapshot.id,
+        updatedBy: runtimeSnapshot.publishedBy,
+      },
+    });
   });
+}
+
+function buildDemoRuntimeSnapshot(
+  runtimeConfig: RuntimeConfig,
+  document: ActiveRuntimeConfigResponseDto,
+): RuntimeSnapshotResponseDto {
+  const runtimeSnapshotVersion = toRuntimeSnapshotVersion(
+    runtimeConfig,
+    document,
+  );
+  const providerCatalog = buildDemoProviderCatalog(
+    runtimeConfig,
+    document,
+  );
+  const snapshotWithoutContentHash = {
+    runtimeSnapshotId: runtimeConfig.id,
+    runtimeSnapshotVersion,
+    contentHash: undefined,
+    runtimeState: 'snapshot_active',
+    publishedAt:
+      runtimeConfig.publishedAt?.toISOString() ?? document.publishedAt,
+    publishedBy: DEMO_PUBLISHED_BY,
+    gatewayInstanceId: DEMO_GATEWAY_INSTANCE_ID,
+    lookupKey: {
+      tenantId: document.tenantId,
+      projectId: document.projectId,
+      applicationId: document.applicationId,
+    },
+    budgetResolution: {
+      budgetScopeType: 'application',
+      budgetScopeId: document.applicationId,
+      resolvedBy: 'default_application',
+      warningThresholdPercent: document.budgetPolicy.warningThresholdPercent,
+    },
+    providerCatalogRef: {
+      catalogId: providerCatalog.catalogId,
+      catalogVersion: providerCatalog.catalogVersion,
+      contentHash: providerCatalog.contentHash,
+    },
+    policies: {
+      safety: {
+        enabled: document.safetyPolicy.detectors.some(
+          (detector) => detector.enabled,
+        ),
+        mode: document.safetyPolicy.detectors.some(
+          (detector) => detector.enabled,
+        )
+          ? 'enforce'
+          : 'disabled',
+        requestSideRequired: true,
+        policyHash: document.safetyPolicy.securityPolicyHash,
+        detectorSet: document.safetyPolicy.detectors.map((detector) => ({
+          detectorType: detector.type,
+          action: detector.enabled ? detector.action : 'allow',
+        })),
+      },
+      routing: {
+        autoModelEnabled: true,
+        defaultRequestedModel: document.routingPolicy.autoModel,
+        defaultProvider: document.routingPolicy.defaultProvider,
+        defaultModel: document.routingPolicy.defaultModel,
+        routingPolicyHash: document.routingPolicy.routingPolicyHash,
+      },
+      cache: {
+        exactCacheEnabled: document.cachePolicy.enabled,
+        semanticCacheMode: document.cachePolicy.enabled
+          ? 'evidence_only'
+          : 'disabled',
+        cachePolicyHash: sha256(canonicalJson(document.cachePolicy)),
+      },
+      rateLimit: {
+        enabled: document.rateLimit.enabled,
+        scope: document.rateLimit.scope,
+        windowSeconds: document.rateLimit.windowSeconds,
+        limit: document.rateLimit.limit,
+      },
+      budget: {
+        enabled: document.budgetPolicy.enabled,
+        enforcementMode: document.budgetPolicy.enforcementMode,
+        warningThresholdPercent: document.budgetPolicy.warningThresholdPercent,
+      },
+      fallback: {
+        enabled: true,
+        fallbackProvider: document.routingPolicy.fallbackProvider,
+        fallbackModel: document.routingPolicy.fallbackModel,
+        allowedReasons: ['provider_timeout', 'provider_error'],
+      },
+      streaming: {
+        enabled: document.models.some((model) => model.supportsStreaming),
+        thinSliceOnly: true,
+      },
+    },
+    legacyHashes: {
+      configHash: document.configHash,
+      securityPolicyHash: document.safetyPolicy.securityPolicyHash,
+      routingPolicyHash: document.routingPolicy.routingPolicyHash,
+    },
+  } satisfies Omit<RuntimeSnapshotResponseDto, 'contentHash'> & {
+    contentHash?: string;
+  };
+
+  return {
+    ...snapshotWithoutContentHash,
+    contentHash: sha256(canonicalJson(snapshotWithoutContentHash)),
+  };
+}
+
+function buildDemoProviderCatalog(
+  runtimeConfig: RuntimeConfig,
+  document: ActiveRuntimeConfigResponseDto,
+): ProviderCatalogResponseDto {
+  const catalogVersion = toRuntimeSnapshotVersion(runtimeConfig, document);
+  const updatedAt =
+    runtimeConfig.publishedAt?.toISOString() ?? document.publishedAt;
+  const catalogBodyWithoutHash = {
+    catalogId: `${PROVIDER_CATALOG_ID_PREFIX}:${document.applicationId}:${catalogVersion}`,
+    catalogVersion,
+    updatedAt,
+    providers: document.providers
+      .filter(isProviderCatalogProviderExecutable)
+      .map((provider) => ({
+        providerId: provider.providerId,
+        providerName: provider.provider,
+        adapterType: toRuntimeProviderAdapterType(provider),
+        enabled: provider.status === 'active',
+        baseUrl: provider.baseUrl,
+        timeoutMs: provider.timeoutMs,
+        credentialRequired: providerCredentialRequired(provider),
+        credentialRef: providerCredentialRequired(provider)
+          ? providerCatalogCredentialRef(provider)
+          : null,
+        adapterConfig:
+          provider.adapterConfig ??
+          toRuntimeProviderAdapterConfig(
+            toRuntimeProviderAdapterType(provider),
+          ),
+        fallbackEligible: provider.failureMode === 'fail_open_to_fallback',
+        models: document.models
+          .filter((model) => model.provider === provider.provider)
+          .map((model) => ({
+            modelId: `${provider.providerId}:${model.model}`,
+            modelName: model.model,
+            displayName: model.displayName,
+            enabled: model.status === 'active',
+            capabilities: {
+              streamingSupported: model.supportsStreaming,
+              supportsJsonMode: model.supportsJsonMode,
+              maxInputTokens: model.contextWindowTokens,
+              maxOutputTokens: toMaxOutputTokens(model),
+            },
+            routing: {
+              autoRoutingEligible: model.status === 'active',
+              costTier: toModelCostTier(model, document),
+              fallbackPriority: toModelFallbackPriority(model, document),
+            },
+          })),
+      })),
+  };
+  if (catalogBodyWithoutHash.providers.length === 0) {
+    throw new Error('Provider Catalog has no executable providers.');
+  }
+
+  return {
+    ...catalogBodyWithoutHash,
+    contentHash: sha256(canonicalJson(catalogBodyWithoutHash)),
+  };
+}
+
+function isProviderCatalogProviderExecutable(
+  provider: ActiveRuntimeConfigResponseDto['providers'][number],
+): boolean {
+  if (provider.status !== 'active') {
+    return false;
+  }
+  if (!providerCredentialRequired(provider)) {
+    return true;
+  }
+
+  return provider.credentialRef?.credentialState === 'active';
+}
+
+function providerCredentialRequired(
+  provider: ActiveRuntimeConfigResponseDto['providers'][number],
+): boolean {
+  return provider.credentialRequired ?? provider.resolver !== 'none';
+}
+
+function providerCatalogCredentialRef(
+  provider: ActiveRuntimeConfigResponseDto['providers'][number],
+): NonNullable<
+  ProviderCatalogResponseDto['providers'][number]['credentialRef']
+> {
+  if (!provider.credentialRef) {
+    throw new Error('Provider credentialRef is required for catalog seed.');
+  }
+
+  return {
+    credentialRefId: provider.credentialRef.credentialRefId,
+    credentialVersion: provider.credentialRef.credentialVersion,
+    credentialState: provider.credentialRef.credentialState,
+  };
+}
+
+function toRuntimeProviderAdapterType(
+  provider: ActiveRuntimeConfigResponseDto['providers'][number],
+): string {
+  if (isSafeCatalogToken(provider.adapterType)) {
+    return provider.adapterType.trim();
+  }
+
+  return provider.provider === DEMO_PROVIDER ? 'mock' : 'openai_compatible';
+}
+
+function toRuntimeProviderAdapterConfig(
+  adapterType: string,
+): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+  return adapterType === 'mock'
+    ? { requestFormat: 'mock_chat_completions' }
+    : { requestFormat: 'openai_chat_completions' };
+}
+
+function toMaxOutputTokens(
+  model: ActiveRuntimeConfigResponseDto['models'][number],
+): number {
+  return Math.max(
+    1,
+    Math.min(4096, Math.floor(model.contextWindowTokens / 4)),
+  );
+}
+
+function toModelCostTier(
+  model: ActiveRuntimeConfigResponseDto['models'][number],
+  document: ActiveRuntimeConfigResponseDto,
+): 'low' | 'balanced' | 'premium' {
+  if (
+    model.provider === document.routingPolicy.lowCostProvider &&
+    model.model === document.routingPolicy.lowCostModel
+  ) {
+    return 'low';
+  }
+
+  return 'balanced';
+}
+
+function toModelFallbackPriority(
+  model: ActiveRuntimeConfigResponseDto['models'][number],
+  document: ActiveRuntimeConfigResponseDto,
+): number {
+  if (
+    model.provider === document.routingPolicy.lowCostProvider &&
+    model.model === document.routingPolicy.lowCostModel
+  ) {
+    return 0;
+  }
+  if (
+    model.provider === document.routingPolicy.defaultProvider &&
+    model.model === document.routingPolicy.defaultModel
+  ) {
+    return 1;
+  }
+  if (
+    model.provider === document.routingPolicy.fallbackProvider &&
+    model.model === document.routingPolicy.fallbackModel
+  ) {
+    return 10;
+  }
+
+  return 5;
+}
+
+function toRuntimeSnapshotVersion(
+  runtimeConfig: RuntimeConfig,
+  document: ActiveRuntimeConfigResponseDto,
+): number {
+  const fromVersion =
+    trailingPositiveInteger(runtimeConfig.configVersion) ??
+    trailingPositiveInteger(document.configVersion);
+  if (fromVersion) {
+    return fromVersion;
+  }
+
+  const publishedAt =
+    runtimeConfig.publishedAt ?? new Date(document.publishedAt);
+  if (!Number.isNaN(publishedAt.getTime())) {
+    return Math.max(1, publishedAt.getTime());
+  }
+
+  return 1;
+}
+
+function trailingPositiveInteger(value: string): number | null {
+  const match = value.match(/(\d+)$/);
+  if (!match?.[1]) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isSafeCatalogToken(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[A-Za-z0-9._-]{1,80}$/.test(value.trim())
+  );
 }
 
 function buildSafetyPolicy(): ActiveRuntimeConfigResponseDto['safetyPolicy'] {
@@ -774,6 +1155,23 @@ function readEnvString(key: string, fallback: string): string {
   return value.trim();
 }
 
+function credentialPreview(
+  plaintext: string,
+  fallbackPrefix: string,
+): { prefix: string; last4: string } {
+  const value = plaintext.trim();
+  const markerIndex = value.lastIndexOf('_');
+  const prefix =
+    markerIndex >= 0
+      ? value.slice(0, Math.min(markerIndex + 1, 24))
+      : fallbackPrefix;
+
+  return {
+    prefix,
+    last4: value.length >= 4 ? value.slice(-4) : '****',
+  };
+}
+
 function canonicalJson(value: unknown): string {
   if (value === undefined) {
     return 'null';
@@ -821,7 +1219,7 @@ function sha256(value: string): string {
 }
 
 function toInputJsonObject(
-  value: ActiveRuntimeConfigResponseDto,
+  value: ActiveRuntimeConfigResponseDto | RuntimeSnapshotResponseDto,
 ): Prisma.InputJsonObject {
   return value as unknown as Prisma.InputJsonObject;
 }
