@@ -1068,16 +1068,21 @@ func chatChoiceContent(choice provider.ChatChoice) string {
 }
 
 func splitStreamingContent(content string) []string {
-	words := strings.Fields(content)
-	if len(words) == 0 {
+	if content == "" {
 		return []string{""}
 	}
-	chunks := make([]string, len(words))
-	for i, word := range words {
-		chunks[i] = word
-		if i < len(words)-1 {
-			chunks[i] += " "
+
+	chunks := make([]string, 0)
+	var current strings.Builder
+	for _, r := range content {
+		current.WriteRune(r)
+		if r == ' ' || r == '\n' || r == '\t' {
+			chunks = append(chunks, current.String())
+			current.Reset()
 		}
+	}
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
 	}
 	return chunks
 }

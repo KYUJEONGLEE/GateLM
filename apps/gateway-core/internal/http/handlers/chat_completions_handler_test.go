@@ -319,6 +319,54 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 	}
 }
 
+func TestChatCompletionsHandlerStreamingPreservesResponseWhitespace(t *testing.T) {
+	content := "첫 줄\n\n```go\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n```\n끝  두칸"
+	contentJSON, err := json.Marshal(content)
+	if err != nil {
+		t.Fatalf("marshal content: %v", err)
+	}
+
+	calls := 0
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", staticProviderAdapter{
+			calls: &calls,
+			response: &provider.ChatCompletionResponse{
+				ID:      "mock_chatcmpl_whitespace",
+				Object:  "chat.completion",
+				Created: 1782108000,
+				Model:   "mock-balanced",
+				Choices: []provider.ChatChoice{{
+					Index: 0,
+					Message: provider.ChatMessage{
+						Role:    "assistant",
+						Content: contentJSON,
+					},
+					FinishReason: "stop",
+				}},
+			},
+		}),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Return formatted code.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if calls != 1 {
+		t.Fatalf("expected one provider call, got %d", calls)
+	}
+	if got := streamedAssistantContent(t, rr.Body.String()); got != content {
+		t.Fatalf("streamed content must preserve whitespace\nwant: %q\n got: %q\nbody: %s", content, got, rr.Body.String())
+	}
+}
+
 func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
@@ -3076,6 +3124,33 @@ func decodeChatCompletionResponse(t *testing.T, rr *httptest.ResponseRecorder) p
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp
+}
+
+func streamedAssistantContent(t *testing.T, body string) string {
+	t.Helper()
+
+	var content strings.Builder
+	for _, line := range strings.Split(body, "\n") {
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok || data == "" || data == "[DONE]" {
+			continue
+		}
+
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			t.Fatalf("decode streaming chunk %q: %v", data, err)
+		}
+		for _, choice := range chunk.Choices {
+			content.WriteString(choice.Delta.Content)
+		}
+	}
+	return content.String()
 }
 
 func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder, resp provider.ChatCompletionResponse) {
