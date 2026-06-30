@@ -79,7 +79,7 @@ func Load() Config {
 		OpenAIBalancedModelName:  envString("GATEWAY_OPENAI_BALANCED_MODEL_NAME", "gpt-4o"),
 		MockProviderID:           envString("GATEWAY_MOCK_PROVIDER_ID", "provider_mock_local"),
 		MockProviderName:         envString("GATEWAY_MOCK_PROVIDER_NAME", "mock"),
-		ProviderCredentialEnvMap: envString("GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP", "credential_ref_openai_main=OPENAI_API_KEY"),
+		ProviderCredentialEnvMap: envString("GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP", "credential_ref_openai_main=OPENAI_API_KEY,provider_credential:00000000-0000-4000-8000-000000000601=OPENAI_API_KEY"),
 		RuntimeConfigHash:        envString("GATEWAY_RUNTIME_CONFIG_HASH", "hash_runtime_config_v1_local"),
 		SecurityPolicyHash:       envString("GATEWAY_SECURITY_POLICY_HASH", "hash_security_policy_v1_local"),
 		RoutingPolicyHash:        envString("GATEWAY_ROUTING_POLICY_HASH", "hash_routing_policy_v1_local"),

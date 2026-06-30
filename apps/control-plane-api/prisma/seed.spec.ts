@@ -5,6 +5,8 @@ import {
   canonicalJsonForDemo,
   credentialHash,
   DEMO_APPLICATION_ID,
+  DEMO_MOCK_PROVIDER_ID,
+  DEMO_OPENAI_PROVIDER_ID,
   DEMO_RUNTIME_CONFIG_VERSION,
   seedDemoData,
 } from './seed';
@@ -44,6 +46,45 @@ describe('Control Plane demo seed baseline', () => {
     expect(serialized).not.toContain('authorizationHeader');
     expect(serialized).not.toContain('rawCredential');
     expect(serialized).not.toContain('demo_only');
+  });
+
+  it('can build an actual-provider main path without storing raw provider keys', () => {
+    const runtimeConfig = buildDemoRuntimeConfigDocument(DEMO_MOCK_PROVIDER_ID, {
+      providerMode: 'actual',
+      mockProviderId: DEMO_MOCK_PROVIDER_ID,
+      openAIProviderId: DEMO_OPENAI_PROVIDER_ID,
+    });
+    const openAIProvider = runtimeConfig.providers.find(
+      (provider) => provider.provider === 'openai-main',
+    );
+    const mockProvider = runtimeConfig.providers.find(
+      (provider) => provider.provider === 'mock',
+    );
+    const serialized = JSON.stringify(runtimeConfig);
+
+    expect(runtimeConfig.defaultProvider).toBe('openai-main');
+    expect(runtimeConfig.lowCostProvider).toBe('openai-main');
+    expect(runtimeConfig.fallbackProvider).toBe('mock');
+    expect(openAIProvider).toMatchObject({
+      providerId: DEMO_OPENAI_PROVIDER_ID,
+      adapterType: 'openai_compatible',
+      credentialRequired: true,
+      credentialRef: {
+        credentialRefId: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
+        credentialVersion: 1,
+        credentialState: 'active',
+      },
+      resolver: 'environment',
+      adapterConfig: { requestFormat: 'openai_chat_completions' },
+    });
+    expect(mockProvider).toMatchObject({
+      providerId: DEMO_MOCK_PROVIDER_ID,
+      adapterType: 'mock',
+      failureMode: 'fail_open_to_fallback',
+    });
+    expect(serialized).not.toContain('OPENAI_API_KEY');
+    expect(serialized).not.toContain('Authorization');
+    expect(serialized).not.toContain('Bearer ');
   });
 
   it('hashes demo credentials after trimming surrounding whitespace', () => {
@@ -106,6 +147,50 @@ describe('Control Plane demo seed baseline', () => {
       }),
     );
   });
+
+  it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
+    const tx = createMockTransaction();
+    tx.providerConnection.upsert.mockImplementation(
+      (args: { create?: { id?: string } }) =>
+        Promise.resolve({ id: args.create?.id ?? 'provider-demo-id' }),
+    );
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await withEnv({ GATELM_DEMO_PROVIDER_MODE: 'actual' }, async () => {
+      await seedDemoData(client as unknown as PrismaClient);
+    });
+
+    expect(tx.providerConnection.upsert).toHaveBeenCalledTimes(2);
+    expect(tx.providerConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          id: DEMO_OPENAI_PROVIDER_ID,
+          provider: 'openai-main',
+          resolver: 'environment',
+          secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
+          providerConfig: expect.objectContaining({
+            adapterType: 'openai_compatible',
+            requestFormat: 'openai_chat_completions',
+            credentialRequired: true,
+          }),
+        }),
+      }),
+    );
+    expect(tx.runtimeConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          document: expect.objectContaining({
+            defaultProvider: 'openai-main',
+            fallbackProvider: 'mock',
+          }),
+        }),
+      }),
+    );
+  });
 });
 
 function createMockTransaction() {
@@ -123,4 +208,25 @@ function createMockTransaction() {
       upsert: jest.fn(),
     },
   };
+}
+
+async function withEnv(
+  values: Record<string, string>,
+  callback: () => Promise<void>,
+): Promise<void> {
+  const previous = new Map(
+    Object.keys(values).map((key) => [key, process.env[key]]),
+  );
+  try {
+    Object.assign(process.env, values);
+    await callback();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }

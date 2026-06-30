@@ -20,6 +20,8 @@ export const DEMO_PROJECT_ID = '00000000-0000-4000-8000-000000000200';
 export const DEMO_APPLICATION_ID = '00000000-0000-4000-8000-000000000300';
 export const DEMO_API_KEY_ID = '00000000-0000-4000-8000-000000000400';
 export const DEMO_APP_TOKEN_ID = '00000000-0000-4000-8000-000000000500';
+export const DEMO_MOCK_PROVIDER_ID = '00000000-0000-4000-8000-000000000600';
+export const DEMO_OPENAI_PROVIDER_ID = '00000000-0000-4000-8000-000000000601';
 export const DEMO_RUNTIME_CONFIG_VERSION = 'runtime_config_v1_demo_001';
 
 const DEMO_API_KEY_SECRET_HASH =
@@ -28,10 +30,25 @@ const DEMO_APP_TOKEN_SECRET_HASH =
   '525420fa732030cf3d3da44e077628b53fdf3503f772b21e8b14b1fc1b354862';
 const DEMO_PROVIDER = 'mock';
 const DEMO_PROVIDER_BASE_URL = 'http://mock-provider:8090';
+const DEMO_OPENAI_PROVIDER = 'openai-main';
+const DEMO_OPENAI_PROVIDER_BASE_URL = 'https://api.openai.com/v1';
+const DEMO_OPENAI_LOW_COST_MODEL = 'gpt-4o-mini';
+const DEMO_OPENAI_BALANCED_MODEL = 'gpt-4o';
 const DEMO_GENERATED_AT = '2026-06-27T02:00:00.000Z';
 const CONFIG_HASH_ALGORITHM =
   'sha256(canonical_json(runtimeConfig_without_configHash))';
 const DEMO_MODELS = ['mock-fast', 'mock-balanced'] as const;
+
+type DemoProviderMode = 'mock' | 'actual';
+
+interface DemoRuntimeConfigOptions {
+  providerMode?: DemoProviderMode;
+  mockProviderId?: string;
+  openAIProviderId?: string;
+  openAIBaseUrl?: string;
+  openAILowCostModel?: string;
+  openAIBalancedModel?: string;
+}
 
 export function credentialHash(plaintext: string): string {
   return sha256(plaintext.trim());
@@ -43,9 +60,102 @@ export function canonicalJsonForDemo(value: unknown): string {
 
 export function buildDemoRuntimeConfigDocument(
   providerId: string,
+  options: DemoRuntimeConfigOptions = {},
 ): ActiveRuntimeConfigResponseDto {
+  const providerMode = options.providerMode ?? 'mock';
+  const mockProviderId = options.mockProviderId ?? providerId;
+  const openAIProviderId =
+    options.openAIProviderId ?? DEMO_OPENAI_PROVIDER_ID;
+  const openAIBaseUrl =
+    options.openAIBaseUrl ?? DEMO_OPENAI_PROVIDER_BASE_URL;
+  const openAILowCostModel =
+    options.openAILowCostModel ?? DEMO_OPENAI_LOW_COST_MODEL;
+  const openAIBalancedModel =
+    options.openAIBalancedModel ?? DEMO_OPENAI_BALANCED_MODEL;
   const safetyPolicy = buildSafetyPolicy();
-  const routingPolicy = buildRoutingPolicy();
+  const routingPolicy =
+    providerMode === 'actual'
+      ? buildRoutingPolicy({
+          defaultProvider: DEMO_OPENAI_PROVIDER,
+          defaultModel: openAIBalancedModel,
+          lowCostProvider: DEMO_OPENAI_PROVIDER,
+          lowCostModel: openAILowCostModel,
+          fallbackProvider: DEMO_PROVIDER,
+          fallbackModel: 'mock-balanced',
+        })
+      : buildRoutingPolicy();
+  const providers =
+    providerMode === 'actual'
+      ? [
+          buildOpenAIRuntimeProvider({
+            providerId: openAIProviderId,
+            baseUrl: openAIBaseUrl,
+            lowCostModel: openAILowCostModel,
+            balancedModel: openAIBalancedModel,
+          }),
+          buildMockRuntimeProvider(mockProviderId, 'fail_open_to_fallback'),
+        ]
+      : [buildMockRuntimeProvider(mockProviderId, 'fail_closed')];
+  const models =
+    providerMode === 'actual'
+      ? [
+          buildOpenAIModel(openAILowCostModel, 'OpenAI Low Cost', 128000),
+          buildOpenAIModel(openAIBalancedModel, 'OpenAI Balanced', 128000),
+          buildMockModel('mock-fast', 'Mock Fast'),
+          buildMockModel('mock-balanced', 'Mock Balanced'),
+        ]
+      : [
+          buildMockModel('mock-fast', 'Mock Fast'),
+          buildMockModel('mock-balanced', 'Mock Balanced'),
+        ];
+  const pricingRules =
+    providerMode === 'actual'
+      ? [
+          buildPricingRule({
+            provider: DEMO_OPENAI_PROVIDER,
+            model: openAILowCostModel,
+            pricingVersion: '2026-06-30.openai.demo.v1',
+            promptTokenMicroUsd: 1,
+            completionTokenMicroUsd: 4,
+          }),
+          buildPricingRule({
+            provider: DEMO_OPENAI_PROVIDER,
+            model: openAIBalancedModel,
+            pricingVersion: '2026-06-30.openai.demo.v1',
+            promptTokenMicroUsd: 3,
+            completionTokenMicroUsd: 10,
+          }),
+          buildPricingRule({
+            provider: DEMO_PROVIDER,
+            model: 'mock-fast',
+            pricingVersion: '2026-06-27.mock.v1',
+            promptTokenMicroUsd: 1,
+            completionTokenMicroUsd: 2,
+          }),
+          buildPricingRule({
+            provider: DEMO_PROVIDER,
+            model: 'mock-balanced',
+            pricingVersion: '2026-06-27.mock.v1',
+            promptTokenMicroUsd: 2,
+            completionTokenMicroUsd: 3,
+          }),
+        ]
+      : [
+          buildPricingRule({
+            provider: DEMO_PROVIDER,
+            model: 'mock-fast',
+            pricingVersion: '2026-06-27.mock.v1',
+            promptTokenMicroUsd: 1,
+            completionTokenMicroUsd: 2,
+          }),
+          buildPricingRule({
+            provider: DEMO_PROVIDER,
+            model: 'mock-balanced',
+            pricingVersion: '2026-06-27.mock.v1',
+            promptTokenMicroUsd: 2,
+            completionTokenMicroUsd: 3,
+          }),
+        ];
   const documentWithoutHash: ActiveRuntimeConfigResponseDto = {
     schemaVersion: 'gatelm.active-runtime-config.v1',
     configVersion: DEMO_RUNTIME_CONFIG_VERSION,
@@ -85,45 +195,12 @@ export function buildDemoRuntimeConfigDocument(
       expiresAt: null,
       verification: 'prefix_then_hash_compare',
     },
-    providers: [
-      {
-        providerId,
-        provider: DEMO_PROVIDER,
-        displayName: 'Mock Provider',
-        status: 'active',
-        baseUrl: DEMO_PROVIDER_BASE_URL,
-        timeoutMs: 30000,
-        secretRef: null,
-        credentialPreview: null,
-        resolver: 'none',
-        models: [...DEMO_MODELS],
-        failureMode: 'fail_closed',
-      },
-    ],
-    models: [
-      {
-        provider: DEMO_PROVIDER,
-        model: 'mock-fast',
-        displayName: 'Mock Fast',
-        status: 'active',
-        contextWindowTokens: 8192,
-        supportsStreaming: false,
-        supportsJsonMode: false,
-      },
-      {
-        provider: DEMO_PROVIDER,
-        model: 'mock-balanced',
-        displayName: 'Mock Balanced',
-        status: 'active',
-        contextWindowTokens: 8192,
-        supportsStreaming: false,
-        supportsJsonMode: false,
-      },
-    ],
-    defaultProvider: DEMO_PROVIDER,
-    defaultModel: 'mock-balanced',
-    lowCostProvider: DEMO_PROVIDER,
-    lowCostModel: 'mock-fast',
+    providers,
+    models,
+    defaultProvider: routingPolicy.defaultProvider,
+    defaultModel: routingPolicy.defaultModel,
+    lowCostProvider: routingPolicy.lowCostProvider,
+    lowCostModel: routingPolicy.lowCostModel,
     fallbackProvider: DEMO_PROVIDER,
     fallbackModel: 'mock-balanced',
     rateLimit: {
@@ -145,30 +222,7 @@ export function buildDemoRuntimeConfigDocument(
       ttlSeconds: 3600,
     },
     routingPolicy,
-    pricingRules: [
-      {
-        pricingRuleId: 'price_mock_mock-fast_v1',
-        provider: DEMO_PROVIDER,
-        model: 'mock-fast',
-        pricingVersion: '2026-06-27.mock.v1',
-        currency: 'USD',
-        unit: 'token',
-        promptTokenMicroUsd: 1,
-        completionTokenMicroUsd: 2,
-        effectiveAt: DEMO_GENERATED_AT,
-      },
-      {
-        pricingRuleId: 'price_mock_mock-balanced_v1',
-        provider: DEMO_PROVIDER,
-        model: 'mock-balanced',
-        pricingVersion: '2026-06-27.mock.v1',
-        currency: 'USD',
-        unit: 'token',
-        promptTokenMicroUsd: 2,
-        completionTokenMicroUsd: 3,
-        effectiveAt: DEMO_GENERATED_AT,
-      },
-    ],
+    pricingRules,
     hashing: {
       canonicalJson: 'utf8_json_sorted_keys_no_extra_whitespace',
       usesSecret: false,
@@ -276,6 +330,20 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       },
     });
 
+    const providerMode = readDemoProviderMode();
+    const openAIBaseUrl = readEnvString(
+      'GATELM_DEMO_OPENAI_BASE_URL',
+      DEMO_OPENAI_PROVIDER_BASE_URL,
+    );
+    const openAILowCostModel = readEnvString(
+      'GATELM_DEMO_OPENAI_LOW_COST_MODEL',
+      DEMO_OPENAI_LOW_COST_MODEL,
+    );
+    const openAIBalancedModel = readEnvString(
+      'GATELM_DEMO_OPENAI_BALANCED_MODEL',
+      DEMO_OPENAI_BALANCED_MODEL,
+    );
+
     const provider = await tx.providerConnection.upsert({
       where: {
         projectId_provider: {
@@ -296,6 +364,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         providerConfig: demoProviderConfig(),
       },
       create: {
+        id: DEMO_MOCK_PROVIDER_ID,
         tenantId: DEMO_TENANT_ID,
         projectId: DEMO_PROJECT_ID,
         provider: DEMO_PROVIDER,
@@ -310,6 +379,51 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         providerConfig: demoProviderConfig(),
       },
     });
+
+    const openAIProvider =
+      providerMode === 'actual'
+        ? await tx.providerConnection.upsert({
+            where: {
+              projectId_provider: {
+                projectId: DEMO_PROJECT_ID,
+                provider: DEMO_OPENAI_PROVIDER,
+              },
+            },
+            update: {
+              tenantId: DEMO_TENANT_ID,
+              displayName: 'OpenAI Main',
+              status: ProviderConnectionStatus.ACTIVE,
+              baseUrl: openAIBaseUrl,
+              timeoutMs: 30000,
+              secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
+              credentialPrefix: 'env_ref_',
+              credentialLast4: '0000',
+              resolver: 'environment',
+              providerConfig: demoOpenAIProviderConfig(
+                openAILowCostModel,
+                openAIBalancedModel,
+              ),
+            },
+            create: {
+              id: DEMO_OPENAI_PROVIDER_ID,
+              tenantId: DEMO_TENANT_ID,
+              projectId: DEMO_PROJECT_ID,
+              provider: DEMO_OPENAI_PROVIDER,
+              displayName: 'OpenAI Main',
+              status: ProviderConnectionStatus.ACTIVE,
+              baseUrl: openAIBaseUrl,
+              timeoutMs: 30000,
+              secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
+              credentialPrefix: 'env_ref_',
+              credentialLast4: '0000',
+              resolver: 'environment',
+              providerConfig: demoOpenAIProviderConfig(
+                openAILowCostModel,
+                openAIBalancedModel,
+              ),
+            },
+          })
+        : null;
 
     await tx.gatewayApiKey.upsert({
       where: { id: DEMO_API_KEY_ID },
@@ -373,7 +487,14 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       },
     });
 
-    const runtimeConfig = buildDemoRuntimeConfigDocument(provider.id);
+    const runtimeConfig = buildDemoRuntimeConfigDocument(provider.id, {
+      providerMode,
+      mockProviderId: provider.id,
+      openAIProviderId: openAIProvider?.id ?? DEMO_OPENAI_PROVIDER_ID,
+      openAIBaseUrl,
+      openAILowCostModel,
+      openAIBalancedModel,
+    });
     await tx.runtimeConfig.updateMany({
       where: {
         applicationId: DEMO_APPLICATION_ID,
@@ -478,17 +599,136 @@ function buildSafetyPolicy(): ActiveRuntimeConfigResponseDto['safetyPolicy'] {
   };
 }
 
-function buildRoutingPolicy(): ActiveRuntimeConfigResponseDto['routingPolicy'] {
+function buildMockRuntimeProvider(
+  providerId: string,
+  failureMode: 'fail_closed' | 'fail_open_to_fallback',
+): ActiveRuntimeConfigResponseDto['providers'][number] {
+  return {
+    providerId,
+    provider: DEMO_PROVIDER,
+    displayName: 'Mock Provider',
+    status: 'active',
+    adapterType: 'mock',
+    baseUrl: DEMO_PROVIDER_BASE_URL,
+    timeoutMs: 30000,
+    credentialRequired: false,
+    credentialRef: null,
+    secretRef: null,
+    credentialPreview: null,
+    resolver: 'none',
+    adapterConfig: { requestFormat: 'mock_chat_completions' },
+    models: [...DEMO_MODELS],
+    failureMode,
+  };
+}
+
+function buildOpenAIRuntimeProvider(args: {
+  providerId: string;
+  baseUrl: string;
+  lowCostModel: string;
+  balancedModel: string;
+}): ActiveRuntimeConfigResponseDto['providers'][number] {
+  return {
+    providerId: args.providerId,
+    provider: DEMO_OPENAI_PROVIDER,
+    displayName: 'OpenAI Main',
+    status: 'active',
+    adapterType: 'openai_compatible',
+    baseUrl: args.baseUrl,
+    timeoutMs: 30000,
+    credentialRequired: true,
+    credentialRef: {
+      credentialRefId: `provider_credential:${args.providerId}`,
+      credentialVersion: 1,
+      credentialState: 'active',
+    },
+    secretRef: `provider_credential:${args.providerId}`,
+    credentialPreview: {
+      prefix: 'env_ref_',
+      last4: '0000',
+    },
+    resolver: 'environment',
+    adapterConfig: { requestFormat: 'openai_chat_completions' },
+    models: [args.lowCostModel, args.balancedModel],
+    failureMode: 'fail_closed',
+  };
+}
+
+function buildMockModel(
+  model: (typeof DEMO_MODELS)[number],
+  displayName: string,
+): ActiveRuntimeConfigResponseDto['models'][number] {
+  return {
+    provider: DEMO_PROVIDER,
+    model,
+    displayName,
+    status: 'active',
+    contextWindowTokens: 8192,
+    supportsStreaming: false,
+    supportsJsonMode: false,
+  };
+}
+
+function buildOpenAIModel(
+  model: string,
+  displayName: string,
+  contextWindowTokens: number,
+): ActiveRuntimeConfigResponseDto['models'][number] {
+  return {
+    provider: DEMO_OPENAI_PROVIDER,
+    model,
+    displayName,
+    status: 'active',
+    contextWindowTokens,
+    supportsStreaming: true,
+    supportsJsonMode: true,
+  };
+}
+
+function buildPricingRule(args: {
+  provider: string;
+  model: string;
+  pricingVersion: string;
+  promptTokenMicroUsd: number;
+  completionTokenMicroUsd: number;
+}): ActiveRuntimeConfigResponseDto['pricingRules'][number] {
+  return {
+    pricingRuleId: `price_${args.provider}_${args.model}_v1`.replace(
+      /[^a-zA-Z0-9_-]/g,
+      '_',
+    ),
+    provider: args.provider,
+    model: args.model,
+    pricingVersion: args.pricingVersion,
+    currency: 'USD',
+    unit: 'token',
+    promptTokenMicroUsd: args.promptTokenMicroUsd,
+    completionTokenMicroUsd: args.completionTokenMicroUsd,
+    effectiveAt: DEMO_GENERATED_AT,
+  };
+}
+
+function buildRoutingPolicy(
+  overrides: Partial<{
+    defaultProvider: string;
+    defaultModel: string;
+    lowCostProvider: string;
+    lowCostModel: string;
+    fallbackProvider: string;
+    fallbackModel: string;
+    shortPromptMaxChars: number;
+  }> = {},
+): ActiveRuntimeConfigResponseDto['routingPolicy'] {
   const routingPolicyWithoutHash = {
     type: 'simple',
     autoModel: 'auto',
-    defaultProvider: DEMO_PROVIDER,
-    defaultModel: 'mock-balanced',
-    lowCostProvider: DEMO_PROVIDER,
-    lowCostModel: 'mock-fast',
-    fallbackProvider: DEMO_PROVIDER,
-    fallbackModel: 'mock-balanced',
-    shortPromptMaxChars: 500,
+    defaultProvider: overrides.defaultProvider ?? DEMO_PROVIDER,
+    defaultModel: overrides.defaultModel ?? 'mock-balanced',
+    lowCostProvider: overrides.lowCostProvider ?? DEMO_PROVIDER,
+    lowCostModel: overrides.lowCostModel ?? 'mock-fast',
+    fallbackProvider: overrides.fallbackProvider ?? DEMO_PROVIDER,
+    fallbackModel: overrides.fallbackModel ?? 'mock-balanced',
+    shortPromptMaxChars: overrides.shortPromptMaxChars ?? 500,
   } as const;
 
   return {
@@ -500,8 +740,38 @@ function buildRoutingPolicy(): ActiveRuntimeConfigResponseDto['routingPolicy'] {
 function demoProviderConfig(): Prisma.InputJsonObject {
   return {
     models: [...DEMO_MODELS],
+    failureMode: 'fail_open_to_fallback',
+    adapterType: 'mock',
+    requestFormat: 'mock_chat_completions',
+  };
+}
+
+function demoOpenAIProviderConfig(
+  lowCostModel: string,
+  balancedModel: string,
+): Prisma.InputJsonObject {
+  return {
+    adapterType: 'openai_compatible',
+    requestFormat: 'openai_chat_completions',
+    credentialRequired: true,
+    models: [lowCostModel, balancedModel],
     failureMode: 'fail_closed',
   };
+}
+
+function readDemoProviderMode(): DemoProviderMode {
+  return process.env.GATELM_DEMO_PROVIDER_MODE === 'actual'
+    ? 'actual'
+    : 'mock';
+}
+
+function readEnvString(key: string, fallback: string): string {
+  const value = process.env[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return fallback;
+  }
+
+  return value.trim();
 }
 
 function canonicalJson(value: unknown): string {
