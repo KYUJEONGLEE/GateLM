@@ -170,6 +170,16 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
                 {formatLatency(overview.performance?.p95GatewayInternalLatencyMs ?? overview.p95LatencyMs)} / {formatLatency(overview.performance?.p95ProviderLatencyMs ?? 0)}
               </strong>
             </div>
+            <div className="compact-row">
+              <span>budget scope</span>
+              <strong>
+                {overview.filters.budgetScopeType}:{overview.filters.budgetScopeId}
+              </strong>
+            </div>
+            <div className="compact-row">
+              <span>resolved by</span>
+              <strong>{overview.filters.resolvedBy}</strong>
+            </div>
           </div>
         </article>
 
@@ -230,6 +240,34 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
               <div className="compact-row" key={`fallback-${row.outcome}`}>
                 <span>fallback.{row.outcome}</span>
                 <strong>{row.requestCount}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="console-panel">
+          <div className="panel-heading">
+            <h3>Budget scopes</h3>
+          </div>
+          <div className="compact-list">
+            {(overview.breakdowns?.byBudgetScope ?? []).map((row) => (
+              <div className="compact-row" key={`${row.budgetScopeType}-${row.budgetScopeId}`}>
+                <span>{row.budgetScopeType}:{row.budgetScopeId}</span>
+                <strong>{row.requestCount}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="console-panel">
+          <div className="panel-heading">
+            <h3>Provider p95</h3>
+          </div>
+          <div className="compact-list">
+            {(overview.breakdowns?.byProviderModel ?? []).map((row) => (
+              <div className="compact-row" key={`${row.selectedProvider}-${row.selectedModel}`}>
+                <span>{row.selectedProvider}/{row.selectedModel}</span>
+                <strong>{formatLatency(row.p95ProviderLatencyMs)}</strong>
               </div>
             ))}
           </div>
