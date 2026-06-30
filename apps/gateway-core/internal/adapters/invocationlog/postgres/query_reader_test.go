@@ -259,8 +259,10 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(1),
 			int64(1),
 			int64(1),
+			int64(0),
 			int64(1),
 			int64(3),
+			int64(1),
 			int64(13),
 			int64(20),
 			int64(33),
@@ -268,10 +270,18 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(50),
 			sql.NullFloat64{Float64: 63.3333333333, Valid: true},
 			sql.NullFloat64{Float64: 100, Valid: true},
+			sql.NullFloat64{Float64: 20, Valid: true},
+			sql.NullFloat64{Float64: 34, Valid: true},
+			sql.NullFloat64{Float64: 86, Valid: true},
+			sql.NullFloat64{Float64: 120, Valid: true},
 			[]byte(`{"success":3,"blocked":1,"rate_limited":1,"failed":1,"cancelled":1}`),
 			[]byte(`{"none":4,"redacted":1,"blocked":1}`),
+			[]byte(`{"passed":4,"redacted":1,"blocked":1}`),
+			[]byte(`{"hit":1,"miss":2,"bypassed":3}`),
+			[]byte(`{"success":1,"not_called":5}`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			[]byte(`[{"applicationId":"app_demo","requestCount":6,"costMicroUsd":100}]`),
 			[]byte(`[{"budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application","requestCount":6,"costMicroUsd":100}]`),
 			sql.NullTime{Time: lastLogCreatedAt, Valid: true},
 		}},
@@ -302,6 +312,19 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if overview.StatusCounts[invocationlog.StatusRateLimited] != 1 || overview.MaskingActionCounts["redacted"] != 1 {
 		t.Fatalf("unexpected status/masking counts: status=%+v masking=%+v", overview.StatusCounts, overview.MaskingActionCounts)
 	}
+	if overview.CancelledRequests != 0 || overview.FallbackSuccessCount != 1 {
+		t.Fatalf("unexpected cancelled/fallback counts: %+v", overview)
+	}
+	if overview.SafetyOutcomeCounts["blocked"] != 1 || overview.CacheOutcomeCounts["hit"] != 1 || overview.FallbackOutcomeCounts["success"] != 1 {
+		t.Fatalf("unexpected outcome counts: safety=%+v cache=%+v fallback=%+v", overview.SafetyOutcomeCounts, overview.CacheOutcomeCounts, overview.FallbackOutcomeCounts)
+	}
+	if overview.Performance.P95GatewayInternalLatencyMs == nil || !floatEquals(*overview.Performance.P95GatewayInternalLatencyMs, 20) ||
+		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {
+		t.Fatalf("unexpected performance split: %+v", overview.Performance)
+	}
+	if len(overview.ApplicationBreakdown) != 1 || overview.ApplicationBreakdown[0].ApplicationID != "app_demo" {
+		t.Fatalf("unexpected application breakdown: %+v", overview.ApplicationBreakdown)
+	}
 	if len(overview.RoutingCountByModel) != 1 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
 		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
 	}
@@ -318,15 +341,19 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
 	}
 	for _, expected := range []string{
-		"status = 'failed'",
-		"status = 'rate_limited'",
+		"terminal_status = 'failed'",
+		"terminal_status = 'rate_limited'",
 		"cache_eligible_requests",
 		"saved_cost_micro_usd",
 		"percentile_disc(0.95)",
 		"status_counts",
 		"masking_action_counts",
+		"safety_outcome_counts",
+		"cache_outcome_counts",
+		"fallback_outcome_counts",
 		"routing_count_by_model",
 		"cost_by_model",
+		"application_breakdown",
 		"budget_scope_breakdown",
 	} {
 		if !strings.Contains(db.query, expected) {

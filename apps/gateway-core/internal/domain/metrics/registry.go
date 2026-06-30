@@ -84,6 +84,26 @@ var allowedLabels = map[string]struct{}{
 	"operation":          {},
 }
 
+var forbiddenLabels = map[string]struct{}{
+	"request_id":        {},
+	"trace_id":          {},
+	"tenant_id":         {},
+	"project_id":        {},
+	"application_id":    {},
+	"api_key_id":        {},
+	"app_token_id":      {},
+	"end_user_id":       {},
+	"feature_id":        {},
+	"prompt":            {},
+	"prompt_hash":       {},
+	"request_body_hash": {},
+	"cache_key_hash":    {},
+	"raw_response":      {},
+	"provider_key":      {},
+	"authorization":     {},
+	"raw_error_detail":  {},
+}
+
 func NewRegistry() *Registry {
 	return &Registry{
 		counters:   map[seriesKey]float64{},
@@ -191,6 +211,9 @@ func canonicalLabels(labels []Label) string {
 	filtered := make([]Label, 0, len(labels))
 	for _, label := range labels {
 		name := strings.TrimSpace(label.Name)
+		if _, forbidden := forbiddenLabels[name]; forbidden {
+			continue
+		}
 		if _, ok := allowedLabels[name]; !ok {
 			continue
 		}

@@ -24,17 +24,23 @@ const dashboardText: Record<
       averageLatency: string;
       blocked: string;
       cacheHitRate: string;
+      cancelled: string;
       failed: string;
+      fallbackSuccess: string;
       p95Latency: string;
+      p95ProviderLatency: string;
       rateLimited: string;
       records: string;
       savedCost: string;
+      systemErrorRate: string;
       successful: string;
       totalCost: string;
       totalRequests: string;
       totalTokens: string;
     };
     maskingActions: string;
+    operationalEvidence: string;
+    outcomeEvidence: string;
     routingByModel: string;
     statusDistribution: string;
     title: string;
@@ -47,17 +53,23 @@ const dashboardText: Record<
       averageLatency: "Average latency",
       blocked: "Blocked",
       cacheHitRate: "Cache hit rate",
+      cancelled: "Cancelled",
       failed: "Failed",
+      fallbackSuccess: "Fallback success",
       p95Latency: "P95 latency",
+      p95ProviderLatency: "P95 provider latency",
       rateLimited: "Rate limited",
       records: "Records",
       savedCost: "Saved cost",
+      systemErrorRate: "System error rate",
       successful: "Successful",
       totalCost: "Total cost",
       totalRequests: "Total requests",
       totalTokens: "Total tokens"
     },
     maskingActions: "Masking actions",
+    operationalEvidence: "Operational evidence",
+    outcomeEvidence: "Outcome evidence",
     routingByModel: "Routing by model",
     statusDistribution: "Status distribution",
     title: "Overview"
@@ -69,17 +81,23 @@ const dashboardText: Record<
       averageLatency: "평균 지연",
       blocked: "차단",
       cacheHitRate: "캐시 적중률",
+      cancelled: "취소",
       failed: "실패",
+      fallbackSuccess: "Fallback 성공",
       p95Latency: "P95 지연",
+      p95ProviderLatency: "Provider P95 지연",
       rateLimited: "Rate limit",
       records: "레코드",
       savedCost: "절감 비용",
+      systemErrorRate: "시스템 오류율",
       successful: "성공",
       totalCost: "총 비용",
       totalRequests: "총 요청",
       totalTokens: "총 토큰"
     },
     maskingActions: "마스킹 동작",
+    operationalEvidence: "운영 증거",
+    outcomeEvidence: "Outcome 증거",
     routingByModel: "모델별 라우팅",
     statusDistribution: "상태 분포",
     title: "Overview"
@@ -115,16 +133,46 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
           value={formatInteger(overview.rateLimitedRequests)}
           tone="warning"
         />
+        <MetricCard label={text.metrics.cancelled} value={formatInteger(overview.cancelledRequests ?? 0)} />
         <MetricCard label={text.metrics.cacheHitRate} value={formatPercent(overview.cacheHitRate)} />
+        <MetricCard label={text.metrics.fallbackSuccess} value={formatInteger(overview.fallbackSuccessCount ?? 0)} />
         <MetricCard label={text.metrics.totalTokens} value={formatInteger(overview.totalTokens)} />
         <MetricCard label={text.metrics.totalCost} value={formatUsd(overview.totalCostUsd)} />
         <MetricCard label={text.metrics.savedCost} value={formatUsd(overview.savedCostUsd)} tone="success" />
         <MetricCard label={text.metrics.averageLatency} value={formatLatency(overview.averageLatencyMs)} />
         <MetricCard label={text.metrics.p95Latency} value={formatLatency(overview.p95LatencyMs)} />
+        <MetricCard label={text.metrics.p95ProviderLatency} value={formatLatency(overview.performance?.p95ProviderLatencyMs ?? 0)} />
+        <MetricCard label={text.metrics.systemErrorRate} value={formatPercent(overview.performance?.systemErrorRate ?? 0)} tone="danger" />
         <MetricCard label={text.metrics.records} value={formatInteger(overview.dataFreshness.recordCount)} />
       </section>
 
       <section className="dashboard-grid">
+        <article className="console-panel">
+          <div className="panel-heading">
+            <h3>{text.operationalEvidence}</h3>
+          </div>
+          <div className="compact-list">
+            <div className="compact-row">
+              <span>freshness source</span>
+              <strong>{overview.dataFreshness.source}</strong>
+            </div>
+            <div className="compact-row">
+              <span>query budget</span>
+              <strong>{overview.queryBudget?.status ?? "ok"}</strong>
+            </div>
+            <div className="compact-row">
+              <span>max range</span>
+              <strong>{overview.queryBudget?.maxRangeHours ?? 24}h</strong>
+            </div>
+            <div className="compact-row">
+              <span>gateway/provider p95</span>
+              <strong>
+                {formatLatency(overview.performance?.p95GatewayInternalLatencyMs ?? overview.p95LatencyMs)} / {formatLatency(overview.performance?.p95ProviderLatencyMs ?? 0)}
+              </strong>
+            </div>
+          </div>
+        </article>
+
         <article className="console-panel">
           <div className="panel-heading">
             <h3>{text.statusDistribution}</h3>
@@ -156,6 +204,32 @@ export function DashboardOverviewView({ locale, overview }: DashboardOverviewPro
               <div className="compact-row" key={action}>
                 <span>{action}</span>
                 <strong>{count}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="console-panel">
+          <div className="panel-heading">
+            <h3>{text.outcomeEvidence}</h3>
+          </div>
+          <div className="compact-list">
+            {(overview.breakdowns?.bySafetyOutcome ?? []).map((row) => (
+              <div className="compact-row" key={`safety-${row.outcome}`}>
+                <span>safety.{row.outcome}</span>
+                <strong>{row.requestCount}</strong>
+              </div>
+            ))}
+            {(overview.breakdowns?.byCacheOutcome ?? []).map((row) => (
+              <div className="compact-row" key={`cache-${row.outcome}`}>
+                <span>cache.{row.outcome}</span>
+                <strong>{row.requestCount}</strong>
+              </div>
+            ))}
+            {(overview.breakdowns?.byFallbackOutcome ?? []).map((row) => (
+              <div className="compact-row" key={`fallback-${row.outcome}`}>
+                <span>fallback.{row.outcome}</span>
+                <strong>{row.requestCount}</strong>
               </div>
             ))}
           </div>
