@@ -87,6 +87,7 @@ Customer App / Employee Chat
 
 ```powershell
 corepack pnpm run verify:v2-docs
+corepack pnpm run verify:v2-final
 pnpm install --frozen-lockfile
 ```
 

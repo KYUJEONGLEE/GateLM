@@ -201,6 +201,7 @@ Common checks:
 
 - `git diff --check`
 - `pnpm install --frozen-lockfile`
+- `corepack pnpm run verify:v2-final`
 - impacted TypeScript typecheck
 - impacted Go tests
 - impacted app smoke tests
