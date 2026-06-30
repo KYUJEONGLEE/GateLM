@@ -96,6 +96,16 @@ export class RuntimeConfigsService {
     await this.getApplicationContextOrThrow(applicationId);
     const runtimeConfigs = await this.prisma.runtimeConfig.findMany({
       where: { applicationId },
+      select: {
+        id: true,
+        configVersion: true,
+        configHash: true,
+        publishState: true,
+        effectiveAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: [
         { publishedAt: 'desc' },
         { updatedAt: 'desc' },
@@ -2044,7 +2054,17 @@ export class RuntimeConfigsService {
   }
 
   private toRuntimeConfigHistoryItem(
-    runtimeConfig: RuntimeConfig,
+    runtimeConfig: Pick<
+      RuntimeConfig,
+      | 'id'
+      | 'configVersion'
+      | 'configHash'
+      | 'publishState'
+      | 'effectiveAt'
+      | 'publishedAt'
+      | 'createdAt'
+      | 'updatedAt'
+    >,
   ): RuntimeConfigHistoryItemDto {
     return {
       id: runtimeConfig.id,

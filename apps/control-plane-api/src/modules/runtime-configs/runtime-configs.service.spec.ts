@@ -226,6 +226,16 @@ describe('RuntimeConfigsService', () => {
 
     expect(prisma.runtimeConfig.findMany).toHaveBeenCalledWith({
       where: { applicationId },
+      select: {
+        id: true,
+        configVersion: true,
+        configHash: true,
+        publishState: true,
+        effectiveAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: [
         { publishedAt: 'desc' },
         { updatedAt: 'desc' },
