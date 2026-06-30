@@ -23,6 +23,7 @@ import {
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
   ResourceStatusDto,
+  RuntimeConfigBudgetPolicyResponseDto,
   RuntimeConfigCachePolicyResponseDto,
   RuntimeConfigCostingDto,
   RuntimeConfigCredentialRefDto,
@@ -425,6 +426,7 @@ export class RuntimeConfigsService {
       fallbackProvider: fallbackModel.provider,
       fallbackModel: fallbackModel.model,
       rateLimit: this.resolveRateLimit(args.dto.rateLimit),
+      budgetPolicy: this.resolveBudgetPolicy(args.dto.budgetPolicy),
       safetyPolicy,
       cachePolicy: this.resolveCachePolicy(args.dto.cachePolicy),
       routingPolicy,
@@ -648,6 +650,7 @@ export class RuntimeConfigsService {
       document.rateLimit.windowSeconds !== 60 ||
       !Number.isInteger(document.rateLimit.limit) ||
       document.rateLimit.limit < 1 ||
+      !this.isExecutableBudgetPolicy(document.budgetPolicy) ||
       document.cachePolicy.type !== 'exact' ||
       !Number.isInteger(document.cachePolicy.ttlSeconds) ||
       document.cachePolicy.ttlSeconds < 1 ||
@@ -681,6 +684,7 @@ export class RuntimeConfigsService {
       !Array.isArray(document.models) ||
       document.models.length === 0 ||
       !document.rateLimit ||
+      !document.budgetPolicy ||
       !document.cachePolicy ||
       !document.safetyPolicy ||
       !document.routingPolicy ||
@@ -1075,6 +1079,36 @@ export class RuntimeConfigsService {
     };
   }
 
+  private resolveBudgetPolicy(
+    dto: UpsertRuntimeConfigDraftDto['budgetPolicy'],
+  ): RuntimeConfigBudgetPolicyResponseDto {
+    if (dto?.enabled === true && dto.enforcementMode === 'disabled') {
+      throw new ConflictException('Runtime Config budget policy is invalid.');
+    }
+    if (
+      dto?.enabled === false &&
+      dto.enforcementMode &&
+      dto.enforcementMode !== 'disabled'
+    ) {
+      throw new ConflictException('Runtime Config budget policy is invalid.');
+    }
+
+    const enabled =
+      dto?.enabled ??
+      Boolean(dto?.enforcementMode && dto.enforcementMode !== 'disabled');
+    const enforcementMode = enabled
+      ? dto?.enforcementMode ?? 'warn'
+      : 'disabled';
+
+    return {
+      enabled,
+      enforcementMode,
+      warningThresholdPercent:
+        dto?.warningThresholdPercent ??
+        DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+    };
+  }
+
   private resolveCachePolicy(
     dto: UpsertRuntimeConfigDraftDto['cachePolicy'],
   ): RuntimeConfigCachePolicyResponseDto {
@@ -1185,6 +1219,7 @@ export class RuntimeConfigsService {
         'providers',
         'models',
         'rateLimit',
+        'budgetPolicy',
         'safetyPolicy',
         'cachePolicy',
         'routingPolicy',
@@ -1291,7 +1326,7 @@ export class RuntimeConfigsService {
         budgetScopeId: document.applicationId,
         resolvedBy: 'default_application',
         warningThresholdPercent:
-          DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+          document.budgetPolicy.warningThresholdPercent,
       },
       providerCatalogRef,
       policies: {
@@ -1334,10 +1369,10 @@ export class RuntimeConfigsService {
           limit: document.rateLimit.limit,
         },
         budget: {
-          enabled: false,
-          enforcementMode: 'disabled',
+          enabled: document.budgetPolicy.enabled,
+          enforcementMode: document.budgetPolicy.enforcementMode,
           warningThresholdPercent:
-            DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+            document.budgetPolicy.warningThresholdPercent,
         },
         fallback: {
           enabled: true,
@@ -1830,6 +1865,12 @@ export class RuntimeConfigsService {
         enabled: document.rateLimit.enabled,
         limit: document.rateLimit.limit,
       },
+      budgetPolicy: {
+        enabled: document.budgetPolicy.enabled,
+        enforcementMode: document.budgetPolicy.enforcementMode,
+        warningThresholdPercent:
+          document.budgetPolicy.warningThresholdPercent,
+      },
       cachePolicy: {
         enabled: document.cachePolicy.enabled,
         ttlSeconds: document.cachePolicy.ttlSeconds,
@@ -1883,7 +1924,39 @@ export class RuntimeConfigsService {
       throw new ConflictException('Runtime Config document is invalid.');
     }
 
-    return value as unknown as ActiveRuntimeConfigResponseDto;
+    const document = value as unknown as ActiveRuntimeConfigResponseDto;
+
+    return {
+      ...document,
+      budgetPolicy:
+        document.budgetPolicy ?? this.defaultRuntimeConfigBudgetPolicy(),
+    };
+  }
+
+  private defaultRuntimeConfigBudgetPolicy(): RuntimeConfigBudgetPolicyResponseDto {
+    return {
+      enabled: false,
+      enforcementMode: 'disabled',
+      warningThresholdPercent: DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+    };
+  }
+
+  private isExecutableBudgetPolicy(
+    budgetPolicy: RuntimeConfigBudgetPolicyResponseDto,
+  ): boolean {
+    return (
+      Boolean(budgetPolicy) &&
+      typeof budgetPolicy.enabled === 'boolean' &&
+      ['warn', 'block', 'disabled'].includes(
+        budgetPolicy.enforcementMode,
+      ) &&
+      Number.isInteger(budgetPolicy.warningThresholdPercent) &&
+      budgetPolicy.warningThresholdPercent >= 0 &&
+      budgetPolicy.warningThresholdPercent <= 100 &&
+      (budgetPolicy.enabled
+        ? budgetPolicy.enforcementMode !== 'disabled'
+        : budgetPolicy.enforcementMode === 'disabled')
+    );
   }
 
   private toInputJsonObject(

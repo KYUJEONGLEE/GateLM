@@ -43,6 +43,23 @@ export class RuntimeConfigRateLimitDto {
   limit?: number;
 }
 
+export class RuntimeConfigBudgetPolicyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(['warn', 'block', 'disabled'])
+  enforcementMode?: 'warn' | 'block' | 'disabled';
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  warningThresholdPercent?: number;
+}
+
 export class RuntimeConfigCachePolicyDto {
   @IsOptional()
   @IsBoolean()
@@ -228,6 +245,11 @@ export class UpsertRuntimeConfigDraftDto {
 
   @IsOptional()
   @ValidateNested()
+  @Type(() => RuntimeConfigBudgetPolicyDto)
+  budgetPolicy?: RuntimeConfigBudgetPolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
   @Type(() => RuntimeConfigCachePolicyDto)
   cachePolicy?: RuntimeConfigCachePolicyDto;
 
@@ -333,6 +355,12 @@ export interface RuntimeConfigRateLimitResponseDto {
   limit: number;
 }
 
+export interface RuntimeConfigBudgetPolicyResponseDto {
+  enabled: boolean;
+  enforcementMode: 'warn' | 'block' | 'disabled';
+  warningThresholdPercent: number;
+}
+
 export interface RuntimeConfigSafetyDetectorResponseDto {
   type: RuntimeConfigSafetyDetectorDto['type'];
   enabled: boolean;
@@ -431,6 +459,7 @@ export interface ActiveRuntimeConfigResponseDto {
   fallbackProvider: string;
   fallbackModel: string;
   rateLimit: RuntimeConfigRateLimitResponseDto;
+  budgetPolicy: RuntimeConfigBudgetPolicyResponseDto;
   safetyPolicy: RuntimeConfigSafetyPolicyResponseDto;
   cachePolicy: RuntimeConfigCachePolicyResponseDto;
   routingPolicy: RuntimeConfigRoutingPolicyResponseDto;
