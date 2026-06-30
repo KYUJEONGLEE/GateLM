@@ -20,8 +20,11 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
   ActiveRuntimeConfigResponseDto,
+  ListRuntimeConfigHistoryQueryDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
+  RUNTIME_CONFIG_VERSION_PATTERN,
+  RollbackRuntimeConfigDto,
   ResourceStatusDto,
   RuntimeConfigBudgetPolicyResponseDto,
   RuntimeConfigCachePolicyResponseDto,
@@ -29,6 +32,9 @@ import {
   RuntimeConfigCredentialRefDto,
   RuntimeConfigDraftResponseDto,
   RuntimeConfigHashingDto,
+  RuntimeConfigHistoryDetailResponseDto,
+  RuntimeConfigHistoryItemDto,
+  RuntimeConfigHistoryResponseDto,
   RuntimeConfigModelResponseDto,
   RuntimeConfigPricingRuleResponseDto,
   RuntimeConfigProviderDto,
@@ -85,6 +91,101 @@ export class RuntimeConfigsService {
     });
 
     return document;
+  }
+
+  async listRuntimeConfigHistory(
+    applicationId: string,
+    query: ListRuntimeConfigHistoryQueryDto = {},
+  ): Promise<RuntimeConfigHistoryResponseDto> {
+    await this.getApplicationContextOrThrow(applicationId);
+    const limit = query.limit ?? 50;
+    const runtimeConfigs = await this.prisma.runtimeConfig.findMany({
+      where: { applicationId },
+      select: {
+        id: true,
+        configVersion: true,
+        configHash: true,
+        publishState: true,
+        effectiveAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: [
+        { publishedAt: { sort: 'desc', nulls: 'last' } },
+        { updatedAt: 'desc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+    const hasMore = runtimeConfigs.length > limit;
+    const page = runtimeConfigs.slice(0, limit);
+
+    return {
+      applicationId,
+      items: page.map((runtimeConfig) =>
+        this.toRuntimeConfigHistoryItem(runtimeConfig),
+      ),
+      pagination: {
+        limit,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
+      },
+    };
+  }
+
+  async getRuntimeConfigHistoryDetail(
+    applicationId: string,
+    configVersion: string,
+  ): Promise<RuntimeConfigHistoryDetailResponseDto> {
+    await this.getApplicationContextOrThrow(applicationId);
+    const requestedConfigVersion =
+      this.toRuntimeConfigVersionForLookup(configVersion);
+    if (!requestedConfigVersion) {
+      throw new NotFoundException('Runtime Config history item not found.');
+    }
+
+    const runtimeConfig = await this.prisma.runtimeConfig.findUnique({
+      where: {
+        applicationId_configVersion: {
+          applicationId,
+          configVersion: requestedConfigVersion,
+        },
+      },
+      select: {
+        id: true,
+        configVersion: true,
+        configHash: true,
+        publishState: true,
+        document: true,
+        effectiveAt: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!runtimeConfig) {
+      throw new NotFoundException('Runtime Config history item not found.');
+    }
+
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
+    this.assertNoForbiddenRuntimeConfigKeys(document);
+
+    return {
+      applicationId,
+      item: this.toRuntimeConfigHistoryItem(runtimeConfig),
+      runtimeConfig: {
+        ...document,
+        publishState: this.toRuntimeConfigPublishState(
+          runtimeConfig.publishState,
+        ),
+      },
+    };
   }
 
   async getActiveRuntimeSnapshot(
@@ -312,6 +413,108 @@ export class RuntimeConfigsService {
       if (this.isConcurrentWriteError(error)) {
         throw new ConflictException(
           'Runtime Config publish conflicted. Retry the request.',
+        );
+      }
+
+      throw error;
+    }
+
+    return activeDocument;
+  }
+
+  async rollbackRuntimeConfig(
+    applicationId: string,
+    dto: RollbackRuntimeConfigDto,
+  ): Promise<ActiveRuntimeConfigResponseDto> {
+    const now = new Date();
+    const targetConfigVersion = dto.targetConfigVersion?.trim();
+    if (!targetConfigVersion) {
+      throw new ConflictException(
+        'Runtime Config rollback target version is required.',
+      );
+    }
+    const target = await this.prisma.runtimeConfig.findUnique({
+      where: {
+        applicationId_configVersion: {
+          applicationId,
+          configVersion: targetConfigVersion,
+        },
+      },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Runtime Config rollback target not found.');
+    }
+    if (
+      target.publishState !== RuntimeConfigPublishState.SUPERSEDED &&
+      target.publishState !== RuntimeConfigPublishState.ROLLED_BACK
+    ) {
+      throw new ConflictException(
+        'Runtime Config rollback target must be a previous published version.',
+      );
+    }
+
+    const targetDocument = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(target.document),
+    );
+    const rollbackConfigVersion =
+      dto.rollbackConfigVersion?.trim() ||
+      this.createRollbackConfigVersion(target.configVersion, now);
+    if (rollbackConfigVersion === target.configVersion) {
+      throw new ConflictException(
+        'Rollback Runtime Config version must differ from the target version.',
+      );
+    }
+
+    const activeDocument = await this.buildRuntimeConfigDocument({
+      applicationId,
+      configVersion: rollbackConfigVersion,
+      dto: this.toDraftDto(targetDocument, dto.effectiveAt ?? now.toISOString()),
+      publishState: 'active',
+      now,
+      publishedAt: now,
+    });
+
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          await tx.runtimeConfig.updateMany({
+            where: {
+              applicationId,
+              publishState: RuntimeConfigPublishState.ACTIVE,
+            },
+            data: {
+              publishState: RuntimeConfigPublishState.ROLLED_BACK,
+            },
+          });
+
+          await tx.runtimeConfig.create({
+            data: {
+              tenantId: activeDocument.tenantId,
+              projectId: activeDocument.projectId,
+              applicationId: activeDocument.applicationId,
+              configVersion: activeDocument.configVersion,
+              configHash: activeDocument.configHash,
+              publishState: RuntimeConfigPublishState.ACTIVE,
+              document: this.toInputJsonObject(activeDocument),
+              effectiveAt: this.toDate(activeDocument.effectiveAt),
+              publishedAt: this.toDate(activeDocument.publishedAt),
+            },
+          });
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException(
+          'Runtime Config version already exists for this application.',
+        );
+      }
+      if (this.isConcurrentWriteError(error)) {
+        throw new ConflictException(
+          'Runtime Config rollback conflicted. Retry the request.',
         );
       }
 
@@ -1917,6 +2120,36 @@ export class RuntimeConfigsService {
     };
   }
 
+  private toRuntimeConfigHistoryItem(
+    runtimeConfig: Pick<
+      RuntimeConfig,
+      | 'id'
+      | 'configVersion'
+      | 'configHash'
+      | 'publishState'
+      | 'effectiveAt'
+      | 'publishedAt'
+      | 'createdAt'
+      | 'updatedAt'
+    >,
+  ): RuntimeConfigHistoryItemDto {
+    return {
+      id: runtimeConfig.id,
+      configVersion: runtimeConfig.configVersion,
+      configHash: runtimeConfig.configHash,
+      publishState: this.toRuntimeConfigPublishState(
+        runtimeConfig.publishState,
+      ),
+      effectiveAt: runtimeConfig.effectiveAt?.toISOString() ?? null,
+      publishedAt: runtimeConfig.publishedAt?.toISOString() ?? null,
+      createdAt: runtimeConfig.createdAt.toISOString(),
+      updatedAt: runtimeConfig.updatedAt.toISOString(),
+      canRollback:
+        runtimeConfig.publishState === RuntimeConfigPublishState.SUPERSEDED ||
+        runtimeConfig.publishState === RuntimeConfigPublishState.ROLLED_BACK,
+    };
+  }
+
   private toRuntimeConfigDocument(
     value: Prisma.JsonValue,
   ): ActiveRuntimeConfigResponseDto {
@@ -2066,6 +2299,12 @@ export class RuntimeConfigsService {
     return status.toLowerCase() as ResourceStatusDto;
   }
 
+  private toRuntimeConfigPublishState(
+    status: RuntimeConfigPublishState,
+  ): RuntimeConfigHistoryItemDto['publishState'] {
+    return status.toLowerCase() as RuntimeConfigHistoryItemDto['publishState'];
+  }
+
   private toPricingRuleId(provider: string, model: string): string {
     return `price_${provider}_${model}_v1`.replace(/[^a-zA-Z0-9_-]/g, '_');
   }
@@ -2076,6 +2315,28 @@ export class RuntimeConfigsService {
 
   private createPublishedConfigVersion(now: Date): string {
     return `runtime_config_${now.getTime()}`;
+  }
+
+  private toRuntimeConfigVersionForLookup(value: string): string | null {
+    const configVersion = value.trim();
+    if (
+      !configVersion ||
+      !RUNTIME_CONFIG_VERSION_PATTERN.test(configVersion)
+    ) {
+      return null;
+    }
+
+    return configVersion;
+  }
+
+  private createRollbackConfigVersion(
+    targetConfigVersion: string,
+    now: Date,
+  ): string {
+    const safeTarget = targetConfigVersion
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 80);
+    return `runtime_config_rollback_${safeTarget}_${now.getTime()}`;
   }
 
   private defaultSafetyDetectors(): RuntimeConfigSafetyDetectorResponseDto[] {

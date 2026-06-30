@@ -8,12 +8,18 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
+
+export const RUNTIME_CONFIG_VERSION_PATTERN = /^[a-zA-Z0-9._-]+$/;
+const RUNTIME_CONFIG_VERSION_MESSAGE =
+  'must contain only alphanumeric characters, dashes, underscores, or dots.';
 
 export type RuntimeConfigPublishStateDto =
   | 'draft'
@@ -230,6 +236,9 @@ export class RuntimeConfigPricingRuleDto {
 export class UpsertRuntimeConfigDraftDto {
   @IsOptional()
   @IsString()
+  @Matches(RUNTIME_CONFIG_VERSION_PATTERN, {
+    message: `configVersion ${RUNTIME_CONFIG_VERSION_MESSAGE}`,
+  })
   @MinLength(1)
   @MaxLength(120)
   configVersion?: string;
@@ -281,12 +290,18 @@ export class UpsertRuntimeConfigDraftDto {
 export class PublishRuntimeConfigDto {
   @IsOptional()
   @IsString()
+  @Matches(RUNTIME_CONFIG_VERSION_PATTERN, {
+    message: `draftConfigVersion ${RUNTIME_CONFIG_VERSION_MESSAGE}`,
+  })
   @MinLength(1)
   @MaxLength(120)
   draftConfigVersion?: string;
 
   @IsOptional()
   @IsString()
+  @Matches(RUNTIME_CONFIG_VERSION_PATTERN, {
+    message: `configVersion ${RUNTIME_CONFIG_VERSION_MESSAGE}`,
+  })
   @MinLength(1)
   @MaxLength(120)
   configVersion?: string;
@@ -294,6 +309,42 @@ export class PublishRuntimeConfigDto {
   @IsOptional()
   @IsISO8601()
   effectiveAt?: string;
+}
+
+export class RollbackRuntimeConfigDto {
+  @IsString()
+  @Matches(RUNTIME_CONFIG_VERSION_PATTERN, {
+    message: `targetConfigVersion ${RUNTIME_CONFIG_VERSION_MESSAGE}`,
+  })
+  @MinLength(1)
+  @MaxLength(120)
+  targetConfigVersion!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(RUNTIME_CONFIG_VERSION_PATTERN, {
+    message: `rollbackConfigVersion ${RUNTIME_CONFIG_VERSION_MESSAGE}`,
+  })
+  @MinLength(1)
+  @MaxLength(120)
+  rollbackConfigVersion?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  effectiveAt?: string;
+}
+
+export class ListRuntimeConfigHistoryQueryDto {
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 50;
+
+  @IsOptional()
+  @IsUUID()
+  cursor?: string;
 }
 
 export interface RuntimeConfigCredentialPreviewDto {
@@ -635,5 +686,33 @@ export interface RuntimeConfigDraftResponseDto {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  runtimeConfig: ActiveRuntimeConfigResponseDto;
+}
+
+export interface RuntimeConfigHistoryItemDto {
+  id: string;
+  configVersion: string;
+  configHash: string;
+  publishState: RuntimeConfigPublishStateDto;
+  effectiveAt: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canRollback: boolean;
+}
+
+export interface RuntimeConfigHistoryResponseDto {
+  applicationId: string;
+  items: RuntimeConfigHistoryItemDto[];
+  pagination: {
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+  };
+}
+
+export interface RuntimeConfigHistoryDetailResponseDto {
+  applicationId: string;
+  item: RuntimeConfigHistoryItemDto;
   runtimeConfig: ActiveRuntimeConfigResponseDto;
 }

@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
@@ -14,9 +15,13 @@ import { AdminAuthGuard } from '@/common/guards/admin-auth.guard';
 
 import {
   ActiveRuntimeConfigResponseDto,
+  ListRuntimeConfigHistoryQueryDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
+  RollbackRuntimeConfigDto,
   RuntimeConfigDraftResponseDto,
+  RuntimeConfigHistoryDetailResponseDto,
+  RuntimeConfigHistoryResponseDto,
   RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
 } from './dto/runtime-config.dto';
@@ -32,6 +37,28 @@ export class RuntimeConfigsController {
     @Param('applicationId', ParseUUIDPipe) applicationId: string,
   ): Promise<ActiveRuntimeConfigResponseDto> {
     return this.runtimeConfigsService.getActiveRuntimeConfig(applicationId);
+  }
+
+  @Get('applications/:applicationId/runtime-config/history')
+  async listRuntimeConfigHistory(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Query() query: ListRuntimeConfigHistoryQueryDto,
+  ): Promise<RuntimeConfigHistoryResponseDto> {
+    return this.runtimeConfigsService.listRuntimeConfigHistory(
+      applicationId,
+      query,
+    );
+  }
+
+  @Get('applications/:applicationId/runtime-config/history/:configVersion')
+  async getRuntimeConfigHistoryDetail(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Param('configVersion') configVersion: string,
+  ): Promise<RuntimeConfigHistoryDetailResponseDto> {
+    return this.runtimeConfigsService.getRuntimeConfigHistoryDetail(
+      applicationId,
+      configVersion,
+    );
   }
 
   @Get('applications/:applicationId/runtime-snapshot/active')
@@ -71,6 +98,18 @@ export class RuntimeConfigsController {
     @Body() body: PublishRuntimeConfigDto,
   ): Promise<ActiveRuntimeConfigResponseDto> {
     return this.runtimeConfigsService.publishRuntimeConfig(
+      applicationId,
+      body,
+    );
+  }
+
+  @Post('applications/:applicationId/runtime-config/rollback')
+  @HttpCode(HttpStatus.OK)
+  async rollbackRuntimeConfig(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Body() body: RollbackRuntimeConfigDto,
+  ): Promise<ActiveRuntimeConfigResponseDto> {
+    return this.runtimeConfigsService.rollbackRuntimeConfig(
       applicationId,
       body,
     );
