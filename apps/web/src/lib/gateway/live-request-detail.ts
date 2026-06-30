@@ -1,6 +1,11 @@
 import "server-only";
 
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type {
+  DomainOutcomes,
+  InvocationLogRecord,
+  RuntimeSnapshotProvenance,
+  TerminalStatus
+} from "@/lib/fixtures/v1-observability-fixtures";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayRequestDetailResponse = {
@@ -24,9 +29,15 @@ type GatewayRequestDetailResponse = {
       errorStage?: string | null;
     };
     httpStatus?: number;
+    domainOutcomes?: DomainOutcomes;
     latency?: {
       latencyMs?: number;
       providerLatencyMs?: number | null;
+    };
+    latencySummary?: {
+      gatewayInternalLatencyMs?: number;
+      providerLatencyMs?: number | null;
+      totalLatencyMs?: number;
     };
     masking?: {
       maskingAction?: "none" | "redacted" | "blocked";
@@ -44,14 +55,29 @@ type GatewayRequestDetailResponse = {
       selectedModel?: string | null;
       selectedProvider?: string | null;
     };
+    runtimeSnapshot?: RuntimeSnapshotProvenance | null;
     selectedModel?: string;
     status?: InvocationLogRecord["status"];
+    terminalStatus?: TerminalStatus;
     tenantId?: string;
     traceId?: string;
     usage?: {
       completionTokens?: number;
       promptTokens?: number;
       totalTokens?: number;
+    };
+    usageSummary?: {
+      completionTokens?: number;
+      estimatedCostMicroUsd?: number;
+      promptTokens?: number;
+      savedCostMicroUsd?: number;
+      totalTokens?: number;
+    };
+    safetySummary?: {
+      detectedCount?: number;
+      detectorCategories?: string[];
+      maskingAction?: string | null;
+      outcome?: string;
     };
   };
 };
@@ -89,11 +115,25 @@ export async function getLiveGatewayRequestDetail(
 function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
   const createdAt = data.createdAt ?? new Date().toISOString();
   const completedAt = data.completedAt ?? createdAt;
-  const status = normalizeLegacyBridgeStatus(data.status);
+  const status = normalizeLegacyBridgeStatus(data.terminalStatus ?? data.status);
   const cacheStatus = data.cache?.cacheStatus ?? "bypass";
   const maskingAction = data.masking?.maskingAction ?? "none";
   const applicationId = data.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(data.budgetScope, applicationId);
+  const runtimeSnapshot = normalizeRuntimeSnapshot(data.runtimeSnapshot, createdAt);
+  const domainOutcomes = data.domainOutcomes ?? legacyDomainOutcomes(status, cacheStatus, maskingAction, data.latency?.providerLatencyMs ?? null, data.error?.errorCode ?? null);
+  const latencySummary = {
+    gatewayInternalLatencyMs: data.latencySummary?.gatewayInternalLatencyMs ?? Math.max((data.latency?.latencyMs ?? 0) - (data.latency?.providerLatencyMs ?? 0), 0),
+    providerLatencyMs: data.latencySummary?.providerLatencyMs ?? data.latency?.providerLatencyMs ?? null,
+    totalLatencyMs: data.latencySummary?.totalLatencyMs ?? data.latency?.latencyMs ?? 0
+  };
+  const usageSummary = {
+    promptTokens: data.usageSummary?.promptTokens ?? data.usage?.promptTokens ?? 0,
+    completionTokens: data.usageSummary?.completionTokens ?? data.usage?.completionTokens ?? 0,
+    totalTokens: data.usageSummary?.totalTokens ?? data.usage?.totalTokens ?? 0,
+    estimatedCostMicroUsd: data.usageSummary?.estimatedCostMicroUsd ?? data.cost?.costMicroUsd ?? 0,
+    savedCostMicroUsd: data.usageSummary?.savedCostMicroUsd ?? (cacheStatus === "hit" ? data.cost?.costMicroUsd ?? 0 : 0)
+  };
 
   return {
     requestId: data.requestId ?? "",
@@ -102,8 +142,8 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     projectId: data.projectId ?? "live_gateway_project",
     applicationId,
     budgetScope,
-    apiKeyId: "live_gateway_api_key",
-    appTokenId: "live_gateway_app_token",
+    apiKeyId: "not-exposed",
+    appTokenId: "not-exposed",
     endUserId: "customer_user_demo_live",
     featureId: "support-reply",
     endpoint: "/v1/chat/completions",
@@ -138,14 +178,24 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       reason: status === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-detail",
       durationMs: 0
     },
-    promptTokens: data.usage?.promptTokens ?? 0,
-    completionTokens: data.usage?.completionTokens ?? 0,
-    totalTokens: data.usage?.totalTokens ?? 0,
-    costMicroUsd: data.cost?.costMicroUsd ?? 0,
-    savedCostMicroUsd: cacheStatus === "hit" ? data.cost?.costMicroUsd ?? 0 : 0,
-    latencyMs: data.latency?.latencyMs ?? 0,
-    providerLatencyMs: data.latency?.providerLatencyMs ?? null,
+    promptTokens: usageSummary.promptTokens,
+    completionTokens: usageSummary.completionTokens,
+    totalTokens: usageSummary.totalTokens,
+    costMicroUsd: usageSummary.estimatedCostMicroUsd,
+    savedCostMicroUsd: usageSummary.savedCostMicroUsd,
+    latencyMs: latencySummary.totalLatencyMs,
+    providerLatencyMs: latencySummary.providerLatencyMs,
     status,
+    terminalStatus: status,
+    domainOutcomes,
+    latencySummary,
+    usageSummary,
+    safetySummary: {
+      outcome: data.safetySummary?.outcome ?? domainOutcomes.safety.outcome,
+      detectedCount: data.safetySummary?.detectedCount ?? data.masking?.maskingDetectedCount ?? 0,
+      detectorCategories: data.safetySummary?.detectorCategories ?? data.masking?.maskingDetectedTypes ?? [],
+      maskingAction: data.safetySummary?.maskingAction ?? maskingAction
+    },
     httpStatus: data.httpStatus ?? 0,
     errorCode: data.error?.errorCode ?? null,
     errorMessage: data.error?.errorMessage ?? null,
@@ -154,20 +204,7 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     completedAt,
     metadata: {
       runtime: {
-        runtimeSnapshot: {
-          runtimeSnapshotId: "runtime_snapshot_live_gateway",
-          runtimeSnapshotVersion: 1,
-          contentHash: "live-gateway",
-          runtimeState: "snapshot_active",
-          publishedAt: createdAt,
-          publishedBy: "runtime_config_compat",
-          gatewayInstanceId: "gateway_web_live",
-          legacyHashes: {
-            configHash: "live-gateway",
-            securityPolicyHash: "live-gateway",
-            routingPolicyHash: "live-gateway"
-          }
-        }
+        runtimeSnapshot
       }
     }
   };
@@ -186,6 +223,64 @@ function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, application
     budgetScopeType: "application",
     budgetScopeId: applicationId,
     resolvedBy: "default_application"
+  };
+}
+
+function normalizeRuntimeSnapshot(value: RuntimeSnapshotProvenance | null | undefined, createdAt: string): RuntimeSnapshotProvenance {
+  if (value) {
+    return {
+      ...value,
+      legacyHashes: value.legacyHashes ?? {
+        configHash: "not-exposed",
+        securityPolicyHash: "not-exposed",
+        routingPolicyHash: "not-exposed"
+      }
+    };
+  }
+
+  return {
+    runtimeSnapshotId: "runtime_snapshot_live_gateway",
+    runtimeSnapshotVersion: 1,
+    contentHash: "live-gateway",
+    runtimeState: "snapshot_active",
+    publishedAt: createdAt,
+    publishedBy: "runtime_config_compat",
+    gatewayInstanceId: "gateway_web_live",
+    legacyHashes: {
+      configHash: "not-exposed",
+      securityPolicyHash: "not-exposed",
+      routingPolicyHash: "not-exposed"
+    }
+  };
+}
+
+function legacyDomainOutcomes(
+  status: TerminalStatus,
+  cacheStatus: string,
+  maskingAction: string,
+  providerLatencyMs: number | null,
+  errorCode: string | null
+): DomainOutcomes {
+  const cacheOutcome = cacheStatus === "hit" || cacheStatus === "miss" || cacheStatus === "error"
+    ? cacheStatus
+    : cacheStatus === "bypass" ? "bypassed" : "not_used";
+  const safetyOutcome = maskingAction === "blocked" || maskingAction === "redacted" ? maskingAction : "passed";
+  const providerOutcome = providerLatencyMs === null || status === "blocked" || status === "rate_limited"
+    ? "not_called"
+    : status === "failed" ? "error" : "success";
+
+  return {
+    auth: { outcome: "passed" },
+    runtime: { outcome: "snapshot_active" },
+    rateLimit: { outcome: status === "rate_limited" ? "rate_limited" : "not_checked", code: status === "rate_limited" ? errorCode : null },
+    budget: { outcome: "allowed" },
+    safety: { outcome: safetyOutcome, code: safetyOutcome === "blocked" ? errorCode : null },
+    routing: { outcome: cacheOutcome === "hit" ? "skipped" : "selected" },
+    cache: { outcome: cacheOutcome },
+    provider: { outcome: providerOutcome, code: providerOutcome === "error" ? errorCode : null },
+    fallback: { outcome: "not_called" },
+    streaming: { outcome: "not_streaming" },
+    logging: { outcome: "written" }
   };
 }
 

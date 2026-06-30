@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -72,10 +73,22 @@ type dashboardOverviewResponse struct {
 }
 
 type dashboardOverviewDataResponse struct {
+	GeneratedAt   time.Time                      `json:"generatedAt"`
+	TimeRange     dashboardTimeRangeResponse     `json:"timeRange"`
+	Freshness     dashboardFreshnessResponse     `json:"freshness"`
+	QueryBudget   dashboardQueryBudgetResponse   `json:"queryBudget"`
+	Breakdowns    dashboardBreakdownsResponse    `json:"breakdowns"`
+	Performance   dashboardPerformanceResponse   `json:"performance"`
 	Range         dashboardRangeResponse         `json:"range"`
 	Filter        dashboardFilterResponse        `json:"filters"`
 	Totals        dashboardTotalsResponse        `json:"totals"`
 	DataFreshness dashboardDataFreshnessResponse `json:"dataFreshness"`
+}
+
+type dashboardTimeRangeResponse struct {
+	From        time.Time `json:"from"`
+	To          time.Time `json:"to"`
+	Granularity string    `json:"granularity"`
 }
 
 type dashboardRangeResponse struct {
@@ -97,9 +110,12 @@ type dashboardTotalsResponse struct {
 	FailedRequests        int64                          `json:"failedRequests"`
 	BlockedRequests       int64                          `json:"blockedRequests"`
 	RateLimitedRequests   int64                          `json:"rateLimitedRequests"`
+	CancelledRequests     int64                          `json:"cancelledRequests"`
 	CacheHitRequests      int64                          `json:"cacheHitRequests"`
 	CacheEligibleRequests int64                          `json:"cacheEligibleRequests"`
 	CacheHitRate          *float64                       `json:"cacheHitRate"`
+	ExactCacheHitRate     *float64                       `json:"exactCacheHitRate"`
+	FallbackSuccessCount  int64                          `json:"fallbackSuccessCount"`
 	PromptTokens          int64                          `json:"promptTokens"`
 	CompletionTokens      int64                          `json:"completionTokens"`
 	TotalTokens           int64                          `json:"totalTokens"`
@@ -122,6 +138,56 @@ type dashboardDataFreshnessResponse struct {
 	RecordCount      int64      `json:"recordCount"`
 	LastLogCreatedAt *time.Time `json:"lastLogCreatedAt"`
 	GeneratedAt      time.Time  `json:"generatedAt"`
+}
+
+type dashboardFreshnessResponse struct {
+	LastIngestedAt   time.Time `json:"lastIngestedAt"`
+	LastAggregatedAt time.Time `json:"lastAggregatedAt"`
+	Source           string    `json:"source"`
+	IsStale          bool      `json:"isStale"`
+}
+
+type dashboardQueryBudgetResponse struct {
+	Status            string  `json:"status"`
+	MaxRangeHours     int     `json:"maxRangeHours"`
+	MaxBreakdownItems int     `json:"maxBreakdownItems"`
+	Guidance          *string `json:"guidance"`
+}
+
+type dashboardPerformanceResponse struct {
+	P95GatewayInternalLatencyMs *float64 `json:"p95GatewayInternalLatencyMs"`
+	P99GatewayInternalLatencyMs *float64 `json:"p99GatewayInternalLatencyMs"`
+	P95ProviderLatencyMs        *float64 `json:"p95ProviderLatencyMs"`
+	P99ProviderLatencyMs        *float64 `json:"p99ProviderLatencyMs"`
+	SystemErrorRate             float64  `json:"systemErrorRate"`
+}
+
+type dashboardBreakdownsResponse struct {
+	ByApplication     []applicationBreakdownResponse   `json:"byApplication"`
+	ByBudgetScope     []budgetScopeBreakdownResponse   `json:"byBudgetScope"`
+	ByProviderModel   []providerModelBreakdownResponse `json:"byProviderModel"`
+	BySafetyOutcome   []outcomeBreakdownResponse       `json:"bySafetyOutcome"`
+	ByCacheOutcome    []outcomeBreakdownResponse       `json:"byCacheOutcome"`
+	ByFallbackOutcome []outcomeBreakdownResponse       `json:"byFallbackOutcome"`
+	ByTerminalStatus  []outcomeBreakdownResponse       `json:"byTerminalStatus"`
+}
+
+type applicationBreakdownResponse struct {
+	ApplicationID string `json:"applicationId"`
+	RequestCount  int64  `json:"requestCount"`
+	CostMicroUSD  int64  `json:"estimatedCostMicroUsd"`
+}
+
+type providerModelBreakdownResponse struct {
+	SelectedProvider     string  `json:"selectedProvider"`
+	SelectedModel        string  `json:"selectedModel"`
+	RequestCount         int64   `json:"requestCount"`
+	P95ProviderLatencyMs float64 `json:"p95ProviderLatencyMs"`
+}
+
+type outcomeBreakdownResponse struct {
+	Outcome      string `json:"outcome"`
+	RequestCount int64  `json:"requestCount"`
 }
 
 type routingCountByModelResponse struct {
@@ -182,27 +248,58 @@ type requestDetailDataResponse struct {
 	RuntimeSnapshot *runtimeSnapshotProvenanceResponse `json:"runtimeSnapshot"`
 	Status          string                             `json:"status"`
 	TerminalStatus  string                             `json:"terminalStatus"`
-	DomainOutcomes  invocationlog.DomainOutcomes       `json:"domainOutcomes"`
 	HTTPStatus      int                                `json:"httpStatus"`
+	DomainOutcomes  domainOutcomesResponse             `json:"domainOutcomes"`
 	Provider        string                             `json:"provider"`
 	Model           string                             `json:"model"`
 	RequestedModel  string                             `json:"requestedModel"`
 	SelectedModel   string                             `json:"selectedModel"`
 	Usage           usageResponse                      `json:"usage"`
+	UsageSummary    usageSummaryResponse               `json:"usageSummary"`
 	Cost            costResponse                       `json:"cost"`
 	Latency         latencyResponse                    `json:"latency"`
+	LatencySummary  latencySummaryResponse             `json:"latencySummary"`
 	Cache           cacheResponse                      `json:"cache"`
 	Routing         routingResponse                    `json:"routing"`
 	Masking         maskingResponse                    `json:"masking"`
+	SafetySummary   safetySummaryResponse              `json:"safetySummary"`
 	Error           detailErrorResponse                `json:"error"`
 	CreatedAt       time.Time                          `json:"createdAt"`
 	CompletedAt     *time.Time                         `json:"completedAt"`
+}
+
+type outcomeResponse struct {
+	Outcome string  `json:"outcome"`
+	Reason  *string `json:"reason"`
+	Code    *string `json:"code"`
+}
+
+type domainOutcomesResponse struct {
+	Auth      outcomeResponse `json:"auth"`
+	Runtime   outcomeResponse `json:"runtime"`
+	RateLimit outcomeResponse `json:"rateLimit"`
+	Budget    outcomeResponse `json:"budget"`
+	Safety    outcomeResponse `json:"safety"`
+	Routing   outcomeResponse `json:"routing"`
+	Cache     outcomeResponse `json:"cache"`
+	Provider  outcomeResponse `json:"provider"`
+	Fallback  outcomeResponse `json:"fallback"`
+	Streaming outcomeResponse `json:"streaming"`
+	Logging   outcomeResponse `json:"logging"`
 }
 
 type usageResponse struct {
 	PromptTokens     int64 `json:"promptTokens"`
 	CompletionTokens int64 `json:"completionTokens"`
 	TotalTokens      int64 `json:"totalTokens"`
+}
+
+type usageSummaryResponse struct {
+	PromptTokens          int64 `json:"promptTokens"`
+	CompletionTokens      int64 `json:"completionTokens"`
+	TotalTokens           int64 `json:"totalTokens"`
+	EstimatedCostMicroUSD int64 `json:"estimatedCostMicroUsd"`
+	SavedCostMicroUSD     int64 `json:"savedCostMicroUsd"`
 }
 
 type costResponse struct {
@@ -214,6 +311,12 @@ type costResponse struct {
 type latencyResponse struct {
 	LatencyMs         int64  `json:"latencyMs"`
 	ProviderLatencyMs *int64 `json:"providerLatencyMs"`
+}
+
+type latencySummaryResponse struct {
+	GatewayInternalLatencyMs int64  `json:"gatewayInternalLatencyMs"`
+	ProviderLatencyMs        *int64 `json:"providerLatencyMs"`
+	TotalLatencyMs           int64  `json:"totalLatencyMs"`
 }
 
 type cacheResponse struct {
@@ -237,6 +340,13 @@ type maskingResponse struct {
 	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
 }
 
+type safetySummaryResponse struct {
+	Outcome            string   `json:"outcome"`
+	DetectedCount      int      `json:"detectedCount"`
+	DetectorCategories []string `json:"detectorCategories"`
+	MaskingAction      string   `json:"maskingAction"`
+}
+
 type detailErrorResponse struct {
 	ErrorCode    *string `json:"errorCode"`
 	ErrorMessage *string `json:"errorMessage"`
@@ -244,50 +354,29 @@ type detailErrorResponse struct {
 }
 
 type requestLogListItemResponse struct {
-	RequestID        string                     `json:"requestId"`
-	ProjectID        string                     `json:"projectId"`
-	ApplicationID    string                     `json:"applicationId"`
-	BudgetScope      budgetScopeResponse        `json:"budgetScope"`
-	Provider         string                     `json:"provider"`
-	Model            string                     `json:"model"`
-	RequestedModel   string                     `json:"requestedModel"`
-	SelectedModel    string                     `json:"selectedModel"`
-	Status           string                     `json:"status"`
-	TerminalStatus   string                     `json:"terminalStatus"`
-	DomainOutcomes   listDomainOutcomesResponse `json:"domainOutcomes"`
-	HTTPStatus       int                        `json:"httpStatus"`
-	PromptTokens     int64                      `json:"promptTokens"`
-	CompletionTokens int64                      `json:"completionTokens"`
-	TotalTokens      int64                      `json:"totalTokens"`
-	CostUSD          string                     `json:"costUsd"`
-	CostMicroUSD     int64                      `json:"costMicroUsd"`
-	LatencyMs        int64                      `json:"latencyMs"`
-	CacheStatus      string                     `json:"cacheStatus"`
-	CacheType        string                     `json:"cacheType"`
-	RoutingReason    string                     `json:"routingReason"`
-	MaskingAction    string                     `json:"maskingAction"`
-	CreatedAt        time.Time                  `json:"createdAt"`
-}
-
-type listDomainOutcomesResponse struct {
-	Auth      invocationlog.AuthOutcome      `json:"auth"`
-	Runtime   invocationlog.RuntimeOutcome   `json:"runtime"`
-	RateLimit invocationlog.RateLimitOutcome `json:"rateLimit"`
-	Budget    invocationlog.BudgetOutcome    `json:"budget"`
-	Safety    listSafetyOutcomeResponse      `json:"safety"`
-	Routing   invocationlog.RoutingOutcome   `json:"routing"`
-	Cache     invocationlog.CacheOutcome     `json:"cache"`
-	Provider  invocationlog.ProviderOutcome  `json:"provider"`
-	Fallback  invocationlog.FallbackOutcome  `json:"fallback"`
-	Streaming invocationlog.StreamingOutcome `json:"streaming"`
-	Logging   invocationlog.LoggingOutcome   `json:"logging"`
-}
-
-type listSafetyOutcomeResponse struct {
-	Outcome       string   `json:"outcome"`
-	MaskingAction string   `json:"maskingAction,omitempty"`
-	DetectedTypes []string `json:"detectedTypes,omitempty"`
-	DetectedCount int      `json:"detectedCount"`
+	RequestID        string                 `json:"requestId"`
+	ProjectID        string                 `json:"projectId"`
+	ApplicationID    string                 `json:"applicationId"`
+	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
+	Provider         string                 `json:"provider"`
+	Model            string                 `json:"model"`
+	RequestedModel   string                 `json:"requestedModel"`
+	SelectedModel    string                 `json:"selectedModel"`
+	Status           string                 `json:"status"`
+	TerminalStatus   string                 `json:"terminalStatus"`
+	DomainOutcomes   domainOutcomesResponse `json:"domainOutcomes"`
+	HTTPStatus       int                    `json:"httpStatus"`
+	PromptTokens     int64                  `json:"promptTokens"`
+	CompletionTokens int64                  `json:"completionTokens"`
+	TotalTokens      int64                  `json:"totalTokens"`
+	CostUSD          string                 `json:"costUsd"`
+	CostMicroUSD     int64                  `json:"costMicroUsd"`
+	LatencyMs        int64                  `json:"latencyMs"`
+	CacheStatus      string                 `json:"cacheStatus"`
+	CacheType        string                 `json:"cacheType"`
+	RoutingReason    string                 `json:"routingReason"`
+	MaskingAction    string                 `json:"maskingAction"`
+	CreatedAt        time.Time              `json:"createdAt"`
 }
 
 type paginationResponse struct {
@@ -427,6 +516,32 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 
 func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overview invocationlog.DashboardOverviewFields) dashboardOverviewDataResponse {
 	return dashboardOverviewDataResponse{
+		GeneratedAt: overview.DataFreshness.GeneratedAt,
+		TimeRange: dashboardTimeRangeResponse{
+			From:        filter.From,
+			To:          filter.To,
+			Granularity: dashboardGranularity(filter.From, filter.To),
+		},
+		Freshness: dashboardFreshnessResponse{
+			LastIngestedAt:   dashboardLastIngestedAt(overview.DataFreshness),
+			LastAggregatedAt: dashboardLastAggregatedAt(overview.DataFreshness),
+			Source:           overview.DataFreshness.Source,
+			IsStale:          overview.DataFreshness.IsStale,
+		},
+		QueryBudget: dashboardQueryBudgetResponse{
+			Status:            overview.QueryBudget.Status,
+			MaxRangeHours:     overview.QueryBudget.MaxRangeHours,
+			MaxBreakdownItems: overview.QueryBudget.MaxBreakdownItems,
+			Guidance:          stringPointerOrNil(overview.QueryBudget.Guidance),
+		},
+		Breakdowns: dashboardBreakdowns(overview),
+		Performance: dashboardPerformanceResponse{
+			P95GatewayInternalLatencyMs: overview.Performance.P95GatewayInternalLatencyMs,
+			P99GatewayInternalLatencyMs: overview.Performance.P99GatewayInternalLatencyMs,
+			P95ProviderLatencyMs:        overview.Performance.P95ProviderLatencyMs,
+			P99ProviderLatencyMs:        overview.Performance.P99ProviderLatencyMs,
+			SystemErrorRate:             overview.Performance.SystemErrorRate,
+		},
 		Range: dashboardRangeResponse{
 			From: filter.From,
 			To:   filter.To,
@@ -444,9 +559,12 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 			FailedRequests:        overview.FailedRequests,
 			BlockedRequests:       overview.BlockedRequests,
 			RateLimitedRequests:   overview.RateLimitedRequests,
+			CancelledRequests:     overview.CancelledRequests,
 			CacheHitRequests:      overview.CacheHitRequests,
 			CacheEligibleRequests: overview.CacheEligibleRequests,
 			CacheHitRate:          overview.CacheHitRate,
+			ExactCacheHitRate:     overview.CacheHitRate,
+			FallbackSuccessCount:  overview.FallbackSuccessCount,
 			PromptTokens:          overview.PromptTokens,
 			CompletionTokens:      overview.CompletionTokens,
 			TotalTokens:           overview.TotalTokens,
@@ -483,8 +601,8 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		RuntimeSnapshot: runtimeSnapshotResponse(detail.RuntimeSnapshot),
 		Status:          detail.Status,
 		TerminalStatus:  detail.TerminalStatus,
-		DomainOutcomes:  detail.DomainOutcomes,
 		HTTPStatus:      detail.HTTPStatus,
+		DomainOutcomes:  domainOutcomesResponseFromDomain(detail.DomainOutcomes),
 		Provider:        detail.Provider,
 		Model:           detail.Model,
 		RequestedModel:  detail.RequestedModel,
@@ -494,6 +612,13 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			CompletionTokens: detail.Usage.CompletionTokens,
 			TotalTokens:      detail.Usage.TotalTokens,
 		},
+		UsageSummary: usageSummaryResponse{
+			PromptTokens:          detail.UsageSummary.PromptTokens,
+			CompletionTokens:      detail.UsageSummary.CompletionTokens,
+			TotalTokens:           detail.UsageSummary.TotalTokens,
+			EstimatedCostMicroUSD: detail.UsageSummary.EstimatedCostMicroUSD,
+			SavedCostMicroUSD:     detail.UsageSummary.SavedCostMicroUSD,
+		},
 		Cost: costResponse{
 			CostUSD:      detail.Cost.CostUSD,
 			CostMicroUSD: detail.Cost.CostMicroUSD,
@@ -502,6 +627,11 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		Latency: latencyResponse{
 			LatencyMs:         detail.Latency.LatencyMs,
 			ProviderLatencyMs: detail.Latency.ProviderLatencyMs,
+		},
+		LatencySummary: latencySummaryResponse{
+			GatewayInternalLatencyMs: detail.LatencySummary.GatewayInternalLatencyMs,
+			ProviderLatencyMs:        detail.LatencySummary.ProviderLatencyMs,
+			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
 		},
 		Cache: cacheResponse{
 			CacheStatus:       detail.Cache.CacheStatus,
@@ -520,6 +650,12 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			MaskingDetectedTypes:  append([]string(nil), detail.Masking.MaskingDetectedTypes...),
 			MaskingDetectedCount:  detail.Masking.MaskingDetectedCount,
 			RedactedPromptPreview: stringPointerOrNil(detail.Masking.RedactedPromptPreview),
+		},
+		SafetySummary: safetySummaryResponse{
+			Outcome:            detail.SafetySummary.Outcome,
+			DetectedCount:      detail.SafetySummary.DetectedCount,
+			DetectorCategories: append([]string(nil), detail.SafetySummary.DetectorCategories...),
+			MaskingAction:      detail.SafetySummary.MaskingAction,
 		},
 		Error: detailErrorResponse{
 			ErrorCode:    stringPointerOrNil(detail.Error.ErrorCode),
@@ -545,7 +681,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			SelectedModel:    item.SelectedModel,
 			Status:           item.Status,
 			TerminalStatus:   item.TerminalStatus,
-			DomainOutcomes:   listDomainOutcomes(item.DomainOutcomes),
+			DomainOutcomes:   domainOutcomesResponseFromDomain(item.DomainOutcomes),
 			HTTPStatus:       item.HTTPStatus,
 			PromptTokens:     item.PromptTokens,
 			CompletionTokens: item.CompletionTokens,
@@ -563,25 +699,120 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 	return responses
 }
 
-func listDomainOutcomes(outcomes invocationlog.DomainOutcomes) listDomainOutcomesResponse {
-	return listDomainOutcomesResponse{
-		Auth:      outcomes.Auth,
-		Runtime:   outcomes.Runtime,
-		RateLimit: outcomes.RateLimit,
-		Budget:    outcomes.Budget,
-		Safety: listSafetyOutcomeResponse{
-			Outcome:       outcomes.Safety.Outcome,
-			MaskingAction: outcomes.Safety.MaskingAction,
-			DetectedTypes: append([]string(nil), outcomes.Safety.DetectedTypes...),
-			DetectedCount: outcomes.Safety.DetectedCount,
-		},
-		Routing:   outcomes.Routing,
-		Cache:     outcomes.Cache,
-		Provider:  outcomes.Provider,
-		Fallback:  outcomes.Fallback,
-		Streaming: outcomes.Streaming,
-		Logging:   outcomes.Logging,
+func domainOutcomesResponseFromDomain(outcomes invocationlog.DomainOutcomes) domainOutcomesResponse {
+	normalized := invocationlog.NormalizeDomainOutcomes(invocationlog.LlmInvocationLog{DomainOutcomes: outcomes})
+	return domainOutcomesResponse{
+		Auth:      outcomeResponseWithCode(normalized.Auth.Outcome, normalized.Auth.ErrorCode),
+		Runtime:   outcomeResponseFromOutcome(normalized.Runtime.Outcome),
+		RateLimit: outcomeResponseFromOutcome(normalized.RateLimit.Outcome),
+		Budget:    outcomeResponseFromOutcome(normalized.Budget.Outcome),
+		Safety:    outcomeResponseFromOutcome(normalized.Safety.Outcome),
+		Routing:   outcomeResponseFromOutcome(normalized.Routing.Outcome),
+		Cache:     outcomeResponseFromOutcome(normalized.Cache.Outcome),
+		Provider:  outcomeResponseWithCode(normalized.Provider.Outcome, normalized.Provider.SanitizedErrorCode),
+		Fallback:  outcomeResponseWithReason(normalized.Fallback.Outcome, normalized.Fallback.Reason),
+		Streaming: outcomeResponseFromOutcome(normalized.Streaming.Outcome),
+		Logging:   outcomeResponseWithCode(normalized.Logging.Outcome, normalized.Logging.SanitizedErrorCode),
 	}
+}
+
+func outcomeResponseFromOutcome(outcome string) outcomeResponse {
+	return outcomeResponse{
+		Outcome: outcome,
+	}
+}
+
+func outcomeResponseWithCode(outcome string, code *string) outcomeResponse {
+	return outcomeResponse{
+		Outcome: outcome,
+		Code:    code,
+	}
+}
+
+func outcomeResponseWithReason(outcome string, reason *string) outcomeResponse {
+	return outcomeResponse{
+		Outcome: outcome,
+		Reason:  reason,
+	}
+}
+
+func dashboardBreakdowns(overview invocationlog.DashboardOverviewFields) dashboardBreakdownsResponse {
+	return dashboardBreakdownsResponse{
+		ByApplication:     applicationBreakdownResponses(overview.ApplicationBreakdown),
+		ByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+		ByProviderModel:   providerModelBreakdownResponses(overview.CostByModel, overview.Performance.P95ProviderLatencyMs),
+		BySafetyOutcome:   outcomeBreakdownResponses(overview.SafetyOutcomeCounts),
+		ByCacheOutcome:    outcomeBreakdownResponses(overview.CacheOutcomeCounts),
+		ByFallbackOutcome: outcomeBreakdownResponses(overview.FallbackOutcomeCounts),
+		ByTerminalStatus:  outcomeBreakdownResponses(overview.StatusCounts),
+	}
+}
+
+func applicationBreakdownResponses(items []invocationlog.ApplicationBreakdown) []applicationBreakdownResponse {
+	responses := make([]applicationBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, applicationBreakdownResponse{
+			ApplicationID: item.ApplicationID,
+			RequestCount:  item.RequestCount,
+			CostMicroUSD:  item.CostMicroUSD,
+		})
+	}
+	return responses
+}
+
+func providerModelBreakdownResponses(items []invocationlog.CostByModel, p95ProviderLatencyMs *float64) []providerModelBreakdownResponse {
+	p95 := 0.0
+	if p95ProviderLatencyMs != nil {
+		p95 = *p95ProviderLatencyMs
+	}
+	responses := make([]providerModelBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, providerModelBreakdownResponse{
+			SelectedProvider:     item.SelectedProvider,
+			SelectedModel:        item.SelectedModel,
+			RequestCount:         item.RequestCount,
+			P95ProviderLatencyMs: p95,
+		})
+	}
+	return responses
+}
+
+func outcomeBreakdownResponses(counts map[string]int64) []outcomeBreakdownResponse {
+	responses := make([]outcomeBreakdownResponse, 0, len(counts))
+	for outcome, count := range counts {
+		responses = append(responses, outcomeBreakdownResponse{
+			Outcome:      outcome,
+			RequestCount: count,
+		})
+	}
+	sort.Slice(responses, func(i int, j int) bool {
+		return responses[i].Outcome < responses[j].Outcome
+	})
+	return responses
+}
+
+func dashboardLastIngestedAt(freshness invocationlog.DashboardDataFreshness) time.Time {
+	if freshness.LastLogCreatedAt != nil {
+		return *freshness.LastLogCreatedAt
+	}
+	return freshness.GeneratedAt
+}
+
+func dashboardLastAggregatedAt(freshness invocationlog.DashboardDataFreshness) time.Time {
+	if !freshness.LastAggregatedAt.IsZero() {
+		return freshness.LastAggregatedAt
+	}
+	return freshness.GeneratedAt
+}
+
+func dashboardGranularity(from time.Time, to time.Time) string {
+	if to.Sub(from) > 48*time.Hour {
+		return "day"
+	}
+	if to.Sub(from) > 6*time.Hour {
+		return "hour"
+	}
+	return "minute"
 }
 
 func budgetScopeFromQuery(query map[string][]string) budget.Scope {

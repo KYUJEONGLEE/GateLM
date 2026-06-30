@@ -52,6 +52,7 @@ const requestDetailText: Record<
 export function RequestLogDetail({ locale, record, tenantId, timezone }: RequestLogDetailProps) {
   const text = requestDetailText[locale];
   const runtimeSnapshot = record.metadata.runtime.runtimeSnapshot;
+  const domainOutcomes = record.domainOutcomes;
 
   return (
     <main className="console-content">
@@ -84,10 +85,28 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Tenant", formatTenantDisplayName(record.tenantId)],
             ["Project", record.projectId],
             ["Application", formatDisplayIdentifier(record.applicationId)],
-            ["API key ID", record.apiKeyId],
-            ["App token ID", record.appTokenId],
+            ["Budget scope", `${record.budgetScope.budgetScopeType}:${formatDisplayIdentifier(record.budgetScope.budgetScopeId)}`],
+            ["Resolved by", record.budgetScope.resolvedBy],
             ["End user", nullableText(record.endUserId ? formatDisplayIdentifier(record.endUserId) : null)],
             ["Feature", nullableText(record.featureId)]
+          ]}
+        />
+
+        <DetailPanel
+          title="Gateway outcome"
+          rows={[
+            ["Terminal status", record.terminalStatus ?? record.status],
+            ["Auth", domainOutcomes?.auth.outcome ?? text.none],
+            ["Runtime", domainOutcomes?.runtime.outcome ?? text.none],
+            ["Rate limit", domainOutcomes?.rateLimit.outcome ?? text.none],
+            ["Budget", domainOutcomes?.budget.outcome ?? text.none],
+            ["Safety", domainOutcomes?.safety.outcome ?? text.none],
+            ["Routing", domainOutcomes?.routing.outcome ?? text.none],
+            ["Cache", domainOutcomes?.cache.outcome ?? text.none],
+            ["Provider", domainOutcomes?.provider.outcome ?? text.none],
+            ["Fallback", domainOutcomes?.fallback.outcome ?? text.none],
+            ["Streaming", domainOutcomes?.streaming.outcome ?? text.none],
+            ["Logging", domainOutcomes?.logging.outcome ?? text.none]
           ]}
         />
 
@@ -111,11 +130,11 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
         <DetailPanel
           title="Safety"
           rows={[
-            ["Masking action", record.maskingAction],
-            ["Detected count", String(record.maskingDetectedCount)],
-            ["Detected types", record.maskingDetectedTypes?.join(", ") || text.none],
-            ["Prompt preview", nullableText(record.redactedPromptPreview, text.emptyPreview)],
-            ["Prompt hash", record.promptHash]
+            ["Outcome", record.safetySummary?.outcome ?? domainOutcomes?.safety.outcome ?? record.maskingAction],
+            ["Masking action", record.safetySummary?.maskingAction ?? record.maskingAction],
+            ["Detected count", String(record.safetySummary?.detectedCount ?? record.maskingDetectedCount)],
+            ["Detected types", record.safetySummary?.detectorCategories?.join(", ") || record.maskingDetectedTypes?.join(", ") || text.none],
+            ["Prompt preview", nullableText(record.redactedPromptPreview, text.emptyPreview)]
           ]}
         />
 
@@ -143,7 +162,8 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Cost micro USD", formatInteger(record.costMicroUsd)],
             ["Saved cost micro USD", formatInteger(record.savedCostMicroUsd)],
             ["Latency", formatLatency(record.latencyMs)],
-            ["Provider latency", formatLatency(record.providerLatencyMs)]
+            ["Gateway internal latency", formatLatency(record.latencySummary?.gatewayInternalLatencyMs ?? record.latencyMs)],
+            ["Provider latency", formatLatency(record.latencySummary?.providerLatencyMs ?? record.providerLatencyMs)]
           ]}
         />
 
@@ -168,9 +188,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
             ["Gateway instance", runtimeSnapshot.gatewayInstanceId],
             ["Legacy config hash", runtimeSnapshot.legacyHashes.configHash],
             ["Legacy security policy hash", runtimeSnapshot.legacyHashes.securityPolicyHash],
-            ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash],
-            ["Request body hash", record.requestBodyHash],
-            ["Cache key hash", nullableText(record.cacheKeyHash, text.none)]
+            ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash]
           ]}
         />
       </section>

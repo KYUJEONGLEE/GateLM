@@ -5,10 +5,22 @@ import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveDashboardOverviewResponse = {
   data?: {
+    breakdowns?: {
+      byCacheOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      byFallbackOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      bySafetyOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      byTerminalStatus?: Array<{ outcome?: string; requestCount?: number }>;
+    };
     dataFreshness?: {
       generatedAt?: string;
       lastLogCreatedAt?: string | null;
       recordCount?: number;
+      source?: string;
+    };
+    freshness?: {
+      isStale?: boolean;
+      lastAggregatedAt?: string;
+      lastIngestedAt?: string;
       source?: string;
     };
     filters?: {
@@ -22,6 +34,24 @@ type LiveDashboardOverviewResponse = {
       from?: string;
       to?: string;
     };
+    performance?: {
+      p95GatewayInternalLatencyMs?: number | null;
+      p95ProviderLatencyMs?: number | null;
+      p99GatewayInternalLatencyMs?: number | null;
+      p99ProviderLatencyMs?: number | null;
+      systemErrorRate?: number;
+    };
+    queryBudget?: {
+      guidance?: string | null;
+      maxBreakdownItems?: number;
+      maxRangeHours?: number;
+      status?: "ok" | "too_broad" | "partial" | "stale" | "unavailable";
+    };
+    timeRange?: {
+      from?: string;
+      granularity?: string;
+      to?: string;
+    };
     totals?: {
       averageLatencyMs?: number | null;
       averageResponseTimeMs?: number | null;
@@ -29,6 +59,7 @@ type LiveDashboardOverviewResponse = {
       cacheEligibleRequests?: number;
       cacheHitRate?: number | null;
       cacheHitRequests?: number;
+      cancelledRequests?: number;
       completionTokens?: number;
       costByModel?: Array<{
         costMicroUsd?: number;
@@ -39,6 +70,8 @@ type LiveDashboardOverviewResponse = {
         totalTokens?: number;
       }>;
       failedRequests?: number;
+      exactCacheHitRate?: number | null;
+      fallbackSuccessCount?: number;
       maskingActionCounts?: Record<string, number>;
       p95LatencyMs?: number | null;
       promptTokens?: number;
@@ -111,6 +144,8 @@ function toDashboardOverview(
 ): DashboardOverview {
   const totals = data.totals ?? {};
   const freshness = data.dataFreshness ?? {};
+  const v2Freshness = data.freshness;
+  const performance = data.performance;
   const applicationId = "live_gateway_application";
 
   return {
@@ -124,10 +159,10 @@ function toDashboardOverview(
       "GET /api/dashboard/overview"
     ],
     range: {
-      from: data.range?.from ?? fallbackFrom,
-      to: data.range?.to ?? fallbackTo,
+      from: data.timeRange?.from ?? data.range?.from ?? fallbackFrom,
+      to: data.timeRange?.to ?? data.range?.to ?? fallbackTo,
       timezone: "UTC",
-      grain: "live"
+      grain: data.timeRange?.granularity ?? "live"
     },
     filters: {
       tenantId,
@@ -144,9 +179,12 @@ function toDashboardOverview(
     failedRequests: totals.failedRequests ?? 0,
     blockedRequests: totals.blockedRequests ?? 0,
     rateLimitedRequests: totals.rateLimitedRequests ?? 0,
+    cancelledRequests: totals.cancelledRequests ?? 0,
     cacheHitRequests: totals.cacheHitRequests ?? 0,
     cacheEligibleRequests: totals.cacheEligibleRequests ?? 0,
     cacheHitRate: totals.cacheHitRate ?? 0,
+    exactCacheHitRate: totals.exactCacheHitRate ?? totals.cacheHitRate ?? 0,
+    fallbackSuccessCount: totals.fallbackSuccessCount ?? 0,
     totalTokens: totals.totalTokens ?? 0,
     promptTokens: totals.promptTokens ?? 0,
     completionTokens: totals.completionTokens ?? 0,
@@ -174,13 +212,46 @@ function toDashboardOverview(
     })),
     requestIds: [],
     dataFreshness: {
-      source: freshness.source ?? "gateway-postgresql",
+      source: v2Freshness?.source ?? freshness.source ?? "gateway-postgresql",
       recordCount: freshness.recordCount ?? 0,
-      lastLogCreatedAt: freshness.lastLogCreatedAt ?? freshness.generatedAt ?? fallbackTo,
-      generatedAt: freshness.generatedAt ?? fallbackTo
+      lastLogCreatedAt: v2Freshness?.lastIngestedAt ?? freshness.lastLogCreatedAt ?? freshness.generatedAt ?? fallbackTo,
+      generatedAt: freshness.generatedAt ?? v2Freshness?.lastAggregatedAt ?? fallbackTo
+    },
+    queryBudget: {
+      status: data.queryBudget?.status ?? "ok",
+      maxRangeHours: data.queryBudget?.maxRangeHours ?? LIVE_RANGE_HOURS,
+      maxBreakdownItems: data.queryBudget?.maxBreakdownItems ?? 50,
+      guidance: data.queryBudget?.guidance ?? null
+    },
+    performance: {
+      p95GatewayInternalLatencyMs: performance?.p95GatewayInternalLatencyMs ?? totals.p95LatencyMs ?? 0,
+      p99GatewayInternalLatencyMs: performance?.p99GatewayInternalLatencyMs ?? performance?.p95GatewayInternalLatencyMs ?? totals.p95LatencyMs ?? 0,
+      p95ProviderLatencyMs: performance?.p95ProviderLatencyMs ?? 0,
+      p99ProviderLatencyMs: performance?.p99ProviderLatencyMs ?? performance?.p95ProviderLatencyMs ?? 0,
+      systemErrorRate: performance?.systemErrorRate ?? safeRate(totals.failedRequests ?? 0, totals.totalRequests ?? 0)
+    },
+    breakdowns: {
+      bySafetyOutcome: normalizeOutcomeRows(data.breakdowns?.bySafetyOutcome),
+      byCacheOutcome: normalizeOutcomeRows(data.breakdowns?.byCacheOutcome),
+      byFallbackOutcome: normalizeOutcomeRows(data.breakdowns?.byFallbackOutcome),
+      byTerminalStatus: normalizeOutcomeRows(data.breakdowns?.byTerminalStatus)
     },
     notes: ["Live Gateway overview. Raw prompt, raw response, and credentials are not exposed."]
   };
+}
+
+function normalizeOutcomeRows(rows: Array<{ outcome?: string; requestCount?: number }> | undefined) {
+  return (rows ?? []).map((row) => ({
+    outcome: row.outcome ?? "unknown",
+    requestCount: row.requestCount ?? 0
+  }));
+}
+
+function safeRate(numerator: number, denominator: number) {
+  if (denominator <= 0) {
+    return 0;
+  }
+  return numerator / denominator;
 }
 
 function formatMicroUsd(value: number) {

@@ -47,6 +47,28 @@ export type BudgetScope = {
   resolvedBy: string;
 };
 
+export type TerminalStatus = "success" | "blocked" | "rate_limited" | "failed" | "cancelled";
+
+export type DomainOutcome = {
+  outcome: string;
+  reason?: string | null;
+  code?: string | null;
+};
+
+export type DomainOutcomes = {
+  auth: DomainOutcome;
+  runtime: DomainOutcome;
+  rateLimit: DomainOutcome;
+  budget: DomainOutcome;
+  safety: DomainOutcome;
+  routing: DomainOutcome;
+  cache: DomainOutcome;
+  provider: DomainOutcome;
+  fallback: DomainOutcome;
+  streaming: DomainOutcome;
+  logging: DomainOutcome;
+};
+
 export type InvocationLogRecord = {
   requestId: string;
   traceId: string;
@@ -85,7 +107,27 @@ export type InvocationLogRecord = {
   savedCostMicroUsd: number;
   latencyMs: number;
   providerLatencyMs: number | null;
-  status: "success" | "blocked" | "rate_limited" | "failed" | "cancelled";
+  status: TerminalStatus;
+  terminalStatus?: TerminalStatus;
+  domainOutcomes?: DomainOutcomes;
+  latencySummary?: {
+    gatewayInternalLatencyMs: number;
+    providerLatencyMs: number | null;
+    totalLatencyMs: number;
+  };
+  usageSummary?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    estimatedCostMicroUsd: number;
+    savedCostMicroUsd: number;
+  };
+  safetySummary?: {
+    outcome: string;
+    detectedCount: number;
+    detectorCategories: string[];
+    maskingAction: string | null;
+  };
   httpStatus: number;
   errorCode: string | null;
   errorMessage: string | null;
@@ -136,9 +178,12 @@ export type DashboardOverview = {
   failedRequests: number;
   blockedRequests: number;
   rateLimitedRequests: number;
+  cancelledRequests?: number;
   cacheHitRequests: number;
   cacheEligibleRequests: number;
   cacheHitRate: number;
+  exactCacheHitRate?: number;
+  fallbackSuccessCount?: number;
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
@@ -171,6 +216,25 @@ export type DashboardOverview = {
     lastLogCreatedAt: string;
     generatedAt: string;
   };
+  queryBudget?: {
+    status: "ok" | "too_broad" | "partial" | "stale" | "unavailable";
+    maxRangeHours: number;
+    maxBreakdownItems: number;
+    guidance: string | null;
+  };
+  performance?: {
+    p95GatewayInternalLatencyMs: number;
+    p99GatewayInternalLatencyMs: number;
+    p95ProviderLatencyMs: number;
+    p99ProviderLatencyMs: number;
+    systemErrorRate: number;
+  };
+  breakdowns?: {
+    bySafetyOutcome: Array<{ outcome: string; requestCount: number }>;
+    byCacheOutcome: Array<{ outcome: string; requestCount: number }>;
+    byFallbackOutcome: Array<{ outcome: string; requestCount: number }>;
+    byTerminalStatus: Array<{ outcome: string; requestCount: number }>;
+  };
   notes: string[];
 };
 
@@ -195,12 +259,14 @@ export function getInvocationRecord(requestId: string): InvocationLogRecord | un
 
 function normalizeInvocationRecord(record: InvocationLogRecord): InvocationLogRecord {
 	const status = normalizeLegacyBridgeStatus(record.status);
+	const terminalStatus = normalizeLegacyBridgeStatus(record.terminalStatus ?? status);
 	const budgetScope = normalizeBudgetScope(record.budgetScope, record.applicationId);
 	const runtime = normalizeRuntimeMetadataBridge(record.metadata?.runtime, record.createdAt);
-	if (status === record.status && budgetScope === record.budgetScope && runtime === record.metadata?.runtime) {
+	const domainOutcomes = record.domainOutcomes ?? legacyDomainOutcomes(record, terminalStatus);
+	if (status === record.status && terminalStatus === record.terminalStatus && budgetScope === record.budgetScope && runtime === record.metadata?.runtime && domainOutcomes === record.domainOutcomes) {
 		return record;
 	}
-	return { ...record, budgetScope, metadata: { runtime }, status };
+	return { ...record, budgetScope, domainOutcomes, metadata: { runtime }, status, terminalStatus };
 }
 
 // v1 fixture compatibility bridge: legacy status values are normalized to v2 terminal status values.
@@ -296,5 +362,30 @@ function normalizeBudgetScope(scope: BudgetScope | undefined, applicationId: str
 		budgetScopeType: "application",
 		budgetScopeId: applicationId,
 		resolvedBy: "default_application"
+	};
+}
+
+function legacyDomainOutcomes(record: InvocationLogRecord, terminalStatus: TerminalStatus): DomainOutcomes {
+	const cacheOutcome = record.cacheStatus === "hit" || record.cacheStatus === "miss" || record.cacheStatus === "error"
+		? record.cacheStatus
+		: record.cacheStatus === "bypass" ? "bypassed" : "not_used";
+	const safetyOutcome = record.maskingAction === "blocked" || record.maskingAction === "redacted"
+		? record.maskingAction
+		: "passed";
+	const providerOutcome = record.providerLatencyMs === null || terminalStatus === "blocked" || terminalStatus === "rate_limited"
+		? "not_called"
+		: terminalStatus === "failed" ? "error" : "success";
+	return {
+		auth: { outcome: "passed" },
+		runtime: { outcome: record.metadata?.runtime?.runtimeSnapshot?.runtimeState ?? "not_checked" },
+		rateLimit: { outcome: terminalStatus === "rate_limited" ? "rate_limited" : "not_checked" },
+		budget: { outcome: "allowed" },
+		safety: { outcome: safetyOutcome },
+		routing: { outcome: record.selectedProvider || record.selectedModel ? "selected" : "not_checked" },
+		cache: { outcome: cacheOutcome },
+		provider: { outcome: providerOutcome, code: providerOutcome === "error" ? record.errorCode : null },
+		fallback: { outcome: "not_called" },
+		streaming: { outcome: record.stream ? terminalStatus === "cancelled" ? "cancelled" : "completed" : "not_streaming" },
+		logging: { outcome: "written" }
 	};
 }
