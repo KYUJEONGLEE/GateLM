@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  DomainOutcome,
   DomainOutcomes,
   InvocationLogRecord,
   RuntimeSnapshotProvenance,
@@ -29,7 +30,7 @@ type GatewayRequestDetailResponse = {
       errorStage?: string | null;
     };
     httpStatus?: number;
-    domainOutcomes?: DomainOutcomes;
+    domainOutcomes?: GatewayDomainOutcomes;
     latency?: {
       latencyMs?: number;
       providerLatencyMs?: number | null;
@@ -89,6 +90,10 @@ type GatewayBudgetScope = {
   resolvedBy?: string;
 };
 
+type GatewayDomainOutcomes = Partial<
+  Record<keyof DomainOutcomes, Partial<DomainOutcome> | null>
+>;
+
 export async function getLiveGatewayRequestDetail(
   requestId: string
 ): Promise<InvocationLogRecord | undefined> {
@@ -122,7 +127,10 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
   const applicationId = data.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(data.budgetScope, applicationId);
   const runtimeSnapshot = normalizeRuntimeSnapshot(data.runtimeSnapshot);
-  const domainOutcomes = data.domainOutcomes ?? legacyDomainOutcomes(status, cacheStatus, maskingAction, data.latency?.providerLatencyMs ?? null, data.error?.errorCode ?? null);
+  const domainOutcomes = normalizeDomainOutcomes(
+    data.domainOutcomes,
+    legacyDomainOutcomes(status, cacheStatus, maskingAction, data.latency?.providerLatencyMs ?? null, data.error?.errorCode ?? null)
+  );
   const stream = data.stream ?? isStreamingOutcome(domainOutcomes.streaming.outcome);
   const latencySummary = {
     gatewayInternalLatencyMs: data.latencySummary?.gatewayInternalLatencyMs ?? Math.max((data.latency?.latencyMs ?? 0) - (data.latency?.providerLatencyMs ?? 0), 0),
@@ -241,6 +249,36 @@ function normalizeRuntimeSnapshot(value: RuntimeSnapshotProvenance | null | unde
   }
 
   return null;
+}
+
+function normalizeDomainOutcomes(
+  value: GatewayDomainOutcomes | undefined,
+  fallback: DomainOutcomes
+): DomainOutcomes {
+  return {
+    auth: normalizeDomainOutcome(value?.auth, fallback.auth),
+    runtime: normalizeDomainOutcome(value?.runtime, fallback.runtime),
+    rateLimit: normalizeDomainOutcome(value?.rateLimit, fallback.rateLimit),
+    budget: normalizeDomainOutcome(value?.budget, fallback.budget),
+    safety: normalizeDomainOutcome(value?.safety, fallback.safety),
+    routing: normalizeDomainOutcome(value?.routing, fallback.routing),
+    cache: normalizeDomainOutcome(value?.cache, fallback.cache),
+    provider: normalizeDomainOutcome(value?.provider, fallback.provider),
+    fallback: normalizeDomainOutcome(value?.fallback, fallback.fallback),
+    streaming: normalizeDomainOutcome(value?.streaming, fallback.streaming),
+    logging: normalizeDomainOutcome(value?.logging, fallback.logging)
+  };
+}
+
+function normalizeDomainOutcome(
+  value: Partial<DomainOutcome> | null | undefined,
+  fallback: DomainOutcome
+): DomainOutcome {
+  return {
+    outcome: value?.outcome ?? fallback.outcome,
+    reason: value?.reason ?? fallback.reason ?? null,
+    code: value?.code ?? fallback.code ?? null
+  };
 }
 
 function isStreamingOutcome(outcome: string | undefined): boolean {

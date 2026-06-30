@@ -96,31 +96,31 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
           title="Gateway outcome"
           rows={[
             ["Terminal status", record.terminalStatus ?? record.status],
-            ["Auth", domainOutcomes?.auth.outcome ?? text.none],
-            ["Runtime", domainOutcomes?.runtime.outcome ?? text.none],
-            ["Rate limit", domainOutcomes?.rateLimit.outcome ?? text.none],
-            ["Budget", domainOutcomes?.budget.outcome ?? text.none],
-            ["Safety", domainOutcomes?.safety.outcome ?? text.none],
-            ["Routing", domainOutcomes?.routing.outcome ?? text.none],
-            ["Cache", domainOutcomes?.cache.outcome ?? text.none],
-            ["Provider", domainOutcomes?.provider.outcome ?? text.none],
-            ["Fallback", domainOutcomes?.fallback.outcome ?? text.none],
-            ["Streaming", domainOutcomes?.streaming.outcome ?? text.none],
-            ["Logging", domainOutcomes?.logging.outcome ?? text.none]
+            ["Auth", domainOutcomes?.auth?.outcome ?? text.none],
+            ["Runtime", domainOutcomes?.runtime?.outcome ?? text.none],
+            ["Rate limit", domainOutcomes?.rateLimit?.outcome ?? text.none],
+            ["Budget", domainOutcomes?.budget?.outcome ?? text.none],
+            ["Safety", domainOutcomes?.safety?.outcome ?? text.none],
+            ["Routing", domainOutcomes?.routing?.outcome ?? text.none],
+            ["Cache", domainOutcomes?.cache?.outcome ?? text.none],
+            ["Provider", domainOutcomes?.provider?.outcome ?? text.none],
+            ["Fallback", domainOutcomes?.fallback?.outcome ?? text.none],
+            ["Streaming", domainOutcomes?.streaming?.outcome ?? text.none],
+            ["Logging", domainOutcomes?.logging?.outcome ?? text.none]
           ]}
         />
 
         <DetailPanel
           title="Outcome detail"
           rows={[
-            ["Budget reason", nullableText(domainOutcomes?.budget.reason ?? null, text.none)],
-            ["Budget code", nullableText(domainOutcomes?.budget.code ?? null, text.none)],
-            ["Provider reason", nullableText(domainOutcomes?.provider.reason ?? null, text.none)],
-            ["Provider code", nullableText(domainOutcomes?.provider.code ?? null, text.none)],
-            ["Fallback reason", nullableText(domainOutcomes?.fallback.reason ?? null, text.none)],
-            ["Fallback code", nullableText(domainOutcomes?.fallback.code ?? null, text.none)],
-            ["Streaming reason", nullableText(domainOutcomes?.streaming.reason ?? null, text.none)],
-            ["Streaming code", nullableText(domainOutcomes?.streaming.code ?? null, text.none)],
+            ["Budget reason", nullableText(domainOutcomes?.budget?.reason ?? null, text.none)],
+            ["Budget code", nullableText(domainOutcomes?.budget?.code ?? null, text.none)],
+            ["Provider reason", nullableText(domainOutcomes?.provider?.reason ?? null, text.none)],
+            ["Provider code", nullableText(domainOutcomes?.provider?.code ?? null, text.none)],
+            ["Fallback reason", nullableText(domainOutcomes?.fallback?.reason ?? null, text.none)],
+            ["Fallback code", nullableText(domainOutcomes?.fallback?.code ?? null, text.none)],
+            ["Streaming reason", nullableText(domainOutcomes?.streaming?.reason ?? null, text.none)],
+            ["Streaming code", nullableText(domainOutcomes?.streaming?.code ?? null, text.none)],
             ["Streaming requested", record.stream ? text.yes : text.no]
           ]}
         />
@@ -145,7 +145,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
         <DetailPanel
           title="Safety"
           rows={[
-            ["Outcome", record.safetySummary?.outcome ?? domainOutcomes?.safety.outcome ?? record.maskingAction],
+            ["Outcome", record.safetySummary?.outcome ?? domainOutcomes?.safety?.outcome ?? record.maskingAction],
             ["Masking action", record.safetySummary?.maskingAction ?? record.maskingAction],
             ["Detected count", String(record.safetySummary?.detectedCount ?? record.maskingDetectedCount)],
             ["Detected types", record.safetySummary?.detectorCategories?.join(", ") || record.maskingDetectedTypes?.join(", ") || text.none],
@@ -209,7 +209,7 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
                 ]
               : [
                   ["Snapshot", text.none],
-                  ["Runtime outcome", domainOutcomes?.runtime.outcome ?? text.none]
+                  ["Runtime outcome", domainOutcomes?.runtime?.outcome ?? text.none]
                 ]
           }
         />
