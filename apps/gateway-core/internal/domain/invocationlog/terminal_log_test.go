@@ -135,6 +135,27 @@ func TestBuildTerminalLogMapsExactCacheHitDomainOutcomes(t *testing.T) {
 	}
 }
 
+func TestBuildTerminalLogDefaultsMissingBudgetDecisionToNotChecked(t *testing.T) {
+	startedAt := time.Date(2026, 6, 30, 9, 3, 0, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:     "request_without_budget_decision",
+		ApplicationID: "app_demo",
+		Status:        StatusSuccess,
+		HTTPStatus:    200,
+		CacheStatus:   CacheStatusMiss,
+		CacheType:     CacheTypeExact,
+		StartedAt:     startedAt,
+		CompletedAt:   startedAt.Add(2 * time.Millisecond),
+	})
+
+	if log.BudgetDecision != nil {
+		t.Fatalf("expected no budget decision, got %#v", log.BudgetDecision)
+	}
+	if log.DomainOutcomes.Budget.Outcome != budget.OutcomeNotChecked {
+		t.Fatalf("missing budget decision must be not_checked, got %+v", log.DomainOutcomes.Budget)
+	}
+}
+
 func TestBuildTerminalLogUsesLatencyFallback(t *testing.T) {
 	startedAt := time.Date(2026, 6, 26, 1, 2, 3, 0, time.UTC)
 	log := BuildTerminalLog(TerminalLogInput{

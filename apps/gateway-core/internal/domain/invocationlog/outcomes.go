@@ -319,7 +319,7 @@ func rateLimitOutcome(decision *ratelimit.Decision) RateLimitOutcome {
 
 func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.Decision) BudgetOutcome {
 	normalized := budget.NormalizeScope(scope, applicationID)
-	outcome := budget.OutcomeNotUsed
+	outcome := budget.OutcomeNotChecked
 	if decision != nil {
 		decisionScope := budget.NormalizeScope(decision.Scope, applicationID)
 		if strings.TrimSpace(decisionScope.ID) != "" {
