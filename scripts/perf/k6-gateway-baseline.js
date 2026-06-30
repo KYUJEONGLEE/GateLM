@@ -7,6 +7,13 @@ const appToken = __ENV.GATELM_DEMO_APP_TOKEN || __ENV.GATELM_APP_TOKEN || "glm_a
 const endUserId = __ENV.GATELM_DEMO_END_USER_ID || "user_k6_baseline";
 const cacheHitIterations = positiveIntEnv("K6_CACHE_HIT_ITERATIONS", 3);
 const enableDependencyScenarios = (__ENV.K6_ENABLE_V2_DEPENDENCY_SCENARIOS || "").toLowerCase() === "true";
+const providerFailureControlUrl = trimTrailingSlash(
+  __ENV.K6_PROVIDER_FAILURE_CONTROL_URL || __ENV.MOCK_PROVIDER_BASE_URL || "http://localhost:8090"
+);
+const providerFailureModels = csvEnv("K6_PROVIDER_FAILURE_MODELS", [
+  __ENV.GATELM_DEMO_OPENAI_LOW_COST_MODEL || "gpt-4o-mini",
+  __ENV.GATELM_DEMO_OPENAI_BALANCED_MODEL || "gpt-4o",
+]);
 
 const requiredMetricFamilies = [
   "gatelm_gateway_requests_total",
@@ -42,7 +49,7 @@ const forbiddenMetricLabels = [
   "raw_response",
 ];
 
-http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 403, 429));
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 403, 404, 429));
 
 export const options = {
   scenarios: {
@@ -153,12 +160,15 @@ export function setup() {
   const fallbackRunId = `run_${Date.now().toString(36)}_${Math.floor(Math.random() * 1000000).toString(36)}`;
   const runId = (__ENV.GATELM_K6_RUN_ID || fallbackRunId).replace(/[^A-Za-z0-9_]/g, "_");
   const metricsBefore = getMetrics();
+  resetProviderFailureControl();
 
   return {
     runId,
     metricsBefore,
     safePrompt: `Write a short safe refund response for GateLM k6 baseline ${runId}.`,
     missPrompt: `Write a short safe refund response for GateLM provider-call evidence ${runId}.`,
+    providerErrorPrompt: `Write a short safe provider error fallback response for GateLM k6 baseline ${runId}.`,
+    providerTimeoutPrompt: `Write a short safe provider timeout fallback response for GateLM k6 baseline ${runId}.`,
     streamingPrompt: `Write a short safe streaming response for GateLM thin slice ${runId}.`,
     redactionPrompt: `Write a support reply to synthetic.user.${runId}@example.test without exposing the address.`,
     blockedPrompt: `This synthetic request contains api_key=test_secret_token_redacted_for_demo_only_${runId}_abcdef1234567890`,
@@ -259,12 +269,24 @@ export function rate_limited(data) {
   });
 }
 
-export function provider_timeout() {
-  guardedEvidence("provider_timeout", "requires PR-2A provider timeout injection; not implemented in PR-5");
+export function provider_timeout(data) {
+  runProviderFailureFallbackScenario(data, {
+    scenario: "provider_timeout",
+    failureMode: "timeout",
+    prompt: data.providerTimeoutPrompt,
+    expectedProviderOutcome: "timeout",
+    expectedFallbackReason: "provider_timeout",
+  });
 }
 
-export function provider_error_mock_fallback() {
-  guardedEvidence("provider_error_mock_fallback", "requires PR-2A fallback controls; not implemented in PR-5");
+export function provider_error_mock_fallback(data) {
+  runProviderFailureFallbackScenario(data, {
+    scenario: "provider_error_mock_fallback",
+    failureMode: "error",
+    prompt: data.providerErrorPrompt,
+    expectedProviderOutcome: "error",
+    expectedFallbackReason: "provider_error",
+  });
 }
 
 export function streaming_thin_slice(data) {
@@ -312,6 +334,69 @@ function guardedEvidence(name, reason) {
   check(reason, {
     [`${name} guarded until dependency PR lands`]: () => true,
   });
+}
+
+function runProviderFailureFallbackScenario(data, scenario) {
+  const requestId = buildScenarioRequestId(data, scenario.scenario);
+  const configured = configureProviderFailureControl(scenario.failureMode);
+  if (!configured) {
+    return;
+  }
+
+  let response;
+  try {
+    response = chatCompletion(scenario.prompt, scenario.scenario, { requestId });
+  } finally {
+    resetProviderFailureControl();
+  }
+
+  const detail = requestDetail(requestId);
+  const domainOutcomes = detail.data.domainOutcomes || {};
+  const providerOutcome = domainOutcomes.provider || {};
+  const fallbackOutcome = domainOutcomes.fallback || {};
+
+  check(response, {
+    [`${scenario.scenario} returns degraded success`]: (r) => r.status === 200,
+  });
+  check(detail.response, {
+    [`${scenario.scenario} request detail returns 200`]: (r) => r.status === 200,
+  });
+  check(detail.data, {
+    [`${scenario.scenario} terminal status is success`]: () => detail.data.terminalStatus === "success",
+    [`${scenario.scenario} provider outcome is ${scenario.expectedProviderOutcome}`]: () =>
+      providerOutcome.outcome === scenario.expectedProviderOutcome,
+    [`${scenario.scenario} provider code is ${scenario.expectedFallbackReason}`]: () =>
+      providerOutcome.code === scenario.expectedFallbackReason,
+    [`${scenario.scenario} fallback outcome is success`]: () => fallbackOutcome.outcome === "success",
+    [`${scenario.scenario} fallback reason is sanitized`]: () =>
+      fallbackOutcome.reason === scenario.expectedFallbackReason,
+  });
+}
+
+function configureProviderFailureControl(mode) {
+  const response = http.post(
+    `${providerFailureControlUrl}/__mock/config`,
+    JSON.stringify({ mode, failModels: providerFailureModels }),
+    {
+      headers: { "Content-Type": "application/json" },
+      tags: { name: "POST /__mock/config" },
+    }
+  );
+
+  return check(response, {
+    [`provider failure control accepts ${mode}`]: (r) => r.status === 200,
+  });
+}
+
+function resetProviderFailureControl() {
+  http.post(
+    `${providerFailureControlUrl}/__mock/config`,
+    JSON.stringify({ mode: "off", failModels: [] }),
+    {
+      headers: { "Content-Type": "application/json" },
+      tags: { name: "POST /__mock/config" },
+    }
+  );
 }
 
 /*
@@ -384,6 +469,27 @@ function buildScenarioRequestId(data, featureId) {
   const safeFeature = String(featureId || "scenario").replace(/[^A-Za-z0-9_]/g, "_");
   const suffix = Math.floor(Math.random() * 1000000).toString(36);
   return `request_k6_${runId}_${safeFeature}_${__VU}_${__ITER}_${suffix}`.slice(0, 128);
+}
+
+function requestDetail(requestId) {
+  let response = null;
+  let body = {};
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    response = http.get(`${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(requestId)}`, {
+      tags: { name: "GET /api/llm-requests/:requestId" },
+    });
+    body = safeJson(response.body);
+    if (response.status === 200 && body.data) {
+      break;
+    }
+    sleep(0.5);
+  }
+
+  return {
+    response,
+    body,
+    data: body.data || {},
+  };
 }
 
 function safeJson(body) {
@@ -481,6 +587,15 @@ function positiveIntEnv(name, fallback) {
     return fallback;
   }
   return value;
+}
+
+function csvEnv(name, fallback) {
+  const raw = String(__ENV[name] || "").trim();
+  if (!raw) {
+    return fallback;
+  }
+  const values = raw.split(",").map((value) => value.trim()).filter(Boolean);
+  return values.length > 0 ? values : fallback;
 }
 
 function escapeRegex(value) {

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
+const expectedPnpmVersion = "9.15.0";
 
 const skipDirs = new Set([
   ".cache",
@@ -64,22 +65,22 @@ const commands = [
   },
   {
     name: "v2 docs",
-    command: "pnpm",
+    packageManager: true,
     args: ["run", "verify:v2-docs"],
   },
   {
     name: "control-plane typecheck",
-    command: "pnpm",
+    packageManager: true,
     args: ["--filter", "@gatelm/control-plane-api", "typecheck"],
   },
   {
     name: "control-plane tests",
-    command: "pnpm",
+    packageManager: true,
     args: ["--filter", "@gatelm/control-plane-api", "test", "--", "--runInBand"],
   },
   {
     name: "web typecheck",
-    command: "pnpm",
+    packageManager: true,
     args: ["--filter", "@gatelm/web", "typecheck"],
   },
   {
@@ -95,13 +96,14 @@ const commands = [
 
 function runCommand(step) {
   console.log(`\n==> ${step.name}`);
-  const result = spawnSync(step.command, step.args, {
+  const invocation = commandInvocation(step);
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd: step.cwd ?? rootDir,
     env: {
       ...process.env,
       ...(step.env ?? {}),
     },
-    shell: process.platform === "win32",
+    shell: invocation.shell,
     stdio: "inherit",
   });
 
@@ -115,6 +117,60 @@ function runCommand(step) {
       result.status !== null ? `exited with ${result.status}` : `terminated by signal ${result.signal}`;
     failures.push(`${step.name}: ${reason}`);
   }
+}
+
+function commandInvocation(step) {
+  if (step.packageManager === true) {
+    return packageManagerInvocation(step.args);
+  }
+
+  return {
+    command: step.command,
+    args: step.args,
+    shell: process.platform === "win32",
+  };
+}
+
+function packageManagerInvocation(args) {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath && path.basename(npmExecPath).toLowerCase().includes("pnpm")) {
+    const extension = path.extname(npmExecPath).toLowerCase();
+    if ([".cjs", ".js", ".mjs"].includes(extension)) {
+      return {
+        command: process.execPath,
+        args: [npmExecPath, ...args],
+        shell: false,
+      };
+    }
+
+    return {
+      command: npmExecPath,
+      args,
+      shell: process.platform === "win32",
+    };
+  }
+
+  return {
+    command: "corepack",
+    args: ["pnpm", ...args],
+    shell: process.platform === "win32",
+  };
+}
+
+function readActivePnpmVersion() {
+  const invocation = packageManagerInvocation(["--version"]);
+  const result = spawnSync(invocation.command, invocation.args, {
+    cwd: rootDir,
+    env: process.env,
+    encoding: "utf8",
+    shell: invocation.shell,
+  });
+
+  if (result.error || result.status !== 0) {
+    return "unavailable";
+  }
+
+  return result.stdout.trim();
 }
 
 function scanSecrets() {
@@ -165,19 +221,26 @@ function assertToolingBaseline() {
   if (nvmrc !== "22" || nodeVersion !== "22") {
     failures.push("Node baseline files must both be 22");
   }
-  if (packageJson.packageManager !== "pnpm@9.15.0") {
-    failures.push("packageManager must be pnpm@9.15.0");
+  if (packageJson.packageManager !== `pnpm@${expectedPnpmVersion}`) {
+    failures.push(`packageManager must be pnpm@${expectedPnpmVersion}`);
   }
   if (packageJson.engines?.node !== ">=22 <23") {
     failures.push('engines.node must be ">=22 <23"');
   }
+  const activePnpmVersion = readActivePnpmVersion();
+  if (activePnpmVersion !== expectedPnpmVersion) {
+    failures.push(`active pnpm must be ${expectedPnpmVersion}, got ${activePnpmVersion}`);
+  }
 
   console.log(`node baseline: ${nvmrc}`);
   console.log(`pnpm baseline: ${packageJson.packageManager}`);
+  console.log(`active pnpm: ${activePnpmVersion}`);
 }
 
 function main() {
   assertToolingBaseline();
+  exitIfFailures();
+
   scanSecrets();
 
   for (const command of commands) {
@@ -188,6 +251,11 @@ function main() {
     runCommand(command);
   }
 
+  exitIfFailures();
+  console.log("\nv2 final hardening passed.");
+}
+
+function exitIfFailures() {
   if (failures.length > 0) {
     console.error("\nv2 final hardening failed:");
     for (const failure of failures) {
@@ -195,8 +263,6 @@ function main() {
     }
     process.exit(1);
   }
-
-  console.log("\nv2 final hardening passed.");
 }
 
 main();
