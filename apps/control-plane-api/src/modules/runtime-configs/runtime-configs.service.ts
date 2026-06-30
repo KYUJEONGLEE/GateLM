@@ -21,6 +21,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import {
   ActiveRuntimeConfigResponseDto,
   PublishRuntimeConfigDto,
+  ProviderCatalogResponseDto,
   ResourceStatusDto,
   RuntimeConfigCachePolicyResponseDto,
   RuntimeConfigCostingDto,
@@ -48,6 +49,7 @@ const MISSING_PROVIDER_CREDENTIAL_BINDING_MESSAGE =
 const DEFAULT_PUBLISHED_BY = 'control_plane';
 const DEFAULT_GATEWAY_INSTANCE_ID = 'gateway_core_static';
 const DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT = 80;
+const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
 const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
   'secretHash',
   'plaintext',
@@ -73,26 +75,9 @@ export class RuntimeConfigsService {
   async getActiveRuntimeConfig(
     applicationId: string,
   ): Promise<ActiveRuntimeConfigResponseDto> {
-    const runtimeConfig = await this.prisma.runtimeConfig.findFirst({
-      where: {
-        applicationId,
-        publishState: RuntimeConfigPublishState.ACTIVE,
-      },
-      orderBy: [{ publishedAt: 'desc' }, { updatedAt: 'desc' }],
-    });
-
-    if (!runtimeConfig) {
-      throw new NotFoundException('Active Runtime Config not found.');
-    }
-
-    const document = this.withProviderCredentialRefBridge(
-      this.toRuntimeConfigDocument(runtimeConfig.document),
-    );
-    await this.assertRuntimeConfigExecutable({
+    const { document } = await this.getExecutableActiveRuntimeConfig({
       applicationId,
-      runtimeConfig,
-      document,
-      now: new Date(),
+      notFoundMessage: 'Active Runtime Config not found.',
     });
 
     return document;
@@ -101,6 +86,53 @@ export class RuntimeConfigsService {
   async getActiveRuntimeSnapshot(
     applicationId: string,
   ): Promise<RuntimeSnapshotResponseDto> {
+    const { runtimeConfig, document } =
+      await this.getExecutableActiveRuntimeConfig({
+        applicationId,
+        notFoundMessage: 'Active RuntimeSnapshot not found.',
+      });
+
+    return this.toRuntimeSnapshotResponse(runtimeConfig, document);
+  }
+
+  async getActiveProviderCatalog(
+    applicationId: string,
+  ): Promise<ProviderCatalogResponseDto> {
+    const { runtimeConfig, document } =
+      await this.getExecutableActiveRuntimeConfig({
+        applicationId,
+        notFoundMessage: 'Active Provider Catalog not found.',
+      });
+
+    return this.toProviderCatalogResponse(runtimeConfig, document);
+  }
+
+  async getProviderCatalog(
+    catalogId: string,
+  ): Promise<ProviderCatalogResponseDto> {
+    const parsedCatalogId = this.parseProviderCatalogId(catalogId);
+    const catalog = await this.getActiveProviderCatalog(
+      parsedCatalogId.applicationId,
+    );
+
+    if (
+      catalog.catalogId !== catalogId ||
+      catalog.catalogVersion !== parsedCatalogId.catalogVersion
+    ) {
+      throw new NotFoundException('Provider Catalog not found.');
+    }
+
+    return catalog;
+  }
+
+  private async getExecutableActiveRuntimeConfig(args: {
+    applicationId: string;
+    notFoundMessage: string;
+  }): Promise<{
+    runtimeConfig: RuntimeConfig;
+    document: ActiveRuntimeConfigResponseDto;
+  }> {
+    const { applicationId, notFoundMessage } = args;
     const runtimeConfig = await this.prisma.runtimeConfig.findFirst({
       where: {
         applicationId,
@@ -110,7 +142,7 @@ export class RuntimeConfigsService {
     });
 
     if (!runtimeConfig) {
-      throw new NotFoundException('Active RuntimeSnapshot not found.');
+      throw new NotFoundException(notFoundMessage);
     }
 
     const document = this.withProviderCredentialRefBridge(
@@ -123,7 +155,7 @@ export class RuntimeConfigsService {
       now: new Date(),
     });
 
-    return this.toRuntimeSnapshotResponse(runtimeConfig, document);
+    return { runtimeConfig, document };
   }
 
   async upsertDraft(
@@ -904,7 +936,7 @@ export class RuntimeConfigsService {
       if (!selectedProviderSet.has(provider.provider)) {
         continue;
       }
-      if (provider.resolver === 'none') {
+      if (!(provider.credentialRequired ?? provider.resolver !== 'none')) {
         continue;
       }
       if (
@@ -1193,17 +1225,25 @@ export class RuntimeConfigsService {
     provider: ProviderConnection,
     models: RuntimeConfigModelResponseDto[],
   ): RuntimeConfigProviderDto {
+    const adapterType = this.toProviderConnectionAdapterType(provider);
     return {
       providerId: provider.id,
       provider: provider.provider,
       displayName: provider.displayName,
       status: this.toProviderStatus(provider.status),
+      adapterType,
       baseUrl: provider.baseUrl,
       timeoutMs: provider.timeoutMs,
+      credentialRequired:
+        this.toProviderConnectionCredentialRequired(provider),
       credentialRef: this.toProviderCredentialRef(provider),
       secretRef: provider.secretRef,
       credentialPreview: this.toProviderCredentialPreview(provider),
       resolver: this.toResolver(provider.resolver),
+      adapterConfig: this.toProviderConnectionAdapterConfig(
+        provider,
+        adapterType,
+      ),
       models: models
         .filter((model) => model.provider === provider.provider)
         .map((model) => model.model),
@@ -1219,10 +1259,15 @@ export class RuntimeConfigsService {
       runtimeConfig,
       document,
     );
-    const providerCatalogRef = this.toProviderCatalogRef(
+    const providerCatalog = this.toProviderCatalogResponse(
+      runtimeConfig,
       document,
-      runtimeSnapshotVersion,
     );
+    const providerCatalogRef = {
+      catalogId: providerCatalog.catalogId,
+      catalogVersion: providerCatalog.catalogVersion,
+      contentHash: providerCatalog.contentHash,
+    };
 
     return {
       runtimeSnapshotId: runtimeConfig.id,
@@ -1310,37 +1355,303 @@ export class RuntimeConfigsService {
     };
   }
 
-  private toProviderCatalogRef(
+  private toProviderCatalogResponse(
+    runtimeConfig: RuntimeConfig,
     document: ActiveRuntimeConfigResponseDto,
-    catalogVersion: number,
-  ): RuntimeSnapshotResponseDto['providerCatalogRef'] {
-    const catalogBody = {
-      providers: document.providers.map((provider) => ({
-        providerId: provider.providerId,
-        providerName: provider.provider,
-        adapterType: provider.provider,
-        enabled: provider.status === 'active',
-        credentialRef: provider.credentialRef,
-        fallbackEligible: provider.failureMode === 'fail_open_to_fallback',
-        models: document.models
-          .filter((model) => model.provider === provider.provider)
-          .map((model) => ({
-            modelId: `${model.provider}:${model.model}`,
-            modelName: model.model,
-            enabled: model.status === 'active',
-            capabilities: {
-              streamingSupported: model.supportsStreaming,
-              maxInputTokens: model.contextWindowTokens,
-            },
-          })),
-      })),
+  ): ProviderCatalogResponseDto {
+    const catalogVersion = this.toRuntimeSnapshotVersion(
+      runtimeConfig,
+      document,
+    );
+    const updatedAt =
+      runtimeConfig.publishedAt?.toISOString() ?? document.publishedAt;
+    const catalogBodyWithoutHash = {
+      catalogId: this.toProviderCatalogId(
+        document.applicationId,
+        catalogVersion,
+      ),
+      catalogVersion,
+      updatedAt,
+      providers: document.providers.map((provider) =>
+        this.toProviderCatalogProvider(provider, document),
+      ),
     };
 
     return {
-      catalogId: `provider_catalog:${document.projectId}:${catalogVersion}`,
-      catalogVersion,
-      contentHash: this.sha256(this.canonicalJson(catalogBody)),
+      ...catalogBodyWithoutHash,
+      contentHash: this.sha256(this.canonicalJson(catalogBodyWithoutHash)),
     };
+  }
+
+  private toProviderCatalogProvider(
+    provider: RuntimeConfigProviderDto,
+    document: ActiveRuntimeConfigResponseDto,
+  ): ProviderCatalogResponseDto['providers'][number] {
+    const adapterType = this.toRuntimeProviderAdapterType(provider);
+    const credentialRequired =
+      provider.credentialRequired ?? provider.resolver !== 'none';
+
+    return {
+      providerId: provider.providerId,
+      providerName: provider.provider,
+      adapterType,
+      enabled: provider.status === 'active',
+      baseUrl: this.toSafeProviderBaseUrl(provider.baseUrl),
+      timeoutMs: provider.timeoutMs,
+      credentialRequired,
+      credentialRef: credentialRequired
+        ? this.toProviderCatalogCredentialRef(provider)
+        : null,
+      adapterConfig:
+        provider.adapterConfig ??
+        this.toRuntimeProviderAdapterConfig(adapterType),
+      fallbackEligible: provider.failureMode === 'fail_open_to_fallback',
+      models: document.models
+        .filter((model) => model.provider === provider.provider)
+        .map((model) =>
+          this.toProviderCatalogModel(model, provider, document),
+        ),
+    };
+  }
+
+  private toProviderCatalogCredentialRef(
+    provider: RuntimeConfigProviderDto,
+  ): NonNullable<
+    ProviderCatalogResponseDto['providers'][number]['credentialRef']
+  > {
+    if (!provider.credentialRef) {
+      throw new ConflictException(MISSING_PROVIDER_CREDENTIAL_BINDING_MESSAGE);
+    }
+
+    return {
+      credentialRefId: provider.credentialRef.credentialRefId,
+      credentialVersion: provider.credentialRef.credentialVersion,
+      credentialState: provider.credentialRef.credentialState,
+    };
+  }
+
+  private toProviderCatalogModel(
+    model: RuntimeConfigModelResponseDto,
+    provider: RuntimeConfigProviderDto,
+    document: ActiveRuntimeConfigResponseDto,
+  ): ProviderCatalogResponseDto['providers'][number]['models'][number] {
+    return {
+      modelId: `${provider.providerId}:${model.model}`,
+      modelName: model.model,
+      displayName: model.displayName,
+      enabled: model.status === 'active',
+      capabilities: {
+        streamingSupported: model.supportsStreaming,
+        supportsJsonMode: model.supportsJsonMode,
+        maxInputTokens: model.contextWindowTokens,
+        maxOutputTokens: this.toMaxOutputTokens(model),
+      },
+      routing: {
+        autoRoutingEligible: model.status === 'active',
+        costTier: this.toModelCostTier(model, document),
+        fallbackPriority: this.toModelFallbackPriority(model, document),
+      },
+    };
+  }
+
+  private toProviderCatalogId(
+    applicationId: string,
+    catalogVersion: number,
+  ): string {
+    return `${PROVIDER_CATALOG_ID_PREFIX}:${applicationId}:${catalogVersion}`;
+  }
+
+  private parseProviderCatalogId(catalogId: string): {
+    applicationId: string;
+    catalogVersion: number;
+  } {
+    const parts = catalogId.split(':');
+    if (parts.length !== 3 || parts[0] !== PROVIDER_CATALOG_ID_PREFIX) {
+      throw new NotFoundException('Provider Catalog not found.');
+    }
+
+    const catalogVersion = Number.parseInt(parts[2] ?? '', 10);
+    if (!parts[1] || !Number.isInteger(catalogVersion) || catalogVersion < 1) {
+      throw new NotFoundException('Provider Catalog not found.');
+    }
+
+    return {
+      applicationId: parts[1],
+      catalogVersion,
+    };
+  }
+
+  private toRuntimeProviderAdapterType(
+    provider: RuntimeConfigProviderDto,
+  ): string {
+    if (this.isSafeCatalogToken(provider.adapterType)) {
+      return provider.adapterType.trim();
+    }
+
+    return provider.provider === 'mock' ? 'mock' : 'openai_compatible';
+  }
+
+  private toProviderConnectionAdapterType(
+    provider: ProviderConnection,
+  ): string {
+    const adapterType = this.toRecordOrNull(provider.providerConfig)
+      ?.adapterType;
+    if (this.isSafeCatalogToken(adapterType)) {
+      return adapterType.trim();
+    }
+
+    return provider.provider === 'mock' ? 'mock' : 'openai_compatible';
+  }
+
+  private toProviderConnectionCredentialRequired(
+    provider: ProviderConnection,
+  ): boolean {
+    const credentialRequired = this.toRecordOrNull(provider.providerConfig)
+      ?.credentialRequired;
+    if (typeof credentialRequired === 'boolean') {
+      return credentialRequired;
+    }
+
+    return provider.resolver !== 'none';
+  }
+
+  private toProviderConnectionAdapterConfig(
+    provider: ProviderConnection,
+    adapterType: string,
+  ): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+    const providerConfig = this.toRecordOrNull(provider.providerConfig);
+    const requestFormat = this.toAdapterRequestFormat(
+      providerConfig?.requestFormat,
+      adapterType,
+    );
+    const apiVersion = this.toAdapterApiVersion(providerConfig?.apiVersion);
+
+    return apiVersion ? { requestFormat, apiVersion } : { requestFormat };
+  }
+
+  private toRuntimeProviderAdapterConfig(
+    adapterType: string,
+  ): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+    return {
+      requestFormat:
+        adapterType === 'mock'
+          ? 'mock_chat_completions'
+          : 'openai_chat_completions',
+    };
+  }
+
+  private toAdapterRequestFormat(
+    value: unknown,
+    adapterType: string,
+  ): 'openai_chat_completions' | 'mock_chat_completions' {
+    if (
+      value === 'openai_chat_completions' ||
+      value === 'mock_chat_completions'
+    ) {
+      return value;
+    }
+
+    return adapterType === 'mock'
+      ? 'mock_chat_completions'
+      : 'openai_chat_completions';
+  }
+
+  private toAdapterApiVersion(value: unknown): string | undefined {
+    if (
+      typeof value === 'string' &&
+      /^[A-Za-z0-9._-]{1,80}$/.test(value)
+    ) {
+      return value;
+    }
+
+    return undefined;
+  }
+
+  private toSafeProviderBaseUrl(baseUrl: string): string {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(baseUrl);
+    } catch {
+      throw new ConflictException('Provider baseUrl is not executable.');
+    }
+
+    if (parsedUrl.username || parsedUrl.password) {
+      throw new ConflictException(
+        'Provider baseUrl must not contain credential material.',
+      );
+    }
+
+    const forbiddenQueryKeys = new Set([
+      'api_key',
+      'apikey',
+      'key',
+      'token',
+      'access_token',
+      'authorization',
+    ]);
+    for (const key of parsedUrl.searchParams.keys()) {
+      if (forbiddenQueryKeys.has(key.toLowerCase())) {
+        throw new ConflictException(
+          'Provider baseUrl must not contain credential material.',
+        );
+      }
+    }
+
+    return baseUrl;
+  }
+
+  private toMaxOutputTokens(model: RuntimeConfigModelResponseDto): number {
+    return Math.max(
+      1,
+      Math.min(4096, Math.floor(model.contextWindowTokens / 4)),
+    );
+  }
+
+  private toModelCostTier(
+    model: RuntimeConfigModelResponseDto,
+    document: ActiveRuntimeConfigResponseDto,
+  ): 'low' | 'balanced' | 'premium' {
+    if (
+      model.provider === document.routingPolicy.lowCostProvider &&
+      model.model === document.routingPolicy.lowCostModel
+    ) {
+      return 'low';
+    }
+
+    return 'balanced';
+  }
+
+  private toModelFallbackPriority(
+    model: RuntimeConfigModelResponseDto,
+    document: ActiveRuntimeConfigResponseDto,
+  ): number {
+    if (
+      model.provider === document.routingPolicy.lowCostProvider &&
+      model.model === document.routingPolicy.lowCostModel
+    ) {
+      return 0;
+    }
+    if (
+      model.provider === document.routingPolicy.defaultProvider &&
+      model.model === document.routingPolicy.defaultModel
+    ) {
+      return 1;
+    }
+    if (
+      model.provider === document.routingPolicy.fallbackProvider &&
+      model.model === document.routingPolicy.fallbackModel
+    ) {
+      return 10;
+    }
+
+    return 5;
+  }
+
+  private isSafeCatalogToken(value: unknown): value is string {
+    return (
+      typeof value === 'string' &&
+      /^[A-Za-z0-9._-]{1,80}$/.test(value.trim())
+    );
   }
 
   private toRuntimeSnapshotVersion(

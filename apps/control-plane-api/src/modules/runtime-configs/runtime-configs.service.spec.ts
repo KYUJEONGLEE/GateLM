@@ -327,6 +327,78 @@ describe('RuntimeConfigsService', () => {
     );
   });
 
+  it('returns the active Provider Catalog body referenced by RuntimeSnapshot', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const catalogById = await service.getProviderCatalog(catalog.catalogId);
+
+    expect(catalogById).toEqual(catalog);
+    expect(snapshot.providerCatalogRef).toEqual({
+      catalogId: catalog.catalogId,
+      catalogVersion: catalog.catalogVersion,
+      contentHash: catalog.contentHash,
+    });
+    expect(catalog.catalogId).toBe(
+      `provider_catalog:${applicationId}:${catalog.catalogVersion}`,
+    );
+    expect(catalog.providers[0]).toMatchObject({
+      providerId,
+      providerName: 'mock',
+      adapterType: 'mock',
+      enabled: true,
+      baseUrl: 'http://mock-provider:8090',
+      timeoutMs: 30000,
+      credentialRequired: false,
+      credentialRef: null,
+      adapterConfig: { requestFormat: 'mock_chat_completions' },
+      fallbackEligible: false,
+    });
+    expect(catalog.providers[0]?.models[0]).toMatchObject({
+      modelId: `${providerId}:mock-fast`,
+      modelName: 'mock-fast',
+      enabled: true,
+      capabilities: {
+        streamingSupported: false,
+        supportsJsonMode: false,
+        maxInputTokens: 8192,
+        maxOutputTokens: 2048,
+      },
+      routing: {
+        autoRoutingEligible: true,
+        costTier: 'low',
+        fallbackPriority: 0,
+      },
+    });
+    expect(JSON.stringify(catalog)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(catalog)).not.toContain('secretHash');
+  });
+
+  it('rejects a Provider Catalog id that does not match the active catalog', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    await expect(
+      service.getProviderCatalog(`provider_catalog:${applicationId}:999`),
+    ).rejects.toThrow('Provider Catalog not found.');
+  });
+
   it('rejects an active row when its stored document is not active', async () => {
     const { service, prisma } = createService();
     prisma.runtimeConfig.findFirst.mockResolvedValue(
