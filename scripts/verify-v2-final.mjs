@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -111,7 +111,9 @@ function runCommand(step) {
   }
 
   if (result.status !== 0) {
-    failures.push(`${step.name}: exited with ${result.status}`);
+    const reason =
+      result.status !== null ? `exited with ${result.status}` : `terminated by signal ${result.signal}`;
+    failures.push(`${step.name}: ${reason}`);
   }
 }
 
@@ -141,7 +143,7 @@ function listTextFiles(dir) {
       continue;
     }
 
-    const stats = statSync(fullPath);
+    const stats = lstatSync(fullPath);
     if (stats.isDirectory()) {
       files.push(...listTextFiles(fullPath));
       continue;
