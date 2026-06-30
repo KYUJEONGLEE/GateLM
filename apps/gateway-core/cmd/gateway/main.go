@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	postgresauth "gatelm/apps/gateway-core/internal/adapters/auth/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
@@ -92,6 +93,20 @@ func main() {
 		ApplicationID: cfg.DemoApplicationID,
 	})
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
+	routerOptions := []app.RouterOption{
+		app.WithAuthFailureLogWriter(authFailureLogWriter),
+		app.WithTerminalLogWriter(terminalLogWriter),
+		app.WithInvocationLogReader(invocationLogReader),
+		app.WithExactCache(
+			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
+			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
+		),
+		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
+	}
+	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
+		gatewayCredentials := postgresauth.NewStore(postgresPool)
+		routerOptions = append(routerOptions, app.WithGatewayAuth(gatewayCredentials, gatewayCredentials))
+	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
 		budgetstage.NewStage(budget.AllowChecker{}),
@@ -107,19 +122,12 @@ func main() {
 		),
 	)
 
+	routerOptions = append(routerOptions, app.WithRuntimePolicyPipeline(runtimePolicyPipeline))
 	router := app.NewRouter(
 		cfg,
 		providers,
 		readinessChecks,
-		app.WithAuthFailureLogWriter(authFailureLogWriter),
-		app.WithTerminalLogWriter(terminalLogWriter),
-		app.WithInvocationLogReader(invocationLogReader),
-		app.WithExactCache(
-			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
-			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
-		),
-		app.WithRuntimePolicyPipeline(runtimePolicyPipeline),
-		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
+		routerOptions...,
 	)
 	server := app.NewServer(cfg, router)
 
