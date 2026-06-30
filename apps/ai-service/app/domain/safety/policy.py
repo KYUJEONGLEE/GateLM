@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from dataclasses import replace
 
 from app.domain.safety.decision import (
     ACTION_BLOCKED,
@@ -16,6 +17,7 @@ from app.schemas.safety import SafetyDetector
 
 
 PREVIEW_MAX_CHARS = 120
+MERGEABLE_INFIX_CHARS = frozenset("._-+@:/?=&%#")
 
 
 def enabled_detector_map(detectors: list[SafetyDetector]) -> dict[str, SafetyDetector]:
@@ -34,7 +36,7 @@ def build_safety_decision(
     signals: list[SafetySignal],
     security_policy_hash: str,
 ) -> SafetyDecision:
-    effective = effective_signals(signals)
+    effective = effective_signals(signals, prompt_text=prompt_text)
     if not effective:
         return SafetyDecision(
             action=ACTION_NONE,
@@ -62,11 +64,15 @@ def build_safety_decision(
     )
 
 
-def effective_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
+def effective_signals(
+    signals: list[SafetySignal],
+    *,
+    prompt_text: str | None = None,
+) -> list[SafetySignal]:
     candidates = [
-        signal
+        normalized
         for signal in signals
-        if signal.start >= 0 and signal.end > signal.start
+        if (normalized := _normalize_signal_span(signal, prompt_text)) is not None
     ]
     candidates.sort(
         key=lambda signal: (
@@ -85,15 +91,18 @@ def effective_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
         selected.append(candidate)
 
     selected.sort(key=lambda signal: (signal.start, signal.end))
-    return selected
+    if prompt_text is None:
+        return selected
+    return _merge_adjacent_similar_signals(selected, prompt_text)
 
 
 def redact_prompt(prompt_text: str, signals: list[SafetySignal]) -> str:
     if not signals:
         return prompt_text
+    redaction_signals = effective_signals(signals, prompt_text=prompt_text)
     chunks: list[str] = []
     offset = 0
-    for signal in signals:
+    for signal in redaction_signals:
         if signal.start < offset or signal.end > len(prompt_text):
             continue
         chunks.append(prompt_text[offset:signal.start])
@@ -130,3 +139,64 @@ def _confidence_rank(confidence: float) -> float:
 
 def _overlaps(left: SafetySignal, right: SafetySignal) -> bool:
     return left.start < right.end and right.start < left.end
+
+
+def _normalize_signal_span(
+    signal: SafetySignal,
+    prompt_text: str | None,
+) -> SafetySignal | None:
+    if signal.start < 0 or signal.end <= signal.start:
+        return None
+    if prompt_text is None:
+        return signal
+    if signal.end > len(prompt_text):
+        return None
+
+    start = signal.start
+    end = signal.end
+    while start < end and prompt_text[start].isspace():
+        start += 1
+    while end > start and prompt_text[end - 1].isspace():
+        end -= 1
+    if end <= start:
+        return None
+    if start == signal.start and end == signal.end:
+        return signal
+    return replace(signal, start=start, end=end)
+
+
+def _merge_adjacent_similar_signals(
+    signals: list[SafetySignal],
+    prompt_text: str,
+) -> list[SafetySignal]:
+    merged: list[SafetySignal] = []
+    for signal in signals:
+        if not merged:
+            merged.append(signal)
+            continue
+
+        previous = merged[-1]
+        gap = prompt_text[previous.end : signal.start]
+        if _should_merge_adjacent_signal(previous, signal, gap):
+            merged[-1] = replace(
+                previous,
+                end=signal.end,
+                confidence=max(previous.confidence, signal.confidence),
+            )
+            continue
+        merged.append(signal)
+    return merged
+
+
+def _should_merge_adjacent_signal(
+    previous: SafetySignal,
+    current: SafetySignal,
+    gap: str,
+) -> bool:
+    if previous.detector_type != current.detector_type:
+        return False
+    if previous.action != current.action or previous.placeholder != current.placeholder:
+        return False
+    if current.start < previous.end:
+        return False
+    return gap == "" or all(char in MERGEABLE_INFIX_CHARS for char in gap)

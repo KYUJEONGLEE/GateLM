@@ -86,7 +86,8 @@ class AiSafetyDetectorService:
             safety_signals_from_detections(
                 detections,
                 detector_config,
-            )
+            ),
+            prompt_text=prompt_text,
         )
         redacted_prompt = redact_prompt(prompt_text, signals)
         type_counts = Counter(signal.detector_type for signal in signals)

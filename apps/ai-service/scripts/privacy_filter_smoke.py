@@ -13,6 +13,8 @@ import sys
 from typing import Any
 
 
+MERGEABLE_INFIX_CHARS = frozenset("._-+@:/?=&%#")
+
 LABEL_MAP = {
     "private_email": ("email", "redact", "[EMAIL_REDACTED]"),
     "private_phone": ("phone_number", "redact", "[PHONE_NUMBER_REDACTED]"),
@@ -76,11 +78,7 @@ def normalize_detection(item: dict[str, Any]) -> dict[str, Any] | None:
 
 def redact_text(text: str, detections: list[dict[str, Any]]) -> str:
     redacted = text
-    span_detections = [
-        detection
-        for detection in detections
-        if isinstance(detection.get("start"), int) and isinstance(detection.get("end"), int)
-    ]
+    span_detections = normalize_redaction_detections(text, detections)
 
     for detection in sorted(span_detections, key=lambda item: item["start"], reverse=True):
         redacted = (
@@ -90,6 +88,85 @@ def redact_text(text: str, detections: list[dict[str, Any]]) -> str:
         )
 
     return redacted
+
+
+def normalize_redaction_detections(
+    text: str,
+    detections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized = [
+        normalized_detection
+        for detection in detections
+        if (normalized_detection := normalize_detection_span(text, detection)) is not None
+    ]
+    normalized.sort(
+        key=lambda detection: (
+            detection["start"],
+            detection["end"],
+            -float(detection.get("confidence", 0.0)),
+        )
+    )
+
+    selected: list[dict[str, Any]] = []
+    for detection in normalized:
+        if selected and detection["start"] < selected[-1]["end"]:
+            previous = selected[-1]
+            previous_confidence = float(previous.get("confidence", 0.0))
+            current_confidence = float(detection.get("confidence", 0.0))
+            previous_length = previous["end"] - previous["start"]
+            current_length = detection["end"] - detection["start"]
+            if (current_confidence, current_length) > (previous_confidence, previous_length):
+                selected[-1] = detection
+            continue
+        selected.append(detection)
+
+    merged: list[dict[str, Any]] = []
+    for detection in selected:
+        if merged and should_merge_adjacent_detection(merged[-1], detection, text):
+            merged[-1]["end"] = detection["end"]
+            merged[-1]["confidence"] = max(
+                float(merged[-1].get("confidence", 0.0)),
+                float(detection.get("confidence", 0.0)),
+            )
+            continue
+        merged.append(detection)
+    return merged
+
+
+def normalize_detection_span(text: str, detection: dict[str, Any]) -> dict[str, Any] | None:
+    start = detection.get("start")
+    end = detection.get("end")
+    if not isinstance(start, int) or not isinstance(end, int):
+        return None
+    if start < 0 or end <= start or end > len(text):
+        return None
+
+    while start < end and text[start].isspace():
+        start += 1
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    if end <= start:
+        return None
+
+    normalized = dict(detection)
+    normalized["start"] = start
+    normalized["end"] = end
+    return normalized
+
+
+def should_merge_adjacent_detection(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    text: str,
+) -> bool:
+    if previous.get("detectorType") != current.get("detectorType"):
+        return False
+    if previous.get("action") != current.get("action"):
+        return False
+    if previous.get("placeholder") != current.get("placeholder"):
+        return False
+    gap = text[previous["end"] : current["start"]]
+    return gap == "" or all(char in MERGEABLE_INFIX_CHARS for char in gap)
 
 
 def strip_internal_fields(detection: dict[str, Any]) -> dict[str, Any]:
@@ -113,11 +190,12 @@ def main() -> None:
     )
 
     raw_items = classifier(input_text)
-    detections = [
+    raw_detections = [
         detection
         for item in raw_items
         if (detection := normalize_detection(item)) is not None
     ]
+    detections = normalize_redaction_detections(input_text, raw_detections)
     detector_categories = sorted({detection["detectorType"] for detection in detections})
     outcome = "blocked" if any(d["action"] == "block" for d in detections) else "redacted"
     if not detections:

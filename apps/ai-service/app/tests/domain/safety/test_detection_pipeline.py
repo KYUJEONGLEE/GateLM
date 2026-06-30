@@ -149,6 +149,64 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertIn("[AUTHORIZATION_HEADER_REDACTED]", decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_token, decision.redacted_prompt_preview or "")
 
+    def test_model_split_spans_preserve_spaces_and_merge_email_parts(self) -> None:
+        raw_name = "Alice"
+        raw_email = "alice@example.invalid"
+        prompt = f"Contact {raw_name} Example at {raw_email}."
+        email_first_part = "alice@example"
+        email_second_part = "invalid"
+
+        detections = [
+            Detection(
+                detector_type="person_name",
+                source="openai_privacy_filter",
+                start=prompt.index(f" {raw_name}"),
+                end=prompt.index(f" {raw_name}") + len(f" {raw_name}"),
+                confidence=0.99,
+            ),
+            Detection(
+                detector_type="email",
+                source="openai_privacy_filter",
+                start=prompt.index(f" {email_first_part}"),
+                end=prompt.index(f" {email_first_part}") + len(f" {email_first_part}"),
+                confidence=0.99,
+            ),
+            Detection(
+                detector_type="email",
+                source="openai_privacy_filter",
+                start=prompt.index(email_second_part),
+                end=prompt.index(email_second_part) + len(email_second_part),
+                confidence=0.98,
+            ),
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {
+                "person_name": detector(
+                    "person_name",
+                    "redact",
+                    "[PERSON_NAME_REDACTED]",
+                ),
+                "email": detector("email", "redact", "[EMAIL_REDACTED]"),
+            },
+        )
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=signals,
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.action, "redacted")
+        self.assertEqual(decision.detected_types, ("email", "person_name"))
+        self.assertEqual(decision.detected_count, 2)
+        self.assertEqual(
+            decision.redacted_prompt_preview,
+            "Contact [PERSON_NAME_REDACTED] Example at [EMAIL_REDACTED].",
+        )
+        self.assertNotIn(raw_name, decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
+
 
 def detector(detector_type: str, action: str, placeholder: str) -> SafetyDetector:
     return SafetyDetector(
