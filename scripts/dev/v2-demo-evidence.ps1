@@ -55,15 +55,11 @@ function Invoke-GatewayChat {
   } | ConvertTo-Json -Depth 8
 
   try {
-    $response = Invoke-WebRequest -Method Post -Uri "$GatewayBaseUrl/v1/chat/completions" -Headers $headers -Body $body -UseBasicParsing
+    $response = Invoke-WebRequest -Method Post -Uri "$GatewayBaseUrl/v1/chat/completions" -Headers $headers -Body $body -UseBasicParsing -SkipHttpErrorCheck
     $statusCode = [int]$response.StatusCode
   } catch {
-    $response = $_.Exception.Response
-    if ($response -and $response.StatusCode) {
-      $statusCode = [int]$response.StatusCode
-    } else {
-      $statusCode = 0
-    }
+    $response = $null
+    $statusCode = 0
   }
 
   return [ordered]@{
@@ -83,7 +79,15 @@ function HeaderValue($Response, [string]$Name) {
   if (-not $Response -or -not $Response.Headers) {
     return $null
   }
-  $value = $Response.Headers[$Name]
+  if ($Response.Headers -is [System.Collections.IDictionary]) {
+    $value = $Response.Headers[$Name]
+  } else {
+    try {
+      $value = $Response.Headers.GetValues($Name)
+    } catch {
+      $value = $null
+    }
+  }
   if ($value -is [array]) {
     return $value -join ","
   }
