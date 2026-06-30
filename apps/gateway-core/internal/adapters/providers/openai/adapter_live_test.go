@@ -31,7 +31,7 @@ func TestLiveOpenAIChatCompletionOptIn(t *testing.T) {
 	adapter := NewAdapter(nil)
 	resp, err := adapter.CreateChatCompletion(context.Background(), provider.ExecutionConfig{
 		AdapterType:        providercatalog.AdapterTypeOpenAICompatible,
-		BaseURL:            firstNonEmpty(os.Getenv("GATELM_LIVE_OPENAI_BASE_URL"), "https://api.openai.com/v1"),
+		BaseURL:            liveEnvOrDefault("GATELM_LIVE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		Timeout:            15 * time.Second,
 		CredentialRequired: true,
 		Credential:         &provider.ResolvedCredential{Value: apiKey},
@@ -57,4 +57,12 @@ func TestLiveOpenAIChatCompletionOptIn(t *testing.T) {
 
 func intPointer(value int) *int {
 	return &value
+}
+
+func liveEnvOrDefault(name string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	return value
 }
