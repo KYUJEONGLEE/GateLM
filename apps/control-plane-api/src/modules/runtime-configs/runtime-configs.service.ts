@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -13,6 +14,7 @@ import {
   ResourceStatus,
   RuntimeConfig,
   RuntimeConfigPublishState,
+  RuntimeSnapshot,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
@@ -191,6 +193,12 @@ export class RuntimeConfigsService {
   async getActiveRuntimeSnapshot(
     applicationId: string,
   ): Promise<RuntimeSnapshotResponseDto> {
+    const persistedSnapshot =
+      await this.getPersistedActiveRuntimeSnapshot(applicationId);
+    if (persistedSnapshot) {
+      return persistedSnapshot;
+    }
+
     const { runtimeConfig, document } =
       await this.getExecutableActiveRuntimeConfig({
         applicationId,
@@ -228,6 +236,58 @@ export class RuntimeConfigsService {
     }
 
     return catalog;
+  }
+
+  private async getPersistedActiveRuntimeSnapshot(
+    applicationId: string,
+  ): Promise<RuntimeSnapshotResponseDto | null> {
+    const application = await this.getApplicationContextOrThrow(
+      applicationId,
+    );
+    this.assertActiveContext(application);
+    const activeSnapshot =
+      await this.prisma.activeRuntimeSnapshot.findUnique({
+        where: {
+          tenantId_projectId_applicationId: {
+            tenantId: application.tenantId,
+            projectId: application.projectId,
+            applicationId,
+          },
+        },
+        include: {
+          runtimeSnapshot: true,
+        },
+      });
+
+    if (!activeSnapshot) {
+      return null;
+    }
+
+    if (
+      activeSnapshot.runtimeSnapshot.tenantId !== activeSnapshot.tenantId ||
+      activeSnapshot.runtimeSnapshot.projectId !== activeSnapshot.projectId ||
+      activeSnapshot.runtimeSnapshot.applicationId !==
+        activeSnapshot.applicationId
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    const snapshot = this.toPersistedRuntimeSnapshotResponse(
+      activeSnapshot.runtimeSnapshot,
+    );
+    if (
+      snapshot.lookupKey?.tenantId !== activeSnapshot.tenantId ||
+      snapshot.lookupKey?.projectId !== activeSnapshot.projectId ||
+      snapshot.lookupKey?.applicationId !== activeSnapshot.applicationId
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    return snapshot;
   }
 
   private async getExecutableActiveRuntimeConfig(args: {
@@ -386,7 +446,7 @@ export class RuntimeConfigsService {
             },
           });
 
-          await tx.runtimeConfig.create({
+          const runtimeConfig = await tx.runtimeConfig.create({
             data: {
               tenantId: activeDocument.tenantId,
               projectId: activeDocument.projectId,
@@ -398,6 +458,11 @@ export class RuntimeConfigsService {
               effectiveAt: this.toDate(activeDocument.effectiveAt),
               publishedAt: this.toDate(activeDocument.publishedAt),
             },
+          });
+          await this.persistActiveRuntimeSnapshot({
+            tx,
+            runtimeConfig,
+            document: activeDocument,
           });
         },
         {
@@ -488,7 +553,7 @@ export class RuntimeConfigsService {
             },
           });
 
-          await tx.runtimeConfig.create({
+          const runtimeConfig = await tx.runtimeConfig.create({
             data: {
               tenantId: activeDocument.tenantId,
               projectId: activeDocument.projectId,
@@ -500,6 +565,11 @@ export class RuntimeConfigsService {
               effectiveAt: this.toDate(activeDocument.effectiveAt),
               publishedAt: this.toDate(activeDocument.publishedAt),
             },
+          });
+          await this.persistActiveRuntimeSnapshot({
+            tx,
+            runtimeConfig,
+            document: activeDocument,
           });
         },
         {
@@ -522,6 +592,51 @@ export class RuntimeConfigsService {
     }
 
     return activeDocument;
+  }
+
+  private async persistActiveRuntimeSnapshot(args: {
+    tx: Prisma.TransactionClient;
+    runtimeConfig: RuntimeConfig;
+    document: ActiveRuntimeConfigResponseDto;
+  }): Promise<void> {
+    const snapshot = this.toRuntimeSnapshotResponse(
+      args.runtimeConfig,
+      args.document,
+    );
+    await args.tx.runtimeSnapshot.create({
+      data: {
+        id: snapshot.runtimeSnapshotId,
+        tenantId: args.document.tenantId,
+        projectId: args.document.projectId,
+        applicationId: args.document.applicationId,
+        runtimeConfigId: args.runtimeConfig.id,
+        version: BigInt(snapshot.runtimeSnapshotVersion),
+        contentHash: snapshot.contentHash,
+        snapshotBody: this.toInputJsonObject(snapshot),
+        publishedAt: this.toDate(snapshot.publishedAt),
+        publishedBy: snapshot.publishedBy,
+      },
+    });
+    await args.tx.activeRuntimeSnapshot.upsert({
+      where: {
+        tenantId_projectId_applicationId: {
+          tenantId: args.document.tenantId,
+          projectId: args.document.projectId,
+          applicationId: args.document.applicationId,
+        },
+      },
+      update: {
+        runtimeSnapshotId: snapshot.runtimeSnapshotId,
+        updatedBy: snapshot.publishedBy,
+      },
+      create: {
+        tenantId: args.document.tenantId,
+        projectId: args.document.projectId,
+        applicationId: args.document.applicationId,
+        runtimeSnapshotId: snapshot.runtimeSnapshotId,
+        updatedBy: snapshot.publishedBy,
+      },
+    });
   }
 
   private async buildRuntimeConfigDocument(args: {
@@ -1510,10 +1625,10 @@ export class RuntimeConfigsService {
       contentHash: providerCatalog.contentHash,
     };
 
-    return {
+    const snapshotWithoutContentHash = {
       runtimeSnapshotId: runtimeConfig.id,
       runtimeSnapshotVersion,
-      contentHash: document.configHash,
+      contentHash: undefined,
       runtimeState: 'snapshot_active',
       publishedAt:
         runtimeConfig.publishedAt?.toISOString() ?? document.publishedAt,
@@ -1593,7 +1708,51 @@ export class RuntimeConfigsService {
         securityPolicyHash: document.safetyPolicy.securityPolicyHash,
         routingPolicyHash: document.routingPolicy.routingPolicyHash,
       },
+    } satisfies Omit<RuntimeSnapshotResponseDto, 'contentHash'> & {
+      contentHash?: string;
     };
+
+    return {
+      ...snapshotWithoutContentHash,
+      contentHash: this.sha256(
+        this.canonicalJson(snapshotWithoutContentHash),
+      ),
+    };
+  }
+
+  private toPersistedRuntimeSnapshotResponse(
+    runtimeSnapshot: RuntimeSnapshot,
+  ): RuntimeSnapshotResponseDto {
+    if (
+      !runtimeSnapshot.snapshotBody ||
+      typeof runtimeSnapshot.snapshotBody !== 'object' ||
+      Array.isArray(runtimeSnapshot.snapshotBody)
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is invalid.',
+      );
+    }
+
+    const document =
+      runtimeSnapshot.snapshotBody as unknown as RuntimeSnapshotResponseDto;
+    const persistedVersion = Number(runtimeSnapshot.version);
+    if (!Number.isSafeInteger(persistedVersion)) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+    if (
+      document.runtimeSnapshotId !== runtimeSnapshot.id ||
+      document.runtimeSnapshotVersion !== persistedVersion ||
+      document.contentHash !== runtimeSnapshot.contentHash
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+    this.assertNoForbiddenRuntimeConfigKeys(document);
+
+    return document;
   }
 
   private toProviderCatalogResponse(
@@ -2238,9 +2397,7 @@ export class RuntimeConfigsService {
     return normalized;
   }
 
-  private toInputJsonObject(
-    value: ActiveRuntimeConfigResponseDto,
-  ): Prisma.InputJsonObject {
+  private toInputJsonObject(value: object): Prisma.InputJsonObject {
     return value as unknown as Prisma.InputJsonObject;
   }
 
