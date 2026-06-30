@@ -110,6 +110,7 @@ cache key, metrics label, dashboard aggregate label에도 위 값이나 high-car
 ```powershell
 git diff --check
 corepack pnpm run verify:v2-docs
+corepack pnpm run verify:v2-final
 pnpm install --frozen-lockfile
 ```
 
