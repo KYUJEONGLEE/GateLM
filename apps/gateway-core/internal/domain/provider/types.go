@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 type ChatMessage struct {
@@ -61,6 +62,26 @@ type GateLMMetadata struct {
 	LatencyMs        int64  `json:"latencyMs"`
 }
 
+type ExecutionConfig struct {
+	ProviderID         string
+	ProviderName       string
+	AdapterType        string
+	BaseURL            string
+	Timeout            time.Duration
+	CredentialRequired bool
+	Credential         *ResolvedCredential
+	AdapterConfig      AdapterConfig
+}
+
+type AdapterConfig struct {
+	RequestFormat string
+	APIVersion    string
+}
+
+type ResolvedCredential struct {
+	Value string
+}
+
 type ModelListResponse struct {
 	Object string      `json:"object"`
 	Data   []ModelInfo `json:"data"`
@@ -75,7 +96,7 @@ type ModelInfo struct {
 }
 
 type Adapter interface {
-	Name() string
-	ListModels(ctx context.Context) (*ModelListResponse, error)
-	CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error)
+	AdapterType() string
+	ListModels(ctx context.Context, config ExecutionConfig) (*ModelListResponse, error)
+	CreateChatCompletion(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (*ChatCompletionResponse, error)
 }

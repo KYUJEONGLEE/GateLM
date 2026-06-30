@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 )
@@ -66,6 +67,7 @@ type RuntimeSnapshotProvenance struct {
 	PublishedAt            time.Time
 	PublishedBy            string
 	GatewayInstanceID      string
+	ProviderCatalogRef     providercatalog.Reference
 	LegacyHashes           LegacyHashes
 }
 
@@ -173,6 +175,7 @@ func (p RuntimeSnapshotProvenance) Normalize(config ActiveConfig, publishedAt ti
 	p.RuntimeState = strings.TrimSpace(p.RuntimeState)
 	p.PublishedBy = strings.TrimSpace(p.PublishedBy)
 	p.GatewayInstanceID = strings.TrimSpace(p.GatewayInstanceID)
+	p.ProviderCatalogRef = p.ProviderCatalogRef.Normalize()
 	p.LegacyHashes = p.LegacyHashes.Normalize()
 
 	if p.RuntimeSnapshotID == "" {
@@ -226,6 +229,13 @@ func (p RuntimeSnapshotProvenance) Metadata() map[string]any {
 	if !p.LegacyHashes.IsZero() {
 		metadata["legacyHashes"] = p.LegacyHashes.Metadata()
 	}
+	if !p.ProviderCatalogRef.IsZero() {
+		metadata["providerCatalogRef"] = map[string]any{
+			"catalogId":      p.ProviderCatalogRef.CatalogID,
+			"catalogVersion": p.ProviderCatalogRef.CatalogVersion,
+			"contentHash":    p.ProviderCatalogRef.ContentHash,
+		}
+	}
 	return metadata
 }
 
@@ -235,6 +245,7 @@ func (p RuntimeSnapshotProvenance) IsZero() bool {
 	p.RuntimeState = strings.TrimSpace(p.RuntimeState)
 	p.PublishedBy = strings.TrimSpace(p.PublishedBy)
 	p.GatewayInstanceID = strings.TrimSpace(p.GatewayInstanceID)
+	p.ProviderCatalogRef = p.ProviderCatalogRef.Normalize()
 	return p.RuntimeSnapshotID == "" &&
 		p.RuntimeSnapshotVersion == 0 &&
 		p.ContentHash == "" &&
@@ -242,6 +253,7 @@ func (p RuntimeSnapshotProvenance) IsZero() bool {
 		p.PublishedAt.IsZero() &&
 		p.PublishedBy == "" &&
 		p.GatewayInstanceID == "" &&
+		p.ProviderCatalogRef.IsZero() &&
 		p.LegacyHashes.IsZero()
 }
 

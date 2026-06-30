@@ -327,6 +327,157 @@ describe('RuntimeConfigsService', () => {
     );
   });
 
+  it('returns the active Provider Catalog body referenced by RuntimeSnapshot', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const catalogById = await service.getProviderCatalog(catalog.catalogId);
+
+    expect(catalogById).toEqual(catalog);
+    expect(snapshot.providerCatalogRef).toEqual({
+      catalogId: catalog.catalogId,
+      catalogVersion: catalog.catalogVersion,
+      contentHash: catalog.contentHash,
+    });
+    expect(catalog.catalogId).toBe(
+      `provider_catalog:${applicationId}:${catalog.catalogVersion}`,
+    );
+    expect(catalog.providers[0]).toMatchObject({
+      providerId,
+      providerName: 'mock',
+      adapterType: 'mock',
+      enabled: true,
+      baseUrl: 'http://mock-provider:8090',
+      timeoutMs: 30000,
+      credentialRequired: false,
+      credentialRef: null,
+      adapterConfig: { requestFormat: 'mock_chat_completions' },
+      fallbackEligible: false,
+    });
+    expect(catalog.providers[0]?.models[0]).toMatchObject({
+      modelId: `${providerId}:mock-fast`,
+      modelName: 'mock-fast',
+      enabled: true,
+      capabilities: {
+        streamingSupported: false,
+        supportsJsonMode: false,
+        maxInputTokens: 8192,
+        maxOutputTokens: 2048,
+      },
+      routing: {
+        autoRoutingEligible: true,
+        costTier: 'low',
+        fallbackPriority: 0,
+      },
+    });
+    expect(JSON.stringify(catalog)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(catalog)).not.toContain('secretHash');
+  });
+
+  it('filters unselected providers that require missing credentials from the Provider Catalog body', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const unselectedProviderId = '00000000-0000-4000-8000-000000000601';
+    const activeDocument = activeRuntimeConfigDocument();
+    const activeDocumentWithUnselectedProvider = {
+      ...activeDocument,
+      providers: [
+        ...activeDocument.providers,
+        {
+          providerId: unselectedProviderId,
+          provider: 'openai-main',
+          displayName: 'OpenAI Main',
+          status: 'active' as const,
+          adapterType: 'openai_compatible',
+          baseUrl: 'https://api.openai.com/v1',
+          timeoutMs: 30000,
+          credentialRequired: true,
+          credentialRef: null,
+          secretRef: null,
+          credentialPreview: null,
+          resolver: 'environment' as const,
+          adapterConfig: { requestFormat: 'openai_chat_completions' as const },
+          models: ['gpt-4o-mini'],
+          failureMode: 'fail_closed' as const,
+        },
+      ],
+      models: [
+        ...activeDocument.models,
+        {
+          provider: 'openai-main',
+          model: 'gpt-4o-mini',
+          displayName: 'GPT 4o Mini',
+          status: 'active' as const,
+          contextWindowTokens: 128000,
+          supportsStreaming: true,
+          supportsJsonMode: true,
+        },
+      ],
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocumentWithUnselectedProvider, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+
+    expect(catalog.providers).toHaveLength(1);
+    expect(catalog.providers[0]?.providerName).toBe('mock');
+    expect(JSON.stringify(catalog)).not.toContain('openai-main');
+    expect(JSON.stringify(catalog)).not.toContain(unselectedProviderId);
+  });
+
+  it('rejects a Provider Catalog id that does not match the active catalog', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    await expect(
+      service.getProviderCatalog(`provider_catalog:${applicationId}:999`),
+    ).rejects.toThrow('Provider Catalog not found.');
+  });
+
+  it('rejects malformed Provider Catalog ids before application lookup', async () => {
+    const { service, prisma } = createService();
+
+    await expect(
+      service.getProviderCatalog('provider_catalog:not-a-uuid:12abc'),
+    ).rejects.toThrow('Provider Catalog not found.');
+
+    expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider base URLs with credential query material before saving runtime config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      baseUrl: 'https://api.openai.com/v1?api_key=synthetic',
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+
+    await expect(service.upsertDraft(applicationId, {})).rejects.toThrow(
+      'Provider baseUrl must not contain credential material.',
+    );
+
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
   it('rejects an active row when its stored document is not active', async () => {
     const { service, prisma } = createService();
     prisma.runtimeConfig.findFirst.mockResolvedValue(

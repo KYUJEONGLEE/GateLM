@@ -3,14 +3,14 @@ package provider
 import "fmt"
 
 type Registry struct {
-	defaultProvider string
-	adapters        map[string]Adapter
+	defaultAdapterType string
+	adapters           map[string]Adapter
 }
 
-func NewRegistry(defaultProvider string, adapters ...Adapter) *Registry {
+func NewRegistry(defaultAdapterType string, adapters ...Adapter) *Registry {
 	registry := &Registry{
-		defaultProvider: defaultProvider,
-		adapters:        make(map[string]Adapter, len(adapters)),
+		defaultAdapterType: defaultAdapterType,
+		adapters:           make(map[string]Adapter, len(adapters)),
 	}
 
 	for _, adapter := range adapters {
@@ -27,22 +27,22 @@ func (r *Registry) Register(adapter Adapter) {
 	if r.adapters == nil {
 		r.adapters = make(map[string]Adapter)
 	}
-	r.adapters[adapter.Name()] = adapter
+	r.adapters[adapter.AdapterType()] = adapter
 }
 
-func (r *Registry) Get(providerName string) (Adapter, error) {
-	if providerName == "" {
-		providerName = r.defaultProvider
+func (r *Registry) Get(adapterType string) (Adapter, error) {
+	if adapterType == "" {
+		adapterType = r.defaultAdapterType
 	}
 
-	adapter, ok := r.adapters[providerName]
+	adapter, ok := r.adapters[adapterType]
 	if !ok {
-		return nil, fmt.Errorf("provider adapter %q is not registered", providerName)
+		return nil, fmt.Errorf("provider adapter %q is not registered", adapterType)
 	}
 
 	return adapter, nil
 }
 
-func (r *Registry) DefaultProvider() string {
-	return r.defaultProvider
+func (r *Registry) DefaultAdapterType() string {
+	return r.defaultAdapterType
 }

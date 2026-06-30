@@ -354,28 +354,29 @@ type detailErrorResponse struct {
 }
 
 type requestLogListItemResponse struct {
-	RequestID        string              `json:"requestId"`
-	ProjectID        string              `json:"projectId"`
-	ApplicationID    string              `json:"applicationId"`
-	BudgetScope      budgetScopeResponse `json:"budgetScope"`
-	Provider         string              `json:"provider"`
-	Model            string              `json:"model"`
-	RequestedModel   string              `json:"requestedModel"`
-	SelectedModel    string              `json:"selectedModel"`
-	Status           string              `json:"status"`
-	TerminalStatus   string              `json:"terminalStatus"`
-	HTTPStatus       int                 `json:"httpStatus"`
-	PromptTokens     int64               `json:"promptTokens"`
-	CompletionTokens int64               `json:"completionTokens"`
-	TotalTokens      int64               `json:"totalTokens"`
-	CostUSD          string              `json:"costUsd"`
-	CostMicroUSD     int64               `json:"costMicroUsd"`
-	LatencyMs        int64               `json:"latencyMs"`
-	CacheStatus      string              `json:"cacheStatus"`
-	CacheType        string              `json:"cacheType"`
-	RoutingReason    string              `json:"routingReason"`
-	MaskingAction    string              `json:"maskingAction"`
-	CreatedAt        time.Time           `json:"createdAt"`
+	RequestID        string                 `json:"requestId"`
+	ProjectID        string                 `json:"projectId"`
+	ApplicationID    string                 `json:"applicationId"`
+	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
+	Provider         string                 `json:"provider"`
+	Model            string                 `json:"model"`
+	RequestedModel   string                 `json:"requestedModel"`
+	SelectedModel    string                 `json:"selectedModel"`
+	Status           string                 `json:"status"`
+	TerminalStatus   string                 `json:"terminalStatus"`
+	DomainOutcomes   domainOutcomesResponse `json:"domainOutcomes"`
+	HTTPStatus       int                    `json:"httpStatus"`
+	PromptTokens     int64                  `json:"promptTokens"`
+	CompletionTokens int64                  `json:"completionTokens"`
+	TotalTokens      int64                  `json:"totalTokens"`
+	CostUSD          string                 `json:"costUsd"`
+	CostMicroUSD     int64                  `json:"costMicroUsd"`
+	LatencyMs        int64                  `json:"latencyMs"`
+	CacheStatus      string                 `json:"cacheStatus"`
+	CacheType        string                 `json:"cacheType"`
+	RoutingReason    string                 `json:"routingReason"`
+	MaskingAction    string                 `json:"maskingAction"`
+	CreatedAt        time.Time              `json:"createdAt"`
 }
 
 type paginationResponse struct {
@@ -680,6 +681,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			SelectedModel:    item.SelectedModel,
 			Status:           item.Status,
 			TerminalStatus:   item.TerminalStatus,
+			DomainOutcomes:   domainOutcomesResponseFromDomain(item.DomainOutcomes),
 			HTTPStatus:       item.HTTPStatus,
 			PromptTokens:     item.PromptTokens,
 			CompletionTokens: item.CompletionTokens,

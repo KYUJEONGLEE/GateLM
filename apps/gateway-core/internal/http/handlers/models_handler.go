@@ -49,9 +49,9 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqCtx.SelectedProvider = adapter.Name()
+	reqCtx.SelectedProvider = adapter.AdapterType()
 
-	models, err := adapter.ListModels(r.Context())
+	models, err := adapter.ListModels(r.Context(), provider.ExecutionConfig{AdapterType: adapter.AdapterType()})
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_model_catalog")
 		return

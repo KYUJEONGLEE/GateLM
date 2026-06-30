@@ -301,13 +301,16 @@ export interface RuntimeConfigProviderDto {
   provider: string;
   displayName: string;
   status: ProviderStatusDto;
+  adapterType?: string;
   baseUrl: string;
   timeoutMs: number;
+  credentialRequired?: boolean;
   credentialRef?: RuntimeConfigProviderCredentialRefDto | null;
   /** Legacy compatibility field. v2-facing RuntimeSnapshot/Provider Catalog consumers should use credentialRef. */
   secretRef: string | null;
   credentialPreview: RuntimeConfigCredentialPreviewDto | null;
   resolver: 'none' | 'control_plane_secret_store' | 'environment';
+  adapterConfig?: ProviderCatalogAdapterConfigDto;
   models: string[];
   failureMode: 'fail_closed' | 'fail_open_to_fallback';
 }
@@ -453,6 +456,61 @@ export interface RuntimeSnapshotProviderCatalogRefDto {
   catalogId: string;
   catalogVersion: number;
   contentHash: string;
+}
+
+export interface ProviderCatalogCredentialRefDto {
+  credentialRefId: string;
+  credentialVersion: number;
+  credentialState: 'active' | 'rotating' | 'disabled';
+}
+
+export interface ProviderCatalogAdapterConfigDto {
+  requestFormat: 'openai_chat_completions' | 'mock_chat_completions';
+  apiVersion?: string;
+}
+
+export interface ProviderCatalogModelCapabilitiesDto {
+  streamingSupported: boolean;
+  supportsJsonMode: boolean;
+  maxInputTokens: number;
+  maxOutputTokens: number;
+}
+
+export interface ProviderCatalogModelRoutingDto {
+  autoRoutingEligible: boolean;
+  costTier?: 'low' | 'balanced' | 'premium';
+  fallbackPriority?: number;
+}
+
+export interface ProviderCatalogModelDto {
+  modelId: string;
+  modelName: string;
+  displayName?: string;
+  enabled: boolean;
+  capabilities: ProviderCatalogModelCapabilitiesDto;
+  routing?: ProviderCatalogModelRoutingDto;
+}
+
+export interface ProviderCatalogProviderDto {
+  providerId: string;
+  providerName: string;
+  adapterType: string;
+  enabled: boolean;
+  baseUrl: string;
+  timeoutMs: number;
+  credentialRequired: boolean;
+  credentialRef: ProviderCatalogCredentialRefDto | null;
+  adapterConfig: ProviderCatalogAdapterConfigDto;
+  fallbackEligible?: boolean;
+  models: ProviderCatalogModelDto[];
+}
+
+export interface ProviderCatalogResponseDto {
+  catalogId: string;
+  catalogVersion: number;
+  contentHash: string;
+  updatedAt?: string;
+  providers: ProviderCatalogProviderDto[];
 }
 
 export interface RuntimeSnapshotSafetyPolicyDto {

@@ -15,6 +15,7 @@ import { AdminAuthGuard } from '@/common/guards/admin-auth.guard';
 import {
   ActiveRuntimeConfigResponseDto,
   PublishRuntimeConfigDto,
+  ProviderCatalogResponseDto,
   RuntimeConfigDraftResponseDto,
   RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
@@ -38,6 +39,20 @@ export class RuntimeConfigsController {
     @Param('applicationId', ParseUUIDPipe) applicationId: string,
   ): Promise<RuntimeSnapshotResponseDto> {
     return this.runtimeConfigsService.getActiveRuntimeSnapshot(applicationId);
+  }
+
+  @Get('applications/:applicationId/provider-catalog/active')
+  async getActiveProviderCatalog(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+  ): Promise<ProviderCatalogResponseDto> {
+    return this.runtimeConfigsService.getActiveProviderCatalog(applicationId);
+  }
+
+  @Get('provider-catalogs/:catalogId')
+  async getProviderCatalog(
+    @Param('catalogId') catalogId: string,
+  ): Promise<ProviderCatalogResponseDto> {
+    return this.runtimeConfigsService.getProviderCatalog(catalogId);
   }
 
   @Post('applications/:applicationId/runtime-config/draft')
