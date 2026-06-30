@@ -6,8 +6,27 @@ import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 type LiveDashboardOverviewResponse = {
   data?: {
     breakdowns?: {
+      byApplication?: Array<{
+        applicationId?: string;
+        estimatedCostMicroUsd?: number;
+        requestCount?: number;
+      }>;
+      byBudgetScope?: Array<{
+        budgetScopeId?: string;
+        budgetScopeType?: string;
+        costMicroUsd?: number;
+        estimatedCostMicroUsd?: number;
+        requestCount?: number;
+        resolvedBy?: string;
+      }>;
       byCacheOutcome?: Array<{ outcome?: string; requestCount?: number }>;
       byFallbackOutcome?: Array<{ outcome?: string; requestCount?: number }>;
+      byProviderModel?: Array<{
+        p95ProviderLatencyMs?: number;
+        requestCount?: number;
+        selectedModel?: string;
+        selectedProvider?: string;
+      }>;
       bySafetyOutcome?: Array<{ outcome?: string; requestCount?: number }>;
       byTerminalStatus?: Array<{ outcome?: string; requestCount?: number }>;
     };
@@ -56,10 +75,12 @@ type LiveDashboardOverviewResponse = {
       averageLatencyMs?: number | null;
       averageResponseTimeMs?: number | null;
       blockedRequests?: number;
+      blockedCount?: number;
       cacheEligibleRequests?: number;
       cacheHitRate?: number | null;
       cacheHitRequests?: number;
       cancelledRequests?: number;
+      cancelledCount?: number;
       completionTokens?: number;
       costByModel?: Array<{
         costMicroUsd?: number;
@@ -70,12 +91,16 @@ type LiveDashboardOverviewResponse = {
         totalTokens?: number;
       }>;
       failedRequests?: number;
+      failedCount?: number;
       exactCacheHitRate?: number | null;
       fallbackSuccessCount?: number;
+      estimatedCostMicroUsd?: number;
       maskingActionCounts?: Record<string, number>;
       p95LatencyMs?: number | null;
       promptTokens?: number;
       rateLimitedRequests?: number;
+      rateLimitedCount?: number;
+      requestCount?: number;
       routingCountByModel?: Array<{
         requestCount?: number;
         routingReason?: string;
@@ -86,6 +111,7 @@ type LiveDashboardOverviewResponse = {
       savedCostUsd?: string;
       statusCounts?: Record<string, number>;
       successfulRequests?: number;
+      successCount?: number;
       totalCostMicroUsd?: number;
       totalCostUsd?: string;
       totalRequests?: number;
@@ -147,6 +173,16 @@ function toDashboardOverview(
   const v2Freshness = data.freshness;
   const performance = data.performance;
   const applicationId = "live_gateway_application";
+  const totalRequests = totals.totalRequests ?? totals.requestCount ?? 0;
+  const successfulRequests = totals.successfulRequests ?? totals.successCount ?? 0;
+  const failedRequests = totals.failedRequests ?? totals.failedCount ?? 0;
+  const blockedRequests = totals.blockedRequests ?? totals.blockedCount ?? 0;
+  const rateLimitedRequests = totals.rateLimitedRequests ?? totals.rateLimitedCount ?? 0;
+  const cancelledRequests = totals.cancelledRequests ?? totals.cancelledCount ?? 0;
+  const totalCostMicroUsd = totals.totalCostMicroUsd ?? totals.estimatedCostMicroUsd ?? 0;
+  const statusCounts =
+    totals.statusCounts ??
+    statusCountsFromTerminalBreakdown(data.breakdowns?.byTerminalStatus);
 
   return {
     fixtureName: "live-dashboard-overview",
@@ -174,12 +210,12 @@ function toDashboardOverview(
       provider: null,
       model: null
     },
-    totalRequests: totals.totalRequests ?? 0,
-    successfulRequests: totals.successfulRequests ?? 0,
-    failedRequests: totals.failedRequests ?? 0,
-    blockedRequests: totals.blockedRequests ?? 0,
-    rateLimitedRequests: totals.rateLimitedRequests ?? 0,
-    cancelledRequests: totals.cancelledRequests ?? 0,
+    totalRequests,
+    successfulRequests,
+    failedRequests,
+    blockedRequests,
+    rateLimitedRequests,
+    cancelledRequests,
     cacheHitRequests: totals.cacheHitRequests ?? 0,
     cacheEligibleRequests: totals.cacheEligibleRequests ?? 0,
     cacheHitRate: totals.cacheHitRate ?? 0,
@@ -188,8 +224,8 @@ function toDashboardOverview(
     totalTokens: totals.totalTokens ?? 0,
     promptTokens: totals.promptTokens ?? 0,
     completionTokens: totals.completionTokens ?? 0,
-    totalCostMicroUsd: totals.totalCostMicroUsd ?? 0,
-    totalCostUsd: totals.totalCostUsd ?? formatMicroUsd(totals.totalCostMicroUsd ?? 0),
+    totalCostMicroUsd,
+    totalCostUsd: totals.totalCostUsd ?? formatMicroUsd(totalCostMicroUsd),
     savedCostMicroUsd: totals.savedCostMicroUsd ?? 0,
     savedCostUsd: totals.savedCostUsd ?? formatMicroUsd(totals.savedCostMicroUsd ?? 0),
     averageLatencyMs: totals.averageLatencyMs ?? totals.averageResponseTimeMs ?? 0,
@@ -201,7 +237,7 @@ function toDashboardOverview(
       routingReason: row.routingReason ?? "not-set",
       requestCount: row.requestCount ?? 0
     })),
-    statusCounts: totals.statusCounts ?? {},
+    statusCounts,
     costByModel: (totals.costByModel ?? []).map((row) => ({
       selectedProvider: row.selectedProvider ?? "not-routed",
       selectedModel: row.selectedModel ?? "not-routed",
@@ -231,6 +267,9 @@ function toDashboardOverview(
       systemErrorRate: performance?.systemErrorRate ?? safeRate(totals.failedRequests ?? 0, totals.totalRequests ?? 0)
     },
     breakdowns: {
+      byApplication: normalizeApplicationRows(data.breakdowns?.byApplication),
+      byBudgetScope: normalizeBudgetScopeRows(data.breakdowns?.byBudgetScope),
+      byProviderModel: normalizeProviderModelRows(data.breakdowns?.byProviderModel),
       bySafetyOutcome: normalizeOutcomeRows(data.breakdowns?.bySafetyOutcome),
       byCacheOutcome: normalizeOutcomeRows(data.breakdowns?.byCacheOutcome),
       byFallbackOutcome: normalizeOutcomeRows(data.breakdowns?.byFallbackOutcome),
@@ -245,6 +284,69 @@ function normalizeOutcomeRows(rows: Array<{ outcome?: string; requestCount?: num
     outcome: row.outcome ?? "unknown",
     requestCount: row.requestCount ?? 0
   }));
+}
+
+function normalizeApplicationRows(
+  rows:
+    | Array<{
+        applicationId?: string;
+        estimatedCostMicroUsd?: number;
+        requestCount?: number;
+      }>
+    | undefined
+) {
+  return (rows ?? []).map((row) => ({
+    applicationId: row.applicationId ?? "unknown_application",
+    requestCount: row.requestCount ?? 0,
+    estimatedCostMicroUsd: row.estimatedCostMicroUsd ?? 0
+  }));
+}
+
+function normalizeBudgetScopeRows(
+  rows:
+    | Array<{
+        budgetScopeId?: string;
+        budgetScopeType?: string;
+        costMicroUsd?: number;
+        estimatedCostMicroUsd?: number;
+        requestCount?: number;
+        resolvedBy?: string;
+      }>
+    | undefined
+) {
+  return (rows ?? []).map((row) => ({
+    budgetScopeType: row.budgetScopeType ?? "application",
+    budgetScopeId: row.budgetScopeId ?? "unknown_budget_scope",
+    resolvedBy: row.resolvedBy ?? "default_application",
+    requestCount: row.requestCount ?? 0,
+    estimatedCostMicroUsd: row.estimatedCostMicroUsd ?? row.costMicroUsd ?? 0
+  }));
+}
+
+function normalizeProviderModelRows(
+  rows:
+    | Array<{
+        p95ProviderLatencyMs?: number;
+        requestCount?: number;
+        selectedModel?: string;
+        selectedProvider?: string;
+      }>
+    | undefined
+) {
+  return (rows ?? []).map((row) => ({
+    selectedProvider: row.selectedProvider ?? "not-routed",
+    selectedModel: row.selectedModel ?? "not-routed",
+    requestCount: row.requestCount ?? 0,
+    p95ProviderLatencyMs: row.p95ProviderLatencyMs ?? 0
+  }));
+}
+
+function statusCountsFromTerminalBreakdown(
+  rows: Array<{ outcome?: string; requestCount?: number }> | undefined
+) {
+  return Object.fromEntries(
+    (rows ?? []).map((row) => [row.outcome ?? "unknown", row.requestCount ?? 0])
+  );
 }
 
 function safeRate(numerator: number, denominator: number) {

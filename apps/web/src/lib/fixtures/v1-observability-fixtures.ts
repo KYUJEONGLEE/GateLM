@@ -24,7 +24,7 @@ export type RuntimeSnapshotProvenance = {
 };
 
 export type RuntimeMetadata = {
-  runtimeSnapshot: RuntimeSnapshotProvenance;
+  runtimeSnapshot: RuntimeSnapshotProvenance | null;
 };
 
 export type RateLimitDecision = {
@@ -230,6 +230,20 @@ export type DashboardOverview = {
     systemErrorRate: number;
   };
   breakdowns?: {
+    byApplication?: Array<{ applicationId: string; requestCount: number; estimatedCostMicroUsd: number }>;
+    byBudgetScope?: Array<{
+      budgetScopeType: string;
+      budgetScopeId: string;
+      resolvedBy: string;
+      requestCount: number;
+      estimatedCostMicroUsd: number;
+    }>;
+    byProviderModel?: Array<{
+      selectedProvider: string;
+      selectedModel: string;
+      requestCount: number;
+      p95ProviderLatencyMs: number;
+    }>;
     bySafetyOutcome: Array<{ outcome: string; requestCount: number }>;
     byCacheOutcome: Array<{ outcome: string; requestCount: number }>;
     byFallbackOutcome: Array<{ outcome: string; requestCount: number }>;

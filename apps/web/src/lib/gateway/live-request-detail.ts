@@ -79,6 +79,7 @@ type GatewayRequestDetailResponse = {
       maskingAction?: string | null;
       outcome?: string;
     };
+    stream?: boolean;
   };
 };
 
@@ -120,8 +121,9 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
   const maskingAction = data.masking?.maskingAction ?? "none";
   const applicationId = data.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(data.budgetScope, applicationId);
-  const runtimeSnapshot = normalizeRuntimeSnapshot(data.runtimeSnapshot, createdAt);
+  const runtimeSnapshot = normalizeRuntimeSnapshot(data.runtimeSnapshot);
   const domainOutcomes = data.domainOutcomes ?? legacyDomainOutcomes(status, cacheStatus, maskingAction, data.latency?.providerLatencyMs ?? null, data.error?.errorCode ?? null);
+  const stream = data.stream ?? isStreamingOutcome(domainOutcomes.streaming.outcome);
   const latencySummary = {
     gatewayInternalLatencyMs: data.latencySummary?.gatewayInternalLatencyMs ?? Math.max((data.latency?.latencyMs ?? 0) - (data.latency?.providerLatencyMs ?? 0), 0),
     providerLatencyMs: data.latencySummary?.providerLatencyMs ?? data.latency?.providerLatencyMs ?? null,
@@ -149,7 +151,7 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     endpoint: "/v1/chat/completions",
     method: "POST",
     source: "customer_demo_app",
-    stream: false,
+    stream,
     requestBodyHash: "not-exposed-by-live-detail",
     promptHash: "not-exposed-by-live-detail",
     redactedPromptPreview: data.masking?.redactedPromptPreview ?? null,
@@ -226,7 +228,7 @@ function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, application
   };
 }
 
-function normalizeRuntimeSnapshot(value: RuntimeSnapshotProvenance | null | undefined, createdAt: string): RuntimeSnapshotProvenance {
+function normalizeRuntimeSnapshot(value: RuntimeSnapshotProvenance | null | undefined): RuntimeSnapshotProvenance | null {
   if (value) {
     return {
       ...value,
@@ -238,20 +240,16 @@ function normalizeRuntimeSnapshot(value: RuntimeSnapshotProvenance | null | unde
     };
   }
 
-  return {
-    runtimeSnapshotId: "runtime_snapshot_live_gateway",
-    runtimeSnapshotVersion: 1,
-    contentHash: "live-gateway",
-    runtimeState: "snapshot_active",
-    publishedAt: createdAt,
-    publishedBy: "runtime_config_compat",
-    gatewayInstanceId: "gateway_web_live",
-    legacyHashes: {
-      configHash: "not-exposed",
-      securityPolicyHash: "not-exposed",
-      routingPolicyHash: "not-exposed"
-    }
-  };
+  return null;
+}
+
+function isStreamingOutcome(outcome: string | undefined): boolean {
+  return Boolean(
+    outcome &&
+      outcome !== "not_streaming" &&
+      outcome !== "not_started" &&
+      outcome !== "not_called"
+  );
 }
 
 function legacyDomainOutcomes(

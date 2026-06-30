@@ -111,6 +111,21 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
         />
 
         <DetailPanel
+          title="Outcome detail"
+          rows={[
+            ["Budget reason", nullableText(domainOutcomes?.budget.reason ?? null, text.none)],
+            ["Budget code", nullableText(domainOutcomes?.budget.code ?? null, text.none)],
+            ["Provider reason", nullableText(domainOutcomes?.provider.reason ?? null, text.none)],
+            ["Provider code", nullableText(domainOutcomes?.provider.code ?? null, text.none)],
+            ["Fallback reason", nullableText(domainOutcomes?.fallback.reason ?? null, text.none)],
+            ["Fallback code", nullableText(domainOutcomes?.fallback.code ?? null, text.none)],
+            ["Streaming reason", nullableText(domainOutcomes?.streaming.reason ?? null, text.none)],
+            ["Streaming code", nullableText(domainOutcomes?.streaming.code ?? null, text.none)],
+            ["Streaming requested", record.stream ? text.yes : text.no]
+          ]}
+        />
+
+        <DetailPanel
           title="Routing and cache"
           rows={[
             ["Requested model", nullableText(record.requestedModel)],
@@ -178,18 +193,25 @@ export function RequestLogDetail({ locale, record, tenantId, timezone }: Request
 
         <DetailPanel
           title="RuntimeSnapshot provenance"
-          rows={[
-            ["Snapshot ID", runtimeSnapshot.runtimeSnapshotId],
-            ["Snapshot version", String(runtimeSnapshot.runtimeSnapshotVersion)],
-            ["Runtime state", runtimeSnapshot.runtimeState],
-            ["Content hash", runtimeSnapshot.contentHash],
-            ["Published", formatDateTime(runtimeSnapshot.publishedAt, timezone)],
-            ["Published by", runtimeSnapshot.publishedBy],
-            ["Gateway instance", runtimeSnapshot.gatewayInstanceId],
-            ["Legacy config hash", runtimeSnapshot.legacyHashes.configHash],
-            ["Legacy security policy hash", runtimeSnapshot.legacyHashes.securityPolicyHash],
-            ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash]
-          ]}
+          rows={
+            runtimeSnapshot
+              ? [
+                  ["Snapshot ID", runtimeSnapshot.runtimeSnapshotId],
+                  ["Snapshot version", String(runtimeSnapshot.runtimeSnapshotVersion)],
+                  ["Runtime state", runtimeSnapshot.runtimeState],
+                  ["Content hash", runtimeSnapshot.contentHash],
+                  ["Published", formatDateTime(runtimeSnapshot.publishedAt, timezone)],
+                  ["Published by", runtimeSnapshot.publishedBy],
+                  ["Gateway instance", runtimeSnapshot.gatewayInstanceId],
+                  ["Legacy config hash", runtimeSnapshot.legacyHashes.configHash],
+                  ["Legacy security policy hash", runtimeSnapshot.legacyHashes.securityPolicyHash],
+                  ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash]
+                ]
+              : [
+                  ["Snapshot", text.none],
+                  ["Runtime outcome", domainOutcomes?.runtime.outcome ?? text.none]
+                ]
+          }
         />
       </section>
     </main>
