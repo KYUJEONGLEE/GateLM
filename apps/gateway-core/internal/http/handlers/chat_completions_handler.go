@@ -18,11 +18,13 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -54,6 +56,8 @@ type ExactCacheKeyBuilder interface {
 
 type ChatCompletionsHandler struct {
 	Providers               *provider.Registry
+	ProviderCatalogResolver providercatalog.Resolver
+	CredentialResolver      credentials.Resolver
 	DefaultModel            string
 	DefaultProvider         string
 	MaxRequestBodyBytes     int64
@@ -229,46 +233,30 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	providerName := reqCtx.SelectedProvider
-	if providerName == "" {
-		providerName = h.DefaultProvider
-	}
-	adapter, err := h.Providers.Get(providerName)
+	target, err := h.resolveProviderCallTarget(r.Context(), reqCtx, chatReq.Model)
 	if err != nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway provider is not configured.", "resolve_provider_adapter")
+		h.writeProviderResolutionFailure(w, reqCtx, err)
 		return
 	}
 
 	chatReq.RequestID = requestID
-	if reqCtx.SelectedProvider == "" {
-		reqCtx.SelectedProvider = adapter.Name()
-	}
-	if reqCtx.SelectedModel == "" {
-		reqCtx.SelectedModel = chatReq.Model
-	}
+	reqCtx.SelectedProvider = target.ProviderName
+	reqCtx.SelectedModel = target.ModelID
 	if reqCtx.RoutingReason == "" {
 		reqCtx.RoutingReason = "not_routed"
 	}
-	chatReq.Model = reqCtx.SelectedModel
+	chatReq.Model = target.ModelName
 	reqCtx.Provider = reqCtx.SelectedProvider
 	reqCtx.Model = reqCtx.SelectedModel
 	ensureCacheDefaults(reqCtx)
 
 	providerStartedAt := time.Now()
-	providerResp, err := adapter.CreateChatCompletion(r.Context(), chatReq)
+	providerResp, err := target.Adapter.CreateChatCompletion(r.Context(), target.ExecutionConfig, chatReq)
 	providerDuration := time.Since(providerStartedAt)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
-		h.recordProviderRequest(metrics.ProviderRequest{
-			SelectedProvider: reqCtx.SelectedProvider,
-			SelectedModel:    reqCtx.SelectedModel,
-			Status:           invocationlog.StatusFailed,
-			HTTPStatus:       http.StatusBadGateway,
-			ErrorCode:        "provider_error",
-			DurationSeconds:  providerDuration.Seconds(),
-		})
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_with_timeout_retry_fallback")
+		h.handleProviderFailure(w, r, reqCtx, chatReq, target, err, providerDuration, startedAt)
 		return
 	}
 	if providerResp == nil {
@@ -277,10 +265,10 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			SelectedModel:    reqCtx.SelectedModel,
 			Status:           invocationlog.StatusFailed,
 			HTTPStatus:       http.StatusBadGateway,
-			ErrorCode:        "provider_error",
+			ErrorCode:        provider.ErrorCodeProviderError,
 			DurationSeconds:  providerDuration.Seconds(),
 		})
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, provider.ErrorCodeProviderError, "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
 		return
 	}
 	h.recordProviderRequest(metrics.ProviderRequest{
@@ -347,6 +335,359 @@ func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
 
 func cachePolicyAllowsExact(policy runtimeconfig.CachePolicy) bool {
 	return policy.Enabled && strings.EqualFold(strings.TrimSpace(policy.Type), runtimeconfig.CacheTypeExact)
+}
+
+type providerCallTarget struct {
+	Adapter         provider.Adapter
+	ExecutionConfig provider.ExecutionConfig
+	Catalog         providercatalog.Catalog
+	ProviderName    string
+	AdapterType     string
+	ModelID         string
+	ModelName       string
+	FromCatalog     bool
+	Fallback        bool
+}
+
+type providerResolutionFailure struct {
+	httpStatus int
+	code       string
+	message    string
+	stage      string
+	err        error
+}
+
+func (e providerResolutionFailure) Error() string {
+	if e.err != nil {
+		return e.err.Error()
+	}
+	return e.code
+}
+
+func (h *ChatCompletionsHandler) resolveProviderCallTarget(ctx context.Context, reqCtx *pipeline.RequestContext, requestedModel string) (providerCallTarget, error) {
+	ref := reqCtx.RuntimeSnapshot.ProviderCatalogRef.Normalize()
+	if h.ProviderCatalogResolver == nil && ref.IsZero() {
+		return h.resolveLegacyProviderCallTarget(reqCtx, requestedModel)
+	}
+	if h.ProviderCatalogResolver == nil {
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Provider catalog is unavailable.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrUnavailable,
+		}
+	}
+
+	catalog, err := h.ProviderCatalogResolver.GetCatalog(ctx, ref, providercatalog.Scope{
+		TenantID:      reqCtx.TenantID,
+		ProjectID:     reqCtx.ProjectID,
+		ApplicationID: reqCtx.ApplicationID,
+	})
+	if err != nil {
+		code := "provider_catalog_unavailable"
+		if errors.Is(err, providercatalog.ErrMismatch) {
+			code = "provider_catalog_mismatch"
+		}
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       code,
+			message:    "Provider catalog could not be verified.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+	catalog = catalog.Normalize()
+	if !catalog.Matches(ref) {
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_mismatch",
+			message:    "Provider catalog reference mismatch.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrMismatch,
+		}
+	}
+
+	providerName := firstNonEmpty(reqCtx.SelectedProvider, h.DefaultProvider)
+	catalogProvider, err := catalog.ProviderByName(providerName)
+	if err != nil {
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Gateway provider is not configured.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+
+	modelID := firstNonEmpty(reqCtx.SelectedModel, requestedModel, h.DefaultModel)
+	catalogModel, err := catalogProvider.ModelByID(modelID)
+	if err != nil {
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Gateway provider model is not configured.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+
+	reqCtx.SelectedProvider = catalogProvider.ProviderName
+	reqCtx.SelectedModel = catalogModel.ModelID
+	reqCtx.Provider = catalogProvider.ProviderName
+	reqCtx.Model = catalogModel.ModelID
+	return h.providerCallTargetFromCatalog(ctx, catalog, catalogProvider, catalogModel, false)
+}
+
+func (h *ChatCompletionsHandler) resolveLegacyProviderCallTarget(reqCtx *pipeline.RequestContext, requestedModel string) (providerCallTarget, error) {
+	providerName := firstNonEmpty(reqCtx.SelectedProvider, h.DefaultProvider)
+	adapter, err := h.Providers.Get(providerName)
+	if err != nil {
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "internal_error",
+			message:    "Gateway provider is not configured.",
+			stage:      "resolve_provider_adapter",
+			err:        err,
+		}
+	}
+	modelID := firstNonEmpty(reqCtx.SelectedModel, requestedModel, h.DefaultModel)
+	return providerCallTarget{
+		Adapter:      adapter,
+		ProviderName: firstNonEmpty(providerName, adapter.AdapterType()),
+		AdapterType:  adapter.AdapterType(),
+		ModelID:      modelID,
+		ModelName:    modelID,
+		ExecutionConfig: provider.ExecutionConfig{
+			ProviderName: firstNonEmpty(providerName, adapter.AdapterType()),
+			AdapterType:  adapter.AdapterType(),
+		},
+	}, nil
+}
+
+func (h *ChatCompletionsHandler) providerCallTargetFromCatalog(ctx context.Context, catalog providercatalog.Catalog, catalogProvider providercatalog.Provider, catalogModel providercatalog.Model, fallback bool) (providerCallTarget, error) {
+	adapter, err := h.Providers.Get(catalogProvider.AdapterType)
+	if err != nil {
+		return providerCallTarget{}, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "internal_error",
+			message:    "Gateway provider adapter is not configured.",
+			stage:      "resolve_provider_adapter",
+			err:        err,
+		}
+	}
+
+	var resolvedCredential *provider.ResolvedCredential
+	if catalogProvider.CredentialRequired {
+		if catalogProvider.CredentialRef == nil {
+			return providerCallTarget{}, provider.NewError(provider.ErrorKindCredential, provider.ErrorCodeProviderCredentialUnavailable, credentials.ErrMissingReference)
+		}
+		if h.CredentialResolver == nil {
+			return providerCallTarget{}, provider.NewError(provider.ErrorKindCredential, provider.ErrorCodeProviderCredentialUnavailable, credentials.ErrUnavailable)
+		}
+		resolved, err := h.CredentialResolver.Resolve(ctx, *catalogProvider.CredentialRef)
+		if err != nil {
+			return providerCallTarget{}, provider.NewError(provider.ErrorKindCredential, provider.ErrorCodeProviderCredentialUnavailable, err)
+		}
+		resolvedCredential = &provider.ResolvedCredential{Value: resolved.Value}
+	}
+
+	timeout := time.Duration(catalogProvider.TimeoutMs) * time.Millisecond
+	return providerCallTarget{
+		Adapter:      adapter,
+		Catalog:      catalog,
+		ProviderName: catalogProvider.ProviderName,
+		AdapterType:  catalogProvider.AdapterType,
+		ModelID:      catalogModel.ModelID,
+		ModelName:    catalogModel.ModelName,
+		FromCatalog:  true,
+		Fallback:     fallback,
+		ExecutionConfig: provider.ExecutionConfig{
+			ProviderID:         catalogProvider.ProviderID,
+			ProviderName:       catalogProvider.ProviderName,
+			AdapterType:        catalogProvider.AdapterType,
+			BaseURL:            catalogProvider.BaseURL,
+			Timeout:            timeout,
+			CredentialRequired: catalogProvider.CredentialRequired,
+			Credential:         resolvedCredential,
+			AdapterConfig: provider.AdapterConfig{
+				RequestFormat: catalogProvider.AdapterConfig.RequestFormat,
+				APIVersion:    catalogProvider.AdapterConfig.APIVersion,
+			},
+		},
+	}, nil
+}
+
+func (h *ChatCompletionsHandler) writeProviderResolutionFailure(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
+	var resolutionErr providerResolutionFailure
+	if errors.As(err, &resolutionErr) {
+		writeGatewayErrorWithContext(w, reqCtx, resolutionErr.httpStatus, resolutionErr.code, resolutionErr.message, resolutionErr.stage)
+		return
+	}
+	code := provider.SafeErrorCode(err)
+	writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider credential could not be resolved.", "resolve_provider_credential")
+}
+
+func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time) {
+	code := provider.SafeErrorCode(err)
+	if errors.Is(err, context.Canceled) {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: reqCtx.SelectedProvider,
+			SelectedModel:    reqCtx.SelectedModel,
+			Status:           invocationlog.StatusCancelled,
+			HTTPStatus:       gatewayerrors.StatusClientClosedRequest,
+			ErrorCode:        "internal_error",
+			DurationSeconds:  providerDuration.Seconds(),
+		})
+		writeGatewayErrorWithContext(w, reqCtx, gatewayerrors.StatusClientClosedRequest, "internal_error", "Request was cancelled.", "call_provider_with_timeout_retry_fallback")
+		return
+	}
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		Status:           invocationlog.StatusFailed,
+		HTTPStatus:       http.StatusBadGateway,
+		ErrorCode:        code,
+		DurationSeconds:  providerDuration.Seconds(),
+	})
+
+	if !provider.AllowsFallback(err) {
+		reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{Outcome: "not_called"})
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider request failed.", "call_provider_with_timeout_retry_fallback")
+		return
+	}
+
+	fallbackTarget, fallbackErr := h.resolveFallbackTarget(r.Context(), reqCtx, target)
+	if fallbackErr != nil {
+		reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+			Outcome: "disabled",
+			Reason:  stringPointerValue("fallback_not_configured"),
+		})
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider request failed and fallback is unavailable.", "call_provider_with_timeout_retry_fallback")
+		return
+	}
+
+	fallbackReq := chatReq
+	fallbackReq.Model = fallbackTarget.ModelName
+	fallbackStartedAt := time.Now()
+	fallbackResp, fallbackCallErr := fallbackTarget.Adapter.CreateChatCompletion(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
+	fallbackDuration := time.Since(fallbackStartedAt)
+	if fallbackCallErr != nil || fallbackResp == nil {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: fallbackTarget.ProviderName,
+			SelectedModel:    fallbackTarget.ModelID,
+			Status:           invocationlog.StatusFailed,
+			HTTPStatus:       http.StatusBadGateway,
+			ErrorCode:        "fallback_failed",
+			DurationSeconds:  fallbackDuration.Seconds(),
+		})
+		reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+			Outcome:          "failed",
+			FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+			Reason:           stringPointerValue("fallback_provider_failed"),
+		})
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "fallback_failed", "Provider request failed and fallback failed.", "call_provider_with_timeout_retry_fallback")
+		return
+	}
+
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: fallbackTarget.ProviderName,
+		SelectedModel:    fallbackTarget.ModelID,
+		Status:           invocationlog.StatusSuccess,
+		HTTPStatus:       http.StatusOK,
+		ErrorCode:        "none",
+		DurationSeconds:  fallbackDuration.Seconds(),
+	})
+	if fallbackResp.Usage != nil {
+		reqCtx.PromptTokens = fallbackResp.Usage.PromptTokens
+		reqCtx.CompletionTokens = fallbackResp.Usage.CompletionTokens
+		reqCtx.TotalTokens = fallbackResp.Usage.TotalTokens
+	}
+	reqCtx.Status = invocationlog.StatusSuccess
+	reqCtx.HTTPStatus = http.StatusOK
+	reqCtx.ErrorCode = ""
+	reqCtx.ErrorMessage = ""
+	reqCtx.ErrorStage = ""
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	reqCtx.SavedCostMicroUSD = 0
+	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
+		reqCtx.CacheStatus = cachestage.CacheStatusMiss
+		reqCtx.CacheType = cachestage.CacheTypeExact
+	}
+	reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+		Outcome:          "success",
+		FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+		Reason:           stringPointerValue(code),
+	})
+
+	attachGateLMMetadata(fallbackResp, reqCtx)
+	setGatewayHeaders(w, reqCtx)
+	writeJSON(w, http.StatusOK, fallbackResp)
+}
+
+func (h *ChatCompletionsHandler) resolveFallbackTarget(ctx context.Context, reqCtx *pipeline.RequestContext, primary providerCallTarget) (providerCallTarget, error) {
+	if !primary.FromCatalog {
+		return providerCallTarget{}, providercatalog.ErrProviderNotFound
+	}
+
+	fallbackProviderName := firstNonEmpty(reqCtx.RuntimeRoutingPolicy.FallbackProvider)
+	var fallbackProvider providercatalog.Provider
+	var fallbackModel providercatalog.Model
+	var err error
+	if fallbackProviderName != "" {
+		fallbackProvider, err = primary.Catalog.ProviderByName(fallbackProviderName)
+		if err != nil {
+			return providerCallTarget{}, err
+		}
+		fallbackModelID := firstNonEmpty(reqCtx.RuntimeRoutingPolicy.FallbackModel)
+		if fallbackModelID != "" {
+			fallbackModel, err = fallbackProvider.ModelByID(fallbackModelID)
+		} else {
+			fallbackModel, err = fallbackProvider.FirstEnabledFallbackModel()
+		}
+		if err != nil {
+			return providerCallTarget{}, err
+		}
+	} else {
+		fallbackProvider, fallbackModel, err = primary.Catalog.FirstFallbackProvider(primary.ProviderName, primary.ModelID)
+		if err != nil {
+			return providerCallTarget{}, err
+		}
+	}
+
+	if fallbackProvider.ProviderName == primary.ProviderName && fallbackModel.ModelID == primary.ModelID {
+		return providerCallTarget{}, providercatalog.ErrProviderNotFound
+	}
+	return h.providerCallTargetFromCatalog(ctx, primary.Catalog, fallbackProvider, fallbackModel, true)
+}
+
+func (h *ChatCompletionsHandler) providerFailureDomainOutcomes(reqCtx *pipeline.RequestContext, target providerCallTarget, err error, fallback invocationlog.FallbackOutcome) invocationlog.DomainOutcomes {
+	outcomes := buildDomainOutcomesFromRequestContext(reqCtx)
+	code := provider.SafeErrorCode(err)
+	providerOutcome := "error"
+	switch provider.ErrorKindOf(err) {
+	case provider.ErrorKindTimeout:
+		providerOutcome = "timeout"
+	case provider.ErrorKindUnauthorized:
+		providerOutcome = "unauthorized"
+	}
+	outcomes.Provider = invocationlog.ProviderOutcome{
+		Outcome:            providerOutcome,
+		SelectedProvider:   stringPointerValue(target.ProviderName),
+		SelectedModel:      stringPointerValue(target.ModelID),
+		LatencyMs:          providerLatencyForLog(reqCtx),
+		SanitizedErrorCode: stringPointerValue(code),
+	}
+	outcomes.Fallback = fallback
+	return outcomes
+}
+
+func stringPointerValue(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
@@ -682,6 +1023,13 @@ func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocatio
 	if reqCtx == nil {
 		return invocationlog.DomainOutcomes{}
 	}
+	if !reqCtx.DomainOutcomes.IsZero() {
+		return reqCtx.DomainOutcomes
+	}
+	return buildDomainOutcomesFromRequestContext(reqCtx)
+}
+
+func buildDomainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {
 	providerLatencyMs := providerLatencyForLog(reqCtx)
 	return invocationlog.BuildDomainOutcomes(invocationlog.TerminalLog{
 		RequestID:             reqCtx.RequestID,
@@ -823,6 +1171,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		MaskingDetectedCount:    reqCtx.MaskingDetectedCount,
 		RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
 		SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
+		DomainOutcomes:          reqCtx.DomainOutcomes,
 		RedactedPromptForHash:   redactedPrompt,
 		StartedAt:               startedAt,
 		CompletedAt:             completedAt,

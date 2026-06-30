@@ -453,15 +453,15 @@ type metricsHandoffNilProviderAdapter struct {
 	calls *int64
 }
 
-func (a metricsHandoffNilProviderAdapter) Name() string {
+func (a metricsHandoffNilProviderAdapter) AdapterType() string {
 	return "nil-provider"
 }
 
-func (a metricsHandoffNilProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+func (a metricsHandoffNilProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
 	return &provider.ModelListResponse{}, nil
 }
 
-func (a metricsHandoffNilProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (a metricsHandoffNilProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	if a.calls != nil {
 		atomic.AddInt64(a.calls, 1)
 	}

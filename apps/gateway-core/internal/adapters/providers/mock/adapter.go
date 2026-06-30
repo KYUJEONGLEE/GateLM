@@ -31,8 +31,12 @@ func (a *Adapter) Name() string {
 	return "mock"
 }
 
-func (a *Adapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+"/v1/models", nil)
+func (a *Adapter) AdapterType() string {
+	return "mock"
+}
+
+func (a *Adapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, providerEndpoint(firstNonEmpty(config.BaseURL, a.baseURL), "/models"), nil)
 	if err != nil {
 		return nil, fmt.Errorf("build mock provider models request: %w", err)
 	}
@@ -55,13 +59,13 @@ func (a *Adapter) ListModels(ctx context.Context) (*provider.ModelListResponse, 
 	return &models, nil
 }
 
-func (a *Adapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("encode mock provider chat request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, providerEndpoint(firstNonEmpty(config.BaseURL, a.baseURL), "/chat/completions"), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("build mock provider chat request: %w", err)
 	}
@@ -84,4 +88,21 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, req provider.ChatCom
 	}
 
 	return &completion, nil
+}
+
+func providerEndpoint(baseURL string, path string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if !strings.HasSuffix(baseURL, "/v1") {
+		baseURL += "/v1"
+	}
+	return baseURL + path
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

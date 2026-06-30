@@ -132,6 +132,7 @@ type TerminalLogInput struct {
 
 	RequestBodyHashMaterial string
 	RedactedPromptForHash   string
+	DomainOutcomes          DomainOutcomes
 	StartedAt               time.Time
 	CompletedAt             time.Time
 }
@@ -269,7 +270,14 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		CreatedAt:       input.StartedAt.UTC(),
 		CompletedAt:     completedAt.UTC(),
 	}
-	log.DomainOutcomes = BuildDomainOutcomes(log)
+	if !input.DomainOutcomes.IsZero() {
+		log.DomainOutcomes = input.DomainOutcomes
+		if log.DomainOutcomes.Logging.Outcome == "" {
+			log.DomainOutcomes.Logging = LoggingOutcome{Outcome: "written", RequestLogWritten: true}
+		}
+	} else {
+		log.DomainOutcomes = BuildDomainOutcomes(log)
+	}
 	log.Metadata["terminalStatus"] = canonicalTerminalStatus(log.Status)
 	log.Metadata["domainOutcomes"] = log.DomainOutcomes
 	log.Metadata["gatewayStageOutcomes"] = BuildGatewayStageOutcomes(log)
