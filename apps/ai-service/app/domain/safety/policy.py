@@ -17,7 +17,33 @@ from app.schemas.safety import SafetyDetector
 
 
 PREVIEW_MAX_CHARS = 120
-MERGEABLE_INFIX_CHARS = frozenset("._-+@:/?=&%#")
+DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
+MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
+    "email": frozenset("._-+@"),
+    "private_url": frozenset(":/?=&%#._-+"),
+    "webhook_url": frozenset(":/?=&%#._-+"),
+    "database_url": frozenset(":/?=&%#._-+"),
+    "phone_number": frozenset(" -.()"),
+    "account_number": frozenset("-_"),
+    "account_id": frozenset("-_"),
+    "customer_id": frozenset("-_"),
+    "employee_id": frozenset("-_"),
+    "secret": frozenset("-_./+"),
+    "api_key": frozenset("-_./+"),
+    "provider_api_key": frozenset("-_./+"),
+    "cloud_access_key": frozenset("-_./+"),
+    "github_token": frozenset("-_./+"),
+    "slack_token": frozenset("-_./+"),
+    "jwt": frozenset(".-_"),
+    "person_name": frozenset("-'"),
+}
+LEADING_BOUNDARY_CHARS = frozenset("\"'([{<")
+TRAILING_BOUNDARY_CHARS_BY_DETECTOR_TYPE = {
+    "private_url": frozenset("\"')]}>,;."),
+    "webhook_url": frozenset("\"')]}>,;."),
+    "database_url": frozenset("\"')]}>,;."),
+}
+DEFAULT_TRAILING_BOUNDARY_CHARS = frozenset("\"')]}>,;:.")
 
 
 def enabled_detector_map(detectors: list[SafetyDetector]) -> dict[str, SafetyDetector]:
@@ -74,22 +100,7 @@ def effective_signals(
         for signal in signals
         if (normalized := _normalize_signal_span(signal, prompt_text)) is not None
     ]
-    candidates.sort(
-        key=lambda signal: (
-            -_action_rank(signal.action),
-            signal.priority,
-            -_confidence_rank(signal.confidence),
-            -signal.length,
-            signal.start,
-        )
-    )
-
-    selected: list[SafetySignal] = []
-    for candidate in candidates:
-        if any(_overlaps(candidate, existing) for existing in selected):
-            continue
-        selected.append(candidate)
-
+    selected = _signals_from_overlap_clusters(candidates)
     selected.sort(key=lambda signal: (signal.start, signal.end))
     if prompt_text is None:
         return selected
@@ -158,11 +169,64 @@ def _normalize_signal_span(
         start += 1
     while end > start and prompt_text[end - 1].isspace():
         end -= 1
+    while start < end and prompt_text[start] in LEADING_BOUNDARY_CHARS:
+        start += 1
+    trailing_boundary_chars = _trailing_boundary_chars_for_detector_type(signal.detector_type)
+    while end > start and prompt_text[end - 1] in trailing_boundary_chars:
+        end -= 1
     if end <= start:
         return None
     if start == signal.start and end == signal.end:
         return signal
     return replace(signal, start=start, end=end)
+
+
+def _signals_from_overlap_clusters(signals: list[SafetySignal]) -> list[SafetySignal]:
+    if not signals:
+        return []
+
+    ordered = sorted(signals, key=lambda signal: (signal.start, signal.end))
+    clusters: list[list[SafetySignal]] = []
+    current_cluster: list[SafetySignal] = []
+    current_end = -1
+
+    for signal in ordered:
+        if not current_cluster or signal.start < current_end:
+            current_cluster.append(signal)
+            current_end = max(current_end, signal.end)
+            continue
+
+        clusters.append(current_cluster)
+        current_cluster = [signal]
+        current_end = signal.end
+
+    if current_cluster:
+        clusters.append(current_cluster)
+
+    return [_signal_from_overlap_cluster(cluster) for cluster in clusters]
+
+
+def _signal_from_overlap_cluster(cluster: list[SafetySignal]) -> SafetySignal:
+    if len(cluster) == 1:
+        return cluster[0]
+
+    action = "block" if any(signal.action == "block" for signal in cluster) else "redact"
+    action_candidates = [signal for signal in cluster if signal.action == action]
+    representative = min(
+        action_candidates,
+        key=lambda signal: (
+            signal.priority,
+            -signal.length,
+            -_confidence_rank(signal.confidence),
+            signal.start,
+        ),
+    )
+    return replace(
+        representative,
+        start=min(signal.start for signal in cluster),
+        end=max(signal.end for signal in cluster),
+        confidence=max(_confidence_rank(signal.confidence) for signal in cluster),
+    )
 
 
 def _merge_adjacent_similar_signals(
@@ -199,4 +263,19 @@ def _should_merge_adjacent_signal(
         return False
     if current.start < previous.end:
         return False
-    return gap == "" or all(char in MERGEABLE_INFIX_CHARS for char in gap)
+    mergeable_chars = _mergeable_infix_chars_for_detector_type(previous.detector_type)
+    return gap == "" or all(char in mergeable_chars for char in gap)
+
+
+def _mergeable_infix_chars_for_detector_type(detector_type: str) -> frozenset[str]:
+    return MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE.get(
+        detector_type,
+        DEFAULT_MERGEABLE_INFIX_CHARS,
+    )
+
+
+def _trailing_boundary_chars_for_detector_type(detector_type: str) -> frozenset[str]:
+    return TRAILING_BOUNDARY_CHARS_BY_DETECTOR_TYPE.get(
+        detector_type,
+        DEFAULT_TRAILING_BOUNDARY_CHARS,
+    )

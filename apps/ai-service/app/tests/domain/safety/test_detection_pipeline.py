@@ -207,6 +207,147 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertNotIn(raw_name, decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
 
+    def test_overlapping_same_detector_spans_are_unioned(self) -> None:
+        raw_email = "alice@example.invalid"
+        prompt = f"Contact {raw_email}."
+
+        detections = [
+            Detection(
+                detector_type="email",
+                source="openai_privacy_filter",
+                start=prompt.index("alice"),
+                end=prompt.index("example") + len("example"),
+                confidence=0.97,
+            ),
+            Detection(
+                detector_type="email",
+                source="openai_privacy_filter",
+                start=prompt.index("example"),
+                end=prompt.index("invalid") + len("invalid"),
+                confidence=0.96,
+            ),
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {"email": detector("email", "redact", "[EMAIL_REDACTED]")},
+        )
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=signals,
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.detected_types, ("email",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertEqual(decision.redacted_prompt_preview, "Contact [EMAIL_REDACTED].")
+        self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
+
+    def test_overlapping_block_cluster_redacts_union_span(self) -> None:
+        raw_url = "https://example.invalid/path?token=syntheticSecretValue"
+        raw_secret = "syntheticSecretValue"
+        prompt = f"Review {raw_url}."
+
+        detections = [
+            Detection(
+                detector_type="private_url",
+                source="openai_privacy_filter",
+                start=prompt.index(raw_url),
+                end=prompt.index(raw_url) + len(raw_url),
+                confidence=0.93,
+            ),
+            Detection(
+                detector_type="secret",
+                source="openai_privacy_filter",
+                start=prompt.index(raw_secret),
+                end=prompt.index(raw_secret) + len(raw_secret),
+                confidence=0.99,
+            ),
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {
+                "private_url": detector("private_url", "redact", "[PRIVATE_URL_REDACTED]"),
+                "secret": detector("secret", "block", "[SECRET_REDACTED]"),
+            },
+        )
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=signals,
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.action, "blocked")
+        self.assertEqual(decision.detected_types, ("secret",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertEqual(decision.redacted_prompt_preview, "Review [SECRET_REDACTED].")
+        self.assertNotIn(raw_url, decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_secret, decision.redacted_prompt_preview or "")
+
+    def test_detector_specific_merge_rules_do_not_merge_person_names_across_slash(self) -> None:
+        prompt = "Review Alice/Bob."
+
+        detections = [
+            Detection(
+                detector_type="person_name",
+                source="openai_privacy_filter",
+                start=prompt.index("Alice"),
+                end=prompt.index("Alice") + len("Alice"),
+                confidence=0.99,
+            ),
+            Detection(
+                detector_type="person_name",
+                source="openai_privacy_filter",
+                start=prompt.index("Bob"),
+                end=prompt.index("Bob") + len("Bob"),
+                confidence=0.99,
+            ),
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {"person_name": detector("person_name", "redact", "[PERSON_NAME_REDACTED]")},
+        )
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=signals,
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.detected_count, 2)
+        self.assertEqual(
+            decision.redacted_prompt_preview,
+            "Review [PERSON_NAME_REDACTED]/[PERSON_NAME_REDACTED].",
+        )
+
+    def test_boundary_punctuation_is_preserved_outside_redaction_span(self) -> None:
+        raw_email = "alice@example.invalid"
+        prompt = f"Contact {raw_email}, please."
+
+        detections = [
+            Detection(
+                detector_type="email",
+                source="openai_privacy_filter",
+                start=prompt.index(raw_email),
+                end=prompt.index(raw_email) + len(f"{raw_email},"),
+                confidence=0.99,
+            )
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {"email": detector("email", "redact", "[EMAIL_REDACTED]")},
+        )
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=signals,
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.redacted_prompt_preview, "Contact [EMAIL_REDACTED], please.")
+        self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
+
 
 def detector(detector_type: str, action: str, placeholder: str) -> SafetyDetector:
     return SafetyDetector(

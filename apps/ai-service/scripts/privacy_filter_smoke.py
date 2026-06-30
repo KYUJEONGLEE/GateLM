@@ -12,19 +12,17 @@ import json
 import sys
 from typing import Any
 
+from app.adapters.safety.privacy_filter_adapter import (
+    DEFAULT_PRIVACY_FILTER_SOURCE,
+    normalize_label,
+)
+from app.domain.safety.detections import Detection, normalized_confidence, safety_signals_from_detections
+from app.domain.safety.policy import effective_signals, redact_prompt
+from app.domain.safety.signals import SafetySignal
+from app.services.ai_safety_detector import DEFAULT_PRIVACY_FILTER_DETECTORS
 
-MERGEABLE_INFIX_CHARS = frozenset("._-+@:/?=&%#")
 
-LABEL_MAP = {
-    "private_email": ("email", "redact", "[EMAIL_REDACTED]"),
-    "private_phone": ("phone_number", "redact", "[PHONE_NUMBER_REDACTED]"),
-    "private_person": ("person_name", "redact", "[PERSON_NAME_REDACTED]"),
-    "private_address": ("postal_address", "redact", "[ADDRESS_REDACTED]"),
-    "account_number": ("account_number", "block", "[ACCOUNT_NUMBER_REDACTED]"),
-    "private_date": ("private_date", "redact", "[PRIVATE_DATE_REDACTED]"),
-    "private_url": ("private_url", "redact", "[PRIVATE_URL_REDACTED]"),
-    "secret": ("secret", "block", "[SECRET_REDACTED]"),
-}
+DETECTOR_CONFIG = {detector.type: detector for detector in DEFAULT_PRIVACY_FILTER_DETECTORS}
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,128 +51,83 @@ def read_input(text_arg: str | None) -> str:
     return text
 
 
-def normalize_detection(item: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_detection(item: dict[str, Any], text_length: int) -> dict[str, Any] | None:
     model_label = item.get("entity_group") or item.get("entity")
     if not isinstance(model_label, str):
         return None
 
-    mapping = LABEL_MAP.get(model_label)
-    if mapping is None:
+    detector_type = normalize_label(model_label)
+    if detector_type is None:
+        return None
+    start = coerce_int(item.get("start"))
+    end = coerce_int(item.get("end"))
+    if start is None or end is None:
+        return None
+    if start < 0 or end <= start or end > text_length:
         return None
 
-    detector_type, action, placeholder = mapping
     return {
-        "detectorType": detector_type,
+        "detection": Detection(
+            detector_type=detector_type,
+            source=DEFAULT_PRIVACY_FILTER_SOURCE,
+            start=start,
+            end=end,
+            confidence=normalized_confidence(coerce_float(item.get("score"))),
+        ),
         "modelLabel": model_label,
-        "source": "openai_privacy_filter",
-        "confidence": float(item.get("score", 0.0)),
-        "action": action,
+    }
+
+
+def coerce_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def coerce_float(value: object) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def output_detection(signal: SafetySignal, raw_detections: list[dict[str, Any]]) -> dict[str, Any]:
+    output: dict[str, Any] = {
+        "detectorType": signal.detector_type,
+        "source": signal.source,
+        "confidence": signal.confidence,
+        "action": signal.action,
         "mode": "shadow",
-        "placeholder": placeholder,
-        "start": item.get("start"),
-        "end": item.get("end"),
     }
+    model_label = model_label_for_signal(signal, raw_detections)
+    if model_label is not None:
+        output["modelLabel"] = model_label
+    return output
 
 
-def redact_text(text: str, detections: list[dict[str, Any]]) -> str:
-    redacted = text
-    span_detections = normalize_redaction_detections(text, detections)
-
-    for detection in sorted(span_detections, key=lambda item: item["start"], reverse=True):
-        redacted = (
-            redacted[: detection["start"]]
-            + detection["placeholder"]
-            + redacted[detection["end"] :]
-        )
-
-    return redacted
-
-
-def normalize_redaction_detections(
-    text: str,
-    detections: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    normalized = [
-        normalized_detection
-        for detection in detections
-        if (normalized_detection := normalize_detection_span(text, detection)) is not None
-    ]
-    normalized.sort(
-        key=lambda detection: (
-            detection["start"],
-            detection["end"],
-            -float(detection.get("confidence", 0.0)),
-        )
-    )
-
-    selected: list[dict[str, Any]] = []
-    for detection in normalized:
-        if selected and detection["start"] < selected[-1]["end"]:
-            previous = selected[-1]
-            previous_confidence = float(previous.get("confidence", 0.0))
-            current_confidence = float(detection.get("confidence", 0.0))
-            previous_length = previous["end"] - previous["start"]
-            current_length = detection["end"] - detection["start"]
-            if (current_confidence, current_length) > (previous_confidence, previous_length):
-                selected[-1] = detection
-            continue
-        selected.append(detection)
-
-    merged: list[dict[str, Any]] = []
-    for detection in selected:
-        if merged and should_merge_adjacent_detection(merged[-1], detection, text):
-            merged[-1]["end"] = detection["end"]
-            merged[-1]["confidence"] = max(
-                float(merged[-1].get("confidence", 0.0)),
-                float(detection.get("confidence", 0.0)),
-            )
-            continue
-        merged.append(detection)
-    return merged
-
-
-def normalize_detection_span(text: str, detection: dict[str, Any]) -> dict[str, Any] | None:
-    start = detection.get("start")
-    end = detection.get("end")
-    if not isinstance(start, int) or not isinstance(end, int):
-        return None
-    if start < 0 or end <= start or end > len(text):
-        return None
-
-    while start < end and text[start].isspace():
-        start += 1
-    while end > start and text[end - 1].isspace():
-        end -= 1
-    if end <= start:
-        return None
-
-    normalized = dict(detection)
-    normalized["start"] = start
-    normalized["end"] = end
-    return normalized
-
-
-def should_merge_adjacent_detection(
-    previous: dict[str, Any],
-    current: dict[str, Any],
-    text: str,
-) -> bool:
-    if previous.get("detectorType") != current.get("detectorType"):
-        return False
-    if previous.get("action") != current.get("action"):
-        return False
-    if previous.get("placeholder") != current.get("placeholder"):
-        return False
-    gap = text[previous["end"] : current["start"]]
-    return gap == "" or all(char in MERGEABLE_INFIX_CHARS for char in gap)
-
-
-def strip_internal_fields(detection: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in detection.items()
-        if key not in {"start", "end", "placeholder"}
+def model_label_for_signal(
+    signal: SafetySignal,
+    raw_detections: list[dict[str, Any]],
+) -> str | None:
+    labels = {
+        str(raw_detection["modelLabel"])
+        for raw_detection in raw_detections
+        if detection_overlaps_signal(raw_detection["detection"], signal)
     }
+    if len(labels) == 1:
+        return next(iter(labels))
+    return None
+
+
+def detection_overlaps_signal(detection: Detection, signal: SafetySignal) -> bool:
+    if detection.detector_type != signal.detector_type:
+        return False
+    return detection.start < signal.end and signal.start < detection.end
 
 
 def main() -> None:
@@ -193,12 +146,16 @@ def main() -> None:
     raw_detections = [
         detection
         for item in raw_items
-        if (detection := normalize_detection(item)) is not None
+        if (detection := normalize_detection(item, len(input_text))) is not None
     ]
-    detections = normalize_redaction_detections(input_text, raw_detections)
-    detector_categories = sorted({detection["detectorType"] for detection in detections})
-    outcome = "blocked" if any(d["action"] == "block" for d in detections) else "redacted"
-    if not detections:
+    detections = [raw_detection["detection"] for raw_detection in raw_detections]
+    signals = effective_signals(
+        safety_signals_from_detections(detections, DETECTOR_CONFIG),
+        prompt_text=input_text,
+    )
+    detector_categories = sorted({signal.detector_type for signal in signals})
+    outcome = "blocked" if any(signal.action == "block" for signal in signals) else "redacted"
+    if not signals:
         outcome = "passed"
 
     output = {
@@ -209,12 +166,12 @@ def main() -> None:
         },
         "outcome": outcome,
         "mode": "shadow",
-        "redactedPrompt": redact_text(input_text, detections),
+        "redactedPrompt": redact_prompt(input_text, signals),
         "detectorSummary": {
-            "detectedCount": len(detections),
+            "detectedCount": len(signals),
             "detectorCategories": detector_categories,
         },
-        "detections": [strip_internal_fields(detection) for detection in detections],
+        "detections": [output_detection(signal, raw_detections) for signal in signals],
     }
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
