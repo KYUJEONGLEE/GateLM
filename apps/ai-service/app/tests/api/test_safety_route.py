@@ -11,7 +11,7 @@ from app.services.safety_evaluator import RemoteSafetyEvaluationService
 
 
 SYNTHETIC_EMAIL = "alex@example.test"
-SYNTHETIC_SECRET = "DEMOSECRETDEMOSECRET12345"
+SYNTHETIC_SECRET = "demoSecretDemoSecret1234567890abcdef"
 
 
 class SafetyRouteTests(unittest.TestCase):

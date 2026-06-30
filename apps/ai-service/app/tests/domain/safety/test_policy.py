@@ -4,7 +4,12 @@ import re
 import unittest
 
 from app.adapters.safety.noop_evaluator import NoopSafetyEvaluator
-from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator, RegexDetector
+from app.adapters.safety.heuristic_evaluator import (
+    CREDIT_CARD_CANDIDATE_PATTERN,
+    IP_ADDRESS_CANDIDATE_PATTERN,
+    HeuristicSafetyEvaluator,
+    RegexDetector,
+)
 from app.domain.safety.policy import PREVIEW_MAX_CHARS
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
@@ -15,7 +20,7 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         decision = evaluator.evaluate(
             remote_context(),
             remote_input(
-                "Contact alex@example.test and inspect api_key=DEMOSECRETDEMOSECRET12345.",
+                "Contact alex@example.test and inspect api_key=test_api_key_redacted_demo_1234567890abcdef.",
                 [
                     detector("email", "redact", "[EMAIL_REDACTED]"),
                     detector("api_key", "block", "[API_KEY_REDACTED]"),
@@ -29,7 +34,407 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(decision.block_reason, "sensitive_data_blocked")
         self.assertIn("[EMAIL_REDACTED]", decision.redacted_prompt_preview or "")
         self.assertIn("[API_KEY_REDACTED]", decision.redacted_prompt_preview or "")
-        self.assertNotIn("DEMOSECRET", decision.redacted_prompt_preview or "")
+        self.assertNotIn("1234567890abcdef", decision.redacted_prompt_preview or "")
+
+    def test_api_key_detector_blocks_credential_like_assignment(self) -> None:
+        raw_value = "test_api_key_redacted_demo_1234567890abcdef"
+        evaluator = HeuristicSafetyEvaluator()
+        decision = evaluator.evaluate(
+            remote_context(),
+            remote_input(
+                f"Inspect api_key={raw_value}.",
+                [detector("api_key", "block", "[API_KEY_REDACTED]")],
+            ),
+        )
+
+        self.assertEqual(decision.action, "blocked")
+        self.assertEqual(decision.detected_types, ("api_key",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertIn("[API_KEY_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
+
+    def test_api_key_detector_ignores_bare_secret_and_short_token_values(self) -> None:
+        evaluator = HeuristicSafetyEvaluator()
+
+        for prompt in [
+            "secret=internal note",
+            "token budget is 3000",
+            "token=short_demo",
+        ]:
+            with self.subTest(prompt=prompt):
+                decision = evaluator.evaluate(
+                    remote_context(),
+                    remote_input(prompt, [detector("api_key", "block", "[API_KEY_REDACTED]")]),
+                )
+
+                self.assertEqual(decision.action, "none")
+                self.assertEqual(decision.detected_count, 0)
+                self.assertIsNone(decision.redacted_prompt_preview)
+
+    def test_jwt_detector_blocks_long_synthetic_token(self) -> None:
+        raw_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.synthetic_signature_1234567890"
+        evaluator = HeuristicSafetyEvaluator()
+        decision = evaluator.evaluate(
+            remote_context(),
+            remote_input(
+                f"Review this token {raw_token}.",
+                [detector("jwt", "block", "[JWT_REDACTED]")],
+            ),
+        )
+
+        self.assertEqual(decision.action, "blocked")
+        self.assertEqual(decision.detected_types, ("jwt",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertIn("[JWT_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_token, decision.redacted_prompt_preview or "")
+
+    def test_jwt_detector_ignores_short_or_non_jwt_triplets(self) -> None:
+        evaluator = HeuristicSafetyEvaluator()
+
+        for prompt in [
+            "eyJ.a.b",
+            "header.payload.signature",
+        ]:
+            with self.subTest(prompt=prompt):
+                decision = evaluator.evaluate(
+                    remote_context(),
+                    remote_input(prompt, [detector("jwt", "block", "[JWT_REDACTED]")]),
+                )
+
+                self.assertEqual(decision.action, "none")
+                self.assertEqual(decision.detected_count, 0)
+                self.assertIsNone(decision.redacted_prompt_preview)
+
+    def test_secret_block_detectors_block_high_confidence_values(self) -> None:
+        cases = [
+            (
+                "provider_api_key",
+                "[PROVIDER_API_KEY_REDACTED]",
+                "sk-redactedDemoProviderKey1234567890",
+                "Provider key sk-redactedDemoProviderKey1234567890 was pasted.",
+            ),
+            (
+                "cloud_access_key",
+                "[CLOUD_ACCESS_KEY_REDACTED]",
+                "AKIAREDACTEDDEMO1234",
+                "Cloud key AKIAREDACTEDDEMO1234 was pasted.",
+            ),
+            (
+                "github_token",
+                "[GITHUB_TOKEN_REDACTED]",
+                "ghp_redactedDemoToken1234567890",
+                "GitHub token ghp_redactedDemoToken1234567890 was pasted.",
+            ),
+            (
+                "slack_token",
+                "[SLACK_TOKEN_REDACTED]",
+                "xoxb-redacted-demo-token-1234567890",
+                "Slack token xoxb-redacted-demo-token-1234567890 was pasted.",
+            ),
+            (
+                "database_url",
+                "[DATABASE_URL_REDACTED]",
+                "postgres://demo_user:demoPass123456@db.local/app",
+                "DATABASE_URL=postgres://demo_user:demoPass123456@db.local/app",
+            ),
+            (
+                "webhook_url",
+                "[WEBHOOK_URL_REDACTED]",
+                "https://hooks.slack.com/services/T00000000/B00000000/redactedWebhookToken1234567890",
+                "Webhook https://hooks.slack.com/services/T00000000/B00000000/redactedWebhookToken1234567890",
+            ),
+            (
+                "password_assignment",
+                "[PASSWORD_REDACTED]",
+                "demoPassword123456!",
+                "password=demoPassword123456!",
+            ),
+            (
+                "session_cookie",
+                "[SESSION_COOKIE_REDACTED]",
+                "demoSessionToken1234567890abcdef",
+                "Cookie: session=demoSessionToken1234567890abcdef",
+            ),
+        ]
+
+        for detector_type, placeholder, raw_value, prompt in cases:
+            with self.subTest(detector_type=detector_type):
+                assert_blocked_detector(self, prompt, detector_type, placeholder, raw_value)
+
+    def test_secret_block_detectors_ignore_low_confidence_values(self) -> None:
+        cases = {
+            "provider_api_key": [
+                "sketch-123",
+                "hf model name",
+                "sk-demo",
+            ],
+            "cloud_access_key": [
+                "asia region",
+                "akia",
+                "cloud_access_key=short_demo",
+            ],
+            "github_token": [
+                "github token required",
+                "ghp_short",
+                "github_pat_short",
+            ],
+            "slack_token": [
+                "xoxb-short",
+                "slack token xoxb missing",
+            ],
+            "database_url": [
+                "postgres://localhost/app",
+                "postgres://demo_user@localhost/app",
+            ],
+            "webhook_url": [
+                "https://api.github.com/repos/acme/demo/hooks/123",
+                "https://discord.com/api/webhooks/123/short",
+            ],
+            "password_assignment": [
+                "password is required",
+                "password=short",
+                "password=internal note",
+            ],
+            "session_cookie": [
+                "Cookie: theme=dark",
+                "Set-Cookie: session=short",
+            ],
+        }
+
+        for detector_type, prompts in cases.items():
+            with self.subTest(detector_type=detector_type):
+                assert_ignored_prompts(self, detector_type, prompts)
+
+    def test_financial_and_identity_block_detectors_block_high_confidence_values(self) -> None:
+        cases = [
+            (
+                "credit_card",
+                "[CREDIT_CARD_REDACTED]",
+                "4111 1111 1111 1111",
+                "card_number=4111 1111 1111 1111",
+            ),
+            (
+                "credit_card",
+                "[CREDIT_CARD_REDACTED]",
+                "5555-5555-5555-4444",
+                "payment card: 5555-5555-5555-4444",
+            ),
+            (
+                "bank_account",
+                "[BANK_ACCOUNT_REDACTED]",
+                "110-123-456789",
+                "계좌번호: 110-123-456789",
+            ),
+            (
+                "passport_number",
+                "[PASSPORT_NUMBER_REDACTED]",
+                "M12345678",
+                "passport_no=M12345678",
+            ),
+            (
+                "driver_license",
+                "[DRIVER_LICENSE_REDACTED]",
+                "12-34-567890-12",
+                "driver_license=12-34-567890-12",
+            ),
+        ]
+
+        for detector_type, placeholder, raw_value, prompt in cases:
+            with self.subTest(detector_type=detector_type, raw_value=raw_value):
+                assert_blocked_detector(self, prompt, detector_type, placeholder, raw_value)
+
+    def test_financial_and_identity_block_detectors_ignore_low_confidence_values(self) -> None:
+        cases = {
+            "credit_card": [
+                "order_id=1234567890123456",
+                "card number is required",
+                "card_number=4111 1111 1111 1112",
+            ],
+            "bank_account": [
+                "account is required",
+                "account_id=acct_1234567890",
+                "주문번호: 123456789012",
+            ],
+            "passport_number": [
+                "passport renewal guide",
+                "M12345678",
+                "문서번호: M12345678",
+            ],
+            "driver_license": [
+                "driver license is required",
+                "123456789012",
+                "ticket_number=123456789012",
+            ],
+        }
+
+        for detector_type, prompts in cases.items():
+            with self.subTest(detector_type=detector_type):
+                assert_ignored_prompts(self, detector_type, prompts)
+
+    def test_pii_redact_detectors_redact_high_confidence_values(self) -> None:
+        cases = [
+            (
+                "postal_address",
+                "[ADDRESS_REDACTED]",
+                "서울시 강남구 테헤란로 123",
+                "주소: 서울시 강남구 테헤란로 123",
+            ),
+            (
+                "date_of_birth",
+                "[DATE_OF_BIRTH_REDACTED]",
+                "1998-03-12",
+                "생년월일: 1998-03-12",
+            ),
+            (
+                "person_name",
+                "[PERSON_NAME_REDACTED]",
+                "홍길동",
+                "이름: 홍길동",
+            ),
+            (
+                "customer_id",
+                "[CUSTOMER_ID_REDACTED]",
+                "cus_1234567890",
+                "customer_id=cus_1234567890",
+            ),
+            (
+                "employee_id",
+                "[EMPLOYEE_ID_REDACTED]",
+                "E123456",
+                "employee_id=E123456",
+            ),
+            (
+                "account_id",
+                "[ACCOUNT_ID_REDACTED]",
+                "acct_1234567890",
+                "account_id=acct_1234567890",
+            ),
+            (
+                "ip_address",
+                "[IP_ADDRESS_REDACTED]",
+                "8.8.8.8",
+                "source ip 8.8.8.8",
+            ),
+            (
+                "ip_address",
+                "[IP_ADDRESS_REDACTED]",
+                "2606:4700:4700::1111",
+                "source ip 2606:4700:4700::1111",
+            ),
+        ]
+
+        for detector_type, placeholder, raw_value, prompt in cases:
+            with self.subTest(detector_type=detector_type, raw_value=raw_value):
+                assert_redacted_detector(self, prompt, detector_type, placeholder, raw_value)
+
+    def test_pii_redact_detectors_ignore_low_confidence_values(self) -> None:
+        cases = {
+            "postal_address": [
+                "주소를 알려주세요",
+                "서울시 강남구 테헤란로를 분석해줘",
+            ],
+            "date_of_birth": [
+                "meeting date 1998-03-12",
+                "1998년 프로젝트를 요약해줘",
+            ],
+            "person_name": [
+                "홍길동은 한국 소설의 인물이다",
+                "Kim model routing test",
+            ],
+            "customer_id": [
+                "customer id is required",
+                "회원번호를 확인해 주세요",
+            ],
+            "employee_id": [
+                "employee id is required",
+                "사번을 입력해 주세요",
+            ],
+            "account_id": [
+                "account id field is missing",
+                "계정번호를 확인해 주세요",
+            ],
+            "ip_address": [
+                "127.0.0.1",
+                "localhost",
+                "10.0.0.8",
+                "192.168.0.2",
+                "172.16.0.2",
+                "2001:db8::1",
+            ],
+        }
+
+        for detector_type, prompts in cases.items():
+            with self.subTest(detector_type=detector_type):
+                assert_ignored_prompts(self, detector_type, prompts)
+
+    def test_candidate_patterns_restrict_digit_matching_to_ascii(self) -> None:
+        unicode_ipv4_digits = "\u0668.\u0668.\u0668.\u0668"
+        unicode_card_digits = "\u0664\u0661\u0661\u0661 \u0661\u0661\u0661\u0661 \u0661\u0661\u0661\u0661 \u0661\u0661\u0661\u0661"
+
+        self.assertIsNone(IP_ADDRESS_CANDIDATE_PATTERN.search(unicode_ipv4_digits))
+        self.assertIsNone(CREDIT_CARD_CANDIDATE_PATTERN.search(unicode_card_digits))
+
+    def test_person_name_detector_is_label_based_only(self) -> None:
+        assert_redacted_detector(
+            self,
+            "고객명=김민수",
+            "person_name",
+            "[PERSON_NAME_REDACTED]",
+            "김민수",
+        )
+        assert_redacted_detector(
+            self,
+            "customer_name=Alex Kim",
+            "person_name",
+            "[PERSON_NAME_REDACTED]",
+            "Alex Kim",
+        )
+        assert_ignored_prompts(
+            self,
+            "person_name",
+            [
+                "김민수 고객이 문의했다",
+                "Alex Kim is a sample name",
+            ],
+        )
+
+    def test_structural_secret_detectors_win_over_inner_token_matches(self) -> None:
+        jwt_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.synthetic_signature_1234567890"
+        cases = [
+            (
+                "session_cookie",
+                "Cookie: access_token=test_access_token_redacted_demo_1234567890abcdef",
+                [
+                    detector("session_cookie", "block", "[SESSION_COOKIE_REDACTED]"),
+                    detector("api_key", "block", "[API_KEY_REDACTED]"),
+                ],
+            ),
+            (
+                "database_url",
+                "postgres://demo_user:password123456@db.local/app",
+                [
+                    detector("database_url", "block", "[DATABASE_URL_REDACTED]"),
+                    detector("password_assignment", "block", "[PASSWORD_REDACTED]"),
+                ],
+            ),
+            (
+                "authorization_header",
+                f"Authorization: Bearer {jwt_token}",
+                [
+                    detector("authorization_header", "block", "[AUTHORIZATION_HEADER_REDACTED]"),
+                    detector("jwt", "block", "[JWT_REDACTED]"),
+                ],
+            ),
+        ]
+
+        evaluator = HeuristicSafetyEvaluator()
+        for expected_type, prompt, detectors in cases:
+            with self.subTest(expected_type=expected_type):
+                decision = evaluator.evaluate(remote_context(), remote_input(prompt, detectors))
+
+                self.assertEqual(decision.action, "blocked")
+                self.assertEqual(decision.detected_types, (expected_type,))
+                self.assertEqual(decision.detected_count, 1)
 
     def test_disabled_detector_is_ignored(self) -> None:
         evaluator = HeuristicSafetyEvaluator()
@@ -107,6 +512,63 @@ def remote_input(prompt_text: str, detectors: list[SafetyDetector]) -> RemoteSaf
         requestedModel="auto",
         detectors=detectors,
     )
+
+
+def assert_blocked_detector(
+    test_case: unittest.TestCase,
+    prompt: str,
+    detector_type: str,
+    placeholder: str,
+    raw_value: str,
+) -> None:
+    evaluator = HeuristicSafetyEvaluator()
+    decision = evaluator.evaluate(
+        remote_context(),
+        remote_input(prompt, [detector(detector_type, "block", placeholder)]),
+    )
+
+    test_case.assertEqual(decision.action, "blocked")
+    test_case.assertEqual(decision.detected_types, (detector_type,))
+    test_case.assertEqual(decision.detected_count, 1)
+    test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")
+    test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
+
+
+def assert_redacted_detector(
+    test_case: unittest.TestCase,
+    prompt: str,
+    detector_type: str,
+    placeholder: str,
+    raw_value: str,
+) -> None:
+    evaluator = HeuristicSafetyEvaluator()
+    decision = evaluator.evaluate(
+        remote_context(),
+        remote_input(prompt, [detector(detector_type, "redact", placeholder)]),
+    )
+
+    test_case.assertEqual(decision.action, "redacted")
+    test_case.assertEqual(decision.detected_types, (detector_type,))
+    test_case.assertEqual(decision.detected_count, 1)
+    test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")
+    test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
+
+
+def assert_ignored_prompts(
+    test_case: unittest.TestCase,
+    detector_type: str,
+    prompts: list[str],
+) -> None:
+    evaluator = HeuristicSafetyEvaluator()
+    for prompt in prompts:
+        decision = evaluator.evaluate(
+            remote_context(),
+            remote_input(prompt, [detector(detector_type, "block", f"[{detector_type.upper()}_REDACTED]")]),
+        )
+
+        test_case.assertEqual(decision.action, "none", prompt)
+        test_case.assertEqual(decision.detected_count, 0, prompt)
+        test_case.assertIsNone(decision.redacted_prompt_preview, prompt)
 
 
 def detector(
