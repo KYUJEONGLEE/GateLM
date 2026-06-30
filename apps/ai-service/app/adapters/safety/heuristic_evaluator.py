@@ -19,9 +19,10 @@ IP_ADDRESS_CANDIDATE_PATTERN = re.compile(
     r"|"
     r"(?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9]{0,4}"
     r")"
-    r"(?![A-Za-z0-9_.:-])"
+    r"(?![A-Za-z0-9_.:-])",
+    re.ASCII,
 )
-CREDIT_CARD_CANDIDATE_PATTERN = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")
+CREDIT_CARD_CANDIDATE_PATTERN = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)", re.ASCII)
 
 
 class PromptDetector(Protocol):

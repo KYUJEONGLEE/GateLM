@@ -4,7 +4,12 @@ import re
 import unittest
 
 from app.adapters.safety.noop_evaluator import NoopSafetyEvaluator
-from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator, RegexDetector
+from app.adapters.safety.heuristic_evaluator import (
+    CREDIT_CARD_CANDIDATE_PATTERN,
+    IP_ADDRESS_CANDIDATE_PATTERN,
+    HeuristicSafetyEvaluator,
+    RegexDetector,
+)
 from app.domain.safety.policy import PREVIEW_MAX_CHARS
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
@@ -361,6 +366,13 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         for detector_type, prompts in cases.items():
             with self.subTest(detector_type=detector_type):
                 assert_ignored_prompts(self, detector_type, prompts)
+
+    def test_candidate_patterns_restrict_digit_matching_to_ascii(self) -> None:
+        unicode_ipv4_digits = "\u0668.\u0668.\u0668.\u0668"
+        unicode_card_digits = "\u0664\u0661\u0661\u0661 \u0661\u0661\u0661\u0661 \u0661\u0661\u0661\u0661 \u0661\u0661\u0661\u0661"
+
+        self.assertIsNone(IP_ADDRESS_CANDIDATE_PATTERN.search(unicode_ipv4_digits))
+        self.assertIsNone(CREDIT_CARD_CANDIDATE_PATTERN.search(unicode_card_digits))
 
     def test_person_name_detector_is_label_based_only(self) -> None:
         assert_redacted_detector(
