@@ -1147,6 +1147,11 @@ func TestChatCompletionsHandlerBlocksSensitiveDataBeforeProviderCall(t *testing.
 			rawValue: "test_secret_token_redacted_for_demo_only_1234567890",
 		},
 		{
+			name:     "provider api key",
+			prompt:   "Summarize this synthetic provider key: sk-redactedDemoProviderKey1234567890",
+			rawValue: "sk-redactedDemoProviderKey1234567890",
+		},
+		{
 			name:     "jwt",
 			prompt:   "Summarize this synthetic token: eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.signature_for_test_only",
 			rawValue: "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.signature_for_test_only",
