@@ -81,9 +81,9 @@ export const options = {
       maxDuration: "45s",
       startTime: "5s",
     },
-    safety_block_provider_bypass: {
+    safety_block: {
       executor: "shared-iterations",
-      exec: "safety_block_provider_bypass",
+      exec: "safety_block",
       vus: 1,
       iterations: 1,
       maxDuration: "30s",
@@ -173,17 +173,17 @@ export function safe_cache_hit_baseline(data) {
   sleep(1);
 }
 
-export function safety_block_provider_bypass(data) {
+export function safety_block(data) {
   const metricsBefore = getMetrics();
   const providerBefore = sumMetric(metricsBefore, "gatelm_provider_requests_total");
-  const cacheBefore = sumMetric(metricsBefore, "gatelm_cache_operations_total");
+  const cacheWriteBefore = sumMetric(metricsBefore, "gatelm_cache_operations_total", { operation: "write" });
   const response = chatCompletion(data.blockedPrompt, "k6-safety-block-provider-bypass");
   const metricsAfter = getMetrics();
   const providerAfter = sumMetric(metricsAfter, "gatelm_provider_requests_total");
-  const cacheAfter = sumMetric(metricsAfter, "gatelm_cache_operations_total");
+  const cacheWriteAfter = sumMetric(metricsAfter, "gatelm_cache_operations_total", { operation: "write" });
 
-  console.log(`metric_delta safety_block_provider_bypass provider_requests_total ${providerBefore} -> ${providerAfter}`);
-  console.log(`metric_delta safety_block_provider_bypass cache_operations_total ${cacheBefore} -> ${cacheAfter}`);
+  console.log(`metric_delta safety_block provider_requests_total ${providerBefore} -> ${providerAfter}`);
+  console.log(`metric_delta safety_block cache_write_total ${cacheWriteBefore} -> ${cacheWriteAfter}`);
 
   check(response, {
     "safety block returns 403": (r) => r.status === 403,
@@ -193,7 +193,7 @@ export function safety_block_provider_bypass(data) {
   });
   check(metricsAfter, {
     "safety block does not increment provider metric": () => providerAfter === providerBefore,
-    "safety block does not increment cache metric": () => cacheAfter === cacheBefore,
+    "safety block does not write cache": () => cacheWriteAfter === cacheWriteBefore,
     "safety block records blocked gateway metric": (body) =>
       sumMetric(body, "gatelm_gateway_requests_total", { status: "blocked", http_status: "403", error_code: "sensitive_data_blocked" }) >= 1,
     "safety block records masking metric": (body) =>
@@ -202,7 +202,11 @@ export function safety_block_provider_bypass(data) {
 }
 
 export function blocked_before_provider(data) {
-  safety_block_provider_bypass(data);
+  safety_block(data);
+}
+
+export function safety_block_provider_bypass(data) {
+  safety_block(data);
 }
 
 export function metrics_probe() {

@@ -1,4 +1,3 @@
-import credentialLifecycleFixture from "../../../../../docs/v1.0.0/fixtures/credential-lifecycle.fixture.json";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import type {
   CustomerDemoExchange,
@@ -17,25 +16,6 @@ type RuntimeConfigFixture = {
     tenantId: string;
     projectId: string;
     applicationId: string;
-  };
-};
-
-type CredentialListItem = {
-  credentialId: string;
-  prefix: string;
-  last4: string;
-  scopes?: string[] | null;
-  status: string;
-};
-
-type CredentialLifecycleFixture = {
-  credentialLifecycle: {
-    apiKey: {
-      listItemExample: CredentialListItem;
-    };
-    appToken: {
-      listItemExample: CredentialListItem;
-    };
   };
 };
 
@@ -68,7 +48,7 @@ const scenarioConfigs: ScenarioConfig[] = [
       requestPath: "redaction"
     },
     recordId: "request_v1_demo_redacted_003",
-    scenarioId: "redacted",
+    scenarioId: "redaction",
     title: "Redaction"
   },
   {
@@ -76,11 +56,11 @@ const scenarioConfigs: ScenarioConfig[] = [
     description: "Credential-like content is blocked before routing, cache, and provider.",
     metadata: {
       customerTicketId: "ticket-blocked-004",
-      requestPath: "blocked"
+      requestPath: "safety_block"
     },
     recordId: "request_v1_demo_blocked_004",
-    scenarioId: "blocked",
-    title: "Blocked"
+    scenarioId: "safety_block",
+    title: "Safety block"
   },
   {
     assistantMessage: "Cached answer returned.",
@@ -107,32 +87,12 @@ const scenarioConfigs: ScenarioConfig[] = [
   }
 ];
 
-function displaySecret(prefix: string, last4: string) {
-  return `${prefix}<redacted>${last4}`;
-}
-
 function formatEstimatedCost(costMicroUsd: number) {
   return (costMicroUsd / 1_000_000).toFixed(6);
 }
 
-function buildRequestHeaders({
-  apiKey,
-  appToken,
-  record
-}: {
-  apiKey: CredentialListItem;
-  appToken: CredentialListItem;
-  record: InvocationLogRecord;
-}): CustomerDemoHeader[] {
+function buildRequestHeaders(record: InvocationLogRecord): CustomerDemoHeader[] {
   return [
-    {
-      name: "Authorization",
-      value: `Bearer ${displaySecret(apiKey.prefix, apiKey.last4)}`
-    },
-    {
-      name: "X-GateLM-App-Token",
-      value: displaySecret(appToken.prefix, appToken.last4)
-    },
     {
       name: "X-GateLM-End-User-Id",
       value: record.endUserId ?? "not-set"
@@ -264,31 +224,38 @@ function buildResponseBody(config: ScenarioConfig, record: InvocationLogRecord) 
 }
 
 function buildExchange({
-  apiKey,
-  appToken,
   config,
   record
 }: {
-  apiKey: CredentialListItem;
-  appToken: CredentialListItem;
   config: ScenarioConfig;
   record: InvocationLogRecord;
 }): CustomerDemoExchange {
   const request: CustomerDemoRequest = {
     endpoint: "/v1/chat/completions",
     method: "POST",
-    headers: buildRequestHeaders({ apiKey, appToken, record }),
+    headers: buildRequestHeaders(record),
     body: buildRequestBody(config, record)
   };
 
   return {
     assistantMessage: config.assistantMessage,
     cacheStatus: record.cacheStatus,
+    dashboardHref: `/tenants/${record.tenantId}/dashboard`,
     description: config.description,
-    detectedTypes: record.maskingDetectedTypes ?? [],
+    detectorSummary: {
+      detectedCount: record.maskingDetectedCount ?? 0,
+      detectorCategories: record.maskingDetectedTypes ?? []
+    },
     httpStatus: record.httpStatus,
     latencyMs: record.latencyMs,
     maskingAction: record.maskingAction,
+    outcomeSummary: {
+      cacheOutcome: record.domainOutcomes.cache.outcome,
+      providerOutcome: record.domainOutcomes.provider.outcome,
+      safetyOutcome: record.domainOutcomes.safety.outcome,
+      streamingOutcome: record.domainOutcomes.streaming.outcome,
+      terminalStatus: record.terminalStatus
+    },
     providerCall: record.providerLatencyMs == null ? "skipped" : "called",
     request,
     requestId: record.requestId,
@@ -306,7 +273,6 @@ function buildExchange({
 
 export function getCustomerDemoModel(): CustomerDemoModel {
   const runtime = runtimeConfigFixture as RuntimeConfigFixture;
-  const credentials = credentialLifecycleFixture as CredentialLifecycleFixture;
   const records = getInvocationLogFixture().records;
 
   return {
@@ -321,8 +287,6 @@ export function getCustomerDemoModel(): CustomerDemoModel {
       }
 
       return buildExchange({
-        apiKey: credentials.credentialLifecycle.apiKey.listItemExample,
-        appToken: credentials.credentialLifecycle.appToken.listItemExample,
         config,
         record
       });

@@ -34,6 +34,8 @@ const customerDemoText: Record<
   Locale,
   {
     actions: {
+      copy: string;
+      dashboard: string;
       detail: string;
       loading: string;
       replay: string;
@@ -83,6 +85,8 @@ const customerDemoText: Record<
 > = {
   en: {
     actions: {
+      copy: "Copy request ID",
+      dashboard: "Open dashboard",
       detail: "Open request detail",
       loading: "Processing...",
       replay: "Replay fixture request",
@@ -103,17 +107,17 @@ const customerDemoText: Record<
     requestMetadata: "Request metadata",
     responseMetadata: "Response metadata",
     scenarios: {
-      blocked: {
-        title: "Blocked"
-      },
       "cache-hit": {
         title: "Cache hit"
       },
       "rate-limited": {
         title: "Rate limit"
       },
-      redacted: {
+      redaction: {
         title: "Redaction"
+      },
+      safety_block: {
+        title: "Safety block"
       },
       safe: {
         title: "Safe request"
@@ -142,6 +146,8 @@ const customerDemoText: Record<
   },
   ko: {
     actions: {
+      copy: "Copy request ID",
+      dashboard: "Dashboard",
       detail: "요청 상세 열기",
       loading: "처리 중...",
       replay: "Fixture 요청 재실행",
@@ -162,7 +168,7 @@ const customerDemoText: Record<
     requestMetadata: "요청 메타데이터",
     responseMetadata: "응답 메타데이터",
     scenarios: {
-      blocked: {
+      safety_block: {
         title: "차단"
       },
       "cache-hit": {
@@ -171,7 +177,7 @@ const customerDemoText: Record<
       "rate-limited": {
         title: "Rate limit"
       },
-      redacted: {
+      redaction: {
         title: "Redaction"
       },
       safe: {
@@ -252,6 +258,14 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
       setIsLoading(false);
     }
   }, [client, text.error]);
+
+  const copyRequestId = useCallback(() => {
+    if (!hasRequestDetail) {
+      return;
+    }
+
+    void navigator.clipboard.writeText(exchange.requestId);
+  }, [exchange.requestId, hasRequestDetail]);
 
   return (
     <main className="customer-demo-shell">
@@ -390,6 +404,18 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                   {text.actions.detail}
                 </Button>
               )}
+              <Button
+                className="secondary-button"
+                disabled={!hasRequestDetail}
+                onClick={copyRequestId}
+                type="button"
+                variant="outline"
+              >
+                {text.actions.copy}
+              </Button>
+              <Link className="secondary-button" href={exchange.dashboardHref}>
+                {text.actions.dashboard}
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -433,7 +459,20 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
               <dl className="customer-demo-metrics">
                 <Metric label="HTTP" value={String(exchange.httpStatus)} />
                 <Metric label="Request ID" value={formatDisplayIdentifier(exchange.requestId)} />
-                <Metric label="Status" value={exchange.status} />
+                <Metric label="Terminal status" value={exchange.outcomeSummary.terminalStatus} />
+                <Metric label="Safety outcome" value={exchange.outcomeSummary.safetyOutcome} />
+                <Metric label="Provider outcome" value={exchange.outcomeSummary.providerOutcome} />
+                <Metric label="Cache outcome" value={exchange.outcomeSummary.cacheOutcome} />
+                <Metric label="Streaming outcome" value={exchange.outcomeSummary.streamingOutcome} />
+                <Metric label="Detector count" value={String(exchange.detectorSummary.detectedCount)} />
+                <Metric
+                  label="Detector categories"
+                  value={
+                    exchange.detectorSummary.detectorCategories.length > 0
+                      ? exchange.detectorSummary.detectorCategories.join(", ")
+                      : text.detectedNone
+                  }
+                />
                 <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
                 <Metric label="Error code" value={getErrorCode(exchange.response.body)} />
               </dl>
@@ -463,8 +502,14 @@ function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoEx
     ...scenario,
     assistantMessage: "Ready to send this scenario through the live Gateway.",
     cacheStatus: "pending",
+    dashboardHref: `/tenants/${model.tenantId}/dashboard`,
     httpStatus: 0,
     latencyMs: 0,
+    outcomeSummary: {
+      ...scenario.outcomeSummary,
+      providerOutcome: "not_called",
+      terminalStatus: "pending"
+    },
     providerCall: "skipped",
     requestId: "pending-live-request",
     requestLogHref: `/tenants/${model.tenantId}/request-logs`,
@@ -492,24 +537,27 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
   return {
     assistantMessage: "No customer demo scenario is configured.",
     cacheStatus: "not-configured",
+    dashboardHref: `/tenants/${model.tenantId}/dashboard`,
     description: "Customer demo scenarios are not available for this tenant application.",
-    detectedTypes: [],
+    detectorSummary: {
+      detectedCount: 0,
+      detectorCategories: []
+    },
     httpStatus: 0,
     latencyMs: 0,
     maskingAction: "none",
+    outcomeSummary: {
+      cacheOutcome: "not_used",
+      providerOutcome: "not_called",
+      safetyOutcome: "not_checked",
+      streamingOutcome: "not_streaming",
+      terminalStatus: "not-configured"
+    },
     providerCall: "skipped",
     request: {
       endpoint: "/v1/chat/completions",
       method: "POST",
       headers: [
-        {
-          name: "Authorization",
-          value: "Bearer <redacted>"
-        },
-        {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
-        },
         {
           name: "Content-Type",
           value: "application/json"

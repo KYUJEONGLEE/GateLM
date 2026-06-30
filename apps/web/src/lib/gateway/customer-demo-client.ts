@@ -1,9 +1,11 @@
 export type CustomerDemoScenarioId =
   | "safe"
-  | "redacted"
-  | "blocked"
+  | "redaction"
+  | "safety_block"
   | "cache-hit"
   | "rate-limited";
+
+export type CustomerDemoScenarioAlias = CustomerDemoScenarioId | "redacted" | "blocked";
 
 export type CustomerDemoIntegrationMode = "fixture" | "gateway";
 
@@ -47,11 +49,22 @@ export type CustomerDemoResponse = {
 export type CustomerDemoExchange = {
   assistantMessage: string;
   cacheStatus: string;
+  dashboardHref: string;
   description: string;
-  detectedTypes: string[];
+  detectorSummary: {
+    detectedCount: number;
+    detectorCategories: string[];
+  };
   httpStatus: number;
   latencyMs: number;
   maskingAction: "none" | "redacted" | "blocked";
+  outcomeSummary: {
+    cacheOutcome: string;
+    providerOutcome: string;
+    safetyOutcome: string;
+    streamingOutcome: string;
+    terminalStatus: string;
+  };
   providerCall: "called" | "skipped";
   request: CustomerDemoRequest;
   requestId: string;
@@ -71,7 +84,7 @@ export type CustomerDemoModel = {
 };
 
 export interface GatewayChatClient {
-  sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange>;
+  sendChatCompletion(scenarioId: CustomerDemoScenarioAlias): Promise<CustomerDemoExchange>;
 }
 
 export class FixtureGatewayChatClient implements GatewayChatClient {
@@ -81,8 +94,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
   }
 
-  async sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange> {
-    const scenario = this.scenarioMap.get(scenarioId);
+  async sendChatCompletion(scenarioId: CustomerDemoScenarioAlias): Promise<CustomerDemoExchange> {
+    const scenario = this.scenarioMap.get(normalizeCustomerDemoScenarioId(scenarioId));
 
     if (!scenario) {
       throw new Error(`Unknown customer demo scenario: ${scenarioId}`);
@@ -95,7 +108,7 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
 export class RouteGatewayChatClient implements GatewayChatClient {
   constructor(private readonly tenantId: string) {}
 
-  async sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange> {
+  async sendChatCompletion(scenarioId: CustomerDemoScenarioAlias): Promise<CustomerDemoExchange> {
     const response = await fetch("/api/customer-demo/chat", {
       method: "POST",
       headers: {
@@ -117,4 +130,18 @@ export class RouteGatewayChatClient implements GatewayChatClient {
 
     return payload.exchange;
   }
+}
+
+export function normalizeCustomerDemoScenarioId(
+  scenarioId: CustomerDemoScenarioAlias
+): CustomerDemoScenarioId {
+  if (scenarioId === "redacted") {
+    return "redaction";
+  }
+
+  if (scenarioId === "blocked") {
+    return "safety_block";
+  }
+
+  return scenarioId;
 }

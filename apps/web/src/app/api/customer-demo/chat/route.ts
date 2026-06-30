@@ -5,8 +5,10 @@ import type {
   CustomerDemoExchange,
   CustomerDemoHeader,
   CustomerDemoRequest,
+  CustomerDemoScenarioAlias,
   CustomerDemoScenarioId
 } from "@/lib/gateway/customer-demo-client";
+import { normalizeCustomerDemoScenarioId } from "@/lib/gateway/customer-demo-client";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -21,7 +23,8 @@ type GatewayCallResult = {
 };
 
 type LiveScenarioDefinition = {
-  detectedTypes: string[];
+  detectedCount: number;
+  detectorCategories: string[];
   gatewayPrompt: string;
 };
 
@@ -41,25 +44,30 @@ const SAFE_PROMPT =
 
 const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
   safe: {
-    detectedTypes: [],
+    detectedCount: 0,
+    detectorCategories: [],
     gatewayPrompt: SAFE_PROMPT
   },
   "cache-hit": {
-    detectedTypes: [],
+    detectedCount: 0,
+    detectorCategories: [],
     gatewayPrompt: SAFE_PROMPT
   },
-  redacted: {
-    detectedTypes: ["email", "phone_number"],
+  redaction: {
+    detectedCount: 2,
+    detectorCategories: ["email", "phone_number"],
     gatewayPrompt:
       "Write a support note to minji.kim@example.test and ask them to call 010-0000-1234."
   },
-  blocked: {
-    detectedTypes: ["credential"],
+  safety_block: {
+    detectedCount: 1,
+    detectorCategories: ["credential"],
     gatewayPrompt:
       "Summarize this synthetic config: api_key=test_secret_token_redacted_for_demo_only_abcdef1234567890"
   },
   "rate-limited": {
-    detectedTypes: [],
+    detectedCount: 0,
+    detectorCategories: [],
     gatewayPrompt: "Write one more local stack response after quota is exhausted."
   }
 };
@@ -72,25 +80,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
   }
 
-  if (!isCustomerDemoScenarioId(payload.scenarioId)) {
+  if (!isCustomerDemoScenarioAlias(payload.scenarioId)) {
     return NextResponse.json({ error: "Unknown customer demo scenario." }, { status: 400 });
   }
 
-  const scenario = model.scenarios.find((item) => item.scenarioId === payload.scenarioId);
+  const scenarioId = normalizeCustomerDemoScenarioId(payload.scenarioId);
+  const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
 
   if (!scenario) {
     return NextResponse.json({ error: "Customer demo scenario is not configured." }, { status: 404 });
   }
 
   try {
-    const gatewayResult = await executeLiveScenario(payload.scenarioId);
+    const gatewayResult = await executeLiveScenario(scenarioId);
 
     return NextResponse.json({
       exchange: buildLiveExchange({
         allScenarios: model.scenarios,
         gatewayResult,
         scenario,
-        scenarioId: payload.scenarioId,
+        scenarioId,
         tenantId: model.tenantId
       })
     });
@@ -112,8 +121,8 @@ async function readRequestPayload(request: Request) {
   };
 }
 
-function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioId {
-  return Object.hasOwn(LIVE_SCENARIOS, value);
+function isCustomerDemoScenarioAlias(value: string): value is CustomerDemoScenarioAlias {
+  return value === "redacted" || value === "blocked" || Object.hasOwn(LIVE_SCENARIOS, value);
 }
 
 async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
@@ -288,16 +297,25 @@ function buildLiveExchange({
   const displayScenario =
     allScenarios.find((item) => item.scenarioId === actualScenarioId) ?? scenario;
   const assistantMessage = getDisplayAssistantMessage(status, scenario.assistantMessage);
+  const detectorSummary = getDetectorSummary(gatewayResult, actualScenarioId);
+  const outcomeSummary = getOutcomeSummary({
+    cacheStatus,
+    gatewayResult,
+    maskingAction,
+    status
+  });
 
   return {
     assistantMessage,
     cacheStatus,
+    dashboardHref: `/tenants/${tenantId}/dashboard`,
     description: displayScenario.description,
-    detectedTypes: LIVE_SCENARIOS[actualScenarioId].detectedTypes,
+    detectorSummary,
     httpStatus: gatewayResult.httpStatus,
     latencyMs: getGatewayLatencyMs(gatewayResult),
     maskingAction,
-    providerCall: status === "success" && cacheStatus !== "hit" ? "called" : "skipped",
+    outcomeSummary,
+    providerCall: outcomeSummary.providerOutcome === "not_called" ? "skipped" : "called",
     request: {
       endpoint: "/v1/chat/completions",
       method: "POST",
@@ -319,14 +337,6 @@ function buildLiveExchange({
 
 function buildDisplayRequestHeaders(requestId: string): CustomerDemoHeader[] {
   return [
-    {
-      name: "Authorization",
-      value: "Bearer <redacted>"
-    },
-    {
-      name: "X-GateLM-App-Token",
-      value: "<redacted>"
-    },
     {
       name: "X-GateLM-End-User-Id",
       value: "customer_user_demo_live"
@@ -391,6 +401,21 @@ function getGatewayLatencyMs(result: GatewayCallResult) {
 }
 
 function getGatewayStatus(result: GatewayCallResult): CustomerDemoExchange["status"] {
+  const terminalStatus = getFirstNestedString(result.body, [
+    ["gate_lm", "terminalStatus"],
+    ["terminalStatus"]
+  ]);
+
+  if (
+    terminalStatus === "success" ||
+    terminalStatus === "blocked" ||
+    terminalStatus === "rate_limited" ||
+    terminalStatus === "failed" ||
+    terminalStatus === "cancelled"
+  ) {
+    return terminalStatus;
+  }
+
   const errorCode = getNestedString(result.body, ["error", "code"]);
 
   if (result.httpStatus === 429 || errorCode === "rate_limited") {
@@ -440,6 +465,95 @@ function getDisplayAssistantMessage(status: CustomerDemoExchange["status"], fall
   return fallback;
 }
 
+function getDetectorSummary(
+  result: GatewayCallResult,
+  scenarioId: CustomerDemoScenarioId
+): CustomerDemoExchange["detectorSummary"] {
+  const fallback = LIVE_SCENARIOS[scenarioId];
+  const detectorCategories =
+    getFirstNestedStringArray(result.body, [
+      ["gate_lm", "safetySummary", "detectorCategories"],
+      ["safetySummary", "detectorCategories"],
+      ["gate_lm", "domainOutcomes", "safety", "detectedTypes"],
+      ["domainOutcomes", "safety", "detectedTypes"]
+    ]) ?? fallback.detectorCategories;
+  const detectedCount =
+    getFirstNestedNumber(result.body, [
+      ["gate_lm", "safetySummary", "detectedCount"],
+      ["safetySummary", "detectedCount"],
+      ["gate_lm", "domainOutcomes", "safety", "detectedCount"],
+      ["domainOutcomes", "safety", "detectedCount"]
+    ]) ?? fallback.detectedCount;
+
+  return {
+    detectedCount,
+    detectorCategories
+  };
+}
+
+function getOutcomeSummary({
+  cacheStatus,
+  gatewayResult,
+  maskingAction,
+  status
+}: {
+  cacheStatus: string;
+  gatewayResult: GatewayCallResult;
+  maskingAction: CustomerDemoExchange["maskingAction"];
+  status: string;
+}): CustomerDemoExchange["outcomeSummary"] {
+  const safetyOutcome = getFirstNestedString(gatewayResult.body, [
+    ["gate_lm", "safetySummary", "outcome"],
+    ["safetySummary", "outcome"],
+    ["gate_lm", "domainOutcomes", "safety", "outcome"],
+    ["domainOutcomes", "safety", "outcome"]
+  ]) ?? maskingActionFromSafety(maskingAction);
+  const cacheOutcome = getFirstNestedString(gatewayResult.body, [
+    ["gate_lm", "domainOutcomes", "cache", "outcome"],
+    ["domainOutcomes", "cache", "outcome"]
+  ]) ?? cacheOutcomeFromStatus(cacheStatus);
+  const providerOutcome = getFirstNestedString(gatewayResult.body, [
+    ["gate_lm", "domainOutcomes", "provider", "outcome"],
+    ["domainOutcomes", "provider", "outcome"]
+  ]) ?? providerOutcomeFromStatus(status, cacheOutcome);
+  const streamingOutcome = getFirstNestedString(gatewayResult.body, [
+    ["gate_lm", "domainOutcomes", "streaming", "outcome"],
+    ["domainOutcomes", "streaming", "outcome"]
+  ]) ?? "not_streaming";
+
+  return {
+    cacheOutcome,
+    providerOutcome,
+    safetyOutcome,
+    streamingOutcome,
+    terminalStatus: status
+  };
+}
+
+function maskingActionFromSafety(maskingAction: CustomerDemoExchange["maskingAction"]) {
+  if (maskingAction === "blocked" || maskingAction === "redacted") {
+    return maskingAction;
+  }
+
+  return "passed";
+}
+
+function cacheOutcomeFromStatus(cacheStatus: string) {
+  if (cacheStatus === "hit" || cacheStatus === "miss" || cacheStatus === "error") {
+    return cacheStatus;
+  }
+
+  return "bypassed";
+}
+
+function providerOutcomeFromStatus(status: string, cacheOutcome: string) {
+  if (cacheOutcome === "hit" || status === "blocked" || status === "rate_limited") {
+    return "not_called";
+  }
+
+  return status === "success" ? "success" : "error";
+}
+
 function getNestedString(record: JsonRecord, path: string[]) {
   const value = getNestedValue(record, path);
   return typeof value === "string" && value.trim() ? value : undefined;
@@ -448,6 +562,39 @@ function getNestedString(record: JsonRecord, path: string[]) {
 function getNestedNumber(record: JsonRecord, path: string[]) {
   const value = getNestedValue(record, path);
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getFirstNestedString(record: JsonRecord, paths: string[][]) {
+  for (const path of paths) {
+    const value = getNestedString(record, path);
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function getFirstNestedNumber(record: JsonRecord, paths: string[][]) {
+  for (const path of paths) {
+    const value = getNestedNumber(record, path);
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function getFirstNestedStringArray(record: JsonRecord, paths: string[][]) {
+  for (const path of paths) {
+    const value = getNestedValue(record, path);
+    if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function getNestedValue(record: JsonRecord, path: string[]): unknown {

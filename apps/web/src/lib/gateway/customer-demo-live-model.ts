@@ -17,7 +17,8 @@ type RuntimeConfigFixture = {
 type LiveScenarioTemplate = {
   cacheStatus: string;
   description: string;
-  detectedTypes: string[];
+  detectorCategories: string[];
+  detectedCount: number;
   httpStatus: number;
   maskingAction: CustomerDemoExchange["maskingAction"];
   promptPreview: string;
@@ -31,7 +32,8 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
   {
     cacheStatus: "miss",
     description: "Allowed request through Gateway governance with exact cache miss.",
-    detectedTypes: [],
+    detectedCount: 0,
+    detectorCategories: [],
     httpStatus: 200,
     maskingAction: "none",
     promptPreview:
@@ -44,31 +46,34 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
   {
     cacheStatus: "miss",
     description: "Rule-based safety redacts contact data before provider call.",
-    detectedTypes: ["email", "phone_number"],
+    detectedCount: 2,
+    detectorCategories: ["email", "phone_number"],
     httpStatus: 200,
     maskingAction: "redacted",
     promptPreview: "Write a support note to <email> and ask them to call <phone_number>.",
     providerCall: "called",
-    scenarioId: "redacted",
+    scenarioId: "redaction",
     status: "success",
     title: "Redaction"
   },
   {
     cacheStatus: "bypass",
     description: "Credential-like content is blocked before routing, cache, and provider.",
-    detectedTypes: ["credential"],
+    detectedCount: 1,
+    detectorCategories: ["credential"],
     httpStatus: 403,
     maskingAction: "blocked",
     promptPreview: "Summarize this synthetic config: api_key=<credential_like_secret>",
     providerCall: "skipped",
-    scenarioId: "blocked",
+    scenarioId: "safety_block",
     status: "blocked",
     title: "Blocked"
   },
 	{
-		cacheStatus: "hit",
-		description: "Same safe request resolves to exact cache hit and provider bypass.",
-    detectedTypes: [],
+    cacheStatus: "hit",
+    description: "Same safe request resolves to exact cache hit and provider bypass.",
+    detectedCount: 0,
+    detectorCategories: [],
     httpStatus: 200,
     maskingAction: "none",
     promptPreview:
@@ -81,7 +86,8 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
   {
     cacheStatus: "bypass",
     description: "Application-scoped rate limit stops the request before provider cost.",
-    detectedTypes: [],
+    detectedCount: 0,
+    detectorCategories: [],
     httpStatus: 429,
     maskingAction: "none",
     promptPreview: "Write one more local stack response after quota is exhausted.",
@@ -113,24 +119,21 @@ function buildLiveScenario(
   return {
     assistantMessage: "A live Gateway response will replace this preview after the request runs.",
     cacheStatus: template.cacheStatus,
+    dashboardHref: `/tenants/${tenantId}/dashboard`,
     description: template.description,
-    detectedTypes: template.detectedTypes,
+    detectorSummary: {
+      detectedCount: template.detectedCount,
+      detectorCategories: template.detectorCategories
+    },
     httpStatus: template.httpStatus,
     latencyMs: 0,
     maskingAction: template.maskingAction,
+    outcomeSummary: buildPreviewOutcomeSummary(template),
     providerCall: template.providerCall,
     request: {
       endpoint: "/v1/chat/completions",
       method: "POST",
       headers: [
-        {
-          name: "Authorization",
-          value: "Bearer <redacted>"
-        },
-        {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
-        },
         {
           name: "X-GateLM-End-User-Id",
           value: "customer_user_demo_live"
@@ -158,6 +161,31 @@ function buildLiveScenario(
     scenarioId: template.scenarioId,
     status: template.status,
     title: template.title
+  };
+}
+
+function buildPreviewOutcomeSummary(template: LiveScenarioTemplate): CustomerDemoExchange["outcomeSummary"] {
+  const safetyOutcome =
+    template.maskingAction === "blocked"
+      ? "blocked"
+      : template.maskingAction === "redacted"
+        ? "redacted"
+        : "passed";
+  const cacheOutcome =
+    template.cacheStatus === "bypass"
+      ? "bypassed"
+      : template.cacheStatus === "hit" || template.cacheStatus === "miss"
+        ? template.cacheStatus
+        : "not_used";
+  const providerOutcome =
+    template.providerCall === "called" ? "success" : "not_called";
+
+  return {
+    cacheOutcome,
+    providerOutcome,
+    safetyOutcome,
+    streamingOutcome: "not_streaming",
+    terminalStatus: template.status
   };
 }
 
