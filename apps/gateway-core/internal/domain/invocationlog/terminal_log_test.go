@@ -156,6 +156,46 @@ func TestBuildTerminalLogDefaultsMissingBudgetDecisionToNotChecked(t *testing.T)
 	}
 }
 
+func TestBuildTerminalLogMapsStreamingFinalOutcomes(t *testing.T) {
+	startedAt := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
+	providerLatencyMs := int64(12)
+
+	success := BuildTerminalLog(TerminalLogInput{
+		RequestID:         "request_stream_success",
+		ApplicationID:     "app_demo",
+		Stream:            true,
+		RequestedModel:    "auto",
+		SelectedProvider:  "mock",
+		SelectedModel:     "mock-fast",
+		Status:            StatusSuccess,
+		HTTPStatus:        200,
+		CacheStatus:       CacheStatusMiss,
+		CacheType:         CacheTypeExact,
+		ProviderLatencyMs: &providerLatencyMs,
+		StartedAt:         startedAt,
+		CompletedAt:       startedAt.Add(20 * time.Millisecond),
+	})
+	if success.DomainOutcomes.Streaming.Outcome != "completed" || !success.DomainOutcomes.Streaming.StreamingRequested {
+		t.Fatalf("streaming success must record completed outcome, got %+v", success.DomainOutcomes.Streaming)
+	}
+
+	blocked := BuildTerminalLog(TerminalLogInput{
+		RequestID:   "request_stream_blocked",
+		Stream:      true,
+		Status:      StatusBlocked,
+		HTTPStatus:  403,
+		ErrorCode:   "sensitive_data_blocked",
+		ErrorStage:  "mask_or_block",
+		CacheStatus: CacheStatusBypass,
+		CacheType:   CacheTypeNone,
+		StartedAt:   startedAt,
+		CompletedAt: startedAt.Add(2 * time.Millisecond),
+	})
+	if blocked.DomainOutcomes.Streaming.Outcome != "not_streaming" {
+		t.Fatalf("blocked stream request must not record streaming start, got %+v", blocked.DomainOutcomes.Streaming)
+	}
+}
+
 func TestBuildTerminalLogUsesLatencyFallback(t *testing.T) {
 	startedAt := time.Date(2026, 6, 26, 1, 2, 3, 0, time.UTC)
 	log := BuildTerminalLog(TerminalLogInput{

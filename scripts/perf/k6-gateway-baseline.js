@@ -159,6 +159,7 @@ export function setup() {
     metricsBefore,
     safePrompt: `Write a short safe refund response for GateLM k6 baseline ${runId}.`,
     missPrompt: `Write a short safe refund response for GateLM provider-call evidence ${runId}.`,
+    streamingPrompt: `Write a short safe streaming response for GateLM thin slice ${runId}.`,
     redactionPrompt: `Write a support reply to synthetic.user.${runId}@example.test without exposing the address.`,
     blockedPrompt: `This synthetic request contains api_key=test_secret_token_redacted_for_demo_only_${runId}_abcdef1234567890`,
   };
@@ -266,8 +267,36 @@ export function provider_error_mock_fallback() {
   guardedEvidence("provider_error_mock_fallback", "requires PR-2A fallback controls; not implemented in PR-5");
 }
 
-export function streaming_thin_slice() {
-  guardedEvidence("streaming_thin_slice", "requires PR-4 streaming thin slice; not implemented in PR-5");
+export function streaming_thin_slice(data) {
+  const requestId = buildScenarioRequestId(data, "streaming_thin_slice");
+  const response = chatCompletion(data.streamingPrompt, "streaming_thin_slice", {
+    requestId,
+    stream: true,
+  });
+  const detail = http.get(`${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(requestId)}`, {
+    tags: { name: "GET /api/llm-requests/:requestId" },
+  });
+  const detailBody = safeJson(detail.body);
+  const detailData = detailBody.data || {};
+  const domainOutcomes = detailData.domainOutcomes || {};
+  const detailText = JSON.stringify(detailBody);
+
+  check(response, {
+    "streaming thin slice returns 200": (r) => r.status === 200,
+    "streaming thin slice uses event stream": (r) => (r.headers["Content-Type"] || "").includes("text/event-stream"),
+    "streaming thin slice emits chunks": (r) => countOccurrences(r.body || "", "data:") >= 3,
+    "streaming thin slice emits done marker": (r) => (r.body || "").includes("data: [DONE]"),
+  });
+  check(detail, {
+    "streaming request detail returns 200": (r) => r.status === 200,
+    "streaming request detail terminal status is success": () => detailData.terminalStatus === "success",
+    "streaming request detail outcome is completed": () =>
+      domainOutcomes.streaming && domainOutcomes.streaming.outcome === "completed",
+    "streaming request detail does not store chunk content": () =>
+      !detailText.includes("chat.completion.chunk") &&
+      !detailText.includes("data: [DONE]") &&
+      !detailText.includes("Mock response"),
+  });
 }
 
 export function mixed_demo_traffic(data) {
@@ -319,7 +348,7 @@ export function metrics_probe() {
   });
 }
 
-function chatCompletion(prompt, featureId) {
+function chatCompletion(prompt, featureId, overrides = {}) {
   const payload = JSON.stringify({
     model: "auto",
     messages: [
@@ -330,19 +359,43 @@ function chatCompletion(prompt, featureId) {
     ],
     temperature: 0.2,
     max_tokens: 128,
-    stream: false,
+    stream: overrides.stream === true,
   });
 
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+    "X-GateLM-App-Token": appToken,
+    "X-GateLM-End-User-Id": endUserId,
+    "X-GateLM-Feature-Id": featureId,
+  };
+  if (overrides.requestId) {
+    headers["X-GateLM-Request-Id"] = overrides.requestId;
+  }
+
   return http.post(`${gatewayBaseUrl}/v1/chat/completions`, payload, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "X-GateLM-App-Token": appToken,
-      "X-GateLM-End-User-Id": endUserId,
-      "X-GateLM-Feature-Id": featureId,
-    },
+    headers,
     tags: { name: "POST /v1/chat/completions" },
   });
+}
+
+function buildScenarioRequestId(data, featureId) {
+  const runId = data && data.runId ? data.runId : "run_unknown";
+  const safeFeature = String(featureId || "scenario").replace(/[^A-Za-z0-9_]/g, "_");
+  const suffix = Math.floor(Math.random() * 1000000).toString(36);
+  return `request_k6_${runId}_${safeFeature}_${__VU}_${__ITER}_${suffix}`.slice(0, 128);
+}
+
+function safeJson(body) {
+  try {
+    return JSON.parse(body || "{}");
+  } catch (_) {
+    return {};
+  }
+}
+
+function countOccurrences(value, needle) {
+  return String(value || "").split(needle).length - 1;
 }
 
 function getMetrics() {

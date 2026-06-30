@@ -140,11 +140,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	terminalLogEnabled = true
 
-	if chatReq.Stream {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Streaming is not supported in P0.", "parse_openai_compatible_payload")
-		return
-	}
-
 	if chatReq.Model == "" {
 		chatReq.Model = h.DefaultModel
 		reqCtx.RequestedModel = h.DefaultModel
@@ -225,7 +220,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			gatewayCtx.Cache.Payload = cachePayload
 		}
 	}
-	if h.writeCachedChatCompletionIfHit(w, reqCtx, gatewayCtx, chatReq.Model, startedAt) {
+	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, chatReq.Model, startedAt) {
 		return
 	}
 
@@ -240,24 +235,26 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	chatReq.RequestID = requestID
+	providerReq := chatReq
+	providerReq.RequestID = requestID
+	providerReq.Stream = false
 	reqCtx.SelectedProvider = target.ProviderName
 	reqCtx.SelectedModel = target.ModelID
 	if reqCtx.RoutingReason == "" {
 		reqCtx.RoutingReason = "not_routed"
 	}
-	chatReq.Model = target.ModelName
+	providerReq.Model = target.ModelName
 	reqCtx.Provider = reqCtx.SelectedProvider
 	reqCtx.Model = reqCtx.SelectedModel
 	ensureCacheDefaults(reqCtx)
 
 	providerStartedAt := time.Now()
-	providerResp, err := target.Adapter.CreateChatCompletion(r.Context(), target.ExecutionConfig, chatReq)
+	providerResp, err := target.Adapter.CreateChatCompletion(r.Context(), target.ExecutionConfig, providerReq)
 	providerDuration := time.Since(providerStartedAt)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
-		h.handleProviderFailure(w, r, reqCtx, chatReq, target, err, providerDuration, startedAt)
+		h.handleProviderFailure(w, r, reqCtx, providerReq, target, err, providerDuration, startedAt)
 		return
 	}
 	if providerResp == nil {
@@ -295,10 +292,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	h.writeExactCache(r.Context(), reqCtx, providerResp)
-	attachGateLMMetadata(providerResp, reqCtx)
-
-	setGatewayHeaders(w, reqCtx)
-	writeJSON(w, http.StatusOK, providerResp)
+	h.writeChatCompletionResponse(r.Context(), w, reqCtx, providerResp)
 }
 
 func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
@@ -631,9 +625,7 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 		Reason:           stringPointerValue(code),
 	})
 
-	attachGateLMMetadata(fallbackResp, reqCtx)
-	setGatewayHeaders(w, reqCtx)
-	writeJSON(w, http.StatusOK, fallbackResp)
+	h.writeChatCompletionResponse(r.Context(), w, reqCtx, fallbackResp)
 }
 
 func (h *ChatCompletionsHandler) resolveFallbackTarget(ctx context.Context, reqCtx *pipeline.RequestContext, primary providerCallTarget) (providerCallTarget, error) {
@@ -896,7 +888,248 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 	h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeExact, "success")
 }
 
-func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, requestedModel string, startedAt time.Time) bool {
+func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
+	if reqCtx == nil || providerResp == nil {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, provider.ErrorCodeProviderError, "Provider returned an empty response.", "call_provider_with_timeout_retry_fallback")
+		return
+	}
+
+	if !reqCtx.Stream {
+		attachGateLMMetadata(providerResp, reqCtx)
+		setGatewayHeaders(w, reqCtx)
+		writeJSON(w, http.StatusOK, providerResp)
+		return
+	}
+
+	started, err := writeStreamingChatCompletion(ctx, w, reqCtx, providerResp)
+	if err == nil {
+		reqCtx.Status = invocationlog.StatusSuccess
+		reqCtx.HTTPStatus = http.StatusOK
+		reqCtx.ErrorCode = ""
+		reqCtx.ErrorMessage = ""
+		reqCtx.ErrorStage = ""
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
+		return
+	}
+
+	status := http.StatusInternalServerError
+	code := "internal_error"
+	message := "Gateway streaming response failed."
+	outcome := "interrupted"
+	terminalStatus := invocationlog.StatusFailed
+	if errors.Is(err, context.Canceled) {
+		status = gatewayerrors.StatusClientClosedRequest
+		message = "Request was cancelled."
+		outcome = "cancelled"
+		terminalStatus = invocationlog.StatusCancelled
+	}
+
+	reqCtx.Status = terminalStatus
+	reqCtx.HTTPStatus = status
+	reqCtx.ErrorCode = code
+	reqCtx.ErrorMessage = message
+	reqCtx.ErrorStage = "stream_response"
+	reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
+	if !started {
+		writeGatewayErrorWithContext(w, reqCtx, status, code, message, "stream_response")
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
+	}
+}
+
+type streamingChatCompletionChunk struct {
+	ID      string                   `json:"id"`
+	Object  string                   `json:"object"`
+	Created int64                    `json:"created"`
+	Model   string                   `json:"model"`
+	Choices []streamingChoice        `json:"choices"`
+	GateLM  *provider.GateLMMetadata `json:"gate_lm,omitempty"`
+}
+
+type streamingChoice struct {
+	Index        int            `json:"index"`
+	Delta        streamingDelta `json:"delta"`
+	FinishReason *string        `json:"finish_reason"`
+}
+
+type streamingDelta struct {
+	Role    string `json:"role,omitempty"`
+	Content string `json:"content,omitempty"`
+}
+
+func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	setGatewayHeaders(w, reqCtx)
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flushResponse(w)
+
+	for _, chunk := range streamingChunks(providerResp) {
+		if err := ctx.Err(); err != nil {
+			return true, err
+		}
+		if err := writeSSEData(w, chunk); err != nil {
+			return true, err
+		}
+		flushResponse(w)
+	}
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
+	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
+		return true, err
+	}
+	flushResponse(w)
+	return true, nil
+}
+
+func writeSSEData(w http.ResponseWriter, payload any) error {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "data: %s\n\n", encoded)
+	return err
+}
+
+func streamingChunks(resp *provider.ChatCompletionResponse) []streamingChatCompletionChunk {
+	if resp == nil {
+		return nil
+	}
+	created := resp.Created
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+	choices := resp.Choices
+	if len(choices) == 0 {
+		choices = []provider.ChatChoice{{
+			Index: 0,
+			Message: provider.ChatMessage{
+				Role: "assistant",
+			},
+			FinishReason: "stop",
+		}}
+	}
+
+	chunks := make([]streamingChatCompletionChunk, 0, len(choices)*3)
+	for _, choice := range choices {
+		index := choice.Index
+		chunks = append(chunks, streamingChatCompletionChunk{
+			ID:      resp.ID,
+			Object:  "chat.completion.chunk",
+			Created: created,
+			Model:   resp.Model,
+			Choices: []streamingChoice{{
+				Index: index,
+				Delta: streamingDelta{Role: firstNonEmpty(choice.Message.Role, "assistant")},
+			}},
+		})
+
+		for _, contentChunk := range splitStreamingContent(chatChoiceContent(choice)) {
+			chunks = append(chunks, streamingChatCompletionChunk{
+				ID:      resp.ID,
+				Object:  "chat.completion.chunk",
+				Created: created,
+				Model:   resp.Model,
+				Choices: []streamingChoice{{
+					Index: index,
+					Delta: streamingDelta{Content: contentChunk},
+				}},
+			})
+		}
+
+		finishReason := firstNonEmpty(choice.FinishReason, "stop")
+		chunks = append(chunks, streamingChatCompletionChunk{
+			ID:      resp.ID,
+			Object:  "chat.completion.chunk",
+			Created: created,
+			Model:   resp.Model,
+			Choices: []streamingChoice{{
+				Index:        index,
+				Delta:        streamingDelta{},
+				FinishReason: &finishReason,
+			}},
+		})
+	}
+	return chunks
+}
+
+func chatChoiceContent(choice provider.ChatChoice) string {
+	var content string
+	if err := json.Unmarshal(choice.Message.Content, &content); err != nil {
+		return ""
+	}
+	return content
+}
+
+func splitStreamingContent(content string) []string {
+	if content == "" {
+		return []string{""}
+	}
+
+	chunks := make([]string, 0)
+	var current strings.Builder
+	for _, r := range content {
+		current.WriteRune(r)
+		if r == ' ' || r == '\n' || r == '\t' {
+			chunks = append(chunks, current.String())
+			current.Reset()
+		}
+	}
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
+	}
+	return chunks
+}
+
+func flushResponse(w http.ResponseWriter) {
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func streamingFinalDomainOutcomes(reqCtx *pipeline.RequestContext, outcome string) invocationlog.DomainOutcomes {
+	if reqCtx == nil {
+		return invocationlog.DomainOutcomes{}
+	}
+
+	outcomes := reqCtx.DomainOutcomes
+	if outcomes.IsZero() {
+		originalStatus := reqCtx.Status
+		originalHTTPStatus := reqCtx.HTTPStatus
+		originalErrorCode := reqCtx.ErrorCode
+		originalErrorMessage := reqCtx.ErrorMessage
+		originalErrorStage := reqCtx.ErrorStage
+		if outcome == "cancelled" || outcome == "interrupted" {
+			reqCtx.Status = invocationlog.StatusSuccess
+			reqCtx.HTTPStatus = http.StatusOK
+			reqCtx.ErrorCode = ""
+			reqCtx.ErrorMessage = ""
+			reqCtx.ErrorStage = ""
+		}
+		outcomes = buildDomainOutcomesFromRequestContext(reqCtx)
+		reqCtx.Status = originalStatus
+		reqCtx.HTTPStatus = originalHTTPStatus
+		reqCtx.ErrorCode = originalErrorCode
+		reqCtx.ErrorMessage = originalErrorMessage
+		reqCtx.ErrorStage = originalErrorStage
+	}
+	outcomes.Streaming = invocationlog.StreamingOutcome{
+		Outcome:            outcome,
+		StreamingRequested: reqCtx.Stream,
+	}
+	if outcomes.Logging.Outcome == "" {
+		outcomes.Logging = invocationlog.LoggingOutcome{Outcome: "written", RequestLogWritten: true}
+	}
+	return outcomes
+}
+
+func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, requestedModel string, startedAt time.Time) bool {
 	if reqCtx == nil || gatewayCtx == nil || gatewayCtx.Cache.CacheStatus != cachestage.CacheStatusHit {
 		return false
 	}
@@ -950,10 +1183,7 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(w http.ResponseW
 		cachedResp.Model = reqCtx.SelectedModel
 	}
 	cachedResp.Usage = &provider.Usage{}
-	attachGateLMMetadata(cachedResp, reqCtx)
-
-	setGatewayHeaders(w, reqCtx)
-	writeJSON(w, http.StatusOK, cachedResp)
+	h.writeChatCompletionResponse(ctx, w, reqCtx, cachedResp)
 	return true
 }
 

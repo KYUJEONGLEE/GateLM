@@ -469,10 +469,19 @@ func fallbackOutcome(log TerminalLog) FallbackOutcome {
 
 func streamingOutcome(stream bool, status string, errorCode string) StreamingOutcome {
 	outcome := "not_streaming"
-	if stream && status == StatusCancelled {
-		outcome = "cancelled"
-	} else if stream && strings.TrimSpace(errorCode) != "streaming_not_supported" {
-		outcome = "started"
+	if stream && strings.TrimSpace(errorCode) != "streaming_not_supported" {
+		switch status {
+		case StatusSuccess:
+			outcome = "completed"
+		case StatusCancelled:
+			outcome = "cancelled"
+		case StatusFailed:
+			outcome = "interrupted"
+		case StatusBlocked, StatusRateLimited:
+			outcome = "not_streaming"
+		default:
+			outcome = "started"
+		}
 	}
 	return StreamingOutcome{
 		Outcome:            outcome,
