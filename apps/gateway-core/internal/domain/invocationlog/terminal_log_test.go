@@ -225,3 +225,33 @@ func TestBuildTerminalLogCarriesBudgetBlockedDecisionBeforeProviderPath(t *testi
 		t.Fatalf("expected budget decision metadata, got %#v", log.Metadata)
 	}
 }
+
+func TestBuildTerminalLogCarriesBudgetCheckerErrorAsSystemFailure(t *testing.T) {
+	startedAt := time.Date(2026, 6, 30, 9, 5, 0, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:      "request_budget_checker_error",
+		ApplicationID:  "app_demo",
+		Status:         StatusFailed,
+		HTTPStatus:     500,
+		ErrorCode:      "internal_error",
+		ErrorStage:     "check_budget",
+		CacheStatus:    CacheStatusBypass,
+		CacheType:      CacheTypeNone,
+		BudgetScope:    budget.DefaultScope("app_demo"),
+		BudgetDecision: &budget.Decision{Allowed: true, Outcome: budget.OutcomeNotChecked, Reason: "checker_error"},
+		StartedAt:      startedAt,
+		CompletedAt:    startedAt.Add(2 * time.Millisecond),
+	})
+
+	if log.Status != StatusFailed {
+		t.Fatalf("expected failed terminal status, got %q", log.Status)
+	}
+	if log.DomainOutcomes.Budget.Outcome != budget.OutcomeNotChecked ||
+		log.DomainOutcomes.Cache.Outcome != "bypassed" ||
+		log.DomainOutcomes.Safety.Outcome != "not_checked" ||
+		log.DomainOutcomes.Routing.Outcome != "not_checked" ||
+		log.DomainOutcomes.Provider.Outcome != "not_called" ||
+		log.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("unexpected budget checker error outcomes: %+v", log.DomainOutcomes)
+	}
+}

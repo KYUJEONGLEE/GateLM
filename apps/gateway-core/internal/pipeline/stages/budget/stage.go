@@ -54,17 +54,27 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		Now:           nowFn(),
 	}
 	decision, err := s.checker.Check(ctx, req)
-	decision, normalizeErr := budget.NormalizeDecision(decision, req)
-	if normalizeErr != nil && err == nil {
-		err = normalizeErr
-	}
-	gatewayCtx.Governance.BudgetDecision = decision.Clone()
-
 	if err != nil {
+		decision, _ = budget.NormalizeDecision(budget.Decision{
+			Allowed: true,
+			Outcome: budget.OutcomeNotChecked,
+			Scope:   req.Scope,
+			Policy:  req.Policy,
+			Reason:  "checker_error",
+		}, req)
+		gatewayCtx.Governance.BudgetDecision = decision.Clone()
 		gatewayCtx.SetError(500, "internal_error", "Gateway budget check failed.", StageName)
 		gatewayCtx.BypassCache()
 		return gatewayerrors.InternalError(StageName, "Gateway budget check failed.", err)
 	}
+	decision, normalizeErr := budget.NormalizeDecision(decision, req)
+	if normalizeErr != nil {
+		gatewayCtx.SetError(500, "internal_error", "Gateway budget check failed.", StageName)
+		gatewayCtx.BypassCache()
+		return gatewayerrors.InternalError(StageName, "Gateway budget check failed.", normalizeErr)
+	}
+	gatewayCtx.Governance.BudgetDecision = decision.Clone()
+
 	if decision.Allowed {
 		return nil
 	}

@@ -48,11 +48,12 @@ type Checker interface {
 	Check(ctx context.Context, req Request) (Decision, error)
 }
 
+// AllowChecker is the default no-op checker until a real ledger/limit source is wired.
 type AllowChecker struct{}
 
 func (AllowChecker) Check(_ context.Context, req Request) (Decision, error) {
 	policy := NormalizePolicy(req.Policy)
-	outcome := OutcomeAllowed
+	outcome := OutcomeNotChecked
 	if !policy.Enabled {
 		outcome = OutcomeNotUsed
 	}
@@ -130,6 +131,7 @@ func NormalizeDecision(decision Decision, req Request) (Decision, error) {
 		decision.Allowed = true
 	case OutcomeNotChecked:
 		decision.Outcome = OutcomeNotChecked
+		decision.Allowed = true
 	default:
 		if !decision.Policy.Enabled {
 			decision.Outcome = OutcomeNotUsed
