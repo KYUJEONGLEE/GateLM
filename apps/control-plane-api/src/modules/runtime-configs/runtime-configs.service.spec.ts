@@ -85,6 +85,11 @@ describe('RuntimeConfigsService', () => {
 
     const result = await service.upsertDraft(applicationId, {
       rateLimit: { limit: 30 },
+      budgetPolicy: {
+        enabled: true,
+        enforcementMode: 'warn',
+        warningThresholdPercent: 70,
+      },
       cachePolicy: { ttlSeconds: 120 },
     });
 
@@ -100,6 +105,11 @@ describe('RuntimeConfigsService', () => {
     expect(result.publishState).toBe('draft');
     expect(result.runtimeConfig.publishState).toBe('draft');
     expect(result.runtimeConfig.rateLimit.limit).toBe(30);
+    expect(result.runtimeConfig.budgetPolicy).toEqual({
+      enabled: true,
+      enforcementMode: 'warn',
+      warningThresholdPercent: 70,
+    });
     expect(result.runtimeConfig.cachePolicy.ttlSeconds).toBe(120);
     expect(result.runtimeConfig.configHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('secretHash');
@@ -272,6 +282,11 @@ describe('RuntimeConfigsService', () => {
     });
     expect(result.providerCatalogRef.catalogVersion).toBe(1);
     expect(result.providerCatalogRef.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.policies.budget).toEqual({
+      enabled: false,
+      enforcementMode: 'disabled',
+      warningThresholdPercent: 80,
+    });
     expect(result.policies.routing.defaultProvider).toBe('mock');
     expect(result.policies.safety.requestSideRequired).toBe(true);
     expect(result.legacyHashes).toEqual({
@@ -281,6 +296,85 @@ describe('RuntimeConfigsService', () => {
     });
     expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('uses disabled budget policy defaults for legacy Runtime Config documents', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as Partial<
+      ActiveRuntimeConfigResponseDto
+    >;
+    delete activeDocument.budgetPolicy;
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument as ActiveRuntimeConfigResponseDto, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.budget).toEqual({
+      enabled: false,
+      enforcementMode: 'disabled',
+      warningThresholdPercent: 80,
+    });
+  });
+
+  it('reflects active budget policy in the RuntimeSnapshot execution view', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      budgetPolicy: {
+        enabled: true,
+        enforcementMode: 'block' as const,
+        warningThresholdPercent: 75,
+      },
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.budgetResolution).toEqual({
+      budgetScopeType: 'application',
+      budgetScopeId: applicationId,
+      resolvedBy: 'default_application',
+      warningThresholdPercent: 75,
+    });
+    expect(result.policies.budget).toEqual({
+      enabled: true,
+      enforcementMode: 'block',
+      warningThresholdPercent: 75,
+    });
+  });
+
+  it('rejects partial stored budget policy documents', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.budgetPolicy = { enabled: true };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    await expect(
+      service.getActiveRuntimeSnapshot(applicationId),
+    ).rejects.toThrow('Active Runtime Config is not executable.');
   });
 
   it('disables semantic cache mode when exact cache is disabled', async () => {
@@ -783,6 +877,21 @@ describe('RuntimeConfigsService', () => {
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
   });
 
+  it('rejects inconsistent budget policy settings', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        budgetPolicy: {
+          enabled: false,
+          enforcementMode: 'block',
+        },
+      }),
+    ).rejects.toThrow('Runtime Config budget policy is invalid.');
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+  });
+
   it('rejects pricing rules for models outside the runtime model set', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -999,6 +1108,11 @@ describe('RuntimeConfigsService', () => {
         algorithm: 'fixed_window',
         windowSeconds: 60,
         limit: 60,
+      },
+      budgetPolicy: {
+        enabled: false,
+        enforcementMode: 'disabled',
+        warningThresholdPercent: 80,
       },
       safetyPolicy: {
         mode: 'rule_based',

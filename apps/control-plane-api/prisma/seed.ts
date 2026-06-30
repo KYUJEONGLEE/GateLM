@@ -133,6 +133,11 @@ export function buildDemoRuntimeConfigDocument(
       windowSeconds: 60,
       limit: 60,
     },
+    budgetPolicy: {
+      enabled: false,
+      enforcementMode: 'disabled',
+      warningThresholdPercent: 80,
+    },
     safetyPolicy,
     cachePolicy: {
       enabled: true,
@@ -174,6 +179,7 @@ export function buildDemoRuntimeConfigDocument(
         'providers',
         'models',
         'rateLimit',
+        'budgetPolicy',
         'safetyPolicy',
         'cachePolicy',
         'routingPolicy',
