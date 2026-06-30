@@ -138,6 +138,7 @@ def evaluate_case(
         actual_block_reason = None
         actual_policy_hash = None
         actual_gateway_effects = None
+        actual_safety_outcome = None
     else:
         actual_action = actual.action
         actual_count = actual.detected_count
@@ -145,6 +146,14 @@ def evaluate_case(
         actual_block_reason = actual.block_reason
         actual_policy_hash = actual.security_policy_hash
         actual_gateway_effects = actual.gateway_effects
+        actual_safety_outcome = actual.safety_outcome
+
+    preview_is_canonical = actual is None or actual_safety_outcome is None
+    preview_matches = (
+        normalize_preview(expected.redacted_prompt_preview) == normalize_preview(actual_preview)
+        if preview_is_canonical
+        else True
+    )
 
     if actual is None or expected.action != actual.action:
         mismatch_reasons.append("action_mismatch")
@@ -152,7 +161,7 @@ def evaluate_case(
         mismatch_reasons.append("detected_types_mismatch")
     if actual is None or expected.detected_count != actual.detected_count:
         mismatch_reasons.append("detected_count_mismatch")
-    if normalize_preview(expected.redacted_prompt_preview) != normalize_preview(actual_preview):
+    if not preview_matches:
         mismatch_reasons.append("preview_mismatch")
     if expected.block_reason != actual_block_reason:
         mismatch_reasons.append("block_reason_mismatch")
@@ -194,7 +203,7 @@ def evaluate_case(
     )
     is_under_enforcement = (
         expected.action in {"redacted", "blocked"}
-        and actual_action in {"none", "missing"}
+        and actual_action in {"none", "missing", "not_checked"}
     ) or (
         expected.action == "blocked"
         and actual_action == "redacted"
@@ -208,6 +217,7 @@ def evaluate_case(
         "outcome": "pass" if not mismatch_reasons else "fail",
         "expected": {
             "action": expected.action,
+            "safetyOutcome": action_to_v2_safety_outcome(expected.action),
             "detectedTypes": list(expected.detected_types),
             "detectedCount": expected.detected_count,
             "blockReason": expected.block_reason,
@@ -216,15 +226,16 @@ def evaluate_case(
         },
         "actual": {
             "action": actual_action,
+            "safetyOutcome": actual_safety_outcome,
             "detectedTypes": sorted(actual_types),
             "detectedCount": actual_count,
             "blockReason": actual_block_reason,
             "securityPolicyHash": actual_policy_hash,
             "gatewayEffects": actual_gateway_effects.to_report() if actual_gateway_effects else None,
         },
-        "redactedPromptPreviewMatched": normalize_preview(expected.redacted_prompt_preview) == normalize_preview(actual_preview),
-        "expectedPreviewHash": preview_hash(expected.redacted_prompt_preview),
-        "actualPreviewHash": preview_hash(actual_preview),
+        "redactedPromptPreviewMatched": preview_matches if preview_is_canonical else None,
+        "expectedPreviewHash": preview_hash(expected.redacted_prompt_preview) if preview_is_canonical else None,
+        "actualPreviewHash": preview_hash(actual_preview) if preview_is_canonical else None,
         "missingDetectorTypes": missing_types,
         "extraDetectorTypes": extra_types,
         "mismatchReasons": dedupe_preserve_order(mismatch_reasons),
@@ -250,7 +261,27 @@ def preview_hash(value: str | None) -> str | None:
 
 
 def gateway_effects_equal(expected: GatewayEffects, actual: GatewayEffects) -> bool:
-    return expected == actual
+    if (
+        expected.provider_called != actual.provider_called
+        or expected.cache_lookup != actual.cache_lookup
+        or expected.terminal_status != actual.terminal_status
+        or expected.http_status != actual.http_status
+        or expected.error_code != actual.error_code
+    ):
+        return False
+    if expected.cache_write is not None and expected.cache_write != actual.cache_write:
+        return False
+    if expected.streaming_started is not None and expected.streaming_started != actual.streaming_started:
+        return False
+    return True
+
+
+def action_to_v2_safety_outcome(action: str) -> str | None:
+    return {
+        "none": "passed",
+        "redacted": "redacted",
+        "blocked": "blocked",
+    }.get(action)
 
 
 def dedupe_preserve_order(values: list[str]) -> list[str]:

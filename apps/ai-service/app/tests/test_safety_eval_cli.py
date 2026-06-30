@@ -33,6 +33,25 @@ class SafetyEvalCliTests(unittest.TestCase):
             self.assertIn("9/9 passed", result.stdout)
             self.assertTrue((Path(temp_dir) / "safety-eval-report.json").exists())
 
+    def test_cli_gateway_v2_fixture_with_semantic_cache_evidence_exits_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_cli(
+                [
+                    "--mode",
+                    "gateway-safety-output-v2",
+                    "--corpus",
+                    str(CORPUS_PATH),
+                    "--fixture",
+                    str(FIXTURE_DIR / "gateway-safety-output-v2.fixture.json"),
+                    "--semantic-cache-evidence",
+                    str(FIXTURE_DIR / "semantic-cache-evidence-v2.fixture.json"),
+                    "--out",
+                    temp_dir,
+                ]
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("9/9 passed", result.stdout)
+
     def test_cli_mismatch_fixture_exits_one_unless_overridden(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = run_cli(

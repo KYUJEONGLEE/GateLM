@@ -10,6 +10,7 @@ from app.domain.safety_eval.corpus import filter_cases, load_corpus
 from app.domain.safety_eval.evaluator import evaluate_cases
 from app.domain.safety_eval.report import (
     build_report,
+    load_semantic_cache_evidence_fixture,
     scan_path_for_forbidden_sensitive_values,
     write_reports,
 )
@@ -22,11 +23,11 @@ DEFAULT_SCHEMA_PATH = REPO_ROOT / "docs" / "v1.0.0" / "schemas" / "safety-eval-c
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run GateLM v1 safety evaluation fixtures.")
+    parser = argparse.ArgumentParser(description="Run GateLM safety evaluation fixtures.")
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["detector-output", "gateway-safety-output"],
+        choices=["detector-output", "gateway-safety-output", "gateway-safety-output-v2"],
         help="Actual fixture mode.",
     )
     parser.add_argument(
@@ -60,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         help="Fail if actual fixture or report includes raw sensitive values.",
     )
+    parser.add_argument(
+        "--semantic-cache-evidence",
+        type=Path,
+        default=None,
+        help="Optional v2 Semantic Cache evidence-only fixture to validate and include in the report.",
+    )
     return parser
 
 
@@ -71,6 +78,13 @@ def run(argv: Sequence[str] | None = None) -> int:
     try:
         if args.strict_security_scan:
             scan_path_for_forbidden_sensitive_values(args.fixture)
+            if args.semantic_cache_evidence is not None:
+                scan_path_for_forbidden_sensitive_values(args.semantic_cache_evidence)
+        semantic_cache_evidence = (
+            load_semantic_cache_evidence_fixture(args.semantic_cache_evidence)
+            if args.semantic_cache_evidence is not None
+            else None
+        )
         cases = load_corpus(args.corpus, DEFAULT_SCHEMA_PATH)
         cases = filter_cases(
             cases,
@@ -86,6 +100,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             mode=mode,
             fixture_name=raw_fixture.get("fixtureName"),
             fixture_version=raw_fixture.get("fixtureVersion"),
+            semantic_cache_evidence=semantic_cache_evidence,
         )
         json_path, markdown_path = write_reports(
             report,
