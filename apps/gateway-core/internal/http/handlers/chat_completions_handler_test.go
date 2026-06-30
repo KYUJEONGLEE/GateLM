@@ -260,38 +260,102 @@ func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.
 	}
 }
 
-func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
+func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	providerRequests := []provider.ChatCompletionRequest{}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("mock"),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
-		"model": "mock-balanced",
-		"messages": [{"role": "user", "content": "Write a short refund response."}],
-		"stream": true
-	}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Write a short refund response.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-
-	var resp gatewayErrorResponse
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error response: %v", err)
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("expected event-stream content type, got %q", got)
 	}
-	if resp.Error.Code != "streaming_not_supported" {
-		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	body := rr.Body.String()
+	if !strings.Contains(body, "data:") || !strings.Contains(body, "Mock") || !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected SSE chunks and done marker, got %q", body)
+	}
+	if strings.Count(body, "data:") < 3 {
+		t.Fatalf("expected multiple SSE chunks, got %q", body)
+	}
+	if len(providerRequests) != 1 {
+		t.Fatalf("expected one provider request, got %d", len(providerRequests))
+	}
+	if providerRequests[0].Stream {
+		t.Fatalf("thin slice must not require upstream provider streaming")
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream || logged.Status != invocationlog.StatusSuccess || logged.HTTPStatus != http.StatusOK {
+		t.Fatalf("unexpected streaming terminal log: %+v", logged)
+	}
+	if logged.DomainOutcomes.Streaming.Outcome != "completed" ||
+		!logged.DomainOutcomes.Streaming.StreamingRequested ||
+		logged.DomainOutcomes.Provider.Outcome != "success" {
+		t.Fatalf("unexpected streaming domain outcomes: %+v", logged.DomainOutcomes)
+	}
+	loggedJSON, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal terminal log: %v", err)
+	}
+	if strings.Contains(string(loggedJSON), "Mock response") {
+		t.Fatalf("terminal log must not store streamed response chunks: %s", string(loggedJSON))
 	}
 }
 
-func TestChatCompletionsHandlerAuthenticatesBeforeRejectingStreaming(t *testing.T) {
+func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Write a short refund response."))).WithContext(ctx)
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+	cancel()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("cancelled request must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerAuthenticatesBeforeStreaming(t *testing.T) {
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock"),
 		DefaultModel:    "mock-balanced",
@@ -1261,6 +1325,49 @@ func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) 
 	}
 }
 
+func TestChatCompletionsHandlerStreamingSafetyBlockNeverStartsStreamOrProvider(t *testing.T) {
+	chatCalls := 0
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	rawSecret := "test_secret_token_redacted_for_demo_only_1234567890"
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Summarize api_key="+rawSecret)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("safety block must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("safety block must not call provider, got %d calls", chatCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.Status != invocationlog.StatusBlocked ||
+		logged.DomainOutcomes.Streaming.Outcome != "not_streaming" ||
+		logged.DomainOutcomes.Provider.Outcome != "not_called" ||
+		logged.DomainOutcomes.Cache.Outcome != "bypassed" {
+		t.Fatalf("unexpected streaming safety block log: %+v", logged.DomainOutcomes)
+	}
+	if strings.Contains(rr.Body.String(), rawSecret) {
+		t.Fatalf("blocked response must not include raw sensitive value")
+	}
+}
+
 func TestChatCompletionsHandlerSameSafeRequestMissThenHit(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
@@ -1879,6 +1986,54 @@ func TestChatCompletionsHandlerBudgetBlockStopsBeforeCacheRoutingAndProvider(t *
 		logged.DomainOutcomes.Provider.Outcome != "not_called" ||
 		logged.DomainOutcomes.Routing.Outcome != "not_checked" {
 		t.Fatalf("unexpected budget blocked domain outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingBudgetBlockNeverStartsStreamOrProvider(t *testing.T) {
+	chatCalls := 0
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:must-not-build"}
+	cacheStore := &recordingExactCacheStore{}
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := pipeline.New(budgetstage.NewStage(handlerBudgetChecker{decision: budget.Decision{
+		Allowed: false,
+		Outcome: budget.OutcomeBlocked,
+		Reason:  "monthly_limit_exceeded",
+	}}))
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		ExactCacheStore:       cacheStore,
+		ExactCacheKeyBuilder:  keyBuilder,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("short prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("budget block must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
+	}
+	if chatCalls != 0 || keyBuilder.calls != 0 || cacheStore.getCalls != 0 || cacheStore.setCalls != 0 {
+		t.Fatalf("budget block must stop before provider/cache, provider=%d key=%d get=%d set=%d", chatCalls, keyBuilder.calls, cacheStore.getCalls, cacheStore.setCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.DomainOutcomes.Budget.Outcome != budget.OutcomeBlocked ||
+		logged.DomainOutcomes.Streaming.Outcome != "not_streaming" ||
+		logged.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("unexpected streaming budget block outcomes: %+v", logged.DomainOutcomes)
 	}
 }
 
@@ -2727,6 +2882,23 @@ func writeTestJSON(t *testing.T, w http.ResponseWriter, status int, payload any)
 
 func chatCompletionBody(prompt string) string {
 	return chatCompletionBodyWithModel("mock-balanced", prompt)
+}
+
+func chatCompletionStreamBody(prompt string) string {
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral(prompt)),
+			},
+		},
+		Stream: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(body)
 }
 
 func chatCompletionBodyWithModel(model string, prompt string) string {
