@@ -139,15 +139,21 @@ func (c Catalog) ProviderByName(providerName string) (Provider, error) {
 	return Provider{}, ErrProviderNotFound
 }
 
-func (c Catalog) FirstFallbackProvider() (Provider, Model, error) {
+func (c Catalog) FirstFallbackProvider(excludeProvider string, excludeModel string) (Provider, Model, error) {
+	excludeProvider = strings.TrimSpace(excludeProvider)
+	excludeModel = strings.TrimSpace(excludeModel)
 	for _, provider := range c.Normalize().Providers {
 		if !provider.Enabled || !provider.FallbackEligible {
 			continue
 		}
 		model, err := provider.FirstEnabledFallbackModel()
-		if err == nil {
-			return provider, model, nil
+		if err != nil {
+			continue
 		}
+		if (provider.ProviderName == excludeProvider || provider.ProviderID == excludeProvider) && model.ModelID == excludeModel {
+			continue
+		}
+		return provider, model, nil
 	}
 	return Provider{}, Model{}, ErrProviderNotFound
 }

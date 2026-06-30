@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -68,6 +69,9 @@ func ErrorKindOf(err error) ErrorKind {
 }
 
 func AllowsFallback(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
 	switch ErrorKindOf(err) {
 	case ErrorKindTimeout, ErrorKindError:
 		return true

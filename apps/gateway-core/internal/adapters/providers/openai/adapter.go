@@ -147,8 +147,11 @@ func providerEndpoint(baseURL string, path string) string {
 }
 
 func classifyTransportError(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
-		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctx.Err())
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if errors.Is(ctxErr, context.Canceled) {
+			return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, ctxErr)
+		}
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctxErr)
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {

@@ -2046,6 +2046,83 @@ func TestChatCompletionsHandlerRecordsFallbackSuccessAsDegradedSuccess(t *testin
 	}
 }
 
+func TestChatCompletionsHandlerAutoFallbackSkipsFailedPrimaryCandidate(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		err:         provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	catalog := testProviderCatalog()
+	catalog.Providers[0].FallbackEligible = true
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipelineWithoutExplicitFallback("openai-main", "model_low"),
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected fallback success 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected one primary and one fallback call, got primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if fallback.lastRequest.Model != "mock-fallback-model" {
+		t.Fatalf("expected fallback modelName mock-fallback-model, got %s", fallback.lastRequest.Model)
+	}
+}
+
+func TestChatCompletionsHandlerProviderCancellationDoesNotFallback(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		err:         context.Canceled,
+	}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 || fallback.calls != 0 {
+		t.Fatalf("expected primary call without fallback, got primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled || logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected cancelled terminal log, got status=%s http=%d", logged.Status, logged.HTTPStatus)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != "not_called" || logged.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("cancelled request must not record provider/fallback failure outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
 func TestChatCompletionsHandlerCredentialFailureDoesNotCallProviderOrFallback(t *testing.T) {
 	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
 	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
@@ -2250,6 +2327,24 @@ func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatew
 			gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.RoutingPolicy{
 				FallbackProvider: "mock-fallback",
 				FallbackModel:    "model_mock_fallback",
+			}
+			gatewayCtx.Runtime.HasRoutingPolicy = true
+			gatewayCtx.Routing.SelectedProvider = providerName
+			gatewayCtx.Routing.SelectedModel = modelID
+			gatewayCtx.Routing.RoutingReason = "catalog_test"
+		},
+	}
+}
+
+func testProviderCatalogPipelineWithoutExplicitFallback(providerName string, modelID string) *fakeGatewayPipeline {
+	return &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.Snapshot = runtimeconfig.RuntimeSnapshotProvenance{
+				RuntimeSnapshotID:      "runtime_snapshot_test",
+				RuntimeSnapshotVersion: 1,
+				ContentHash:            "sha256:runtime-test",
+				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+				ProviderCatalogRef:     testProviderCatalog().Reference(),
 			}
 			gatewayCtx.Runtime.HasRoutingPolicy = true
 			gatewayCtx.Routing.SelectedProvider = providerName

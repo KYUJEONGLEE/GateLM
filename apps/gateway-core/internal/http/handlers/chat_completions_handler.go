@@ -530,6 +530,18 @@ func (h *ChatCompletionsHandler) writeProviderResolutionFailure(w http.ResponseW
 
 func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time) {
 	code := provider.SafeErrorCode(err)
+	if errors.Is(err, context.Canceled) {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: reqCtx.SelectedProvider,
+			SelectedModel:    reqCtx.SelectedModel,
+			Status:           invocationlog.StatusCancelled,
+			HTTPStatus:       gatewayerrors.StatusClientClosedRequest,
+			ErrorCode:        "internal_error",
+			DurationSeconds:  providerDuration.Seconds(),
+		})
+		writeGatewayErrorWithContext(w, reqCtx, gatewayerrors.StatusClientClosedRequest, "internal_error", "Request was cancelled.", "call_provider_with_timeout_retry_fallback")
+		return
+	}
 	h.recordProviderRequest(metrics.ProviderRequest{
 		SelectedProvider: reqCtx.SelectedProvider,
 		SelectedModel:    reqCtx.SelectedModel,
@@ -637,7 +649,7 @@ func (h *ChatCompletionsHandler) resolveFallbackTarget(ctx context.Context, reqC
 			return providerCallTarget{}, err
 		}
 	} else {
-		fallbackProvider, fallbackModel, err = primary.Catalog.FirstFallbackProvider()
+		fallbackProvider, fallbackModel, err = primary.Catalog.FirstFallbackProvider(primary.ProviderName, primary.ModelID)
 		if err != nil {
 			return providerCallTarget{}, err
 		}

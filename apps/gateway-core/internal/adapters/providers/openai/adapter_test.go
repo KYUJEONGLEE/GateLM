@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -83,6 +84,23 @@ func TestAdapterMapsTimeoutToSafeError(t *testing.T) {
 	}
 	if provider.SafeErrorCode(err) != provider.ErrorCodeProviderTimeout {
 		t.Fatalf("expected timeout safe code, got %s", provider.SafeErrorCode(err))
+	}
+}
+
+func TestAdapterDoesNotMapClientCancellationToProviderTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	adapter := NewAdapter(http.DefaultClient)
+	_, err := adapter.CreateChatCompletion(ctx, executionConfig("http://127.0.0.1:1"), minimalRequest())
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected wrapped context.Canceled, got %v", err)
+	}
+	if provider.SafeErrorCode(err) == provider.ErrorCodeProviderTimeout {
+		t.Fatalf("client cancellation must not map to %s", provider.ErrorCodeProviderTimeout)
 	}
 }
 
