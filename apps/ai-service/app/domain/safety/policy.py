@@ -110,10 +110,9 @@ def effective_signals(
 def redact_prompt(prompt_text: str, signals: list[SafetySignal]) -> str:
     if not signals:
         return prompt_text
-    redaction_signals = effective_signals(signals, prompt_text=prompt_text)
     chunks: list[str] = []
     offset = 0
-    for signal in redaction_signals:
+    for signal in signals:
         if signal.start < offset or signal.end > len(prompt_text):
             continue
         chunks.append(prompt_text[offset:signal.start])
@@ -165,15 +164,19 @@ def _normalize_signal_span(
 
     start = signal.start
     end = signal.end
-    while start < end and prompt_text[start].isspace():
-        start += 1
-    while end > start and prompt_text[end - 1].isspace():
-        end -= 1
-    while start < end and prompt_text[start] in LEADING_BOUNDARY_CHARS:
-        start += 1
     trailing_boundary_chars = _trailing_boundary_chars_for_detector_type(signal.detector_type)
-    while end > start and prompt_text[end - 1] in trailing_boundary_chars:
-        end -= 1
+    while start < end:
+        char = prompt_text[start]
+        if char.isspace() or char in LEADING_BOUNDARY_CHARS:
+            start += 1
+            continue
+        break
+    while end > start:
+        char = prompt_text[end - 1]
+        if char.isspace() or char in trailing_boundary_chars:
+            end -= 1
+            continue
+        break
     if end <= start:
         return None
     if start == signal.start and end == signal.end:

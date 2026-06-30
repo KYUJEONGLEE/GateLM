@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -69,7 +70,6 @@ class PrivacyFilterAdapter:
         label_map: Mapping[str, str] | None = None,
         min_confidence: float = DEFAULT_ML_MIN_CONFIDENCE,
     ) -> None:
-        import threading
         self._lock = threading.Lock()
         self._classifier = classifier
         self.model_name = model_name
@@ -91,8 +91,11 @@ class PrivacyFilterAdapter:
     def _run_classifier(self, text: str) -> list[Mapping[str, Any]]:
         classifier = self._classifier
         if classifier is None:
-            classifier = self._load_classifier()
-            self._classifier = classifier
+            with self._lock:
+                classifier = self._classifier
+                if classifier is None:
+                    classifier = self._load_classifier()
+                    self._classifier = classifier
 
         result = classifier(text)
         if not isinstance(result, list):

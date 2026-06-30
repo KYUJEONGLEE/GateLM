@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import threading
+import time
 import unittest
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator
 from app.adapters.safety.privacy_filter_adapter import PrivacyFilterAdapter, normalize_label
@@ -91,6 +95,25 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(normalize_label("secret"), "secret")
         self.assertEqual(normalize_label("account_number"), "account_number")
         self.assertIsNone(normalize_label("ORG"))
+
+    def test_adapter_lazy_loads_classifier_once_across_threads(self) -> None:
+        load_count = 0
+        load_count_lock = threading.Lock()
+
+        class LazyAdapter(PrivacyFilterAdapter):
+            def _load_classifier(self) -> Callable[[str], object]:
+                nonlocal load_count
+                with load_count_lock:
+                    load_count += 1
+                time.sleep(0.01)
+                return lambda _text: []
+
+        adapter = LazyAdapter()
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(adapter.detect, ["safe prompt"] * 8))
+
+        self.assertEqual(load_count, 1)
 
 
 def remote_context() -> RemoteSafetyContext:
