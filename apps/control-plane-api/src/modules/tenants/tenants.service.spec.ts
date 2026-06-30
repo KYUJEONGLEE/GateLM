@@ -1,4 +1,5 @@
-import { ResourceStatus } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
+import { Prisma, ResourceStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -80,5 +81,24 @@ describe('TenantsService', () => {
       nextCursor: '00000000-0000-4000-8000-000000000102',
       hasMore: true,
     });
+  });
+
+  it('maps invalid cursor pagination failures to bad request', async () => {
+    const { service, prisma } = createService();
+    prisma.tenant.findMany.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError(
+        'Record to paginate over not found.',
+        {
+          code: 'P2025',
+          clientVersion: 'test',
+        },
+      ),
+    );
+
+    await expect(
+      service.listTenants({
+        cursor: '00000000-0000-4000-8000-000000000999',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

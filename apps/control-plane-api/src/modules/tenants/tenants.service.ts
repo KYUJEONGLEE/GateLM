@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { Tenant } from '@prisma/client';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma, Tenant } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -28,11 +28,20 @@ export class TenantsService {
     query: ListTenantsQueryDto,
   ): Promise<ListEnvelope<TenantResponseDto>> {
     const limit = query.limit ?? 50;
-    const tenants = await this.prisma.tenant.findMany({
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: limit + 1,
-      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-    });
+    let tenants: Tenant[];
+    try {
+      tenants = await this.prisma.tenant.findMany({
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: limit + 1,
+        ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      });
+    } catch (error) {
+      if (this.isRecordNotFoundError(error)) {
+        throw new BadRequestException('Tenant cursor is invalid.');
+      }
+
+      throw error;
+    }
     const hasMore = tenants.length > limit;
     const page = tenants.slice(0, limit);
 
@@ -54,5 +63,14 @@ export class TenantsService {
       createdAt: tenant.createdAt.toISOString(),
       updatedAt: tenant.updatedAt.toISOString(),
     };
+  }
+
+  private isRecordNotFoundError(
+    error: unknown,
+  ): error is Prisma.PrismaClientKnownRequestError {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    );
   }
 }
