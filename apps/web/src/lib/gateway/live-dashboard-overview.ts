@@ -193,7 +193,7 @@ function toDashboardOverview(
     savedCostMicroUsd: totals.savedCostMicroUsd ?? 0,
     savedCostUsd: totals.savedCostUsd ?? formatMicroUsd(totals.savedCostMicroUsd ?? 0),
     averageLatencyMs: totals.averageLatencyMs ?? totals.averageResponseTimeMs ?? 0,
-    p95LatencyMs: performance?.p95GatewayInternalLatencyMs ?? totals.p95LatencyMs ?? 0,
+    p95LatencyMs: totals.p95LatencyMs ?? 0,
     maskingActionCounts: totals.maskingActionCounts ?? {},
     routingCountByModel: (totals.routingCountByModel ?? []).map((row) => ({
       selectedProvider: row.selectedProvider ?? "not-routed",
