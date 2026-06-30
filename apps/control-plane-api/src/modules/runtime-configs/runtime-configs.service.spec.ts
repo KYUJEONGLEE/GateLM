@@ -222,7 +222,9 @@ describe('RuntimeConfigsService', () => {
       }),
     ]);
 
-    const result = await service.listRuntimeConfigHistory(applicationId);
+    const result = await service.listRuntimeConfigHistory(applicationId, {
+      limit: 2,
+    });
 
     expect(prisma.runtimeConfig.findMany).toHaveBeenCalledWith({
       where: { applicationId },
@@ -237,10 +239,12 @@ describe('RuntimeConfigsService', () => {
         updatedAt: true,
       },
       orderBy: [
-        { publishedAt: 'desc' },
+        { publishedAt: { sort: 'desc', nulls: 'last' } },
         { updatedAt: 'desc' },
         { createdAt: 'desc' },
+        { id: 'desc' },
       ],
+      take: 3,
     });
     expect(result).toEqual({
       applicationId,
@@ -255,13 +259,12 @@ describe('RuntimeConfigsService', () => {
           publishState: 'superseded',
           canRollback: true,
         }),
-        expect.objectContaining({
-          configVersion: 'draft',
-          publishState: 'draft',
-          publishedAt: null,
-          canRollback: false,
-        }),
       ],
+      pagination: {
+        limit: 2,
+        nextCursor: '00000000-0000-4000-8000-000000000702',
+        hasMore: true,
+      },
     });
     expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(result)).not.toContain('providers');
@@ -350,6 +353,16 @@ describe('RuntimeConfigsService', () => {
         'runtime_config_missing',
       ),
     ).rejects.toThrow('Runtime Config history item not found.');
+  });
+
+  it('rejects malformed runtime config history detail versions before lookup', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.getRuntimeConfigHistoryDetail(applicationId, 'bad/version'),
+    ).rejects.toThrow('Runtime Config history item not found.');
+    expect(prisma.runtimeConfig.findUnique).not.toHaveBeenCalled();
   });
 
   it('rolls back by creating a new active runtime config from a previous published version', async () => {

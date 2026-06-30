@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
@@ -14,6 +15,7 @@ import { AdminAuthGuard } from '@/common/guards/admin-auth.guard';
 
 import {
   ActiveRuntimeConfigResponseDto,
+  ListRuntimeConfigHistoryQueryDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
   RollbackRuntimeConfigDto,
@@ -40,8 +42,12 @@ export class RuntimeConfigsController {
   @Get('applications/:applicationId/runtime-config/history')
   async listRuntimeConfigHistory(
     @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Query() query: ListRuntimeConfigHistoryQueryDto,
   ): Promise<RuntimeConfigHistoryResponseDto> {
-    return this.runtimeConfigsService.listRuntimeConfigHistory(applicationId);
+    return this.runtimeConfigsService.listRuntimeConfigHistory(
+      applicationId,
+      query,
+    );
   }
 
   @Get('applications/:applicationId/runtime-config/history/:configVersion')

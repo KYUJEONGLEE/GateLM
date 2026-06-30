@@ -20,8 +20,10 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
   ActiveRuntimeConfigResponseDto,
+  ListRuntimeConfigHistoryQueryDto,
   PublishRuntimeConfigDto,
   ProviderCatalogResponseDto,
+  RUNTIME_CONFIG_VERSION_PATTERN,
   RollbackRuntimeConfigDto,
   ResourceStatusDto,
   RuntimeConfigBudgetPolicyResponseDto,
@@ -93,8 +95,10 @@ export class RuntimeConfigsService {
 
   async listRuntimeConfigHistory(
     applicationId: string,
+    query: ListRuntimeConfigHistoryQueryDto = {},
   ): Promise<RuntimeConfigHistoryResponseDto> {
     await this.getApplicationContextOrThrow(applicationId);
+    const limit = query.limit ?? 50;
     const runtimeConfigs = await this.prisma.runtimeConfig.findMany({
       where: { applicationId },
       select: {
@@ -108,17 +112,27 @@ export class RuntimeConfigsService {
         updatedAt: true,
       },
       orderBy: [
-        { publishedAt: 'desc' },
+        { publishedAt: { sort: 'desc', nulls: 'last' } },
         { updatedAt: 'desc' },
         { createdAt: 'desc' },
+        { id: 'desc' },
       ],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
+    const hasMore = runtimeConfigs.length > limit;
+    const page = runtimeConfigs.slice(0, limit);
 
     return {
       applicationId,
-      items: runtimeConfigs.map((runtimeConfig) =>
+      items: page.map((runtimeConfig) =>
         this.toRuntimeConfigHistoryItem(runtimeConfig),
       ),
+      pagination: {
+        limit,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
+      },
     };
   }
 
@@ -127,7 +141,8 @@ export class RuntimeConfigsService {
     configVersion: string,
   ): Promise<RuntimeConfigHistoryDetailResponseDto> {
     await this.getApplicationContextOrThrow(applicationId);
-    const requestedConfigVersion = configVersion.trim();
+    const requestedConfigVersion =
+      this.toRuntimeConfigVersionForLookup(configVersion);
     if (!requestedConfigVersion) {
       throw new NotFoundException('Runtime Config history item not found.');
     }
@@ -2300,6 +2315,18 @@ export class RuntimeConfigsService {
 
   private createPublishedConfigVersion(now: Date): string {
     return `runtime_config_${now.getTime()}`;
+  }
+
+  private toRuntimeConfigVersionForLookup(value: string): string | null {
+    const configVersion = value.trim();
+    if (
+      !configVersion ||
+      !RUNTIME_CONFIG_VERSION_PATTERN.test(configVersion)
+    ) {
+      return null;
+    }
+
+    return configVersion;
   }
 
   private createRollbackConfigVersion(
