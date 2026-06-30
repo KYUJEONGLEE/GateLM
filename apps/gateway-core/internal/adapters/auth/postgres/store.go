@@ -22,6 +22,8 @@ type Store struct {
 	db Queryer
 }
 
+var issuedCredentialPrefixes = []string{"gsk_live_", "gat_app_"}
+
 type credentialCandidate struct {
 	id            string
 	tenantID      string
@@ -137,16 +139,26 @@ func credentialLookupFromPlaintext(plaintext string) credentialLookup {
 }
 
 func knownCredentialPrefix(plaintext string) string {
-	first := strings.IndexByte(plaintext, '_')
-	if first <= 0 || first >= len(plaintext)-1 {
+	for _, prefix := range issuedCredentialPrefixes {
+		if strings.HasPrefix(plaintext, prefix) && len(plaintext) > len(prefix) {
+			return prefix
+		}
+	}
+
+	if strings.HasPrefix(plaintext, "glm_") {
+		return legacyDemoCredentialPrefix(plaintext)
+	}
+
+	parts := strings.SplitN(plaintext, "_", 3)
+	if len(parts) < 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return ""
 	}
-	second := strings.IndexByte(plaintext[first+1:], '_')
-	if second <= 0 {
-		return ""
-	}
-	prefixEnd := first + 1 + second + 1
-	if prefixEnd >= len(plaintext) {
+	return parts[0] + "_" + parts[1] + "_"
+}
+
+func legacyDemoCredentialPrefix(plaintext string) string {
+	prefixEnd := strings.LastIndexByte(plaintext, '_') + 1
+	if prefixEnd <= 1 || prefixEnd >= len(plaintext) {
 		return ""
 	}
 	return plaintext[:prefixEnd]

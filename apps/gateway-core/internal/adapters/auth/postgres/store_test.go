@@ -78,6 +78,53 @@ func TestStoreValidatesAppTokenWithApplicationScope(t *testing.T) {
 	assertLookupArgs(t, queryer, "gat_app_", "5678")
 }
 
+func TestCredentialLookupSupportsDemoSeedPrefixes(t *testing.T) {
+	tests := []struct {
+		name      string
+		plaintext string
+		prefix    string
+		last4     string
+	}{
+		{
+			name:      "demo api key",
+			plaintext: "glm_api_test_redacted",
+			prefix:    "glm_api_test_",
+			last4:     "cted",
+		},
+		{
+			name:      "demo app token",
+			plaintext: "glm_app_token_test_redacted",
+			prefix:    "glm_app_token_test_",
+			last4:     "cted",
+		},
+		{
+			name:      "issued api key",
+			plaintext: "gsk_live_body_with_underscore_1234",
+			prefix:    "gsk_live_",
+			last4:     "1234",
+		},
+		{
+			name:      "issued app token",
+			plaintext: "gat_app_body_with_underscore_5678",
+			prefix:    "gat_app_",
+			last4:     "5678",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := credentialLookupFromPlaintext(tt.plaintext)
+
+			if lookup.prefix != tt.prefix || lookup.last4 != tt.last4 {
+				t.Fatalf("unexpected lookup: got prefix=%q last4=%q", lookup.prefix, lookup.last4)
+			}
+			if lookup.secretHash != credentialHash(tt.plaintext) {
+				t.Fatal("expected lookup to hash the normalized credential")
+			}
+		})
+	}
+}
+
 func TestStoreRejectsMalformedCredentialWithoutQuery(t *testing.T) {
 	queryer := &fakeQueryer{}
 
