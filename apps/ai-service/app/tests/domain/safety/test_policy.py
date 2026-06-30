@@ -15,7 +15,7 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         decision = evaluator.evaluate(
             remote_context(),
             remote_input(
-                "Contact alex@example.test and inspect api_key=DEMOSECRETDEMOSECRET12345.",
+                "Contact alex@example.test and inspect api_key=test_api_key_redacted_demo_1234567890abcdef.",
                 [
                     detector("email", "redact", "[EMAIL_REDACTED]"),
                     detector("api_key", "block", "[API_KEY_REDACTED]"),
@@ -29,7 +29,76 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(decision.block_reason, "sensitive_data_blocked")
         self.assertIn("[EMAIL_REDACTED]", decision.redacted_prompt_preview or "")
         self.assertIn("[API_KEY_REDACTED]", decision.redacted_prompt_preview or "")
-        self.assertNotIn("DEMOSECRET", decision.redacted_prompt_preview or "")
+        self.assertNotIn("1234567890abcdef", decision.redacted_prompt_preview or "")
+
+    def test_api_key_detector_blocks_credential_like_assignment(self) -> None:
+        raw_value = "test_api_key_redacted_demo_1234567890abcdef"
+        evaluator = HeuristicSafetyEvaluator()
+        decision = evaluator.evaluate(
+            remote_context(),
+            remote_input(
+                f"Inspect api_key={raw_value}.",
+                [detector("api_key", "block", "[API_KEY_REDACTED]")],
+            ),
+        )
+
+        self.assertEqual(decision.action, "blocked")
+        self.assertEqual(decision.detected_types, ("api_key",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertIn("[API_KEY_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
+
+    def test_api_key_detector_ignores_bare_secret_and_short_token_values(self) -> None:
+        evaluator = HeuristicSafetyEvaluator()
+
+        for prompt in [
+            "secret=internal note",
+            "token budget is 3000",
+            "token=short_demo",
+        ]:
+            with self.subTest(prompt=prompt):
+                decision = evaluator.evaluate(
+                    remote_context(),
+                    remote_input(prompt, [detector("api_key", "block", "[API_KEY_REDACTED]")]),
+                )
+
+                self.assertEqual(decision.action, "none")
+                self.assertEqual(decision.detected_count, 0)
+                self.assertIsNone(decision.redacted_prompt_preview)
+
+    def test_jwt_detector_blocks_long_synthetic_token(self) -> None:
+        raw_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.synthetic_signature_1234567890"
+        evaluator = HeuristicSafetyEvaluator()
+        decision = evaluator.evaluate(
+            remote_context(),
+            remote_input(
+                f"Review this token {raw_token}.",
+                [detector("jwt", "block", "[JWT_REDACTED]")],
+            ),
+        )
+
+        self.assertEqual(decision.action, "blocked")
+        self.assertEqual(decision.detected_types, ("jwt",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertIn("[JWT_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_token, decision.redacted_prompt_preview or "")
+
+    def test_jwt_detector_ignores_short_or_non_jwt_triplets(self) -> None:
+        evaluator = HeuristicSafetyEvaluator()
+
+        for prompt in [
+            "eyJ.a.b",
+            "header.payload.signature",
+        ]:
+            with self.subTest(prompt=prompt):
+                decision = evaluator.evaluate(
+                    remote_context(),
+                    remote_input(prompt, [detector("jwt", "block", "[JWT_REDACTED]")]),
+                )
+
+                self.assertEqual(decision.action, "none")
+                self.assertEqual(decision.detected_count, 0)
+                self.assertIsNone(decision.redacted_prompt_preview)
 
     def test_disabled_detector_is_ignored(self) -> None:
         evaluator = HeuristicSafetyEvaluator()

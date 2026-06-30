@@ -58,7 +58,15 @@ def default_detectors() -> list[RegexDetector]:
         ),
         RegexDetector(
             "api_key",
-            re.compile(r"\b(?:api[_-]?key|secret|token|access[_-]?key|client[_-]?secret)\s*[:=]\s*['\"]?[A-Za-z0-9_.-]{20,}", re.IGNORECASE),
+            re.compile(
+                r"\b(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|id[_-]?token|secret[_-]?key|client[_-]?secret|provider[_-]?key)"
+                r"\s*[:=]\s*['\"]?"
+                r"(?=[A-Za-z0-9_.-]{32,}(?:['\"\s,;}]|$))"
+                r"(?=[A-Za-z0-9_.-]*[A-Za-z])"
+                r"(?=[A-Za-z0-9_.-]*\d)"
+                r"[A-Za-z0-9_.-]+",
+                re.IGNORECASE,
+            ),
             10,
         ),
         RegexDetector(
@@ -68,7 +76,7 @@ def default_detectors() -> list[RegexDetector]:
         ),
         RegexDetector(
             "jwt",
-            re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
+            re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])"),
             12,
         ),
         RegexDetector(
