@@ -47,6 +47,33 @@ func TestResolverLoadsProviderCatalogByRuntimeSnapshotRef(t *testing.T) {
 	}
 }
 
+func TestResolverNormalizesNullProviderModelsToEmptySlice(t *testing.T) {
+	ref := testCatalogRef()
+	response := testProviderCatalogResponse(ref, catalogTestApplicationID)
+	response.Providers[0].Models = nil
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProviderCatalog(t, w, response)
+	}))
+	defer server.Close()
+
+	resolver := NewResolver(server.URL, server.Client())
+	catalog, err := resolver.GetCatalog(context.Background(), ref, providercatalog.Scope{ApplicationID: catalogTestApplicationID})
+	if err != nil {
+		t.Fatalf("expected provider catalog, got %v", err)
+	}
+
+	provider, err := catalog.ProviderByName("openai-main")
+	if err != nil {
+		t.Fatalf("expected openai-main provider: %v", err)
+	}
+	if provider.Models == nil {
+		t.Fatal("expected null provider models to normalize to an empty slice")
+	}
+	if len(provider.Models) != 0 {
+		t.Fatalf("expected empty provider models slice, got %d models", len(provider.Models))
+	}
+}
+
 func TestResolverRejectsCatalogMismatchWithoutLastKnownFallback(t *testing.T) {
 	ref := testCatalogRef()
 	response := testProviderCatalogResponse(ref, catalogTestApplicationID)

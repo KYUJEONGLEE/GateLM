@@ -31,6 +31,25 @@ func TestFirstFallbackProviderSkipsExcludedPrimaryCandidate(t *testing.T) {
 	}
 }
 
+func TestCatalogNormalizeConvertsNilProviderModelsToEmptySlice(t *testing.T) {
+	catalog := Catalog{
+		Providers: []Provider{
+			{
+				ProviderID: "provider_without_models",
+				Models:     nil,
+			},
+		},
+	}
+
+	normalized := catalog.Normalize()
+	if normalized.Providers[0].Models == nil {
+		t.Fatal("expected nil models to normalize to an empty slice")
+	}
+	if len(normalized.Providers[0].Models) != 0 {
+		t.Fatalf("expected empty models slice, got %d models", len(normalized.Providers[0].Models))
+	}
+}
+
 func enabledFallbackModel(modelID string, priority int) Model {
 	return Model{
 		ModelID:   modelID,
