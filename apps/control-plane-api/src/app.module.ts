@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
+import { controlPlaneEnvFilePaths } from './config/env-file-paths';
 import { validateEnv } from './config/env.schema';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
@@ -15,6 +16,7 @@ import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: controlPlaneEnvFilePaths(),
       validate: validateEnv,
     }),
     DatabaseModule,
