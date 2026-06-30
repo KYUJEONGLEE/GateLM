@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -268,18 +269,22 @@ export class RuntimeConfigsService {
       activeSnapshot.runtimeSnapshot.applicationId !==
         activeSnapshot.applicationId
     ) {
-      throw new ConflictException('RuntimeSnapshot body is inconsistent.');
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
     }
 
     const snapshot = this.toPersistedRuntimeSnapshotResponse(
       activeSnapshot.runtimeSnapshot,
     );
     if (
-      snapshot.lookupKey.tenantId !== activeSnapshot.tenantId ||
-      snapshot.lookupKey.projectId !== activeSnapshot.projectId ||
-      snapshot.lookupKey.applicationId !== activeSnapshot.applicationId
+      snapshot.lookupKey?.tenantId !== activeSnapshot.tenantId ||
+      snapshot.lookupKey?.projectId !== activeSnapshot.projectId ||
+      snapshot.lookupKey?.applicationId !== activeSnapshot.applicationId
     ) {
-      throw new ConflictException('RuntimeSnapshot body is inconsistent.');
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
     }
 
     return snapshot;
@@ -1723,21 +1728,27 @@ export class RuntimeConfigsService {
       typeof runtimeSnapshot.snapshotBody !== 'object' ||
       Array.isArray(runtimeSnapshot.snapshotBody)
     ) {
-      throw new ConflictException('RuntimeSnapshot body is invalid.');
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is invalid.',
+      );
     }
 
     const document =
       runtimeSnapshot.snapshotBody as unknown as RuntimeSnapshotResponseDto;
     const persistedVersion = Number(runtimeSnapshot.version);
     if (!Number.isSafeInteger(persistedVersion)) {
-      throw new ConflictException('RuntimeSnapshot body is inconsistent.');
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
     }
     if (
       document.runtimeSnapshotId !== runtimeSnapshot.id ||
       document.runtimeSnapshotVersion !== persistedVersion ||
       document.contentHash !== runtimeSnapshot.contentHash
     ) {
-      throw new ConflictException('RuntimeSnapshot body is inconsistent.');
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
     }
     this.assertNoForbiddenRuntimeConfigKeys(document);
 

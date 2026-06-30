@@ -1,3 +1,4 @@
+import { InternalServerErrorException } from '@nestjs/common';
 import {
   CredentialStatus,
   ProviderConnectionStatus,
@@ -736,27 +737,9 @@ describe('RuntimeConfigsService', () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
     const snapshotBody = runtimeSnapshotBody();
-    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue({
-      tenantId,
-      projectId,
-      applicationId,
-      runtimeSnapshotId: snapshotBody.runtimeSnapshotId,
-      updatedAt: now,
-      updatedBy: 'control_plane',
-      runtimeSnapshot: {
-        id: snapshotBody.runtimeSnapshotId,
-        tenantId,
-        projectId,
-        applicationId,
-        runtimeConfigId: '00000000-0000-4000-8000-000000000700',
-        version: BigInt(snapshotBody.runtimeSnapshotVersion),
-        contentHash: snapshotBody.contentHash,
-        snapshotBody,
-        publishedAt: now,
-        publishedBy: 'control_plane',
-        createdAt: now,
-      },
-    });
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(snapshotBody),
+    );
 
     const result = await service.getActiveRuntimeSnapshot(applicationId);
 
@@ -775,6 +758,74 @@ describe('RuntimeConfigsService', () => {
     });
     expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('fails with an internal error when the active snapshot pointer references another application', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const snapshotBody = runtimeSnapshotBody();
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(snapshotBody, {
+        runtimeSnapshot: {
+          applicationId: '00000000-0000-4000-8000-000000000399',
+        },
+      }),
+    );
+
+    const result = service.getActiveRuntimeSnapshot(applicationId);
+
+    await expect(result).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+    await expect(result).rejects.toThrow(
+      'RuntimeSnapshot body is inconsistent.',
+    );
+  });
+
+  it('fails with an internal error when persisted RuntimeSnapshot metadata is inconsistent', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const snapshotBody = runtimeSnapshotBody();
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(snapshotBody, {
+        runtimeSnapshot: {
+          contentHash: '9'.repeat(64),
+        },
+      }),
+    );
+
+    const result = service.getActiveRuntimeSnapshot(applicationId);
+
+    await expect(result).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+    await expect(result).rejects.toThrow(
+      'RuntimeSnapshot body is inconsistent.',
+    );
+  });
+
+  it('fails with an internal error instead of TypeError when persisted RuntimeSnapshot lookupKey is missing', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const snapshotBody = runtimeSnapshotBody() as unknown as Record<
+      string,
+      unknown
+    >;
+    delete snapshotBody.lookupKey;
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(
+        snapshotBody as unknown as RuntimeSnapshotResponseDto,
+      ),
+    );
+
+    const result = service.getActiveRuntimeSnapshot(applicationId);
+
+    await expect(result).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+    await expect(result).rejects.toThrow(
+      'RuntimeSnapshot body is inconsistent.',
+    );
   });
 
   it('uses disabled budget policy defaults for legacy Runtime Config documents', async () => {
@@ -1590,6 +1641,38 @@ describe('RuntimeConfigsService', () => {
       createdAt: now,
       updatedAt: now,
       ...overrides,
+    };
+  }
+
+  function activeRuntimeSnapshotRecord(
+    snapshotBody: RuntimeSnapshotResponseDto,
+    overrides: {
+      pointer?: Record<string, unknown>;
+      runtimeSnapshot?: Record<string, unknown>;
+    } = {},
+  ) {
+    return {
+      tenantId,
+      projectId,
+      applicationId,
+      runtimeSnapshotId: snapshotBody.runtimeSnapshotId,
+      updatedAt: now,
+      updatedBy: 'control_plane',
+      runtimeSnapshot: {
+        id: snapshotBody.runtimeSnapshotId,
+        tenantId,
+        projectId,
+        applicationId,
+        runtimeConfigId: '00000000-0000-4000-8000-000000000700',
+        version: BigInt(snapshotBody.runtimeSnapshotVersion),
+        contentHash: snapshotBody.contentHash,
+        snapshotBody,
+        publishedAt: now,
+        publishedBy: 'control_plane',
+        createdAt: now,
+        ...overrides.runtimeSnapshot,
+      },
+      ...overrides.pointer,
     };
   }
 
