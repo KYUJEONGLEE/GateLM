@@ -205,6 +205,18 @@ function createMockTransaction() {
     appToken: { upsert: jest.fn() },
     runtimeConfig: {
       updateMany: jest.fn(),
+      upsert: jest.fn().mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000701',
+        configVersion: DEMO_RUNTIME_CONFIG_VERSION,
+        publishedAt: new Date('2026-06-27T02:00:00.000Z'),
+      }),
+    },
+    runtimeSnapshot: {
+      upsert: jest.fn().mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000701',
+      }),
+    },
+    activeRuntimeSnapshot: {
       upsert: jest.fn(),
     },
   };
