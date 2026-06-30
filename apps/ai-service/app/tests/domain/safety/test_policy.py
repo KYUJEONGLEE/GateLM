@@ -200,6 +200,126 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             with self.subTest(detector_type=detector_type):
                 assert_ignored_prompts(self, detector_type, prompts)
 
+    def test_pii_redact_detectors_redact_high_confidence_values(self) -> None:
+        cases = [
+            (
+                "postal_address",
+                "[ADDRESS_REDACTED]",
+                "서울시 강남구 테헤란로 123",
+                "주소: 서울시 강남구 테헤란로 123",
+            ),
+            (
+                "date_of_birth",
+                "[DATE_OF_BIRTH_REDACTED]",
+                "1998-03-12",
+                "생년월일: 1998-03-12",
+            ),
+            (
+                "person_name",
+                "[PERSON_NAME_REDACTED]",
+                "홍길동",
+                "이름: 홍길동",
+            ),
+            (
+                "customer_id",
+                "[CUSTOMER_ID_REDACTED]",
+                "cus_1234567890",
+                "customer_id=cus_1234567890",
+            ),
+            (
+                "employee_id",
+                "[EMPLOYEE_ID_REDACTED]",
+                "E123456",
+                "employee_id=E123456",
+            ),
+            (
+                "account_id",
+                "[ACCOUNT_ID_REDACTED]",
+                "acct_1234567890",
+                "account_id=acct_1234567890",
+            ),
+            (
+                "ip_address",
+                "[IP_ADDRESS_REDACTED]",
+                "8.8.8.8",
+                "source ip 8.8.8.8",
+            ),
+            (
+                "ip_address",
+                "[IP_ADDRESS_REDACTED]",
+                "2606:4700:4700::1111",
+                "source ip 2606:4700:4700::1111",
+            ),
+        ]
+
+        for detector_type, placeholder, raw_value, prompt in cases:
+            with self.subTest(detector_type=detector_type, raw_value=raw_value):
+                assert_redacted_detector(self, prompt, detector_type, placeholder, raw_value)
+
+    def test_pii_redact_detectors_ignore_low_confidence_values(self) -> None:
+        cases = {
+            "postal_address": [
+                "주소를 알려주세요",
+                "서울시 강남구 테헤란로를 분석해줘",
+            ],
+            "date_of_birth": [
+                "meeting date 1998-03-12",
+                "1998년 프로젝트를 요약해줘",
+            ],
+            "person_name": [
+                "홍길동은 한국 소설의 인물이다",
+                "Kim model routing test",
+            ],
+            "customer_id": [
+                "customer id is required",
+                "회원번호를 확인해 주세요",
+            ],
+            "employee_id": [
+                "employee id is required",
+                "사번을 입력해 주세요",
+            ],
+            "account_id": [
+                "account id field is missing",
+                "계정번호를 확인해 주세요",
+            ],
+            "ip_address": [
+                "127.0.0.1",
+                "localhost",
+                "10.0.0.8",
+                "192.168.0.2",
+                "172.16.0.2",
+                "2001:db8::1",
+            ],
+        }
+
+        for detector_type, prompts in cases.items():
+            with self.subTest(detector_type=detector_type):
+                assert_ignored_prompts(self, detector_type, prompts)
+
+    def test_person_name_detector_is_label_based_only(self) -> None:
+        assert_redacted_detector(
+            self,
+            "고객명=김민수",
+            "person_name",
+            "[PERSON_NAME_REDACTED]",
+            "김민수",
+        )
+        assert_redacted_detector(
+            self,
+            "customer_name=Alex Kim",
+            "person_name",
+            "[PERSON_NAME_REDACTED]",
+            "Alex Kim",
+        )
+        assert_ignored_prompts(
+            self,
+            "person_name",
+            [
+                "김민수 고객이 문의했다",
+                "Alex Kim is a sample name",
+            ],
+        )
+
     def test_structural_secret_detectors_win_over_inner_token_matches(self) -> None:
         jwt_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.synthetic_signature_1234567890"
         cases = [
@@ -330,6 +450,26 @@ def assert_blocked_detector(
     )
 
     test_case.assertEqual(decision.action, "blocked")
+    test_case.assertEqual(decision.detected_types, (detector_type,))
+    test_case.assertEqual(decision.detected_count, 1)
+    test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")
+    test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
+
+
+def assert_redacted_detector(
+    test_case: unittest.TestCase,
+    prompt: str,
+    detector_type: str,
+    placeholder: str,
+    raw_value: str,
+) -> None:
+    evaluator = HeuristicSafetyEvaluator()
+    decision = evaluator.evaluate(
+        remote_context(),
+        remote_input(prompt, [detector(detector_type, "redact", placeholder)]),
+    )
+
+    test_case.assertEqual(decision.action, "redacted")
     test_case.assertEqual(decision.detected_types, (detector_type,))
     test_case.assertEqual(decision.detected_count, 1)
     test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")

@@ -1,13 +1,34 @@
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass
 from re import Pattern
+from typing import Protocol
 
 from app.domain.safety.decision import SafetyDecision
 from app.domain.safety.policy import build_safety_decision, enabled_detector_map
 from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
+
+
+IP_ADDRESS_CANDIDATE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.:-])"
+    r"(?:"
+    r"(?:\d{1,3}\.){3}\d{1,3}"
+    r"|"
+    r"(?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9]{0,4}"
+    r")"
+    r"(?![A-Za-z0-9_.:-])"
+)
+
+
+class PromptDetector(Protocol):
+    detector_type: str
+    priority: int
+
+    def detect(self, prompt_text: str, config: SafetyDetector) -> list[SafetySignal]:
+        ...
 
 
 @dataclass(frozen=True)
@@ -30,8 +51,36 @@ class RegexDetector:
         ]
 
 
+@dataclass(frozen=True)
+class PublicIPAddressDetector:
+    detector_type: str
+    pattern: Pattern[str]
+    priority: int
+
+    def detect(self, prompt_text: str, config: SafetyDetector) -> list[SafetySignal]:
+        signals: list[SafetySignal] = []
+        for match in self.pattern.finditer(prompt_text):
+            try:
+                address = ipaddress.ip_address(match.group(0))
+            except ValueError:
+                continue
+            if not address.is_global:
+                continue
+            signals.append(
+                SafetySignal(
+                    detector_type=self.detector_type,
+                    start=match.start(),
+                    end=match.end(),
+                    action=config.action,
+                    placeholder=config.placeholder,
+                    priority=self.priority,
+                )
+            )
+        return signals
+
+
 class HeuristicSafetyEvaluator:
-    def __init__(self, detectors: list[RegexDetector] | None = None) -> None:
+    def __init__(self, detectors: list[PromptDetector] | None = None) -> None:
         self.detectors = detectors or default_detectors()
 
     def evaluate(self, ctx: RemoteSafetyContext, input: RemoteSafetyInput) -> SafetyDecision:
@@ -49,7 +98,7 @@ class HeuristicSafetyEvaluator:
         )
 
 
-def default_detectors() -> list[RegexDetector]:
+def default_detectors() -> list[PromptDetector]:
     return [
         RegexDetector(
             "private_key",
@@ -152,6 +201,73 @@ def default_detectors() -> list[RegexDetector]:
                 re.IGNORECASE,
             ),
             15,
+        ),
+        RegexDetector(
+            "date_of_birth",
+            re.compile(
+                r"\b(?:date[_ -]?of[_ -]?birth|birth[_ -]?date|birthday|dob|생년월일|출생일)\b"
+                r"\s*[:=]?\s*['\"]?"
+                r"(?:\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일)",
+                re.IGNORECASE,
+            ),
+            30,
+        ),
+        RegexDetector(
+            "person_name",
+            re.compile(
+                r"\b(?:name|customer[_ -]?name|contact[_ -]?name|manager|이름|성명|고객명|담당자)\b"
+                r"\s*[:=]\s*['\"]?"
+                r"(?:[가-힣]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})",
+                re.IGNORECASE,
+            ),
+            31,
+        ),
+        RegexDetector(
+            "customer_id",
+            re.compile(
+                r"\b(?:customer[_ -]?id|customer[_ -]?no|고객id|고객번호|회원번호)\b"
+                r"\s*[:=]?\s*['\"]?"
+                r"(?:cus_[A-Za-z0-9_-]{6,}|[A-Za-z0-9_-]{6,})",
+                re.IGNORECASE,
+            ),
+            32,
+        ),
+        RegexDetector(
+            "employee_id",
+            re.compile(
+                r"\b(?:employee[_ -]?id|employee[_ -]?no|사번|직원번호)\b"
+                r"\s*[:=]?\s*['\"]?"
+                r"(?:E\d{5,}|[A-Z]{1,3}\d{5,}|\d{6,})",
+                re.IGNORECASE,
+            ),
+            33,
+        ),
+        RegexDetector(
+            "account_id",
+            re.compile(
+                r"\b(?:account[_ -]?id|account[_ -]?no|acct[_ -]?id|계정id|계정번호)\b"
+                r"\s*[:=]?\s*['\"]?"
+                r"(?:acct_[A-Za-z0-9_-]{6,}|[A-Za-z0-9_-]{8,})",
+                re.IGNORECASE,
+            ),
+            34,
+        ),
+        RegexDetector(
+            "postal_address",
+            re.compile(
+                r"(?:주소|배송지|도로명주소|지번주소|address|shipping[_ -]?address|postal[_ -]?address)"
+                r"\s*[:=]\s*['\"]?"
+                r"(?:[가-힣A-Za-z0-9\s,.-]{6,80}(?:로|길|동|읍|면|리|번길|street|st\.|road|rd\.|avenue|ave\.|blvd|drive|dr\.)\s*\d{0,5}(?:-\d{1,5})?)"
+                r"|"
+                r"(?:우편번호|postal[_ -]?code|zip)\s*[:=]\s*\d{5}",
+                re.IGNORECASE,
+            ),
+            35,
+        ),
+        PublicIPAddressDetector(
+            "ip_address",
+            IP_ADDRESS_CANDIDATE_PATTERN,
+            45,
         ),
         RegexDetector(
             "resident_registration_number",
