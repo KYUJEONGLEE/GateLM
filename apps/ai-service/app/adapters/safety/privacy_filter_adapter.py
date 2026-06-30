@@ -69,6 +69,8 @@ class PrivacyFilterAdapter:
         label_map: Mapping[str, str] | None = None,
         min_confidence: float = DEFAULT_ML_MIN_CONFIDENCE,
     ) -> None:
+        import threading
+        self._lock = threading.Lock()
         self._classifier = classifier
         self.model_name = model_name
         self.source = source
