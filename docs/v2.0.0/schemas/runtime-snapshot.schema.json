@@ -95,7 +95,7 @@
           "description": "Source of the resolved budget scope. default_application means the v2.0.0 application/applicationId default was applied."
         },
         "warningThresholdPercent": {
-          "type": "number",
+          "type": "integer",
           "minimum": 0,
           "maximum": 100,
           "description": "Admin/operator warning threshold. User-facing exposure is outside this schema."
@@ -104,7 +104,8 @@
       "required": [
         "budgetScopeType",
         "budgetScopeId",
-        "resolvedBy"
+        "resolvedBy",
+        "warningThresholdPercent"
       ]
     },
     "providerCatalogRef": {
@@ -367,14 +368,15 @@
           ]
         },
         "warningThresholdPercent": {
-          "type": "number",
+          "type": "integer",
           "minimum": 0,
           "maximum": 100
         }
       },
       "required": [
         "enabled",
-        "enforcementMode"
+        "enforcementMode",
+        "warningThresholdPercent"
       ]
     },
     "fallbackPolicy": {

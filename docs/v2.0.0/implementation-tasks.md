@@ -219,6 +219,9 @@ Likely files:
 Tasks:
 
 - Enforce order: auth/context -> RuntimeSnapshot -> budget/rate limit -> safety -> exact cache -> routing -> provider/fallback.
+- Consume budget execution policy from `RuntimeSnapshot.policies.budget` and resolved budget attribution from `budgetResolution`.
+- Keep PR-3 budget enforcement limited to stage placement, outcome/logging, and provider bypass boundaries until a quota/ledger/check adapter contract exists.
+- Keep production default safe when no budget checker is configured; do not turn checker missing or no-ledger paths into confirmed `blocked` outcomes.
 - Budget block returns `terminalStatus=blocked`, `budget.outcome=blocked`, `provider.outcome=not_called`.
 - Safety block prevents provider call, cache write, streaming start.
 - Exact cache hit bypasses provider and logs provider not called.
@@ -227,9 +230,11 @@ Tasks:
 
 Verification:
 
+- Control Plane RuntimeSnapshot budget shape test for `policies.budget` and `budgetResolution`.
 - Pipeline order tests.
 - Safety block provider-bypass test.
 - Budget block provider-bypass test.
+- Budget `not_used` / `not_checked` / checker failure tests that do not masquerade as confirmed `blocked`.
 - Exact cache hit provider-bypass test.
 - Routing decision test.
 

@@ -90,6 +90,7 @@ Reject:
 | Scenario | Input / Setup | Expected result | Evidence |
 |---|---|---|---|
 | default budget scope | no override | `budgetScopeType=application`, `budgetScopeId=applicationId`, `resolvedBy=default_application` | Gateway test |
+| RuntimeSnapshot budget shape | active RuntimeSnapshot from Control Plane | `policies.budget` has `enabled`, `enforcementMode`, `warningThresholdPercent`; `budgetResolution` has `budgetScopeType`, `budgetScopeId`, `resolvedBy`, `warningThresholdPercent` | Control Plane test |
 | runtime budget override | snapshot specifies project/team scope | resolved budget scope from trusted snapshot/rule only | Gateway test |
 | client supplied budget scope | request body sends scope | ignored unless trusted rule resolves same result | Gateway test |
 | budget block | quota exceeded | terminal status `blocked`, provider `not_called` | Gateway test |
@@ -104,6 +105,13 @@ Execution order:
 ```text
 auth/context -> RuntimeSnapshot -> budget/rate limit -> safety -> exact cache -> routing -> provider/fallback
 ```
+
+PR-3 budget scope note:
+
+- Control Plane provides budget execution policy through `RuntimeSnapshot.policies.budget` and budget attribution through `budgetResolution`.
+- Gateway consumes that shape only; it must not read editable RuntimeConfig directly.
+- Production spend/ledger-based blocking is out of PR-3 scope until a quota/ledger/check adapter contract exists.
+- `blocked` is reserved for confirmed budget policy blocks. Checker missing, checker disabled, or no ledger path must be represented as `not_used`, `not_checked`, or a failure outcome, not as a confirmed budget block.
 
 ## PR-4. Streaming Thin Slice
 

@@ -321,6 +321,42 @@ describe('RuntimeConfigsService', () => {
     });
   });
 
+  it('uses the default warning threshold for legacy budget policies that only miss the threshold', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.budgetPolicy = {
+      enabled: true,
+      enforcementMode: 'warn',
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.budget).toEqual({
+      enabled: true,
+      enforcementMode: 'warn',
+      warningThresholdPercent: 80,
+    });
+    expect(result.budgetResolution).toEqual({
+      budgetScopeType: 'application',
+      budgetScopeId: applicationId,
+      resolvedBy: 'default_application',
+      warningThresholdPercent: 80,
+    });
+  });
+
   it('reflects active budget policy in the RuntimeSnapshot execution view', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -352,6 +388,60 @@ describe('RuntimeConfigsService', () => {
       enforcementMode: 'block',
       warningThresholdPercent: 75,
     });
+  });
+
+  it('keeps the RuntimeSnapshot budget shape stable for Gateway consumers', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      budgetPolicy: {
+        enabled: true,
+        enforcementMode: 'warn' as const,
+        warningThresholdPercent: 65,
+      },
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(Object.keys(result.policies.budget).sort()).toEqual([
+      'enabled',
+      'enforcementMode',
+      'warningThresholdPercent',
+    ]);
+    expect(Object.keys(result.budgetResolution).sort()).toEqual([
+      'budgetScopeId',
+      'budgetScopeType',
+      'resolvedBy',
+      'warningThresholdPercent',
+    ]);
+    expect(result.policies.budget).toEqual({
+      enabled: true,
+      enforcementMode: 'warn',
+      warningThresholdPercent: 65,
+    });
+    expect(result.budgetResolution).toEqual({
+      budgetScopeType: 'application',
+      budgetScopeId: applicationId,
+      resolvedBy: 'default_application',
+      warningThresholdPercent: 65,
+    });
+    expect(result.lookupKey).toEqual({
+      tenantId,
+      projectId,
+      applicationId,
+    });
+    expect(result.lookupKey).not.toHaveProperty('budgetScopeType');
+    expect(result.lookupKey).not.toHaveProperty('budgetScopeId');
+    expect(result.policies.budget).not.toHaveProperty('quota');
+    expect(result.policies.budget).not.toHaveProperty('ledger');
+    expect(result.policies.budget).not.toHaveProperty('checker');
   });
 
   it('rejects partial stored budget policy documents', async () => {
