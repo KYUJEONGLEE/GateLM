@@ -104,7 +104,8 @@
       "required": [
         "budgetScopeType",
         "budgetScopeId",
-        "resolvedBy"
+        "resolvedBy",
+        "warningThresholdPercent"
       ]
     },
     "providerCatalogRef": {
@@ -374,7 +375,8 @@
       },
       "required": [
         "enabled",
-        "enforcementMode"
+        "enforcementMode",
+        "warningThresholdPercent"
       ]
     },
     "fallbackPolicy": {
