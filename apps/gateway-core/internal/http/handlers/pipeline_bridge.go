@@ -46,6 +46,8 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			Snapshot:           reqCtx.RuntimeSnapshot,
 			RateLimitConfig:    reqCtx.RuntimeRateLimit,
 			HasRateLimitConfig: reqCtx.HasRuntimeRateLimit,
+			BudgetPolicy:       reqCtx.RuntimeBudgetPolicy,
+			HasBudgetPolicy:    reqCtx.HasRuntimeBudgetPolicy,
 			RoutingPolicy:      reqCtx.RuntimeRoutingPolicy,
 			HasRoutingPolicy:   reqCtx.HasRuntimeRoutingPolicy,
 			CachePolicy:        reqCtx.RuntimeCachePolicy,
@@ -53,6 +55,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 		},
 		Governance: request.GovernanceContext{
 			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
+			BudgetDecision:    reqCtx.BudgetDecision.Clone(),
 		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
@@ -115,6 +118,10 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 		reqCtx.RuntimeRateLimit = gatewayCtx.Runtime.RateLimitConfig
 		reqCtx.HasRuntimeRateLimit = true
 	}
+	if gatewayCtx.Runtime.HasBudgetPolicy {
+		reqCtx.RuntimeBudgetPolicy = gatewayCtx.Runtime.BudgetPolicy
+		reqCtx.HasRuntimeBudgetPolicy = true
+	}
 	if gatewayCtx.Runtime.HasRoutingPolicy {
 		reqCtx.RuntimeRoutingPolicy = gatewayCtx.Runtime.RoutingPolicy
 		reqCtx.HasRuntimeRoutingPolicy = true
@@ -126,6 +133,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 
 	if gatewayCtx.Governance.RateLimitDecision != nil {
 		reqCtx.RateLimitDecision = gatewayCtx.Governance.RateLimitDecision.Clone()
+	}
+	if gatewayCtx.Governance.BudgetDecision != nil {
+		reqCtx.BudgetDecision = gatewayCtx.Governance.BudgetDecision.Clone()
 	}
 
 	if gatewayCtx.Masking.Action != "" {

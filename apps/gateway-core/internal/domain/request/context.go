@@ -49,6 +49,8 @@ type RuntimeContext struct {
 
 	RateLimitConfig    ratelimit.Config
 	HasRateLimitConfig bool
+	BudgetPolicy       budget.Policy
+	HasBudgetPolicy    bool
 	RoutingPolicy      runtimeconfig.RoutingPolicy
 	HasRoutingPolicy   bool
 	CachePolicy        runtimeconfig.CachePolicy
@@ -57,6 +59,7 @@ type RuntimeContext struct {
 
 type GovernanceContext struct {
 	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 }
 
 type MaskingContext struct {

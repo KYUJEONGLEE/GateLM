@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/request"
@@ -41,6 +42,12 @@ func TestStageLoadsActiveRuntimeConfigIntoGatewayContext(t *testing.T) {
 	}
 	if !gatewayCtx.Runtime.HasRateLimitConfig || gatewayCtx.Runtime.RateLimitConfig.Limit != 7 {
 		t.Fatalf("expected runtime rate limit config, got %#v", gatewayCtx.Runtime)
+	}
+	if !gatewayCtx.Runtime.HasBudgetPolicy ||
+		!gatewayCtx.Runtime.BudgetPolicy.Enabled ||
+		gatewayCtx.Runtime.BudgetPolicy.EnforcementMode != "warn" ||
+		gatewayCtx.Runtime.BudgetPolicy.WarningThresholdPercent != 70 {
+		t.Fatalf("expected runtime budget policy, got %#v", gatewayCtx.Runtime)
 	}
 }
 
@@ -122,6 +129,11 @@ func testActiveConfig() runtimeconfig.ActiveConfig {
 			Algorithm:     ratelimit.AlgorithmFixedWindow,
 			WindowSeconds: 60,
 			Limit:         7,
+		},
+		BudgetPolicy: budget.Policy{
+			Enabled:                 true,
+			EnforcementMode:         budget.EnforcementModeWarn,
+			WarningThresholdPercent: 70,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: "hash_security_policy_test",

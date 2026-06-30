@@ -156,6 +156,7 @@ type runtimeSnapshotPolicies struct {
 	Routing   runtimeSnapshotRoutingPolicy   `json:"routing"`
 	Cache     runtimeSnapshotCachePolicy     `json:"cache"`
 	RateLimit runtimeSnapshotRateLimitPolicy `json:"rateLimit"`
+	Budget    runtimeSnapshotBudgetPolicy    `json:"budget"`
 	Fallback  runtimeSnapshotFallbackPolicy  `json:"fallback"`
 }
 
@@ -179,6 +180,12 @@ type runtimeSnapshotRateLimitPolicy struct {
 	Scope         string `json:"scope"`
 	WindowSeconds int    `json:"windowSeconds"`
 	Limit         int    `json:"limit"`
+}
+
+type runtimeSnapshotBudgetPolicy struct {
+	Enabled                 bool   `json:"enabled"`
+	EnforcementMode         string `json:"enforcementMode"`
+	WarningThresholdPercent int    `json:"warningThresholdPercent"`
 }
 
 type runtimeSnapshotFallbackPolicy struct {
@@ -232,6 +239,11 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Algorithm:     ratelimit.AlgorithmFixedWindow,
 			WindowSeconds: r.Policies.RateLimit.WindowSeconds,
 			Limit:         r.Policies.RateLimit.Limit,
+		},
+		BudgetPolicy: budget.Policy{
+			Enabled:                 r.Policies.Budget.Enabled,
+			EnforcementMode:         r.Policies.Budget.EnforcementMode,
+			WarningThresholdPercent: r.Policies.Budget.WarningThresholdPercent,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: securityPolicyHash,

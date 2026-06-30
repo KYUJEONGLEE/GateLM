@@ -47,6 +47,11 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 	if snapshot.CachePolicy.CachePolicyHash != "hash_cache_policy_live" || snapshot.CachePolicy.Type != runtimeconfig.CacheTypeExact {
 		t.Fatalf("unexpected cache policy: %+v", snapshot.CachePolicy)
 	}
+	if !snapshot.BudgetPolicy.Enabled ||
+		snapshot.BudgetPolicy.EnforcementMode != budget.EnforcementModeBlock ||
+		snapshot.BudgetPolicy.WarningThresholdPercent != 75 {
+		t.Fatalf("unexpected budget policy: %+v", snapshot.BudgetPolicy)
+	}
 	if snapshot.RoutingPolicy.DefaultProvider != "openai-main" || snapshot.RoutingPolicy.DefaultModel != "gpt-test-low" {
 		t.Fatalf("unexpected routing policy: %+v", snapshot.RoutingPolicy)
 	}
@@ -151,6 +156,11 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				Scope:         "application",
 				WindowSeconds: 60,
 				Limit:         10,
+			},
+			Budget: runtimeSnapshotBudgetPolicy{
+				Enabled:                 true,
+				EnforcementMode:         budget.EnforcementModeBlock,
+				WarningThresholdPercent: 75,
 			},
 			Fallback: runtimeSnapshotFallbackPolicy{
 				FallbackProvider: "mock-fallback",

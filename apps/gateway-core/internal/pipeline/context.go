@@ -32,12 +32,15 @@ type RequestContext struct {
 	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
 	RuntimeRateLimit        ratelimit.Config
 	HasRuntimeRateLimit     bool
+	RuntimeBudgetPolicy     budget.Policy
+	HasRuntimeBudgetPolicy  bool
 	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy
 	HasRuntimeRoutingPolicy bool
 	RuntimeCachePolicy      runtimeconfig.CachePolicy
 	HasRuntimeCachePolicy   bool
 
 	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 
 	RequestedProvider string
 	RequestedModel    string
