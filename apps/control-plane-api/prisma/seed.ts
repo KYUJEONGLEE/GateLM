@@ -201,8 +201,8 @@ export function buildDemoRuntimeConfigDocument(
     defaultModel: routingPolicy.defaultModel,
     lowCostProvider: routingPolicy.lowCostProvider,
     lowCostModel: routingPolicy.lowCostModel,
-    fallbackProvider: DEMO_PROVIDER,
-    fallbackModel: 'mock-balanced',
+    fallbackProvider: routingPolicy.fallbackProvider,
+    fallbackModel: routingPolicy.fallbackModel,
     rateLimit: {
       enabled: true,
       scope: 'application',
