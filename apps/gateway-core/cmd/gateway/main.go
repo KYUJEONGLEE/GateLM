@@ -6,16 +6,19 @@ import (
 	"log"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
+	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
+	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
@@ -40,7 +43,7 @@ func main() {
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
 	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter)
-	providerCatalogResolver := staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
 	credentialResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
 
 	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
@@ -87,9 +90,8 @@ func main() {
 		ApplicationID: cfg.DemoApplicationID,
 	})
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
-	runtimeConfigProvider := staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg))
-	rateLimitPipeline := pipeline.New(
-		runtimeconfigstage.NewStage(runtimeConfigProvider),
+	runtimePolicyPipeline := pipeline.New(
+		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
 		ratelimitstage.NewStage(
 			postgresratelimit.NewLimiter(postgresPool),
 			ratelimit.Config{
@@ -113,7 +115,7 @@ func main() {
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
 		),
-		app.WithRateLimitPipeline(rateLimitPipeline),
+		app.WithRuntimePolicyPipeline(runtimePolicyPipeline),
 		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
 	)
 	server := app.NewServer(cfg, router)
@@ -135,6 +137,17 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("gateway-core shutdown failed: %v", err)
 	}
+}
+
+func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvider, providercatalog.Resolver) {
+	if strings.TrimSpace(cfg.ControlPlaneBaseURL) != "" {
+		client := &http.Client{Timeout: cfg.ControlPlaneTimeout}
+		return controlplaneruntimeconfig.NewProvider(cfg.ControlPlaneBaseURL, client),
+			controlplaneprovidercatalog.NewResolver(cfg.ControlPlaneBaseURL, client)
+	}
+
+	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),
+		staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
 }
 
 type invocationLogQueryer struct {
@@ -192,9 +205,10 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			RoutingPolicyHash:   cfg.RoutingPolicyHash,
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
-			Enabled:    true,
-			Type:       runtimeconfig.CacheTypeExact,
-			TTLSeconds: int(cfg.ExactCacheTTL.Seconds()),
+			Enabled:         true,
+			Type:            runtimeconfig.CacheTypeExact,
+			TTLSeconds:      int(cfg.ExactCacheTTL.Seconds()),
+			CachePolicyHash: cfg.CachePolicyHash,
 		},
 	}
 }
