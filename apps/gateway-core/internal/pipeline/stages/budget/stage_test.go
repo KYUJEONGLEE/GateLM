@@ -52,6 +52,30 @@ func TestStageAllowsEnabledPolicyAsNotCheckedWithoutLedger(t *testing.T) {
 	}
 }
 
+func TestStageNormalizesCheckerDecisionWithRuntimePolicyFallback(t *testing.T) {
+	stage := NewStage(rawBudgetChecker{decision: budget.Decision{
+		Allowed: true,
+	}})
+	gatewayCtx := testBudgetGatewayContext()
+	gatewayCtx.Runtime.BudgetPolicy = budget.Policy{
+		Enabled:                 true,
+		EnforcementMode:         budget.EnforcementModeBlock,
+		WarningThresholdPercent: 65,
+	}
+	gatewayCtx.Runtime.HasBudgetPolicy = true
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected checker decision to inherit runtime policy and allow request, got %v", err)
+	}
+	if gatewayCtx.Governance.BudgetDecision == nil {
+		t.Fatal("expected budget decision")
+	}
+	if gatewayCtx.Governance.BudgetDecision.Outcome != budget.OutcomeAllowed ||
+		gatewayCtx.Governance.BudgetDecision.Policy.EnforcementMode != budget.EnforcementModeBlock {
+		t.Fatalf("expected runtime policy fallback to produce allowed decision, got %#v", gatewayCtx.Governance.BudgetDecision)
+	}
+}
+
 func TestStageBlocksBeforeProviderPath(t *testing.T) {
 	stage := NewStage(fakeBudgetChecker{decision: budget.Decision{
 		Allowed: false,
@@ -167,6 +191,15 @@ func (f fakeBudgetChecker) Check(_ context.Context, req budget.Request) (budget.
 	decision.Scope = req.Scope
 	decision.Policy = req.Policy
 	return decision, f.err
+}
+
+type rawBudgetChecker struct {
+	decision budget.Decision
+	err      error
+}
+
+func (f rawBudgetChecker) Check(_ context.Context, _ budget.Request) (budget.Decision, error) {
+	return f.decision, f.err
 }
 
 func testBudgetGatewayContext() *request.GatewayContext {

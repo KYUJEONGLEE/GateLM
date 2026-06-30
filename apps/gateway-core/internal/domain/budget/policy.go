@@ -63,7 +63,7 @@ func (AllowChecker) Check(_ context.Context, req Request) (Decision, error) {
 		Scope:                   req.Scope,
 		Policy:                  policy,
 		WarningThresholdPercent: policy.WarningThresholdPercent,
-	}, req)
+	}, req), nil
 }
 
 func NormalizePolicy(policy Policy) Policy {
@@ -103,12 +103,12 @@ func NormalizePolicy(policy Policy) Policy {
 	return policy
 }
 
-func NormalizeDecision(decision Decision, req Request) (Decision, error) {
+func NormalizeDecision(decision Decision, req Request) Decision {
 	req.Policy = NormalizePolicy(req.Policy)
-	decision.Policy = NormalizePolicy(decision.Policy)
-	if decision.Policy.EnforcementMode == "" {
+	if isZeroPolicy(decision.Policy) {
 		decision.Policy = req.Policy
 	}
+	decision.Policy = NormalizePolicy(decision.Policy)
 	decision.Scope = NormalizeScope(decision.Scope, req.ApplicationID)
 	if strings.TrimSpace(decision.Scope.ID) == "" {
 		decision.Scope = NormalizeScope(req.Scope, req.ApplicationID)
@@ -140,13 +140,19 @@ func NormalizeDecision(decision Decision, req Request) (Decision, error) {
 		}
 		decision.Allowed = true
 	}
-	return decision, nil
+	return decision
 }
 
 func (d *Decision) Clone() *Decision {
 	if d == nil {
 		return nil
 	}
-	copy := *d
-	return &copy
+	cloned := *d
+	return &cloned
+}
+
+func isZeroPolicy(policy Policy) bool {
+	return !policy.Enabled &&
+		strings.TrimSpace(policy.EnforcementMode) == "" &&
+		policy.WarningThresholdPercent == 0
 }
