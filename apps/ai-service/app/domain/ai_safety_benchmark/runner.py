@@ -16,15 +16,21 @@ def run_benchmark(
     warmup_requests: int,
     measured_requests: int,
     timeout_ms: int,
+    request_timeout_ms: int | None = None,
     resource_sampler: ResourceSampler,
 ) -> list[BenchmarkSample]:
+    effective_request_timeout_ms = request_timeout_ms or timeout_ms
     for case in islice(cycle(cases), warmup_requests):
-        target.detect(render_case_prompt(case), locale=case.locale, timeout_ms=timeout_ms)
+        target.detect(render_case_prompt(case), locale=case.locale, timeout_ms=effective_request_timeout_ms)
 
     samples: list[BenchmarkSample] = []
     resource_sampler.start()
     for case in islice(cycle(cases), measured_requests):
-        result = target.detect(render_case_prompt(case), locale=case.locale, timeout_ms=timeout_ms)
+        result = target.detect(
+            render_case_prompt(case),
+            locale=case.locale,
+            timeout_ms=effective_request_timeout_ms,
+        )
         resource_sampler.sample()
         samples.append(
             BenchmarkSample(

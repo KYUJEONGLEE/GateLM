@@ -187,6 +187,7 @@ def build_fake_report(
         warmup_requests=10,
         measured_requests=100,
         timeout_ms=300,
+        request_timeout_ms=300,
         resource_sampler=resource_sampler,
     )
     report = build_report(
@@ -196,6 +197,7 @@ def build_fake_report(
         warmup_requests=10,
         measured_requests=100,
         timeout_ms=300,
+        request_timeout_ms=300,
         resource_summary=resource_sampler.summary(),
         run_id="test-run",
         git_sha="testsha",

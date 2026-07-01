@@ -34,6 +34,8 @@ python -m app.services.ai_safety_latency_benchmark_runner `
   --target http `
   --endpoint-url http://127.0.0.1:8000/internal/ai-safety/v1/detect `
   --runtime-profile cpu_local_pipeline `
+  --timeout-ms 300 `
+  --request-timeout-ms 3000 `
   --corpus ../../docs/ai-safety-lab/fixtures/resource-latency-benchmark-corpus.jsonl `
   --out ../../reports/ai-safety-lab
 ```

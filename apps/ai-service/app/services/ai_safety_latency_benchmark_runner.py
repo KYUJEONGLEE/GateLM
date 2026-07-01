@@ -85,7 +85,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout-ms",
         type=int,
         default=DEFAULT_TIMEOUT_MS,
-        help="Sidecar timeout candidate in milliseconds.",
+        help="Sidecar gate timeout candidate in milliseconds.",
+    )
+    parser.add_argument(
+        "--request-timeout-ms",
+        type=int,
+        default=None,
+        help="Optional HTTP/in-process request timeout in milliseconds. Defaults to --timeout-ms.",
     )
     parser.add_argument(
         "--resource-pid",
@@ -142,6 +148,7 @@ def run(
             warmup_requests=args.warmup_requests,
             measured_requests=args.measured_requests,
             timeout_ms=args.timeout_ms,
+            request_timeout_ms=args.request_timeout_ms,
             resource_sampler=resource_sampler,
         )
         report = build_report(
@@ -151,6 +158,7 @@ def run(
             warmup_requests=args.warmup_requests,
             measured_requests=args.measured_requests,
             timeout_ms=args.timeout_ms,
+            request_timeout_ms=args.request_timeout_ms,
             resource_summary=resource_sampler.summary(),
             run_id=args.run_id or default_run_id(),
             git_sha=args.git_sha or git_sha(),
@@ -196,6 +204,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise BenchmarkError("measuredRequests must be positive")
     if args.timeout_ms <= 0:
         raise BenchmarkError("timeoutMs must be positive")
+    if args.request_timeout_ms is not None and args.request_timeout_ms <= 0:
+        raise BenchmarkError("requestTimeoutMs must be positive")
     if args.target == "http" and not str(args.endpoint_url).startswith(("http://", "https://")):
         raise BenchmarkError("endpoint-url must be an http or https URL")
 
