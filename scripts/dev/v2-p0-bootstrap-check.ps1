@@ -333,7 +333,8 @@ try {
         $gatewaySqlFiles = @(
             "db/migrations/006_create_p0_invocation_logs_fallback.sql",
             "db/migrations/007_create_gateway_rate_limit_counters.sql",
-            "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql"
+            "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
+            "db/migrations/009_alter_p0_invocation_logs_api_key_fk.sql"
         )
         foreach ($file in $gatewaySqlFiles) {
             Invoke-GatewaySqlFile -Path $file
