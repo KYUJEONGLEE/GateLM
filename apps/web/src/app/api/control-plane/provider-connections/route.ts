@@ -51,9 +51,17 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
   const timeoutMs = record.timeoutMs;
 
   return (
+    typeof record.adapterType === "string" &&
+    typeof record.apiVersion === "string" &&
     typeof record.provider === "string" &&
     typeof record.displayName === "string" &&
     typeof record.baseUrl === "string" &&
+    typeof record.credentialRequired === "boolean" &&
+    typeof record.models === "string" &&
+    (record.failureMode === "fail_closed" ||
+      record.failureMode === "fail_open_to_fallback") &&
+    (record.requestFormat === "openai_chat_completions" ||
+      record.requestFormat === "mock_chat_completions") &&
     typeof timeoutMs === "number" &&
     Number.isInteger(timeoutMs) &&
     timeoutMs >= minProviderTimeoutMs &&

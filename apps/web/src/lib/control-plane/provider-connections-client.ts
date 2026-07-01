@@ -23,6 +23,7 @@ type RuntimeConfigFixture = {
         prefix: string | null;
       } | null;
       displayName: string;
+      failureMode?: string;
       provider: string;
       providerId: string;
       resolver: string;
@@ -132,17 +133,56 @@ async function listProviders(projectId: string): Promise<ProviderListResult> {
 }
 
 function toProviderPayload(values: ProviderConnectionFormValues) {
+  const models = splitProviderModels(values.models);
+  const providerConfig = toProviderConfig(values, models);
+
   return {
     baseUrl: values.baseUrl.trim(),
     credentialLast4: values.credentialLast4.trim() || undefined,
     credentialPrefix: values.credentialPrefix.trim() || undefined,
     displayName: values.displayName.trim(),
     provider: values.provider.trim(),
+    providerConfig,
     resolver: values.resolver.trim() || undefined,
     secretRef: values.secretRef.trim() || undefined,
     status: values.status,
     timeoutMs: values.timeoutMs
   };
+}
+
+function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {
+  const adapterType = values.adapterType.trim();
+  const apiVersion = values.apiVersion.trim();
+  const providerConfig: Record<string, unknown> = {
+    credentialRequired: values.credentialRequired,
+    failureMode: values.failureMode,
+    requestFormat: values.requestFormat
+  };
+
+  if (models.length > 0) {
+    providerConfig.models = models;
+  }
+
+  if (adapterType) {
+    providerConfig.adapterType = adapterType;
+  }
+
+  if (apiVersion) {
+    providerConfig.apiVersion = apiVersion;
+  }
+
+  return providerConfig;
+}
+
+function splitProviderModels(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((model) => model.trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 async function readProviderResponse(response: Response): Promise<ProviderRequestResult> {
@@ -264,7 +304,14 @@ function getFixtureProviders(): ProviderConnectionRecord[] {
     id: provider.providerId,
     projectId: runtimeConfig.projectId,
     provider: provider.provider,
-    providerConfig: null,
+    providerConfig: {
+      adapterType: provider.provider === "mock" ? "mock" : "openai_compatible",
+      credentialRequired: provider.resolver !== "none",
+      failureMode: provider.failureMode ?? "fail_closed",
+      models: provider.models,
+      requestFormat:
+        provider.provider === "mock" ? "mock_chat_completions" : "openai_chat_completions"
+    },
     resolver: provider.resolver,
     status: normalizeProviderStatus(provider.status) ?? "DISABLED",
     tenantId: runtimeConfig.tenantId,

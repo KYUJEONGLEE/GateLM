@@ -22,11 +22,17 @@ export type ProviderConnectionRecord = {
 };
 
 export type ProviderConnectionFormValues = {
+  adapterType: string;
+  apiVersion: string;
   baseUrl: string;
+  credentialRequired: boolean;
   credentialLast4: string;
   credentialPrefix: string;
   displayName: string;
+  failureMode: "fail_closed" | "fail_open_to_fallback";
+  models: string;
   provider: string;
+  requestFormat: "openai_chat_completions" | "mock_chat_completions";
   resolver: string;
   secretRef: string;
   status: ProviderConnectionStatus;

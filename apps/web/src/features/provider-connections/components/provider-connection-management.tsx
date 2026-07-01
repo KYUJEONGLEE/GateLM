@@ -35,11 +35,17 @@ const minProviderTimeoutMs = 1000;
 const maxProviderTimeoutMs = 120000;
 
 const emptyProviderForm: ProviderConnectionFormValues = {
+  adapterType: "openai_compatible",
+  apiVersion: "",
   baseUrl: "",
+  credentialRequired: true,
   credentialLast4: "",
   credentialPrefix: "",
   displayName: "",
+  failureMode: "fail_closed",
+  models: "",
   provider: "",
+  requestFormat: "openai_chat_completions",
   resolver: "none",
   secretRef: "",
   status: "ACTIVE",
@@ -49,19 +55,26 @@ const emptyProviderForm: ProviderConnectionFormValues = {
 const providerText: Record<
   Locale,
   {
+    adapterType: string;
+    apiVersion: string;
     baseUrl: string;
     created: string;
     credential: string;
+    credentialRequired: string;
     credentialLast4: string;
     credentialPrefix: string;
     displayName: string;
     empty: string;
     fixtureFallback: string;
     management: string;
+    models: string;
+    failureMode: string;
     projectId: string;
     provider: string;
+    providerConfig: string;
     providerId: string;
     register: string;
+    requestFormat: string;
     resolver: string;
     save: string;
     secretRef: string;
@@ -73,19 +86,26 @@ const providerText: Record<
   }
 > = {
   en: {
+    adapterType: "Adapter type",
+    apiVersion: "API version",
     baseUrl: "Base URL",
     created: "Created",
     credential: "Credential preview",
+    credentialRequired: "Credential required",
     credentialLast4: "Credential last 4",
     credentialPrefix: "Credential prefix",
     displayName: "Display name",
     empty: "No provider connections found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture provider connection.",
     management: "management",
+    models: "Models",
+    failureMode: "Failure mode",
     projectId: "Project ID",
     provider: "Provider key",
+    providerConfig: "Provider config",
     providerId: "Provider ID",
     register: "Register provider",
+    requestFormat: "Request format",
     resolver: "Resolver",
     save: "Save",
     secretRef: "Secret reference",
@@ -96,19 +116,26 @@ const providerText: Record<
     updated: "Updated"
   },
   ko: {
+    adapterType: "Adapter type",
+    apiVersion: "API version",
     baseUrl: "Base URL",
     created: "생성",
     credential: "Credential preview",
+    credentialRequired: "Credential required",
     credentialLast4: "Credential last 4",
     credentialPrefix: "Credential prefix",
     displayName: "표시 이름",
     empty: "Provider connection이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture Provider connection을 표시 중입니다.",
     management: "관리",
+    models: "Models",
+    failureMode: "Failure mode",
     projectId: "Project ID",
     provider: "Provider key",
+    providerConfig: "Provider config",
     providerId: "Provider ID",
     register: "Provider 등록",
+    requestFormat: "Request format",
     resolver: "Resolver",
     save: "저장",
     secretRef: "Secret reference",
@@ -289,6 +316,85 @@ export function ProviderConnectionManagement({
             />
           </label>
           <label className="policy-field">
+            <span>{text.adapterType}</span>
+            <input
+              maxLength={80}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  adapterType: event.target.value.trim()
+                }))
+              }
+              placeholder="openai_compatible"
+              type="text"
+              value={formValues.adapterType}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.requestFormat}</span>
+            <select
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  requestFormat:
+                    event.target.value === "mock_chat_completions"
+                      ? "mock_chat_completions"
+                      : "openai_chat_completions"
+                }))
+              }
+              value={formValues.requestFormat}
+            >
+              <option value="openai_chat_completions">openai_chat_completions</option>
+              <option value="mock_chat_completions">mock_chat_completions</option>
+            </select>
+          </label>
+          <label className="policy-field">
+            <span>{text.apiVersion}</span>
+            <input
+              maxLength={80}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  apiVersion: event.target.value.trim()
+                }))
+              }
+              placeholder="optional"
+              type="text"
+              value={formValues.apiVersion}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.failureMode}</span>
+            <select
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  failureMode:
+                    event.target.value === "fail_open_to_fallback"
+                      ? "fail_open_to_fallback"
+                      : "fail_closed"
+                }))
+              }
+              value={formValues.failureMode}
+            >
+              <option value="fail_closed">fail_closed</option>
+              <option value="fail_open_to_fallback">fail_open_to_fallback</option>
+            </select>
+          </label>
+          <label className="policy-toggle-row provider-form-toggle">
+            <input
+              checked={formValues.credentialRequired}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  credentialRequired: event.target.checked
+                }))
+              }
+              type="checkbox"
+            />
+            <span>{text.credentialRequired}</span>
+          </label>
+          <label className="policy-field">
             <span>{text.resolver}</span>
             <input
               maxLength={80}
@@ -314,6 +420,20 @@ export function ProviderConnectionManagement({
               }
               type="text"
               value={formValues.secretRef}
+            />
+          </label>
+          <label className="policy-field provider-wide-field">
+            <span>{text.models}</span>
+            <textarea
+              maxLength={1200}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  models: event.target.value
+                }))
+              }
+              placeholder="gpt-4o-mini, gpt-4o"
+              value={formValues.models}
             />
           </label>
           <label className="policy-field">
@@ -393,6 +513,12 @@ export function ProviderConnectionManagement({
                       <small className="project-muted">
                         {text.timeoutMs}: {provider.timeoutMs} / {text.resolver}: {provider.resolver}
                       </small>
+                      <small className="project-muted">
+                        {text.models}: {formatProviderModels(provider.providerConfig)}
+                      </small>
+                      <small className="project-muted">
+                        {text.providerConfig}: {formatProviderConfig(provider.providerConfig)}
+                      </small>
                     </td>
                     <td>
                       <Badge
@@ -449,12 +575,28 @@ function getInitialProviderForm(providers: ProviderConnectionRecord[]) {
 }
 
 function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConnectionFormValues {
+  const providerConfig = provider.providerConfig;
+
   return {
+    adapterType: getProviderConfigString(
+      providerConfig,
+      "adapterType",
+      getDefaultAdapterType(provider)
+    ),
+    apiVersion: getProviderConfigString(providerConfig, "apiVersion", ""),
     baseUrl: provider.baseUrl,
+    credentialRequired: getProviderConfigBoolean(
+      providerConfig,
+      "credentialRequired",
+      provider.resolver !== "none"
+    ),
     credentialLast4: nullableText(provider.credentialPreview.last4, ""),
     credentialPrefix: nullableText(provider.credentialPreview.prefix, ""),
     displayName: provider.displayName,
+    failureMode: getProviderConfigFailureMode(providerConfig),
+    models: getProviderConfigModels(provider.providerConfig).join(", "),
     provider: provider.provider,
+    requestFormat: getProviderConfigRequestFormat(providerConfig, provider),
     resolver: provider.resolver,
     secretRef: "",
     status: provider.status,
@@ -490,4 +632,90 @@ function validateProviderForm(values: ProviderConnectionFormValues, locale: Loca
   }
 
   return null;
+}
+
+function getProviderConfigString(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: string
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "string" ? value : fallback;
+}
+
+function getProviderConfigBoolean(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: boolean
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function getProviderConfigFailureMode(
+  providerConfig: Record<string, unknown> | null
+): ProviderConnectionFormValues["failureMode"] {
+  return providerConfig?.failureMode === "fail_open_to_fallback"
+    ? "fail_open_to_fallback"
+    : "fail_closed";
+}
+
+function getProviderConfigRequestFormat(
+  providerConfig: Record<string, unknown> | null,
+  provider: ProviderConnectionRecord
+): ProviderConnectionFormValues["requestFormat"] {
+  const requestFormat = providerConfig?.requestFormat;
+
+  if (requestFormat === "mock_chat_completions") {
+    return "mock_chat_completions";
+  }
+
+  if (requestFormat === "openai_chat_completions") {
+    return "openai_chat_completions";
+  }
+
+  return provider.provider === "mock"
+    ? "mock_chat_completions"
+    : "openai_chat_completions";
+}
+
+function getDefaultAdapterType(provider: ProviderConnectionRecord) {
+  return provider.provider === "mock" ? "mock" : "openai_compatible";
+}
+
+function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
+  const models = providerConfig?.models;
+
+  return Array.isArray(models)
+    ? models.filter(
+        (model): model is string => typeof model === "string" && model.trim().length > 0
+      )
+    : [];
+}
+
+function formatProviderModels(providerConfig: Record<string, unknown> | null) {
+  const models = getProviderConfigModels(providerConfig);
+
+  return models.length > 0 ? models.join(", ") : "none";
+}
+
+function formatProviderConfig(providerConfig: Record<string, unknown> | null) {
+  if (!providerConfig) {
+    return "default";
+  }
+
+  const adapterType = getProviderConfigString(providerConfig, "adapterType", "default");
+  const credentialRequired = getProviderConfigBoolean(
+    providerConfig,
+    "credentialRequired",
+    true
+  );
+  const requestFormat = getProviderConfigString(providerConfig, "requestFormat", "default");
+  const failureMode = getProviderConfigFailureMode(providerConfig);
+
+  return `${adapterType} / ${requestFormat} / credential ${
+    credentialRequired ? "required" : "not_required"
+  } / ${failureMode}`;
 }
