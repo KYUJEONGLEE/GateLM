@@ -281,6 +281,8 @@ reports/ai-safety-lab/sidecar-shadow-report.json
 reports/ai-safety-lab/sidecar-shadow-report.md
 reports/ai-safety-lab/gateway-safety-output-report.json
 reports/ai-safety-lab/gateway-safety-output-report.md
+reports/ai-safety-lab/resource-latency-benchmark.json
+reports/ai-safety-lab/resource-latency-benchmark.md
 ```
 
 이 report들은 raw prompt, raw response, raw secret, raw detected value를 포함하지 않는다.
