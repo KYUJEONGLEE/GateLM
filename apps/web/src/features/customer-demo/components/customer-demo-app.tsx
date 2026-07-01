@@ -115,6 +115,12 @@ const customerDemoText: Record<
       "rate-limited": {
         title: "Rate limit"
       },
+      "provider-fallback": {
+        title: "Provider fallback"
+      },
+      "provider-timeout": {
+        title: "Provider timeout"
+      },
       redacted: {
         title: "Redaction"
       },
@@ -175,6 +181,12 @@ const customerDemoText: Record<
       "rate-limited": {
         title: "Rate limit"
       },
+      "provider-fallback": {
+        title: "Provider fallback"
+      },
+      "provider-timeout": {
+        title: "Provider timeout"
+      },
       redacted: {
         title: "Redaction"
       },
@@ -219,6 +231,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const requestInFlight = useRef(false);
   const hasScenarios = model.scenarios.length > 0;
   const hasRequestDetail = isRequestDetailAvailable(exchange);
+  const canSendStreaming = hasScenarios && isStreamingSupportedScenario(exchange.scenarioId);
   const text = customerDemoText[locale];
   const exchangeText = text.scenarios[exchange.scenarioId];
   const tenantLabel = formatTenantDisplayName(model.tenantId);
@@ -396,7 +409,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
               </Button>
               <Button
                 className="secondary-button"
-                disabled={isLoading || !hasScenarios}
+                disabled={isLoading || !canSendStreaming}
                 onClick={() => sendScenario(exchange.scenarioId, { stream: true })}
                 type="button"
                 variant="outline"
@@ -461,6 +474,8 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 <Metric label="Cache" value={exchange.cacheStatus} />
                 <Metric label="Masking" value={exchange.maskingAction} />
                 <Metric label="Provider" value={exchange.providerCall} />
+                <Metric label="Provider outcome" value={getDomainOutcome(exchange, "provider")} />
+                <Metric label="Fallback outcome" value={getDomainOutcome(exchange, "fallback")} />
                 <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
                 <Metric label="Error code" value={getErrorCode(exchange.response.body)} />
                 <Metric label="Stream requested" value={exchange.streaming.requested ? "yes" : "no"} />
@@ -564,6 +579,10 @@ function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
     exchange.requestId !== "not-configured" &&
     exchange.requestLogHref.includes(`/request-logs/${exchange.requestId}`)
   );
+}
+
+function isStreamingSupportedScenario(scenarioId: CustomerDemoScenarioId) {
+  return scenarioId !== "provider-timeout" && scenarioId !== "provider-fallback";
 }
 
 function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
@@ -732,6 +751,11 @@ function getResponseHeader(exchange: CustomerDemoExchange, name: string) {
   return exchange.response.headers.find((header) => header.name === name)?.value ?? "not-set";
 }
 
+function getDomainOutcome(exchange: CustomerDemoExchange, domain: string) {
+  return getNestedString(exchange.response.body, ["gate_lm", "domainOutcomes", domain, "outcome"])
+    ?? "not-set";
+}
+
 function getErrorCode(body: unknown) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return "none";
@@ -745,4 +769,18 @@ function getErrorCode(body: unknown) {
 
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" && code.trim() ? code : "none";
+}
+
+function getNestedString(body: unknown, path: string[]) {
+  let current = body;
+
+  for (const key of path) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[key];
+  }
+
+  return typeof current === "string" && current.trim() ? current : undefined;
 }

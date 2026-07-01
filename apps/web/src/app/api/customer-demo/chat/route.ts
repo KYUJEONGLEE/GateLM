@@ -26,6 +26,8 @@ type LiveScenarioDefinition = {
   gatewayPrompt: string;
 };
 
+type ProviderFailureMode = "error" | "timeout";
+
 const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Request-Id",
   "X-GateLM-Cache-Status",
@@ -62,6 +64,14 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
   "rate-limited": {
     detectedTypes: [],
     gatewayPrompt: "Write one more local stack response after quota is exhausted."
+  },
+  "provider-timeout": {
+    detectedTypes: [],
+    gatewayPrompt: "Write a short safe provider timeout fallback response."
+  },
+  "provider-fallback": {
+    detectedTypes: [],
+    gatewayPrompt: "Write a short safe provider error fallback response."
   }
 };
 
@@ -143,7 +153,30 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId, stream: b
     }
   }
 
+  if (scenarioId === "provider-timeout") {
+    return executeProviderFailureScenario(scenarioId, "timeout");
+  }
+
+  if (scenarioId === "provider-fallback") {
+    return executeProviderFailureScenario(scenarioId, "error");
+  }
+
   return callGateway(scenarioId, "1", { stream });
+}
+
+async function executeProviderFailureScenario(
+  scenarioId: CustomerDemoScenarioId,
+  mode: ProviderFailureMode
+) {
+  const config = getLiveGatewayConfig();
+
+  await configureProviderFailureControl(mode);
+
+  try {
+    return await callGateway(scenarioId, mode, { stream: false });
+  } finally {
+    await resetProviderFailureControl(config).catch(() => undefined);
+  }
 }
 
 async function callGateway(
@@ -218,6 +251,39 @@ function buildGatewayRequestBody(
       responseMetadata: true
     }
   };
+}
+
+async function configureProviderFailureControl(mode: ProviderFailureMode) {
+  const config = getLiveGatewayConfig();
+  const response = await fetch(`${config.providerFailureControlUrl}/__mock/config`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      failModels: config.providerFailureModels,
+      mode
+    }),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error("Provider failure control is unavailable.");
+  }
+}
+
+async function resetProviderFailureControl(config = getLiveGatewayConfig()) {
+  await fetch(`${config.providerFailureControlUrl}/__mock/config`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      failModels: [],
+      mode: "off"
+    }),
+    cache: "no-store"
+  });
 }
 
 function buildDisplayRequestBody(

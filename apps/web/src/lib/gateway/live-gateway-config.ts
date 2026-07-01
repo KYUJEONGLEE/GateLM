@@ -10,6 +10,8 @@ export type LiveGatewayConfig = {
   appToken: string;
   baseUrl: string;
   projectId: string;
+  providerFailureControlUrl: string;
+  providerFailureModels: string[];
   rateLimitMaxAttempts: number;
 };
 
@@ -27,6 +29,11 @@ export function getLiveGatewayConfig(): LiveGatewayConfig {
     projectId:
       firstEnv("GATELM_DEMO_PROJECT_ID", "GATELM_GATEWAY_PROJECT_ID", "GATEWAY_PROJECT_ID")
       ?? "00000000-0000-4000-8000-000000000200",
+    providerFailureControlUrl: normalizeBaseUrl(
+      firstEnv("GATELM_PROVIDER_FAILURE_CONTROL_URL", "K6_PROVIDER_FAILURE_CONTROL_URL", "MOCK_PROVIDER_BASE_URL")
+        ?? `http://${defaultGatewayHost()}:${process.env.MOCK_PROVIDER_PORT ?? "8090"}`
+    ),
+    providerFailureModels: getProviderFailureModels(),
     rateLimitMaxAttempts: getRateLimitMaxAttempts()
   };
 }
@@ -59,6 +66,31 @@ function getRateLimitMaxAttempts() {
   }
 
   return DEFAULT_RATE_LIMIT_MAX_ATTEMPTS;
+}
+
+function getProviderFailureModels() {
+  const configured = firstEnv("GATELM_PROVIDER_FAILURE_MODELS", "K6_PROVIDER_FAILURE_MODELS");
+  const parsed = parseCsv(configured);
+
+  if (parsed.length > 0) {
+    return parsed;
+  }
+
+  return [
+    firstEnv("GATELM_DEMO_OPENAI_LOW_COST_MODEL", "OPENAI_LOW_COST_MODEL") ?? "gpt-4o-mini",
+    firstEnv("GATELM_DEMO_OPENAI_BALANCED_MODEL", "OPENAI_BALANCED_MODEL") ?? "gpt-4o"
+  ];
+}
+
+function parseCsv(value: string | undefined) {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parsePositiveInt(value: string | undefined) {

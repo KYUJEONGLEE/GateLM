@@ -3,7 +3,9 @@ export type CustomerDemoScenarioId =
   | "redacted"
   | "blocked"
   | "cache-hit"
-  | "rate-limited";
+  | "rate-limited"
+  | "provider-timeout"
+  | "provider-fallback";
 
 export type CustomerDemoIntegrationMode = "fixture" | "gateway";
 
