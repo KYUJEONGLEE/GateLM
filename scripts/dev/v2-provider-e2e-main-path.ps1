@@ -26,10 +26,10 @@ function Convert-ToSafeArray {
     param($Value)
 
     if ($null -eq $Value) {
-        return @()
+        return ,@()
     }
 
-    return @($Value | Where-Object { $null -ne $_ })
+    return ,@($Value | Where-Object { $null -ne $_ })
 }
 
 function Join-Url {
@@ -83,11 +83,8 @@ function Invoke-Http {
         $errorType = $_.Exception.GetType().FullName
         $errorMessage = $_.Exception.Message
         $errorResponse = $null
-        try {
+        if ($_.Exception -is [System.Net.WebException]) {
             $errorResponse = $_.Exception.Response
-        }
-        catch {
-            $errorResponse = $null
         }
         if ($null -ne $errorResponse) {
             $statusCode = [int]$errorResponse.StatusCode
@@ -231,7 +228,7 @@ function Select-SafeProviderSummary {
         enabled = $Provider.enabled
         credentialRequired = $Provider.credentialRequired
         fallbackEligible = $Provider.fallbackEligible
-        modelIds = @(Convert-ToSafeArray -Value ($Provider.models | ForEach-Object { $_.modelId }))
+        modelIds = Convert-ToSafeArray -Value ($Provider.models | ForEach-Object { $_.modelId })
     }
 }
 
@@ -380,11 +377,11 @@ $catalogResponse = Invoke-Http -Method GET -Uri (Join-Url $ControlPlaneBaseUrl "
 Assert-True ($catalogResponse.statusCode -eq 200) "Provider Catalog check failed: HTTP $($catalogResponse.statusCode)"
 $catalog = Get-EnvelopeData -Payload (Convert-JsonBody -Body $catalogResponse.body)
 
-$providers = @(Convert-ToSafeArray -Value $catalog.providers)
+$providers = Convert-ToSafeArray -Value $catalog.providers
 $filteredOpenAI = $providers | Where-Object { $_.adapterType -eq "openai_compatible" -and $_.enabled -eq $true }
 $filteredMock = $providers | Where-Object { $_.adapterType -eq "mock" -and $_.fallbackEligible -eq $true -and $_.enabled -eq $true }
-$hasOpenAICompatible = @(Convert-ToSafeArray -Value $filteredOpenAI).Count -gt 0
-$hasMockFallback = @(Convert-ToSafeArray -Value $filteredMock).Count -gt 0
+$hasOpenAICompatible = (Convert-ToSafeArray -Value $filteredOpenAI).Count -gt 0
+$hasMockFallback = (Convert-ToSafeArray -Value $filteredMock).Count -gt 0
 Assert-True $hasOpenAICompatible "Provider Catalog has no enabled openai_compatible provider."
 Assert-True $hasMockFallback "Provider Catalog has no enabled mock fallback provider."
 
@@ -482,7 +479,7 @@ $report = [ordered]@{
         catalogId = $catalog.catalogId
         catalogVersion = $catalog.catalogVersion
         contentHash = $catalog.contentHash
-        providers = @(Convert-ToSafeArray -Value ($providers | ForEach-Object { Select-SafeProviderSummary -Provider $_ }))
+        providers = Convert-ToSafeArray -Value ($providers | ForEach-Object { Select-SafeProviderSummary -Provider $_ })
     }
     requestDetail = $detailSummary
     securityNote = "This report intentionally excludes raw prompt, raw response, Authorization header, API Key, App Token, Provider Key, and secret plaintext."

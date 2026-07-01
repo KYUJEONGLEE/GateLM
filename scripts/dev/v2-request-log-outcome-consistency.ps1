@@ -22,10 +22,10 @@ function Convert-ToSafeArray {
     param($Value)
 
     if ($null -eq $Value) {
-        return @()
+        return ,@()
     }
 
-    return @($Value | Where-Object { $null -ne $_ })
+    return ,@($Value | Where-Object { $null -ne $_ })
 }
 
 function Join-Url {
@@ -54,11 +54,8 @@ function Invoke-Http {
         $statusCode = 0
         $body = ""
         $errorResponse = $null
-        try {
+        if ($_.Exception -is [System.Net.WebException]) {
             $errorResponse = $_.Exception.Response
-        }
-        catch {
-            $errorResponse = $null
         }
         if ($null -ne $errorResponse) {
             $statusCode = [int]$errorResponse.StatusCode
@@ -294,7 +291,7 @@ $projectLogsResponse = Invoke-Http -Method GET -Uri $projectLogsUri
 Assert-True ($projectLogsResponse.statusCode -eq 200) "Project Logs lookup failed: HTTP $($projectLogsResponse.statusCode)"
 Assert-ResponseDoesNotExposeSensitiveFields -Body $projectLogsResponse.body -Name "Project Logs"
 $projectLogs = Convert-JsonBody -Body $projectLogsResponse.body
-$items = @(Convert-ToSafeArray -Value $projectLogs.data)
+$items = Convert-ToSafeArray -Value $projectLogs.data
 $listItem = $items | Where-Object { $_.requestId -eq $RequestId } | Select-Object -First 1
 Assert-True ($null -ne $listItem) "Project Logs response did not include requestId=$RequestId."
 

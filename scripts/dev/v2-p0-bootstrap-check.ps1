@@ -21,10 +21,10 @@ function Convert-ToSafeArray {
     param($Value)
 
     if ($null -eq $Value) {
-        return @()
+        return ,@()
     }
 
-    return @($Value | Where-Object { $null -ne $_ })
+    return ,@($Value | Where-Object { $null -ne $_ })
 }
 
 function Join-Url {
@@ -127,11 +127,8 @@ function Invoke-StatusCode {
     }
     catch {
         $errorResponse = $null
-        try {
+        if ($_.Exception -is [System.Net.WebException]) {
             $errorResponse = $_.Exception.Response
-        }
-        catch {
-            $errorResponse = $null
         }
         if ($null -ne $errorResponse) {
             return [int]$errorResponse.StatusCode
@@ -193,7 +190,7 @@ function Invoke-PrismaMigrateDeploy {
             $ErrorActionPreference = $previousErrorActionPreference
         }
 
-        $lines = @(Convert-ToSafeArray -Value $output | ForEach-Object { [string]$_ })
+        $lines = Convert-ToSafeArray -Value ($output | ForEach-Object { [string]$_ })
         foreach ($line in $lines) {
             Write-Host $line
         }
@@ -235,9 +232,9 @@ where table_schema = 'public'
 order by table_name;
 "@
     $queryResult = Invoke-PostgresQuery -Sql $sql | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-    $existing = @(Convert-ToSafeArray -Value $queryResult)
+    $existing = Convert-ToSafeArray -Value $queryResult
     $filteredMissing = $requiredTables | Where-Object { $existing -notcontains $_ }
-    $missing = @(Convert-ToSafeArray -Value $filteredMissing)
+    $missing = Convert-ToSafeArray -Value $filteredMissing
     if ($missing.Count -gt 0) {
         throw "missing required P0 tables: $($missing -join ', ')"
     }

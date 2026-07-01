@@ -22,10 +22,10 @@ function Convert-ToSafeArray {
     param($Value)
 
     if ($null -eq $Value) {
-        return @()
+        return ,@()
     }
 
-    return @($Value | Where-Object { $null -ne $_ })
+    return ,@($Value | Where-Object { $null -ne $_ })
 }
 
 function Join-Url {
@@ -46,11 +46,8 @@ function Invoke-StatusCode {
     }
     catch {
         $errorResponse = $null
-        try {
+        if ($_.Exception -is [System.Net.WebException]) {
             $errorResponse = $_.Exception.Response
-        }
-        catch {
-            $errorResponse = $null
         }
         if ($null -ne $errorResponse) {
             return [int]$errorResponse.StatusCode

@@ -18,10 +18,10 @@ function Convert-ToSafeArray {
     param($Value)
 
     if ($null -eq $Value) {
-        return @()
+        return ,@()
     }
 
-    return @($Value | Where-Object { $null -ne $_ })
+    return ,@($Value | Where-Object { $null -ne $_ })
 }
 
 function Invoke-CheckedCommand {
@@ -112,7 +112,7 @@ function Assert-ExpectedScripts {
         "v2:k6:smoke"
     )
     $filteredMissingPhaseScripts = $phaseScripts | Where-Object { $null -eq $packageJson.scripts.PSObject.Properties[$_] }
-    $missingPhaseScripts = @(Convert-ToSafeArray -Value $filteredMissingPhaseScripts)
+    $missingPhaseScripts = Convert-ToSafeArray -Value $filteredMissingPhaseScripts
 
     return $missingPhaseScripts
 }
@@ -175,7 +175,7 @@ if ($DescribeOnly) {
 }
 
 Assert-ToolingBaseline
-$missingPhaseScripts = @(Convert-ToSafeArray -Value (Assert-ExpectedScripts))
+$missingPhaseScripts = Convert-ToSafeArray -Value (Assert-ExpectedScripts)
 
 if (-not $SkipGitDiffCheck) {
     Invoke-CheckedCommand -Name "git diff --check" -FilePath "git" -Arguments @("diff", "--check") -WorkingDirectory $repoRoot
