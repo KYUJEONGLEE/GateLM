@@ -13,11 +13,15 @@ import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
 
 type RequestLogTableProps = {
+  applicationOptions: string[];
+  budgetScopeIdOptions: string[];
   detailPanel?: ReactNode;
   filters: RequestLogFilterState;
   locale: Locale;
   modelOptions: string[];
+  providerOptions: string[];
   records: InvocationLogRecord[];
+  resolvedByOptions: string[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
   tenantId: string;
@@ -32,11 +36,20 @@ export const requestLogStatusFilters = [
   "failed",
   "cancelled"
 ] as const satisfies readonly InvocationLogRecord["status"][];
+export const requestLogCacheStatusFilters = ["hit", "miss", "bypass"] as const;
+export const requestLogBudgetScopeTypeFilters = ["application", "project", "team"] as const;
 
 export type RequestLogCreatedFilter = (typeof requestLogCreatedFilters)[number];
 export type RequestLogFilterState = {
+  applicationId: string;
+  budgetScopeId: string;
+  budgetScopeType: "" | (typeof requestLogBudgetScopeTypeFilters)[number];
+  cacheStatus: "" | (typeof requestLogCacheStatusFilters)[number];
   created: RequestLogCreatedFilter;
   model: string;
+  provider: string;
+  requestId: string;
+  resolvedBy: string;
   status: "" | InvocationLogRecord["status"];
 };
 
@@ -44,6 +57,16 @@ const requestLogText: Record<
   Locale,
   {
     allModels: string;
+    allProviders: string;
+    allCacheStatuses: string;
+    allApplications: string;
+    allBudgetScopeTypes: string;
+    allBudgetScopeIds: string;
+    allResolvedBy: string;
+    applicationLabel: string;
+    budgetScopeIdLabel: string;
+    budgetScopeTypeLabel: string;
+    cacheLabel: string;
     allStatuses: string;
     createdLabel: string;
     createdOptions: Record<RequestLogCreatedFilter, string>;
@@ -51,6 +74,7 @@ const requestLogText: Record<
     filterLabel: string;
     kicker: string;
     modelLabel: string;
+    providerLabel: string;
     searchLabel: string;
     searchPlaceholder: string;
     statusLabel: string;
@@ -59,8 +83,18 @@ const requestLogText: Record<
   }
 > = {
   en: {
+    allApplications: "All applications",
+    allBudgetScopeIds: "All budget scopes",
+    allBudgetScopeTypes: "All scope types",
+    allCacheStatuses: "All cache states",
     allModels: "All models",
+    allProviders: "All providers",
+    allResolvedBy: "All resolution sources",
     allStatuses: "All statuses",
+    applicationLabel: "Application",
+    budgetScopeIdLabel: "Budget scope",
+    budgetScopeTypeLabel: "Scope type",
+    cacheLabel: "Cache",
     createdLabel: "Created",
     createdOptions: {
       "15m": "Last 15m",
@@ -72,15 +106,26 @@ const requestLogText: Record<
     filterLabel: "Log filters",
     kicker: "analytics",
     modelLabel: "Model",
+    providerLabel: "Provider",
     searchLabel: "Search logs",
-    searchPlaceholder: "Search request logs",
+    searchPlaceholder: "Search by requestId",
     statusLabel: "Status",
     submitLabel: "Search",
     title: "Request logs"
   },
   ko: {
+    allApplications: "전체 Application",
+    allBudgetScopeIds: "전체 Budget scope",
+    allBudgetScopeTypes: "전체 Scope type",
+    allCacheStatuses: "전체 캐시 상태",
     allModels: "전체 모델",
+    allProviders: "전체 Provider",
+    allResolvedBy: "전체 결정 경로",
     allStatuses: "전체 상태",
+    applicationLabel: "Application",
+    budgetScopeIdLabel: "Budget scope",
+    budgetScopeTypeLabel: "Scope type",
+    cacheLabel: "Cache",
     createdLabel: "생성 시각",
     createdOptions: {
       "15m": "최근 15분",
@@ -92,8 +137,9 @@ const requestLogText: Record<
     filterLabel: "로그 필터",
     kicker: "분석",
     modelLabel: "모델",
+    providerLabel: "Provider",
     searchLabel: "로그 검색",
-    searchPlaceholder: "요청 로그 검색",
+    searchPlaceholder: "requestId 검색",
     statusLabel: "상태",
     submitLabel: "검색",
     title: "요청 로그"
@@ -101,11 +147,15 @@ const requestLogText: Record<
 };
 
 export function RequestLogTable({
+  applicationOptions,
+  budgetScopeIdOptions,
   detailPanel,
   filters,
   locale,
   modelOptions,
+  providerOptions,
   records,
+  resolvedByOptions,
   selectedRequestId,
   sourceState,
   tenantId,
@@ -129,6 +179,8 @@ export function RequestLogTable({
               <div className="request-log-search-shell">
                 <input
                   aria-label={text.searchLabel}
+                  defaultValue={filters.requestId}
+                  name="requestId"
                   placeholder={text.searchPlaceholder}
                   type="search"
                 />
@@ -157,6 +209,78 @@ export function RequestLogTable({
                     {modelOptions.map((model) => (
                       <option key={model} value={model}>
                         {model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.providerLabel}</span>
+                  <select defaultValue={filters.provider} name="provider">
+                    <option value="">{text.allProviders}</option>
+                    {providerOptions.map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.cacheLabel}</span>
+                  <select defaultValue={filters.cacheStatus} name="cacheStatus">
+                    <option value="">{text.allCacheStatuses}</option>
+                    {requestLogCacheStatusFilters.map((cacheStatus) => (
+                      <option key={cacheStatus} value={cacheStatus}>
+                        {cacheStatus}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.applicationLabel}</span>
+                  <select defaultValue={filters.applicationId} name="applicationId">
+                    <option value="">{text.allApplications}</option>
+                    {applicationOptions.map((applicationId) => (
+                      <option key={applicationId} value={applicationId}>
+                        {formatDisplayIdentifier(applicationId)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.budgetScopeTypeLabel}</span>
+                  <select defaultValue={filters.budgetScopeType} name="budgetScopeType">
+                    <option value="">{text.allBudgetScopeTypes}</option>
+                    {requestLogBudgetScopeTypeFilters.map((scopeType) => (
+                      <option key={scopeType} value={scopeType}>
+                        {scopeType}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.budgetScopeIdLabel}</span>
+                  <select defaultValue={filters.budgetScopeId} name="budgetScopeId">
+                    <option value="">{text.allBudgetScopeIds}</option>
+                    {budgetScopeIdOptions.map((budgetScopeId) => (
+                      <option key={budgetScopeId} value={budgetScopeId}>
+                        {formatDisplayIdentifier(budgetScopeId)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>Resolved by</span>
+                  <select defaultValue={filters.resolvedBy} name="resolvedBy">
+                    <option value="">{text.allResolvedBy}</option>
+                    {resolvedByOptions.map((resolvedBy) => (
+                      <option key={resolvedBy} value={resolvedBy}>
+                        {resolvedBy}
                       </option>
                     ))}
                   </select>
@@ -243,18 +367,30 @@ export function RequestLogTable({
 
 function requestLogDetailHref(tenantId: string, requestId: string, filters: RequestLogFilterState) {
   const query = new URLSearchParams();
+  appendRequestLogQuery(query, "applicationId", filters.applicationId);
+  appendRequestLogQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendRequestLogQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
   if (filters.status) {
     query.set("status", filters.status);
   }
   if (filters.model) {
     query.set("model", filters.model);
   }
+  appendRequestLogQuery(query, "provider", filters.provider);
+  appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
   }
   query.set("requestId", requestId);
 
   return `/tenants/${tenantId}/request-logs?${query.toString()}`;
+}
+
+function appendRequestLogQuery(query: URLSearchParams, key: string, value: string) {
+  if (value) {
+    query.set(key, value);
+  }
 }
 
 export function StatusBadge({ status }: { status: InvocationLogRecord["status"] }) {

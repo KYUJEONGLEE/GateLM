@@ -14,6 +14,7 @@ import type { Locale } from "@/lib/i18n/locale";
 type DashboardOverviewProps = {
   activeTab?: DashboardTab;
   detailPanel?: ReactNode;
+  filters: DashboardFilterState;
   locale: Locale;
   overview: DashboardOverview;
   rateLimitedRecords?: InvocationLogRecord[];
@@ -23,6 +24,12 @@ type DashboardOverviewProps = {
 
 type DashboardTab = "overview" | "requests" | "cache" | "routing" | "safety" | "limits";
 type DashboardVisibleTab = Exclude<DashboardTab, "overview">;
+export type DashboardFilterState = {
+  budgetScopeId: string;
+  budgetScopeType: "" | "application" | "project" | "team";
+  projectId: string;
+  resolvedBy: string;
+};
 
 const dashboardTabs: DashboardVisibleTab[] = ["requests", "cache", "routing", "safety", "limits"];
 const statusOrder = ["success", "blocked", "rate_limited", "failed", "cancelled"];
@@ -67,6 +74,14 @@ const dashboardText: Record<
       traffic: string;
     };
     database: string;
+    filter: {
+      apply: string;
+      budgetScopeId: string;
+      budgetScopeType: string;
+      projectId: string;
+      reset: string;
+      resolvedBy: string;
+    };
     maskingActions: string;
     budgetScopeBreakdown: string;
     queryBudget: string;
@@ -82,6 +97,14 @@ const dashboardText: Record<
     backToOverview: "Back to overview",
     costByModel: "Cost by model",
     database: "Database",
+    filter: {
+      apply: "Apply",
+      budgetScopeId: "Budget scope",
+      budgetScopeType: "Scope type",
+      projectId: "Project ID",
+      reset: "Reset",
+      resolvedBy: "Resolved by"
+    },
     charts: {
       cache: "Cache",
       cacheHits: "Cache hits",
@@ -134,6 +157,14 @@ const dashboardText: Record<
     backToOverview: "Overview로 돌아가기",
     costByModel: "모델별 비용",
     database: "Database",
+    filter: {
+      apply: "적용",
+      budgetScopeId: "Budget scope",
+      budgetScopeType: "Scope type",
+      projectId: "Project ID",
+      reset: "초기화",
+      resolvedBy: "Resolved by"
+    },
     charts: {
       cache: "Cache",
       cacheHits: "캐시 적중",
@@ -188,6 +219,7 @@ type DashboardCopy = (typeof dashboardText)[Locale];
 export function DashboardOverviewView({
   activeTab = "overview",
   detailPanel,
+  filters,
   locale,
   overview,
   rateLimitedRecords = [],
@@ -225,14 +257,15 @@ export function DashboardOverviewView({
         </Link>
       </section>
 
-      <DashboardTabs activeTab={activeTab} overview={overview} text={text} />
+      <DashboardTabs activeTab={activeTab} filters={filters} overview={overview} text={text} />
+      <DashboardFilterBar activeTab={activeTab} filters={filters} overview={overview} text={text} />
 
       {activeTab === "overview" ? (
         <>
       <section className="dashboard-chart-grid" aria-label="Dashboard overview charts">
         <Link
           className="console-panel dashboard-chart-panel dashboard-chart-link"
-          href={`/tenants/${overview.filters.tenantId}/dashboard?tab=requests`}
+          href={dashboardHref(overview.filters.tenantId, filters, "requests")}
         >
           <div className="panel-heading dashboard-chart-heading">
             <h3>{text.charts.requestTrend}</h3>
@@ -254,7 +287,7 @@ export function DashboardOverviewView({
 
         <Link
           className="console-panel dashboard-chart-panel dashboard-chart-link"
-          href={`/tenants/${overview.filters.tenantId}/dashboard?tab=routing`}
+          href={dashboardHref(overview.filters.tenantId, filters, "routing")}
         >
           <div className="panel-heading dashboard-chart-heading">
             <h3>{text.charts.modelShare}</h3>
@@ -301,15 +334,20 @@ export function DashboardOverviewView({
 
 function DashboardTabs({
   activeTab,
+  filters,
   overview,
   text
 }: {
   activeTab: DashboardTab;
+  filters: DashboardFilterState;
   overview: DashboardOverview;
   text: DashboardCopy;
 }) {
-  const baseHref = `/tenants/${overview.filters.tenantId}/dashboard`;
-  const overviewHref = activeTab === "overview" ? `${baseHref}?motion=none` : baseHref;
+  const baseHref = dashboardHref(overview.filters.tenantId, filters);
+  const overviewHref =
+    activeTab === "overview"
+      ? dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })
+      : baseHref;
 
   return (
     <nav className="dashboard-tab-row" aria-label="Dashboard sections">
@@ -324,7 +362,7 @@ function DashboardTabs({
       <div className="dashboard-tab-list">
         {dashboardTabs.map((tab) => {
           const isActive = activeTab === tab;
-          const href = isActive ? baseHref : `${baseHref}?tab=${tab}`;
+          const href = isActive ? baseHref : dashboardHref(overview.filters.tenantId, filters, tab);
 
           return (
             <Link aria-current={isActive ? "page" : undefined} data-active={isActive} href={href} key={tab}>
@@ -335,6 +373,83 @@ function DashboardTabs({
       </div>
     </nav>
   );
+}
+
+function DashboardFilterBar({
+  activeTab,
+  filters,
+  overview,
+  text
+}: {
+  activeTab: DashboardTab;
+  filters: DashboardFilterState;
+  overview: DashboardOverview;
+  text: DashboardCopy;
+}) {
+  return (
+    <form
+      action={`/tenants/${overview.filters.tenantId}/dashboard`}
+      className="dashboard-filter-bar"
+    >
+      {activeTab !== "overview" ? <input name="tab" type="hidden" value={activeTab} /> : null}
+      <label className="request-log-filter-control">
+        <span>{text.filter.projectId}</span>
+        <input defaultValue={filters.projectId} name="projectId" placeholder="project id" />
+      </label>
+      <label className="request-log-filter-control">
+        <span>{text.filter.budgetScopeType}</span>
+        <select defaultValue={filters.budgetScopeType} name="budgetScopeType">
+          <option value="">All</option>
+          <option value="application">application</option>
+          <option value="project">project</option>
+          <option value="team">team</option>
+        </select>
+      </label>
+      <label className="request-log-filter-control">
+        <span>{text.filter.budgetScopeId}</span>
+        <input defaultValue={filters.budgetScopeId} name="budgetScopeId" placeholder="scope id" />
+      </label>
+      <label className="request-log-filter-control">
+        <span>{text.filter.resolvedBy}</span>
+        <input defaultValue={filters.resolvedBy} name="resolvedBy" placeholder="resolved by" />
+      </label>
+      <div className="dashboard-filter-actions">
+        <button className="secondary-button" type="submit">
+          {text.filter.apply}
+        </button>
+        <Link className="secondary-link" href={`/tenants/${overview.filters.tenantId}/dashboard`}>
+          {text.filter.reset}
+        </Link>
+      </div>
+    </form>
+  );
+}
+
+function dashboardHref(
+  tenantId: string,
+  filters: DashboardFilterState,
+  tab?: DashboardVisibleTab,
+  extra?: { motion?: string; requestId?: string }
+) {
+  const query = new URLSearchParams();
+  if (tab) {
+    query.set("tab", tab);
+  }
+  appendDashboardQuery(query, "projectId", filters.projectId);
+  appendDashboardQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendDashboardQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendDashboardQuery(query, "resolvedBy", filters.resolvedBy);
+  appendDashboardQuery(query, "motion", extra?.motion ?? "");
+  appendDashboardQuery(query, "requestId", extra?.requestId ?? "");
+
+  const serialized = query.toString();
+  return `/tenants/${tenantId}/dashboard${serialized ? `?${serialized}` : ""}`;
+}
+
+function appendDashboardQuery(query: URLSearchParams, key: string, value: string) {
+  if (value) {
+    query.set(key, value);
+  }
 }
 
 function DashboardTabPanel({

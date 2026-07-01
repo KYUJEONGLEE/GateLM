@@ -37,10 +37,16 @@ type GatewayBudgetScope = {
 };
 
 export type LiveGatewayRequestLogFilters = {
+  applicationId?: string;
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  cacheStatus?: string;
   from?: string;
   limit?: number;
   model?: string;
+  provider?: string;
   requestId?: string;
+  resolvedBy?: string;
   status?: string;
   to?: string;
 };
@@ -57,9 +63,15 @@ export async function getLiveGatewayRequestLogs(
     limit: String(filters.limit ?? 50),
     to: filters.to ?? defaultRange.to
   });
+  appendOptionalQuery(query, "applicationId", filters.applicationId);
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "cacheStatus", filters.cacheStatus);
   appendOptionalQuery(query, "status", filters.status);
   appendOptionalQuery(query, "model", filters.model);
+  appendOptionalQuery(query, "provider", filters.provider);
   appendOptionalQuery(query, "requestId", filters.requestId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(
     `${config.baseUrl}/api/projects/${encodeURIComponent(config.projectId)}/logs?${query.toString()}`,

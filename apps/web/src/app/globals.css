@@ -848,6 +848,28 @@ select {
   gap: 16px;
 }
 
+.dashboard-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.75fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+}
+
+.dashboard-filter-bar .request-log-filter-control {
+  min-width: 0;
+}
+
+.dashboard-filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .console-content:not([data-motion="none"]) > :not(.dashboard-hero):not(.detail-header):not(.dashboard-tab-row):not(.dashboard-tab-panel):not(.request-log-detail-anchor-root),
   .console-content:not([data-motion="none"]) .dashboard-tab-panel > * {
@@ -3482,6 +3504,7 @@ select {
   }
 
   .dashboard-chart-grid,
+  .dashboard-filter-bar,
   .dashboard-focus-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3666,6 +3689,7 @@ select {
 
   .metric-grid,
   .dashboard-chart-grid,
+  .dashboard-filter-bar,
   .dashboard-focus-stats,
   .dashboard-grid,
   .detail-grid,

@@ -20,9 +20,15 @@ type RequestLogsPageProps = {
     tenantId: string;
   }>;
   searchParams?: Promise<{
+    applicationId?: string;
+    budgetScopeId?: string;
+    budgetScopeType?: string;
+    cacheStatus?: string;
     created?: string;
     model?: string;
+    provider?: string;
     requestId?: string;
+    resolvedBy?: string;
     status?: string;
   }>;
 };
@@ -32,19 +38,24 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const resolvedSearchParams = await searchParams;
   const selectedRequestId = resolvedSearchParams?.requestId;
   const { filters, logFilters } = buildRequestLogFilters(resolvedSearchParams);
-  const shouldLoadUnfilteredModels = Boolean(filters.status || filters.model);
-  const modelOptionRecordsPromise = shouldLoadUnfilteredModels
+  const shouldLoadUnfilteredOptions = hasNarrowingFilters(filters);
+  const optionRecordsPromise = shouldLoadUnfilteredOptions
     ? getLiveGatewayRequestLogs({ from: logFilters.from, limit: 100, to: logFilters.to })
     : Promise.resolve(undefined);
-  const [locale, records, modelOptionRecords, selectedDetail] = await Promise.all([
+  const [locale, records, optionRecords, selectedDetail] = await Promise.all([
     getRequestLocale(),
     getLiveGatewayRequestLogs(logFilters),
-    modelOptionRecordsPromise,
+    optionRecordsPromise,
     selectedRequestId ? getLiveGatewayRequestDetail(selectedRequestId) : Promise.resolve(null)
   ]);
   const scopedSelectedDetail =
     selectedDetail ?? (records ?? []).find((record) => record.requestId === selectedRequestId);
-  const modelOptions = getModelOptions(modelOptionRecords ?? records ?? [], filters.model);
+  const optionRecordsForFilters = optionRecords ?? records ?? [];
+  const modelOptions = getModelOptions(optionRecordsForFilters, filters.model);
+  const providerOptions = getProviderOptions(optionRecordsForFilters, filters.provider);
+  const applicationOptions = getApplicationOptions(optionRecordsForFilters, filters.applicationId);
+  const budgetScopeIdOptions = getBudgetScopeIdOptions(optionRecordsForFilters, filters.budgetScopeId);
+  const resolvedByOptions = getResolvedByOptions(optionRecordsForFilters, filters.resolvedBy);
 
   return (
     <ConsoleShell
@@ -66,8 +77,12 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         }
         filters={filters}
         locale={locale}
+        applicationOptions={applicationOptions}
+        budgetScopeIdOptions={budgetScopeIdOptions}
         modelOptions={modelOptions}
+        providerOptions={providerOptions}
         records={records ?? []}
+        resolvedByOptions={resolvedByOptions}
         selectedRequestId={scopedSelectedDetail?.requestId}
         sourceState={records ? "ready" : "unavailable"}
         tenantId={tenantId}
@@ -84,18 +99,39 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const created = normalizeCreatedFilter(searchParams?.created);
   const status = normalizeStatusFilter(searchParams?.status);
   const model = normalizeOptionalText(searchParams?.model);
+  const provider = normalizeOptionalText(searchParams?.provider);
+  const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
+  const applicationId = normalizeOptionalText(searchParams?.applicationId);
+  const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
+  const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
+  const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
+  const requestId = normalizeOptionalText(searchParams?.requestId);
   const { from, to } = createdRange(created);
 
   return {
     filters: {
+      applicationId,
+      budgetScopeId,
+      budgetScopeType,
+      cacheStatus,
       created,
       model,
+      provider,
+      requestId,
+      resolvedBy,
       status
     },
     logFilters: {
+      applicationId: applicationId || undefined,
+      budgetScopeId: budgetScopeId || undefined,
+      budgetScopeType: budgetScopeType || undefined,
+      cacheStatus: cacheStatus || undefined,
       from,
       limit: 50,
       model: model || undefined,
+      provider: provider || undefined,
+      requestId: requestId || undefined,
+      resolvedBy: resolvedBy || undefined,
       status: status || undefined,
       to
     }
@@ -119,8 +155,40 @@ function normalizeStatusFilter(value: string | undefined): RequestLogFilterState
   return "";
 }
 
+function normalizeCacheStatusFilter(value: string | undefined): RequestLogFilterState["cacheStatus"] {
+  if (value === "hit" || value === "miss" || value === "bypass") {
+    return value;
+  }
+
+  return "";
+}
+
+function normalizeBudgetScopeTypeFilter(
+  value: string | undefined
+): RequestLogFilterState["budgetScopeType"] {
+  if (value === "application" || value === "project" || value === "team") {
+    return value;
+  }
+
+  return "";
+}
+
 function normalizeOptionalText(value: string | undefined) {
   return value?.trim() ?? "";
+}
+
+function hasNarrowingFilters(filters: RequestLogFilterState) {
+  return Boolean(
+    filters.applicationId ||
+      filters.budgetScopeId ||
+      filters.budgetScopeType ||
+      filters.cacheStatus ||
+      filters.model ||
+      filters.provider ||
+      filters.requestId ||
+      filters.resolvedBy ||
+      filters.status
+  );
 }
 
 function createdRange(created: RequestLogCreatedFilter) {
@@ -150,6 +218,70 @@ function getModelOptions(records: InvocationLogRecord[], selectedModel: string) 
     const model = record.selectedModel ?? record.requestedModel;
     if (model) {
       options.add(model);
+    }
+  });
+
+  return Array.from(options).sort((first, second) => first.localeCompare(second));
+}
+
+function getProviderOptions(records: InvocationLogRecord[], selectedProvider: string) {
+  const options = new Set<string>();
+
+  if (selectedProvider) {
+    options.add(selectedProvider);
+  }
+
+  records.forEach((record) => {
+    if (record.selectedProvider) {
+      options.add(record.selectedProvider);
+    }
+  });
+
+  return Array.from(options).sort((first, second) => first.localeCompare(second));
+}
+
+function getApplicationOptions(records: InvocationLogRecord[], selectedApplicationId: string) {
+  const options = new Set<string>();
+
+  if (selectedApplicationId) {
+    options.add(selectedApplicationId);
+  }
+
+  records.forEach((record) => {
+    if (record.applicationId) {
+      options.add(record.applicationId);
+    }
+  });
+
+  return Array.from(options).sort((first, second) => first.localeCompare(second));
+}
+
+function getBudgetScopeIdOptions(records: InvocationLogRecord[], selectedBudgetScopeId: string) {
+  const options = new Set<string>();
+
+  if (selectedBudgetScopeId) {
+    options.add(selectedBudgetScopeId);
+  }
+
+  records.forEach((record) => {
+    if (record.budgetScope.budgetScopeId) {
+      options.add(record.budgetScope.budgetScopeId);
+    }
+  });
+
+  return Array.from(options).sort((first, second) => first.localeCompare(second));
+}
+
+function getResolvedByOptions(records: InvocationLogRecord[], selectedResolvedBy: string) {
+  const options = new Set<string>();
+
+  if (selectedResolvedBy) {
+    options.add(selectedResolvedBy);
+  }
+
+  records.forEach((record) => {
+    if (record.budgetScope.resolvedBy) {
+      options.add(record.budgetScope.resolvedBy);
     }
   });
 
