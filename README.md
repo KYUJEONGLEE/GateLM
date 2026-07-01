@@ -99,6 +99,12 @@ pnpm --filter @gatelm/web typecheck
 go test ./...
 ```
 
+### RuntimeSnapshot Mode
+
+Gateway는 기본값 `GATEWAY_RUNTIME_SNAPSHOT_MODE=demo`에서 기존 로컬/static fallback 흐름을 유지합니다.
+
+릴리즈 검증이나 운영에 가까운 실행에서는 `GATEWAY_RUNTIME_SNAPSHOT_MODE=strict` 또는 `strict_snapshot`을 사용합니다. 이 모드에서는 `GATEWAY_CONTROL_PLANE_BASE_URL`이 반드시 필요하며, Control Plane `/healthz`가 Gateway readiness에 포함됩니다. active RuntimeSnapshot을 가져오지 못하면 Gateway는 editable RuntimeConfig나 static config로 조용히 대체하지 않습니다.
+
 ---
 
 ## 5. Docker Infrastructure

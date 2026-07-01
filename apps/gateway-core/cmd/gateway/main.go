@@ -42,6 +42,10 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneBaseURL) == "" {
+		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_BASE_URL")
+	}
+
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
@@ -80,6 +84,13 @@ func main() {
 			FailureMessage: "connection failed",
 			Check:          handlers.HTTPHealthCheck(providerHTTPClient, cfg.MockProviderBaseURL),
 		},
+	}
+	if isStrictRuntimeSnapshotMode(cfg) {
+		readinessChecks["control_plane"] = handlers.ReadinessCheck{
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          handlers.HTTPHealthCheck(&http.Client{Timeout: cfg.ControlPlaneTimeout}, cfg.ControlPlaneBaseURL),
+		}
 	}
 
 	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
@@ -159,6 +170,11 @@ func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvide
 
 	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),
 		staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+}
+
+func isStrictRuntimeSnapshotMode(cfg config.Config) bool {
+	mode := strings.TrimSpace(strings.ToLower(cfg.RuntimeSnapshotMode))
+	return mode == "strict" || mode == "strict_snapshot"
 }
 
 type invocationLogQueryer struct {
