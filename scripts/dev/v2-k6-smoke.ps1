@@ -173,6 +173,7 @@ if ($SkipRun) {
 $previousGatewayBaseUrl = $env:GATEWAY_BASE_URL
 $previousMockProviderBaseUrl = $env:MOCK_PROVIDER_BASE_URL
 $previousFailureControlUrl = $env:K6_PROVIDER_FAILURE_CONTROL_URL
+$previousFailureModels = $env:K6_PROVIDER_FAILURE_MODELS
 $previousRunId = $env:GATELM_K6_RUN_ID
 $previousDependencyScenarios = $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS
 $previousTenantId = $env:GATELM_DEMO_TENANT_ID
@@ -182,6 +183,7 @@ try {
     $env:GATEWAY_BASE_URL = $GatewayBaseUrl
     $env:MOCK_PROVIDER_BASE_URL = $MockProviderBaseUrl
     $env:K6_PROVIDER_FAILURE_CONTROL_URL = $MockProviderBaseUrl
+    $env:K6_PROVIDER_FAILURE_MODELS = "mock-primary-fail"
     $env:GATELM_K6_RUN_ID = $safeRunId
     $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS = $(if ($EnableDependencyScenarios) { "true" } else { "false" })
     $env:GATELM_DEMO_TENANT_ID = $TenantId
@@ -198,6 +200,7 @@ finally {
     $env:GATEWAY_BASE_URL = $previousGatewayBaseUrl
     $env:MOCK_PROVIDER_BASE_URL = $previousMockProviderBaseUrl
     $env:K6_PROVIDER_FAILURE_CONTROL_URL = $previousFailureControlUrl
+    $env:K6_PROVIDER_FAILURE_MODELS = $previousFailureModels
     $env:GATELM_K6_RUN_ID = $previousRunId
     $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS = $previousDependencyScenarios
     $env:GATELM_DEMO_TENANT_ID = $previousTenantId

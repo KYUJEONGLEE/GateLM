@@ -47,6 +47,43 @@ function New-RequestId {
     return "request_v201_provider_e2e_$RunId"
 }
 
+function Convert-HeadersToHashtable {
+    param($Headers)
+
+    $result = @{}
+    if ($null -eq $Headers) {
+        return $result
+    }
+
+    if ($Headers -is [System.Collections.IDictionary]) {
+        foreach ($key in $Headers.Keys) {
+            $value = $Headers[$key]
+            if ($value -is [array]) {
+                $result[[string]$key] = ($value -join ",")
+            }
+            else {
+                $result[[string]$key] = [string]$value
+            }
+        }
+
+        return $result
+    }
+
+    if ($Headers.PSObject.Properties["AllKeys"]) {
+        foreach ($key in $Headers.AllKeys) {
+            $value = $Headers.Get($key)
+            if ($value -is [array]) {
+                $result[[string]$key] = ($value -join ",")
+            }
+            else {
+                $result[[string]$key] = [string]$value
+            }
+        }
+    }
+
+    return $result
+}
+
 function Invoke-Http {
     param(
         [Parameter(Mandatory = $true)][ValidateSet("GET", "POST")][string]$Method,
@@ -70,7 +107,7 @@ function Invoke-Http {
         $response = Invoke-WebRequest @request
         return [ordered]@{
             statusCode = [int]$response.StatusCode
-            headers = $response.Headers
+            headers = Convert-HeadersToHashtable -Headers $response.Headers
             body = [string]$response.Content
             errorType = $null
             errorMessage = $null
@@ -93,7 +130,7 @@ function Invoke-Http {
         if ($null -ne $errorResponse) {
             $statusCode = [int]$errorResponse.StatusCode
             if ($errorResponse.PSObject.Properties["Headers"]) {
-                $headers = $errorResponse.Headers
+                $headers = Convert-HeadersToHashtable -Headers $errorResponse.Headers
             }
             try {
                 if ($errorResponse.PSObject.Methods["GetResponseStream"]) {
