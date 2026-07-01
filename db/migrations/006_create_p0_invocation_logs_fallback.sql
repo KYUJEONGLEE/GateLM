@@ -5,7 +5,7 @@ create table if not exists p0_llm_invocation_logs (
   tenant_id uuid not null references tenants(id),
   project_id uuid not null references projects(id),
   application_id uuid null references applications(id),
-  api_key_id uuid null references api_keys(id),
+  api_key_id uuid null references gateway_api_keys(id),
   app_token_id uuid null references app_tokens(id),
   end_user_id text null,
   feature_id text null,

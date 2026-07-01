@@ -46,6 +46,7 @@ type DemoProviderMode = 'mock' | 'actual';
 interface DemoRuntimeConfigOptions {
   providerMode?: DemoProviderMode;
   mockProviderId?: string;
+  mockProviderBaseUrl?: string;
   openAIProviderId?: string;
   openAIBaseUrl?: string;
   openAILowCostModel?: string;
@@ -70,6 +71,8 @@ export function buildDemoRuntimeConfigDocument(
 ): ActiveRuntimeConfigResponseDto {
   const providerMode = options.providerMode ?? 'mock';
   const mockProviderId = options.mockProviderId ?? providerId;
+  const mockProviderBaseUrl =
+    options.mockProviderBaseUrl ?? DEMO_PROVIDER_BASE_URL;
   const openAIProviderId =
     options.openAIProviderId ?? DEMO_OPENAI_PROVIDER_ID;
   const openAIBaseUrl =
@@ -103,9 +106,19 @@ export function buildDemoRuntimeConfigDocument(
             lowCostModel: openAILowCostModel,
             balancedModel: openAIBalancedModel,
           }),
-          buildMockRuntimeProvider(mockProviderId, 'fail_open_to_fallback'),
+          buildMockRuntimeProvider(
+            mockProviderId,
+            'fail_open_to_fallback',
+            mockProviderBaseUrl,
+          ),
         ]
-      : [buildMockRuntimeProvider(mockProviderId, 'fail_closed')];
+      : [
+          buildMockRuntimeProvider(
+            mockProviderId,
+            'fail_closed',
+            mockProviderBaseUrl,
+          ),
+        ];
   const models =
     providerMode === 'actual'
       ? [
@@ -341,6 +354,10 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
     });
 
     const providerMode = readDemoProviderMode();
+    const mockProviderBaseUrl = readEnvString(
+      'GATELM_DEMO_MOCK_PROVIDER_BASE_URL',
+      DEMO_PROVIDER_BASE_URL,
+    );
     const openAIBaseUrl = readEnvString(
       'GATELM_DEMO_OPENAI_BASE_URL',
       DEMO_OPENAI_PROVIDER_BASE_URL,
@@ -375,7 +392,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         tenantId: DEMO_TENANT_ID,
         displayName: 'Mock Provider',
         status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: DEMO_PROVIDER_BASE_URL,
+        baseUrl: mockProviderBaseUrl,
         timeoutMs: 30000,
         secretRef: null,
         credentialPrefix: null,
@@ -390,7 +407,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         provider: DEMO_PROVIDER,
         displayName: 'Mock Provider',
         status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: DEMO_PROVIDER_BASE_URL,
+        baseUrl: mockProviderBaseUrl,
         timeoutMs: 30000,
         secretRef: null,
         credentialPrefix: null,
@@ -510,6 +527,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
     const runtimeConfig = buildDemoRuntimeConfigDocument(provider.id, {
       providerMode,
       mockProviderId: provider.id,
+      mockProviderBaseUrl,
       openAIProviderId: openAIProvider?.id ?? DEMO_OPENAI_PROVIDER_ID,
       openAIBaseUrl,
       openAILowCostModel,
@@ -983,6 +1001,7 @@ function buildSafetyPolicy(): ActiveRuntimeConfigResponseDto['safetyPolicy'] {
 function buildMockRuntimeProvider(
   providerId: string,
   failureMode: 'fail_closed' | 'fail_open_to_fallback',
+  baseUrl: string,
 ): ActiveRuntimeConfigResponseDto['providers'][number] {
   return {
     providerId,
@@ -990,7 +1009,7 @@ function buildMockRuntimeProvider(
     displayName: 'Mock Provider',
     status: 'active',
     adapterType: 'mock',
-    baseUrl: DEMO_PROVIDER_BASE_URL,
+    baseUrl,
     timeoutMs: 30000,
     credentialRequired: false,
     credentialRef: null,
