@@ -135,6 +135,33 @@ func TestBuildTerminalLogMapsExactCacheHitDomainOutcomes(t *testing.T) {
 	}
 }
 
+func TestBuildTerminalLogMapsPreRoutingExactCacheHitAsSkippedRouting(t *testing.T) {
+	startedAt := time.Date(2026, 6, 29, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:         "request_cache_hit",
+		ApplicationID:     "app_demo",
+		RequestedModel:    "auto",
+		Status:            StatusSuccess,
+		HTTPStatus:        200,
+		CacheStatus:       CacheStatusHit,
+		CacheType:         CacheTypeExact,
+		CacheHitRequestID: "request_previous",
+		StartedAt:         startedAt,
+		CompletedAt:       startedAt.Add(4 * time.Millisecond),
+	})
+
+	if log.DomainOutcomes.Routing.Outcome != "skipped" {
+		t.Fatalf("pre-routing cache hit must skip routing, got %+v", log.DomainOutcomes.Routing)
+	}
+	if log.DomainOutcomes.Routing.RoutingReason == nil ||
+		*log.DomainOutcomes.Routing.RoutingReason != "exact_cache_hit_provider_bypass" {
+		t.Fatalf("unexpected pre-routing cache hit reason: %+v", log.DomainOutcomes.Routing)
+	}
+	if log.DomainOutcomes.Provider.SelectedProvider != nil || log.DomainOutcomes.Provider.SelectedModel != nil {
+		t.Fatalf("pre-routing cache hit must not invent provider/model, got %+v", log.DomainOutcomes.Provider)
+	}
+}
+
 func TestBuildTerminalLogDefaultsMissingBudgetDecisionToNotChecked(t *testing.T) {
 	startedAt := time.Date(2026, 6, 30, 9, 3, 0, 0, time.UTC)
 	log := BuildTerminalLog(TerminalLogInput{
