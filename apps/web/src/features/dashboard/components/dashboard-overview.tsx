@@ -37,6 +37,8 @@ const dashboardText: Record<
     metrics: {
       averageLatency: string;
       averageP95Latency: string;
+      budgetLedgerCost: string;
+      budgetScope: string;
       blocked: string;
       cacheHitRate: string;
       cancelled: string;
@@ -65,6 +67,8 @@ const dashboardText: Record<
     };
     database: string;
     maskingActions: string;
+    budgetScopeBreakdown: string;
+    queryBudget: string;
     routingByModel: string;
     statusDistribution: string;
     tabs: Record<DashboardTab, string>;
@@ -90,6 +94,8 @@ const dashboardText: Record<
     metrics: {
       averageLatency: "Average latency",
       averageP95Latency: "Average/P95 latency",
+      budgetLedgerCost: "Budget ledger cost",
+      budgetScope: "Budget scope",
       blocked: "Blocked",
       cacheHitRate: "Cache hit rate",
       cancelled: "Cancelled",
@@ -106,6 +112,8 @@ const dashboardText: Record<
       totalTokens: "Total tokens"
     },
     maskingActions: "Masking actions",
+    budgetScopeBreakdown: "Budget scope breakdown",
+    queryBudget: "Query budget",
     routingByModel: "Routing by model",
     statusDistribution: "Status distribution",
     tabs: {
@@ -137,6 +145,8 @@ const dashboardText: Record<
     metrics: {
       averageLatency: "평균 지연",
       averageP95Latency: "평균/P95 지연",
+      budgetLedgerCost: "Budget ledger 비용",
+      budgetScope: "Budget scope",
       blocked: "차단",
       cacheHitRate: "캐시 적중률",
       cancelled: "취소",
@@ -153,6 +163,8 @@ const dashboardText: Record<
       totalTokens: "총 토큰"
     },
     maskingActions: "마스킹 동작",
+    budgetScopeBreakdown: "Budget scope 집계",
+    queryBudget: "Query budget",
     routingByModel: "모델별 라우팅",
     statusDistribution: "상태 분포",
     tabs: {
@@ -498,8 +510,8 @@ function DashboardTabPanel({
       <div className="dashboard-focus-stats">
         <FocusStat label={text.metrics.rateLimited} value={formatInteger(overview.rateLimitedRequests)} />
         <FocusStat label="Limit status" value={overview.queryBudget?.status ?? "ok"} />
-        <FocusStat label="Max range" value={`${overview.queryBudget?.maxRangeHours ?? 24}h`} />
-        <FocusStat label="Budget" value="Reserved" />
+        <FocusStat label={text.metrics.budgetScope} value={`${overview.filters.budgetScopeType}:${formatDisplayIdentifier(overview.filters.budgetScopeId)}`} />
+        <FocusStat label={text.metrics.budgetLedgerCost} value={formatUsd(microUsdToUsdString(sumBudgetScopeCostMicroUsd(overview)))} />
       </div>
 
       <section className="dashboard-grid">
@@ -525,26 +537,32 @@ function DashboardTabPanel({
 
         <article className="console-panel">
           <div className="panel-heading">
-            <h3>Budget</h3>
+            <h3>{text.queryBudget}</h3>
           </div>
           <div className="compact-list">
             <div className="compact-row">
-              <span>scope</span>
-              <strong>
-                {overview.filters.budgetScopeType}:{overview.filters.budgetScopeId}
-              </strong>
+              <span>status</span>
+              <strong>{overview.queryBudget?.status ?? "ok"}</strong>
             </div>
             <div className="compact-row">
-              <span>amount</span>
-              <strong>reserved</strong>
+              <span>max range</span>
+              <strong>{overview.queryBudget?.maxRangeHours ?? 24}h</strong>
             </div>
             <div className="compact-row">
-              <span>remaining</span>
-              <strong>reserved</strong>
+              <span>max breakdowns</span>
+              <strong>{formatInteger(overview.queryBudget?.maxBreakdownItems ?? 50)}</strong>
             </div>
+            {overview.queryBudget?.guidance ? (
+              <div className="compact-row">
+                <span>guidance</span>
+                <strong>{overview.queryBudget.guidance}</strong>
+              </div>
+            ) : null}
           </div>
         </article>
       </section>
+
+      <BudgetScopeBreakdownTable overview={overview} text={text} />
     </section>
   );
 }
@@ -743,6 +761,47 @@ function CostByModelTable({ overview, text }: { overview: DashboardOverview; tex
   );
 }
 
+function BudgetScopeBreakdownTable({ overview, text }: { overview: DashboardOverview; text: DashboardCopy }) {
+  const rows = overview.breakdowns?.byBudgetScope ?? [];
+
+  return (
+    <article className="console-panel wide-panel">
+      <div className="panel-heading">
+        <h3>{text.budgetScopeBreakdown}</h3>
+      </div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Scope</th>
+              <th>Resolved by</th>
+              <th>Requests</th>
+              <th>Ledger cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${row.budgetScopeType}-${row.budgetScopeId}-${row.resolvedBy}`}>
+                <td>
+                  {row.budgetScopeType}:{formatDisplayIdentifier(row.budgetScopeId)}
+                </td>
+                <td>{row.resolvedBy}</td>
+                <td>{formatInteger(row.requestCount)}</td>
+                <td>{formatUsd(microUsdToUsdString(row.estimatedCostMicroUsd))}</td>
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={4}>none</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
 function EmptyRow() {
   return (
     <div className="compact-row">
@@ -775,6 +834,17 @@ function RequestTrendRangeToggle() {
 
 function formatLatencyPair(averageLatencyMs: number, p95LatencyMs: number) {
   return `${formatInteger(averageLatencyMs)} / ${formatInteger(p95LatencyMs)} ms`;
+}
+
+function sumBudgetScopeCostMicroUsd(overview: DashboardOverview) {
+  return (overview.breakdowns?.byBudgetScope ?? []).reduce(
+    (total, row) => total + row.estimatedCostMicroUsd,
+    0
+  );
+}
+
+function microUsdToUsdString(value: number) {
+  return (value / 1_000_000).toFixed(6);
 }
 
 function MetricCard({
