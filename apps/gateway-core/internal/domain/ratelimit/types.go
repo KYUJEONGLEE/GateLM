@@ -98,9 +98,11 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 
 func ScopeID(scope string, req Request) string {
 	switch scope {
+	case ScopeApplication:
+		return req.ApplicationID
 	case ScopeProject:
 		return req.ProjectID
 	default:
-		return req.ApplicationID
+		return ""
 	}
 }
