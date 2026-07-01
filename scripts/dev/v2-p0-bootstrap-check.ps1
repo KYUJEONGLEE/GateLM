@@ -176,9 +176,27 @@ function Invoke-GatewaySqlFile {
 function Invoke-PrismaMigrateDeploy {
     Push-Location (Join-Path $repoRoot "apps/control-plane-api")
     try {
-        & corepack pnpm exec prisma migrate deploy
-        if ($LASTEXITCODE -ne 0) {
-            throw "prisma migrate deploy failed with exit code $LASTEXITCODE"
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $output = & corepack pnpm exec prisma migrate deploy 2>&1
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+
+        $lines = @(Convert-ToSafeArray -Value $output | ForEach-Object { [string]$_ })
+        foreach ($line in $lines) {
+            Write-Host $line
+        }
+
+        if ($exitCode -ne 0) {
+            $joinedOutput = $lines -join "`n"
+            if ($joinedOutput -match "P3005") {
+                throw "prisma migrate deploy failed because the database schema is not empty but not baselined for Prisma migrations. Use a fresh DB/reset/baseline before claiming live bootstrap evidence. Do not treat -SkipPrismaMigrate as E2E success unless required Prisma tables already exist."
+            }
+            throw "prisma migrate deploy failed with exit code $exitCode"
         }
     }
     finally {
