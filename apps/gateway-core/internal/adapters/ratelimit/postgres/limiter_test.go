@@ -51,13 +51,13 @@ func TestLimiterAllowsRequestWithinPostgresFixedWindow(t *testing.T) {
 	if db.calls != 1 {
 		t.Fatalf("expected one query, got %d", db.calls)
 	}
-	if !strings.Contains(db.query, "on conflict (tenant_id, application_id, window_start)") ||
-		!strings.Contains(db.query, "request_count = gateway_rate_limit_counters.request_count + 1") ||
-		!strings.Contains(db.query, "where gateway_rate_limit_counters.request_count < excluded.limit_value") ||
+	if !strings.Contains(db.query, "on conflict (tenant_id, scope_type, scope_id, window_start)") ||
+		!strings.Contains(db.query, "request_count = gateway_rate_limit_scope_counters.request_count + 1") ||
+		!strings.Contains(db.query, "where gateway_rate_limit_scope_counters.request_count < excluded.limit_value") ||
 		!strings.Contains(db.query, "returning request_count") {
 		t.Fatalf("expected atomic upsert SQL, got %s", db.query)
 	}
-	if len(db.args) != 5 || db.args[0] != testTenantID || db.args[1] != testApplicationID || db.args[4] != 3 {
+	if len(db.args) != 6 || db.args[0] != testTenantID || db.args[1] != ratelimit.ScopeApplication || db.args[2] != testApplicationID || db.args[5] != 3 {
 		t.Fatalf("unexpected query args: %#v", db.args)
 	}
 }
@@ -83,8 +83,33 @@ func TestLimiterTrimsScopeIdentifiersOnceForDecisionAndQuery(t *testing.T) {
 	if decision.ScopeID != testApplicationID {
 		t.Fatalf("expected trimmed application id in decision, got %q", decision.ScopeID)
 	}
-	if len(db.args) < 2 || db.args[0] != testTenantID || db.args[1] != testApplicationID {
+	if len(db.args) < 3 || db.args[0] != testTenantID || db.args[1] != ratelimit.ScopeApplication || db.args[2] != testApplicationID {
 		t.Fatalf("expected trimmed query args, got %#v", db.args)
+	}
+}
+
+func TestLimiterUsesProjectScopeWhenConfigured(t *testing.T) {
+	db := &fakeQueryer{row: fakeRow{requestCount: 1}}
+	limiter := NewLimiter(db)
+	config := testConfig(3)
+	config.Scope = ratelimit.ScopeProject
+
+	decision, err := limiter.Check(context.Background(), ratelimit.Request{
+		TenantID:      testTenantID,
+		ProjectID:     testProjectID,
+		ApplicationID: testApplicationID,
+		Config:        config,
+		Now:           time.Date(2026, 6, 27, 9, 0, 10, 0, time.UTC),
+	})
+
+	if err != nil {
+		t.Fatalf("expected project scoped request to pass, got %v", err)
+	}
+	if decision.Scope != ratelimit.ScopeProject || decision.ScopeID != testProjectID {
+		t.Fatalf("expected project scope decision, got %#v", decision)
+	}
+	if len(db.args) != 6 || db.args[1] != ratelimit.ScopeProject || db.args[2] != testProjectID {
+		t.Fatalf("expected project scope query args, got %#v", db.args)
 	}
 }
 
@@ -119,7 +144,7 @@ func TestLimiterBlocksRequestWhenCounterExceedsLimit(t *testing.T) {
 	if db.calls != 2 {
 		t.Fatalf("expected capped upsert and current counter read, got %d calls", db.calls)
 	}
-	if !strings.Contains(db.queries[0], "where gateway_rate_limit_counters.request_count < excluded.limit_value") {
+	if !strings.Contains(db.queries[0], "where gateway_rate_limit_scope_counters.request_count < excluded.limit_value") {
 		t.Fatalf("expected capped upsert SQL, got %s", db.queries[0])
 	}
 	if !strings.Contains(db.queries[1], "select request_count") {
@@ -356,10 +381,11 @@ func TestLimiterIntegrationConcurrentFixedWindow(t *testing.T) {
 	var finalCount int
 	if err := pool.QueryRow(ctx, `
 select request_count
-from gateway_rate_limit_counters
+from gateway_rate_limit_scope_counters
 where tenant_id = $1::uuid
-  and application_id = $2::uuid
-  and window_start = $3::timestamptz`, tenantID, applicationID, time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)).Scan(&finalCount); err != nil {
+  and scope_type = $2
+  and scope_id = $3
+  and window_start = $4::timestamptz`, tenantID, ratelimit.ScopeApplication, applicationID, time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)).Scan(&finalCount); err != nil {
 		t.Fatalf("read final counter: %v", err)
 	}
 	if finalCount != 5 {
@@ -456,9 +482,10 @@ func TestCounterPrunerIntegrationDeletesExpiredCounters(t *testing.T) {
 
 	now := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
 	execIntegrationSQL(t, ctx, pool, `
-insert into gateway_rate_limit_counters (
+insert into gateway_rate_limit_scope_counters (
   tenant_id,
-  application_id,
+  scope_type,
+  scope_id,
   window_start,
   window_seconds,
   limit_value,
@@ -466,9 +493,10 @@ insert into gateway_rate_limit_counters (
   created_at,
   updated_at
 ) values
-  ($1::uuid, $2::uuid, $3::timestamptz, 60, 10, 10, $5::timestamptz, $5::timestamptz),
-  ($1::uuid, $2::uuid, $4::timestamptz, 60, 10, 1, $6::timestamptz, $6::timestamptz)`,
+  ($1::uuid, $2, $3, $4::timestamptz, 60, 10, 10, $6::timestamptz, $6::timestamptz),
+  ($1::uuid, $2, $3, $5::timestamptz, 60, 10, 1, $7::timestamptz, $7::timestamptz)`,
 		tenantID,
+		ratelimit.ScopeApplication,
 		applicationID,
 		now.Add(-48*time.Hour),
 		now.Add(-1*time.Hour),
@@ -491,9 +519,10 @@ insert into gateway_rate_limit_counters (
 	var remaining int
 	if err := pool.QueryRow(ctx, `
 select count(*)
-from gateway_rate_limit_counters
+from gateway_rate_limit_scope_counters
 where tenant_id = $1::uuid
-  and application_id = $2::uuid`, tenantID, applicationID).Scan(&remaining); err != nil {
+  and scope_type = $2
+  and scope_id = $3`, tenantID, ratelimit.ScopeApplication, applicationID).Scan(&remaining); err != nil {
 		t.Fatalf("count remaining counters: %v", err)
 	}
 	if remaining != 1 {
@@ -614,6 +643,7 @@ on conflict (id) do nothing`, applicationID, tenantID, projectID, "Rate Limit Te
 func cleanupIntegrationScope(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID string, projectID string, applicationID string) {
 	t.Helper()
 
+	execIntegrationSQL(t, ctx, pool, `delete from gateway_rate_limit_scope_counters where tenant_id = $1::uuid`, tenantID)
 	execIntegrationSQL(t, ctx, pool, `delete from gateway_rate_limit_counters where tenant_id = $1::uuid`, tenantID)
 	execIntegrationSQL(t, ctx, pool, `delete from applications where id = $1::uuid`, applicationID)
 	execIntegrationSQL(t, ctx, pool, `delete from projects where id = $1::uuid`, projectID)
