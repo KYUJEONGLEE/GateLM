@@ -36,6 +36,9 @@ const policyText: Record<
   {
     activeConfig: string;
     application: string;
+    budget: string;
+    budgetEnforcement: string;
+    budgetWarning: string;
     cache: string;
     cacheEnabled: string;
     cacheTtl: string;
@@ -77,6 +80,9 @@ const policyText: Record<
   en: {
     activeConfig: "Active config",
     application: "Application",
+    budget: "Budget policy",
+    budgetEnforcement: "Enforcement",
+    budgetWarning: "Warning threshold",
     cache: "Exact cache",
     cacheEnabled: "Cache enabled",
     cacheTtl: "TTL seconds",
@@ -117,6 +123,9 @@ const policyText: Record<
   ko: {
     activeConfig: "Active config",
     application: "애플리케이션",
+    budget: "Budget policy",
+    budgetEnforcement: "Enforcement",
+    budgetWarning: "Warning threshold",
     cache: "Exact cache",
     cacheEnabled: "캐시 사용",
     cacheTtl: "TTL 초",
@@ -377,6 +386,62 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
       ) : null}
 
       <section className="policy-layout">
+        <article className="console-panel policy-editor-panel">
+          <div className="panel-heading">
+            <h3>{text.budget}</h3>
+          </div>
+          <label className="policy-toggle-row">
+            <input
+              checked={draftValues.budgetEnabled}
+              onChange={(event) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  budgetEnabled: event.target.checked,
+                  budgetEnforcementMode: event.target.checked
+                    ? current.budgetEnforcementMode === "disabled"
+                      ? "warn"
+                      : current.budgetEnforcementMode
+                    : "disabled"
+                }))
+              }
+              type="checkbox"
+            />
+            <span>{text.enabled}</span>
+          </label>
+          <label className="policy-field">
+            <span>{text.budgetEnforcement}</span>
+            <select
+              disabled={!draftValues.budgetEnabled}
+              onChange={(event) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  budgetEnforcementMode:
+                    event.target.value === "block" || event.target.value === "warn"
+                      ? event.target.value
+                      : "disabled"
+                }))
+              }
+              value={draftValues.budgetEnforcementMode}
+            >
+              <option value="warn">warn</option>
+              <option value="block">block</option>
+              <option value="disabled">disabled</option>
+            </select>
+          </label>
+          <PolicyNumberField
+            label={text.budgetWarning}
+            max={100}
+            min={0}
+            onChange={(value) =>
+              setDraftValues((current) => ({
+                ...current,
+                budgetWarningThresholdPercent: value
+              }))
+            }
+            value={draftValues.budgetWarningThresholdPercent}
+          />
+        </article>
+
         <article className="console-panel policy-editor-panel">
           <div className="panel-heading">
             <h3>{text.rateLimit}</h3>

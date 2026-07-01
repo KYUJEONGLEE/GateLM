@@ -51,8 +51,15 @@ export type RuntimePolicyPricingRule = {
   unit?: "token";
 };
 
+export type RuntimePolicyBudgetPolicy = {
+  enabled: boolean;
+  enforcementMode: "warn" | "block" | "disabled";
+  warningThresholdPercent: number;
+};
+
 export type RuntimePolicyConfig = {
   applicationId: string;
+  budgetPolicy?: RuntimePolicyBudgetPolicy;
   cachePolicy: {
     enabled: boolean;
     ttlSeconds: number;
@@ -93,6 +100,9 @@ export type RuntimePolicyConfig = {
 };
 
 export type RuntimePolicyDraftValues = {
+  budgetEnabled: boolean;
+  budgetEnforcementMode: "warn" | "block" | "disabled";
+  budgetWarningThresholdPercent: number;
   cacheEnabled: boolean;
   cacheTtlSeconds: number;
   configVersion: string;
@@ -122,7 +132,12 @@ export type RuntimePolicyModel = {
 export function getRuntimePolicyDraftValues(
   config: RuntimePolicyConfig
 ): RuntimePolicyDraftValues {
+  const budgetPolicy = config.budgetPolicy ?? getDefaultRuntimePolicyBudgetPolicy();
+
   return {
+    budgetEnabled: budgetPolicy.enabled,
+    budgetEnforcementMode: budgetPolicy.enforcementMode,
+    budgetWarningThresholdPercent: budgetPolicy.warningThresholdPercent,
     cacheEnabled: config.cachePolicy.enabled,
     cacheTtlSeconds: config.cachePolicy.ttlSeconds,
     configVersion: config.configVersion,
@@ -144,5 +159,13 @@ export function getRuntimePolicyDraftValues(
     routingLowCostModel: config.routingPolicy.lowCostModel,
     routingLowCostProvider: config.routingPolicy.lowCostProvider,
     routingShortPromptMaxChars: config.routingPolicy.shortPromptMaxChars
+  };
+}
+
+export function getDefaultRuntimePolicyBudgetPolicy(): RuntimePolicyBudgetPolicy {
+  return {
+    enabled: false,
+    enforcementMode: "disabled",
+    warningThresholdPercent: 80
   };
 }

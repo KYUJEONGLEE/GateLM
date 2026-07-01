@@ -50,6 +50,11 @@ function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraft
   const record = value as Partial<RuntimePolicyDraftValues>;
 
   return (
+    typeof record.budgetEnabled === "boolean" &&
+    (record.budgetEnforcementMode === "warn" ||
+      record.budgetEnforcementMode === "block" ||
+      record.budgetEnforcementMode === "disabled") &&
+    Number.isInteger(record.budgetWarningThresholdPercent) &&
     typeof record.cacheEnabled === "boolean" &&
     Number.isInteger(record.cacheTtlSeconds) &&
     typeof record.configVersion === "string" &&

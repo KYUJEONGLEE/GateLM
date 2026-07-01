@@ -146,6 +146,11 @@ async function writeRuntimeConfig(
 
 function toDraftRequest(values: RuntimePolicyDraftValues) {
   return {
+    budgetPolicy: {
+      enabled: values.budgetEnabled,
+      enforcementMode: values.budgetEnabled ? values.budgetEnforcementMode : "disabled",
+      warningThresholdPercent: values.budgetWarningThresholdPercent
+    },
     cachePolicy: {
       enabled: values.cacheEnabled,
       ttlSeconds: values.cacheTtlSeconds
