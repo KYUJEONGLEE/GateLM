@@ -22,7 +22,10 @@ const catalogText: Record<
     capabilities: string;
     clear: string;
     created: string;
+    credential: string;
     empty: string;
+    execution: string;
+    fallback: string;
     gateway: string;
     gatewayUnavailable: string;
     httpStatus: string;
@@ -37,6 +40,7 @@ const catalogText: Record<
     provider: string;
     refresh: string;
     requestId: string;
+    routing: string;
     route: string;
     source: string;
     title: string;
@@ -48,7 +52,10 @@ const catalogText: Record<
     capabilities: "Capabilities",
     clear: "Clear",
     created: "Created",
+    credential: "Credential",
     empty: "No models returned from Gateway.",
+    execution: "Execution",
+    fallback: "Fallback",
     gateway: "Gateway",
     gatewayUnavailable: "Gateway unavailable",
     httpStatus: "HTTP status",
@@ -63,6 +70,7 @@ const catalogText: Record<
     provider: "Provider",
     refresh: "Refresh",
     requestId: "Request ID",
+    routing: "Routing",
     route: "Route",
     source: "Source",
     title: "Model Catalog"
@@ -73,7 +81,10 @@ const catalogText: Record<
     capabilities: "Capabilities",
     clear: "초기화",
     created: "생성",
+    credential: "Credential",
     empty: "Gateway에서 반환된 모델이 없습니다.",
+    execution: "Execution",
+    fallback: "Fallback",
     gateway: "Gateway",
     gatewayUnavailable: "Gateway unavailable",
     httpStatus: "HTTP status",
@@ -88,6 +99,7 @@ const catalogText: Record<
     provider: "Provider",
     refresh: "새로고침",
     requestId: "Request ID",
+    routing: "Routing",
     route: "Route",
     source: "출처",
     title: "Model Catalog"
@@ -131,6 +143,11 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
       {model.loadError ? (
         <p className="policy-alert" data-status="error">
           {text.gatewayUnavailable}: {model.loadError}
+        </p>
+      ) : null}
+      {model.controlPlaneLoadError ? (
+        <p className="policy-alert" data-status="warning">
+          Control Plane catalog: {model.controlPlaneLoadError}
         </p>
       ) : null}
 
@@ -205,8 +222,11 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                 <tr>
                   <th>{text.model}</th>
                   <th>{text.provider}</th>
+                  <th>{text.execution}</th>
                   <th>{text.capabilities}</th>
+                  <th>{text.routing}</th>
                   <th>{text.allowed}</th>
+                  <th>{text.source}</th>
                   <th>{text.created}</th>
                 </tr>
               </thead>
@@ -221,8 +241,14 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                     </td>
                     <td>{nullableText(getEffectiveProvider(item) || text.noProvider)}</td>
                     <td>
+                      <ExecutionMetadata item={item} labels={text} />
+                    </td>
+                    <td>
                       <CapabilityList item={item} noCapabilityText={text.noCapability} />
                       {item.alias ? <span className="project-muted">{text.alias}: {item.alias}</span> : null}
+                    </td>
+                    <td>
+                      <RoutingMetadata item={item} labels={text} />
                     </td>
                     <td>
                       <Badge
@@ -239,6 +265,7 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                         {item.allowed === false ? "false" : item.allowed === true ? "true" : "-"}
                       </Badge>
                     </td>
+                    <td>{item.source}</td>
                     <td>{item.createdAt ? formatDateTime(item.createdAt) : "-"}</td>
                   </tr>
                 ))}
@@ -296,6 +323,70 @@ function CapabilityList({
       ))}
     </div>
   );
+}
+
+function ExecutionMetadata({
+  item,
+  labels
+}: {
+  item: ModelCatalogItem;
+  labels: (typeof catalogText)[Locale];
+}) {
+  return (
+    <div className="model-catalog-metadata">
+      <span>{nullableText(item.adapterType, "adapter default")}</span>
+      <small className="project-muted">
+        format: {nullableText(item.requestFormat, "default")}
+      </small>
+      <small className="project-muted">
+        timeout: {item.timeoutMs === null ? "-" : `${item.timeoutMs}ms`}
+      </small>
+      <small className="project-muted">
+        {labels.credential}: {formatCredentialState(item)}
+      </small>
+      <small className="project-muted">
+        {labels.fallback}: {item.fallbackEligible === null ? "-" : String(item.fallbackEligible)}
+      </small>
+      {item.apiVersion ? (
+        <small className="project-muted">apiVersion: {item.apiVersion}</small>
+      ) : null}
+    </div>
+  );
+}
+
+function RoutingMetadata({
+  item,
+  labels
+}: {
+  item: ModelCatalogItem;
+  labels: (typeof catalogText)[Locale];
+}) {
+  return (
+    <div className="model-catalog-metadata">
+      <span>
+        auto: {item.autoRoutingEligible === null ? "-" : String(item.autoRoutingEligible)}
+      </span>
+      <small className="project-muted">
+        costTier: {nullableText(item.costTier, "-")}
+      </small>
+      <small className="project-muted">
+        {labels.fallback}:{" "}
+        {item.fallbackPriority === null ? "-" : item.fallbackPriority.toString()}
+      </small>
+    </div>
+  );
+}
+
+function formatCredentialState(item: ModelCatalogItem) {
+  if (item.credentialRequired === false) {
+    return "not_required";
+  }
+
+  if (item.credentialRequired === true) {
+    return item.credentialState ?? "required";
+  }
+
+  return item.credentialState ?? "-";
 }
 
 function getProviderOptions(models: ModelCatalogItem[]) {

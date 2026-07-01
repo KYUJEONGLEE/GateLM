@@ -1086,13 +1086,19 @@ select {
 }
 
 .model-catalog-table {
-  min-width: 920px;
+  min-width: 1280px;
 }
 
 .model-capability-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.model-catalog-metadata {
+  display: grid;
+  gap: 4px;
+  min-width: 170px;
 }
 
 .metrics-toolbar {
