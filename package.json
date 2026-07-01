@@ -12,6 +12,7 @@
     "v2:p0:bootstrap:describe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -DescribeOnly",
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",
     "v2:p0:bootstrap:apps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -CheckApps -RequireActiveSnapshot",
+    "v2:provider:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-provider-e2e-main-path.ps1",
     "dev:control-plane": "pnpm --filter @gatelm/control-plane-api dev",
     "build:control-plane": "pnpm --filter @gatelm/control-plane-api build",
     "typecheck:control-plane": "pnpm --filter @gatelm/control-plane-api typecheck",
