@@ -226,7 +226,8 @@ function Assert-RequiredTables {
         "p0_llm_invocation_logs",
         "gateway_rate_limit_counters",
         "budget_quotas",
-        "budget_ledger_entries"
+        "budget_ledger_entries",
+        "gateway_rate_limit_scope_counters"
     )
 
     $quoted = ($requiredTables | ForEach-Object { "'$_'" }) -join ", "
@@ -337,7 +338,8 @@ try {
             "db/migrations/007_create_gateway_rate_limit_counters.sql",
             "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
             "db/migrations/009_alter_p0_invocation_logs_api_key_fk.sql",
-            "db/migrations/010_create_budget_ledger.sql"
+            "db/migrations/010_create_budget_ledger.sql",
+            "db/migrations/011_create_gateway_rate_limit_scope_counters.sql"
         )
         foreach ($file in $gatewaySqlFiles) {
             Invoke-GatewaySqlFile -Path $file
