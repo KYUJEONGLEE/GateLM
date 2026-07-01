@@ -25,6 +25,14 @@ exclude = ["app.tests*"]
 test = [
   "httpx>=0.27,<0.29",
 ]
+benchmark = [
+  "httpx>=0.27,<0.29",
+  "psutil>=5.9,<8",
+]
+ml = [
+  "torch>=2.3,<3",
+  "transformers>=4.41,<5",
+]
 
 [tool.unittest]
 start-directory = "app/tests"

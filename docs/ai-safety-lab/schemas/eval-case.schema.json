@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gatelm.local/docs/v1.0.0/schemas/safety-eval-corpus.schema.json",
-  "title": "GateLM v1 Safety Eval Corpus Line",
+  "$id": "https://gatelm.local/schemas/ai-safety-lab/eval-case.schema.json",
+  "title": "GateLM AI Safety Lab Eval Case",
+  "description": "Synthetic placeholder-based eval case. Fixtures must not contain real customer text, real email, real phone number, real token, real credential, raw detected value, raw offset, or raw span.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,47 +16,19 @@
   "properties": {
     "caseId": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9_\\-]*$"
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
     },
     "inputTemplate": {
+      "description": "Synthetic template only. Use placeholder tokens such as SYNTHETIC_* instead of real sensitive values.",
       "type": "string",
       "minLength": 1
     },
     "placeholderBindings": {
       "type": "object",
       "additionalProperties": {
-        "enum": [
-          "email",
-          "phone_number",
-          "postal_address",
-          "date_of_birth",
-          "private_date",
-          "private_url",
-          "person_name",
-          "customer_id",
-          "employee_id",
-          "account_id",
-          "account_number",
-          "ip_address",
-          "resident_registration_number",
-          "api_key",
-          "provider_api_key",
-          "cloud_access_key",
-          "github_token",
-          "slack_token",
-          "database_url",
-          "webhook_url",
-          "password_assignment",
-          "session_cookie",
-          "credit_card",
-          "bank_account",
-          "passport_number",
-          "driver_license",
-          "authorization_header",
-          "jwt",
-          "private_key",
-          "secret"
-        ]
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z][a-z0-9_]*$"
       },
       "propertyNames": {
         "pattern": "^SYNTHETIC_[A-Z0-9_]+$"
@@ -66,11 +39,12 @@
       "additionalProperties": false,
       "required": [
         "action",
+        "mode",
         "detectedTypes",
         "detectedCount",
         "redactedPromptPreview",
         "blockReason",
-        "securityPolicyHash"
+        "policyVersion"
       ],
       "properties": {
         "action": {
@@ -80,43 +54,20 @@
             "blocked"
           ]
         },
+        "mode": {
+          "enum": [
+            "enforce",
+            "shadow"
+          ]
+        },
         "detectedTypes": {
           "type": "array",
-          "uniqueItems": true,
           "items": {
-            "enum": [
-              "email",
-              "phone_number",
-              "postal_address",
-              "date_of_birth",
-              "private_date",
-              "private_url",
-              "person_name",
-              "customer_id",
-              "employee_id",
-              "account_id",
-              "account_number",
-              "ip_address",
-              "resident_registration_number",
-              "api_key",
-              "provider_api_key",
-              "cloud_access_key",
-              "github_token",
-              "slack_token",
-              "database_url",
-              "webhook_url",
-              "password_assignment",
-              "session_cookie",
-              "credit_card",
-              "bank_account",
-              "passport_number",
-              "driver_license",
-              "authorization_header",
-              "jwt",
-              "private_key",
-              "secret"
-            ]
-          }
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "uniqueItems": true
         },
         "detectedCount": {
           "type": "integer",
@@ -132,11 +83,13 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "pattern": "^[a-z][a-z0-9_]*$"
         },
-        "securityPolicyHash": {
+        "policyVersion": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
         }
       }
     },
@@ -146,6 +99,7 @@
       "required": [
         "providerCalled",
         "cacheLookup",
+        "streamingStarted",
         "terminalStatus",
         "httpStatus",
         "errorCode"
@@ -157,13 +111,15 @@
         "cacheLookup": {
           "type": "boolean"
         },
+        "streamingStarted": {
+          "type": "boolean"
+        },
         "terminalStatus": {
           "enum": [
             "success",
-            "cache_hit",
             "blocked",
             "rate_limited",
-            "error",
+            "failed",
             "cancelled"
           ]
         },
@@ -176,7 +132,8 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "pattern": "^[a-z][a-z0-9_]*$"
         }
       }
     },
@@ -186,7 +143,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "pattern": "^[a-z0-9][a-z0-9_\\-]*$"
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
       }
     }
   }

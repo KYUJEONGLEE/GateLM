@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/ai-safety-lab/detector-sidecar-response.schema.json",
+  "title": "GateLM AI Safety Detector Sidecar Response",
+  "description": "Draft response contract for POST /internal/ai-safety/v1/detect. Success responses return redactedPrompt and sanitized detections; error responses are sanitized.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "ai-safety-detector.v1"
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "redacted",
+        "blocked"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "enforce",
+        "shadow"
+      ]
+    },
+    "redactedPrompt": {
+      "description": "Prompt text after sidecar redaction. This must not include detected raw sensitive values.",
+      "type": "string"
+    },
+    "model": {
+      "$ref": "#/$defs/model"
+    },
+    "redactedPromptPreview": {
+      "description": "Optional sanitized preview containing placeholders only.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "detectorSummary": {
+      "$ref": "#/$defs/detectorSummary"
+    },
+    "detections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/detection"
+      }
+    },
+    "latencyMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "outcome",
+        "mode",
+        "redactedPrompt",
+        "detectorSummary",
+        "detections",
+        "latencyMs"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "required": [
+        "error"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "outcome"
+            ]
+          },
+          {
+            "required": [
+              "redactedPrompt"
+            ]
+          },
+          {
+            "required": [
+              "detectorSummary"
+            ]
+          },
+          {
+            "required": [
+              "detections"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "detectorSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detectedCount",
+        "detectorCategories"
+      ],
+      "properties": {
+        "detectedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detectorCategories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detectorType",
+        "source",
+        "action",
+        "mode"
+      ],
+      "properties": {
+        "detectorType": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_./-]*$"
+        },
+        "action": {
+          "enum": [
+            "allow",
+            "redact",
+            "block"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "enforce",
+            "shadow"
+          ]
+        },
+        "confidence": {
+          "description": "Lab/eval-only confidence. Gateway/API/UI summaries should not expose this by default.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "modelVersion": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
+        },
+        "modelLabel": {
+          "description": "Raw model taxonomy label such as private_email. This is a sanitized label, not a detected value.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_./:-]*$"
+        },
+        "runtime": {
+          "enum": [
+            "cpu_only"
+          ]
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modelId",
+        "runtime"
+      ],
+      "properties": {
+        "modelId": {
+          "const": "openai/privacy-filter"
+        },
+        "runtime": {
+          "const": "cpu_only"
+        },
+        "modelRevision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

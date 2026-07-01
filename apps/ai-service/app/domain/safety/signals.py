@@ -11,6 +11,8 @@ class SafetySignal:
     action: str
     placeholder: str
     priority: int
+    source: str = "local_rule"
+    confidence: float = 1.0
 
     @property
     def length(self) -> int:

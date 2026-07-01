@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from re import Pattern
 from typing import Protocol
 
+from app.domain.safety.detections import Detection, safety_signals_from_detections
 from app.domain.safety.decision import SafetyDecision
 from app.domain.safety.policy import build_safety_decision, enabled_detector_map
 from app.domain.safety.signals import SafetySignal
@@ -30,6 +31,11 @@ class PromptDetector(Protocol):
     priority: int
 
     def detect(self, prompt_text: str, config: SafetyDetector) -> list[SafetySignal]:
+        ...
+
+
+class DetectionAdapter(Protocol):
+    def detect(self, text: str) -> list[Detection]:
         ...
 
 
@@ -109,8 +115,13 @@ class CreditCardDetector:
 
 
 class HeuristicSafetyEvaluator:
-    def __init__(self, detectors: list[PromptDetector] | None = None) -> None:
+    def __init__(
+        self,
+        detectors: list[PromptDetector] | None = None,
+        detection_adapters: list[DetectionAdapter] | None = None,
+    ) -> None:
         self.detectors = detectors or default_detectors()
+        self.detection_adapters = detection_adapters or []
 
     def evaluate(self, ctx: RemoteSafetyContext, input: RemoteSafetyInput) -> SafetyDecision:
         detector_config = enabled_detector_map(input.detectors)
@@ -120,6 +131,13 @@ class HeuristicSafetyEvaluator:
             if config is None:
                 continue
             signals.extend(detector.detect(input.prompt_text, config))
+        for adapter in self.detection_adapters:
+            signals.extend(
+                safety_signals_from_detections(
+                    adapter.detect(input.prompt_text),
+                    detector_config,
+                )
+            )
         return build_safety_decision(
             prompt_text=input.prompt_text,
             signals=signals,

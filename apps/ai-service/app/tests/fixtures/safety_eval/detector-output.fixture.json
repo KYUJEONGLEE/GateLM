@@ -144,6 +144,22 @@
       }
     },
     {
+      "caseId": "secret_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "secret"
+        ],
+        "detectedTypeCounts": {
+          "secret": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review secret-like value [SECRET_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
       "caseId": "postal_address_redacts_before_provider",
       "actualSafetyDecision": {
         "action": "redacted",
@@ -171,6 +187,38 @@
         },
         "detectedCount": 1,
         "redactedPromptPreview": "Summarize the profile with date of birth [DATE_OF_BIRTH_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "private_date_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "private_date"
+        ],
+        "detectedTypeCounts": {
+          "private_date": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Summarize private date [PRIVATE_DATE_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "private_url_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "private_url"
+        ],
+        "detectedTypeCounts": {
+          "private_url": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review private URL [PRIVATE_URL_REDACTED].",
         "blockReason": null,
         "securityPolicyHash": "sec_v1_safety_baseline"
       }
@@ -236,6 +284,22 @@
         "detectedCount": 1,
         "redactedPromptPreview": "Summarize account context for account id [ACCOUNT_ID_REDACTED].",
         "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "account_number_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "account_number"
+        ],
+        "detectedTypeCounts": {
+          "account_number": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review account number [ACCOUNT_NUMBER_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
         "securityPolicyHash": "sec_v1_safety_baseline"
       }
     },
