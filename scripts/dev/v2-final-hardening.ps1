@@ -164,7 +164,7 @@ if ($DescribeOnly) {
 }
 
 Assert-ToolingBaseline
-$missingPhaseScripts = Assert-ExpectedScripts
+$missingPhaseScripts = @(Assert-ExpectedScripts)
 
 if (-not $SkipGitDiffCheck) {
     Invoke-CheckedCommand -Name "git diff --check" -FilePath "git" -Arguments @("diff", "--check") -WorkingDirectory $repoRoot
