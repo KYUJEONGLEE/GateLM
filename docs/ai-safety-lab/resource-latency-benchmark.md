@@ -1,40 +1,40 @@
-# Resource / Latency Benchmark Report
+# 리소스 / 지연시간 벤치마크 리포트
 
-## 1. Purpose
+## 1. 목적
 
-이 문서는 `openai/privacy-filter` local sidecar가 노트북, CPU-only 서버, GPU 서버, quantized runtime에서 충분히 빠르게 동작하는지 판단하기 위한 측정 프로토콜과 report 양식이다.
+이 문서는 `openai/privacy-filter` local sidecar가 노트북 CPU-only 환경, GPU 서버, quantized runtime에서 충분히 빠르게 동작하는지 판단하기 위한 측정 프로토콜과 리포트 양식이다.
 
-첫 산출물은 benchmark runner 구현이 아니라 측정 기준과 report template이다.
+첫 산출물은 benchmark runner 구현이 아니라 측정 기준과 리포트 템플릿이다.
 
-이 문서는 Lab evidence용 기준이며 production SLA 또는 v2 공식 API/DB/Event/Metrics 계약이 아니다.
+이 문서는 AI Safety Lab evidence를 위한 보조 문서이며 production SLA나 v2 공식 API, DB, Event, Metrics 계약이 아니다.
 
-## 2. Benchmark Defaults
+## 2. 기본 기준
 
-| Item | Default |
+| 항목 | 기본값 |
 |---|---|
-| First required runtime | `cpu_local_pipeline` |
-| Comparison slots | `gpu_pipeline`, `quantized_cpu` |
-| Model | `openai/privacy-filter` |
-| Target endpoint | `POST /internal/ai-safety/v1/detect` or equivalent in-process harness |
-| Warmup requests | 10 |
-| Measured requests | 100 per runtime profile |
-| Sidecar p95 candidate gate | `<= 300 ms` |
-| Full safety stage good gate | `<= 800 ms` |
-| Full safety stage warning band | `> 800 ms` and `<= 1200 ms` |
-| Full safety stage fail gate | `> 1200 ms` |
-| Timeout behavior | abandon ML result and continue with regex-only fallback |
+| 첫 필수 런타임 | `cpu_local_pipeline` |
+| 비교 슬롯 | `gpu_pipeline`, `quantized_cpu` |
+| 모델 | `openai/privacy-filter` |
+| 측정 대상 | `POST /internal/ai-safety/v1/detect` 또는 동일 service in-process harness |
+| Warmup 요청 수 | 10 |
+| 측정 요청 수 | runtime profile별 100회 |
+| Sidecar p95 목표 후보 | `<= 300 ms` |
+| Full safety stage good 기준 후보 | `<= 800 ms` |
+| Full safety stage warning 구간 후보 | `> 800 ms` 그리고 `<= 1200 ms` |
+| Full safety stage fail 기준 후보 | `> 1200 ms` |
+| Timeout 동작 | ML 결과를 포기하고 regex-only fallback으로 계속 진행 |
 
-`300 ms` and `800~1200 ms` are candidate gates for evaluation. They are not production contract values.
+`300 ms`와 `800~1200 ms`는 평가용 후보 gate이며 production 계약값으로 확정하지 않는다.
 
-## 3. Runtime Profiles
+## 3. 런타임 프로파일
 
-| Runtime Profile | Required Now | Purpose | Result When Missing |
+| Runtime Profile | 지금 필수 여부 | 목적 | 측정하지 못한 경우 |
 |---|---:|---|---|
-| `cpu_local_pipeline` | yes | 노트북 또는 CPU-only 서버에서 실제 사용 가능성 확인 | `fail` if not measured |
+| `cpu_local_pipeline` | yes | 노트북 또는 CPU-only 서버에서 실제 사용 가능성 확인 | `fail` |
 | `gpu_pipeline` | no | GPU 서버에서 latency headroom 확인 | `not_run` |
 | `quantized_cpu` | no | ONNX/int8 등 quantized 후보 비교 | `not_run` |
 
-Record enough environment metadata to explain the result:
+결과 해석에 필요한 환경 정보는 최소한 아래 항목을 기록한다.
 
 ```text
 hardware
@@ -46,13 +46,13 @@ modelRevision
 runtimeProfile
 ```
 
-## 4. Input Corpus
+## 4. 입력 코퍼스
 
-Use only synthetic templates. Do not use customer text, real email addresses, real phone numbers, real names, real credentials, production logs, or provider error bodies.
+입력은 synthetic template만 사용한다. 고객 문장, 실제 이메일, 실제 전화번호, 실제 이름, 실제 credential, production log, provider raw error body를 사용하지 않는다.
 
-First benchmark corpus target: 50 templates.
+첫 benchmark corpus 기준은 50개 template이다.
 
-| Group | Count | Purpose |
+| 그룹 | 개수 | 목적 |
 |---|---:|---|
 | `short_safe` | 10 | 짧고 개인정보 없는 일반 문장 |
 | `long_safe` | 10 | 1k~2k chars 긴 문장 |
@@ -60,62 +60,62 @@ First benchmark corpus target: 50 templates.
 | `pii_ko` | 10 | 한국어 이름, 전화, 주소, 날짜 후보 포함 |
 | `mixed_edge` | 10 | 반복, 괄호/공백, 여러 detector, no-PII mixed |
 
-The report may store `caseId`, `caseGroup`, and `inputLengthBucket`. It must not store the prompt template or rendered prompt.
+리포트에는 `caseId`, `caseGroup`, `inputLengthBucket`만 저장할 수 있다. prompt template이나 렌더링된 전체 prompt는 저장하지 않는다.
 
-Suggested length buckets:
+권장 길이 bucket:
 
-| Bucket | Meaning |
+| Bucket | 의미 |
 |---|---|
 | `short` | `< 200 chars` |
 | `medium` | `200~999 chars` |
 | `long` | `1000~2000 chars` |
 | `very_long` | `> 2000 chars` |
 
-## 5. Measurement Protocol
+## 5. 측정 절차
 
-1. Load the model and record cold start / model load latency separately.
-2. Run 10 warmup requests. Exclude warmup measurements from percentile calculations.
-3. Run 100 measured requests per runtime profile, cycling through the synthetic corpus.
-4. Record primary sidecar latency from response `latencyMs` when using the endpoint.
-5. Record secondary client-observed latency around the request or in-process call.
-6. Use nearest-rank percentile calculation for p50 and p95.
-7. Apply the `300 ms` sidecar timeout candidate during timeout scenario runs.
-8. When timeout occurs, record `sidecarOutcome=timeout` and `fallbackMode=regex_only`.
-9. Do not record raw prompt, raw detected value, raw span, raw model `word`, raw response, raw error body, hashes, request IDs, or trace IDs in the report.
+1. 모델을 로드하고 cold start / model load latency를 별도로 기록한다.
+2. Warmup 요청 10회를 실행한다. Warmup 측정값은 percentile 계산에서 제외한다.
+3. Runtime profile별 측정 요청 100회를 실행한다. Synthetic corpus를 순환하며 사용한다.
+4. Endpoint를 사용하는 경우 response의 `latencyMs`를 primary sidecar latency로 기록한다.
+5. 요청 또는 in-process call 바깥에서 잰 client-observed latency를 secondary metric으로 기록한다.
+6. p50과 p95는 nearest-rank 방식으로 계산한다.
+7. Timeout scenario에서는 `300 ms` sidecar timeout 후보를 적용한다.
+8. Timeout이 발생하면 `sidecarOutcome=timeout`, `fallbackMode=regex_only`로 기록한다.
+9. 리포트에는 raw prompt, raw detected value, raw span, raw model `word`, raw response, raw error body, hash, request ID, trace ID를 기록하지 않는다.
 
-Percentile calculation:
+Percentile 계산 방식:
 
 ```text
-sort ascending
+오름차순 정렬
 rank = ceil(percentile * sample_count)
 value = sorted[rank - 1]
 ```
 
-## 6. Decision Gates
+## 6. 판단 게이트
 
-| Gate | Pass | Warn | Fail |
+| Gate | Pass 기준 | Warn 기준 | Fail 기준 |
 |---|---|---|---|
-| Sidecar latency | p95 sidecar `<= 300 ms` | p95 sidecar `> 300 ms` but fallback works | p95 sidecar `> 300 ms` and fallback missing |
-| Full safety stage | p95 full safety `<= 800 ms` | p95 full safety `> 800 ms` and `<= 1200 ms` | p95 full safety `> 1200 ms` |
-| Timeout fallback | timeout count equals regex-only fallback count | partial fallback evidence | timeout path leaks raw value or fails request unexpectedly |
-| Raw value exposure | no forbidden content in report | manual review needed | raw prompt/value/span/model word/error body present |
+| Sidecar latency | p95 sidecar `<= 300 ms` | p95 sidecar `> 300 ms`지만 fallback 동작 확인 | p95 sidecar `> 300 ms`이고 fallback 근거 없음 |
+| Full safety stage | p95 full safety `<= 800 ms` | p95 full safety `> 800 ms` 그리고 `<= 1200 ms` | p95 full safety `> 1200 ms` |
+| Timeout fallback | timeout 시 regex-only fallback 수가 일치 | fallback 근거가 일부만 있음 | timeout 경로가 raw value를 노출하거나 요청을 예측 불가능하게 실패시킴 |
+| Raw value exposure | report에 금지된 내용 없음 | 수동 검토 필요 | raw prompt/value/span/model word/error body 존재 |
 
-Recommended initial decision:
+초기 권장 판단:
 
 ```text
-sidecar p95 <= 300ms -> keep ML sidecar candidate
-sidecar p95 > 300ms -> shadow unavailable, regex-only fallback for runtime path
-full safety p95 > 1200ms -> do not promote ML sidecar to enforce path
+sidecar p95 <= 300ms -> ML sidecar 후보 유지
+sidecar p95 > 300ms -> shadow unavailable로 보고 runtime path는 regex-only fallback
+full safety p95 > 1200ms -> ML sidecar를 enforce path로 승격하지 않음
 ```
 
-## 7. Report Template
+## 7. 리포트 템플릿
 
-Use this Markdown template for future measured reports at `reports/ai-safety-lab/resource-latency-benchmark.md`.
+실제 측정 리포트는 나중에 `reports/ai-safety-lab/resource-latency-benchmark.md`에 아래 양식으로 작성한다.
 
 ```md
-# Resource / Latency Benchmark Report
+# 리소스 / 지연시간 벤치마크 리포트
 
-## Run Metadata
+## 실행 메타데이터
 - runId:
 - date:
 - gitSha:
@@ -130,43 +130,43 @@ Use this Markdown template for future measured reports at `reports/ai-safety-lab
 - warmupRequests:
 - measuredRequests:
 
-## Decision Summary
-| Gate | Result | Evidence |
+## 판단 요약
+| Gate | 결과 | 근거 |
 |---|---|---|
 | sidecar p95 <= 300ms | pass/warn/fail | p95SidecarLatencyMs |
 | full safety stage <= 800~1200ms | pass/warn/fail | p95FullSafetyStageMs |
-| timeout fallback works | pass/fail | timeoutCount + regexOnlyFallbackCount |
-| raw value exposure | pass/fail | no raw prompt/value/span in report |
+| timeout fallback 동작 | pass/fail | timeoutCount + regexOnlyFallbackCount |
+| raw value 노출 여부 | pass/fail | report에 raw prompt/value/span 없음 |
 
-## Latency Summary
+## 지연시간 요약
 | Runtime | p50 sidecar | p95 sidecar | p50 full safety | p95 full safety | timeout rate |
 |---|---:|---:|---:|---:|---:|
 
-## Case Group Summary
+## Case Group 요약
 | Group | requests | p50 | p95 | max | timeoutCount | fallbackCount |
 |---|---:|---:|---:|---:|---:|---:|
 
-## Resource Summary
+## 리소스 요약
 | Runtime | peakRssMb | avgCpuPct | peakGpuMemoryMb | notes |
 |---|---:|---:|---:|---|
 
-## Fallback Recommendation
-- If sidecar p95 <= 300ms:
-- If sidecar p95 > 300ms:
-- If full safety p95 > 1200ms:
-- Recommended production posture:
+## Fallback 권장안
+- sidecar p95 <= 300ms인 경우:
+- sidecar p95 > 300ms인 경우:
+- full safety p95 > 1200ms인 경우:
+- 권장 production posture:
 
-## Raw Value Safety Check
-- Report stores no raw prompts.
-- Report stores no raw detected values.
-- Report stores no offsets/spans.
-- Report stores no raw model `word`.
-- Report stores no raw error bodies.
+## Raw Value 안전성 확인
+- Report에 raw prompt가 없다.
+- Report에 raw detected value가 없다.
+- Report에 offset/span이 없다.
+- Report에 raw model `word`가 없다.
+- Report에 raw error body가 없다.
 ```
 
-## 8. Draft JSON Shape
+## 8. JSON 결과 초안
 
-The JSON report shape is a runner candidate, not a locked schema.
+JSON 리포트 shape는 runner 후보이며 아직 locked schema가 아니다.
 
 ```json
 {
@@ -216,23 +216,23 @@ The JSON report shape is a runner candidate, not a locked schema.
 }
 ```
 
-Allowed report values are sanitized aggregates only. Do not add prompt text, prompt template, detected raw value, raw span, model `word`, request IDs, trace IDs, sample hashes, or raw error bodies.
+허용되는 report value는 sanitized aggregate뿐이다. Prompt text, prompt template, raw detected value, raw span, model `word`, request ID, trace ID, sample hash, raw error body를 추가하지 않는다.
 
-## 9. Acceptance Checklist
+## 9. 승인 체크리스트
 
 ```text
-[ ] CPU-only local sidecar benchmark ran 100 measured requests.
-[ ] Cold start/model load latency is recorded separately.
-[ ] Warmup requests are excluded from p50/p95.
-[ ] p50/p95 calculation is nearest-rank and reproducible.
-[ ] GPU runtime is either measured or marked not_run.
-[ ] Quantized runtime is either measured or marked not_run.
-[ ] Timeout scenario records sidecarOutcome=timeout.
-[ ] Timeout scenario records fallbackMode=regex_only.
-[ ] Report contains no raw prompt.
-[ ] Report contains no raw detected value.
-[ ] Report contains no raw span or offset.
-[ ] Report contains no raw model word.
-[ ] Report contains no raw error body.
-[ ] Report states that benchmark evidence is not a production SLA.
+[ ] CPU-only local sidecar benchmark가 measured request 100회를 실행했다.
+[ ] Cold start/model load latency를 별도로 기록했다.
+[ ] Warmup request를 p50/p95 계산에서 제외했다.
+[ ] p50/p95 계산 방식은 nearest-rank이며 재현 가능하다.
+[ ] GPU runtime은 측정했거나 not_run으로 명확히 표시했다.
+[ ] Quantized runtime은 측정했거나 not_run으로 명확히 표시했다.
+[ ] Timeout scenario는 sidecarOutcome=timeout을 기록한다.
+[ ] Timeout scenario는 fallbackMode=regex_only를 기록한다.
+[ ] Report에 raw prompt가 없다.
+[ ] Report에 raw detected value가 없다.
+[ ] Report에 raw span 또는 offset이 없다.
+[ ] Report에 raw model word가 없다.
+[ ] Report에 raw error body가 없다.
+[ ] Report가 benchmark evidence이며 production SLA가 아니라고 명시한다.
 ```

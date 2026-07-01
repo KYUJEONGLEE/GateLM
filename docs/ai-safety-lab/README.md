@@ -58,7 +58,7 @@ Initial `openai/privacy-filter` label mapping:
 | `detector-sidecar-contract.md` | local detector sidecar draft contract |
 | `implementation-plan.md` | 첨부 PII detector 메모 기반 구현 계획 |
 | `evaluation-plan.md` | 기존 safety eval 방식과 새 PII detector 평가 계획 |
-| `resource-latency-benchmark.md` | local sidecar resource/latency benchmark protocol and report template |
+| `resource-latency-benchmark.md` | local sidecar 리소스/지연시간 벤치마크 측정 프로토콜과 리포트 템플릿 |
 | `fixtures/` | 향후 synthetic safety eval fixture 위치 |
 | `schemas/` | AI Safety Lab 전용 JSON Schema 위치 |
 
