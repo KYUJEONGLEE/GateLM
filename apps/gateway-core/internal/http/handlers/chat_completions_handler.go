@@ -201,26 +201,26 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	promptText = redactedPrompt
 
 	gatewayCtx := newGatewayContext(reqCtx, promptText)
+	if shouldLookupExactCache(gatewayCtx) {
+		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
+		applyExactCacheLookupToGatewayContext(gatewayCtx, reqCtx, cachePayload, cacheHitRequestID, cacheHit)
+	}
+	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, startedAt) {
+		return
+	}
+
 	if h.PreProviderPipeline != nil {
 		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+			if isPreCacheGatewayError(err) {
+				gatewayCtx.BypassCache()
+			}
 			applyGatewayContext(reqCtx, gatewayCtx)
 			writeGatewayPipelineFailure(w, reqCtx, err)
 			return
 		}
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
-
-	if shouldLookupExactCache(gatewayCtx) {
-		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
-		if cacheHit {
-			gatewayCtx.Cache.CacheStatus = cachestage.CacheStatusHit
-			gatewayCtx.Cache.CacheType = cachestage.CacheTypeExact
-			gatewayCtx.Cache.CacheKeyHash = reqCtx.CacheKeyHash
-			gatewayCtx.Cache.CacheHitRequestID = cacheHitRequestID
-			gatewayCtx.Cache.Payload = cachePayload
-		}
-	}
-	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, chatReq.Model, startedAt) {
+	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, startedAt) {
 		return
 	}
 
@@ -316,6 +316,37 @@ func gatewayExactCachePolicyAllowsLookup(gatewayCtx *request.GatewayContext) boo
 		return true
 	}
 	return cachePolicyAllowsExact(gatewayCtx.Runtime.CachePolicy)
+}
+
+func isPreCacheGatewayError(err error) bool {
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		return false
+	}
+	switch gatewayErr.Code {
+	case "invalid_api_key", "invalid_app_token", "scope_mismatch":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyExactCacheLookupToGatewayContext(gatewayCtx *request.GatewayContext, reqCtx *pipeline.RequestContext, payload []byte, cacheHitRequestID string, hit bool) {
+	if gatewayCtx == nil || reqCtx == nil {
+		return
+	}
+
+	gatewayCtx.Cache.CacheStatus = reqCtx.CacheStatus
+	gatewayCtx.Cache.CacheType = reqCtx.CacheType
+	gatewayCtx.Cache.CacheKeyHash = reqCtx.CacheKeyHash
+	gatewayCtx.Cache.CacheHitRequestID = ""
+	gatewayCtx.Cache.Payload = nil
+	if hit {
+		gatewayCtx.Cache.CacheStatus = cachestage.CacheStatusHit
+		gatewayCtx.Cache.CacheType = cachestage.CacheTypeExact
+		gatewayCtx.Cache.CacheHitRequestID = cacheHitRequestID
+		gatewayCtx.Cache.Payload = payload
+	}
 }
 
 func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
@@ -848,10 +879,9 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 		TenantID:                 reqCtx.TenantID,
 		ProjectID:                reqCtx.ProjectID,
 		ApplicationID:            reqCtx.ApplicationID,
-		SelectedProvider:         reqCtx.SelectedProvider,
-		SelectedModel:            reqCtx.SelectedModel,
+		RequestedModel:           firstNonEmpty(reqCtx.RequestedModel, chatReq.Model, h.DefaultModel),
 		SecurityPolicyVersionID:  firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID),
-		RoutingPolicyVersionID:   reqCtx.RoutingPolicyHash,
+		RoutingPolicyVersionID:   firstNonEmpty(reqCtx.RoutingPolicyHash, reqCtx.RuntimeRoutingPolicy.RoutingPolicyHash, routingdomain.DefaultPolicyHash),
 		CachePolicyHash:          firstNonEmpty(reqCtx.RuntimeCachePolicy.CachePolicyHash, h.CachePolicyHash),
 		NormalizedRedactedPrompt: redactedPrompt,
 		RequestParamsHash:        requestParamsHash(chatReq),
@@ -1129,7 +1159,7 @@ func streamingFinalDomainOutcomes(reqCtx *pipeline.RequestContext, outcome strin
 	return outcomes
 }
 
-func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, requestedModel string, startedAt time.Time) bool {
+func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, gatewayCtx *request.GatewayContext, startedAt time.Time) bool {
 	if reqCtx == nil || gatewayCtx == nil || gatewayCtx.Cache.CacheStatus != cachestage.CacheStatusHit {
 		return false
 	}
@@ -1158,14 +1188,8 @@ func (h *ChatCompletionsHandler) writeCachedChatCompletionIfHit(ctx context.Cont
 	if gatewayCtx.Cache.CacheHitRequestID != "" {
 		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
 	}
-	if reqCtx.SelectedProvider == "" {
-		reqCtx.SelectedProvider = h.DefaultProvider
-	}
-	if reqCtx.SelectedModel == "" {
-		reqCtx.SelectedModel = requestedModel
-	}
 	if reqCtx.RoutingReason == "" {
-		reqCtx.RoutingReason = "not_routed"
+		reqCtx.RoutingReason = "exact_cache_hit_provider_bypass"
 	}
 	reqCtx.Provider = reqCtx.SelectedProvider
 	reqCtx.Model = reqCtx.SelectedModel
