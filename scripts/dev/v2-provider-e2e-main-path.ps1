@@ -56,22 +56,44 @@ function Invoke-Http {
     )
 
     try {
-        $response = Invoke-WebRequest -Method $Method -Uri $Uri -Headers $Headers -Body $Body -UseBasicParsing -TimeoutSec 20
+        $request = @{
+            Method = $Method
+            Uri = $Uri
+            Headers = $Headers
+            UseBasicParsing = $true
+            TimeoutSec = 20
+        }
+        if ($Method -ne "GET" -and -not [string]::IsNullOrEmpty($Body)) {
+            $request.Body = $Body
+        }
+
+        $response = Invoke-WebRequest @request
         return [ordered]@{
             statusCode = [int]$response.StatusCode
             headers = $response.Headers
             body = [string]$response.Content
+            errorType = $null
+            errorMessage = $null
         }
     }
     catch {
         $statusCode = 0
         $body = ""
         $headers = @{}
-        if ($_.Exception.Response) {
-            $statusCode = [int]$_.Exception.Response.StatusCode
-            $headers = $_.Exception.Response.Headers
+        $errorType = $_.Exception.GetType().FullName
+        $errorMessage = $_.Exception.Message
+        $errorResponse = $null
+        try {
+            $errorResponse = $_.Exception.Response
+        }
+        catch {
+            $errorResponse = $null
+        }
+        if ($null -ne $errorResponse) {
+            $statusCode = [int]$errorResponse.StatusCode
+            $headers = $errorResponse.Headers
             try {
-                $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                $reader = New-Object System.IO.StreamReader($errorResponse.GetResponseStream())
                 $body = $reader.ReadToEnd()
             }
             catch {
@@ -83,8 +105,24 @@ function Invoke-Http {
             statusCode = $statusCode
             headers = $headers
             body = $body
+            errorType = $errorType
+            errorMessage = $errorMessage
         }
     }
+}
+
+function Format-HttpDiagnostic {
+    param($Response)
+
+    $parts = @("HTTP $($Response.statusCode)")
+    if (-not [string]::IsNullOrWhiteSpace([string]$Response.errorType)) {
+        $parts += [string]$Response.errorType
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Response.errorMessage)) {
+        $parts += [string]$Response.errorMessage
+    }
+
+    return ($parts -join " - ")
 }
 
 function Convert-JsonBody {
@@ -103,6 +141,24 @@ function Convert-ToJsonBody {
     return ($Value | ConvertTo-Json -Depth 12)
 }
 
+function Get-ObjectProperty {
+    param(
+        $Value,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $property = $Value.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
+}
+
 function Get-EnvelopeData {
     param($Payload)
 
@@ -110,8 +166,9 @@ function Get-EnvelopeData {
         return $null
     }
 
-    if ($null -ne $Payload.data) {
-        return $Payload.data
+    $data = Get-ObjectProperty -Value $Payload -Name "data"
+    if ($null -ne $data) {
+        return $data
     }
 
     return $Payload
@@ -211,8 +268,9 @@ function Select-SafeRequestDetailSummary {
     param($Detail)
 
     $data = $Detail
-    if ($Detail.data) {
-        $data = $Detail.data
+    $envelopedData = Get-ObjectProperty -Value $Detail -Name "data"
+    if ($null -ne $envelopedData) {
+        $data = $envelopedData
     }
     $domainOutcomes = $data.domainOutcomes
 
@@ -271,8 +329,8 @@ if ($DescribeOnly) {
 
 $controlPlaneHealth = Invoke-Http -Method GET -Uri (Join-Url $ControlPlaneBaseUrl "/healthz")
 $gatewayHealth = Invoke-Http -Method GET -Uri (Join-Url $GatewayBaseUrl "/healthz")
-Assert-True ($controlPlaneHealth.statusCode -eq 200) "Control Plane health check failed: HTTP $($controlPlaneHealth.statusCode)"
-Assert-True ($gatewayHealth.statusCode -eq 200) "Gateway health check failed: HTTP $($gatewayHealth.statusCode)"
+Assert-True ($controlPlaneHealth.statusCode -eq 200) "Control Plane health check failed: $(Format-HttpDiagnostic $controlPlaneHealth)"
+Assert-True ($gatewayHealth.statusCode -eq 200) "Gateway health check failed: $(Format-HttpDiagnostic $gatewayHealth)"
 
 $snapshotResponse = Invoke-Http -Method GET -Uri (Join-Url $ControlPlaneBaseUrl "/admin/v1/applications/$ApplicationId/runtime-snapshot/active")
 Assert-True ($snapshotResponse.statusCode -eq 200) "Active RuntimeSnapshot check failed: HTTP $($snapshotResponse.statusCode)"

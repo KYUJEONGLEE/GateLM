@@ -45,8 +45,15 @@ function Invoke-StatusCode {
         return [int]$response.StatusCode
     }
     catch {
-        if ($null -ne $_.Exception.Response) {
-            return [int]$_.Exception.Response.StatusCode
+        $errorResponse = $null
+        try {
+            $errorResponse = $_.Exception.Response
+        }
+        catch {
+            $errorResponse = $null
+        }
+        if ($null -ne $errorResponse) {
+            return [int]$errorResponse.StatusCode
         }
         throw
     }
@@ -166,6 +173,7 @@ $previousMockProviderBaseUrl = $env:MOCK_PROVIDER_BASE_URL
 $previousFailureControlUrl = $env:K6_PROVIDER_FAILURE_CONTROL_URL
 $previousRunId = $env:GATELM_K6_RUN_ID
 $previousDependencyScenarios = $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS
+$previousTenantId = $env:GATELM_DEMO_TENANT_ID
 $previousProjectId = $env:GATELM_DEMO_PROJECT_ID
 
 try {
@@ -174,6 +182,7 @@ try {
     $env:K6_PROVIDER_FAILURE_CONTROL_URL = $MockProviderBaseUrl
     $env:GATELM_K6_RUN_ID = $safeRunId
     $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS = $(if ($EnableDependencyScenarios) { "true" } else { "false" })
+    $env:GATELM_DEMO_TENANT_ID = $TenantId
     $env:GATELM_DEMO_PROJECT_ID = $ProjectId
 
     Write-Host ""
@@ -189,6 +198,7 @@ finally {
     $env:K6_PROVIDER_FAILURE_CONTROL_URL = $previousFailureControlUrl
     $env:GATELM_K6_RUN_ID = $previousRunId
     $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS = $previousDependencyScenarios
+    $env:GATELM_DEMO_TENANT_ID = $previousTenantId
     $env:GATELM_DEMO_PROJECT_ID = $previousProjectId
 }
 

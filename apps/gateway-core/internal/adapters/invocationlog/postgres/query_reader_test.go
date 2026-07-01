@@ -91,6 +91,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				sql.NullString{String: "low_cost", Valid: true},
 				"none",
 				createdAt,
+				[]byte(`{}`),
 			}},
 		},
 	}

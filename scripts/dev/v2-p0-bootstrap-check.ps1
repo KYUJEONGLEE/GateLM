@@ -126,8 +126,15 @@ function Invoke-StatusCode {
         return [int]$response.StatusCode
     }
     catch {
-        if ($null -ne $_.Exception.Response) {
-            return [int]$_.Exception.Response.StatusCode
+        $errorResponse = $null
+        try {
+            $errorResponse = $_.Exception.Response
+        }
+        catch {
+            $errorResponse = $null
+        }
+        if ($null -ne $errorResponse) {
+            return [int]$errorResponse.StatusCode
         }
         throw
     }

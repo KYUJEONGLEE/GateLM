@@ -53,10 +53,17 @@ function Invoke-Http {
     catch {
         $statusCode = 0
         $body = ""
-        if ($_.Exception.Response) {
-            $statusCode = [int]$_.Exception.Response.StatusCode
+        $errorResponse = $null
+        try {
+            $errorResponse = $_.Exception.Response
+        }
+        catch {
+            $errorResponse = $null
+        }
+        if ($null -ne $errorResponse) {
+            $statusCode = [int]$errorResponse.StatusCode
             try {
-                $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                $reader = New-Object System.IO.StreamReader($errorResponse.GetResponseStream())
                 $body = $reader.ReadToEnd()
             }
             catch {
@@ -81,6 +88,24 @@ function Convert-JsonBody {
     return $Body | ConvertFrom-Json
 }
 
+function Get-ObjectProperty {
+    param(
+        $Value,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $property = $Value.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
+}
+
 function Get-EnvelopeData {
     param($Payload)
 
@@ -88,8 +113,9 @@ function Get-EnvelopeData {
         return $null
     }
 
-    if ($null -ne $Payload.data) {
-        return $Payload.data
+    $data = Get-ObjectProperty -Value $Payload -Name "data"
+    if ($null -ne $data) {
+        return $data
     }
 
     return $Payload
