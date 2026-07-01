@@ -4,7 +4,7 @@
 
 이 문서는 `openai/privacy-filter` local sidecar가 노트북 CPU-only 환경, GPU 서버, quantized runtime에서 충분히 빠르게 동작하는지 판단하기 위한 측정 프로토콜과 리포트 양식이다.
 
-첫 산출물은 benchmark runner 구현이 아니라 측정 기준과 리포트 템플릿이다.
+Benchmark runner는 `apps/ai-service/app/services/ai_safety_latency_benchmark_runner.py`에 둔다. 이 문서는 runner의 측정 기준과 리포트 템플릿을 정의한다.
 
 이 문서는 AI Safety Lab evidence를 위한 보조 문서이며 production SLA나 v2 공식 API, DB, Event, Metrics 계약이 아니다.
 
@@ -25,6 +25,18 @@
 | Timeout 동작 | ML 결과를 포기하고 regex-only fallback으로 계속 진행 |
 
 `300 ms`와 `800~1200 ms`는 평가용 후보 gate이며 production 계약값으로 확정하지 않는다.
+
+기본 실행 명령:
+
+```powershell
+cd apps/ai-service
+python -m app.services.ai_safety_latency_benchmark_runner `
+  --target http `
+  --endpoint-url http://127.0.0.1:8000/internal/ai-safety/v1/detect `
+  --runtime-profile cpu_local_pipeline `
+  --corpus ../../docs/ai-safety-lab/fixtures/resource-latency-benchmark-corpus.jsonl `
+  --out ../../reports/ai-safety-lab
+```
 
 ## 3. 런타임 프로파일
 
@@ -110,7 +122,7 @@ full safety p95 > 1200ms -> ML sidecar를 enforce path로 승격하지 않음
 
 ## 7. 리포트 템플릿
 
-실제 측정 리포트는 나중에 `reports/ai-safety-lab/resource-latency-benchmark.md`에 아래 양식으로 작성한다.
+실제 측정 리포트는 runner가 `reports/ai-safety-lab/resource-latency-benchmark.md`에 아래 양식으로 작성한다.
 
 ```md
 # 리소스 / 지연시간 벤치마크 리포트

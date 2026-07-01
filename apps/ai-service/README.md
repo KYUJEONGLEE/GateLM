@@ -88,6 +88,23 @@ python -m pip install -e ".[ml,test]"
 python -m app.main
 ```
 
+## Resource / Latency Benchmark Runner
+
+Run the AI Safety Lab sidecar latency benchmark after starting the local sidecar:
+
+```bash
+cd apps/ai-service
+python -m pip install -e ".[ml,benchmark,test]"
+python -m app.services.ai_safety_latency_benchmark_runner \
+  --target http \
+  --endpoint-url http://127.0.0.1:8000/internal/ai-safety/v1/detect \
+  --runtime-profile cpu_local_pipeline \
+  --corpus ../../docs/ai-safety-lab/fixtures/resource-latency-benchmark-corpus.jsonl \
+  --out ../../reports/ai-safety-lab
+```
+
+The runner writes sanitized aggregate-only reports to `reports/ai-safety-lab/resource-latency-benchmark.json` and `.md`. It does not write source input text, detected sensitive values, raw offsets, model token text, request identifiers, trace identifiers, hashes, or raw error bodies.
+
 ## Safety Eval Runner
 
 Run detector-output fixture evaluation:
