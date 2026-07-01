@@ -46,8 +46,12 @@ function Invoke-StatusCode {
     }
     catch {
         $errorResponse = $null
-        if ($_.Exception -is [System.Net.WebException]) {
-            $errorResponse = $_.Exception.Response
+        $exception = $_.Exception
+        if ($null -ne $exception) {
+            $responseProperty = $exception.PSObject.Properties["Response"]
+            if ($null -ne $responseProperty) {
+                $errorResponse = $responseProperty.Value
+            }
         }
         if ($null -ne $errorResponse) {
             return [int]$errorResponse.StatusCode
@@ -104,8 +108,9 @@ if ([string]::IsNullOrWhiteSpace($ReportDir)) {
     $ReportDir = Join-Path $repoRoot "reports/e2e"
 }
 
-$fromIso = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ssZ")
-$toIso = (Get-Date).ToUniversalTime().AddMinutes(20).ToString("yyyy-MM-ddTHH:mm:ssZ")
+$invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture
+$fromIso = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString("yyyy-MM-ddTHH:mm:ssZ", $invariantCulture)
+$toIso = (Get-Date).ToUniversalTime().AddMinutes(20).ToString("yyyy-MM-ddTHH:mm:ssZ", $invariantCulture)
 $logsQuery = New-QueryString -Values @{
     tenantId = $TenantId
     from = $fromIso

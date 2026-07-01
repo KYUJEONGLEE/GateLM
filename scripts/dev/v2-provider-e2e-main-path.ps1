@@ -83,15 +83,26 @@ function Invoke-Http {
         $errorType = $_.Exception.GetType().FullName
         $errorMessage = $_.Exception.Message
         $errorResponse = $null
-        if ($_.Exception -is [System.Net.WebException]) {
-            $errorResponse = $_.Exception.Response
+        $exception = $_.Exception
+        if ($null -ne $exception) {
+            $responseProperty = $exception.PSObject.Properties["Response"]
+            if ($null -ne $responseProperty) {
+                $errorResponse = $responseProperty.Value
+            }
         }
         if ($null -ne $errorResponse) {
             $statusCode = [int]$errorResponse.StatusCode
-            $headers = $errorResponse.Headers
+            if ($errorResponse.PSObject.Properties["Headers"]) {
+                $headers = $errorResponse.Headers
+            }
             try {
-                $reader = New-Object System.IO.StreamReader($errorResponse.GetResponseStream())
-                $body = $reader.ReadToEnd()
+                if ($errorResponse.PSObject.Methods["GetResponseStream"]) {
+                    $reader = New-Object System.IO.StreamReader($errorResponse.GetResponseStream())
+                    $body = $reader.ReadToEnd()
+                }
+                elseif ($errorResponse.PSObject.Properties["Content"] -and $null -ne $errorResponse.Content) {
+                    $body = $errorResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                }
             }
             catch {
                 $body = ""
@@ -135,7 +146,7 @@ function Convert-JsonBody {
 function Convert-ToJsonBody {
     param([hashtable]$Value)
 
-    return ($Value | ConvertTo-Json -Depth 12)
+    return (ConvertTo-Json -InputObject $Value -Depth 12)
 }
 
 function Get-ObjectProperty {
@@ -393,7 +404,7 @@ $headers = @{
     "X-GateLM-Feature-Id" = "v2_provider_e2e_main_path"
     "X-GateLM-Request-Id" = $requestId
 }
-$body = @{
+$body = ConvertTo-Json -InputObject @{
     model = "auto"
     messages = @(
         @{
@@ -404,7 +415,7 @@ $body = @{
     temperature = 0.2
     max_tokens = 128
     stream = $false
-} | ConvertTo-Json -Depth 8
+} -Depth 8
 
 $requestStartedAt = (Get-Date).ToUniversalTime()
 $chatResponse = Invoke-Http -Method POST -Uri (Join-Url $GatewayBaseUrl "/v1/chat/completions") -Headers $headers -Body $body
@@ -486,7 +497,7 @@ $report = [ordered]@{
 }
 
 $reportPath = Join-Path $ReportDir "v2-provider-e2e-$timestamp.json"
-$report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $reportPath -Encoding utf8
+(ConvertTo-Json -InputObject $report -Depth 20) | Set-Content -LiteralPath $reportPath -Encoding utf8
 
 Write-Host "Provider E2E report written:"
 Write-Host $reportPath

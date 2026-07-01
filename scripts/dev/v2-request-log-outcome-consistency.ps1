@@ -54,14 +54,23 @@ function Invoke-Http {
         $statusCode = 0
         $body = ""
         $errorResponse = $null
-        if ($_.Exception -is [System.Net.WebException]) {
-            $errorResponse = $_.Exception.Response
+        $exception = $_.Exception
+        if ($null -ne $exception) {
+            $responseProperty = $exception.PSObject.Properties["Response"]
+            if ($null -ne $responseProperty) {
+                $errorResponse = $responseProperty.Value
+            }
         }
         if ($null -ne $errorResponse) {
             $statusCode = [int]$errorResponse.StatusCode
             try {
-                $reader = New-Object System.IO.StreamReader($errorResponse.GetResponseStream())
-                $body = $reader.ReadToEnd()
+                if ($errorResponse.PSObject.Methods["GetResponseStream"]) {
+                    $reader = New-Object System.IO.StreamReader($errorResponse.GetResponseStream())
+                    $body = $reader.ReadToEnd()
+                }
+                elseif ($errorResponse.PSObject.Properties["Content"] -and $null -ne $errorResponse.Content) {
+                    $body = $errorResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                }
             }
             catch {
                 $body = ""
@@ -350,7 +359,7 @@ $report = [ordered]@{
 }
 
 $reportPath = Join-Path $ReportDir "v2-request-log-consistency-$timestamp.json"
-$report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $reportPath -Encoding utf8
+(ConvertTo-Json -InputObject $report -Depth 20) | Set-Content -LiteralPath $reportPath -Encoding utf8
 
 Write-Host "Request log consistency report written:"
 Write-Host $reportPath

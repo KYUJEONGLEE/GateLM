@@ -127,8 +127,12 @@ function Invoke-StatusCode {
     }
     catch {
         $errorResponse = $null
-        if ($_.Exception -is [System.Net.WebException]) {
-            $errorResponse = $_.Exception.Response
+        $exception = $_.Exception
+        if ($null -ne $exception) {
+            $responseProperty = $exception.PSObject.Properties["Response"]
+            if ($null -ne $responseProperty) {
+                $errorResponse = $responseProperty.Value
+            }
         }
         if ($null -ne $errorResponse) {
             return [int]$errorResponse.StatusCode

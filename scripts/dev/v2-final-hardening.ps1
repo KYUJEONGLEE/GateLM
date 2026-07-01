@@ -196,7 +196,7 @@ if ($RunFullVerify) {
 New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 $report = Get-ReportObject -MissingPhaseScripts $missingPhaseScripts -DocsVerifyRan $docsVerifyRan -FullVerifyRan $fullVerifyRan
 $reportPath = Join-Path $ReportDir "v2-final-hardening-$timestamp.json"
-$report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $reportPath -Encoding utf8
+(ConvertTo-Json -InputObject $report -Depth 20) | Set-Content -LiteralPath $reportPath -Encoding utf8
 
 Write-Host ""
 Write-Host "final hardening report written:"

@@ -41,7 +41,7 @@ function Invoke-GatewayChat {
     "X-GateLM-Feature-Id" = $Scenario
     "X-GateLM-Request-Id" = $requestId
   }
-  $body = @{
+  $body = ConvertTo-Json -InputObject @{
     model = "auto"
     messages = @(
       @{
@@ -52,7 +52,7 @@ function Invoke-GatewayChat {
     temperature = 0.2
     max_tokens = 128
     stream = $Stream
-  } | ConvertTo-Json -Depth 8
+  } -Depth 8
 
   try {
     $response = Invoke-WebRequest -Method Post -Uri "$GatewayBaseUrl/v1/chat/completions" -Headers $headers -Body $body -UseBasicParsing -SkipHttpErrorCheck
@@ -138,7 +138,7 @@ $report = [ordered]@{
 }
 
 $reportPath = Join-Path $reportDir "v2-demo-evidence-$timestamp.json"
-$report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $reportPath -Encoding utf8
+(ConvertTo-Json -InputObject $report -Depth 12) | Set-Content -LiteralPath $reportPath -Encoding utf8
 
 Write-Host "v2 demo evidence report written:"
 Write-Host $reportPath
