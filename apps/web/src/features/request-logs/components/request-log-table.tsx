@@ -1,4 +1,6 @@
+import { Search } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
@@ -8,38 +10,103 @@ import {
   nullableText
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
 
 type RequestLogTableProps = {
+  detailPanel?: ReactNode;
+  filters: RequestLogFilterState;
   locale: Locale;
+  modelOptions: string[];
   records: InvocationLogRecord[];
+  selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
   tenantId: string;
   timezone: string;
 };
 
+export const requestLogCreatedFilters = ["15m", "1h", "24h", "7d"] as const;
+export const requestLogStatusFilters = [
+  "success",
+  "blocked",
+  "rate_limited",
+  "failed",
+  "cancelled"
+] as const satisfies readonly InvocationLogRecord["status"][];
+
+export type RequestLogCreatedFilter = (typeof requestLogCreatedFilters)[number];
+export type RequestLogFilterState = {
+  created: RequestLogCreatedFilter;
+  model: string;
+  status: "" | InvocationLogRecord["status"];
+};
+
 const requestLogText: Record<
   Locale,
   {
+    allModels: string;
+    allStatuses: string;
+    createdLabel: string;
+    createdOptions: Record<RequestLogCreatedFilter, string>;
     emptyPreview: string;
+    filterLabel: string;
     kicker: string;
+    modelLabel: string;
+    searchLabel: string;
+    searchPlaceholder: string;
+    statusLabel: string;
+    submitLabel: string;
     title: string;
   }
 > = {
   en: {
+    allModels: "All models",
+    allStatuses: "All statuses",
+    createdLabel: "Created",
+    createdOptions: {
+      "15m": "Last 15m",
+      "1h": "Last 1h",
+      "24h": "Last 24h",
+      "7d": "Last 7d"
+    },
     emptyPreview: "No preview stored",
+    filterLabel: "Log filters",
     kicker: "analytics",
+    modelLabel: "Model",
+    searchLabel: "Search logs",
+    searchPlaceholder: "Search request logs",
+    statusLabel: "Status",
+    submitLabel: "Search",
     title: "Request logs"
   },
   ko: {
+    allModels: "전체 모델",
+    allStatuses: "전체 상태",
+    createdLabel: "생성 시각",
+    createdOptions: {
+      "15m": "최근 15분",
+      "1h": "최근 1시간",
+      "24h": "최근 24시간",
+      "7d": "최근 7일"
+    },
     emptyPreview: "저장된 preview 없음",
+    filterLabel: "로그 필터",
     kicker: "분석",
+    modelLabel: "모델",
+    searchLabel: "로그 검색",
+    searchPlaceholder: "요청 로그 검색",
+    statusLabel: "상태",
+    submitLabel: "검색",
     title: "요청 로그"
   }
 };
 
 export function RequestLogTable({
+  detailPanel,
+  filters,
   locale,
+  modelOptions,
   records,
+  selectedRequestId,
   sourceState,
   tenantId,
   timezone
@@ -55,62 +122,139 @@ export function RequestLogTable({
         </div>
       </section>
 
-      <section className="console-panel">
-        <div className="table-wrap">
-          <table className="data-table request-table">
-            <thead>
-              <tr>
-                <th>Request</th>
-                <th>Status</th>
-                <th>Model</th>
-                <th>Safety</th>
-                <th>Cache</th>
-                <th>Latency</th>
-                <th>Tokens</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sourceState === "unavailable" ? (
-                <tr>
-                  <td colSpan={8}>Live Gateway request logs are not available right now.</td>
-                </tr>
-              ) : null}
-              {sourceState === "ready" && records.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>No Gateway request logs found for the current range.</td>
-                </tr>
-              ) : null}
-              {records.map((record) => (
-                <tr key={record.requestId}>
-                  <td>
-                    <Link
-                      className="request-link"
-                      href={`/tenants/${tenantId}/request-logs/${record.requestId}`}
-                    >
-                      {formatDisplayIdentifier(record.requestId)}
-                    </Link>
-                    <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
-                  </td>
-                  <td>
-                    <StatusBadge status={record.status} />
-                  </td>
-                  <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
-                  <td>{record.maskingAction}</td>
-                  <td>
-                    {record.cacheType}:{record.cacheStatus}
-                  </td>
-                  <td>{formatLatency(record.latencyMs)}</td>
-                  <td>{formatInteger(record.totalTokens)}</td>
-                  <td>{formatDateTime(record.createdAt, timezone)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <RequestLogDetailAnchor>
+        <section className="request-log-workspace" data-detail={detailPanel ? "open" : "closed"}>
+          <div className="console-panel request-log-list-panel">
+            <form action={`/tenants/${tenantId}/request-logs`} className="request-log-filter-bar">
+              <div className="request-log-search-shell">
+                <input
+                  aria-label={text.searchLabel}
+                  placeholder={text.searchPlaceholder}
+                  type="search"
+                />
+                <button aria-label={text.submitLabel} className="request-log-search-button" type="submit">
+                  <Search aria-hidden="true" size={18} strokeWidth={2.2} />
+                </button>
+              </div>
+
+              <div aria-label={text.filterLabel} className="request-log-filter-settings">
+                <label className="request-log-filter-control">
+                  <span>{text.statusLabel}</span>
+                  <select defaultValue={filters.status} name="status">
+                    <option value="">{text.allStatuses}</option>
+                    {requestLogStatusFilters.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.modelLabel}</span>
+                  <select defaultValue={filters.model} name="model">
+                    <option value="">{text.allModels}</option>
+                    {modelOptions.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control">
+                  <span>{text.createdLabel}</span>
+                  <select defaultValue={filters.created} name="created">
+                    {requestLogCreatedFilters.map((created) => (
+                      <option key={created} value={created}>
+                        {text.createdOptions[created]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </form>
+
+            <div className="table-wrap">
+              <table className="data-table request-table">
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Status</th>
+                    <th>Model</th>
+                    <th>Safety</th>
+                    <th>Cache</th>
+                    <th>Latency</th>
+                    <th>Tokens</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceState === "unavailable" ? (
+                    <tr>
+                      <td colSpan={8}>Live Gateway request logs are not available right now.</td>
+                    </tr>
+                  ) : null}
+                  {sourceState === "ready" && records.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>No Gateway request logs found for the current range.</td>
+                    </tr>
+                  ) : null}
+                  {records.map((record) => {
+                    const isSelected = selectedRequestId === record.requestId;
+
+                    return (
+                      <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
+                        <td>
+                          <Link
+                            className="request-link"
+                            data-request-log-anchor
+                            href={requestLogDetailHref(tenantId, record.requestId, filters)}
+                            scroll={false}
+                          >
+                            {formatDisplayIdentifier(record.requestId)}
+                          </Link>
+                          <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
+                        </td>
+                        <td>
+                          <StatusBadge status={record.status} />
+                        </td>
+                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
+                        <td>{record.maskingAction}</td>
+                        <td>
+                          {record.cacheType}:{record.cacheStatus}
+                        </td>
+                        <td>{formatLatency(record.latencyMs)}</td>
+                        <td>{formatInteger(record.totalTokens)}</td>
+                        <td>{formatDateTime(record.createdAt, timezone)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {detailPanel}
+        </section>
+      </RequestLogDetailAnchor>
     </main>
   );
+}
+
+function requestLogDetailHref(tenantId: string, requestId: string, filters: RequestLogFilterState) {
+  const query = new URLSearchParams();
+  if (filters.status) {
+    query.set("status", filters.status);
+  }
+  if (filters.model) {
+    query.set("model", filters.model);
+  }
+  if (filters.created !== "24h") {
+    query.set("created", filters.created);
+  }
+  query.set("requestId", requestId);
+
+  return `/tenants/${tenantId}/request-logs?${query.toString()}`;
 }
 
 export function StatusBadge({ status }: { status: InvocationLogRecord["status"] }) {

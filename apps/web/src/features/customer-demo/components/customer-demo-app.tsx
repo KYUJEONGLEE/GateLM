@@ -577,7 +577,7 @@ function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
   return (
     exchange.requestId !== "pending-live-request" &&
     exchange.requestId !== "not-configured" &&
-    exchange.requestLogHref.includes(`/request-logs/${exchange.requestId}`)
+    exchange.requestLogHref.includes(`/request-logs?requestId=${encodeURIComponent(exchange.requestId)}`)
   );
 }
 

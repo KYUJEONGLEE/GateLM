@@ -453,7 +453,7 @@ function buildLiveExchange({
       body: gatewayResult.requestBody
     },
     requestId,
-    requestLogHref: `/tenants/${tenantId}/request-logs/${requestId}`,
+    requestLogHref: `/tenants/${tenantId}/request-logs?requestId=${encodeURIComponent(requestId)}`,
     response: {
       body: buildDisplayResponseBody(gatewayResult.body),
       headers: buildResponseHeaders(gatewayResult.headers),

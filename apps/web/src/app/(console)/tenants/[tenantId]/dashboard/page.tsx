@@ -1,19 +1,48 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { DashboardOverviewView } from "@/features/dashboard/components/dashboard-overview";
+import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
 import { getLiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
+import { getLiveGatewayRequestDetail } from "@/lib/gateway/live-request-detail";
+import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type DashboardPageProps = {
   params: Promise<{
     tenantId: string;
   }>;
+  searchParams?: Promise<{
+    motion?: string;
+    requestId?: string;
+    tab?: string;
+    view?: string;
+  }>;
 };
 
-export default async function DashboardPage({ params }: DashboardPageProps) {
+export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
   const { tenantId } = await params;
-  const locale = await getRequestLocale();
-  const overview = await getLiveDashboardOverview(tenantId);
+  const resolvedSearchParams = await searchParams;
+  const requestedTab = resolvedSearchParams?.tab ?? (resolvedSearchParams?.view === "cache" ? "cache" : undefined);
+  const selectedRequestId = resolvedSearchParams?.requestId;
+  const activeTab =
+    requestedTab === "requests" ||
+    requestedTab === "traffic"
+      ? "requests"
+      : requestedTab === "cache" ||
+          requestedTab === "routing" ||
+          requestedTab === "safety" ||
+          requestedTab === "limits"
+        ? requestedTab
+        : "overview";
+  const suppressContentMotion = activeTab === "overview" && resolvedSearchParams?.motion === "none";
+  const [locale, overview, recentRecords, selectedDetail] = await Promise.all([
+    getRequestLocale(),
+    getLiveDashboardOverview(tenantId),
+    getLiveGatewayRequestLogs(),
+    selectedRequestId ? getLiveGatewayRequestDetail(selectedRequestId) : Promise.resolve(null)
+  ]);
+  const scopedSelectedDetail =
+    selectedDetail ?? recentRecords?.find((record) => record.requestId === selectedRequestId);
 
   if (!overview) {
     return (
@@ -37,7 +66,23 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
   return (
     <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
-      <DashboardOverviewView locale={locale} overview={overview} />
+      <DashboardOverviewView
+        activeTab={activeTab}
+        detailPanel={
+          scopedSelectedDetail ? (
+            <RequestLogDetailAside
+              locale={locale}
+              record={scopedSelectedDetail}
+              tenantId={tenantId}
+              timezone="UTC"
+            />
+          ) : undefined
+        }
+        locale={locale}
+        overview={overview}
+        recentRecords={recentRecords?.slice(0, 5) ?? []}
+        suppressContentMotion={suppressContentMotion}
+      />
     </ConsoleShell>
   );
 }

@@ -292,7 +292,7 @@ function buildExchange({
     providerCall: record.providerLatencyMs == null ? "skipped" : "called",
     request,
     requestId: record.requestId,
-    requestLogHref: `/tenants/${record.tenantId}/request-logs/${record.requestId}`,
+    requestLogHref: `/tenants/${record.tenantId}/request-logs?requestId=${encodeURIComponent(record.requestId)}`,
     response: {
       body: buildResponseBody(config, record),
       headers: buildResponseHeaders(record),

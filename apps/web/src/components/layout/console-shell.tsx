@@ -1,14 +1,15 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import { Menu, Settings as SettingsIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
-type ConsoleSection = "dashboard" | "management" | "analytics" | "settings";
+type ConsoleSection = "dashboard" | "management" | "analytics";
 type ExpandableConsoleSection = "management" | "analytics";
+type ConsoleTheme = "light" | "dark";
 
 export type ManagementNavItem =
   | "api-keys"
@@ -123,14 +124,6 @@ const navigationItems: Array<{
       }
     ],
     section: "analytics"
-  },
-  {
-    labels: {
-      en: "Settings",
-      ko: "설정"
-    },
-    planned: true,
-    section: "settings"
   }
 ];
 
@@ -140,6 +133,10 @@ const shellText: Record<
     collapseNavigation: string;
     expandNavigation: string;
     language: string;
+    settings: string;
+    light: string;
+    dark: string;
+    theme: string;
     planned: string;
     tenant: string;
   }
@@ -147,21 +144,30 @@ const shellText: Record<
   en: {
     collapseNavigation: "Collapse navigation",
     expandNavigation: "Expand navigation",
+    dark: "Dark",
     language: "Console language",
+    light: "Light",
     planned: "planned",
-    tenant: "tenant"
+    settings: "Tenant settings",
+    tenant: "tenant",
+    theme: "Theme"
   },
   ko: {
     collapseNavigation: "내비게이션 닫기",
     expandNavigation: "내비게이션 열기",
+    dark: "다크",
     language: "콘솔 언어",
+    light: "라이트",
     planned: "예정",
-    tenant: "테넌트"
+    settings: "테넌트 설정",
+    tenant: "테넌트",
+    theme: "테마"
   }
 };
 
 const openSectionsStorageKey = "gatelm_console_open_sections";
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
+const themeStorageKey = "gatelm_console_theme";
 
 export function ConsoleShell({
   activeAnalyticsItem,
@@ -177,6 +183,8 @@ export function ConsoleShell({
     getActiveOpenSections(activeSection)
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isTenantSettingsOpen, setIsTenantSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<ConsoleTheme>("light");
 
   useEffect(() => {
     const storedOpenSections = readStoredOpenSections();
@@ -191,12 +199,24 @@ export function ConsoleShell({
     }
   }, []);
 
+  useEffect(() => {
+    const initialTheme = readStoredTheme() ?? readDocumentTheme();
+    setTheme(initialTheme);
+    applyTheme(initialTheme);
+  }, []);
+
   function toggleSidebar() {
     setIsSidebarCollapsed((current) => {
       const next = !current;
       writeStoredSidebarCollapsed(next);
       return next;
     });
+  }
+
+  function selectTheme(nextTheme: ConsoleTheme) {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    writeStoredTheme(nextTheme);
   }
 
   function toggleSection(section: ConsoleSection) {
@@ -290,7 +310,6 @@ export function ConsoleShell({
                     <button
                       aria-expanded={isOpen}
                       className="console-nav-link"
-                      data-active={item.section === activeSection}
                       data-open={isOpen}
                       onClick={() => toggleSection(item.section)}
                       type="button"
@@ -360,11 +379,48 @@ export function ConsoleShell({
             );
           })}
         </div>
-        <div className="console-sidebar-language" aria-hidden={isSidebarCollapsed}>
-          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-        </div>
-        <div className="console-sidebar-tenant" aria-hidden={isSidebarCollapsed}>
-          <strong>{tenantLabel}</strong>
+        <div className="console-sidebar-tenant-wrap" aria-hidden={isSidebarCollapsed}>
+          {isTenantSettingsOpen ? (
+            <div className="console-sidebar-settings-popover" aria-label={text.settings}>
+              <div className="console-sidebar-settings-row">
+                <span>{text.language}</span>
+                <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+              </div>
+              <div className="console-sidebar-settings-row">
+                <span>{text.theme}</span>
+                <div className="theme-segmented-control" data-density="compact">
+                  <button
+                    data-active={theme === "light"}
+                    onClick={() => selectTheme("light")}
+                    type="button"
+                  >
+                    {text.light}
+                  </button>
+                  <button
+                    data-active={theme === "dark"}
+                    onClick={() => selectTheme("dark")}
+                    type="button"
+                  >
+                    {text.dark}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="console-sidebar-tenant">
+            <strong>{tenantLabel}</strong>
+            <button
+              aria-expanded={isTenantSettingsOpen}
+              aria-label={text.settings}
+              className="console-sidebar-settings-button"
+              data-open={isTenantSettingsOpen}
+              onClick={() => setIsTenantSettingsOpen((current) => !current)}
+              title={text.settings}
+              type="button"
+            >
+              <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -445,4 +501,38 @@ function writeStoredSidebarCollapsed(isCollapsed: boolean) {
   }
 
   window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+}
+
+function readDocumentTheme(): ConsoleTheme {
+  if (typeof document === "undefined") {
+    return "light";
+  }
+
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme: ConsoleTheme) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.theme = theme;
+}
+
+function readStoredTheme(): ConsoleTheme | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.localStorage.getItem(themeStorageKey);
+
+  return storedValue === "dark" || storedValue === "light" ? storedValue : null;
+}
+
+function writeStoredTheme(theme: ConsoleTheme) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(themeStorageKey, theme);
 }
