@@ -24,6 +24,7 @@ type RuntimeConfigFixture = {
       } | null;
       displayName: string;
       failureMode?: string;
+      models?: string[];
       provider: string;
       providerId: string;
       resolver: string;
