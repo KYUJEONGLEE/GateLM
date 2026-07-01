@@ -10,7 +10,7 @@ create table if not exists budget_quotas (
   updated_at timestamptz not null default now(),
   primary key (tenant_id, budget_scope_type, budget_scope_id, month_start),
   constraint ck_budget_quotas_scope_type check (budget_scope_type in ('application', 'project', 'team')),
-  constraint ck_budget_quotas_month_start check (date_trunc('month', month_start::timestamp)::date = month_start),
+  constraint ck_budget_quotas_month_start check (extract(day from month_start) = 1),
   constraint ck_budget_quotas_limit_non_negative check (limit_micro_usd >= 0),
   constraint ck_budget_quotas_warning_threshold check (warning_threshold_percent >= 0 and warning_threshold_percent <= 100),
   constraint ck_budget_quotas_status check (status in ('active', 'disabled'))
@@ -33,7 +33,7 @@ create table if not exists budget_ledger_entries (
   completed_at timestamptz null,
   updated_at timestamptz not null default now(),
   constraint ck_budget_ledger_scope_type check (budget_scope_type in ('application', 'project', 'team')),
-  constraint ck_budget_ledger_month_start check (date_trunc('month', month_start::timestamp)::date = month_start),
+  constraint ck_budget_ledger_month_start check (extract(day from month_start) = 1),
   constraint ck_budget_ledger_cost_non_negative check (cost_micro_usd >= 0),
   constraint ck_budget_ledger_source check (source in ('request_log', 'manual_adjustment', 'import'))
 );
@@ -43,3 +43,9 @@ create index if not exists ix_budget_ledger_scope_month
 
 create index if not exists ix_budget_ledger_project_completed
   on budget_ledger_entries (tenant_id, project_id, completed_at desc);
+
+create index if not exists ix_budget_ledger_project_id
+  on budget_ledger_entries (project_id);
+
+create index if not exists ix_budget_ledger_application_id
+  on budget_ledger_entries (application_id);
