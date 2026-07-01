@@ -39,6 +39,7 @@ const customerDemoText: Record<
       loading: string;
       replay: string;
       send: string;
+      streaming: string;
     };
     assistantLabel: string;
     chatPreview: string;
@@ -87,7 +88,8 @@ const customerDemoText: Record<
       detail: "Open request detail",
       loading: "Processing...",
       replay: "Replay fixture request",
-      send: "Send Gateway request"
+      send: "Send Gateway request",
+      streaming: "Send streaming request"
     },
     assistantLabel: "Assistant / Gateway outcome",
     chatPreview: "conversation",
@@ -146,7 +148,8 @@ const customerDemoText: Record<
       detail: "요청 상세 열기",
       loading: "처리 중...",
       replay: "Fixture 요청 재실행",
-      send: "Gateway 요청 전송"
+      send: "Gateway 요청 전송",
+      streaming: "Streaming 요청 전송"
     },
     assistantLabel: "Assistant / Gateway 결과",
     chatPreview: "대화",
@@ -235,24 +238,33 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     setExchange(model.integrationMode === "gateway" ? buildPendingExchange(model, scenario) : scenario);
   }, [model]);
 
-  const sendScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
+  const sendScenario = useCallback(async (
+    scenarioId: CustomerDemoScenarioId,
+    options: { stream?: boolean } = {}
+  ) => {
     if (requestInFlight.current) {
       return;
     }
+
+    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
 
     requestInFlight.current = true;
     setIsLoading(true);
     setLoadError(null);
 
     try {
-      setExchange(await client.sendChatCompletion(scenarioId));
+      if (scenario && model.integrationMode === "gateway") {
+        setExchange(buildPendingExchange(model, scenario, options));
+      }
+
+      setExchange(await client.sendChatCompletion(scenarioId, options));
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : text.error);
     } finally {
       requestInFlight.current = false;
       setIsLoading(false);
     }
-  }, [client, text.error]);
+  }, [client, model, text.error]);
 
   return (
     <main className="customer-demo-shell">
@@ -382,6 +394,15 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                     ? text.actions.send
                     : text.actions.replay}
               </Button>
+              <Button
+                className="secondary-button"
+                disabled={isLoading || !hasScenarios}
+                onClick={() => sendScenario(exchange.scenarioId, { stream: true })}
+                type="button"
+                variant="outline"
+              >
+                {isLoading ? text.actions.loading : text.actions.streaming}
+              </Button>
               {hasRequestDetail ? (
                 <Link className="secondary-button" href={exchange.requestLogHref}>
                   {text.actions.detail}
@@ -442,6 +463,25 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 <Metric label="Provider" value={exchange.providerCall} />
                 <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
                 <Metric label="Error code" value={getErrorCode(exchange.response.body)} />
+                <Metric label="Stream requested" value={exchange.streaming.requested ? "yes" : "no"} />
+                <Metric
+                  label="Stream chunks"
+                  value={
+                    exchange.streaming.chunkCount == null
+                      ? "not-streaming"
+                      : String(exchange.streaming.chunkCount)
+                  }
+                />
+                <Metric
+                  label="Stream complete"
+                  value={
+                    exchange.streaming.completed == null
+                      ? "not-streaming"
+                      : exchange.streaming.completed
+                        ? "yes"
+                        : "no"
+                  }
+                />
                 <Metric
                   label="Detected"
                   value={
@@ -457,6 +497,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 <Metric label="Selected provider" value={getResponseHeader(exchange, "X-GateLM-Routed-Provider")} />
                 <Metric label="Selected model" value={getResponseHeader(exchange, "X-GateLM-Routed-Model")} />
                 <Metric label="Cache status" value={getResponseHeader(exchange, "X-GateLM-Cache-Status")} />
+                <Metric label="Stream content type" value={exchange.streaming.contentType ?? "not-streaming"} />
               </dl>
             </CardContent>
           </Card>
@@ -476,7 +517,13 @@ function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
   return buildPendingExchange(model, base);
 }
 
-function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoExchange): CustomerDemoExchange {
+function buildPendingExchange(
+  model: CustomerDemoModel,
+  scenario: CustomerDemoExchange,
+  options: { stream?: boolean } = {}
+): CustomerDemoExchange {
+  const streamRequested = options.stream === true;
+
   return {
     ...scenario,
     assistantMessage: "Ready to send this scenario through the live Gateway.",
@@ -484,6 +531,13 @@ function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoEx
     httpStatus: 0,
     latencyMs: 0,
     providerCall: "skipped",
+    request: {
+      ...scenario.request,
+      body: {
+        ...scenario.request.body,
+        stream: streamRequested
+      }
+    },
     requestId: "pending-live-request",
     requestLogHref: `/tenants/${model.tenantId}/request-logs`,
     response: {
@@ -494,6 +548,12 @@ function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoEx
       statusCode: 0
     },
     status: "pending",
+    streaming: {
+      completed: null,
+      contentType: null,
+      chunkCount: null,
+      requested: streamRequested
+    },
     title: scenario.title
   };
 }
@@ -573,6 +633,12 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
     },
     scenarioId: "safe",
     status: "not-configured",
+    streaming: {
+      completed: null,
+      contentType: null,
+      chunkCount: null,
+      requested: false
+    },
     title: "No scenario configured"
   };
 }

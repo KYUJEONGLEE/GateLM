@@ -18,6 +18,7 @@ type GatewayCallResult = {
   requestBody: CustomerDemoRequest["body"];
   requestHeaders: CustomerDemoHeader[];
   requestId: string;
+  streaming: CustomerDemoExchange["streaming"];
 };
 
 type LiveScenarioDefinition = {
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const gatewayResult = await executeLiveScenario(payload.scenarioId);
+    const gatewayResult = await executeLiveScenario(payload.scenarioId, payload.stream);
 
     return NextResponse.json({
       exchange: buildLiveExchange({
@@ -103,11 +104,13 @@ export async function POST(request: Request) {
 async function readRequestPayload(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as {
     scenarioId?: unknown;
+    stream?: unknown;
     tenantId?: unknown;
   };
 
   return {
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
+    stream: payload.stream === true,
     tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
   };
 }
@@ -116,10 +119,10 @@ function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioI
   return Object.hasOwn(LIVE_SCENARIOS, value);
 }
 
-async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
+async function executeLiveScenario(scenarioId: CustomerDemoScenarioId, stream: boolean) {
   if (scenarioId === "cache-hit") {
     await callGateway("cache-hit", "warmup");
-    return callGateway("cache-hit", "hit");
+    return callGateway("cache-hit", "hit", { stream });
   }
 
   if (scenarioId === "rate-limited") {
@@ -128,7 +131,7 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
 
     // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
-      latestResult = await callGateway("rate-limited", String(index + 1));
+      latestResult = await callGateway("rate-limited", String(index + 1), { stream });
 
       if (latestResult.httpStatus === 429) {
         return latestResult;
@@ -140,17 +143,18 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
     }
   }
 
-  return callGateway(scenarioId, "1");
+  return callGateway(scenarioId, "1", { stream });
 }
 
 async function callGateway(
   scenarioId: CustomerDemoScenarioId,
-  requestIdSuffix: string
+  requestIdSuffix: string,
+  options: { stream?: boolean } = {}
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig();
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
-  const requestBody = buildGatewayRequestBody(definition, scenarioId);
+  const requestBody = buildGatewayRequestBody(definition, scenarioId, options.stream === true);
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -166,20 +170,24 @@ async function callGateway(
     cache: "no-store"
   });
 
+  const responseText = await response.text();
+
   return {
-    body: await readGatewayResponseBody(response),
+    body: buildGatewayResponseBody(response, responseText, requestBody.stream),
     headers: response.headers,
     httpStatus: response.status,
     latencyMs: Date.now() - startedAt,
     requestBody: buildDisplayRequestBody(requestBody),
     requestHeaders: buildDisplayRequestHeaders(requestId),
-    requestId
+    requestId,
+    streaming: buildGatewayStreamingSummary(response, responseText, requestBody.stream)
   };
 }
 
 function buildGatewayRequestBody(
   definition: LiveScenarioDefinition,
-  scenarioId: CustomerDemoScenarioId
+  scenarioId: CustomerDemoScenarioId,
+  stream: boolean
 ): CustomerDemoRequest["body"] {
   return {
     model: "auto",
@@ -195,7 +203,7 @@ function buildGatewayRequestBody(
     ],
     max_tokens: 128,
     temperature: 0.2,
-    stream: false,
+    stream,
     metadata: {
       demoScenario: scenarioId,
       source: "web-customer-demo"
@@ -226,9 +234,11 @@ function buildDisplayRequestBody(
   };
 }
 
-async function readGatewayResponseBody(response: Response): Promise<JsonRecord> {
-  const text = await response.text();
-
+function buildGatewayResponseBody(
+  response: Response,
+  text: string,
+  streamRequested: boolean
+): JsonRecord {
   if (!text.trim()) {
     return {
       error: {
@@ -236,6 +246,18 @@ async function readGatewayResponseBody(response: Response): Promise<JsonRecord> 
         message: "Gateway returned an empty response.",
         request_id: response.headers.get("X-GateLM-Request-Id") ?? "",
         type: "gatelm_gateway_error"
+      }
+    };
+  }
+
+  if (streamRequested && isEventStreamResponse(response)) {
+    const summary = parseGatewaySseSummary(text);
+
+    return {
+      streaming: {
+        chunkCount: summary.chunkCount,
+        completed: summary.completed,
+        contentWithheld: true
       }
     };
   }
@@ -253,6 +275,66 @@ async function readGatewayResponseBody(response: Response): Promise<JsonRecord> 
       request_id: response.headers.get("X-GateLM-Request-Id") ?? "",
       type: "gatelm_gateway_error"
     }
+  };
+}
+
+function buildGatewayStreamingSummary(
+  response: Response,
+  text: string,
+  requested: boolean
+): CustomerDemoExchange["streaming"] {
+  if (!requested) {
+    return {
+      completed: null,
+      contentType: response.headers.get("Content-Type"),
+      chunkCount: null,
+      requested: false
+    };
+  }
+
+  const summary = isEventStreamResponse(response)
+    ? parseGatewaySseSummary(text)
+    : {
+        chunkCount: 0,
+        completed: false
+      };
+
+  return {
+    completed: summary.completed,
+    contentType: response.headers.get("Content-Type"),
+    chunkCount: summary.chunkCount,
+    requested: true
+  };
+}
+
+function isEventStreamResponse(response: Response) {
+  return response.headers.get("Content-Type")?.includes("text/event-stream") ?? false;
+}
+
+function parseGatewaySseSummary(text: string) {
+  let chunkCount = 0;
+  let completed = false;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) {
+      continue;
+    }
+
+    const value = line.slice("data:".length).trim();
+
+    if (value === "[DONE]") {
+      completed = true;
+      continue;
+    }
+
+    if (value) {
+      chunkCount += 1;
+    }
+  }
+
+  return {
+    chunkCount,
+    completed
   };
 }
 
@@ -313,6 +395,7 @@ function buildLiveExchange({
     },
     scenarioId: actualScenarioId,
     status,
+    streaming: gatewayResult.streaming,
     title: displayScenario.title
   };
 }

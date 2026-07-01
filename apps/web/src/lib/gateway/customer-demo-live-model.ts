@@ -157,6 +157,12 @@ function buildLiveScenario(
     },
     scenarioId: template.scenarioId,
     status: template.status,
+    streaming: {
+      completed: null,
+      contentType: null,
+      chunkCount: null,
+      requested: false
+    },
     title: template.title
   };
 }

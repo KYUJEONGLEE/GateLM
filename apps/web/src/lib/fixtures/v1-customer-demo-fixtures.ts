@@ -300,6 +300,12 @@ function buildExchange({
     },
     scenarioId: config.scenarioId,
     status: record.status,
+    streaming: {
+      completed: record.stream ? true : null,
+      contentType: record.stream ? "text/event-stream" : null,
+      chunkCount: record.stream ? 0 : null,
+      requested: record.stream
+    },
     title: config.title
   };
 }
