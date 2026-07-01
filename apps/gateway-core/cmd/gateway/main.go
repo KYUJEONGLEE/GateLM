@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os/signal"
@@ -42,6 +43,13 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := validateRuntimeSnapshotMode(cfg); err != nil {
+		log.Fatalf("gateway-core invalid GATEWAY_RUNTIME_SNAPSHOT_MODE: %v", err)
+	}
+	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneBaseURL) == "" {
+		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_BASE_URL")
+	}
+
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
@@ -80,6 +88,13 @@ func main() {
 			FailureMessage: "connection failed",
 			Check:          handlers.HTTPHealthCheck(providerHTTPClient, cfg.MockProviderBaseURL),
 		},
+	}
+	if isStrictRuntimeSnapshotMode(cfg) {
+		readinessChecks["control_plane"] = handlers.ReadinessCheck{
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          handlers.HTTPHealthCheck(&http.Client{Timeout: cfg.ControlPlaneTimeout}, cfg.ControlPlaneBaseURL),
+		}
 	}
 
 	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
@@ -159,6 +174,24 @@ func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvide
 
 	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),
 		staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+}
+
+func isStrictRuntimeSnapshotMode(cfg config.Config) bool {
+	mode := normalizedRuntimeSnapshotMode(cfg)
+	return mode == "strict" || mode == "strict_snapshot"
+}
+
+func validateRuntimeSnapshotMode(cfg config.Config) error {
+	switch normalizedRuntimeSnapshotMode(cfg) {
+	case "", "demo", "strict", "strict_snapshot":
+		return nil
+	default:
+		return fmt.Errorf("%q (allowed: demo, strict, strict_snapshot)", cfg.RuntimeSnapshotMode)
+	}
+}
+
+func normalizedRuntimeSnapshotMode(cfg config.Config) string {
+	return strings.TrimSpace(strings.ToLower(cfg.RuntimeSnapshotMode))
 }
 
 type invocationLogQueryer struct {
