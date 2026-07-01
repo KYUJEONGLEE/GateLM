@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os/signal"
@@ -42,6 +43,9 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := validateRuntimeSnapshotMode(cfg); err != nil {
+		log.Fatalf("gateway-core invalid GATEWAY_RUNTIME_SNAPSHOT_MODE: %v", err)
+	}
 	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneBaseURL) == "" {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_BASE_URL")
 	}
@@ -173,8 +177,21 @@ func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvide
 }
 
 func isStrictRuntimeSnapshotMode(cfg config.Config) bool {
-	mode := strings.TrimSpace(strings.ToLower(cfg.RuntimeSnapshotMode))
+	mode := normalizedRuntimeSnapshotMode(cfg)
 	return mode == "strict" || mode == "strict_snapshot"
+}
+
+func validateRuntimeSnapshotMode(cfg config.Config) error {
+	switch normalizedRuntimeSnapshotMode(cfg) {
+	case "", "demo", "strict", "strict_snapshot":
+		return nil
+	default:
+		return fmt.Errorf("%q (allowed: demo, strict, strict_snapshot)", cfg.RuntimeSnapshotMode)
+	}
+}
+
+func normalizedRuntimeSnapshotMode(cfg config.Config) string {
+	return strings.TrimSpace(strings.ToLower(cfg.RuntimeSnapshotMode))
 }
 
 type invocationLogQueryer struct {
