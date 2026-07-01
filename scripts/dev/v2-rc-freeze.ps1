@@ -147,13 +147,14 @@ try {
 
     New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
     $evidence = Resolve-Evidence
+    $fullVerifyStatus = if ($RunFullVerify) { "passed" } else { "skipped" }
     $report = [ordered]@{
         runId = "v2_rc_freeze_$timestamp"
         generatedAt = [DateTime]::UtcNow.ToString("o")
         checks = [ordered]@{
             gitDiffCheck = "passed"
             docsVerify = "passed"
-            fullVerify = if ($RunFullVerify) { "passed" } else { "skipped" }
+            fullVerify = $fullVerifyStatus
             liveEvidenceRequired = [bool]$RequireLiveEvidence
         }
         evidence = $evidence
