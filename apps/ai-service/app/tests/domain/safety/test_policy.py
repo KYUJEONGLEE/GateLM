@@ -10,7 +10,8 @@ from app.adapters.safety.heuristic_evaluator import (
     HeuristicSafetyEvaluator,
     RegexDetector,
 )
-from app.domain.safety.policy import PREVIEW_MAX_CHARS
+from app.domain.safety.policy import PREVIEW_MAX_CHARS, effective_signals, redact_prompt
+from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
 
@@ -475,6 +476,26 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertFalse(hasattr(signals[0], "value"))
         self.assertFalse(hasattr(signals[0], "raw_value"))
         self.assertEqual(signals[0].detector_type, "email")
+
+    def test_signal_span_trims_boundary_inner_spaces(self) -> None:
+        prompt = "Contact ( alex@example.test ) for the synthetic demo."
+        signal = SafetySignal(
+            detector_type="email",
+            start=prompt.index("("),
+            end=prompt.index(")") + 1,
+            action="redact",
+            placeholder="[EMAIL_REDACTED]",
+            priority=10,
+        )
+
+        signals = effective_signals([signal], prompt_text=prompt)
+
+        self.assertEqual(len(signals), 1)
+        self.assertEqual(prompt[signals[0].start : signals[0].end], "alex@example.test")
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            "Contact ( [EMAIL_REDACTED] ) for the synthetic demo.",
+        )
 
     def test_noop_evaluator_returns_none_without_preview(self) -> None:
         decision = NoopSafetyEvaluator().evaluate(

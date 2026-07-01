@@ -15,7 +15,7 @@ FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "safety_eval"
 class SafetyEvalActualFixtureTests(unittest.TestCase):
     def test_loads_detector_output_fixture(self) -> None:
         _, actual = load_actual_fixture(FIXTURE_DIR / "detector-output.fixture.json", "detector-output")
-        self.assertEqual(len(actual), 28)
+        self.assertEqual(len(actual), 32)
         repeated = actual["repeated_email_redacts_count"]
         self.assertEqual(repeated.detected_type_counts, {"email": 2})
         self.assertEqual(repeated.action, "redacted")
@@ -36,7 +36,7 @@ class SafetyEvalActualFixtureTests(unittest.TestCase):
             FIXTURE_DIR / "gateway-safety-output-v2.fixture.json",
             "gateway-safety-output-v2",
         )
-        self.assertEqual(len(actual), 28)
+        self.assertEqual(len(actual), 32)
         safe = actual["safe_none_basic"]
         self.assertEqual(safe.safety_outcome, "passed")
         self.assertEqual(safe.action, "none")

@@ -7,6 +7,7 @@ import (
 
 const (
 	ScopeApplication     = "application"
+	ScopeProject         = "project"
 	AlgorithmFixedWindow = "fixed_window"
 
 	ReasonWithinLimit       = "within_limit"
@@ -77,7 +78,7 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 		decision.Scope = config.Scope
 	}
 	if decision.ScopeID == "" {
-		decision.ScopeID = req.ApplicationID
+		decision.ScopeID = ScopeID(config.Scope, req)
 	}
 	if decision.WindowSeconds <= 0 {
 		decision.WindowSeconds = config.WindowSeconds
@@ -93,4 +94,15 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 		}
 	}
 	return decision
+}
+
+func ScopeID(scope string, req Request) string {
+	switch scope {
+	case ScopeApplication:
+		return req.ApplicationID
+	case ScopeProject:
+		return req.ProjectID
+	default:
+		return ""
+	}
 }

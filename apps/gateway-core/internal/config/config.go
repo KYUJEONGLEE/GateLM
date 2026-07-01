@@ -13,6 +13,8 @@ type Config struct {
 	RedisURL                 string
 	ControlPlaneBaseURL      string
 	ControlPlaneTimeout      time.Duration
+	RuntimeSnapshotMode      string
+	AuthSource               string
 	MockProviderBaseURL      string
 	DefaultProvider          string
 	DefaultModel             string
@@ -44,6 +46,9 @@ type Config struct {
 	DemoApplicationID        string
 	DemoAPIKeyID             string
 	DemoAppTokenID           string
+	ExpectedTenantID         string
+	ExpectedProjectID        string
+	ExpectedApplicationID    string
 	ReadinessTimeout         time.Duration
 	ProviderTimeout          time.Duration
 	MaxRequestBodyBytes      int64
@@ -61,6 +66,8 @@ func Load() Config {
 		RedisURL:                 envString("REDIS_URL", "redis://localhost:6379"),
 		ControlPlaneBaseURL:      envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
 		ControlPlaneTimeout:      envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
+		RuntimeSnapshotMode:      envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
+		AuthSource:               envString("GATEWAY_AUTH_SOURCE", "database"),
 		MockProviderBaseURL:      envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:          envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
 		DefaultModel:             envString("GATEWAY_DEFAULT_MODEL", "mock-balanced"),
@@ -92,6 +99,9 @@ func Load() Config {
 		DemoApplicationID:        envString("GATELM_DEMO_APPLICATION_ID", "00000000-0000-4000-8000-000000000300"),
 		DemoAPIKeyID:             envString("GATELM_DEMO_API_KEY_ID", "00000000-0000-4000-8000-000000000400"),
 		DemoAppTokenID:           envString("GATELM_DEMO_APP_TOKEN_ID", "00000000-0000-4000-8000-000000000500"),
+		ExpectedTenantID:         envString("GATEWAY_EXPECTED_TENANT_ID", ""),
+		ExpectedProjectID:        envString("GATEWAY_EXPECTED_PROJECT_ID", ""),
+		ExpectedApplicationID:    envString("GATEWAY_EXPECTED_APPLICATION_ID", ""),
 		ReadinessTimeout:         envDurationMillis("GATEWAY_READINESS_TIMEOUT_MS", 1000),
 		ProviderTimeout:          envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000),
 		MaxRequestBodyBytes:      envInt64("GATEWAY_MAX_REQUEST_BODY_BYTES", 4*1024*1024),

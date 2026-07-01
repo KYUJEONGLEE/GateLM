@@ -77,14 +77,15 @@ func (p *CounterPruner) Prune(ctx context.Context, req PruneRequest) (PruneResul
 
 const pruneExpiredCountersSQL = `
 with expired as (
-  select tenant_id, application_id, window_start
-  from gateway_rate_limit_counters
+  select tenant_id, scope_type, scope_id, window_start
+  from gateway_rate_limit_scope_counters
   where updated_at < $1::timestamptz
   order by updated_at asc
   limit $2::int
 )
-delete from gateway_rate_limit_counters counters
+delete from gateway_rate_limit_scope_counters counters
 using expired
 where counters.tenant_id = expired.tenant_id
-  and counters.application_id = expired.application_id
+  and counters.scope_type = expired.scope_type
+  and counters.scope_id = expired.scope_id
   and counters.window_start = expired.window_start`

@@ -421,8 +421,8 @@ func (h RequestDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	filter := invocationlog.RequestDetailFilter{
-		TenantID:  h.TenantID,
-		ProjectID: h.ProjectID,
+		TenantID:  firstNonEmptyQueryValue(r.URL.Query().Get("tenantId"), h.TenantID),
+		ProjectID: firstNonEmptyQueryValue(r.URL.Query().Get("projectId"), h.ProjectID),
 		RequestID: r.PathValue("requestId"),
 	}
 	detail, err := h.Reader.GetRequestDetail(r.Context(), filter)
@@ -461,7 +461,7 @@ func (h DashboardOverviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 
 	filter := invocationlog.DashboardOverviewFilter{
-		TenantID:    h.TenantID,
+		TenantID:    firstNonEmptyQueryValue(r.URL.Query().Get("tenantId"), h.TenantID),
 		ProjectID:   r.URL.Query().Get("projectId"),
 		BudgetScope: budgetScopeFromQuery(r.URL.Query()),
 		From:        from,
@@ -499,7 +499,7 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 
 	query := r.URL.Query()
 	return invocationlog.ProjectLogsFilter{
-		TenantID:      h.TenantID,
+		TenantID:      firstNonEmptyQueryValue(query.Get("tenantId"), h.TenantID),
 		ProjectID:     r.PathValue("projectId"),
 		From:          from,
 		To:            to,
@@ -512,6 +512,16 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 		RequestID:     query.Get("requestId"),
 		Limit:         limit,
 	}, nil
+}
+
+func firstNonEmptyQueryValue(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overview invocationlog.DashboardOverviewFields) dashboardOverviewDataResponse {

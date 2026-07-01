@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os/signal"
@@ -10,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	postgresauth "gatelm/apps/gateway-core/internal/adapters/auth/postgres"
+	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
@@ -22,7 +25,6 @@ import (
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
-	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/provider"
@@ -41,6 +43,13 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := validateRuntimeSnapshotMode(cfg); err != nil {
+		log.Fatalf("gateway-core invalid GATEWAY_RUNTIME_SNAPSHOT_MODE: %v", err)
+	}
+	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneBaseURL) == "" {
+		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_BASE_URL")
+	}
+
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
@@ -80,6 +89,13 @@ func main() {
 			Check:          handlers.HTTPHealthCheck(providerHTTPClient, cfg.MockProviderBaseURL),
 		},
 	}
+	if isStrictRuntimeSnapshotMode(cfg) {
+		readinessChecks["control_plane"] = handlers.ReadinessCheck{
+			Required:       true,
+			FailureMessage: "connection failed",
+			Check:          handlers.HTTPHealthCheck(&http.Client{Timeout: cfg.ControlPlaneTimeout}, cfg.ControlPlaneBaseURL),
+		}
+	}
 
 	authFailureLogWriter := postgresinvocationlog.NewAuthFailureWriter(postgresPool, postgresinvocationlog.AuthFailureDefaults{
 		TenantID:      cfg.DemoTenantID,
@@ -92,9 +108,23 @@ func main() {
 		ApplicationID: cfg.DemoApplicationID,
 	})
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
+	routerOptions := []app.RouterOption{
+		app.WithAuthFailureLogWriter(authFailureLogWriter),
+		app.WithTerminalLogWriter(terminalLogWriter),
+		app.WithInvocationLogReader(invocationLogReader),
+		app.WithExactCache(
+			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
+			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
+		),
+		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
+	}
+	if strings.EqualFold(strings.TrimSpace(cfg.AuthSource), "database") {
+		gatewayCredentials := postgresauth.NewStore(postgresPool)
+		routerOptions = append(routerOptions, app.WithGatewayAuth(gatewayCredentials, gatewayCredentials))
+	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
-		budgetstage.NewStage(budget.AllowChecker{}),
+		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(
 			postgresratelimit.NewLimiter(postgresPool),
 			ratelimit.Config{
@@ -107,19 +137,12 @@ func main() {
 		),
 	)
 
+	routerOptions = append(routerOptions, app.WithRuntimePolicyPipeline(runtimePolicyPipeline))
 	router := app.NewRouter(
 		cfg,
 		providers,
 		readinessChecks,
-		app.WithAuthFailureLogWriter(authFailureLogWriter),
-		app.WithTerminalLogWriter(terminalLogWriter),
-		app.WithInvocationLogReader(invocationLogReader),
-		app.WithExactCache(
-			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
-			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
-		),
-		app.WithRuntimePolicyPipeline(runtimePolicyPipeline),
-		app.WithProviderExecution(providerCatalogResolver, credentialResolver),
+		routerOptions...,
 	)
 	server := app.NewServer(cfg, router)
 
@@ -151,6 +174,24 @@ func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvide
 
 	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),
 		staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+}
+
+func isStrictRuntimeSnapshotMode(cfg config.Config) bool {
+	mode := normalizedRuntimeSnapshotMode(cfg)
+	return mode == "strict" || mode == "strict_snapshot"
+}
+
+func validateRuntimeSnapshotMode(cfg config.Config) error {
+	switch normalizedRuntimeSnapshotMode(cfg) {
+	case "", "demo", "strict", "strict_snapshot":
+		return nil
+	default:
+		return fmt.Errorf("%q (allowed: demo, strict, strict_snapshot)", cfg.RuntimeSnapshotMode)
+	}
+}
+
+func normalizedRuntimeSnapshotMode(cfg config.Config) string {
+	return strings.TrimSpace(strings.ToLower(cfg.RuntimeSnapshotMode))
 }
 
 type invocationLogQueryer struct {

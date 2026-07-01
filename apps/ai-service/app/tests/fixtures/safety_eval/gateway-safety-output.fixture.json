@@ -209,6 +209,29 @@
       }
     },
     {
+      "caseId": "secret_blocks_before_cache",
+      "requestId": "request_secret_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": [
+          "secret"
+        ],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Review secret-like value [SECRET_REDACTED].",
+        "promptHash": "hash_secret_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
       "caseId": "postal_address_redacts_before_provider",
       "requestId": "request_postal_address_redacts_before_provider",
       "runtime": {
@@ -245,6 +268,52 @@
         "maskingDetectedCount": 1,
         "redactedPromptPreview": "Summarize the profile with date of birth [DATE_OF_BIRTH_REDACTED].",
         "promptHash": "hash_date_of_birth_redacts_before_provider"
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "private_date_redacts_before_provider",
+      "requestId": "request_private_date_redacts_before_provider",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "redacted",
+        "maskingDetectedTypes": [
+          "private_date"
+        ],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Summarize private date [PRIVATE_DATE_REDACTED].",
+        "promptHash": "hash_private_date_redacts_before_provider"
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "private_url_redacts_before_provider",
+      "requestId": "request_private_url_redacts_before_provider",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "redacted",
+        "maskingDetectedTypes": [
+          "private_url"
+        ],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Review private URL [PRIVATE_URL_REDACTED].",
+        "promptHash": "hash_private_url_redacts_before_provider"
       },
       "gatewayEffects": {
         "providerCalled": true,
@@ -344,6 +413,29 @@
         "terminalStatus": "success",
         "httpStatus": 200,
         "errorCode": null
+      }
+    },
+    {
+      "caseId": "account_number_blocks_before_cache",
+      "requestId": "request_account_number_blocks_before_cache",
+      "runtime": {
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      },
+      "safety": {
+        "maskingAction": "blocked",
+        "maskingDetectedTypes": [
+          "account_number"
+        ],
+        "maskingDetectedCount": 1,
+        "redactedPromptPreview": "Review account number [ACCOUNT_NUMBER_REDACTED].",
+        "promptHash": "hash_account_number_blocks_before_cache"
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
       }
     },
     {

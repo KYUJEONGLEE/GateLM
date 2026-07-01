@@ -14,16 +14,22 @@ import (
 )
 
 type fakeExecer struct {
-	called bool
-	query  string
-	args   []any
-	err    error
+	called      bool
+	calls       int
+	query       string
+	args        []any
+	queries     []string
+	argsHistory [][]any
+	err         error
 }
 
 func (f *fakeExecer) Exec(_ context.Context, query string, arguments ...any) (pgconn.CommandTag, error) {
 	f.called = true
+	f.calls++
 	f.query = query
 	f.args = append([]any(nil), arguments...)
+	f.queries = append(f.queries, query)
+	f.argsHistory = append(f.argsHistory, append([]any(nil), arguments...))
 	return pgconn.CommandTag{}, f.err
 }
 

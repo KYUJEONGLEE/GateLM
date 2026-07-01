@@ -14,10 +14,13 @@ DETECTOR_TYPES = {
     "phone_number",
     "postal_address",
     "date_of_birth",
+    "private_date",
+    "private_url",
     "person_name",
     "customer_id",
     "employee_id",
     "account_id",
+    "account_number",
     "ip_address",
     "resident_registration_number",
     "api_key",
@@ -36,6 +39,7 @@ DETECTOR_TYPES = {
     "authorization_header",
     "jwt",
     "private_key",
+    "secret",
 }
 
 ALLOWED_ACTIONS = {"none", "redacted", "blocked"}

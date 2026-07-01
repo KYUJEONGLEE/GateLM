@@ -5,6 +5,8 @@ const gatewayBaseUrl = trimTrailingSlash(__ENV.GATEWAY_BASE_URL || "http://local
 const apiKey = __ENV.GATELM_DEMO_API_KEY || __ENV.GATELM_API_KEY || "glm_api_test_redacted";
 const appToken = __ENV.GATELM_DEMO_APP_TOKEN || __ENV.GATELM_APP_TOKEN || "glm_app_token_test_redacted";
 const endUserId = __ENV.GATELM_DEMO_END_USER_ID || "user_k6_baseline";
+const tenantId = __ENV.GATELM_DEMO_TENANT_ID || "00000000-0000-4000-8000-000000000100";
+const projectId = __ENV.GATELM_DEMO_PROJECT_ID || "00000000-0000-4000-8000-000000000200";
 const cacheHitIterations = positiveIntEnv("K6_CACHE_HIT_ITERATIONS", 3);
 const enableDependencyScenarios = (__ENV.K6_ENABLE_V2_DEPENDENCY_SCENARIOS || "").toLowerCase() === "true";
 const providerFailureControlUrl = trimTrailingSlash(
@@ -295,7 +297,7 @@ export function streaming_thin_slice(data) {
     requestId,
     stream: true,
   });
-  const detail = http.get(`${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(requestId)}`, {
+  const detail = http.get(`${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(requestId)}?${scopeQuery()}`, {
     tags: { name: "GET /api/llm-requests/:requestId" },
   });
   const detailBody = safeJson(detail.body);
@@ -475,7 +477,7 @@ function requestDetail(requestId) {
   let response = null;
   let body = {};
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    response = http.get(`${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(requestId)}`, {
+    response = http.get(`${gatewayBaseUrl}/api/llm-requests/${encodeURIComponent(requestId)}?${scopeQuery()}`, {
       tags: { name: "GET /api/llm-requests/:requestId" },
     });
     body = safeJson(response.body);
@@ -490,6 +492,10 @@ function requestDetail(requestId) {
     body,
     data: body.data || {},
   };
+}
+
+function scopeQuery() {
+  return `tenantId=${encodeURIComponent(tenantId)}&projectId=${encodeURIComponent(projectId)}`;
 }
 
 function safeJson(body) {

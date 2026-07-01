@@ -316,7 +316,8 @@ select
   cache_type,
   routing_reason,
   masking_action,
-  created_at
+  created_at,
+  metadata
 from p0_llm_invocation_logs
 where %s
 order by created_at desc, request_id desc
@@ -580,6 +581,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var requestedModel sql.NullString
 	var selectedModel sql.NullString
 	var routingReason sql.NullString
+	var metadataJSON []byte
 	if err := rows.Scan(
 		&log.RequestID,
 		&log.ProjectID,
@@ -603,6 +605,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&routingReason,
 		&log.MaskingAction,
 		&log.CreatedAt,
+		&metadataJSON,
 	); err != nil {
 		return invocationlog.LlmInvocationLog{}, err
 	}
@@ -616,6 +619,15 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	log.RequestedModel = nullableString(requestedModel)
 	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
+	var err error
+	log.DomainOutcomes, err = decodeDomainOutcomesMetadata(metadataJSON)
+	if err != nil {
+		return invocationlog.LlmInvocationLog{}, err
+	}
+	log.TerminalStatus, err = decodeTerminalStatusBridgeMetadata(metadataJSON)
+	if err != nil {
+		return invocationlog.LlmInvocationLog{}, err
+	}
 	return log, nil
 }
 

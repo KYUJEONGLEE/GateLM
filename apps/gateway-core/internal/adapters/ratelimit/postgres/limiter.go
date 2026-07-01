@@ -33,13 +33,13 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 	startedAt := time.Now()
 	config := ratelimit.NormalizeConfig(req.Config)
 	tenantID := strings.TrimSpace(req.TenantID)
-	applicationID := strings.TrimSpace(req.ApplicationID)
+	scopeID := strings.TrimSpace(ratelimit.ScopeID(config.Scope, req))
 	now := normalizeNow(req.Now)
 	windowStart := fixedWindowStart(now, config.WindowSeconds)
 	resetAt := windowStart.Add(time.Duration(config.WindowSeconds) * time.Second)
 	decision := ratelimit.Decision{
 		Scope:             config.Scope,
-		ScopeID:           applicationID,
+		ScopeID:           scopeID,
 		Limit:             config.Limit,
 		WindowSeconds:     config.WindowSeconds,
 		WindowStart:       windowStart,
@@ -55,7 +55,7 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 		decision.DurationMS = time.Since(startedAt).Milliseconds()
 		return decision, nil
 	}
-	if err := validateRequest(config, tenantID, applicationID); err != nil {
+	if err := validateRequest(config, tenantID, scopeID); err != nil {
 		decision.Allowed = false
 		decision.Remaining = 0
 		decision.Reason = ratelimit.ReasonConfigMissing
@@ -77,7 +77,8 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 	counted := true
 	if err := l.db.QueryRow(ctx, checkAndIncrementSQL,
 		tenantID,
-		applicationID,
+		config.Scope,
+		scopeID,
 		windowStart,
 		config.WindowSeconds,
 		config.Limit,
@@ -93,7 +94,8 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 		counted = false
 		if err := l.db.QueryRow(ctx, currentCounterSQL,
 			tenantID,
-			applicationID,
+			config.Scope,
+			scopeID,
 			windowStart,
 		).Scan(&requestCount); err != nil {
 			decision.Allowed = false
@@ -116,8 +118,8 @@ func (l *Limiter) Check(ctx context.Context, req ratelimit.Request) (ratelimit.D
 	return decision, nil
 }
 
-func validateRequest(config ratelimit.Config, tenantID string, applicationID string) error {
-	if config.Scope != ratelimit.ScopeApplication {
+func validateRequest(config ratelimit.Config, tenantID string, scopeID string) error {
+	if config.Scope != ratelimit.ScopeApplication && config.Scope != ratelimit.ScopeProject {
 		return fmt.Errorf("%w: unsupported scope %q", ErrMissingConfig, config.Scope)
 	}
 	if config.Algorithm != ratelimit.AlgorithmFixedWindow {
@@ -126,7 +128,7 @@ func validateRequest(config ratelimit.Config, tenantID string, applicationID str
 	if config.WindowSeconds <= 0 || config.Limit <= 0 {
 		return fmt.Errorf("%w: windowSeconds and limit must be positive", ErrMissingConfig)
 	}
-	if tenantID == "" || applicationID == "" {
+	if tenantID == "" || scopeID == "" {
 		return ErrMissingScope
 	}
 	return nil
@@ -156,9 +158,10 @@ func retryAfterSeconds(now time.Time, resetAt time.Time) int {
 }
 
 const checkAndIncrementSQL = `
-insert into gateway_rate_limit_counters (
+insert into gateway_rate_limit_scope_counters (
   tenant_id,
-  application_id,
+  scope_type,
+  scope_id,
   window_start,
   window_seconds,
   limit_value,
@@ -167,26 +170,28 @@ insert into gateway_rate_limit_counters (
   updated_at
 ) values (
   $1::uuid,
-  $2::uuid,
-  $3::timestamptz,
-  $4::int,
+  $2,
+  $3,
+  $4::timestamptz,
   $5::int,
+  $6::int,
   1,
   now(),
   now()
 )
-on conflict (tenant_id, application_id, window_start)
+on conflict (tenant_id, scope_type, scope_id, window_start)
 do update set
-  request_count = gateway_rate_limit_counters.request_count + 1,
+  request_count = gateway_rate_limit_scope_counters.request_count + 1,
   window_seconds = excluded.window_seconds,
   limit_value = excluded.limit_value,
   updated_at = now()
-where gateway_rate_limit_counters.request_count < excluded.limit_value
+where gateway_rate_limit_scope_counters.request_count < excluded.limit_value
 returning request_count`
 
 const currentCounterSQL = `
 select request_count
-from gateway_rate_limit_counters
+from gateway_rate_limit_scope_counters
 where tenant_id = $1::uuid
-  and application_id = $2::uuid
-  and window_start = $3::timestamptz`
+  and scope_type = $2
+  and scope_id = $3
+  and window_start = $4::timestamptz`

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 from collections import Counter
+from dataclasses import replace
 
 from app.domain.safety.decision import (
     ACTION_BLOCKED,
@@ -15,6 +17,33 @@ from app.schemas.safety import SafetyDetector
 
 
 PREVIEW_MAX_CHARS = 120
+DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
+MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
+    "email": frozenset("._-+@"),
+    "private_url": frozenset(":/?=&%#._-+"),
+    "webhook_url": frozenset(":/?=&%#._-+"),
+    "database_url": frozenset(":/?=&%#._-+"),
+    "phone_number": frozenset(" -.()"),
+    "account_number": frozenset("-_"),
+    "account_id": frozenset("-_"),
+    "customer_id": frozenset("-_"),
+    "employee_id": frozenset("-_"),
+    "secret": frozenset("-_./+"),
+    "api_key": frozenset("-_./+"),
+    "provider_api_key": frozenset("-_./+"),
+    "cloud_access_key": frozenset("-_./+"),
+    "github_token": frozenset("-_./+"),
+    "slack_token": frozenset("-_./+"),
+    "jwt": frozenset(".-_"),
+    "person_name": frozenset("-'"),
+}
+LEADING_BOUNDARY_CHARS = frozenset("\"'([{<")
+TRAILING_BOUNDARY_CHARS_BY_DETECTOR_TYPE = {
+    "private_url": frozenset("\"')]}>,;."),
+    "webhook_url": frozenset("\"')]}>,;."),
+    "database_url": frozenset("\"')]}>,;."),
+}
+DEFAULT_TRAILING_BOUNDARY_CHARS = frozenset("\"')]}>,;:.")
 
 
 def enabled_detector_map(detectors: list[SafetyDetector]) -> dict[str, SafetyDetector]:
@@ -33,7 +62,7 @@ def build_safety_decision(
     signals: list[SafetySignal],
     security_policy_hash: str,
 ) -> SafetyDecision:
-    effective = effective_signals(signals)
+    effective = effective_signals(signals, prompt_text=prompt_text)
     if not effective:
         return SafetyDecision(
             action=ACTION_NONE,
@@ -61,29 +90,21 @@ def build_safety_decision(
     )
 
 
-def effective_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
+def effective_signals(
+    signals: list[SafetySignal],
+    *,
+    prompt_text: str | None = None,
+) -> list[SafetySignal]:
     candidates = [
-        signal
+        normalized
         for signal in signals
-        if signal.start >= 0 and signal.end > signal.start
+        if (normalized := _normalize_signal_span(signal, prompt_text)) is not None
     ]
-    candidates.sort(
-        key=lambda signal: (
-            -_action_rank(signal.action),
-            signal.priority,
-            -signal.length,
-            signal.start,
-        )
-    )
-
-    selected: list[SafetySignal] = []
-    for candidate in candidates:
-        if any(_overlaps(candidate, existing) for existing in selected):
-            continue
-        selected.append(candidate)
-
+    selected = _signals_from_overlap_clusters(candidates)
     selected.sort(key=lambda signal: (signal.start, signal.end))
-    return selected
+    if prompt_text is None:
+        return selected
+    return _merge_adjacent_similar_signals(selected, prompt_text)
 
 
 def redact_prompt(prompt_text: str, signals: list[SafetySignal]) -> str:
@@ -116,5 +137,148 @@ def _action_rank(action: str) -> int:
     return 0
 
 
+def _confidence_rank(confidence: float) -> float:
+    if not math.isfinite(confidence):
+        return 0
+    if confidence < 0:
+        return 0
+    if confidence > 1:
+        return 1
+    return confidence
+
+
 def _overlaps(left: SafetySignal, right: SafetySignal) -> bool:
     return left.start < right.end and right.start < left.end
+
+
+def _normalize_signal_span(
+    signal: SafetySignal,
+    prompt_text: str | None,
+) -> SafetySignal | None:
+    if signal.start < 0 or signal.end <= signal.start:
+        return None
+    if prompt_text is None:
+        return signal
+    if signal.end > len(prompt_text):
+        return None
+
+    start = signal.start
+    end = signal.end
+    trailing_boundary_chars = _trailing_boundary_chars_for_detector_type(signal.detector_type)
+    while start < end:
+        char = prompt_text[start]
+        if char.isspace() or char in LEADING_BOUNDARY_CHARS:
+            start += 1
+            continue
+        break
+    while end > start:
+        char = prompt_text[end - 1]
+        if char.isspace() or char in trailing_boundary_chars:
+            end -= 1
+            continue
+        break
+    if end <= start:
+        return None
+    if start == signal.start and end == signal.end:
+        return signal
+    return replace(signal, start=start, end=end)
+
+
+def _signals_from_overlap_clusters(signals: list[SafetySignal]) -> list[SafetySignal]:
+    if not signals:
+        return []
+
+    ordered = sorted(signals, key=lambda signal: (signal.start, signal.end))
+    clusters: list[list[SafetySignal]] = []
+    current_cluster: list[SafetySignal] = []
+    current_end = -1
+
+    for signal in ordered:
+        if not current_cluster or signal.start < current_end:
+            current_cluster.append(signal)
+            current_end = max(current_end, signal.end)
+            continue
+
+        clusters.append(current_cluster)
+        current_cluster = [signal]
+        current_end = signal.end
+
+    if current_cluster:
+        clusters.append(current_cluster)
+
+    return [_signal_from_overlap_cluster(cluster) for cluster in clusters]
+
+
+def _signal_from_overlap_cluster(cluster: list[SafetySignal]) -> SafetySignal:
+    if len(cluster) == 1:
+        return cluster[0]
+
+    action = "block" if any(signal.action == "block" for signal in cluster) else "redact"
+    action_candidates = [signal for signal in cluster if signal.action == action]
+    representative = min(
+        action_candidates,
+        key=lambda signal: (
+            signal.priority,
+            -signal.length,
+            -_confidence_rank(signal.confidence),
+            signal.start,
+        ),
+    )
+    return replace(
+        representative,
+        start=min(signal.start for signal in cluster),
+        end=max(signal.end for signal in cluster),
+        confidence=max(_confidence_rank(signal.confidence) for signal in cluster),
+    )
+
+
+def _merge_adjacent_similar_signals(
+    signals: list[SafetySignal],
+    prompt_text: str,
+) -> list[SafetySignal]:
+    merged: list[SafetySignal] = []
+    for signal in signals:
+        if not merged:
+            merged.append(signal)
+            continue
+
+        previous = merged[-1]
+        gap = prompt_text[previous.end : signal.start]
+        if _should_merge_adjacent_signal(previous, signal, gap):
+            merged[-1] = replace(
+                previous,
+                end=signal.end,
+                confidence=max(previous.confidence, signal.confidence),
+            )
+            continue
+        merged.append(signal)
+    return merged
+
+
+def _should_merge_adjacent_signal(
+    previous: SafetySignal,
+    current: SafetySignal,
+    gap: str,
+) -> bool:
+    if previous.detector_type != current.detector_type:
+        return False
+    if previous.action != current.action or previous.placeholder != current.placeholder:
+        return False
+    if current.start < previous.end:
+        return False
+    mergeable_chars = _mergeable_infix_chars_for_detector_type(previous.detector_type)
+    return gap == "" or all(char in mergeable_chars for char in gap)
+
+
+def _mergeable_infix_chars_for_detector_type(detector_type: str) -> frozenset[str]:
+    return MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE.get(
+        detector_type,
+        DEFAULT_MERGEABLE_INFIX_CHARS,
+    )
+
+
+def _trailing_boundary_chars_for_detector_type(detector_type: str) -> frozenset[str]:
+    return TRAILING_BOUNDARY_CHARS_BY_DETECTOR_TYPE.get(
+        detector_type,
+        DEFAULT_TRAILING_BOUNDARY_CHARS,
+    )

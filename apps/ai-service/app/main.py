@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
-from app.api.routes import health, safety
+from app.api.routes import ai_safety, health, safety
 from app.core.config import Settings, load_settings
 from app.core.errors import (
     RemoteSafetyHTTPError,
@@ -27,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = resolved_settings
     app.include_router(health.router)
     app.include_router(safety.router)
+    app.include_router(ai_safety.router)
     app.add_exception_handler(RemoteSafetyHTTPError, remote_safety_http_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)

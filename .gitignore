@@ -17,6 +17,7 @@ build/
 .next/
 coverage/
 *.tsbuildinfo
+reports/
 
 __pycache__/
 *.py[cod]
@@ -29,3 +30,4 @@ Thumbs.db
 desktop.ini
 
 .cache/
+.tmp/
