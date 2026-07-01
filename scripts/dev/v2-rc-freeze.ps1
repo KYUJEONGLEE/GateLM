@@ -42,9 +42,9 @@ function Convert-ToSafeArray {
 function Get-LatestEvidencePath {
     param([Parameter(Mandatory = $true)][string]$Pattern)
 
-    $matches = Get-ChildItem -LiteralPath $ReportDir -Filter $Pattern -File -ErrorAction SilentlyContinue |
+    $matchedFiles = Get-ChildItem -LiteralPath $ReportDir -Filter $Pattern -File -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTimeUtc -Descending
-    $items = Convert-ToSafeArray -Value $matches
+    $items = Convert-ToSafeArray -Value $matchedFiles
     if ($items.Count -eq 0) {
         return $null
     }
@@ -72,7 +72,7 @@ function Assert-NoSensitiveMarkers {
     )
 
     foreach ($marker in $forbiddenMarkers) {
-        if ($content.Contains($marker)) {
+        if ($content -like "*$marker*") {
             throw "Evidence file contains forbidden sensitive marker [$marker]: $Path"
         }
     }
@@ -149,7 +149,7 @@ try {
     $evidence = Resolve-Evidence
     $report = [ordered]@{
         runId = "v2_rc_freeze_$timestamp"
-        generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+        generatedAt = [DateTime]::UtcNow.ToString("o")
         checks = [ordered]@{
             gitDiffCheck = "passed"
             docsVerify = "passed"

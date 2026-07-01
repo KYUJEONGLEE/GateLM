@@ -10,13 +10,13 @@ It does not replace `contracts.md`. If this document conflicts with the v2 contr
 
 | Gate | Command or Evidence | Required For RC | Notes |
 |---|---|---:|---|
-| Docs contract check | `corepack pnpm verify:v2-docs` | Yes | Confirms contracts/schema/fixture guardrails. |
-| Final verification | `corepack pnpm verify:v2-final` | Yes | Run through `corepack`, not bare pnpm. |
-| Final hardening wrapper | `corepack pnpm v2:final:hardening -- -RunFullVerify` | Yes | Stores sanitized hardening evidence. |
-| Provider E2E | `corepack pnpm v2:provider:e2e` | Yes | Must be either real OpenAI live or explicitly labeled local mock-provider evidence. |
-| Request log consistency | `corepack pnpm v2:request-log:consistency` | Yes | Same requestId must match Detail, Logs, Dashboard. |
-| k6 smoke | `corepack pnpm v2:k6:smoke` | Yes | Target checks: 100% checks, 0% unexpected HTTP failures. |
-| RC freeze gate | `corepack pnpm v2:rc:freeze -- -RunFullVerify -RequireLiveEvidence` | Yes | Scans latest evidence for sensitive markers. |
+| Docs contract check | `corepack pnpm verify:v2-docs` | Yes | Confirms contracts/schema/fixture guardrails. Runs `scripts/verify-v2-docs.mjs`. |
+| Final verification | `corepack pnpm verify:v2-final` | Yes | Run through `corepack`, not bare pnpm. Runs `scripts/verify-v2-final.mjs`. |
+| Final hardening wrapper | `corepack pnpm v2:final:hardening -- -RunFullVerify` | Yes | Stores sanitized hardening evidence. Runs `scripts/dev/v2-final-hardening.ps1`. |
+| Provider E2E | `corepack pnpm v2:provider:e2e` | Yes | Must be either real OpenAI live or explicitly labeled local mock-provider evidence. Runs `scripts/dev/v2-provider-e2e-main-path.ps1`. |
+| Request log consistency | `corepack pnpm v2:request-log:consistency` | Yes | Same requestId must match Detail, Logs, Dashboard. Runs `scripts/dev/v2-request-log-outcome-consistency.ps1`. |
+| k6 smoke | `corepack pnpm v2:k6:smoke` | Yes | Target checks: 100% checks, 0% unexpected HTTP failures. Runs `scripts/dev/v2-k6-smoke.ps1`. |
+| RC freeze gate | `corepack pnpm v2:rc:freeze -- -RunFullVerify -RequireLiveEvidence` | Yes | Scans latest evidence for sensitive markers. Runs `scripts/dev/v2-rc-freeze.ps1`. |
 
 ## Must Not Be In Evidence
 
