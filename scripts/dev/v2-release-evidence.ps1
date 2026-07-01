@@ -91,7 +91,7 @@ function Assert-NoSensitiveMarkers {
     )
 
     foreach ($marker in $forbiddenMarkers) {
-        if ($content.Contains($marker)) {
+        if ($content.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             throw "Evidence report contains forbidden sensitive marker [$marker]: $Path"
         }
     }
@@ -118,6 +118,17 @@ function Get-NestedProperty {
     return $current
 }
 
+function Assert-NestedValue {
+    param(
+        $Value,
+        [Parameter(Mandatory = $true)][string[]]$Path,
+        [Parameter(Mandatory = $true)][string]$Message
+    )
+
+    $nestedValue = Get-NestedProperty -Value $Value -Path $Path
+    Assert-Value $nestedValue $Message
+}
+
 function New-EvidenceItem {
     param(
         [Parameter(Mandatory = $true)][string]$ScenarioName,
@@ -126,25 +137,57 @@ function New-EvidenceItem {
         [Parameter(Mandatory = $true)][hashtable]$Assertions
     )
 
+    $generatedAt = Get-NestedProperty -Value $Json -Path @("generatedAt")
+    $requestId = Get-NestedProperty -Value $Json -Path @("requestId")
+    if ($null -eq $requestId) {
+        $requestId = Get-NestedProperty -Value $Json -Path @("lookupKey", "requestId")
+    }
+
+    $terminalStatus = Get-NestedProperty -Value $Json -Path @("requestDetail", "terminalStatus")
+    if ($null -eq $terminalStatus) {
+        $terminalStatus = Get-NestedProperty -Value $Json -Path @("checks", "terminalStatus")
+    }
+
+    $domainOutcomes = Get-NestedProperty -Value $Json -Path @("requestDetail", "domainOutcomes")
+    if ($null -eq $domainOutcomes) {
+        $domainOutcomes = Get-NestedProperty -Value $Json -Path @("domainOutcomes")
+    }
+
+    $runtimeSnapshot = Get-NestedProperty -Value $Json -Path @("runtimeSnapshot")
+    if ($null -eq $runtimeSnapshot) {
+        $runtimeSnapshotId = Get-NestedProperty -Value $Json -Path @("checks", "runtimeSnapshotId")
+        if ($null -ne $runtimeSnapshotId) {
+            $runtimeSnapshot = [ordered]@{
+                runtimeSnapshotId = $runtimeSnapshotId
+                runtimeSnapshotVersion = Get-NestedProperty -Value $Json -Path @("checks", "runtimeSnapshotVersion")
+                contentHash = Get-NestedProperty -Value $Json -Path @("checks", "contentHash")
+            }
+        }
+    }
+
+    $providerOutcome = Get-NestedProperty -Value $Json -Path @("checks", "providerOutcome")
+    if ($null -eq $providerOutcome) {
+        $providerOutcome = Get-NestedProperty -Value $Json -Path @("domainOutcomes", "provider")
+    }
+
+    $fallbackOutcome = Get-NestedProperty -Value $Json -Path @("checks", "fallbackOutcome")
+    if ($null -eq $fallbackOutcome) {
+        $fallbackOutcome = Get-NestedProperty -Value $Json -Path @("domainOutcomes", "fallback")
+    }
+
     return [ordered]@{
         scenarioName = $ScenarioName
         path = Resolve-Path -LiteralPath $File.FullName -Relative
-        generatedAt = if ($Json.generatedAt) { [string]$Json.generatedAt } else { $null }
-        requestId = if ($Json.requestId) { [string]$Json.requestId } elseif ($Json.lookupKey.requestId) { [string]$Json.lookupKey.requestId } else { $null }
-        terminalStatus = if ($Json.requestDetail.terminalStatus) { [string]$Json.requestDetail.terminalStatus } elseif ($Json.checks.terminalStatus) { [string]$Json.checks.terminalStatus } else { $null }
-        domainOutcomes = if ($Json.requestDetail.domainOutcomes) { $Json.requestDetail.domainOutcomes } elseif ($Json.domainOutcomes) { $Json.domainOutcomes } else { $null }
-        runtimeSnapshot = if ($Json.runtimeSnapshot) { $Json.runtimeSnapshot } elseif ($Json.checks.runtimeSnapshotId) {
-            [ordered]@{
-                runtimeSnapshotId = $Json.checks.runtimeSnapshotId
-                runtimeSnapshotVersion = $Json.checks.runtimeSnapshotVersion
-                contentHash = $Json.checks.contentHash
-            }
-        } else { $null }
+        generatedAt = if ($generatedAt) { [string]$generatedAt } else { $null }
+        requestId = if ($requestId) { [string]$requestId } else { $null }
+        terminalStatus = if ($terminalStatus) { [string]$terminalStatus } else { $null }
+        domainOutcomes = $domainOutcomes
+        runtimeSnapshot = $runtimeSnapshot
         provider = [ordered]@{
-            providerOutcome = if ($Json.checks.providerOutcome) { [string]$Json.checks.providerOutcome } elseif ($Json.domainOutcomes.provider) { [string]$Json.domainOutcomes.provider } else { $null }
-            fallbackOutcome = if ($Json.checks.fallbackOutcome) { [string]$Json.checks.fallbackOutcome } elseif ($Json.domainOutcomes.fallback) { [string]$Json.domainOutcomes.fallback } else { $null }
-            routedProvider = if ($Json.responseHeaders.routedProvider) { [string]$Json.responseHeaders.routedProvider } else { $null }
-            routedModel = if ($Json.responseHeaders.routedModel) { [string]$Json.responseHeaders.routedModel } else { $null }
+            providerOutcome = if ($providerOutcome) { [string]$providerOutcome } else { $null }
+            fallbackOutcome = if ($fallbackOutcome) { [string]$fallbackOutcome } else { $null }
+            routedProvider = Get-NestedProperty -Value $Json -Path @("responseHeaders", "routedProvider")
+            routedModel = Get-NestedProperty -Value $Json -Path @("responseHeaders", "routedModel")
         }
         assertions = $Assertions
     }
@@ -161,15 +204,15 @@ function Validate-ProviderE2E {
 
     Assert-NoSensitiveMarkers -Path $file.FullName
     $json = Read-JsonFile -Path $file.FullName
-    Assert-Value $json.requestId "Provider E2E report is missing requestId."
-    Assert-Value $json.runtimeSnapshot.runtimeSnapshotId "Provider E2E report is missing runtimeSnapshotId."
-    Assert-Value $json.providerCatalog.catalogId "Provider E2E report is missing providerCatalog.catalogId."
+    Assert-NestedValue -Value $json -Path @("requestId") -Message "Provider E2E report is missing requestId."
+    Assert-NestedValue -Value $json -Path @("runtimeSnapshot", "runtimeSnapshotId") -Message "Provider E2E report is missing runtimeSnapshotId."
+    Assert-NestedValue -Value $json -Path @("providerCatalog", "catalogId") -Message "Provider E2E report is missing providerCatalog.catalogId."
 
     $assertions = @{
-        chatStatusOk = ([int]$json.checks.chatStatus -eq 200)
-        detailStatusOk = ([int]$json.checks.detailStatus -eq 200)
-        dashboardStatusOk = ([int]$json.checks.dashboardStatus -eq 200)
-        providerOrFallbackSucceeded = ([string]$json.checks.providerOutcome -eq "success" -or [string]$json.checks.fallbackOutcome -eq "success")
+        chatStatusOk = ([int](Get-NestedProperty -Value $json -Path @("checks", "chatStatus")) -eq 200)
+        detailStatusOk = ([int](Get-NestedProperty -Value $json -Path @("checks", "detailStatus")) -eq 200)
+        dashboardStatusOk = ([int](Get-NestedProperty -Value $json -Path @("checks", "dashboardStatus")) -eq 200)
+        providerOrFallbackSucceeded = ([string](Get-NestedProperty -Value $json -Path @("checks", "providerOutcome")) -eq "success" -or [string](Get-NestedProperty -Value $json -Path @("checks", "fallbackOutcome")) -eq "success")
     }
 
     foreach ($key in $assertions.Keys) {
@@ -190,16 +233,16 @@ function Validate-RequestLogConsistency {
 
     Assert-NoSensitiveMarkers -Path $file.FullName
     $json = Read-JsonFile -Path $file.FullName
-    Assert-Value $json.lookupKey.requestId "Request Log consistency report is missing requestId."
-    Assert-Value $json.checks.runtimeSnapshotId "Request Log consistency report is missing runtimeSnapshotId."
+    Assert-NestedValue -Value $json -Path @("lookupKey", "requestId") -Message "Request Log consistency report is missing requestId."
+    Assert-NestedValue -Value $json -Path @("checks", "runtimeSnapshotId") -Message "Request Log consistency report is missing runtimeSnapshotId."
 
     $assertions = @{
-        requestDetailStatusOk = ([int]$json.checks.requestDetailStatus -eq 200)
-        projectLogsStatusOk = ([int]$json.checks.projectLogsStatus -eq 200)
-        dashboardStatusOk = ([int]$json.checks.dashboardStatus -eq 200)
-        detailMatchesProjectLog = ([bool]$json.consistency.detailMatchesProjectLog)
-        dashboardContainsScope = ([bool]$json.consistency.dashboardContainsScope)
-        sensitiveFieldsNotExposed = ([bool]$json.consistency.sensitiveFieldsNotExposed)
+        requestDetailStatusOk = ([int](Get-NestedProperty -Value $json -Path @("checks", "requestDetailStatus")) -eq 200)
+        projectLogsStatusOk = ([int](Get-NestedProperty -Value $json -Path @("checks", "projectLogsStatus")) -eq 200)
+        dashboardStatusOk = ([int](Get-NestedProperty -Value $json -Path @("checks", "dashboardStatus")) -eq 200)
+        detailMatchesProjectLog = ([bool](Get-NestedProperty -Value $json -Path @("consistency", "detailMatchesProjectLog")))
+        dashboardContainsScope = ([bool](Get-NestedProperty -Value $json -Path @("consistency", "dashboardContainsScope")))
+        sensitiveFieldsNotExposed = ([bool](Get-NestedProperty -Value $json -Path @("consistency", "sensitiveFieldsNotExposed")))
     }
 
     foreach ($key in $assertions.Keys) {
@@ -257,10 +300,10 @@ function Validate-FinalHardening {
     Assert-NoSensitiveMarkers -Path $file.FullName
     $json = Read-JsonFile -Path $file.FullName
     $assertions = @{
-        toolingBaselinePassed = ([string]$json.checks.toolingBaseline -eq "passed")
-        gitDiffCheckPassedOrSkipped = (@("passed", "skipped") -contains [string]$json.checks.gitDiffCheck)
-        docsVerifyPassedOrSkipped = (@("passed", "skipped") -contains [string]$json.checks.docsVerify)
-        fullVerifyPassedOrSkipped = (@("passed", "skipped") -contains [string]$json.checks.fullVerify)
+        toolingBaselinePassed = ([string](Get-NestedProperty -Value $json -Path @("checks", "toolingBaseline")) -eq "passed")
+        gitDiffCheckPassedOrSkipped = (@("passed", "skipped") -contains [string](Get-NestedProperty -Value $json -Path @("checks", "gitDiffCheck")))
+        docsVerifyPassedOrSkipped = (@("passed", "skipped") -contains [string](Get-NestedProperty -Value $json -Path @("checks", "docsVerify")))
+        fullVerifyPassedOrSkipped = (@("passed", "skipped") -contains [string](Get-NestedProperty -Value $json -Path @("checks", "fullVerify")))
     }
 
     foreach ($key in $assertions.Keys) {
@@ -270,7 +313,7 @@ function Validate-FinalHardening {
     return [ordered]@{
         scenarioName = "final_hardening"
         path = Resolve-Path -LiteralPath $file.FullName -Relative
-        generatedAt = if ($json.generatedAt) { [string]$json.generatedAt } else { $null }
+        generatedAt = if (Get-NestedProperty -Value $json -Path @("generatedAt")) { [string](Get-NestedProperty -Value $json -Path @("generatedAt")) } else { $null }
         requestId = $null
         terminalStatus = $null
         domainOutcomes = $null
