@@ -17,6 +17,16 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
+function Convert-ToSafeArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    return @($Value | Where-Object { $null -ne $_ })
+}
+
 function Join-Url {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -199,8 +209,10 @@ where table_schema = 'public'
   and table_name in ($quoted)
 order by table_name;
 "@
-    $existing = @(Invoke-PostgresQuery -Sql $sql | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $missing = @($requiredTables | Where-Object { $existing -notcontains $_ })
+    $queryResult = Invoke-PostgresQuery -Sql $sql | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $existing = @(Convert-ToSafeArray -Value $queryResult)
+    $filteredMissing = $requiredTables | Where-Object { $existing -notcontains $_ }
+    $missing = @(Convert-ToSafeArray -Value $filteredMissing)
     if ($missing.Count -gt 0) {
         throw "missing required P0 tables: $($missing -join ', ')"
     }

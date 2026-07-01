@@ -14,6 +14,16 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
+function Convert-ToSafeArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    return @($Value | Where-Object { $null -ne $_ })
+}
+
 function Invoke-CheckedCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -101,7 +111,8 @@ function Assert-ExpectedScripts {
         "v2:request-log:consistency",
         "v2:k6:smoke"
     )
-    $missingPhaseScripts = @($phaseScripts | Where-Object { $null -eq $packageJson.scripts.PSObject.Properties[$_] })
+    $filteredMissingPhaseScripts = $phaseScripts | Where-Object { $null -eq $packageJson.scripts.PSObject.Properties[$_] }
+    $missingPhaseScripts = @(Convert-ToSafeArray -Value $filteredMissingPhaseScripts)
 
     return $missingPhaseScripts
 }
@@ -164,7 +175,7 @@ if ($DescribeOnly) {
 }
 
 Assert-ToolingBaseline
-$missingPhaseScripts = @(Assert-ExpectedScripts)
+$missingPhaseScripts = @(Convert-ToSafeArray -Value (Assert-ExpectedScripts))
 
 if (-not $SkipGitDiffCheck) {
     Invoke-CheckedCommand -Name "git diff --check" -FilePath "git" -Arguments @("diff", "--check") -WorkingDirectory $repoRoot

@@ -18,6 +18,16 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
+function Convert-ToSafeArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    return @($Value | Where-Object { $null -ne $_ })
+}
+
 function Join-Url {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -258,7 +268,7 @@ $projectLogsResponse = Invoke-Http -Method GET -Uri $projectLogsUri
 Assert-True ($projectLogsResponse.statusCode -eq 200) "Project Logs lookup failed: HTTP $($projectLogsResponse.statusCode)"
 Assert-ResponseDoesNotExposeSensitiveFields -Body $projectLogsResponse.body -Name "Project Logs"
 $projectLogs = Convert-JsonBody -Body $projectLogsResponse.body
-$items = @($projectLogs.data)
+$items = @(Convert-ToSafeArray -Value $projectLogs.data)
 $listItem = $items | Where-Object { $_.requestId -eq $RequestId } | Select-Object -First 1
 Assert-True ($null -ne $listItem) "Project Logs response did not include requestId=$RequestId."
 

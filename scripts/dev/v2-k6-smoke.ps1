@@ -18,6 +18,16 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
+function Convert-ToSafeArray {
+    param($Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    return @($Value | Where-Object { $null -ne $_ })
+}
+
 function Join-Url {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
