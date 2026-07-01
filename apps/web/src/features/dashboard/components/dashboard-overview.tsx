@@ -16,6 +16,7 @@ type DashboardOverviewProps = {
   detailPanel?: ReactNode;
   locale: Locale;
   overview: DashboardOverview;
+  rateLimitedRecords?: InvocationLogRecord[];
   recentRecords?: InvocationLogRecord[];
   suppressContentMotion?: boolean;
 };
@@ -69,6 +70,7 @@ const dashboardText: Record<
     maskingActions: string;
     budgetScopeBreakdown: string;
     queryBudget: string;
+    rateLimitEvidence: string;
     routingByModel: string;
     statusDistribution: string;
     tabs: Record<DashboardTab, string>;
@@ -114,6 +116,7 @@ const dashboardText: Record<
     maskingActions: "Masking actions",
     budgetScopeBreakdown: "Budget scope breakdown",
     queryBudget: "Query budget",
+    rateLimitEvidence: "Rate limit evidence",
     routingByModel: "Routing by model",
     statusDistribution: "Status distribution",
     tabs: {
@@ -165,6 +168,7 @@ const dashboardText: Record<
     maskingActions: "마스킹 동작",
     budgetScopeBreakdown: "Budget scope 집계",
     queryBudget: "Query budget",
+    rateLimitEvidence: "Rate limit 증거",
     routingByModel: "모델별 라우팅",
     statusDistribution: "상태 분포",
     tabs: {
@@ -186,6 +190,7 @@ export function DashboardOverviewView({
   detailPanel,
   locale,
   overview,
+  rateLimitedRecords = [],
   recentRecords = [],
   suppressContentMotion = false
 }: DashboardOverviewProps) {
@@ -283,6 +288,7 @@ export function DashboardOverviewView({
           cacheTrend={cacheTrend}
           modelShareRows={modelShareRows}
           overview={overview}
+          rateLimitedRecords={rateLimitedRecords}
           recentRecords={recentRecords}
           requestTrend={requestTrend}
           text={text}
@@ -337,6 +343,7 @@ function DashboardTabPanel({
   cacheTrend,
   modelShareRows,
   overview,
+  rateLimitedRecords,
   recentRecords,
   requestTrend,
   text
@@ -346,6 +353,7 @@ function DashboardTabPanel({
   cacheTrend: { primary: number[]; secondary: number[] };
   modelShareRows: Array<{ color: string; label: string; value: number }>;
   overview: DashboardOverview;
+  rateLimitedRecords: InvocationLogRecord[];
   recentRecords: InvocationLogRecord[];
   requestTrend: { primary: number[]; secondary: number[] };
   text: DashboardCopy;
@@ -518,6 +526,12 @@ function DashboardTabPanel({
         <article className="console-panel">
           <div className="panel-heading">
             <h3>Rate limit</h3>
+            <Link
+              className="secondary-link"
+              href={`/tenants/${overview.filters.tenantId}/request-logs?status=rate_limited`}
+            >
+              logs
+            </Link>
           </div>
           <div className="compact-list">
             <div className="compact-row">
@@ -562,6 +576,11 @@ function DashboardTabPanel({
         </article>
       </section>
 
+      <RateLimitEvidencePanel
+        overview={overview}
+        records={rateLimitedRecords}
+        text={text}
+      />
       <BudgetScopeBreakdownTable overview={overview} text={text} />
     </section>
   );
@@ -754,6 +773,63 @@ function CostByModelTable({ overview, text }: { overview: DashboardOverview; tex
                 <td>{formatUsd(row.costUsd)}</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
+function RateLimitEvidencePanel({
+  overview,
+  records,
+  text
+}: {
+  overview: DashboardOverview;
+  records: InvocationLogRecord[];
+  text: DashboardCopy;
+}) {
+  return (
+    <article className="console-panel wide-panel">
+      <div className="panel-heading">
+        <h3>{text.rateLimitEvidence}</h3>
+      </div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Request</th>
+              <th>Scope</th>
+              <th>Outcome</th>
+              <th>HTTP</th>
+              <th>Provider cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((record) => (
+              <tr key={record.requestId}>
+                <td>
+                  <Link
+                    href={`/tenants/${overview.filters.tenantId}/dashboard?tab=limits&requestId=${encodeURIComponent(record.requestId)}`}
+                    scroll={false}
+                  >
+                    {formatDisplayIdentifier(record.requestId)}
+                  </Link>
+                </td>
+                <td>
+                  {record.rateLimitDecision.scope}:
+                  {formatDisplayIdentifier(record.rateLimitDecision.scopeId)}
+                </td>
+                <td>{record.domainOutcomes?.rateLimit?.outcome ?? record.status}</td>
+                <td>{record.httpStatus}</td>
+                <td>{record.providerLatencyMs === null ? "not called" : "called"}</td>
+              </tr>
+            ))}
+            {records.length === 0 ? (
+              <tr>
+                <td colSpan={5}>none</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

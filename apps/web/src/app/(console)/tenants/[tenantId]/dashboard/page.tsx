@@ -35,10 +35,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         ? requestedTab
         : "overview";
   const suppressContentMotion = activeTab === "overview" && resolvedSearchParams?.motion === "none";
-  const [locale, overview, recentRecords, selectedDetail] = await Promise.all([
+  const [locale, overview, recentRecords, rateLimitedRecords, selectedDetail] = await Promise.all([
     getRequestLocale(),
     getLiveDashboardOverview(tenantId),
     getLiveGatewayRequestLogs(),
+    getLiveGatewayRequestLogs({ limit: 5, status: "rate_limited" }),
     selectedRequestId ? getLiveGatewayRequestDetail(selectedRequestId) : Promise.resolve(null)
   ]);
   const scopedSelectedDetail =
@@ -80,6 +81,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         }
         locale={locale}
         overview={overview}
+        rateLimitedRecords={rateLimitedRecords ?? []}
         recentRecords={recentRecords?.slice(0, 5) ?? []}
         suppressContentMotion={suppressContentMotion}
       />
