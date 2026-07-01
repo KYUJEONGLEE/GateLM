@@ -11,6 +11,7 @@ import (
 	"time"
 
 	postgresauth "gatelm/apps/gateway-core/internal/adapters/auth/postgres"
+	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
@@ -23,7 +24,6 @@ import (
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
-	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/provider"
@@ -109,7 +109,7 @@ func main() {
 	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
-		budgetstage.NewStage(budget.AllowChecker{}),
+		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(
 			postgresratelimit.NewLimiter(postgresPool),
 			ratelimit.Config{

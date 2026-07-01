@@ -224,7 +224,9 @@ function Assert-RequiredTables {
         "runtime_snapshots",
         "active_runtime_snapshots",
         "p0_llm_invocation_logs",
-        "gateway_rate_limit_counters"
+        "gateway_rate_limit_counters",
+        "budget_quotas",
+        "budget_ledger_entries"
     )
 
     $quoted = ($requiredTables | ForEach-Object { "'$_'" }) -join ", "
@@ -296,7 +298,7 @@ try {
         Write-Gate -Name "tooling" -Status "requires docker + corepack"
         Write-Gate -Name "dependencies" -Status "postgres + redis + mock-provider"
         Write-Gate -Name "prisma migrations" -Status "control-plane schema"
-        Write-Gate -Name "gateway SQL migrations" -Status "logs + rate-limit tables"
+        Write-Gate -Name "gateway SQL migrations" -Status "logs + rate-limit + budget ledger tables"
         Write-Gate -Name "required tables" -Status "Prisma + Gateway SQL tables"
         Write-Gate -Name "active snapshot pointer" -Status "required only with -RequireActiveSnapshot"
         Write-Gate -Name "app readiness" -Status "required only with -CheckApps"
@@ -334,7 +336,8 @@ try {
             "db/migrations/006_create_p0_invocation_logs_fallback.sql",
             "db/migrations/007_create_gateway_rate_limit_counters.sql",
             "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
-            "db/migrations/009_alter_p0_invocation_logs_api_key_fk.sql"
+            "db/migrations/009_alter_p0_invocation_logs_api_key_fk.sql",
+            "db/migrations/010_create_budget_ledger.sql"
         )
         foreach ($file in $gatewaySqlFiles) {
             Invoke-GatewaySqlFile -Path $file

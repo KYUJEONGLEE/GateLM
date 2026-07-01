@@ -87,6 +87,31 @@ func (w *TerminalLogWriter) WriteTerminalLog(ctx context.Context, log invocation
 		record.CreatedAt,
 		record.CompletedAt,
 	)
+	if err != nil {
+		return err
+	}
+	if record.CostMicroUSD <= 0 {
+		return nil
+	}
+
+	completedAt := record.CompletedAt
+	if completedAt.IsZero() {
+		completedAt = record.CreatedAt
+	}
+	completedAt = completedAt.UTC()
+	monthStart := time.Date(completedAt.Year(), completedAt.Month(), 1, 0, 0, 0, 0, time.UTC)
+	_, err = w.db.Exec(ctx, upsertBudgetLedgerEntrySQL,
+		record.RequestID,
+		record.TenantID,
+		record.ProjectID,
+		nullableUUID(record.ApplicationID),
+		record.BudgetScope.Type,
+		record.BudgetScope.ID,
+		monthStart,
+		record.CostMicroUSD,
+		record.CreatedAt,
+		completedAt,
+	)
 	return err
 }
 
@@ -134,6 +159,7 @@ type terminalLogRecord struct {
 	RequestBodyHash          string
 	PromptHash               string
 	RedactedPromptPreview    string
+	BudgetScope              budget.Scope
 	MetadataJSON             []byte
 	CreatedAt                time.Time
 	CompletedAt              time.Time
@@ -229,6 +255,7 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		RequestBodyHash:          strings.TrimSpace(log.RequestBodyHash),
 		PromptHash:               strings.TrimSpace(log.PromptHash),
 		RedactedPromptPreview:    strings.TrimSpace(log.RedactedPromptPreview),
+		BudgetScope:              resolvedBudgetScope,
 		MetadataJSON:             metadataJSON,
 		CreatedAt:                log.CreatedAt,
 		CompletedAt:              log.CompletedAt,
@@ -291,3 +318,44 @@ insert into p0_llm_invocation_logs (
   $41, $42, $43, $44, $45, $46
 )
 on conflict (request_id) do nothing`
+
+const upsertBudgetLedgerEntrySQL = `
+insert into budget_ledger_entries (
+  request_id,
+  tenant_id,
+  project_id,
+  application_id,
+  budget_scope_type,
+  budget_scope_id,
+  month_start,
+  cost_micro_usd,
+  source,
+  created_at,
+  completed_at,
+  updated_at
+) values (
+  $1,
+  $2::uuid,
+  $3::uuid,
+  $4::uuid,
+  $5,
+  $6,
+  $7::date,
+  $8,
+  'request_log',
+  $9,
+  $10,
+  now()
+)
+on conflict (request_id)
+do update set
+  tenant_id = excluded.tenant_id,
+  project_id = excluded.project_id,
+  application_id = excluded.application_id,
+  budget_scope_type = excluded.budget_scope_type,
+  budget_scope_id = excluded.budget_scope_id,
+  month_start = excluded.month_start,
+  cost_micro_usd = excluded.cost_micro_usd,
+  source = excluded.source,
+  completed_at = excluded.completed_at,
+  updated_at = now()`
