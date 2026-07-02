@@ -1,19 +1,26 @@
 param(
+    [string]$ControlPlaneBaseUrl = $(if ($env:CONTROL_PLANE_BASE_URL) { $env:CONTROL_PLANE_BASE_URL } elseif ($env:GATEWAY_CONTROL_PLANE_BASE_URL) { $env:GATEWAY_CONTROL_PLANE_BASE_URL } else { "http://localhost:3001" }),
     [string]$GatewayBaseUrl = $(if ($env:GATEWAY_BASE_URL) { $env:GATEWAY_BASE_URL } else { "http://localhost:8080" }),
     [string]$MockProviderBaseUrl = $(if ($env:MOCK_PROVIDER_BASE_URL) { $env:MOCK_PROVIDER_BASE_URL } else { "http://localhost:8090" }),
+    [string]$DatabaseUrl = $(if ($env:DATABASE_URL) { $env:DATABASE_URL } else { "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public" }),
     [string]$TenantId = $(if ($env:GATELM_E2E_TENANT_ID) { $env:GATELM_E2E_TENANT_ID } else { "00000000-0000-4000-8000-000000000100" }),
     [string]$ProjectId = $(if ($env:GATELM_E2E_PROJECT_ID) { $env:GATELM_E2E_PROJECT_ID } else { "00000000-0000-4000-8000-000000000200" }),
-    [string]$RunId = $(if ($env:GATELM_K6_RUN_ID) { $env:GATELM_K6_RUN_ID } else { "v201_smoke_$(Get-Date -Format "yyyyMMdd_HHmmss")" }),
+    [string]$RunId = $(if ($env:GATELM_K6_RUN_ID) { $env:GATELM_K6_RUN_ID } else { "v201_mock_smoke_$(Get-Date -Format "yyyyMMdd_HHmmss")" }),
     [string]$ReportDir = "",
+    [ValidateSet("mock")]
+    [string]$ProviderMode = $(if ($env:K6_GATEWAY_PROVIDER_MODE) { $env:K6_GATEWAY_PROVIDER_MODE } else { "mock" }),
+    [string]$ProviderFailureModels = $(if ($env:K6_PROVIDER_FAILURE_MODELS) { $env:K6_PROVIDER_FAILURE_MODELS } else { "mock-fast" }),
     [switch]$EnableDependencyScenarios,
+    [switch]$SkipSeed,
     [switch]$SkipRun,
     [switch]$DescribeOnly
 )
 
 # v2.0.1 k6 / smoke evidence wrapper.
 # This wrapper runs the canonical scripts/perf/k6-gateway-baseline.js against
-# a live Gateway and saves a sanitized k6 summary. It does not persist raw
-# prompts, raw responses, API keys, app tokens, provider keys, or headers.
+# a live Gateway in mock-provider mode and saves a sanitized k6 summary. It
+# does not persist raw prompts, raw responses, API keys, app tokens, provider
+# keys, or headers.
 
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
@@ -87,6 +94,35 @@ function Assert-K6Installed {
     throw "k6 is required for v2.0.1 smoke execution"
 }
 
+function Invoke-ControlPlaneDemoSeed {
+    param(
+        [Parameter(Mandatory = $true)][string]$MockProviderUrl,
+        [Parameter(Mandatory = $true)][string]$SeedDatabaseUrl
+    )
+
+    $previousProviderMode = $env:GATELM_DEMO_PROVIDER_MODE
+    $previousMockProviderBaseUrl = $env:GATELM_DEMO_MOCK_PROVIDER_BASE_URL
+    $previousDatabaseUrl = $env:DATABASE_URL
+
+    try {
+        $env:GATELM_DEMO_PROVIDER_MODE = "mock"
+        $env:GATELM_DEMO_MOCK_PROVIDER_BASE_URL = $MockProviderUrl
+        $env:DATABASE_URL = $SeedDatabaseUrl
+
+        Write-Host ""
+        Write-Host "== seed Control Plane demo data for mock k6 smoke =="
+        corepack pnpm --filter @gatelm/control-plane-api db:seed
+        if ($LASTEXITCODE -ne 0) {
+            throw "Control Plane demo seed failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        $env:GATELM_DEMO_PROVIDER_MODE = $previousProviderMode
+        $env:GATELM_DEMO_MOCK_PROVIDER_BASE_URL = $previousMockProviderBaseUrl
+        $env:DATABASE_URL = $previousDatabaseUrl
+    }
+}
+
 function New-QueryString {
     param([Parameter(Mandatory = $true)][hashtable]$Values)
 
@@ -125,19 +161,24 @@ $dashboardQuery = New-QueryString -Values @{
 }
 
 Write-Host ""
-Write-Host "GateLM v2.0.1 k6 / smoke verification"
-Write-Host "====================================="
-Write-Host "gateway:      $GatewayBaseUrl"
-Write-Host "mockProvider: $MockProviderBaseUrl"
-Write-Host "tenantId:     $TenantId"
-Write-Host "projectId:    $ProjectId"
-Write-Host "runId:        $RunId"
+Write-Host "GateLM v2.0.1 k6 / mock smoke verification"
+Write-Host "=========================================="
+Write-Host "controlPlane:   $ControlPlaneBaseUrl"
+Write-Host "gateway:        $GatewayBaseUrl"
+Write-Host "mockProvider:   $MockProviderBaseUrl"
+Write-Host "tenantId:       $TenantId"
+Write-Host "projectId:      $ProjectId"
+Write-Host "runId:          $RunId"
+Write-Host "provider mode:  $ProviderMode"
+Write-Host "failure models: $ProviderFailureModels"
 Write-Host "dependency scenarios: $EnableDependencyScenarios"
 Write-Host ""
 
 if ($DescribeOnly) {
     Write-Host "Describe-only mode. No HTTP requests or k6 run will be started."
     Write-Host "Planned checks:"
+    Write-Host "- Control Plane /healthz readiness."
+    Write-Host "- Seed demo RuntimeSnapshot/Provider Catalog in mock-provider mode unless -SkipSeed is set."
     Write-Host "- Gateway /healthz readiness."
     Write-Host "- mock-provider /healthz readiness."
     Write-Host "- local k6 executable presence."
@@ -146,14 +187,20 @@ if ($DescribeOnly) {
     exit 0
 }
 
+Assert-HttpOk -Name "Control Plane" -Uri (Join-Url $ControlPlaneBaseUrl "/healthz")
 Assert-HttpOk -Name "Gateway" -Uri (Join-Url $GatewayBaseUrl "/healthz")
 Assert-HttpOk -Name "mock-provider" -Uri (Join-Url $MockProviderBaseUrl "/healthz")
 $k6Path = Assert-K6Installed
+
+if (-not $SkipSeed) {
+    Invoke-ControlPlaneDemoSeed -MockProviderUrl $MockProviderBaseUrl -SeedDatabaseUrl $DatabaseUrl
+}
 
 New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 $safeRunId = $RunId -replace "[^A-Za-z0-9_]", "_"
 $summaryPath = Join-Path $ReportDir "v2-k6-smoke-$safeRunId-summary.json"
 
+Write-Host "Control Plane healthz: OK"
 Write-Host "Gateway healthz: OK"
 Write-Host "mock-provider healthz: OK"
 Write-Host "k6: $k6Path"
@@ -174,6 +221,8 @@ $previousGatewayBaseUrl = $env:GATEWAY_BASE_URL
 $previousMockProviderBaseUrl = $env:MOCK_PROVIDER_BASE_URL
 $previousFailureControlUrl = $env:K6_PROVIDER_FAILURE_CONTROL_URL
 $previousFailureModels = $env:K6_PROVIDER_FAILURE_MODELS
+$previousProviderMode = $env:K6_GATEWAY_PROVIDER_MODE
+$previousProviderFailureScenarios = $env:K6_ENABLE_PROVIDER_FAILURE_SCENARIOS
 $previousRunId = $env:GATELM_K6_RUN_ID
 $previousDependencyScenarios = $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS
 $previousTenantId = $env:GATELM_DEMO_TENANT_ID
@@ -183,7 +232,9 @@ try {
     $env:GATEWAY_BASE_URL = $GatewayBaseUrl
     $env:MOCK_PROVIDER_BASE_URL = $MockProviderBaseUrl
     $env:K6_PROVIDER_FAILURE_CONTROL_URL = $MockProviderBaseUrl
-    $env:K6_PROVIDER_FAILURE_MODELS = "mock-primary-fail"
+    $env:K6_PROVIDER_FAILURE_MODELS = $ProviderFailureModels
+    $env:K6_GATEWAY_PROVIDER_MODE = $ProviderMode
+    $env:K6_ENABLE_PROVIDER_FAILURE_SCENARIOS = "true"
     $env:GATELM_K6_RUN_ID = $safeRunId
     $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS = $(if ($EnableDependencyScenarios) { "true" } else { "false" })
     $env:GATELM_DEMO_TENANT_ID = $TenantId
@@ -201,6 +252,8 @@ finally {
     $env:MOCK_PROVIDER_BASE_URL = $previousMockProviderBaseUrl
     $env:K6_PROVIDER_FAILURE_CONTROL_URL = $previousFailureControlUrl
     $env:K6_PROVIDER_FAILURE_MODELS = $previousFailureModels
+    $env:K6_GATEWAY_PROVIDER_MODE = $previousProviderMode
+    $env:K6_ENABLE_PROVIDER_FAILURE_SCENARIOS = $previousProviderFailureScenarios
     $env:GATELM_K6_RUN_ID = $previousRunId
     $env:K6_ENABLE_V2_DEPENDENCY_SCENARIOS = $previousDependencyScenarios
     $env:GATELM_DEMO_TENANT_ID = $previousTenantId

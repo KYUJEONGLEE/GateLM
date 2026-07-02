@@ -1,6 +1,9 @@
 param(
     [string]$ControlPlaneBaseUrl = $(if ($env:CONTROL_PLANE_BASE_URL) { $env:CONTROL_PLANE_BASE_URL } else { "http://localhost:3001" }),
     [string]$GatewayBaseUrl = $(if ($env:GATEWAY_BASE_URL) { $env:GATEWAY_BASE_URL } else { "http://localhost:8080" }),
+    [string]$MockProviderBaseUrl = $(if ($env:MOCK_PROVIDER_BASE_URL) { $env:MOCK_PROVIDER_BASE_URL } else { "http://localhost:8090" }),
+    [string]$OpenAIBaseUrl = $(if ($env:GATELM_DEMO_OPENAI_BASE_URL) { $env:GATELM_DEMO_OPENAI_BASE_URL } else { "https://api.openai.com/v1" }),
+    [string]$DatabaseUrl = $(if ($env:DATABASE_URL) { $env:DATABASE_URL } else { "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public" }),
     [string]$ApplicationId = $(if ($env:GATELM_DEMO_APPLICATION_ID) { $env:GATELM_DEMO_APPLICATION_ID } else { "00000000-0000-4000-8000-000000000300" }),
     [string]$ApiKey = $(if ($env:GATELM_DEMO_API_KEY) { $env:GATELM_DEMO_API_KEY } else { "glm_api_test_redacted" }),
     [string]$AppToken = $(if ($env:GATELM_DEMO_APP_TOKEN) { $env:GATELM_DEMO_APP_TOKEN } else { "glm_app_token_test_redacted" }),
@@ -8,6 +11,7 @@ param(
     [string]$ReportDir = "",
     [switch]$AllowFallbackSuccess,
     [switch]$IssueFreshCredentials,
+    [switch]$SkipSeed,
     [switch]$DescribeOnly,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$RemainingArgs
@@ -339,6 +343,39 @@ function Assert-True {
     }
 }
 
+function Invoke-ControlPlaneDemoSeedForActualProvider {
+    param(
+        [Parameter(Mandatory = $true)][string]$MockProviderUrl,
+        [Parameter(Mandatory = $true)][string]$ProviderBaseUrl,
+        [Parameter(Mandatory = $true)][string]$SeedDatabaseUrl
+    )
+
+    $previousProviderMode = $env:GATELM_DEMO_PROVIDER_MODE
+    $previousMockProviderBaseUrl = $env:GATELM_DEMO_MOCK_PROVIDER_BASE_URL
+    $previousOpenAIBaseUrl = $env:GATELM_DEMO_OPENAI_BASE_URL
+    $previousDatabaseUrl = $env:DATABASE_URL
+
+    try {
+        $env:GATELM_DEMO_PROVIDER_MODE = "actual"
+        $env:GATELM_DEMO_MOCK_PROVIDER_BASE_URL = $MockProviderUrl
+        $env:GATELM_DEMO_OPENAI_BASE_URL = $ProviderBaseUrl
+        $env:DATABASE_URL = $SeedDatabaseUrl
+
+        Write-Host ""
+        Write-Host "== seed Control Plane demo data for actual Provider E2E =="
+        corepack pnpm --filter @gatelm/control-plane-api db:seed
+        if ($LASTEXITCODE -ne 0) {
+            throw "Control Plane demo seed failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        $env:GATELM_DEMO_PROVIDER_MODE = $previousProviderMode
+        $env:GATELM_DEMO_MOCK_PROVIDER_BASE_URL = $previousMockProviderBaseUrl
+        $env:GATELM_DEMO_OPENAI_BASE_URL = $previousOpenAIBaseUrl
+        $env:DATABASE_URL = $previousDatabaseUrl
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 if ([string]::IsNullOrWhiteSpace($ReportDir)) {
     $ReportDir = Join-Path $repoRoot "reports/e2e"
@@ -355,15 +392,19 @@ Write-Host "GateLM v2.0.1 Provider E2E main path"
 Write-Host "===================================="
 Write-Host "controlPlane: $ControlPlaneBaseUrl"
 Write-Host "gateway:      $GatewayBaseUrl"
+Write-Host "mockProvider: $MockProviderBaseUrl"
+Write-Host "openAI base:  $OpenAIBaseUrl"
 Write-Host "application:  $ApplicationId"
 Write-Host "requestId:    $requestId"
 Write-Host "fresh creds:  $IssueFreshCredentials"
+Write-Host "seed actual:  $(-not $SkipSeed)"
 Write-Host ""
 
 if ($DescribeOnly) {
     Write-Host "Describe-only mode. No HTTP requests will be sent."
     Write-Host "Planned checks:"
     Write-Host "- Control Plane and Gateway health checks."
+    Write-Host "- Seed demo RuntimeSnapshot/Provider Catalog in actual OpenAI mode unless -SkipSeed is set."
     Write-Host "- Active RuntimeSnapshot and Provider Catalog lookup."
     Write-Host "- Optional one-time API Key/App Token issuing for the target Application."
     Write-Host "- OpenAI-compatible Gateway chat request through published RuntimeSnapshot."
@@ -376,6 +417,10 @@ $controlPlaneHealth = Invoke-Http -Method GET -Uri (Join-Url $ControlPlaneBaseUr
 $gatewayHealth = Invoke-Http -Method GET -Uri (Join-Url $GatewayBaseUrl "/healthz")
 Assert-True ($controlPlaneHealth.statusCode -eq 200) "Control Plane health check failed: $(Format-HttpDiagnostic $controlPlaneHealth)"
 Assert-True ($gatewayHealth.statusCode -eq 200) "Gateway health check failed: $(Format-HttpDiagnostic $gatewayHealth)"
+
+if (-not $SkipSeed) {
+    Invoke-ControlPlaneDemoSeedForActualProvider -MockProviderUrl $MockProviderBaseUrl -ProviderBaseUrl $OpenAIBaseUrl -SeedDatabaseUrl $DatabaseUrl
+}
 
 $snapshotResponse = Invoke-Http -Method GET -Uri (Join-Url $ControlPlaneBaseUrl "/admin/v1/applications/$ApplicationId/runtime-snapshot/active")
 Assert-True ($snapshotResponse.statusCode -eq 200) "Active RuntimeSnapshot check failed: HTTP $($snapshotResponse.statusCode)"

@@ -48,7 +48,7 @@ func (a *Adapter) ListModels(ctx context.Context, config provider.ExecutionConfi
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("mock provider models returned status %d", resp.StatusCode)
+		return nil, classifyStatus(resp.StatusCode, "models")
 	}
 
 	var models provider.ModelListResponse
@@ -79,7 +79,7 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("mock provider chat completion returned status %d", resp.StatusCode)
+		return nil, classifyStatus(resp.StatusCode, "chat completion")
 	}
 
 	var completion provider.ChatCompletionResponse
@@ -88,6 +88,18 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 	}
 
 	return &completion, nil
+}
+
+func classifyStatus(statusCode int, operation string) error {
+	err := fmt.Errorf("mock provider %s returned status %d", operation, statusCode)
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return provider.NewError(provider.ErrorKindUnauthorized, provider.ErrorCodeProviderUnauthorized, err)
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, err)
+	default:
+		return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
+	}
 }
 
 func providerEndpoint(baseURL string, path string) string {

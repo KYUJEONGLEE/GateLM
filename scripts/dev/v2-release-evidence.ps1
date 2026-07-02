@@ -129,6 +129,25 @@ function Assert-NestedValue {
     Assert-Value $nestedValue $Message
 }
 
+function Get-K6MetricRate {
+    param(
+        $Json,
+        [Parameter(Mandatory = $true)][string]$MetricName
+    )
+
+    $valuesRate = Get-NestedProperty -Value $Json -Path @("metrics", $MetricName, "values", "rate")
+    if ($null -ne $valuesRate) {
+        return [double]$valuesRate
+    }
+
+    $value = Get-NestedProperty -Value $Json -Path @("metrics", $MetricName, "value")
+    if ($null -ne $value) {
+        return [double]$value
+    }
+
+    return $null
+}
+
 function New-EvidenceItem {
     param(
         [Parameter(Mandatory = $true)][string]$ScenarioName,
@@ -263,8 +282,8 @@ function Validate-K6Smoke {
 
     Assert-NoSensitiveMarkers -Path $file.FullName
     $json = Read-JsonFile -Path $file.FullName
-    $checksRate = Get-NestedProperty -Value $json -Path @("metrics", "checks", "values", "rate")
-    $httpReqFailedRate = Get-NestedProperty -Value $json -Path @("metrics", "http_req_failed", "values", "rate")
+    $checksRate = Get-K6MetricRate -Json $json -MetricName "checks"
+    $httpReqFailedRate = Get-K6MetricRate -Json $json -MetricName "http_req_failed"
 
     $assertions = @{
         checksSucceeded = ($null -ne $checksRate -and [double]$checksRate -eq 1.0)

@@ -24,6 +24,8 @@ describe('Control Plane demo seed baseline', () => {
     expect(first.configHash).toMatch(/^[a-f0-9]{64}$/);
     expect(first.safetyPolicy.securityPolicyHash).toMatch(/^[a-f0-9]{64}$/);
     expect(first.routingPolicy.routingPolicyHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.routingPolicy.defaultModel).toBe('mock-fast');
+    expect(first.routingPolicy.fallbackModel).toBe('mock-balanced');
     expect(first.providers[0]?.models).toEqual([
       'mock-fast',
       'mock-balanced',

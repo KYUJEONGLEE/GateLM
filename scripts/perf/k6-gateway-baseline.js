@@ -9,13 +9,12 @@ const tenantId = __ENV.GATELM_DEMO_TENANT_ID || "00000000-0000-4000-8000-0000000
 const projectId = __ENV.GATELM_DEMO_PROJECT_ID || "00000000-0000-4000-8000-000000000200";
 const cacheHitIterations = positiveIntEnv("K6_CACHE_HIT_ITERATIONS", 3);
 const enableDependencyScenarios = (__ENV.K6_ENABLE_V2_DEPENDENCY_SCENARIOS || "").toLowerCase() === "true";
+const providerMode = (__ENV.K6_GATEWAY_PROVIDER_MODE || "mock").toLowerCase();
+const enableProviderFailureScenarios = boolEnv("K6_ENABLE_PROVIDER_FAILURE_SCENARIOS", providerMode === "mock");
 const providerFailureControlUrl = trimTrailingSlash(
   __ENV.K6_PROVIDER_FAILURE_CONTROL_URL || __ENV.MOCK_PROVIDER_BASE_URL || "http://localhost:8090"
 );
-const providerFailureModels = csvEnv("K6_PROVIDER_FAILURE_MODELS", [
-  __ENV.GATELM_DEMO_OPENAI_LOW_COST_MODEL || "gpt-4o-mini",
-  __ENV.GATELM_DEMO_OPENAI_BALANCED_MODEL || "gpt-4o",
-]);
+const providerFailureModels = csvEnv("K6_PROVIDER_FAILURE_MODELS", ["mock-fast"]);
 
 const requiredMetricFamilies = [
   "gatelm_gateway_requests_total",
@@ -166,19 +165,15 @@ export function setup() {
 
   return {
     runId,
+    providerMode,
+    providerFailureScenariosEnabled: enableProviderFailureScenarios,
+    providerFailureModels,
     metricsBefore,
-    safePrompt: `Write a short safe refund response for GateLM k6 baseline ${runId}.`,
-    missPrompt: `Write a short safe refund response for GateLM provider-call evidence ${runId}.`,
-    providerErrorPrompt: `Write a short safe provider error fallback response for GateLM k6 baseline ${runId}.`,
-    providerTimeoutPrompt: `Write a short safe provider timeout fallback response for GateLM k6 baseline ${runId}.`,
-    streamingPrompt: `Write a short safe streaming response for GateLM thin slice ${runId}.`,
-    redactionPrompt: `Write a support reply to synthetic.user.${runId}@example.test without exposing the address.`,
-    blockedPrompt: `This synthetic request contains api_key=test_secret_token_redacted_for_demo_only_${runId}_abcdef1234567890`,
   };
 }
 
 export function baseline_success(data) {
-  const response = chatCompletion(data.safePrompt, "baseline_success");
+  const response = chatCompletion(safePrompt(data), "baseline_success");
   check(response, {
     "baseline success returns 200": (r) => r.status === 200,
     "baseline success terminal outcome is success-compatible": (r) => headerValue(r, "X-GateLM-Cache-Status") !== "",
@@ -188,7 +183,7 @@ export function baseline_success(data) {
 
 export function cache_miss_provider_call(data) {
   const providerBefore = sumMetric(getMetrics(), "gatelm_provider_requests_total");
-  const response = chatCompletion(data.missPrompt, "cache_miss_provider_call");
+  const response = chatCompletion(missPrompt(data), "cache_miss_provider_call");
   const metricsAfter = getMetrics();
   const providerAfter = sumMetric(metricsAfter, "gatelm_provider_requests_total");
 
@@ -207,7 +202,7 @@ export function cache_miss_provider_call(data) {
 export function cache_hit(data) {
   const metricsBefore = getMetrics();
   const providerBefore = sumMetric(metricsBefore, "gatelm_provider_requests_total");
-  const response = chatCompletion(data.safePrompt, "cache_hit");
+  const response = chatCompletion(safePrompt(data), "cache_hit");
   const metricsAfter = getMetrics();
   const providerAfter = sumMetric(metricsAfter, "gatelm_provider_requests_total");
 
@@ -227,7 +222,7 @@ export function cache_hit(data) {
 }
 
 export function safety_redaction(data) {
-  const response = chatCompletion(data.redactionPrompt, "safety_redaction");
+  const response = chatCompletion(redactionPrompt(data), "safety_redaction");
   check(response, {
     "safety redaction returns 200": (r) => r.status === 200,
     "safety redaction produces sanitized masking header": (r) => ["redacted", "none"].includes(headerValue(r, "X-GateLM-Masking-Action")),
@@ -239,7 +234,7 @@ export function safety_block_provider_bypass(data) {
   const metricsBefore = getMetrics();
   const providerBefore = sumMetric(metricsBefore, "gatelm_provider_requests_total");
   const cacheBefore = sumMetric(metricsBefore, "gatelm_cache_operations_total");
-  const response = chatCompletion(data.blockedPrompt, "safety_block_provider_bypass");
+  const response = chatCompletion(blockedPrompt(data), "safety_block_provider_bypass");
   const metricsAfter = getMetrics();
   const providerAfter = sumMetric(metricsAfter, "gatelm_provider_requests_total");
   const cacheAfter = sumMetric(metricsAfter, "gatelm_cache_operations_total");
@@ -264,7 +259,7 @@ export function rate_limited(data) {
     guardedEvidence("rate_limited", "set K6_ENABLE_V2_DEPENDENCY_SCENARIOS=true after PR-3 rate limit policy is configured");
     return;
   }
-  const response = chatCompletion(data.safePrompt, "rate_limited");
+  const response = chatCompletion(safePrompt(data), "rate_limited");
   check(response, {
     "rate limited returns 429": (r) => r.status === 429,
     "rate limited error code": (r) => errorCode(r.body) === "rate_limited",
@@ -272,20 +267,28 @@ export function rate_limited(data) {
 }
 
 export function provider_timeout(data) {
+  if (!enableProviderFailureScenarios) {
+    guardedEvidence("provider_timeout", "provider failure scenarios are only enabled for mock-provider k6 smoke");
+    return;
+  }
   runProviderFailureFallbackScenario(data, {
     scenario: "provider_timeout",
     failureMode: "timeout",
-    prompt: data.providerTimeoutPrompt,
+    prompt: providerTimeoutPrompt(data),
     expectedProviderOutcome: "timeout",
     expectedFallbackReason: "provider_timeout",
   });
 }
 
 export function provider_error_mock_fallback(data) {
+  if (!enableProviderFailureScenarios) {
+    guardedEvidence("provider_error_mock_fallback", "provider failure scenarios are only enabled for mock-provider k6 smoke");
+    return;
+  }
   runProviderFailureFallbackScenario(data, {
     scenario: "provider_error_mock_fallback",
     failureMode: "error",
-    prompt: data.providerErrorPrompt,
+    prompt: providerErrorPrompt(data),
     expectedProviderOutcome: "error",
     expectedFallbackReason: "provider_error",
   });
@@ -293,7 +296,7 @@ export function provider_error_mock_fallback(data) {
 
 export function streaming_thin_slice(data) {
   const requestId = buildScenarioRequestId(data, "streaming_thin_slice");
-  const response = chatCompletion(data.streamingPrompt, "streaming_thin_slice", {
+  const response = chatCompletion(streamingPrompt(data), "streaming_thin_slice", {
     requestId,
     stream: true,
   });
@@ -324,11 +327,43 @@ export function streaming_thin_slice(data) {
 }
 
 export function mixed_demo_traffic(data) {
-  const response = chatCompletion(data.safePrompt, "mixed_demo_traffic");
+  const response = chatCompletion(safePrompt(data), "mixed_demo_traffic");
   check(response, {
     "mixed demo traffic returns 200": (r) => r.status === 200,
   });
   sleep(1);
+}
+
+function safePrompt(data) {
+  return `Write a short safe refund response for GateLM k6 baseline ${runIdFor(data)}.`;
+}
+
+function missPrompt(data) {
+  return `Write a short safe refund response for GateLM provider-call evidence ${runIdFor(data)}.`;
+}
+
+function providerErrorPrompt(data) {
+  return `Write a short safe provider error fallback response for GateLM k6 baseline ${runIdFor(data)}.`;
+}
+
+function providerTimeoutPrompt(data) {
+  return `Write a short safe provider timeout fallback response for GateLM k6 baseline ${runIdFor(data)}.`;
+}
+
+function streamingPrompt(data) {
+  return `Write a short safe streaming response for GateLM thin slice ${runIdFor(data)}.`;
+}
+
+function redactionPrompt(data) {
+  return `Write a support reply to synthetic.user.${runIdFor(data)}@example.test without exposing the address.`;
+}
+
+function blockedPrompt(data) {
+  return `This synthetic request contains api_key=test_secret_token_redacted_for_demo_only_${runIdFor(data)}_abcdef1234567890`;
+}
+
+function runIdFor(data) {
+  return data && data.runId ? data.runId : "run_unknown";
 }
 
 function guardedEvidence(name, reason) {
@@ -593,6 +628,14 @@ function positiveIntEnv(name, fallback) {
     return fallback;
   }
   return value;
+}
+
+function boolEnv(name, fallback) {
+  const raw = String(__ENV[name] || "").trim().toLowerCase();
+  if (!raw) {
+    return fallback;
+  }
+  return ["1", "true", "yes", "on"].includes(raw);
 }
 
 function csvEnv(name, fallback) {

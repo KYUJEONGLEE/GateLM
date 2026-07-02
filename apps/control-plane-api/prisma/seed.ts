@@ -96,7 +96,14 @@ export function buildDemoRuntimeConfigDocument(
           fallbackProvider: DEMO_PROVIDER,
           fallbackModel: 'mock-balanced',
         })
-      : buildRoutingPolicy();
+      : buildRoutingPolicy({
+          defaultProvider: DEMO_PROVIDER,
+          defaultModel: 'mock-fast',
+          lowCostProvider: DEMO_PROVIDER,
+          lowCostModel: 'mock-fast',
+          fallbackProvider: DEMO_PROVIDER,
+          fallbackModel: 'mock-balanced',
+        });
   const providers =
     providerMode === 'actual'
       ? [
