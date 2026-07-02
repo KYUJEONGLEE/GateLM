@@ -48,6 +48,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	firstMaterial := demo.keyBuilder.materials[0]
 	if firstMaterial.SecurityPolicyVersionID != "hash_security_policy_phase3_demo" ||
 		firstMaterial.RoutingPolicyVersionID != "hash_routing_policy_phase3_demo" ||
+		firstMaterial.RequestedModel != "auto" ||
 		firstMaterial.NormalizedRedactedPrompt != safePrompt {
 		t.Fatalf("unexpected exact cache key material: %#v", firstMaterial)
 	}

@@ -1607,8 +1607,7 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	reqCtx.TenantID = testTenantID
 	reqCtx.ProjectID = testProjectID
 	reqCtx.ApplicationID = testAppID
-	reqCtx.SelectedProvider = "mock"
-	reqCtx.SelectedModel = "mock-balanced"
+	reqCtx.RequestedModel = "auto"
 	reqCtx.RoutingPolicyHash = "hash_routing_policy_test"
 	reqCtx.SecurityPolicyHash = "hash_security_policy_test"
 	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
@@ -1636,6 +1635,9 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	}
 	if keyBuilder.material.RoutingPolicyVersionID != "hash_routing_policy_test" {
 		t.Fatalf("expected runtime routing hash in cache material, got %#v", keyBuilder.material)
+	}
+	if keyBuilder.material.RequestedModel != "auto" {
+		t.Fatalf("expected requested model in cache material, got %#v", keyBuilder.material)
 	}
 }
 
@@ -1741,10 +1743,12 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 			Payload:           cachedPayload,
 		},
 	}
+	preflight := &fakeGatewayPipeline{}
 	handler := ChatCompletionsHandler{
 		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
 		DefaultModel:         "mock-balanced",
 		DefaultProvider:      "mock",
+		PreProviderPipeline:  preflight,
 		ExactCacheStore:      cacheStore,
 		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-hit-key"},
 	}
@@ -1763,6 +1767,9 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if chatCalls != 0 {
 		t.Fatalf("cache hit must not call provider, got %d provider calls", chatCalls)
 	}
+	if preflight.calls != 0 {
+		t.Fatalf("cache hit must not run pre-provider routing pipeline, got %d calls", preflight.calls)
+	}
 	if cacheStore.setCalls != 0 {
 		t.Fatalf("cache hit must not write cache, got %d set calls", cacheStore.setCalls)
 	}
@@ -1780,8 +1787,17 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if resp.GateLM.RequestID != "request_current" {
 		t.Fatalf("expected current request id on cache hit, got %q", resp.GateLM.RequestID)
 	}
-	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-balanced" {
+	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "" || resp.GateLM.SelectedModel != "" ||
+		resp.GateLM.RoutingReason != "exact_cache_hit_provider_bypass" {
 		t.Fatalf("unexpected gate_lm cache/routing metadata: %#v", resp.GateLM)
+	}
+	outcomes, ok := resp.GateLM.DomainOutcomes.(map[string]any)
+	if !ok {
+		t.Fatalf("expected domain outcomes map on cache hit, got %#v", resp.GateLM.DomainOutcomes)
+	}
+	routingOutcome, ok := outcomes["routing"].(map[string]any)
+	if !ok || routingOutcome["outcome"] != "skipped" || routingOutcome["routingReason"] != "exact_cache_hit_provider_bypass" {
+		t.Fatalf("expected skipped routing outcome on cache hit, got %#v", outcomes["routing"])
 	}
 }
 
@@ -1846,6 +1862,10 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	}
 	if logged.DomainOutcomes.Cache.Outcome != "hit" || logged.DomainOutcomes.Provider.Outcome != "not_called" {
 		t.Fatalf("unexpected cache hit domain outcomes: %+v", logged.DomainOutcomes)
+	}
+	if logged.DomainOutcomes.Routing.Outcome != "skipped" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.RoutingReason) != "exact_cache_hit_provider_bypass" {
+		t.Fatalf("cache hit must skip routing with bypass reason, got %+v", logged.DomainOutcomes.Routing)
 	}
 }
 
@@ -3187,6 +3207,13 @@ func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.
 	if logged.PromptTokens != resp.Usage.PromptTokens || logged.CompletionTokens != resp.Usage.CompletionTokens || logged.TotalTokens != resp.Usage.TotalTokens {
 		t.Fatalf("usage mismatch: log=%+v response=%+v", logged, resp.Usage)
 	}
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func assertTerminalLogMatchesBlockedResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder) {
