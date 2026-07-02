@@ -79,7 +79,7 @@ canonical material:
   "category": "general | code | translation | support_refund | unknown",
   "tier": "low_cost | balanced | high_quality",
   "capability": "chat | reasoning | code | translation",
-  "policyVariant": "default"
+  "policyVariant": "default | provider_health_fallback"
 }
 ```
 
@@ -87,6 +87,7 @@ canonical 생성 규칙:
 
 - 정해진 key 순서로 JSON을 생성한다.
 - 비어 있는 값은 `unknown` 또는 `default`로 고정한다.
+- `provider_health_fallback`은 provider/model 후보 상태가 실제 응답 경로를 바꾼 경우에만 사용한다.
 - raw prompt, prompt fragment, detected value, secret, provider raw error body는 절대 포함하지 않는다.
 - cache key에는 canonical JSON 자체보다 `routingDecisionKeyHash`를 사용한다.
 - log/detail에는 사람이 확인할 수 있도록 canonical material을 남길 수 있다.

@@ -331,6 +331,40 @@ func TestSimpleRouterHealthFallbackUsesPriorityThenLatency(t *testing.T) {
 	}))
 }
 
+func TestSimpleRouterHealthFallbackPrefersAvailableOverDegraded(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateUnavailable},
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateDegraded, FallbackPriority: 1, LatencyP95Ms: 20},
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateAvailable, FallbackPriority: 20, LatencyP95Ms: 300},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Compare these rollout options and explain the tradeoff.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-cheap", "mock-fast", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryReasoning,
+		Tier:          TierLowCost,
+		Capability:    CapabilityReasoning,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
 func TestSimpleRouterDoesNotHealthFallbackPinnedModel(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider: "mock",

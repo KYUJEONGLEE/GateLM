@@ -562,11 +562,11 @@ Routing decision canonical material:
   "category": "general | code | translation | support_refund | unknown",
   "tier": "low_cost | balanced | high_quality",
   "capability": "chat | reasoning | code | translation",
-  "policyVariant": "default"
+  "policyVariant": "default | provider_health_fallback"
 }
 ```
 
-Canonical JSON은 정해진 key 순서를 사용하고, 비어 있는 값은 `unknown` 또는 `default`로 고정한다. Canonical material은 log/detail에 사람이 볼 수 있는 형태로 남길 수 있지만, cache key에는 `routingDecisionKeyHash`를 사용한다.
+Canonical JSON은 정해진 key 순서를 사용하고, 비어 있는 값은 `unknown` 또는 `default`로 고정한다. Canonical material은 log/detail에 사람이 볼 수 있는 형태로 남길 수 있지만, cache key에는 `routingDecisionKeyHash`를 사용한다. `provider_health_fallback`은 provider/model 후보 상태가 응답 경로를 바꾼 경우에만 사용하는 low-cardinality variant다.
 
 `stream=true` 요청은 별도 streaming cache contract가 생기기 전까지 Exact Cache lookup/store를 bypass한다.
 

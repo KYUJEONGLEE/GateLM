@@ -302,6 +302,11 @@ func sameRouteCandidate(leftProvider string, leftModel string, rightProvider str
 }
 
 func routeCandidateLess(left RouteCandidateStatus, right RouteCandidateStatus) bool {
+	leftStatus := routeCandidateStatusPriority(left.Status)
+	rightStatus := routeCandidateStatusPriority(right.Status)
+	if leftStatus != rightStatus {
+		return leftStatus < rightStatus
+	}
 	leftPriority := normalizedFallbackPriority(left.FallbackPriority)
 	rightPriority := normalizedFallbackPriority(right.FallbackPriority)
 	if leftPriority != rightPriority {
@@ -316,6 +321,17 @@ func routeCandidateLess(left RouteCandidateStatus, right RouteCandidateStatus) b
 		return left.Provider < right.Provider
 	}
 	return left.Model < right.Model
+}
+
+func routeCandidateStatusPriority(status string) int {
+	switch canonicalRouteCandidateStatus(status) {
+	case RouteCandidateAvailable:
+		return 1
+	case RouteCandidateDegraded:
+		return 2
+	default:
+		return 3
+	}
 }
 
 func normalizedFallbackPriority(value int) int {
