@@ -346,6 +346,16 @@ function buildGatewayResponseBody(
     const summary = parseGatewaySseSummary(text);
 
     return {
+      choices: summary.assistantContent
+        ? [
+            {
+              message: {
+                content: summary.assistantContent,
+                role: "assistant"
+              }
+            }
+          ]
+        : [],
       streaming: {
         chunkCount: summary.chunkCount,
         completed: summary.completed,
@@ -404,6 +414,7 @@ function isEventStreamResponse(response: Response) {
 }
 
 function parseGatewaySseSummary(text: string) {
+  const contentParts: string[] = [];
   let chunkCount = 0;
   let completed = false;
 
@@ -421,13 +432,46 @@ function parseGatewaySseSummary(text: string) {
 
     if (value) {
       chunkCount += 1;
+      const parsed = safeJsonParse(value);
+      const content = getStreamingChunkContent(parsed);
+
+      if (content) {
+        contentParts.push(content);
+      }
     }
   }
 
   return {
+    assistantContent: contentParts.join("").trim(),
     chunkCount,
     completed
   };
+}
+
+function getStreamingChunkContent(value: unknown) {
+  if (!isJsonRecord(value) || !Array.isArray(value.choices)) {
+    return "";
+  }
+
+  return value.choices
+    .map((choice) => {
+      if (!isJsonRecord(choice)) {
+        return "";
+      }
+
+      const delta = choice.delta;
+      if (isJsonRecord(delta) && typeof delta.content === "string") {
+        return delta.content;
+      }
+
+      const message = choice.message;
+      if (isJsonRecord(message) && typeof message.content === "string") {
+        return message.content;
+      }
+
+      return typeof choice.text === "string" ? choice.text : "";
+    })
+    .join("");
 }
 
 function safeJsonParse(text: string): unknown {

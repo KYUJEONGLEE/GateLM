@@ -223,6 +223,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     }
 
     const message = inputValue.trim();
+    const streamRequested = options.stream ?? model.integrationMode === "gateway";
 
     if (!message) {
       return;
@@ -245,12 +246,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
 
     try {
       if (scenario && model.integrationMode === "gateway") {
-        setExchange(buildPendingExchange(model, scenario, options));
+        setExchange(buildPendingExchange(model, scenario, { stream: streamRequested }));
       }
 
       const nextExchange = await client.sendChatCompletion("safe", {
         message,
-        stream: options.stream
+        stream: streamRequested
       });
 
       setExchange(nextExchange);
