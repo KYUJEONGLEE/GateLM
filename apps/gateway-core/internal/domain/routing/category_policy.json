@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "gatelm.routing-category-policy.v1",
+  "policyVersion": "route_category_policy_v1",
+  "maxScanBytes": 2048,
+  "categoryPriority": [
+    "code",
+    "translation",
+    "extraction_json",
+    "summarization",
+    "reasoning",
+    "support_refund"
+  ],
+  "rules": {
+    "code": {
+      "contains": [
+        "code",
+        "coding",
+        "function",
+        "stack trace",
+        "exception",
+        "refactor",
+        "typescript",
+        "javascript",
+        "python",
+        "golang",
+        "compile",
+        "컴파일",
+        "코드",
+        "에러",
+        "오류",
+        "버그",
+        "리팩토링",
+        "함수"
+      ],
+      "tokens": [
+        "function",
+        "class",
+        "const",
+        "func",
+        "sql"
+      ],
+      "enableCodeFence": true,
+      "enableSQLPattern": true
+    },
+    "translation": {
+      "contains": [
+        "translate",
+        "translation",
+        "in english",
+        "into korean",
+        "into english",
+        "to english",
+        "번역",
+        "영어로",
+        "영문으로",
+        "한국어로",
+        "일본어로",
+        "중국어로"
+      ]
+    },
+    "extraction_json": {
+      "contains": [
+        "as json",
+        "to json",
+        "return json",
+        "json object",
+        "json schema",
+        "json_schema",
+        "structured output",
+        "json으로",
+        "json 형태",
+        "json 형식",
+        "json 포맷",
+        "json 변환",
+        "json 결과",
+        "json 출력",
+        "json 구조화",
+        "json 추출"
+      ],
+      "requiresToken": "json",
+      "requiresAnyToken": [
+        "extract",
+        "convert",
+        "format",
+        "parse",
+        "fields",
+        "schema",
+        "return"
+      ]
+    },
+    "summarization": {
+      "contains": [
+        "summarize",
+        "summary",
+        "tldr",
+        "tl;dr",
+        "key points",
+        "meeting notes",
+        "bullet points",
+        "요약",
+        "회의록",
+        "핵심",
+        "요약 정리",
+        "핵심 정리"
+      ]
+    },
+    "reasoning": {
+      "contains": [
+        "compare",
+        "tradeoff",
+        "trade-off",
+        "pros and cons",
+        "best option",
+        "recommend the safest sequence",
+        "decision matrix",
+        "analyze the options",
+        "비교",
+        "장단점",
+        "트레이드오프",
+        "의사결정"
+      ]
+    },
+    "support_refund": {
+      "contains": [
+        "refund",
+        "payment",
+        "billing",
+        "chargeback",
+        "cancel order",
+        "return item",
+        "return",
+        "cancel",
+        "cancellation",
+        "exchange",
+        "환불",
+        "결제",
+        "취소",
+        "반품",
+        "교환",
+        "고객문의"
+      ]
+    }
+  }
+}

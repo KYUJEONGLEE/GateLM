@@ -46,6 +46,13 @@ corepack pnpm run v2.1:routing:evaluate -- -dataset apps/gateway-core/internal/d
 - RuntimeConfig/RuntimeSnapshot에 들어갈 최소 routing policy shape를 확정한다.
 - Request Log와 Dashboard에서 routingReason, routingDecisionKeyHash, selected provider/model을 일관되게 보여준다.
 
+현재 구현:
+
+- 기본 category keyword와 priority를 `apps/gateway-core/internal/domain/routing/category_policy.json`으로 분리했다.
+- Gateway hot path는 외부 파일을 매 요청마다 읽지 않고, binary에 embed된 정책 데이터를 사용한다.
+- 이 단계는 RuntimeConfig 편집까지 열기 전의 안전한 중간 단계다.
+- 이후 RuntimeSnapshot 기반 routing policy로 승격할 때도 동일한 shape를 유지하는 것을 목표로 한다.
+
 주의:
 
 - raw prompt 기반 rule을 UI에 노출하지 않는다.
