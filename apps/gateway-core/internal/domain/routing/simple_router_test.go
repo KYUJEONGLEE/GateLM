@@ -234,6 +234,98 @@ func TestSimpleRouterRoutesLongSupportRefundCategoryToLowCostModel(t *testing.T)
 	}))
 }
 
+func TestSimpleRouterRoutesReasoningCategoryToHighQualityModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Compare these rollout options and explain the tradeoff.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-premium", "mock-smart", ReasonReasoningHighQuality, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryReasoning,
+		Tier:          TierHighQuality,
+		Capability:    CapabilityReasoning,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
+func TestSimpleRouterRoutesStructuredCategoriesToBalancedModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	cases := []struct {
+		name       string
+		prompt     string
+		category   string
+		capability string
+		reason     string
+	}{
+		{
+			name:       "summarization",
+			prompt:     "Summarize the attached meeting notes into decisions and blockers.",
+			category:   CategorySummarization,
+			capability: CapabilitySummarization,
+			reason:     ReasonSummarizationBalanced,
+		},
+		{
+			name:       "extraction_json",
+			prompt:     "Extract the order id and status as JSON.",
+			category:   CategoryExtractionJSON,
+			capability: CapabilityJSON,
+			reason:     ReasonExtractionJSONBalanced,
+		},
+		{
+			name:       "safety_sensitive",
+			prompt:     "Review this credential handling request with [SECRET_REDACTED].",
+			category:   CategorySafetySensitive,
+			capability: CapabilitySafety,
+			reason:     ReasonSafetySensitiveBalanced,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision, err := router.DecideRoute(context.Background(), Request{
+				RequestedModel: "auto",
+				PromptText:     tc.prompt,
+			})
+			if err != nil {
+				t.Fatalf("DecideRoute returned error: %v", err)
+			}
+
+			assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", tc.reason, "route_p0_v1", DecisionMaterial{
+				RoutingMode:   RoutingModeAuto,
+				Category:      tc.category,
+				Tier:          TierBalanced,
+				Capability:    tc.capability,
+				PolicyVariant: PolicyVariantDefault,
+			}))
+		})
+	}
+}
+
 func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",
@@ -255,6 +347,10 @@ func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 		{name: "RT-CATEGORY-005 empty", prompt: "", category: CategoryUnknown},
 		{name: "RT-CATEGORY-006 translation priority", prompt: "환불 정책을 영어로 번역해줘", category: CategoryTranslation},
 		{name: "RT-CATEGORY-006 code priority", prompt: "이 코드를 영어로 번역해줘", category: CategoryCode},
+		{name: "RT-CATEGORY-007 summarization", prompt: "Summarize the meeting notes into key points", category: CategorySummarization},
+		{name: "RT-CATEGORY-008 extraction json", prompt: "Extract the order id and status as JSON", category: CategoryExtractionJSON},
+		{name: "RT-CATEGORY-009 reasoning", prompt: "Compare these options and explain the tradeoff", category: CategoryReasoning},
+		{name: "RT-CATEGORY-010 safety sensitive", prompt: "Review this credential handling request with [SECRET_REDACTED]", category: CategorySafetySensitive},
 		{name: "RT-CATEGORY-008 ambiguous go let words stay general", prompt: "Let me know if we can go ahead with the weekly update", category: CategoryGeneral},
 		{name: "RT-CATEGORY-009 select update delete words stay general", prompt: "Please select a plan, update my profile, and delete the old address", category: CategoryGeneral},
 		{name: "RT-CATEGORY-010 bug without code context stays general", prompt: "I found a bug in my order status page", category: CategoryGeneral},

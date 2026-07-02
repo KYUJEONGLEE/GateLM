@@ -176,7 +176,7 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 		PolicyVersion:       semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
 		KeyVersion:          semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
 		AllowCategories:     semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
-		DenyCategories:      semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "reasoning", "sensitive", "tool_call", "unknown"}),
+		DenyCategories:      semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "safety_sensitive", "tool_call", "unknown"}),
 	}, nil
 }
 

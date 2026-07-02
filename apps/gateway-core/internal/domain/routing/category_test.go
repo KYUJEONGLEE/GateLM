@@ -15,10 +15,14 @@ func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 		expected string
 	}{
 		{name: "empty", prompt: "   ", expected: CategoryUnknown},
-		{name: "general", prompt: "Tell me a quick summary of this feature.", expected: CategoryGeneral},
+		{name: "general", prompt: "Explain how this feature works.", expected: CategoryGeneral},
 		{name: "code", prompt: "Fix this TypeScript error in my function.", expected: CategoryCode},
 		{name: "translation", prompt: "이 문장을 영어로 번역해줘.", expected: CategoryTranslation},
+		{name: "summarization", prompt: "Summarize the meeting notes into three bullets.", expected: CategorySummarization},
+		{name: "extraction json", prompt: "Extract the order id and status as JSON.", expected: CategoryExtractionJSON},
 		{name: "support refund", prompt: "Write a short refund response for a customer.", expected: CategorySupportRefund},
+		{name: "reasoning", prompt: "Compare these rollout options and explain the tradeoff.", expected: CategoryReasoning},
+		{name: "safety sensitive", prompt: "Review this credential handling request with [SECRET_REDACTED].", expected: CategorySafetySensitive},
 	}
 
 	for _, tt := range tests {
@@ -27,6 +31,20 @@ func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 				t.Fatalf("expected %s, got %s", tt.expected, actual)
 			}
 		})
+	}
+}
+
+func TestExtractRoutingSignalsUsesBoundedCheapSignals(t *testing.T) {
+	signals := ExtractRoutingSignals("Extract the invoice id as JSON.")
+
+	if signals.Category != CategoryExtractionJSON {
+		t.Fatalf("expected extraction_json, got %s", signals.Category)
+	}
+	if !signals.WantsStructuredOutput || signals.HasCodeSignal || signals.NeedsReasoning {
+		t.Fatalf("unexpected routing signals: %+v", signals)
+	}
+	if signals.PromptLength == 0 {
+		t.Fatalf("expected prompt length to be recorded")
 	}
 }
 

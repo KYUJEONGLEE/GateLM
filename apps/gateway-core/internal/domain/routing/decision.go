@@ -39,20 +39,27 @@ const (
 	RoutingModeAuto   = "auto"
 	RoutingModePinned = "pinned"
 
-	CategoryUnknown       = "unknown"
-	CategoryGeneral       = "general"
-	CategoryCode          = "code"
-	CategoryTranslation   = "translation"
-	CategorySupportRefund = "support_refund"
+	CategoryUnknown         = "unknown"
+	CategoryGeneral         = "general"
+	CategoryCode            = "code"
+	CategoryTranslation     = "translation"
+	CategorySummarization   = "summarization"
+	CategoryExtractionJSON  = "extraction_json"
+	CategorySupportRefund   = "support_refund"
+	CategoryReasoning       = "reasoning"
+	CategorySafetySensitive = "safety_sensitive"
 
 	TierLowCost     = "low_cost"
 	TierBalanced    = "balanced"
 	TierHighQuality = "high_quality"
 
-	CapabilityChat        = "chat"
-	CapabilityReasoning   = "reasoning"
-	CapabilityCode        = "code"
-	CapabilityTranslation = "translation"
+	CapabilityChat          = "chat"
+	CapabilityReasoning     = "reasoning"
+	CapabilityCode          = "code"
+	CapabilityTranslation   = "translation"
+	CapabilitySummarization = "summarization"
+	CapabilityJSON          = "json"
+	CapabilitySafety        = "safety"
 
 	PolicyVariantDefault = "default"
 )
@@ -90,7 +97,7 @@ func canonicalRoutingMode(value string) string {
 func canonicalCategory(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySupportRefund, CategoryUnknown:
+	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySummarization, CategoryExtractionJSON, CategorySupportRefund, CategoryReasoning, CategorySafetySensitive, CategoryUnknown:
 		return value
 	default:
 		return CategoryUnknown
@@ -110,7 +117,7 @@ func canonicalTier(value string) string {
 func canonicalCapability(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation:
+	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation, CapabilitySummarization, CapabilityJSON, CapabilitySafety:
 		return value
 	default:
 		return CapabilityChat
