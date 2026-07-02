@@ -166,6 +166,41 @@ func TestP0EngineKeepsMandatoryDetectorProtectedWhenAllowRequested(t *testing.T)
 	}
 }
 
+func TestEngineTrimsDetectionTypeBeforePolicyAndMandatoryAudit(t *testing.T) {
+	rawSecret := "test_secret_token_redacted_for_demo_only_1234567890"
+	engine := NewEngine(NewRegistry(staticDetector{
+		detections: []Detection{{
+			Type:     " api_key ",
+			Start:    8,
+			End:      8 + len(rawSecret),
+			Action:   ActionBlocked,
+			Priority: 1,
+		}},
+	}), DefaultSecurityPolicyVersionID)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "api_key=" + rawSecret,
+		DetectorPolicies: []DetectorPolicy{
+			{DetectorType: string(DetectorAPIKey), Action: PolicyActionAllow},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.Action != ActionBlocked {
+		t.Fatalf("trimmed mandatory detector must remain blocked, got %s", result.Action)
+	}
+	if !reflect.DeepEqual(result.DetectedTypes, []string{"api_key"}) {
+		t.Fatalf("expected trimmed detected type, got %#v", result.DetectedTypes)
+	}
+	if !reflect.DeepEqual(result.MandatoryProtectedTypes, []string{"api_key"}) {
+		t.Fatalf("expected trimmed mandatory protected type, got %#v", result.MandatoryProtectedTypes)
+	}
+	if strings.Contains(result.RedactedPrompt, rawSecret) || !strings.Contains(result.RedactedPrompt, PlaceholderAPIKey) {
+		t.Fatalf("expected trimmed detector type to use api key placeholder, got %q", result.RedactedPrompt)
+	}
+}
+
 func TestP0EngineBoundsRedactedPromptPreview(t *testing.T) {
 	engine := NewP0Engine()
 	prompt := strings.Repeat("safe ", 40)
@@ -235,4 +270,22 @@ func TestEffectiveDetectionsPrefersBlockingOverlap(t *testing.T) {
 	if selected[0].Type != string(DetectorAPIKey) {
 		t.Fatalf("expected blocking api_key overlap to win, got %#v", selected[0])
 	}
+}
+
+type staticDetector struct {
+	detections []Detection
+}
+
+func (d staticDetector) Type() string {
+	return "static_test_detector"
+}
+
+func (d staticDetector) Priority() int {
+	return 1
+}
+
+func (d staticDetector) Detect(input string) []Detection {
+	detections := make([]Detection, len(d.detections))
+	copy(detections, d.detections)
+	return detections
 }

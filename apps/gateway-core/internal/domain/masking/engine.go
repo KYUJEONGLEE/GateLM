@@ -93,6 +93,7 @@ func applyDetectorPolicies(detections []Detection, policies []DetectorPolicy) []
 		if detection.Start < 0 || detection.End <= detection.Start {
 			continue
 		}
+		detection.Type = strings.TrimSpace(detection.Type)
 		if detection.Placeholder == "" {
 			placeholder, _ := PlaceholderForDetector(detection.Type)
 			detection.Placeholder = placeholder
@@ -155,10 +156,11 @@ func detectionsAllowedByPolicy(detections []Detection) []Detection {
 func mandatoryProtectedTypes(detections []Detection) []string {
 	seen := map[string]struct{}{}
 	for _, detection := range detections {
-		if !IsMandatoryDetector(detection.Type) {
+		detectorType := strings.TrimSpace(detection.Type)
+		if !IsMandatoryDetector(detectorType) {
 			continue
 		}
-		seen[detection.Type] = struct{}{}
+		seen[detectorType] = struct{}{}
 	}
 	types := make([]string, 0, len(seen))
 	for detectorType := range seen {
