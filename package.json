@@ -9,6 +9,8 @@
   "scripts": {
     "verify:v2-docs": "node scripts/verify-v2-docs.mjs",
     "verify:v2.1-category-eval": "node scripts/verify-v2.1-category-eval.mjs",
+    "verify:v2.1-category-capture": "node scripts/export-v2.1-category-eval-samples.mjs --input docs/v2.1.0/fixtures/category-evaluation-capture.fixture.jsonl --dataset-version category_eval_capture_smoke_2026_07_02_v1 --dry-run",
+    "export:v2.1-category-eval": "node scripts/export-v2.1-category-eval-samples.mjs",
     "verify:v2-final": "node scripts/verify-v2-final.mjs",
     "v2:p0:bootstrap:describe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -DescribeOnly",
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",

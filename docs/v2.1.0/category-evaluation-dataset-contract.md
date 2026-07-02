@@ -140,14 +140,49 @@ expectedCategory == actualCategory
 
 Report는 raw prompt text를 출력하면 안 된다. 실패 예시는 `sampleId`, `expectedCategory`, `actualCategory`만 보여줄 수 있다.
 
+## 8. Capture / Export 경로
+
+PR2의 capture/export 경로는 live Gateway hot path에 raw prompt 저장 기능을 추가하지 않는다.
+
+평가셋 후보는 이미 redaction이 끝난 값과 명시적 opt-in 근거만 입력으로 받는다.
+
+입력 fixture:
+
+- `docs/v2.1.0/fixtures/category-evaluation-capture.fixture.jsonl`
+
+Export script:
+
+- `scripts/export-v2.1-category-eval-samples.mjs`
+
+실행 예시:
+
+```powershell
+corepack pnpm run export:v2.1-category-eval -- --input docs/v2.1.0/fixtures/category-evaluation-capture.fixture.jsonl --output tmp/category-evaluation-dataset.jsonl --dataset-version category_eval_2026_07_02_v2
+```
+
+검증 예시:
+
+```powershell
+corepack pnpm run verify:v2.1-category-capture
+```
+
+Capture 입력은 아래 원칙을 지켜야 한다.
+
+- `rawPrompt`, `rawResponse`, API key, token, Authorization header, provider raw error body는 입력에 넣지 않는다.
+- `source=gateway_redacted_sample`은 `operator_opt_in` 또는 `customer_opt_in`만 허용한다.
+- `source=gateway_redacted_sample`은 `labelSource=synthetic_fixture`를 사용할 수 없다.
+- export 결과에는 `requestId`, `captureId` 같은 운영 추적 후보 필드를 남기지 않는다.
+- export 결과의 `sampleId`는 raw prompt text를 인코딩하면 안 된다.
+
 계약과 fixture를 바꾸면 아래 검증을 실행해야 한다.
 
 ```powershell
 corepack pnpm run verify:v2.1-category-eval
+corepack pnpm run verify:v2.1-category-capture
 corepack pnpm run verify:v2-docs
 ```
 
-## 8. PR 분리
+## 9. PR 분리
 
 | PR | 범위 |
 |---|---|
