@@ -270,6 +270,8 @@ HONORIFIC_ROLE_MARKERS = tuple(
         )
     )
 )
+PERSON_BOUNDARY_TAIL_MARKERS = tuple(dict.fromkeys(("\ub2d8", "\uc528", *HONORIFIC_ROLE_MARKERS)))
+PERSON_BOUNDARY_TAIL_PARTICLES = tuple(dict.fromkeys((*HONORIFIC_ROLE_PARTICLES, "\uaed8\uc11c", "\uaed8\uc11c\ub294")))
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "email": frozenset("._-+@"),
@@ -933,6 +935,10 @@ def _structure_preserving_signal_span(
 
 
 def _trim_person_name_structure_suffix(prompt_text: str, start: int, end: int) -> int:
+    boundary_suffix_start = _person_boundary_suffix_start(prompt_text[start:end])
+    if boundary_suffix_start is not None:
+        return start + boundary_suffix_start
+
     honorific_marker_start = _honorific_role_marker_start(prompt_text[start:end])
     if honorific_marker_start is not None:
         return start + honorific_marker_start
@@ -953,6 +959,30 @@ def _trim_person_name_structure_suffix(prompt_text: str, start: int, end: int) -
 def _is_korean_person_stem(value: str) -> bool:
     key = value.replace(" ", "")
     return 2 <= len(key) <= 4 and _is_korean_alias_key(key)
+
+
+def _person_boundary_suffix_start(value: str) -> int | None:
+    max_prefix_length = min(4, len(value) - 1)
+    for prefix_length in range(2, max_prefix_length + 1):
+        prefix = value[:prefix_length]
+        tail = value[prefix_length:]
+        if _is_contiguous_korean_person_stem(prefix) and _is_person_boundary_tail(tail):
+            return prefix_length
+    return None
+
+
+def _is_contiguous_korean_person_stem(value: str) -> bool:
+    return 2 <= len(value) <= 4 and _is_korean_alias_key(value)
+
+
+def _is_person_boundary_tail(value: str) -> bool:
+    for marker in PERSON_BOUNDARY_TAIL_MARKERS:
+        if not value.startswith(marker):
+            continue
+        remainder = value[len(marker) :]
+        if remainder in PERSON_BOUNDARY_TAIL_PARTICLES:
+            return True
+    return False
 
 
 def _honorific_role_marker_start(value: str) -> int | None:

@@ -450,6 +450,38 @@ func TestEnginePreservesHonorificAndRoleMarkersAroundPersonNames(t *testing.T) {
 	}
 }
 
+func TestEnginePreservesBoundariesAfterOverextendedKoreanPersonNames(t *testing.T) {
+	rawSpans := []string{
+		"\uc774\uc724\uc9c0\ub2d8\uaed8\uc11c\ub294",
+		"\uae40\ubbfc\uc218\ud300\uc7a5\ub2d8",
+	}
+	prompt := rawSpans[0] + " \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. " + rawSpans[1] + "\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4."
+	detections := make([]Detection, 0, len(rawSpans))
+	for _, rawSpan := range rawSpans {
+		detections = append(detections, personDetection(prompt, rawSpan, 1))
+	}
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: detections}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\ub2d8\uaed8\uc11c\ub294 \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. " +
+		"[PERSON_2]\ud300\uc7a5\ub2d8\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected boundary-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	for _, rawName := range []string{"\uc774\uc724\uc9c0", "\uae40\ubbfc\uc218"} {
+		if strings.Contains(result.RedactedPrompt, rawName) {
+			t.Fatalf("redacted prompt must not contain raw person name %q: %q", rawName, result.RedactedPrompt)
+		}
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

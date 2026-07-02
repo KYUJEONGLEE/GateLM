@@ -52,6 +52,9 @@ var honorificRoleParticles = []string{
 
 var honorificRoleMarkers = buildHonorificRoleMarkers()
 
+var personBoundaryTailMarkers = buildPersonBoundaryTailMarkers()
+var personBoundaryTailParticles = buildPersonBoundaryTailParticles()
+
 func buildHonorificRoleMarkers() []string {
 	seen := map[string]struct{}{}
 	var markers []string
@@ -68,6 +71,38 @@ func buildHonorificRoleMarkers() []string {
 		markers = append(markers, marker)
 	}
 	return markers
+}
+
+func buildPersonBoundaryTailMarkers() []string {
+	seen := map[string]struct{}{}
+	markers := []string{"\ub2d8", "\uc528"}
+	seen["\ub2d8"] = struct{}{}
+	seen["\uc528"] = struct{}{}
+	for _, marker := range honorificRoleMarkers {
+		if _, ok := seen[marker]; ok {
+			continue
+		}
+		seen[marker] = struct{}{}
+		markers = append(markers, marker)
+	}
+	return markers
+}
+
+func buildPersonBoundaryTailParticles() []string {
+	seen := map[string]struct{}{}
+	var particles []string
+	for _, particle := range honorificRoleParticles {
+		seen[particle] = struct{}{}
+		particles = append(particles, particle)
+	}
+	for _, particle := range []string{"\uaed8\uc11c", "\uaed8\uc11c\ub294"} {
+		if _, ok := seen[particle]; ok {
+			continue
+		}
+		seen[particle] = struct{}{}
+		particles = append(particles, particle)
+	}
+	return particles
 }
 
 func normalizeDetectionSpans(input string, detections []Detection) []Detection {
@@ -97,6 +132,10 @@ func normalizeDetectionSpan(input string, detection Detection) Detection {
 }
 
 func trimPersonNameStructureSuffix(input string, start int, end int) int {
+	if suffixStart, ok := personBoundarySuffixStart(input[start:end]); ok {
+		return start + suffixStart
+	}
+
 	if markerStart, ok := honorificRoleMarkerStart(input[start:end]); ok {
 		return start + markerStart
 	}
@@ -117,6 +156,42 @@ func trimPersonNameStructureSuffix(input string, start int, end int) int {
 		end = nextEnd
 	}
 	return end
+}
+
+func personBoundarySuffixStart(value string) (int, bool) {
+	runes := []rune(value)
+	maxPrefixLength := len(runes) - 1
+	if maxPrefixLength > 4 {
+		maxPrefixLength = 4
+	}
+	for prefixLength := 2; prefixLength <= maxPrefixLength; prefixLength++ {
+		prefix := string(runes[:prefixLength])
+		tail := string(runes[prefixLength:])
+		if isContiguousKoreanPersonStem(prefix) && isPersonBoundaryTail(tail) {
+			return len(prefix), true
+		}
+	}
+	return 0, false
+}
+
+func isContiguousKoreanPersonStem(value string) bool {
+	runes := []rune(value)
+	return len(runes) >= 2 && len(runes) <= 4 && areKoreanSyllables(runes)
+}
+
+func isPersonBoundaryTail(value string) bool {
+	for _, marker := range personBoundaryTailMarkers {
+		if !strings.HasPrefix(value, marker) {
+			continue
+		}
+		remainder := strings.TrimPrefix(value, marker)
+		for _, particle := range personBoundaryTailParticles {
+			if remainder == particle {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func honorificRoleMarkerStart(value string) (int, bool) {
