@@ -202,7 +202,10 @@ export function ProviderConnectionManagement({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
-        values: formValues
+        values: {
+          ...formValues,
+          isEdit: isRegisteredProvider(providers, formValues.provider)
+        }
       }),
       headers: {
         "Content-Type": "application/json"

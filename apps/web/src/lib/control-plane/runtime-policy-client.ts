@@ -267,7 +267,7 @@ function toRuntimePolicyProvider(
     providerId: providerConnection.id,
     resolver: normalizeRuntimeProviderResolver(providerConnection.resolver),
     secretRef: null,
-    status: providerConnection.status,
+    status: normalizeRuntimeProviderStatus(providerConnection.status),
     timeoutMs: providerConnection.timeoutMs
   };
 }
@@ -305,6 +305,18 @@ function normalizeRuntimeProviderResolver(value: string): RuntimePolicyProvider[
   }
 
   return "none";
+}
+
+function normalizeRuntimeProviderStatus(value: string): RuntimePolicyProvider["status"] {
+  if (value === "ACTIVE") {
+    return "active";
+  }
+
+  if (value === "DEGRADED") {
+    return "degraded";
+  }
+
+  return "disabled";
 }
 
 export async function getRuntimePolicyConfigForApplication(

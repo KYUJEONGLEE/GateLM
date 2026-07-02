@@ -216,7 +216,9 @@ async function listProviderPresets(): Promise<ProviderPresetListResult> {
 function toProviderPayload(values: ProviderConnectionFormValues) {
   const models = splitProviderModels(values.models);
   const providerConfig = toProviderConfig(values, models);
-  const secretRef = values.secretRef.trim() || getDefaultProviderSecretRef(values);
+  const secretRef =
+    values.secretRef.trim() ||
+    (values.isEdit ? "" : getDefaultProviderSecretRef(values));
 
   return {
     baseUrl: values.baseUrl.trim(),

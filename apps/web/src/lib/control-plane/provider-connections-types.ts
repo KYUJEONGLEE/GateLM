@@ -62,6 +62,7 @@ export type ProviderConnectionFormValues = {
   credentialPrefix: string;
   displayName: string;
   failureMode: "fail_closed" | "fail_open_to_fallback";
+  isEdit?: boolean;
   models: string;
   modelsEndpointPath: string;
   provider: string;

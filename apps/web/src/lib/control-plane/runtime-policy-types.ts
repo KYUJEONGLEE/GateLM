@@ -25,7 +25,7 @@ export type RuntimePolicyProvider = {
   providerId: string;
   resolver: "none" | "control_plane_secret_store" | "environment";
   secretRef: string | null;
-  status: string;
+  status: "active" | "disabled" | "degraded";
   timeoutMs: number;
 };
 

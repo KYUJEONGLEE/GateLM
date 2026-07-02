@@ -438,7 +438,7 @@ function parseGatewaySseSummary(text: string) {
       continue;
     }
 
-    const value = line.slice("data:".length).trim();
+    const value = stripSingleLeadingSseSpace(line.slice("data:".length));
 
     if (value === "[DONE]") {
       completed = true;
@@ -461,6 +461,10 @@ function parseGatewaySseSummary(text: string) {
     chunkCount,
     completed
   };
+}
+
+function stripSingleLeadingSseSpace(value: string) {
+  return value.startsWith(" ") ? value.slice(1) : value;
 }
 
 function getStreamingChunkContent(value: unknown) {

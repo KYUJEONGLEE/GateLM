@@ -77,7 +77,7 @@ function getApplicationChatMaxTokens() {
   const configured = parsePositiveInt(process.env.GATELM_APPLICATION_CHAT_MAX_TOKENS);
 
   if (configured) {
-    return clamp(configured, 64, 2048);
+    return Math.max(64, Math.min(configured, 2048));
   }
 
   return 512;

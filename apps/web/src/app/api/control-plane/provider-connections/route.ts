@@ -96,6 +96,7 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     timeoutMs <= maxProviderTimeoutMs &&
     typeof record.resolver === "string" &&
     typeof record.secretRef === "string" &&
+    (record.isEdit === undefined || typeof record.isEdit === "boolean") &&
     typeof record.credentialPrefix === "string" &&
     typeof record.credentialLast4 === "string" &&
     typeof record.modelsEndpointPath === "string" &&
