@@ -111,6 +111,12 @@ func (p OpenAIEmbeddingProvider) Embed(ctx context.Context, input EmbeddingInput
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) || errors.Is(reqCtx.Err(), context.Canceled) {
+			return EmbeddingResult{}, context.Canceled
+		}
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(reqCtx.Err(), context.DeadlineExceeded) {
+			return EmbeddingResult{}, context.DeadlineExceeded
+		}
 		return EmbeddingResult{}, fmt.Errorf("%w: transport", ErrOpenAIEmbeddingRequestFailed)
 	}
 	defer resp.Body.Close()
@@ -158,9 +164,6 @@ func openAIEmbeddingEndpoint(baseURL string) string {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		baseURL = defaultOpenAIEmbeddingBaseURL
-	}
-	if !strings.HasSuffix(baseURL, "/v1") {
-		baseURL += "/v1"
 	}
 	return baseURL + "/embeddings"
 }

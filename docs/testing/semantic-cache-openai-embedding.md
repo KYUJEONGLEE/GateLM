@@ -43,6 +43,8 @@ SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS=3000
 SEMANTIC_CACHE_OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
+`SEMANTIC_CACHE_OPENAI_BASE_URL`은 그대로 사용하고 뒤에 `/embeddings`만 붙인다. 기본값은 OpenAI 공식 경로에 맞춰 `/v1`을 포함하지만, Azure OpenAI, 사내 gateway, 로컬 OpenAI-compatible endpoint처럼 다른 path를 쓰는 경우에는 필요한 path를 env 값에 직접 넣어야 한다.
+
 OpenAI embedding을 실제로 켤 때:
 
 ```dotenv

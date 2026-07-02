@@ -107,6 +107,81 @@ func TestOpenAIEmbeddingProviderDoesNotLeakSecretsOrRawErrorBody(t *testing.T) {
 	}
 }
 
+func TestOpenAIEmbeddingProviderClassifiesTransportContextErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "context canceled", err: context.Canceled, want: context.Canceled},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: context.DeadlineExceeded},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider, err := NewOpenAIEmbeddingProvider(OpenAIEmbeddingProviderConfig{
+				APIKey:    "test_openai_api_key_redacted",
+				BaseURL:   "http://127.0.0.1/v1",
+				ModelName: "text-embedding-3-small",
+				Timeout:   time.Second,
+				HTTPClient: &http.Client{
+					Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+						return nil, tc.err
+					}),
+				},
+			})
+			if err != nil {
+				t.Fatalf("OpenAIEmbeddingProvider 생성 실패: %v", err)
+			}
+
+			_, err = provider.Embed(context.Background(), EmbeddingInput{NormalizedText: "비밀번호 재설정 방법 알려줘"})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("transport context error 분류 불일치: got=%v want=%v", err, tc.want)
+			}
+			if errors.Is(err, ErrOpenAIEmbeddingRequestFailed) {
+				t.Fatalf("context error는 provider request failure로 오분류되면 안 됨: %v", err)
+			}
+		})
+	}
+}
+
+func TestOpenAIEmbeddingEndpointUsesConfiguredBaseURLPath(t *testing.T) {
+	cases := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{
+			name:    "default includes v1",
+			baseURL: "",
+			want:    "https://api.openai.com/v1/embeddings",
+		},
+		{
+			name:    "openai v1 path",
+			baseURL: "https://api.openai.com/v1",
+			want:    "https://api.openai.com/v1/embeddings",
+		},
+		{
+			name:    "custom path is preserved",
+			baseURL: "http://localhost:11434/openai-compatible",
+			want:    "http://localhost:11434/openai-compatible/embeddings",
+		},
+		{
+			name:    "trailing slash is trimmed",
+			baseURL: "http://localhost:11434/openai-compatible/",
+			want:    "http://localhost:11434/openai-compatible/embeddings",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := openAIEmbeddingEndpoint(tc.baseURL); got != tc.want {
+				t.Fatalf("embedding endpoint 불일치: got=%q want=%q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestOpenAIEmbeddingProviderFactoryCreatesOpenAIProvider(t *testing.T) {
 	provider, err := NewSemanticCacheEmbeddingProviderWithConfig(SemanticCacheEmbeddingProviderConfig{
 		Provider:      SemanticCacheEmbeddingProviderOpenAI,
@@ -191,4 +266,10 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
