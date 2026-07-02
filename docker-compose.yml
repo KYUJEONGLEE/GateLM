@@ -117,6 +117,40 @@ services:
             })
             data["lastCalls"] = data["lastCalls"][-20:]
 
+        def stream_chunks(model):
+            created = int(time.time())
+            return [
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                },
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": "GateLM mock streaming 응답입니다. "}, "finish_reason": None}],
+                },
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": "실제 Provider 비용 없이 SSE relay를 확인합니다."}, "finish_reason": None}],
+                },
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 32, "completion_tokens": 24, "total_tokens": 56},
+                },
+            ]
+
         class Handler(BaseHTTPRequestHandler):
             def send_json(self, status, payload):
                 body = json.dumps(payload).encode("utf-8")
@@ -125,6 +159,21 @@ services:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+
+            def send_stream(self, model):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("X-Accel-Buffering", "no")
+                self.end_headers()
+                for chunk in stream_chunks(model):
+                    data = json.dumps(chunk, ensure_ascii=False)
+                    self.wfile.write(("data: " + data + "\n\n").encode("utf-8"))
+                    self.wfile.flush()
+                    time.sleep(0.02)
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
 
             def do_GET(self):
                 if self.path == "/healthz":
@@ -163,9 +212,6 @@ services:
                     if not isinstance(payload, dict):
                         self.send_json(400, {"error": {"code": "invalid_request"}})
                         return
-                    if payload.get("stream") is True:
-                        self.send_json(400, {"error": {"code": "streaming_not_supported", "message": "Streaming is not supported in P0."}})
-                        return
                     time.sleep(latency_ms / 1000)
                     model = str(payload.get("model") or "mock-balanced").strip() or "mock-balanced"
                     messages = payload.get("messages") or []
@@ -177,6 +223,9 @@ services:
                         self.send_json(status, {"error": {"code": code, "message": "Synthetic provider failure for GateLM evidence."}})
                         return
                     record_call(self.headers.get("X-GateLM-Request-Id", ""), model, prompt)
+                    if payload.get("stream") is True:
+                        self.send_stream(model)
+                        return
                     self.send_json(200, {
                         "id": "mock_chatcmpl_local",
                         "object": "chat.completion",

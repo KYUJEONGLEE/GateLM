@@ -348,7 +348,7 @@ func mockCatalogModel(modelID string, displayName string, fallbackPriority int) 
 		DisplayName: displayName,
 		Enabled:     true,
 		Capabilities: providercatalog.ModelCapabilities{
-			StreamingSupported: false,
+			StreamingSupported: true,
 			SupportsJSONMode:   false,
 			MaxInputTokens:     4096,
 			MaxOutputTokens:    1024,
