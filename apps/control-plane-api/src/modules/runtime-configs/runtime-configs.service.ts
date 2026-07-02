@@ -2538,12 +2538,11 @@ export class RuntimeConfigsService {
     }
 
     const candidate = policy as Record<string, unknown>;
+    const enabled = candidate.enabled === true;
+    const mode = enabled ? candidate.mode ?? 'log_safe_full' : 'disabled';
     const normalized: RuntimeConfigPromptCapturePolicyResponseDto = {
-      enabled: candidate.enabled === true,
-      mode:
-        candidate.enabled === true
-          ? (candidate.mode as RuntimeConfigPromptCapturePolicyResponseDto['mode'])
-          : 'disabled',
+      enabled,
+      mode: mode as RuntimeConfigPromptCapturePolicyResponseDto['mode'],
       maxChars:
         typeof candidate.maxChars === 'number'
           ? candidate.maxChars

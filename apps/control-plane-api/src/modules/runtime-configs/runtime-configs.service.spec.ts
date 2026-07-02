@@ -1006,6 +1006,36 @@ describe('RuntimeConfigsService', () => {
     });
   });
 
+  it('defaults missing prompt capture mode to log_safe_full when capture is enabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.promptCapturePolicy = {
+      enabled: true,
+      maxChars: 1200,
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.promptCapture).toEqual({
+      enabled: true,
+      mode: 'log_safe_full',
+      maxChars: 1200,
+    });
+  });
+
   it('reflects active budget policy in the RuntimeSnapshot execution view', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);

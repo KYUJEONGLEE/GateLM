@@ -449,9 +449,12 @@ func truncateRunes(value string, maxRunes int) (string, bool) {
 	if maxRunes <= 0 {
 		return "", value != ""
 	}
-	runes := []rune(value)
-	if len(runes) <= maxRunes {
-		return value, false
+	count := 0
+	for i := range value {
+		if count == maxRunes {
+			return value[:i], true
+		}
+		count++
 	}
-	return string(runes[:maxRunes]), true
+	return value, false
 }
