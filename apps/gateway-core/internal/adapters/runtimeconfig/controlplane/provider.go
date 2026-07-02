@@ -289,7 +289,7 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 
 func toRouteCandidateStatuses(statuses []runtimeSnapshotRouteCandidateStatus) []routing.RouteCandidateStatus {
 	if len(statuses) == 0 {
-		return nil
+		return []routing.RouteCandidateStatus{}
 	}
 	mapped := make([]routing.RouteCandidateStatus, 0, len(statuses))
 	for _, status := range statuses {

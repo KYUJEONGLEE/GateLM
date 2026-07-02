@@ -266,7 +266,7 @@ func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
 
 func normalizeRoutingCandidateStatuses(statuses []routing.RouteCandidateStatus) []routing.RouteCandidateStatus {
 	if len(statuses) == 0 {
-		return nil
+		return []routing.RouteCandidateStatus{}
 	}
 	normalized := make([]routing.RouteCandidateStatus, 0, len(statuses))
 	for _, status := range statuses {
