@@ -244,7 +244,7 @@ func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
 		DefaultProvider:     p.DefaultProvider,
 		DefaultModel:        p.DefaultModel,
 		LowCostModel:        p.LowCostModel,
-		HighQualityModel:    p.FallbackModel,
+		HighQualityModel:    p.DefaultModel,
 		PolicyHash:          p.RoutingPolicyHash,
 		ShortPromptMaxChars: p.ShortPromptMaxChars,
 	}

@@ -224,7 +224,7 @@ func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.
 	if logged.RequestedModel != "auto" {
 		t.Fatalf("expected requested model auto, got %q", logged.RequestedModel)
 	}
-	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-fast" || logged.RoutingReason != "short_prompt_low_cost" {
+	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-fast" || logged.RoutingReason != "category_support_refund_low_cost" {
 		t.Fatalf("unexpected routing metadata: %+v", logged)
 	}
 	if logged.Provider != "mock" || logged.Model != "mock-fast" {

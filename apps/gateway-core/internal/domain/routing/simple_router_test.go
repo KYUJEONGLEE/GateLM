@@ -23,7 +23,7 @@ func TestSimpleRouterRoutesShortAutoPromptToLowCostModel(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonShortPromptLowCost, "route_p0_v1", DecisionMaterial{
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonSupportRefundLowCost, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
 		Category:      CategorySupportRefund,
 		Tier:          TierLowCost,
@@ -149,6 +149,87 @@ func TestSimpleRouterRoutingDecisionHashChangesByCategory(t *testing.T) {
 	if codeDecision.RoutingDecisionKeyHash == translationDecision.RoutingDecisionKeyHash {
 		t.Fatal("expected category to affect routing decision key hash")
 	}
+}
+
+func TestSimpleRouterRoutesCodeCategoryToHighQualityModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Fix this TypeScript function error.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-smart", ReasonCodeHighQuality, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryCode,
+		Tier:          TierHighQuality,
+		Capability:    CapabilityCode,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
+func TestSimpleRouterRoutesTranslationCategoryToBalancedModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "이 문장을 영어로 번역해줘.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", ReasonTranslationBalanced, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryTranslation,
+		Tier:          TierBalanced,
+		Capability:    CapabilityTranslation,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
+func TestSimpleRouterRoutesLongSupportRefundCategoryToLowCostModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 30,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Write a detailed refund response for a customer. " + strings.Repeat("a", 100),
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonSupportRefundLowCost, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategorySupportRefund,
+		Tier:          TierLowCost,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
 }
 
 func assertDecision(t *testing.T, actual Decision, expected Decision) {
