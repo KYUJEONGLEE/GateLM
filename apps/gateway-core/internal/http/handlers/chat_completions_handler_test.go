@@ -506,6 +506,105 @@ func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupte
 	}
 }
 
+func TestChatCompletionsHandlerStreamingFallbackResolveCancellationRecordsCancelled(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[0].CredentialRequired = false
+	catalog.Providers[0].CredentialRef = nil
+	catalog.Providers[1].CredentialRequired = true
+	catalog.Providers[1].CredentialRef = &credentials.Ref{
+		CredentialRefID:   "credential_ref_fallback_cancel",
+		CredentialVersion: 1,
+		CredentialState:   credentials.StateActive,
+	}
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      cancelingCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback resolve 취소를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 0 {
+		t.Fatalf("expected primary stream open and no fallback stream call, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.ErrorCode != "internal_error" ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingFallbackOpenCancellationRecordsCancelled(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeMock,
+		openErr:     context.Canceled,
+	}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback open 취소를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 1 {
+		t.Fatalf("expected primary and fallback stream open attempts, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.ErrorCode != "internal_error" ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
 func TestChatCompletionsHandlerAuthenticatesBeforeStreaming(t *testing.T) {
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock"),
@@ -2898,6 +2997,12 @@ type failingCredentialResolver struct{}
 
 func (failingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
 	return credentials.Resolved{}, credentials.ErrUnavailable
+}
+
+type cancelingCredentialResolver struct{}
+
+func (cancelingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
+	return credentials.Resolved{}, context.Canceled
 }
 
 func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatewayPipeline {

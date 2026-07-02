@@ -760,15 +760,6 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{Outcome: "not_called"}
 	if !started {
 		writeGatewayErrorWithContext(w, reqCtx, status, code, message, "stream_provider_response")
-		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
-		reqCtx.DomainOutcomes.Provider = invocationlog.ProviderOutcome{
-			Outcome:            streamingProviderFailureOutcome(streamErr),
-			SelectedProvider:   stringPointerValue(reqCtx.SelectedProvider),
-			SelectedModel:      stringPointerValue(reqCtx.SelectedModel),
-			LatencyMs:          providerLatencyForLog(reqCtx),
-			SanitizedErrorCode: stringPointerValue(code),
-		}
-		reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{Outcome: "not_called"}
 	}
 }
 
@@ -809,6 +800,10 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 
 	fallbackTarget, fallbackErr := h.resolveFallbackTarget(r.Context(), reqCtx, target)
 	if fallbackErr != nil {
+		if requestWasCanceled(r.Context(), fallbackErr) {
+			h.writeStreamingOpenCancellation(w, reqCtx, reqCtx.SelectedProvider, reqCtx.SelectedModel, providerDuration)
+			return
+		}
 		reqCtx.DomainOutcomes = withStreamingOutcome(
 			h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
 				Outcome: "disabled",
@@ -843,6 +838,10 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	stream, fallbackCallErr := fallbackAdapter.CreateChatCompletionStream(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
 	if fallbackCallErr != nil {
 		fallbackDuration := time.Since(fallbackStartedAt)
+		if requestWasCanceled(r.Context(), fallbackCallErr) {
+			h.writeStreamingOpenCancellation(w, reqCtx, fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackDuration)
+			return
+		}
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: fallbackTarget.ProviderName,
 			SelectedModel:    fallbackTarget.ModelID,
@@ -939,13 +938,30 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	}
 	if !started {
 		writeGatewayErrorWithContext(w, reqCtx, status, streamCode, "Provider streaming fallback response failed.", "stream_provider_response")
-		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
-		reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{
-			Outcome:          "failed",
-			FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
-			Reason:           stringPointerValue("fallback_provider_failed"),
-		}
 	}
+}
+
+func requestWasCanceled(ctx context.Context, err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	if ctx == nil {
+		return false
+	}
+	return errors.Is(ctx.Err(), context.Canceled)
+}
+
+func (h *ChatCompletionsHandler) writeStreamingOpenCancellation(w http.ResponseWriter, reqCtx *pipeline.RequestContext, selectedProvider string, selectedModel string, duration time.Duration) {
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: selectedProvider,
+		SelectedModel:    selectedModel,
+		Status:           invocationlog.StatusCancelled,
+		HTTPStatus:       gatewayerrors.StatusClientClosedRequest,
+		ErrorCode:        "internal_error",
+		DurationSeconds:  duration.Seconds(),
+	})
+	writeGatewayErrorWithContext(w, reqCtx, gatewayerrors.StatusClientClosedRequest, "internal_error", "Request was cancelled.", "open_provider_stream")
+	reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "cancelled")
 }
 
 func streamingProviderFailureOutcome(err error) string {

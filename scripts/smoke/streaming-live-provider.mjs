@@ -145,7 +145,6 @@ function handleData(data) {
 
   if (pieces.length > 0) {
     process.stdout.write(pieces.join(""));
-    return;
   }
 
   if (parsed.usage) {
