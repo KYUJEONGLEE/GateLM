@@ -31,6 +31,7 @@ GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비
 - `docs/v2.0.0/implementation-pr-packets.md`: PR별 실행 패킷
 - `docs/v2.0.0/acceptance-test-matrix.md`: PR별 acceptance/evidence matrix
 - `docs/v2.0.0/db-migration-plan.md`: DB migration 호환성 계획
+- `docs/v2.0.0/exact-cache-routing-aware-contract.md`: Exact Cache / Routing 팀 공유용 계약 요약
 
 Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
 
@@ -67,7 +68,7 @@ v2.0.0 목표는 v1.0.0 baseline을 깨지 않으면서 조직 기반 LLMOps Gat
 Customer App / Employee Chat
 -> Gateway
 -> RuntimeSnapshot policy
--> budget / safety / cache / routing
+-> budget / safety / routing / exact cache
 -> Actual Provider or Mock fallback
 -> Request Log / Detail / Dashboard / Metrics / k6 evidence
 ```
@@ -77,7 +78,7 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 - 어떤 tenant/project/application 요청인지
 - 어떤 RuntimeSnapshot이 실제 적용됐는지
 - 어떤 budget scope로 비용과 쿼터가 귀속됐는지
-- safety, budget, cache, routing, provider, fallback, streaming 결과가 무엇인지
+- safety, budget, routing, exact cache, provider, fallback, streaming 결과가 무엇인지
 - Actual Provider가 성공했는지, Mock fallback이 사용됐는지
 - Request Detail, Dashboard, Metrics, k6가 같은 outcome을 보고 있는지
 
@@ -88,7 +89,7 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | Area | Main path |
 |---|---|
 | Control Plane | RuntimeConfig validation/publish, RuntimeSnapshot, Provider/Model catalog, `credentialRef`, budget policy source |
-| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, exact cache, routing, provider, fallback, streaming, logging outcomes |
+| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, routing, routing-aware exact cache, provider, fallback, streaming, logging outcomes |
 | Product Experience | Admin/Developer/Employee surfaces, Employee Chat through Application boundary, Request Detail, Dashboard, Demo Scenario Runner |
 | Safety | request-side safety outcome and sanitized evidence |
 | Observability | Gateway-produced outcomes, Request Log/Detail read model, Dashboard aggregate, metrics label guard, k6/query profile |

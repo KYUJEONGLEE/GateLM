@@ -1810,6 +1810,8 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	reqCtx.ProjectID = testProjectID
 	reqCtx.ApplicationID = testAppID
 	reqCtx.RequestedModel = "auto"
+	reqCtx.SelectedProvider = "mock"
+	reqCtx.SelectedModel = "mock-fast"
 	reqCtx.RoutingPolicyHash = "hash_routing_policy_test"
 	reqCtx.SecurityPolicyHash = "hash_security_policy_test"
 	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
@@ -1832,14 +1834,17 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	if key != "hmac-sha256:cache-key" {
 		t.Fatalf("unexpected cache key: %s", key)
 	}
-	if keyBuilder.material.SecurityPolicyVersionID != "hash_security_policy_test" {
+	if keyBuilder.material.SafetyPolicyHash != "hash_security_policy_test" {
 		t.Fatalf("expected runtime security hash in cache material, got %#v", keyBuilder.material)
 	}
-	if keyBuilder.material.RoutingPolicyVersionID != "hash_routing_policy_test" {
+	if keyBuilder.material.RoutingPolicyHash != "hash_routing_policy_test" {
 		t.Fatalf("expected runtime routing hash in cache material, got %#v", keyBuilder.material)
 	}
 	if keyBuilder.material.RequestedModel != "auto" {
 		t.Fatalf("expected requested model in cache material, got %#v", keyBuilder.material)
+	}
+	if keyBuilder.material.ProviderCatalogStableKey != "mock" || keyBuilder.material.ModelID != "mock-fast" {
+		t.Fatalf("expected routing-aware provider/model material, got %#v", keyBuilder.material)
 	}
 }
 
@@ -1945,7 +1950,13 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 			Payload:           cachedPayload,
 		},
 	}
-	preflight := &fakeGatewayPipeline{}
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-balanced"
+			gatewayCtx.Routing.RoutingReason = "pinned"
+		},
+	}
 	handler := ChatCompletionsHandler{
 		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
 		DefaultModel:         "mock-balanced",
@@ -1969,8 +1980,8 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if chatCalls != 0 {
 		t.Fatalf("cache hit must not call provider, got %d provider calls", chatCalls)
 	}
-	if preflight.calls != 0 {
-		t.Fatalf("cache hit must not run pre-provider routing pipeline, got %d calls", preflight.calls)
+	if preflight.calls != 1 {
+		t.Fatalf("routing-aware cache hit must run pre-provider routing pipeline once, got %d calls", preflight.calls)
 	}
 	if cacheStore.setCalls != 0 {
 		t.Fatalf("cache hit must not write cache, got %d set calls", cacheStore.setCalls)
@@ -1989,8 +2000,8 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if resp.GateLM.RequestID != "request_current" {
 		t.Fatalf("expected current request id on cache hit, got %q", resp.GateLM.RequestID)
 	}
-	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "" || resp.GateLM.SelectedModel != "" ||
-		resp.GateLM.RoutingReason != "exact_cache_hit_provider_bypass" {
+	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-balanced" ||
+		resp.GateLM.RoutingReason != "pinned" {
 		t.Fatalf("unexpected gate_lm cache/routing metadata: %#v", resp.GateLM)
 	}
 	outcomes, ok := resp.GateLM.DomainOutcomes.(map[string]any)
@@ -1998,8 +2009,12 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 		t.Fatalf("expected domain outcomes map on cache hit, got %#v", resp.GateLM.DomainOutcomes)
 	}
 	routingOutcome, ok := outcomes["routing"].(map[string]any)
-	if !ok || routingOutcome["outcome"] != "skipped" || routingOutcome["routingReason"] != "exact_cache_hit_provider_bypass" {
-		t.Fatalf("expected skipped routing outcome on cache hit, got %#v", outcomes["routing"])
+	if !ok ||
+		routingOutcome["outcome"] != "selected" ||
+		routingOutcome["selectedProvider"] != "mock" ||
+		routingOutcome["selectedModel"] != "mock-balanced" ||
+		routingOutcome["routingReason"] != "pinned" {
+		t.Fatalf("expected selected routing outcome on cache hit, got %#v", outcomes["routing"])
 	}
 }
 
@@ -2065,9 +2080,11 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	if logged.DomainOutcomes.Cache.Outcome != "hit" || logged.DomainOutcomes.Provider.Outcome != "not_called" {
 		t.Fatalf("unexpected cache hit domain outcomes: %+v", logged.DomainOutcomes)
 	}
-	if logged.DomainOutcomes.Routing.Outcome != "skipped" ||
-		valueOrEmpty(logged.DomainOutcomes.Routing.RoutingReason) != "exact_cache_hit_provider_bypass" {
-		t.Fatalf("cache hit must skip routing with bypass reason, got %+v", logged.DomainOutcomes.Routing)
+	if logged.DomainOutcomes.Routing.Outcome != "selected" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.SelectedProvider) != "mock" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.SelectedModel) != "mock-balanced" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.RoutingReason) != "pinned" {
+		t.Fatalf("cache hit must retain routing decision and bypass only provider call, got %+v", logged.DomainOutcomes.Routing)
 	}
 }
 

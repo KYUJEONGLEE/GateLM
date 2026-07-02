@@ -46,11 +46,18 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	cacheGetsAfterFirst := demo.cacheStore.getCalls
 	cacheSetsAfterFirst := demo.cacheStore.setCalls
 	firstMaterial := demo.keyBuilder.materials[0]
-	if firstMaterial.SecurityPolicyVersionID != "hash_security_policy_phase3_demo" ||
-		firstMaterial.RoutingPolicyVersionID != "hash_routing_policy_phase3_demo" ||
+	if firstMaterial.SafetyPolicyHash != "hash_security_policy_phase3_demo" ||
+		firstMaterial.MaskingPolicyHash != "hash_security_policy_phase3_demo" ||
+		firstMaterial.RoutingPolicyHash != "hash_routing_policy_phase3_demo" ||
 		firstMaterial.RequestedModel != "auto" ||
-		firstMaterial.NormalizedRedactedPrompt != safePrompt {
+		firstMaterial.ProviderCatalogStableKey != "mock" ||
+		firstMaterial.ModelID != "mock-fast" ||
+		firstMaterial.NormalizedMaskedRequestBodyHash == "" ||
+		firstMaterial.RoutingDecisionKeyHash == "" {
 		t.Fatalf("unexpected exact cache key material: %#v", firstMaterial)
+	}
+	if firstMaterial.NormalizedRedactedPrompt != "" {
+		t.Fatalf("exact cache key material must not keep raw/redacted prompt text: %#v", firstMaterial)
 	}
 
 	second := demo.exercise(t, "request_v1_phase3_safe_hit_002", safePrompt)

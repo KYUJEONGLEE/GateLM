@@ -412,6 +412,8 @@ func cacheOutcome(cacheStatus string, cacheType string, cacheHitRequestID string
 		outcome = "miss"
 	case CacheStatusError:
 		outcome = "error"
+	case CacheStatusStoreSkipped:
+		outcome = "store_skipped"
 	case "":
 		outcome = "bypassed"
 	case CacheStatusBypass:
