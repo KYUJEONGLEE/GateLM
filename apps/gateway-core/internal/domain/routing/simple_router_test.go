@@ -263,6 +263,103 @@ func TestSimpleRouterRoutesReasoningCategoryToHighQualityModel(t *testing.T) {
 	}))
 }
 
+func TestSimpleRouterFallsBackWhenSelectedCandidateUnavailable(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateUnavailable},
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 10, LatencyP95Ms: 180},
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateAvailable, FallbackPriority: 20, LatencyP95Ms: 90},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Compare these rollout options and explain the tradeoff.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-default", "mock-balanced", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryReasoning,
+		Tier:          TierBalanced,
+		Capability:    CapabilityReasoning,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
+func TestSimpleRouterHealthFallbackUsesPriorityThenLatency(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateUnavailable},
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 10, LatencyP95Ms: 200},
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateAvailable, FallbackPriority: 10, LatencyP95Ms: 120},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Write a short refund response.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-premium", "mock-smart", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategorySupportRefund,
+		Tier:          TierHighQuality,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
+func TestSimpleRouterDoesNotHealthFallbackPinnedModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+		LowCostModel:    "mock-fast",
+		PolicyHash:      "route_p0_v1",
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock", Model: "mock-smart", Status: RouteCandidateUnavailable},
+			{Provider: "mock", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 1},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "mock-smart",
+		PromptText:     "Use this exact model.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("mock-smart", "mock", "mock-smart", ReasonPinned, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModePinned,
+		Category:      CategoryGeneral,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
 func TestSimpleRouterRoutesStructuredCategoriesToBalancedModel(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",

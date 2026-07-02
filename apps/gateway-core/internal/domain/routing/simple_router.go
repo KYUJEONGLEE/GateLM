@@ -19,6 +19,11 @@ const (
 	ReasonExtractionJSONBalanced = "category_extraction_json_balanced"
 	ReasonSupportRefundLowCost   = "category_support_refund_low_cost"
 	ReasonReasoningHighQuality   = "category_reasoning_high_quality"
+	ReasonProviderHealthFallback = "provider_health_fallback"
+
+	RouteCandidateAvailable   = "available"
+	RouteCandidateDegraded    = "degraded"
+	RouteCandidateUnavailable = "unavailable"
 )
 
 type SimpleRouterConfig struct {
@@ -30,6 +35,16 @@ type SimpleRouterConfig struct {
 	HighQualityModel    string
 	PolicyHash          string
 	ShortPromptMaxChars int
+	CandidateStatuses   []RouteCandidateStatus
+}
+
+type RouteCandidateStatus struct {
+	Provider         string
+	Model            string
+	Tier             string
+	Status           string
+	FallbackPriority int
+	LatencyP95Ms     int
 }
 
 type SimpleRouter struct {
@@ -41,6 +56,7 @@ type SimpleRouter struct {
 	highQualityModel    string
 	policyHash          string
 	shortPromptMaxChars int
+	candidateStatuses   []RouteCandidateStatus
 }
 
 func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
@@ -54,6 +70,7 @@ func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
 		highQualityModel:    normalized.HighQualityModel,
 		policyHash:          normalized.PolicyHash,
 		shortPromptMaxChars: normalized.ShortPromptMaxChars,
+		candidateStatuses:   append([]RouteCandidateStatus(nil), normalized.CandidateStatuses...),
 	}
 }
 
@@ -67,6 +84,7 @@ func normalizeSimpleRouterConfig(config SimpleRouterConfig) SimpleRouterConfig {
 		HighQualityModel:    strings.TrimSpace(config.HighQualityModel),
 		PolicyHash:          strings.TrimSpace(config.PolicyHash),
 		ShortPromptMaxChars: config.ShortPromptMaxChars,
+		CandidateStatuses:   normalizeRouteCandidateStatuses(config.CandidateStatuses),
 	}
 
 	if config.DefaultProvider == "" {
@@ -109,6 +127,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 			HighQualityModel:    r.highQualityModel,
 			PolicyHash:          r.policyHash,
 			ShortPromptMaxChars: r.shortPromptMaxChars,
+			CandidateStatuses:   append([]RouteCandidateStatus(nil), r.candidateStatuses...),
 		}
 	}
 	config = normalizeSimpleRouterConfig(config)
@@ -132,6 +151,8 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 
 	if strings.EqualFold(requestedModel, "auto") {
 		selectedProvider, selectedModel, tier, reason := autoRouteForCategory(category, req.PromptText, config)
+		policyVariant := PolicyVariantDefault
+		selectedProvider, selectedModel, tier, reason, policyVariant = applyCandidateStatusFallback(selectedProvider, selectedModel, tier, reason, config)
 		decision.SelectedProvider = selectedProvider
 		decision.SelectedProviderCatalogKey = selectedProvider
 		decision.SelectedModel = selectedModel
@@ -141,7 +162,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 			Category:      category,
 			Tier:          tier,
 			Capability:    capability,
-			PolicyVariant: PolicyVariantDefault,
+			PolicyVariant: policyVariant,
 		}
 		decision.RoutingReason = reason
 		decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
@@ -184,4 +205,160 @@ func autoRouteForCategory(category string, prompt string, config SimpleRouterCon
 		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
 	}
 	return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
+}
+
+func applyCandidateStatusFallback(provider string, model string, tier string, reason string, config SimpleRouterConfig) (string, string, string, string, string) {
+	if !routeCandidateIsUnavailable(provider, model, config.CandidateStatuses) {
+		return provider, model, tier, reason, PolicyVariantDefault
+	}
+
+	fallback, ok := bestAvailableRouteCandidate(provider, model, config)
+	if !ok {
+		return provider, model, tier, reason, PolicyVariantDefault
+	}
+	return fallback.Provider, fallback.Model, fallback.Tier, ReasonProviderHealthFallback, PolicyVariantProviderHealthFallback
+}
+
+func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, config SimpleRouterConfig) (RouteCandidateStatus, bool) {
+	candidates := routeCandidatesForConfig(config)
+	var selected RouteCandidateStatus
+	found := false
+	for _, candidate := range candidates {
+		if sameRouteCandidate(candidate.Provider, candidate.Model, excludeProvider, excludeModel) {
+			continue
+		}
+		if candidate.Status == RouteCandidateUnavailable {
+			continue
+		}
+		if !found || routeCandidateLess(candidate, selected) {
+			selected = candidate
+			found = true
+		}
+	}
+	return selected, found
+}
+
+func routeCandidatesForConfig(config SimpleRouterConfig) []RouteCandidateStatus {
+	config = normalizeSimpleRouterConfig(config)
+	candidates := []RouteCandidateStatus{
+		defaultRouteCandidate(config.DefaultProvider, config.DefaultModel, TierBalanced, 10),
+		defaultRouteCandidate(config.LowCostProvider, config.LowCostModel, TierLowCost, 20),
+		defaultRouteCandidate(config.HighQualityProvider, config.HighQualityModel, TierHighQuality, 30),
+	}
+
+	for i := range candidates {
+		if status, ok := routeCandidateStatusFor(candidates[i].Provider, candidates[i].Model, config.CandidateStatuses); ok {
+			candidates[i] = mergeRouteCandidateStatus(candidates[i], status)
+		}
+	}
+	return candidates
+}
+
+func defaultRouteCandidate(provider string, model string, tier string, fallbackPriority int) RouteCandidateStatus {
+	return RouteCandidateStatus{
+		Provider:         strings.TrimSpace(provider),
+		Model:            strings.TrimSpace(model),
+		Tier:             canonicalTier(tier),
+		Status:           RouteCandidateAvailable,
+		FallbackPriority: fallbackPriority,
+	}
+}
+
+func mergeRouteCandidateStatus(candidate RouteCandidateStatus, status RouteCandidateStatus) RouteCandidateStatus {
+	if status.Tier != "" {
+		candidate.Tier = status.Tier
+	}
+	if status.Status != "" {
+		candidate.Status = status.Status
+	}
+	if status.FallbackPriority > 0 {
+		candidate.FallbackPriority = status.FallbackPriority
+	}
+	if status.LatencyP95Ms > 0 {
+		candidate.LatencyP95Ms = status.LatencyP95Ms
+	}
+	return candidate
+}
+
+func routeCandidateIsUnavailable(provider string, model string, statuses []RouteCandidateStatus) bool {
+	status, ok := routeCandidateStatusFor(provider, model, statuses)
+	return ok && status.Status == RouteCandidateUnavailable
+}
+
+func routeCandidateStatusFor(provider string, model string, statuses []RouteCandidateStatus) (RouteCandidateStatus, bool) {
+	provider = strings.TrimSpace(provider)
+	model = strings.TrimSpace(model)
+	for _, status := range statuses {
+		if sameRouteCandidate(status.Provider, status.Model, provider, model) {
+			return status, true
+		}
+	}
+	return RouteCandidateStatus{}, false
+}
+
+func sameRouteCandidate(leftProvider string, leftModel string, rightProvider string, rightModel string) bool {
+	return strings.TrimSpace(leftProvider) == strings.TrimSpace(rightProvider) &&
+		strings.TrimSpace(leftModel) == strings.TrimSpace(rightModel)
+}
+
+func routeCandidateLess(left RouteCandidateStatus, right RouteCandidateStatus) bool {
+	leftPriority := normalizedFallbackPriority(left.FallbackPriority)
+	rightPriority := normalizedFallbackPriority(right.FallbackPriority)
+	if leftPriority != rightPriority {
+		return leftPriority < rightPriority
+	}
+	leftLatency := normalizedLatencyP95(left.LatencyP95Ms)
+	rightLatency := normalizedLatencyP95(right.LatencyP95Ms)
+	if leftLatency != rightLatency {
+		return leftLatency < rightLatency
+	}
+	if left.Provider != right.Provider {
+		return left.Provider < right.Provider
+	}
+	return left.Model < right.Model
+}
+
+func normalizedFallbackPriority(value int) int {
+	if value <= 0 {
+		return 1000
+	}
+	return value
+}
+
+func normalizedLatencyP95(value int) int {
+	if value <= 0 {
+		return 1 << 30
+	}
+	return value
+}
+
+func normalizeRouteCandidateStatuses(statuses []RouteCandidateStatus) []RouteCandidateStatus {
+	if len(statuses) == 0 {
+		return nil
+	}
+	normalized := make([]RouteCandidateStatus, 0, len(statuses))
+	for _, status := range statuses {
+		status.Provider = strings.TrimSpace(status.Provider)
+		status.Model = strings.TrimSpace(status.Model)
+		if status.Provider == "" || status.Model == "" {
+			continue
+		}
+		if strings.TrimSpace(status.Tier) != "" {
+			status.Tier = canonicalTier(status.Tier)
+		}
+		status.Status = canonicalRouteCandidateStatus(status.Status)
+		normalized = append(normalized, status)
+	}
+	return normalized
+}
+
+func canonicalRouteCandidateStatus(value string) string {
+	switch strings.TrimSpace(value) {
+	case RouteCandidateUnavailable:
+		return RouteCandidateUnavailable
+	case RouteCandidateDegraded:
+		return RouteCandidateDegraded
+	default:
+		return RouteCandidateAvailable
+	}
 }
