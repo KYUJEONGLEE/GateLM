@@ -48,11 +48,11 @@ type RoutingSignals struct {
 }
 
 func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
-	return RuleBasedCategoryClassifier{policy: DefaultCategoryPolicy()}
+	return RuleBasedCategoryClassifier{policy: defaultCategoryPolicy}
 }
 
 func NewRuleBasedCategoryClassifierWithPolicy(policy CategoryPolicy) RuleBasedCategoryClassifier {
-	return RuleBasedCategoryClassifier{policy: normalizeCategoryPolicy(policy)}
+	return RuleBasedCategoryClassifier{policy: normalizeCategoryPolicy(cloneCategoryPolicy(policy))}
 }
 
 func DefaultCategoryPolicy() CategoryPolicy {
@@ -64,7 +64,7 @@ func (c RuleBasedCategoryClassifier) Classify(prompt string) string {
 }
 
 func ExtractRoutingSignals(prompt string) RoutingSignals {
-	return extractRoutingSignals(prompt, DefaultCategoryPolicy())
+	return extractRoutingSignals(prompt, defaultCategoryPolicy)
 }
 
 func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals {
@@ -139,13 +139,18 @@ func matchesCategoryRule(text string, tokens []string, rule CategoryRule) bool {
 	if rule.EnableSQLPattern && containsSQLCodePattern(text, tokens) {
 		return true
 	}
-	if rule.RequiresToken == "" {
+	hasRequiredToken := rule.RequiresToken != ""
+	hasAnyTokenRequirement := len(rule.RequiresAnyToken) > 0
+	if !hasRequiredToken && !hasAnyTokenRequirement {
 		return false
 	}
-	if !hasToken(tokens, rule.RequiresToken) {
+	if hasRequiredToken && !hasToken(tokens, rule.RequiresToken) {
 		return false
 	}
-	return hasAnyToken(tokens, rule.RequiresAnyToken)
+	if hasAnyTokenRequirement && !hasAnyToken(tokens, rule.RequiresAnyToken) {
+		return false
+	}
+	return true
 }
 
 func signalMatched(category string, signals RoutingSignals) bool {

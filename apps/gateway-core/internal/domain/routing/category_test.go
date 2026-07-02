@@ -85,6 +85,42 @@ func TestRuleBasedCategoryClassifierUsesPolicyPriority(t *testing.T) {
 	}
 }
 
+func TestRuleBasedCategoryClassifierClonesExternalPolicy(t *testing.T) {
+	policy := CategoryPolicy{
+		MaxScanBytes:     maxCategoryScanBytes,
+		CategoryPriority: []string{CategorySupportRefund},
+		Rules: map[string]CategoryRule{
+			CategorySupportRefund: {Contains: []string{"refund"}},
+		},
+	}
+
+	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
+	policy.CategoryPriority[0] = CategoryCode
+	policy.Rules[CategorySupportRefund] = CategoryRule{}
+
+	if actual := classifier.Classify("refund request"); actual != CategorySupportRefund {
+		t.Fatalf("expected classifier to keep cloned policy, got %s", actual)
+	}
+}
+
+func TestCategoryRuleSupportsRequiresAnyTokenWithoutRequiresToken(t *testing.T) {
+	policy := CategoryPolicy{
+		MaxScanBytes:     maxCategoryScanBytes,
+		CategoryPriority: []string{CategoryReasoning},
+		Rules: map[string]CategoryRule{
+			CategoryReasoning: {RequiresAnyToken: []string{"compare", "tradeoff"}},
+		},
+	}
+	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
+
+	if actual := classifier.Classify("compare these options"); actual != CategoryReasoning {
+		t.Fatalf("expected requiresAnyToken-only rule to classify reasoning, got %s", actual)
+	}
+	if actual := classifier.Classify("plain message"); actual != CategoryGeneral {
+		t.Fatalf("expected empty or unmet rule to stay general, got %s", actual)
+	}
+}
+
 func TestDefaultCategoryPolicyReturnsClone(t *testing.T) {
 	policy := DefaultCategoryPolicy()
 	policy.CategoryPriority[0] = CategorySupportRefund
