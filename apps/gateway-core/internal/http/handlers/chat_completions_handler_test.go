@@ -182,6 +182,51 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerStoresLogSafePromptCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.PromptCapture = runtimeconfig.PromptCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasPromptCapture = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Send a reply to user@example.invalid.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	capture, ok := logWriter.logs[0].Metadata["promptCapture"].(invocationlog.PromptCaptureFields)
+	if !ok {
+		t.Fatalf("expected prompt capture metadata, got %+v", logWriter.logs[0].Metadata["promptCapture"])
+	}
+	if !capture.Enabled ||
+		capture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
+		capture.CapturedPrompt != "Send a reply to [EMAIL_REDACTED]." ||
+		strings.Contains(capture.CapturedPrompt, "user@example.invalid") {
+		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+}
+
 func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
@@ -3470,6 +3515,11 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 				"exactCacheEnabled": true,
 				"semanticCacheMode": "evidence_only",
 				"cachePolicyHash":   "hash_cache_policy_live_handler",
+			},
+			"promptCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.PromptCaptureModeDisabled,
+				"maxChars": runtimeconfig.PromptCaptureDefaultMaxChars,
 			},
 			"rateLimit": map[string]any{
 				"enabled":       false,

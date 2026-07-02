@@ -111,6 +111,11 @@ describe('RuntimeConfigsService', () => {
         warningThresholdPercent: 70,
       },
       cachePolicy: { ttlSeconds: 120 },
+      promptCapturePolicy: {
+        enabled: true,
+        mode: 'log_safe_full',
+        maxChars: 1200,
+      },
     });
 
     expect(prisma.runtimeConfig.create).toHaveBeenCalledWith(
@@ -131,6 +136,11 @@ describe('RuntimeConfigsService', () => {
       warningThresholdPercent: 70,
     });
     expect(result.runtimeConfig.cachePolicy.ttlSeconds).toBe(120);
+    expect(result.runtimeConfig.promptCapturePolicy).toEqual({
+      enabled: true,
+      mode: 'log_safe_full',
+      maxChars: 1200,
+    });
     expect(result.runtimeConfig.configHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('secretHash');
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('a'.repeat(64));
@@ -782,7 +792,14 @@ describe('RuntimeConfigsService', () => {
   it('returns an active RuntimeSnapshot execution view without copying legacy secret refs', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
-    const activeDocument = activeRuntimeConfigDocument();
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      promptCapturePolicy: {
+        enabled: true,
+        mode: 'log_safe_full' as const,
+        maxChars: 1200,
+      },
+    };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
       runtimeConfigRecord(activeDocument, {
         publishState: RuntimeConfigPublishState.ACTIVE,
@@ -821,6 +838,11 @@ describe('RuntimeConfigsService', () => {
     expect(result.policies.routing.defaultProvider).toBe('mock');
     expect(result.policies.routing.lowCostModel).toBe('mock-fast');
     expect(result.policies.safety.requestSideRequired).toBe(true);
+    expect(result.policies.promptCapture).toEqual({
+      enabled: true,
+      mode: 'log_safe_full',
+      maxChars: 1200,
+    });
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
       securityPolicyHash: activeDocument.safetyPolicy.securityPolicyHash,
@@ -1822,6 +1844,11 @@ describe('RuntimeConfigsService', () => {
           semanticCacheMode: 'evidence_only',
           cachePolicyHash: 'a'.repeat(64),
         },
+        promptCapture: {
+          enabled: false,
+          mode: 'disabled',
+          maxChars: 8000,
+        },
         rateLimit: {
           enabled: true,
           scope: 'application',
@@ -1957,6 +1984,11 @@ describe('RuntimeConfigsService', () => {
         ],
       },
       cachePolicy: { enabled: true, type: 'exact', ttlSeconds: 3600 },
+      promptCapturePolicy: {
+        enabled: false,
+        mode: 'disabled',
+        maxChars: 8000,
+      },
       routingPolicy: {
         type: 'simple',
         autoModel: 'auto',

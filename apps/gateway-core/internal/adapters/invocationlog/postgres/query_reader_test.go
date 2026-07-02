@@ -236,6 +236,20 @@ func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testin
 	}
 }
 
+func TestApplyInvocationMetadataFieldsMapsPromptCapture(t *testing.T) {
+	log := invocationlog.LlmInvocationLog{}
+	applyInvocationMetadataFields(&log, []byte(`{"promptCapture":{"enabled":true,"mode":"log_safe_full","visibility":"admin_request_detail","capturedPrompt":"문의: [EMAIL_REDACTED]","truncated":false,"maxChars":8000}}`))
+
+	if !log.PromptCapture.Enabled ||
+		log.PromptCapture.Mode != "log_safe_full" ||
+		log.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail ||
+		log.PromptCapture.CapturedPrompt != "문의: [EMAIL_REDACTED]" ||
+		log.PromptCapture.Truncated ||
+		log.PromptCapture.MaxChars != 8000 {
+		t.Fatalf("unexpected prompt capture fields: %+v", log.PromptCapture)
+	}
+}
+
 func TestDecodeDomainOutcomesMetadataNormalizesNullDomainOutcomes(t *testing.T) {
 	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":null}`))
 	if err != nil {
