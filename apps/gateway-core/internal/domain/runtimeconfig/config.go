@@ -107,6 +107,8 @@ type RoutingPolicy struct {
 	DefaultModel        string
 	LowCostProvider     string
 	LowCostModel        string
+	HighQualityProvider string
+	HighQualityModel    string
 	FallbackProvider    string
 	FallbackModel       string
 	ShortPromptMaxChars int
@@ -141,6 +143,8 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.RoutingPolicy.DefaultModel = strings.TrimSpace(c.RoutingPolicy.DefaultModel)
 	c.RoutingPolicy.LowCostProvider = strings.TrimSpace(c.RoutingPolicy.LowCostProvider)
 	c.RoutingPolicy.LowCostModel = strings.TrimSpace(c.RoutingPolicy.LowCostModel)
+	c.RoutingPolicy.HighQualityProvider = strings.TrimSpace(c.RoutingPolicy.HighQualityProvider)
+	c.RoutingPolicy.HighQualityModel = strings.TrimSpace(c.RoutingPolicy.HighQualityModel)
 	c.RoutingPolicy.FallbackProvider = strings.TrimSpace(c.RoutingPolicy.FallbackProvider)
 	c.RoutingPolicy.FallbackModel = strings.TrimSpace(c.RoutingPolicy.FallbackModel)
 	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
@@ -208,6 +212,8 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.RoutingPolicy.DefaultModel = strings.TrimSpace(s.RoutingPolicy.DefaultModel)
 	s.RoutingPolicy.LowCostProvider = strings.TrimSpace(s.RoutingPolicy.LowCostProvider)
 	s.RoutingPolicy.LowCostModel = strings.TrimSpace(s.RoutingPolicy.LowCostModel)
+	s.RoutingPolicy.HighQualityProvider = strings.TrimSpace(s.RoutingPolicy.HighQualityProvider)
+	s.RoutingPolicy.HighQualityModel = strings.TrimSpace(s.RoutingPolicy.HighQualityModel)
 	s.RoutingPolicy.FallbackProvider = strings.TrimSpace(s.RoutingPolicy.FallbackProvider)
 	s.RoutingPolicy.FallbackModel = strings.TrimSpace(s.RoutingPolicy.FallbackModel)
 	s.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash)
@@ -240,11 +246,15 @@ func (s ExecutionSnapshot) MatchesScope(tenantID string, projectID string, appli
 }
 
 func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
+	highQualityProvider := firstNonEmptyString(p.HighQualityProvider, p.DefaultProvider)
+	highQualityModel := firstNonEmptyString(p.HighQualityModel, p.DefaultModel)
 	return routing.SimpleRouterConfig{
 		DefaultProvider:     p.DefaultProvider,
 		DefaultModel:        p.DefaultModel,
+		LowCostProvider:     firstNonEmptyString(p.LowCostProvider, p.DefaultProvider),
 		LowCostModel:        p.LowCostModel,
-		HighQualityModel:    p.FallbackModel,
+		HighQualityProvider: highQualityProvider,
+		HighQualityModel:    highQualityModel,
 		PolicyHash:          p.RoutingPolicyHash,
 		ShortPromptMaxChars: p.ShortPromptMaxChars,
 	}

@@ -246,6 +246,8 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			DefaultModel:        cfg.DefaultModel,
 			LowCostProvider:     cfg.DefaultProvider,
 			LowCostModel:        cfg.LowCostModel,
+			HighQualityProvider: cfg.DefaultProvider,
+			HighQualityModel:    cfg.HighQualityModel,
 			FallbackProvider:    cfg.DefaultProvider,
 			FallbackModel:       cfg.DefaultModel,
 			ShortPromptMaxChars: cfg.ShortPromptMaxChars,
@@ -351,7 +353,7 @@ func mockCatalogModel(modelID string, displayName string, fallbackPriority int) 
 		DisplayName: displayName,
 		Enabled:     true,
 		Capabilities: providercatalog.ModelCapabilities{
-			StreamingSupported: false,
+			StreamingSupported: true,
 			SupportsJSONMode:   false,
 			MaxInputTokens:     4096,
 			MaxOutputTokens:    1024,

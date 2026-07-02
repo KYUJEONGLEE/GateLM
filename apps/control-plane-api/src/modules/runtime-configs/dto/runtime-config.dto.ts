@@ -108,6 +108,18 @@ export class RuntimeConfigRoutingPolicyDto {
   @IsString()
   @MinLength(1)
   @MaxLength(80)
+  highQualityProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  highQualityModel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
   fallbackProvider?: string;
 
   @IsOptional()
@@ -442,6 +454,8 @@ export interface RuntimeConfigRoutingPolicyResponseDto {
   defaultModel: string;
   lowCostProvider: string;
   lowCostModel: string;
+  highQualityProvider?: string;
+  highQualityModel?: string;
   fallbackProvider: string;
   fallbackModel: string;
   shortPromptMaxChars: number;
@@ -609,6 +623,10 @@ export interface RuntimeSnapshotRoutingPolicyDto {
   defaultRequestedModel: string;
   defaultProvider: string;
   defaultModel: string;
+  lowCostProvider: string;
+  lowCostModel: string;
+  highQualityProvider?: string;
+  highQualityModel?: string;
   routingPolicyHash: string;
 }
 

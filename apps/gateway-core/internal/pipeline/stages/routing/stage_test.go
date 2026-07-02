@@ -117,10 +117,12 @@ func TestStagePassesRuntimeRoutingPolicyToRouter(t *testing.T) {
 			RoutingPolicy: runtimeconfig.RoutingPolicy{
 				DefaultProvider:     "mock",
 				DefaultModel:        "mock-balanced",
-				LowCostProvider:     "mock",
+				LowCostProvider:     "mock-cheap",
 				LowCostModel:        "mock-fast",
+				HighQualityProvider: "mock-premium",
+				HighQualityModel:    "mock-smart",
 				FallbackProvider:    "mock",
-				FallbackModel:       "mock-balanced",
+				FallbackModel:       "mock-fallback",
 				ShortPromptMaxChars: 500,
 				RoutingPolicyHash:   "hash_routing_policy_test",
 			},
@@ -137,5 +139,11 @@ func TestStagePassesRuntimeRoutingPolicyToRouter(t *testing.T) {
 	}
 	if router.request.Config.PolicyHash != "hash_routing_policy_test" || router.request.Config.ShortPromptMaxChars != 500 {
 		t.Fatalf("unexpected runtime routing config: %#v", router.request.Config)
+	}
+	if router.request.Config.LowCostProvider != "mock-cheap" || router.request.Config.LowCostModel != "mock-fast" {
+		t.Fatalf("expected low-cost provider/model to be passed to router: %#v", router.request.Config)
+	}
+	if router.request.Config.HighQualityProvider != "mock-premium" || router.request.Config.HighQualityModel != "mock-smart" {
+		t.Fatalf("high quality route must not use fallback model as primary route: %#v", router.request.Config)
 	}
 }

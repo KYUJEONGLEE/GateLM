@@ -18,6 +18,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -156,8 +157,8 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	if resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected selected route: %#v", resp.GateLM)
 	}
-	if resp.GateLM.RoutingReason != "short_prompt_low_cost" {
-		t.Fatalf("expected short_prompt_low_cost, got %s", resp.GateLM.RoutingReason)
+	if resp.GateLM.RoutingReason != routing.ReasonSupportRefundLowCost {
+		t.Fatalf("expected %s, got %s", routing.ReasonSupportRefundLowCost, resp.GateLM.RoutingReason)
 	}
 }
 

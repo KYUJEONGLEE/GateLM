@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -107,6 +108,49 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 	return &completion, nil
 }
 
+func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	config = normalizeConfig(config)
+	if err := validateConfig(config, true); err != nil {
+		return nil, err
+	}
+
+	req.Stream = true
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("encode provider streaming chat request: %w", err))
+	}
+
+	reqCtx, cancel := contextWithTimeout(ctx, config.Timeout)
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, providerEndpoint(config.BaseURL, "/chat/completions"), bytes.NewReader(body))
+	if err != nil {
+		cancel()
+		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("build provider streaming chat request: %w", err))
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("Authorization", "Bearer "+config.Credential.Value)
+	httpReq.Header.Set("X-GateLM-Request-Id", req.RequestID)
+
+	resp, err := a.httpClient.Do(httpReq)
+	if err != nil {
+		cancel()
+		return nil, classifyTransportError(reqCtx, err)
+	}
+
+	if err := classifyStatus(resp); err != nil {
+		resp.Body.Close()
+		cancel()
+		return nil, err
+	}
+
+	return &openAIStreamReader{
+		ctx:    reqCtx,
+		cancel: cancel,
+		body:   resp.Body,
+		reader: bufio.NewReader(resp.Body),
+	}, nil
+}
+
 func normalizeConfig(config provider.ExecutionConfig) provider.ExecutionConfig {
 	config.ProviderID = strings.TrimSpace(config.ProviderID)
 	config.ProviderName = strings.TrimSpace(config.ProviderName)
@@ -180,4 +224,112 @@ func drainProviderErrorBody(body io.Reader) {
 		return
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(body, 4096))
+}
+
+type openAIStreamReader struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	body   io.ReadCloser
+	reader *bufio.Reader
+	closed bool
+}
+
+func (r *openAIStreamReader) Next() (provider.ChatCompletionStreamEvent, error) {
+	if r == nil || r.reader == nil {
+		return provider.ChatCompletionStreamEvent{}, io.EOF
+	}
+
+	for {
+		payload, err := r.readEventData()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return provider.ChatCompletionStreamEvent{}, io.EOF
+			}
+			return provider.ChatCompletionStreamEvent{}, classifyStreamReadError(r.ctx, err)
+		}
+		payload = strings.TrimSpace(payload)
+		if payload == "" {
+			continue
+		}
+		if payload == "[DONE]" {
+			return provider.ChatCompletionStreamEvent{}, io.EOF
+		}
+
+		raw := json.RawMessage([]byte(payload))
+		if !json.Valid(raw) {
+			return provider.ChatCompletionStreamEvent{}, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("provider stream returned malformed json chunk"))
+		}
+
+		var metadata struct {
+			Usage *provider.Usage `json:"usage"`
+		}
+		if err := json.Unmarshal(raw, &metadata); err != nil {
+			return provider.ChatCompletionStreamEvent{}, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("decode provider streaming chunk metadata: %w", err))
+		}
+
+		copied := append(json.RawMessage(nil), raw...)
+		return provider.ChatCompletionStreamEvent{
+			Data:  copied,
+			Usage: metadata.Usage,
+		}, nil
+	}
+}
+
+func (r *openAIStreamReader) Close() error {
+	if r == nil || r.closed {
+		return nil
+	}
+	r.closed = true
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if r.body != nil {
+		return r.body.Close()
+	}
+	return nil
+}
+
+func (r *openAIStreamReader) readEventData() (string, error) {
+	var dataLines []string
+	for {
+		line, err := r.reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", err
+		}
+
+		line = strings.TrimRight(line, "\r\n")
+		if strings.TrimSpace(line) == "" {
+			if len(dataLines) == 0 && errors.Is(err, io.EOF) {
+				return "", io.EOF
+			}
+			if len(dataLines) > 0 {
+				return strings.Join(dataLines, "\n"), nil
+			}
+			if errors.Is(err, io.EOF) {
+				return "", io.EOF
+			}
+			continue
+		}
+
+		if strings.HasPrefix(line, "data:") {
+			dataLines = append(dataLines, strings.TrimLeft(line[len("data:"):], " "))
+		}
+
+		if errors.Is(err, io.EOF) {
+			if len(dataLines) == 0 {
+				return "", io.EOF
+			}
+			return strings.Join(dataLines, "\n"), nil
+		}
+	}
+}
+
+func classifyStreamReadError(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if errors.Is(ctxErr, context.Canceled) {
+			return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, ctxErr)
+		}
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctxErr)
+	}
+	return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
 }
