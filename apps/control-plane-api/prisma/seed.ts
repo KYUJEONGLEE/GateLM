@@ -785,6 +785,15 @@ function buildDemoRuntimeSnapshot(
         defaultRequestedModel: document.routingPolicy.autoModel,
         defaultProvider: document.routingPolicy.defaultProvider,
         defaultModel: document.routingPolicy.defaultModel,
+        lowCostProvider: document.routingPolicy.lowCostProvider,
+        lowCostModel: document.routingPolicy.lowCostModel,
+        ...(document.routingPolicy.highQualityProvider &&
+        document.routingPolicy.highQualityModel
+          ? {
+              highQualityProvider: document.routingPolicy.highQualityProvider,
+              highQualityModel: document.routingPolicy.highQualityModel,
+            }
+          : {}),
         routingPolicyHash: document.routingPolicy.routingPolicyHash,
       },
       cache: {

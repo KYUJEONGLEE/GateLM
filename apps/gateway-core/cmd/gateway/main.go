@@ -243,6 +243,8 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			DefaultModel:        cfg.DefaultModel,
 			LowCostProvider:     cfg.DefaultProvider,
 			LowCostModel:        cfg.LowCostModel,
+			HighQualityProvider: cfg.DefaultProvider,
+			HighQualityModel:    cfg.HighQualityModel,
 			FallbackProvider:    cfg.DefaultProvider,
 			FallbackModel:       cfg.DefaultModel,
 			ShortPromptMaxChars: cfg.ShortPromptMaxChars,

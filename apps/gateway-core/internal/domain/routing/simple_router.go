@@ -21,7 +21,9 @@ const (
 type SimpleRouterConfig struct {
 	DefaultProvider     string
 	DefaultModel        string
+	LowCostProvider     string
 	LowCostModel        string
+	HighQualityProvider string
 	HighQualityModel    string
 	PolicyHash          string
 	ShortPromptMaxChars int
@@ -30,7 +32,9 @@ type SimpleRouterConfig struct {
 type SimpleRouter struct {
 	defaultProvider     string
 	defaultModel        string
+	lowCostProvider     string
 	lowCostModel        string
+	highQualityProvider string
 	highQualityModel    string
 	policyHash          string
 	shortPromptMaxChars int
@@ -41,7 +45,9 @@ func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
 	return &SimpleRouter{
 		defaultProvider:     normalized.DefaultProvider,
 		defaultModel:        normalized.DefaultModel,
+		lowCostProvider:     normalized.LowCostProvider,
 		lowCostModel:        normalized.LowCostModel,
+		highQualityProvider: normalized.HighQualityProvider,
 		highQualityModel:    normalized.HighQualityModel,
 		policyHash:          normalized.PolicyHash,
 		shortPromptMaxChars: normalized.ShortPromptMaxChars,
@@ -52,7 +58,9 @@ func normalizeSimpleRouterConfig(config SimpleRouterConfig) SimpleRouterConfig {
 	config = SimpleRouterConfig{
 		DefaultProvider:     strings.TrimSpace(config.DefaultProvider),
 		DefaultModel:        strings.TrimSpace(config.DefaultModel),
+		LowCostProvider:     strings.TrimSpace(config.LowCostProvider),
 		LowCostModel:        strings.TrimSpace(config.LowCostModel),
+		HighQualityProvider: strings.TrimSpace(config.HighQualityProvider),
 		HighQualityModel:    strings.TrimSpace(config.HighQualityModel),
 		PolicyHash:          strings.TrimSpace(config.PolicyHash),
 		ShortPromptMaxChars: config.ShortPromptMaxChars,
@@ -67,8 +75,14 @@ func normalizeSimpleRouterConfig(config SimpleRouterConfig) SimpleRouterConfig {
 	if config.LowCostModel == "" {
 		config.LowCostModel = "mock-fast"
 	}
+	if config.LowCostProvider == "" {
+		config.LowCostProvider = config.DefaultProvider
+	}
 	if config.HighQualityModel == "" {
 		config.HighQualityModel = "mock-smart"
+	}
+	if config.HighQualityProvider == "" {
+		config.HighQualityProvider = config.DefaultProvider
 	}
 	if config.PolicyHash == "" {
 		config.PolicyHash = DefaultPolicyHash
@@ -86,7 +100,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 		config = SimpleRouterConfig{
 			DefaultProvider:     r.defaultProvider,
 			DefaultModel:        r.defaultModel,
+			LowCostProvider:     r.lowCostProvider,
 			LowCostModel:        r.lowCostModel,
+			HighQualityProvider: r.highQualityProvider,
 			HighQualityModel:    r.highQualityModel,
 			PolicyHash:          r.policyHash,
 			ShortPromptMaxChars: r.shortPromptMaxChars,
@@ -113,7 +129,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	}
 
 	if strings.EqualFold(requestedModel, "auto") {
-		selectedModel, tier, reason := autoRouteForCategory(category, req.PromptText, config)
+		selectedProvider, selectedModel, tier, reason := autoRouteForCategory(category, req.PromptText, config)
+		decision.SelectedProvider = selectedProvider
+		decision.SelectedProviderCatalogKey = selectedProvider
 		decision.SelectedModel = selectedModel
 		decision.SelectedModelID = selectedModel
 		decision.RoutingDecisionMaterial = DecisionMaterial{
@@ -142,18 +160,18 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	return decision, nil
 }
 
-func autoRouteForCategory(category string, prompt string, config SimpleRouterConfig) (string, string, string) {
+func autoRouteForCategory(category string, prompt string, config SimpleRouterConfig) (string, string, string, string) {
 	switch canonicalCategory(category) {
 	case CategoryCode:
-		return config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
+		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
 	case CategoryTranslation:
-		return config.DefaultModel, TierBalanced, ReasonTranslationBalanced
+		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonTranslationBalanced
 	case CategorySupportRefund:
-		return config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
+		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
 	}
 
 	if utf8.RuneCountInString(prompt) <= config.ShortPromptMaxChars {
-		return config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
+		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
 	}
-	return config.DefaultModel, TierBalanced, ReasonDefaultBalanced
+	return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
 }
