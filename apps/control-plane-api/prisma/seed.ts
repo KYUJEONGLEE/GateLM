@@ -46,35 +46,27 @@ export const PROVIDER_PRESETS = [
     displayName: 'OpenAI',
     adapterType: 'openai_compatible',
     baseUrl: 'https://api.openai.com/v1',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
     sortOrder: 10,
   },
   {
-    providerKey: 'openrouter',
-    displayName: 'OpenRouter',
+    providerKey: 'gemini',
+    displayName: 'Gemini',
     adapterType: 'openai_compatible',
-    baseUrl: 'https://openrouter.ai/api/v1',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
     sortOrder: 20,
   },
   {
-    providerKey: 'groq',
-    displayName: 'Groq',
-    adapterType: 'openai_compatible',
-    baseUrl: 'https://api.groq.com/openai/v1',
+    providerKey: 'claude',
+    displayName: 'Claude',
+    adapterType: 'anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    requestFormat: 'anthropic_messages',
+    modelDiscoveryType: 'anthropic_models',
     sortOrder: 30,
-  },
-  {
-    providerKey: 'mistral',
-    displayName: 'Mistral AI',
-    adapterType: 'openai_compatible',
-    baseUrl: 'https://api.mistral.ai/v1',
-    sortOrder: 40,
-  },
-  {
-    providerKey: 'together',
-    displayName: 'Together AI',
-    adapterType: 'openai_compatible',
-    baseUrl: 'https://api.together.xyz/v1',
-    sortOrder: 50,
   },
 ] as const;
 
@@ -674,6 +666,18 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
 async function seedProviderPresets(
   tx: Prisma.TransactionClient,
 ): Promise<void> {
+  const activeProviderPresetKeys = PROVIDER_PRESETS.map(
+    (preset) => preset.providerKey,
+  );
+
+  await tx.providerPreset.updateMany({
+    where: {
+      providerKey: { notIn: activeProviderPresetKeys },
+      status: ResourceStatus.ACTIVE,
+    },
+    data: { status: ResourceStatus.ARCHIVED },
+  });
+
   for (const preset of PROVIDER_PRESETS) {
     await tx.providerPreset.upsert({
       where: { providerKey: preset.providerKey },
@@ -687,7 +691,7 @@ async function seedProviderPresets(
         defaultTimeoutMs: 30000,
         status: ResourceStatus.ACTIVE,
         sortOrder: preset.sortOrder,
-        providerConfig: providerPresetConfig(preset.providerKey),
+        providerConfig: providerPresetConfig(preset),
       },
       create: {
         providerKey: preset.providerKey,
@@ -700,21 +704,23 @@ async function seedProviderPresets(
         defaultTimeoutMs: 30000,
         status: ResourceStatus.ACTIVE,
         sortOrder: preset.sortOrder,
-        providerConfig: providerPresetConfig(preset.providerKey),
+        providerConfig: providerPresetConfig(preset),
       },
     });
   }
 }
 
-function providerPresetConfig(providerKey: string): Prisma.InputJsonObject {
+function providerPresetConfig(
+  preset: (typeof PROVIDER_PRESETS)[number],
+): Prisma.InputJsonObject {
   return {
-    providerKey,
-    adapterType: 'openai_compatible',
-    requestFormat: 'openai_chat_completions',
+    providerKey: preset.providerKey,
+    adapterType: preset.adapterType,
+    requestFormat: preset.requestFormat,
     modelsEndpointPath: '/models',
     credentialRequired: true,
     modelDiscovery: {
-      type: 'openai_compatible_models',
+      type: preset.modelDiscoveryType,
       cacheTtlSeconds: 3600,
     },
   };

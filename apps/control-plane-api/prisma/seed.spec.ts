@@ -1,4 +1,8 @@
-import { PrismaClient, RuntimeConfigPublishState } from '@prisma/client';
+import {
+  PrismaClient,
+  ResourceStatus,
+  RuntimeConfigPublishState,
+} from '@prisma/client';
 
 import {
   buildDemoRuntimeConfigDocument,
@@ -149,7 +153,7 @@ describe('Control Plane demo seed baseline', () => {
     );
   });
 
-  it('upserts global provider presets for common OpenAI-compatible providers', async () => {
+  it('upserts global provider presets for common providers', async () => {
     const tx = createMockTransaction();
     const client = {
       $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
@@ -159,6 +163,13 @@ describe('Control Plane demo seed baseline', () => {
 
     await seedDemoData(client as unknown as PrismaClient);
 
+    expect(tx.providerPreset.updateMany).toHaveBeenCalledWith({
+      where: {
+        providerKey: { notIn: ['openai', 'gemini', 'claude'] },
+        status: ResourceStatus.ACTIVE,
+      },
+      data: { status: ResourceStatus.ARCHIVED },
+    });
     expect(tx.providerPreset.upsert).toHaveBeenCalledTimes(
       PROVIDER_PRESETS.length,
     );
@@ -178,7 +189,20 @@ describe('Control Plane demo seed baseline', () => {
       tx.providerPreset.upsert.mock.calls.map(
         ([args]) => args.create.providerKey,
       ),
-    ).toEqual(['openai', 'openrouter', 'groq', 'mistral', 'together']);
+    ).toEqual(['openai', 'gemini', 'claude']);
+    expect(tx.providerPreset.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { providerKey: 'claude' },
+        create: expect.objectContaining({
+          adapterType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          providerConfig: expect.objectContaining({
+            adapterType: 'anthropic',
+            requestFormat: 'anthropic_messages',
+          }),
+        }),
+      }),
+    );
   });
 
   it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
@@ -231,7 +255,7 @@ function createMockTransaction() {
     tenant: { upsert: jest.fn() },
     project: { upsert: jest.fn() },
     application: { upsert: jest.fn() },
-    providerPreset: { upsert: jest.fn() },
+    providerPreset: { updateMany: jest.fn(), upsert: jest.fn() },
     providerConnection: {
       upsert: jest.fn().mockResolvedValue({ id: 'provider-demo-id' }),
     },

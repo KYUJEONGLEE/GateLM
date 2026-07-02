@@ -152,10 +152,10 @@ describe('ProviderConnectionsService', () => {
         updatedAt: createdAt,
       },
       {
-        providerKey: 'openrouter',
-        displayName: 'OpenRouter',
+        providerKey: 'gemini',
+        displayName: 'Gemini',
         adapterType: 'openai_compatible',
-        baseUrl: 'https://openrouter.ai/api/v1',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
         modelsEndpointPath: '/models',
         credentialRequired: true,
         defaultResolver: 'environment',
@@ -167,10 +167,10 @@ describe('ProviderConnectionsService', () => {
         updatedAt: createdAt,
       },
       {
-        providerKey: 'groq',
-        displayName: 'Groq',
-        adapterType: 'openai_compatible',
-        baseUrl: 'https://api.groq.com/openai/v1',
+        providerKey: 'claude',
+        displayName: 'Claude',
+        adapterType: 'anthropic',
+        baseUrl: 'https://api.anthropic.com/v1',
         modelsEndpointPath: '/models',
         credentialRequired: true,
         defaultResolver: 'environment',
@@ -184,12 +184,12 @@ describe('ProviderConnectionsService', () => {
     ]);
 
     const result = await service.listProviderPresets({
-      cursor: 'mistral',
+      cursor: 'openai',
       limit: 2,
     });
 
     expect(prisma.providerPreset.findMany).toHaveBeenCalledWith({
-      cursor: { providerKey: 'mistral' },
+      cursor: { providerKey: 'openai' },
       orderBy: [{ sortOrder: 'asc' }, { providerKey: 'asc' }],
       skip: 1,
       take: 3,
@@ -198,7 +198,7 @@ describe('ProviderConnectionsService', () => {
     expect(result.data).toHaveLength(2);
     expect(result.pagination).toEqual({
       limit: 2,
-      nextCursor: 'openrouter',
+      nextCursor: 'gemini',
       hasMore: true,
     });
   });
