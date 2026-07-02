@@ -23,6 +23,9 @@ const sensitiveKeyPattern =
 const sensitiveStringPattern =
   /(sk-[a-z0-9_-]{12,}|Bearer\s+[a-z0-9._-]{12,}|-----BEGIN\s+(RSA|OPENSSH|EC|PRIVATE)\s+KEY-----)/i;
 
+const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/i;
+const regexCache = new Map();
+
 function toAbsolute(rootDir, relativePath) {
   return path.join(rootDir, relativePath);
 }
@@ -31,23 +34,44 @@ function readText(rootDir, relativePath, failures) {
   const absolutePath = toAbsolute(rootDir, relativePath);
   if (!existsSync(absolutePath)) {
     failures.push(`${relativePath}: file is missing`);
-    return "";
+    return null;
   }
 
   try {
     return readFileSync(absolutePath, "utf8");
   } catch (error) {
     failures.push(`${relativePath}: unable to read file (${error.message})`);
-    return "";
+    return null;
   }
 }
 
 function readJson(rootDir, relativePath, failures) {
+  const text = readText(rootDir, relativePath, failures);
+  if (text === null) {
+    return undefined;
+  }
+
   try {
-    return JSON.parse(readText(rootDir, relativePath, failures));
+    return JSON.parse(text);
   } catch (error) {
     failures.push(`${relativePath}: invalid JSON (${error.message})`);
     return undefined;
+  }
+}
+
+function compilePattern(pattern, jsonPath, failures) {
+  if (regexCache.has(pattern)) {
+    return regexCache.get(pattern);
+  }
+
+  try {
+    const regex = new RegExp(pattern);
+    regexCache.set(pattern, regex);
+    return regex;
+  } catch (error) {
+    failures.push(`${jsonPath}: invalid pattern regex ${pattern} (${error.message})`);
+    regexCache.set(pattern, null);
+    return null;
   }
 }
 
@@ -86,12 +110,17 @@ function validateProperty(schema, value, jsonPath, failures) {
       failures.push(`${jsonPath}: expected maxLength ${schema.maxLength}`);
     }
 
-    if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
-      failures.push(`${jsonPath}: expected pattern ${schema.pattern}`);
+    if (schema.pattern) {
+      const regex = compilePattern(schema.pattern, jsonPath, failures);
+      if (regex && !regex.test(value)) {
+        failures.push(`${jsonPath}: expected pattern ${schema.pattern}`);
+      }
     }
 
-    if (schema.format === "date-time" && Number.isNaN(Date.parse(value))) {
-      failures.push(`${jsonPath}: expected date-time format`);
+    if (schema.format === "date-time") {
+      if (!isoDateTimePattern.test(value) || Number.isNaN(Date.parse(value))) {
+        failures.push(`${jsonPath}: expected date-time format`);
+      }
     }
 
     if (sensitiveStringPattern.test(value)) {
@@ -193,6 +222,12 @@ function validateSchemaShape(schema, failures) {
 
   if (!Array.isArray(schema.required)) {
     failures.push(`${schemaPath}: required must be an array`);
+  } else {
+    for (const requiredKey of schema.required) {
+      if (!schema.properties || !(requiredKey in schema.properties)) {
+        failures.push(`${schemaPath}: required key ${requiredKey} is not declared in properties`);
+      }
+    }
   }
 
   if (schema.properties?.redactedPrompt?.maxLength !== 65536) {
@@ -212,6 +247,10 @@ export function verifyCategoryEvaluationDataset(options = {}) {
   validateSchemaShape(schema, failures);
 
   const fixtureText = readText(rootDir, fixturePath, failures);
+  if (fixtureText === null) {
+    return failures;
+  }
+
   const lines = fixtureText.split(/\r?\n/).filter((line) => line.trim().length > 0);
 
   if (lines.length === 0) {
