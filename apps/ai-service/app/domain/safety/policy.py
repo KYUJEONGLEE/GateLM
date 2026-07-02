@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from app.domain.safety.decision import (
     ACTION_BLOCKED,
@@ -251,10 +251,19 @@ def effective_signals(
     return _merge_adjacent_similar_signals(selected, prompt_text)
 
 
+@dataclass(frozen=True)
+class PersonAliasAnchor:
+    full_name: str
+    family_name: str
+    given_name: str
+    placeholder: str
+
+
 class EntityMaskingScope:
     def __init__(self) -> None:
         self._placeholders: dict[str, dict[str, str]] = {}
         self._counters: dict[str, int] = {}
+        self._person_anchors: dict[str, PersonAliasAnchor] = {}
 
     def placeholder_for(
         self,
@@ -273,17 +282,53 @@ class EntityMaskingScope:
         normalized = _normalize_entity_key(detector_type, raw_value)
         if normalized == "":
             return fallback
+        if detector_type == "person_name":
+            return self._person_placeholder_for(normalized, prefix)
 
         placeholders = self._placeholders.setdefault(detector_type, {})
         existing = placeholders.get(normalized)
         if existing is not None:
             return existing
 
-        next_index = self._counters.get(prefix, 0) + 1
-        self._counters[prefix] = next_index
-        placeholder = f"[{prefix}_{next_index}]"
+        placeholder = self._next_placeholder(prefix)
         placeholders[normalized] = placeholder
         return placeholder
+
+    def _person_placeholder_for(self, normalized: str, prefix: str) -> str:
+        placeholders = self._placeholders.setdefault("person_name", {})
+        existing = placeholders.get(normalized)
+        if existing is not None:
+            return existing
+
+        alias_placeholder = self._resolve_person_alias(normalized)
+        if alias_placeholder is not None:
+            placeholders[normalized] = alias_placeholder
+            return alias_placeholder
+
+        placeholder = self._next_placeholder(prefix)
+        placeholders[normalized] = placeholder
+        anchor = _new_person_alias_anchor(normalized, placeholder)
+        if anchor is not None:
+            self._person_anchors[anchor.full_name] = anchor
+        return placeholder
+
+    def _resolve_person_alias(self, normalized: str) -> str | None:
+        if not self._person_anchors or _is_korean_full_name_key(normalized) or not _is_korean_alias_key(normalized):
+            return None
+
+        matches = [
+            anchor.placeholder
+            for anchor in self._person_anchors.values()
+            if _person_alias_matches_anchor(normalized, anchor)
+        ]
+        if len(matches) != 1:
+            return None
+        return matches[0]
+
+    def _next_placeholder(self, prefix: str) -> str:
+        next_index = self._counters.get(prefix, 0) + 1
+        self._counters[prefix] = next_index
+        return f"[{prefix}_{next_index}]"
 
 
 def redact_prompt(
@@ -410,13 +455,75 @@ def _placeholder_for_signal(
 
 
 def _normalize_entity_key(detector_type: str, raw_value: str) -> str:
-    if detector_type in {"person_name", "organization_name", "postal_address"}:
+    if detector_type == "person_name":
+        return _normalize_person_alias_key(raw_value)
+    if detector_type in {"organization_name", "postal_address"}:
         return " ".join(raw_value.strip().split())
     if detector_type == "email":
         return raw_value.strip()
     if detector_type == "phone_number":
         return re.sub(r"\D", "", raw_value)
     return raw_value.strip()
+
+
+def _normalize_person_alias_key(raw_value: str) -> str:
+    normalized = " ".join(raw_value.strip().split())
+    normalized = _strip_person_honorific_suffix(normalized)
+    normalized = _strip_person_business_role_suffix(normalized)
+    normalized = _strip_person_honorific_suffix(normalized)
+    korean_key = normalized.replace(" ", "")
+    if _is_korean_alias_key(korean_key):
+        return korean_key
+    return normalized
+
+
+def _strip_person_honorific_suffix(value: str) -> str:
+    while True:
+        trimmed = value.strip()
+        without_honorific = trimmed.removesuffix("\ub2d8").removesuffix("\uc528").strip()
+        if without_honorific == trimmed:
+            return trimmed
+        value = without_honorific
+
+
+def _strip_person_business_role_suffix(value: str) -> str:
+    trimmed = value.strip()
+    for role in BUSINESS_ROLE_LABELS:
+        if len(trimmed) <= len(role) or trimmed[-len(role) :].lower() != role.lower():
+            continue
+        before_role_with_space = trimmed[: -len(role)]
+        before_role = before_role_with_space.rstrip()
+        if before_role == "" or len(before_role) == len(before_role_with_space):
+            continue
+        return before_role
+    return trimmed
+
+
+def _new_person_alias_anchor(normalized: str, placeholder: str) -> PersonAliasAnchor | None:
+    if not _is_korean_full_name_key(normalized):
+        return None
+    return PersonAliasAnchor(
+        full_name=normalized,
+        family_name=normalized[0],
+        given_name=normalized[1:],
+        placeholder=placeholder,
+    )
+
+
+def _person_alias_matches_anchor(alias: str, anchor: PersonAliasAnchor) -> bool:
+    if len(alias) == 1:
+        return alias == anchor.family_name
+    if len(alias) >= 2:
+        return alias == anchor.given_name or anchor.full_name.endswith(alias)
+    return False
+
+
+def _is_korean_full_name_key(value: str) -> bool:
+    return len(value) in {3, 4} and _is_korean_alias_key(value)
+
+
+def _is_korean_alias_key(value: str) -> bool:
+    return value != "" and all(_is_korean_syllable(char) for char in value)
 
 
 def _person_role_prefix(prompt_text: str, signal: SafetySignal) -> str | None:

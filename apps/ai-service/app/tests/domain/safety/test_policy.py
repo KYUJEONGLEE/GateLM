@@ -666,6 +666,63 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
                 self.assertNotIn("\uae40\ubbfc\uc218", redacted)
                 self.assertNotIn("\uc774\uc724\uc9c0", redacted)
 
+    def test_redact_prompt_links_korean_person_aliases_to_unique_full_name_anchor(self) -> None:
+        full_name = "\uc774\uc724\uc9c0"
+        given_name = "\uc724\uc9c0"
+        family_name = "\uc774"
+        prompt = (
+            f"{full_name}\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
+            f"{given_name}\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4. "
+            f"{family_name} \ud300\uc7a5\uc740 \uc2b9\uc778\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", full_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", given_name, "[PERSON_NAME_REDACTED]", occurrence=2),
+                signal_at(prompt, "person_name", f"{family_name} \ud300\uc7a5", family_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            (
+                "[PERSON_1]\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
+                "[PERSON_1]\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4. "
+                "[PERSON_1] [ROLE:\ud300\uc7a5]\uc740 \uc2b9\uc778\ud588\ub2e4."
+            ),
+        )
+        self.assertEqual(redacted.count("[PERSON_1]"), 3)
+        self.assertNotIn(full_name, redacted)
+        self.assertNotIn(given_name, redacted)
+
+    def test_redact_prompt_does_not_link_ambiguous_korean_person_alias(self) -> None:
+        first_name = "\uc774\uc724\uc9c0"
+        second_name = "\ubc15\uc724\uc9c0"
+        alias = "\uc724\uc9c0"
+        prompt = (
+            f"{first_name}\uc640 {second_name}\uac00 \ucc38\uc11d\ud588\ub2e4. "
+            f"{alias}\ub2d8\uc774 \ubc1c\ud45c\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", first_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", second_name, "[PERSON_NAME_REDACTED]"),
+                signal_at(prompt, "person_name", f"{alias}\ub2d8", alias, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\uc640 [PERSON_2]\uac00 \ucc38\uc11d\ud588\ub2e4. [PERSON_3]\ub2d8\uc774 \ubc1c\ud45c\ud588\ub2e4.",
+        )
+        self.assertNotIn(first_name, redacted)
+        self.assertNotIn(second_name, redacted)
+        self.assertNotIn(f"{alias}\ub2d8", redacted)
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."
@@ -811,6 +868,27 @@ def signal(
     occurrence: int = 1,
 ) -> SafetySignal:
     start = nth_index(prompt, raw_value, occurrence)
+    return SafetySignal(
+        detector_type=detector_type,
+        start=start,
+        end=start + len(raw_value),
+        action=action,
+        placeholder=placeholder,
+        priority=10,
+    )
+
+
+def signal_at(
+    prompt: str,
+    detector_type: str,
+    marker: str,
+    raw_value: str,
+    placeholder: str,
+    *,
+    action: str = "redact",
+) -> SafetySignal:
+    marker_start = prompt.index(marker)
+    start = prompt.index(raw_value, marker_start)
     return SafetySignal(
         detector_type=detector_type,
         start=start,

@@ -181,6 +181,74 @@ func TestP0EnginePreservesBusinessRoleRelationship(t *testing.T) {
 	}
 }
 
+func TestEngineLinksKoreanPersonAliasesToUniqueFullNameAnchor(t *testing.T) {
+	fullName := "\uc774\uc724\uc9c0"
+	givenName := "\uc724\uc9c0"
+	familyName := "\uc774"
+	prompt := fullName + "\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. " +
+		givenName + "\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4. " +
+		familyName + " \ud300\uc7a5\uc740 \uc2b9\uc778\ud588\ub2e4."
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: []Detection{
+			personDetection(prompt, fullName, 1),
+			personDetection(prompt, givenName, 2),
+			personDetectionAt(prompt, familyName+" \ud300\uc7a5", familyName),
+		}}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. " +
+		"[PERSON_1]\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4. " +
+		"[PERSON_1] [ROLE:\ud300\uc7a5]\uc740 \uc2b9\uc778\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected alias-linked prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	if strings.Count(result.RedactedPrompt, "[PERSON_1]") != 3 {
+		t.Fatalf("expected aliases to reuse [PERSON_1], got %q", result.RedactedPrompt)
+	}
+	for _, rawValue := range []string{fullName, givenName} {
+		if strings.Contains(result.RedactedPrompt, rawValue) {
+			t.Fatalf("redacted prompt must not include raw person alias %q: %q", rawValue, result.RedactedPrompt)
+		}
+	}
+}
+
+func TestEngineDoesNotLinkAmbiguousKoreanPersonAlias(t *testing.T) {
+	firstName := "\uc774\uc724\uc9c0"
+	secondName := "\ubc15\uc724\uc9c0"
+	alias := "\uc724\uc9c0"
+	prompt := firstName + "\uc640 " + secondName + "\uac00 \ucc38\uc11d\ud588\ub2e4. " +
+		alias + "\ub2d8\uc774 \ubc1c\ud45c\ud588\ub2e4."
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: []Detection{
+			personDetection(prompt, firstName, 1),
+			personDetection(prompt, secondName, 1),
+			personDetectionAt(prompt, alias+"\ub2d8", alias),
+		}}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\uc640 [PERSON_2]\uac00 \ucc38\uc11d\ud588\ub2e4. [PERSON_3]\ub2d8\uc774 \ubc1c\ud45c\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected ambiguous alias to stay separate %q, got %q", expected, result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, firstName) ||
+		strings.Contains(result.RedactedPrompt, secondName) ||
+		strings.Contains(result.RedactedPrompt, alias+"\ub2d8") {
+		t.Fatalf("redacted prompt must not include raw person aliases: %q", result.RedactedPrompt)
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -325,4 +393,66 @@ func TestEffectiveDetectionsPrefersBlockingOverlap(t *testing.T) {
 	if selected[0].Type != string(DetectorAPIKey) {
 		t.Fatalf("expected blocking api_key overlap to win, got %#v", selected[0])
 	}
+}
+
+type staticDetector struct {
+	detections []Detection
+}
+
+func (d staticDetector) Type() string {
+	return string(DetectorPersonName)
+}
+
+func (d staticDetector) Priority() int {
+	return 1
+}
+
+func (d staticDetector) Detect(_ string) []Detection {
+	detections := make([]Detection, len(d.detections))
+	copy(detections, d.detections)
+	return detections
+}
+
+func personDetection(input string, rawValue string, occurrence int) Detection {
+	start := nthStringIndex(input, rawValue, occurrence)
+	return Detection{
+		Type:        string(DetectorPersonName),
+		Start:       start,
+		End:         start + len(rawValue),
+		Action:      ActionRedacted,
+		Placeholder: PlaceholderPersonName,
+		Priority:    10,
+	}
+}
+
+func personDetectionAt(input string, marker string, rawValue string) Detection {
+	markerStart := strings.Index(input, marker)
+	if markerStart < 0 {
+		panic("test marker not found")
+	}
+	relativeStart := strings.Index(input[markerStart:], rawValue)
+	if relativeStart < 0 {
+		panic("test raw value not found after marker")
+	}
+	start := markerStart + relativeStart
+	return Detection{
+		Type:        string(DetectorPersonName),
+		Start:       start,
+		End:         start + len(rawValue),
+		Action:      ActionRedacted,
+		Placeholder: PlaceholderPersonName,
+		Priority:    10,
+	}
+}
+
+func nthStringIndex(input string, value string, occurrence int) int {
+	start := -1
+	for i := 0; i < occurrence; i++ {
+		next := strings.Index(input[start+1:], value)
+		if next < 0 {
+			panic("test value occurrence not found")
+		}
+		start += next + 1
+	}
+	return start
 }
