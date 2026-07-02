@@ -695,15 +695,31 @@ async function readGatewaySseStream(
   };
 }
 
-function readGatewaySseFrame(frame: string) {
-  const data = frame
-    .split(/\r?\n/)
-    .map(readGatewaySseDataLine)
-    .filter((result) => result.hasValue)
-    .map((result) => result.value)
-    .join("\n");
+function readGatewaySseFrame(frame: string): GatewaySseDataResult {
+  const lines = frame.split(/\r?\n/);
+  let content = "";
+  let done = false;
+  let hasValue = false;
+  let value = "";
 
-  return parseGatewaySseData(data);
+  for (const line of lines) {
+    const result = readGatewaySseDataLine(line);
+    if (!result.hasValue) {
+      continue;
+    }
+
+    hasValue = true;
+    done = done || result.done;
+    content += result.content;
+    value = result.value;
+  }
+
+  return {
+    content,
+    done,
+    hasValue,
+    value
+  };
 }
 
 function readGatewaySseDataLine(line: string): GatewaySseDataResult {

@@ -1862,7 +1862,6 @@ func newStreamingCacheAccumulator(reqCtx *pipeline.RequestContext) *streamingCac
 	}
 
 	return &streamingCacheAccumulator{
-		created: time.Now().Unix(),
 		model:   model,
 		choices: map[int]*streamingCacheChoice{},
 	}
@@ -1952,10 +1951,15 @@ func (a *streamingCacheAccumulator) response(usage *provider.Usage) *provider.Ch
 		return nil
 	}
 
+	created := a.created
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+
 	return &provider.ChatCompletionResponse{
 		ID:      firstNonEmpty(a.id, "chatcmpl_"+middleware.NewRequestID()),
 		Object:  "chat.completion",
-		Created: a.created,
+		Created: created,
 		Model:   a.model,
 		Choices: choices,
 		Usage:   usage,

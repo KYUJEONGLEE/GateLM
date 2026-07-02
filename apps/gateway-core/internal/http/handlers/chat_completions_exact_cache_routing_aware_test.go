@@ -156,6 +156,12 @@ func TestChatCompletionsExactCacheRoutingAwareStreamMissLooksUpAndStores(t *test
 	if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "miss" {
 		t.Fatalf("stream=true miss는 cache status miss여야 한다. cache=%q", got)
 	}
+
+	cached := routingAwareSingleCachedResponse(t, harness.cacheStore)
+	expectedCreated := time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC).Unix()
+	if cached.Created != expectedCreated {
+		t.Fatalf("stream cache payload는 provider created 값을 유지해야 한다. got=%d want=%d", cached.Created, expectedCreated)
+	}
 }
 
 func TestChatCompletionsExactCacheRoutingAwareRepeatedStreamUsesExactCache(t *testing.T) {
@@ -575,6 +581,25 @@ func (s *routingAwareMemoryStore) SetExact(_ context.Context, entry ports.CacheE
 	entry.Payload = append([]byte(nil), entry.Payload...)
 	s.entries[entry.KeyHash] = entry
 	return nil
+}
+
+func routingAwareSingleCachedResponse(t *testing.T, store *routingAwareMemoryStore) provider.ChatCompletionResponse {
+	t.Helper()
+
+	if store == nil || len(store.entries) != 1 {
+		t.Fatalf("expected exactly one cache entry, got %d", len(store.entries))
+	}
+
+	for _, entry := range store.entries {
+		var cached provider.ChatCompletionResponse
+		if err := json.Unmarshal(entry.Payload, &cached); err != nil {
+			t.Fatalf("decode cached chat completion response: %v", err)
+		}
+		return cached
+	}
+
+	t.Fatal("expected cached response")
+	return provider.ChatCompletionResponse{}
 }
 
 func routingAwareCatalog(contentHash string) providercatalog.Catalog {
