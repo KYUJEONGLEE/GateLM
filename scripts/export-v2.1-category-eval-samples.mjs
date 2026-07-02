@@ -13,15 +13,15 @@ const allowedConsentTypes = new Set(["synthetic", "operator_opt_in", "customer_o
 const allowedSources = new Set(["synthetic_fixture", "gateway_redacted_sample", "manual_seed"]);
 const allowedLanguages = new Set(["en", "ko", "mixed", "unknown"]);
 const forbiddenKeyPattern =
-  /(rawPrompt|rawResponse|rawDetectedValue|rawPromptFragment|apiKey|appToken|providerKey|authorizationHeader|providerRawErrorBody|actualSecret|authorization|providerKey|api_key|app_token)/i;
+  /(rawPrompt|rawResponse|rawDetectedValue|rawPromptFragment|apiKey|appToken|providerKey|authorizationHeader|providerRawErrorBody|actualSecret|authorization|api_key|app_token)/i;
 const secretShapePattern =
   /(sk-[a-z0-9_-]{12,}|Bearer\s+[a-z0-9._-]{12,}|-----BEGIN\s+(RSA|OPENSSH|EC|PRIVATE)\s+KEY-----)/i;
 const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/i;
 
-function toAbsolute(relativeOrAbsolutePath) {
+function toAbsolute(relativeOrAbsolutePath, customRootDir) {
   return path.isAbsolute(relativeOrAbsolutePath)
     ? relativeOrAbsolutePath
-    : path.join(rootDir, relativeOrAbsolutePath);
+    : path.join(customRootDir ?? rootDir, relativeOrAbsolutePath);
 }
 
 function parseArgs(argv) {
@@ -71,26 +71,31 @@ function parseArgs(argv) {
   return options;
 }
 
-function readJsonl(filePath, failures) {
-  const absolutePath = toAbsolute(filePath);
+function readJsonl(filePath, failures, customRootDir) {
+  const absolutePath = toAbsolute(filePath, customRootDir);
   if (!existsSync(absolutePath)) {
     failures.push(`${filePath}: file is missing`);
     return [];
   }
 
-  const text = readFileSync(absolutePath, "utf8");
-  return text
-    .split(/\r?\n/)
-    .map((line, index) => ({ line, lineNumber: index + 1 }))
-    .filter(({ line }) => line.trim().length > 0)
-    .map(({ line, lineNumber }) => {
-      try {
-        return { record: JSON.parse(line), lineNumber };
-      } catch (error) {
-        failures.push(`${filePath}: line ${lineNumber}: invalid JSON (${error.message})`);
-        return { record: undefined, lineNumber };
-      }
-    });
+  try {
+    const text = readFileSync(absolutePath, "utf8");
+    return text
+      .split(/\r?\n/)
+      .map((line, index) => ({ line, lineNumber: index + 1 }))
+      .filter(({ line }) => line.trim().length > 0)
+      .map(({ line, lineNumber }) => {
+        try {
+          return { record: JSON.parse(line), lineNumber };
+        } catch (error) {
+          failures.push(`${filePath}: line ${lineNumber}: invalid JSON (${error.message})`);
+          return { record: undefined, lineNumber };
+        }
+      });
+  } catch (error) {
+    failures.push(`${filePath}: unable to read file (${error.message})`);
+    return [];
+  }
 }
 
 function pushFailure(failures, inputPath, lineNumber, message) {
@@ -225,7 +230,7 @@ function buildEvaluationRecord(record, index, options) {
 export function exportCategoryEvaluationSamples(options = {}) {
   const failures = [];
   const input = options.input ?? defaultInputPath;
-  const parsedLines = readJsonl(input, failures);
+  const parsedLines = readJsonl(input, failures, options.rootDir);
   const records = [];
 
   parsedLines.forEach(({ record, lineNumber }, index) => {
@@ -257,11 +262,12 @@ export function verifyCategoryEvaluationCaptureExport(options = {}) {
   return exportCategoryEvaluationSamples({
     input: options.input ?? defaultInputPath,
     datasetVersion: options.datasetVersion ?? "category_eval_capture_smoke_2026_07_02_v1",
+    rootDir: options.rootDir,
   }).failures;
 }
 
-function writeJsonl(outputPath, records) {
-  const absolutePath = toAbsolute(outputPath);
+function writeJsonl(outputPath, records, customRootDir) {
+  const absolutePath = toAbsolute(outputPath, customRootDir);
   mkdirSync(path.dirname(absolutePath), { recursive: true });
   const payload = records.map((record) => JSON.stringify(record)).join("\n") + "\n";
   writeFileSync(absolutePath, payload, "utf8");
@@ -290,7 +296,7 @@ function main() {
   }
 
   if (!options.dryRun && options.output) {
-    writeJsonl(options.output, result.records);
+    writeJsonl(options.output, result.records, options.rootDir);
   }
 
   const message = `v2.1 category evaluation sample export passed. records=${result.records.length}`;
