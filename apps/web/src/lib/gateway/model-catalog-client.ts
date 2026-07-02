@@ -5,8 +5,11 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import {
   getControlPlaneApplicationId,
-  getControlPlaneBaseUrl
+  getControlPlaneBaseUrl,
+  getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
+import { listProviderConnections } from "@/lib/control-plane/provider-connections-client";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 import type {
   ModelCatalogGatewayMeta,
@@ -188,12 +191,41 @@ async function getControlPlaneModelCatalog(): Promise<{
 }> {
   const applicationId = getControlPlaneApplicationId();
   const baseUrl = getControlPlaneBaseUrl();
+  const projectId = getControlPlaneProjectId();
 
+  const [providerCatalog, providerConnections] = await Promise.all([
+    getActiveProviderCatalogModels({ applicationId, baseUrl }),
+    getProviderConnectionModels(projectId)
+  ]);
+
+  return {
+    loadError: joinLoadErrors(providerCatalog.loadError, providerConnections.loadError),
+    models: mergeControlPlaneModelSources(providerConnections.models, providerCatalog.models)
+  };
+}
+
+async function getActiveProviderCatalogModels({
+  applicationId,
+  baseUrl
+}: {
+  applicationId: string;
+  baseUrl: string;
+}): Promise<{
+  loadError: string | null;
+  models: ModelCatalogItem[];
+}> {
   try {
     const response = await requestControlPlaneProviderCatalog({
       applicationId,
       baseUrl
     });
+
+    if (response.status === 404) {
+      return {
+        loadError: null,
+        models: []
+      };
+    }
 
     if (response.status < 200 || response.status >= 300) {
       return {
@@ -221,6 +253,25 @@ async function getControlPlaneModelCatalog(): Promise<{
       models: []
     };
   }
+}
+
+async function getProviderConnectionModels(projectId: string): Promise<{
+  loadError: string | null;
+  models: ModelCatalogItem[];
+}> {
+  const result = await listProviderConnections(projectId);
+
+  if (!result.ok) {
+    return {
+      loadError: result.status === 404 ? null : result.error,
+      models: []
+    };
+  }
+
+  return {
+    loadError: null,
+    models: result.data.flatMap(parseProviderConnectionModels)
+  };
 }
 
 function requestControlPlaneProviderCatalog({
@@ -262,6 +313,88 @@ function requestControlPlaneProviderCatalog({
     request.on("error", reject);
     request.end();
   });
+}
+
+function parseProviderConnectionModels(provider: ProviderConnectionRecord): ModelCatalogItem[] {
+  const providerConfig = provider.providerConfig;
+  const models = Array.isArray(providerConfig?.models)
+    ? providerConfig.models.filter((model): model is string => typeof model === "string" && model.trim().length > 0)
+    : [];
+
+  return Array.from(new Set(models.map((model) => model.trim()))).map((modelName) => ({
+    alias: null,
+    allowed: provider.status === "ACTIVE",
+    adapterType: getProviderConfigString(providerConfig, "adapterType"),
+    apiVersion: getProviderConfigString(providerConfig, "apiVersion"),
+    autoRoutingEligible: null,
+    capabilities: [],
+    costTier: null,
+    createdAt: provider.updatedAt,
+    credentialRequired: getProviderCredentialRequired(provider),
+    credentialState: getProviderCredentialState(provider),
+    fallbackEligible: providerConfig?.failureMode === "fail_open_to_fallback",
+    fallbackPriority: null,
+    id: modelName,
+    object: "model",
+    ownedBy: provider.provider,
+    provider: provider.provider,
+    requestFormat: getProviderConfigString(providerConfig, "requestFormat"),
+    source: "control-plane",
+    timeoutMs: provider.timeoutMs
+  }));
+}
+
+function getProviderConfigString(
+  providerConfig: Record<string, unknown> | null,
+  key: string
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getProviderCredentialRequired(provider: ProviderConnectionRecord) {
+  const credentialRequired = provider.providerConfig?.credentialRequired;
+
+  return typeof credentialRequired === "boolean" ? credentialRequired : provider.resolver !== "none";
+}
+
+function getProviderCredentialState(provider: ProviderConnectionRecord) {
+  if (!getProviderCredentialRequired(provider)) {
+    return "not_required";
+  }
+
+  return provider.status === "ACTIVE" ? "active" : "disabled";
+}
+
+function mergeControlPlaneModelSources(...modelGroups: ModelCatalogItem[][]) {
+  const modelMap = new Map<string, ModelCatalogItem>();
+
+  for (const models of modelGroups) {
+    for (const model of models) {
+      const modelKey = getModelKey(model);
+      const existing = modelMap.get(modelKey);
+
+      modelMap.set(modelKey, existing ? mergeControlPlaneModel(existing, model) : model);
+    }
+  }
+
+  return Array.from(modelMap.values());
+}
+
+function mergeControlPlaneModel(base: ModelCatalogItem, override: ModelCatalogItem): ModelCatalogItem {
+  return {
+    ...base,
+    ...override,
+    capabilities: mergeStringArrays(base.capabilities, override.capabilities),
+    source: "control-plane"
+  };
+}
+
+function joinLoadErrors(...errors: Array<string | null>) {
+  const messages = errors.filter((error): error is string => Boolean(error));
+
+  return messages.length > 0 ? messages.join(" ") : null;
 }
 
 function buildRequestId() {
