@@ -7,7 +7,7 @@
 핵심 순서는 아래와 같다.
 
 1. 평가: 현재 분류기가 무엇을 맞히고 틀리는지 재현 가능한 리포트로 본다.
-2. 운영: 라우팅 룰, 우선순위, policy version, threshold를 RuntimeConfig/문서/로그와 연결한다.
+2. 운영: 관리자 공개 설정은 enabled와 low/default/high 모델 선택으로 제한하고, 세부 룰은 GateLM 내부 정책으로 관리한다.
 3. 동적 라우팅: 비용, latency, provider 상태, fallback 우선순위를 라우팅 판단에 반영한다.
 
 ## Stage 1. Evaluation Report
@@ -42,20 +42,21 @@ corepack pnpm run v2.1:routing:evaluate -- -dataset apps/gateway-core/internal/d
 
 목표:
 
-- routing category, priority, tier, capability, policyVariant를 운영자가 이해할 수 있는 계약으로 정리한다.
-- RuntimeConfig/RuntimeSnapshot에 들어갈 최소 routing policy shape를 확정한다.
+- 관리자에게 공개할 RuntimeConfig 범위는 `routing.enabled`와 low/default/high 모델 선택으로 제한한다.
+- routing category, priority, keyword, policyVariant는 Gateway 내부 embedded policy로 관리한다.
 - Request Log와 Dashboard에서 routingReason, routingDecisionKeyHash, selected provider/model을 일관되게 보여준다.
 
 현재 구현:
 
 - 기본 category keyword와 priority를 `apps/gateway-core/internal/domain/routing/category_policy.json`으로 분리했다.
+- 이 파일은 관리자 편집용 계약이 아니라 GateLM 내부 embedded policy다.
 - Gateway hot path는 외부 파일을 매 요청마다 읽지 않고, binary에 embed된 정책 데이터를 사용한다.
-- 이 단계는 RuntimeConfig 편집까지 열기 전의 안전한 중간 단계다.
-- 이후 RuntimeSnapshot 기반 routing policy로 승격할 때도 동일한 shape를 유지하는 것을 목표로 한다.
+- RuntimeConfig/RuntimeSnapshot에는 세부 룰을 싣지 않고, 관리자 공개 설정과 실행 결과 provenance만 연결한다.
+- 이후 RuntimeSnapshot에 연결하더라도 세부 룰 본문이 아니라 `policyVersion`/hash 같은 추적 정보만 싣는 것을 기본값으로 한다.
 
 주의:
 
-- raw prompt 기반 rule을 UI에 노출하지 않는다.
+- category keyword, priority, detector-like rule을 UI/API/fixture에 공개하지 않는다.
 - provider/model enum lock을 만들지 않는다.
 - safety/masking 책임을 routing policy에 섞지 않는다.
 
