@@ -55,6 +55,11 @@
       "semanticCacheMode": "evidence_only",
       "cachePolicyHash": "sha256:synthetic-cache-policy-hash"
     },
+    "promptCapture": {
+      "enabled": false,
+      "mode": "disabled",
+      "maxChars": 8000
+    },
     "rateLimit": {
       "enabled": true,
       "scope": "application",

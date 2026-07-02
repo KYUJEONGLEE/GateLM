@@ -107,6 +107,14 @@
     "detectorCategories": [],
     "maskingAction": "none"
   },
+  "promptCapture": {
+    "enabled": false,
+    "mode": "disabled",
+    "visibility": "admin_request_detail",
+    "capturedPrompt": null,
+    "truncated": false,
+    "maxChars": 8000
+  },
   "createdAt": "2026-06-29T06:01:10Z",
   "completedAt": "2026-06-29T06:01:10Z"
 }
