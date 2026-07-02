@@ -833,6 +833,24 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
+  it('uses empty routing candidate statuses for legacy Runtime Config documents', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    delete (activeDocument.routingPolicy as { candidateStatuses?: unknown })
+      .candidateStatuses;
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.routing.candidateStatuses).toEqual([]);
+  });
+
   it('returns the persisted active RuntimeSnapshot before falling back to Runtime Config', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);

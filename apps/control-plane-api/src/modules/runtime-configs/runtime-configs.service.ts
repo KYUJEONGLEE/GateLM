@@ -1786,7 +1786,7 @@ export class RuntimeConfigsService {
                 highQualityModel: document.routingPolicy.highQualityModel,
               }
             : {}),
-          candidateStatuses: document.routingPolicy.candidateStatuses,
+          candidateStatuses: document.routingPolicy.candidateStatuses ?? [],
           routingPolicyHash: document.routingPolicy.routingPolicyHash,
         },
         cache: {
