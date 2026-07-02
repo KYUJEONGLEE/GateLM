@@ -182,6 +182,26 @@ PERSON_COREFERENCE_PLACEHOLDER_PREFIXES = (
     "[DOCTOR_",
     "[PATIENT_",
 )
+PERSON_NAME_STRUCTURE_SUFFIXES = (
+    "\uc5d0\uac8c",
+    "\uc5d0\uc11c",
+    "\uc73c\ub85c",
+    "\ub2d8",
+    "\uc528",
+    "\uc740",
+    "\ub294",
+    "\uc774",
+    "\uac00",
+    "\uc744",
+    "\ub97c",
+    "\uc5d0",
+    "\uc640",
+    "\uacfc",
+    "\uc758",
+    "\ub3c4",
+    "\ub9cc",
+    "\ub85c",
+)
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "email": frozenset("._-+@"),
@@ -847,14 +867,19 @@ def _trim_person_name_structure_suffix(prompt_text: str, start: int, end: int) -
     while end > start:
         value = prompt_text[start:end]
         next_end = end
-        for suffix in ("\ub2d8", "\uc528"):
-            if value.endswith(suffix):
+        for suffix in PERSON_NAME_STRUCTURE_SUFFIXES:
+            if value.endswith(suffix) and _is_korean_person_stem(value[: -len(suffix)]):
                 next_end = end - len(suffix)
                 break
         if next_end == end:
             return end
         end = next_end
     return end
+
+
+def _is_korean_person_stem(value: str) -> bool:
+    key = value.replace(" ", "")
+    return 2 <= len(key) <= 4 and _is_korean_alias_key(key)
 
 
 def _email_value_span(prompt_text: str, start: int, end: int) -> tuple[int, int]:

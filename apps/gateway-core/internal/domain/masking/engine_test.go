@@ -360,6 +360,40 @@ func TestEnginePreservesStructureAroundOverextendedPIISpans(t *testing.T) {
 	}
 }
 
+func TestEnginePreservesKoreanParticlesAroundPersonNames(t *testing.T) {
+	personName := "\uc774\uc724\uc9c0"
+	rawSpans := []string{
+		personName + "\ub294",
+		personName + "\uac00",
+		personName + "\ub97c",
+		personName + "\uc5d0\uac8c",
+		personName + "\uc640",
+		personName + "\uc758",
+	}
+	prompt := strings.Join(rawSpans, " ") + " \uae30\ub85d\uc744 \ud655\uc778\ud588\ub2e4."
+	detections := make([]Detection, 0, len(rawSpans))
+	for _, rawSpan := range rawSpans {
+		detections = append(detections, personDetection(prompt, rawSpan, 1))
+	}
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: detections}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\ub294 [PERSON_1]\uac00 [PERSON_1]\ub97c [PERSON_1]\uc5d0\uac8c [PERSON_1]\uc640 [PERSON_1]\uc758 \uae30\ub85d\uc744 \ud655\uc778\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected particle-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, personName) {
+		t.Fatalf("redacted prompt must not contain raw person name: %q", result.RedactedPrompt)
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

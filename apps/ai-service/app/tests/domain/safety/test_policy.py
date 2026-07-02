@@ -810,6 +810,30 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertNotIn("\uc774\uc724\uc9c0", redacted)
         self.assertNotIn("yoonji@example.com", redacted)
 
+    def test_redact_prompt_preserves_korean_particles_around_person_names(self) -> None:
+        person_name = "\uc774\uc724\uc9c0"
+        raw_spans = [
+            f"{person_name}\ub294",
+            f"{person_name}\uac00",
+            f"{person_name}\ub97c",
+            f"{person_name}\uc5d0\uac8c",
+            f"{person_name}\uc640",
+            f"{person_name}\uc758",
+        ]
+        prompt = " ".join(raw_spans) + " \uae30\ub85d\uc744 \ud655\uc778\ud588\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [signal(prompt, "person_name", raw_span, "[PERSON_NAME_REDACTED]") for raw_span in raw_spans],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\ub294 [PERSON_1]\uac00 [PERSON_1]\ub97c [PERSON_1]\uc5d0\uac8c "
+            "[PERSON_1]\uc640 [PERSON_1]\uc758 \uae30\ub85d\uc744 \ud655\uc778\ud588\ub2e4.",
+        )
+        self.assertNotIn(person_name, redacted)
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."
