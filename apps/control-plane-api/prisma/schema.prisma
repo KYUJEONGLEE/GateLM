@@ -121,6 +121,25 @@ model ProviderConnection {
   @@map("provider_connections")
 }
 
+model ProviderPreset {
+  providerKey        String         @id
+  displayName        String
+  adapterType        String
+  baseUrl            String
+  modelsEndpointPath String         @default("/models")
+  credentialRequired Boolean        @default(true)
+  defaultResolver    String         @default("environment")
+  defaultTimeoutMs   Int            @default(30000)
+  status             ResourceStatus @default(ACTIVE)
+  sortOrder          Int            @default(100)
+  providerConfig     Json?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([status, sortOrder])
+  @@map("provider_presets")
+}
+
 model GatewayApiKey {
   id            String           @id @default(uuid()) @db.Uuid
   tenantId      String           @db.Uuid
