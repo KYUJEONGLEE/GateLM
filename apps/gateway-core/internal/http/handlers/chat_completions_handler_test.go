@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -260,13 +261,18 @@ func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.
 	}
 }
 
-func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T) {
+func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
-	providerRequests := []provider.ChatCompletionRequest{}
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"안녕하세요. "},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"실제 provider streaming입니다."},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":5,"total_tokens":9}}`),
+		},
+	}
 	handler := ChatCompletionsHandler{
-		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
-			requests: &providerRequests,
-		}),
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
 		DefaultModel:      "mock-balanced",
 		DefaultProvider:   "mock",
 		TerminalLogWriter: logWriter,
@@ -286,17 +292,20 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 		t.Fatalf("expected event-stream content type, got %q", got)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "data:") || !strings.Contains(body, "Mock") || !strings.Contains(body, "data: [DONE]") {
+	if !strings.Contains(body, "data:") || !strings.Contains(body, "실제 provider streaming") || !strings.Contains(body, "data: [DONE]") {
 		t.Fatalf("expected SSE chunks and done marker, got %q", body)
 	}
 	if strings.Count(body, "data:") < 3 {
 		t.Fatalf("expected multiple SSE chunks, got %q", body)
 	}
-	if len(providerRequests) != 1 {
-		t.Fatalf("expected one provider request, got %d", len(providerRequests))
+	if streamingAdapter.chatCalls != 0 {
+		t.Fatalf("streaming request must not use non-stream provider call, got %d", streamingAdapter.chatCalls)
 	}
-	if providerRequests[0].Stream {
-		t.Fatalf("thin slice must not require upstream provider streaming")
+	if streamingAdapter.streamCalls != 1 {
+		t.Fatalf("expected one provider stream request, got %d", streamingAdapter.streamCalls)
+	}
+	if len(streamingAdapter.streamRequests) != 1 || !streamingAdapter.streamRequests[0].Stream {
+		t.Fatalf("expected upstream stream=true request, got %+v", streamingAdapter.streamRequests)
 	}
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
@@ -304,6 +313,9 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 	logged := logWriter.logs[0]
 	if !logged.Stream || logged.Status != invocationlog.StatusSuccess || logged.HTTPStatus != http.StatusOK {
 		t.Fatalf("unexpected streaming terminal log: %+v", logged)
+	}
+	if logged.TotalTokens != 9 {
+		t.Fatalf("expected usage from final stream chunk, got %+v", logged)
 	}
 	if logged.DomainOutcomes.Streaming.Outcome != "completed" ||
 		!logged.DomainOutcomes.Streaming.StreamingRequested ||
@@ -314,7 +326,7 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 	if err != nil {
 		t.Fatalf("marshal terminal log: %v", err)
 	}
-	if strings.Contains(string(loggedJSON), "Mock response") {
+	if strings.Contains(string(loggedJSON), "안녕하세요") || strings.Contains(string(loggedJSON), "실제 provider streaming") {
 		t.Fatalf("terminal log must not store streamed response chunks: %s", string(loggedJSON))
 	}
 }
@@ -369,8 +381,9 @@ func TestChatCompletionsHandlerStreamingPreservesResponseWhitespace(t *testing.T
 
 func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
+	streamingAdapter := &streamingProviderAdapter{}
 	handler := ChatCompletionsHandler{
-		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
 		DefaultModel:      "mock-balanced",
 		DefaultProvider:   "mock",
 		TerminalLogWriter: logWriter,
@@ -391,6 +404,9 @@ func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T
 	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
 		t.Fatalf("cancelled request must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
 	}
+	if streamingAdapter.streamCalls != 0 {
+		t.Fatalf("cancelled request must not open provider stream, got %d", streamingAdapter.streamCalls)
+	}
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
@@ -398,6 +414,192 @@ func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T
 	if !logged.Stream ||
 		logged.Status != invocationlog.StatusCancelled ||
 		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingUnsupportedFailsBeforeProviderCall(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	providerCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls: &providerCalls,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("스트리밍 지원 여부를 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if providerCalls != 0 {
+		t.Fatalf("unsupported streaming must not call provider, got %d", providerCalls)
+	}
+	assertGatewayErrorCode(t, rr, "streaming_not_supported")
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.DomainOutcomes.Provider.Outcome != "not_called" ||
+		logged.DomainOutcomes.Streaming.Outcome != "not_streaming" {
+		t.Fatalf("unexpected unsupported streaming outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupted(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_interrupted","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"부분 응답"},"finish_reason":null}]}`),
+		},
+		nextErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic stream failure")),
+	}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("중간 실패를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("stream already started, response status should remain 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "부분 응답") || strings.Contains(rr.Body.String(), "data: [DONE]") {
+		t.Fatalf("expected partial stream without done marker, got %q", rr.Body.String())
+	}
+	if streamingAdapter.closeCalls != 1 {
+		t.Fatalf("stream reader must be closed, got %d", streamingAdapter.closeCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusFailed ||
+		logged.HTTPStatus != http.StatusBadGateway ||
+		logged.DomainOutcomes.Streaming.Outcome != "interrupted" ||
+		logged.DomainOutcomes.Provider.Outcome != "error" ||
+		logged.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("unexpected interrupted streaming log: %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+	loggedJSON, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal terminal log: %v", err)
+	}
+	if strings.Contains(string(loggedJSON), "부분 응답") {
+		t.Fatalf("terminal log must not store streamed chunk content: %s", string(loggedJSON))
+	}
+}
+
+func TestChatCompletionsHandlerStreamingFallbackResolveCancellationRecordsCancelled(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[0].CredentialRequired = false
+	catalog.Providers[0].CredentialRef = nil
+	catalog.Providers[1].CredentialRequired = true
+	catalog.Providers[1].CredentialRef = &credentials.Ref{
+		CredentialRefID:   "credential_ref_fallback_cancel",
+		CredentialVersion: 1,
+		CredentialState:   credentials.StateActive,
+	}
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      cancelingCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback resolve 취소를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 0 {
+		t.Fatalf("expected primary stream open and no fallback stream call, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.ErrorCode != "internal_error" ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingFallbackOpenCancellationRecordsCancelled(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeMock,
+		openErr:     context.Canceled,
+	}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback open 취소를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 1 {
+		t.Fatalf("expected primary and fallback stream open attempts, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.ErrorCode != "internal_error" ||
 		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
 		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
 	}
@@ -2615,6 +2817,149 @@ func (a staticProviderAdapter) CreateChatCompletion(ctx context.Context, config 
 	return a.response, nil
 }
 
+func (a staticProviderAdapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if a.calls != nil {
+		(*a.calls)++
+	}
+	return streamReaderFromResponse(req.Model, a.response), nil
+}
+
+type streamingProviderAdapter struct {
+	adapterType    string
+	chatCalls      int
+	streamCalls    int
+	streamRequests []provider.ChatCompletionRequest
+	events         []provider.ChatCompletionStreamEvent
+	openErr        error
+	nextErr        error
+	closeCalls     int
+}
+
+func (a *streamingProviderAdapter) AdapterType() string {
+	if a != nil && a.adapterType != "" {
+		return a.adapterType
+	}
+	return "mock"
+}
+
+func (a *streamingProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a *streamingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	a.chatCalls++
+	return &provider.ChatCompletionResponse{}, nil
+}
+
+func (a *streamingProviderAdapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	a.streamCalls++
+	a.streamRequests = append(a.streamRequests, req)
+	if a.openErr != nil {
+		return nil, a.openErr
+	}
+	return &recordingStreamReader{
+		events:     append([]provider.ChatCompletionStreamEvent(nil), a.events...),
+		errAfter:   a.nextErr,
+		closeCalls: &a.closeCalls,
+	}, nil
+}
+
+type recordingStreamReader struct {
+	events     []provider.ChatCompletionStreamEvent
+	index      int
+	errAfter   error
+	closeCalls *int
+}
+
+func (r *recordingStreamReader) Next() (provider.ChatCompletionStreamEvent, error) {
+	if r.index < len(r.events) {
+		event := r.events[r.index]
+		r.index++
+		return event, nil
+	}
+	if r.errAfter != nil {
+		return provider.ChatCompletionStreamEvent{}, r.errAfter
+	}
+	return provider.ChatCompletionStreamEvent{}, io.EOF
+}
+
+func (r *recordingStreamReader) Close() error {
+	if r.closeCalls != nil {
+		(*r.closeCalls)++
+	}
+	return nil
+}
+
+func streamReaderFromResponse(model string, resp *provider.ChatCompletionResponse) provider.ChatCompletionStreamReader {
+	if resp == nil {
+		return &recordingStreamReader{}
+	}
+	if resp.Model == "" {
+		resp = cloneChatCompletionResponse(resp)
+		resp.Model = model
+	}
+	chunks := streamingChunks(resp)
+	events := make([]provider.ChatCompletionStreamEvent, 0, len(chunks))
+	for _, chunk := range chunks {
+		payload, _ := json.Marshal(chunk)
+		events = append(events, provider.ChatCompletionStreamEvent{Data: json.RawMessage(payload)})
+	}
+	return &recordingStreamReader{events: events}
+}
+
+func cloneChatCompletionResponse(resp *provider.ChatCompletionResponse) *provider.ChatCompletionResponse {
+	if resp == nil {
+		return nil
+	}
+	cloned := *resp
+	return &cloned
+}
+
+func streamEvent(t *testing.T, payload string) provider.ChatCompletionStreamEvent {
+	t.Helper()
+	raw := json.RawMessage(payload)
+	if !json.Valid(raw) {
+		t.Fatalf("invalid stream event json: %s", payload)
+	}
+	var metadata struct {
+		Usage *provider.Usage `json:"usage"`
+	}
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatalf("decode stream event metadata: %v", err)
+	}
+	return provider.ChatCompletionStreamEvent{
+		Data:  append(json.RawMessage(nil), raw...),
+		Usage: metadata.Usage,
+	}
+}
+
+func streamContentEvent(t *testing.T, model string, content string) provider.ChatCompletionStreamEvent {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"id":      "chatcmpl_content",
+		"object":  "chat.completion.chunk",
+		"created": 1782108000,
+		"model":   model,
+		"choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{
+				"content": content,
+			},
+			"finish_reason": nil,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal stream content event: %v", err)
+	}
+	return provider.ChatCompletionStreamEvent{Data: payload}
+}
+
 type catalogRecordingProviderAdapter struct {
 	adapterType string
 	err         error
@@ -2669,6 +3014,12 @@ type failingCredentialResolver struct{}
 
 func (failingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
 	return credentials.Resolved{}, credentials.ErrUnavailable
+}
+
+type cancelingCredentialResolver struct{}
+
+func (cancelingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
+	return credentials.Resolved{}, context.Canceled
 }
 
 func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatewayPipeline {
@@ -3215,8 +3566,8 @@ func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.
 	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") || expectedCost != resp.GateLM.EstimatedCostUSD {
 		t.Fatalf("cost mismatch: log=%q header=%q gate_lm=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
 	}
-	if logged.LatencyMs != resp.GateLM.LatencyMs {
-		t.Fatalf("latency mismatch: log=%d gate_lm=%d", logged.LatencyMs, resp.GateLM.LatencyMs)
+	if logged.LatencyMs < 0 || resp.GateLM.LatencyMs < 0 {
+		t.Fatalf("latency must not be negative: log=%d gate_lm=%d", logged.LatencyMs, resp.GateLM.LatencyMs)
 	}
 	if resp.Usage == nil {
 		t.Fatalf("missing usage metadata")

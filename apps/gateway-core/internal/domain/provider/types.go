@@ -33,6 +33,11 @@ type ChatCompletionResponse struct {
 	Raw     *json.RawMessage `json:"-"`
 }
 
+type ChatCompletionStreamEvent struct {
+	Data  json.RawMessage
+	Usage *Usage
+}
+
 type ChatChoice struct {
 	Index        int         `json:"index"`
 	Message      ChatMessage `json:"message"`
@@ -99,4 +104,13 @@ type Adapter interface {
 	AdapterType() string
 	ListModels(ctx context.Context, config ExecutionConfig) (*ModelListResponse, error)
 	CreateChatCompletion(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (*ChatCompletionResponse, error)
+}
+
+type StreamingAdapter interface {
+	CreateChatCompletionStream(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (ChatCompletionStreamReader, error)
+}
+
+type ChatCompletionStreamReader interface {
+	Next() (ChatCompletionStreamEvent, error)
+	Close() error
 }

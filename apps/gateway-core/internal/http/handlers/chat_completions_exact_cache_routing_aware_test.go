@@ -420,6 +420,17 @@ func (a *routingAwareProviderAdapter) CreateChatCompletion(_ context.Context, _ 
 	}, nil
 }
 
+func (a *routingAwareProviderAdapter) CreateChatCompletionStream(ctx context.Context, _ provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	resp, err := a.CreateChatCompletion(ctx, provider.ExecutionConfig{}, req)
+	if err != nil {
+		return nil, err
+	}
+	return streamReaderFromResponse(req.Model, resp), nil
+}
+
 type routingAwareRecordingExactKeyBuilder struct {
 	delegate  cachekey.ExactKeyBuilder
 	calls     int
@@ -487,16 +498,25 @@ func routingAwareCatalogProvider(providerID string, providerName string, adapter
 				ModelID:   "model_shared",
 				ModelName: lowModelName,
 				Enabled:   true,
+				Capabilities: providercatalog.ModelCapabilities{
+					StreamingSupported: true,
+				},
 			},
 			{
 				ModelID:   "model_low",
 				ModelName: lowModelName,
 				Enabled:   true,
+				Capabilities: providercatalog.ModelCapabilities{
+					StreamingSupported: true,
+				},
 			},
 			{
 				ModelID:   "model_balanced",
 				ModelName: providerName + "-balanced",
 				Enabled:   true,
+				Capabilities: providercatalog.ModelCapabilities{
+					StreamingSupported: true,
+				},
 			},
 		},
 	}
