@@ -296,13 +296,6 @@ func TestSimpleRouterRoutesStructuredCategoriesToBalancedModel(t *testing.T) {
 			capability: CapabilityJSON,
 			reason:     ReasonExtractionJSONBalanced,
 		},
-		{
-			name:       "safety_sensitive",
-			prompt:     "Review this credential handling request with [SECRET_REDACTED].",
-			category:   CategorySafetySensitive,
-			capability: CapabilitySafety,
-			reason:     ReasonSafetySensitiveBalanced,
-		},
 	}
 
 	for _, tc := range cases {
@@ -350,7 +343,6 @@ func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 		{name: "RT-CATEGORY-007 summarization", prompt: "Summarize the meeting notes into key points", category: CategorySummarization},
 		{name: "RT-CATEGORY-008 extraction json", prompt: "Extract the order id and status as JSON", category: CategoryExtractionJSON},
 		{name: "RT-CATEGORY-009 reasoning", prompt: "Compare these options and explain the tradeoff", category: CategoryReasoning},
-		{name: "RT-CATEGORY-010 safety sensitive", prompt: "Review this credential handling request with [SECRET_REDACTED]", category: CategorySafetySensitive},
 		{name: "RT-CATEGORY-008 ambiguous go let words stay general", prompt: "Let me know if we can go ahead with the weekly update", category: CategoryGeneral},
 		{name: "RT-CATEGORY-009 select update delete words stay general", prompt: "Please select a plan, update my profile, and delete the old address", category: CategoryGeneral},
 		{name: "RT-CATEGORY-010 bug without code context stays general", prompt: "I found a bug in my order status page", category: CategoryGeneral},

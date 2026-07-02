@@ -20,9 +20,12 @@ func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 		{name: "translation", prompt: "이 문장을 영어로 번역해줘.", expected: CategoryTranslation},
 		{name: "summarization", prompt: "Summarize the meeting notes into three bullets.", expected: CategorySummarization},
 		{name: "extraction json", prompt: "Extract the order id and status as JSON.", expected: CategoryExtractionJSON},
+		{name: "extraction json schema underscore", prompt: "Return the response with json_schema fields.", expected: CategoryExtractionJSON},
+		{name: "extraction json korean format", prompt: "결과를 json 포맷으로 변환해줘.", expected: CategoryExtractionJSON},
 		{name: "support refund", prompt: "Write a short refund response for a customer.", expected: CategorySupportRefund},
 		{name: "reasoning", prompt: "Compare these rollout options and explain the tradeoff.", expected: CategoryReasoning},
-		{name: "safety sensitive", prompt: "Review this credential handling request with [SECRET_REDACTED].", expected: CategorySafetySensitive},
+		{name: "routing does not own api key safety", prompt: "Check whether this api key handling guide is safe.", expected: CategoryGeneral},
+		{name: "routing does not own authorization safety", prompt: "Review the authorization header handling policy.", expected: CategoryGeneral},
 	}
 
 	for _, tt := range tests {

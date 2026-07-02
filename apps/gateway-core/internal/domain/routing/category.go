@@ -26,16 +26,12 @@ var (
 		"요약", "회의록", "핵심", "정리",
 	}
 	extractionJSONCategoryKeywords = []string{
-		"as json", "to json", "return json", "json object", "json schema", "structured output",
-		"json으로", "json 형태", "구조화", "추출",
+		"as json", "to json", "return json", "json object", "json schema", "json_schema", "structured output",
+		"json으로", "json 형태", "json 형식", "json 포맷", "json 변환", "json 결과", "json 출력", "구조화", "추출",
 	}
 	reasoningCategoryKeywords = []string{
 		"compare", "tradeoff", "trade-off", "pros and cons", "best option", "recommend the safest sequence",
 		"decision matrix", "analyze the options", "비교", "장단점", "트레이드오프", "의사결정",
-	}
-	safetySensitiveCategoryKeywords = []string{
-		"credential", "secret", "api_key", "authorization:", "bearer ", "[secret_redacted]", "[credential_redacted]",
-		"시크릿", "비밀키", "인증 헤더",
 	}
 )
 
@@ -49,7 +45,6 @@ type RoutingSignals struct {
 	WantsStructuredOutput  bool
 	NeedsReasoning         bool
 	HasSupportRefundSignal bool
-	HasSafetySignal        bool
 	Category               string
 }
 
@@ -78,15 +73,9 @@ func ExtractRoutingSignals(prompt string) RoutingSignals {
 	signals.WantsStructuredOutput = containsStructuredOutputSignal(normalized, tokens)
 	signals.NeedsReasoning = containsAny(normalized, reasoningCategoryKeywords)
 	signals.HasSupportRefundSignal = containsAny(normalized, supportRefundCategoryKeywords)
-	signals.HasSafetySignal = containsAny(normalized, safetySensitiveCategoryKeywords)
 
 	if signals.HasCodeSignal {
 		signals.Category = CategoryCode
-		return signals
-	}
-
-	if signals.HasSafetySignal {
-		signals.Category = CategorySafetySensitive
 		return signals
 	}
 
@@ -241,8 +230,6 @@ func capabilityForCategory(category string) string {
 		return CapabilityJSON
 	case CategoryReasoning:
 		return CapabilityReasoning
-	case CategorySafetySensitive:
-		return CapabilitySafety
 	default:
 		return CapabilityChat
 	}

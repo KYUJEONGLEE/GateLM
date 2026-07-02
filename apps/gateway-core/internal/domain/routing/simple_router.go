@@ -10,16 +10,15 @@ const (
 	DefaultPolicyHash          = "route_p0_v1"
 	DefaultShortPromptMaxChars = 300
 
-	ReasonShortPromptLowCost      = "short_prompt_low_cost"
-	ReasonDefaultBalanced         = "default_balanced"
-	ReasonPinned                  = "pinned"
-	ReasonCodeHighQuality         = "category_code_high_quality"
-	ReasonTranslationBalanced     = "category_translation_balanced"
-	ReasonSummarizationBalanced   = "category_summarization_balanced"
-	ReasonExtractionJSONBalanced  = "category_extraction_json_balanced"
-	ReasonSupportRefundLowCost    = "category_support_refund_low_cost"
-	ReasonReasoningHighQuality    = "category_reasoning_high_quality"
-	ReasonSafetySensitiveBalanced = "category_safety_sensitive_balanced"
+	ReasonShortPromptLowCost     = "short_prompt_low_cost"
+	ReasonDefaultBalanced        = "default_balanced"
+	ReasonPinned                 = "pinned"
+	ReasonCodeHighQuality        = "category_code_high_quality"
+	ReasonTranslationBalanced    = "category_translation_balanced"
+	ReasonSummarizationBalanced  = "category_summarization_balanced"
+	ReasonExtractionJSONBalanced = "category_extraction_json_balanced"
+	ReasonSupportRefundLowCost   = "category_support_refund_low_cost"
+	ReasonReasoningHighQuality   = "category_reasoning_high_quality"
 )
 
 type SimpleRouterConfig struct {
@@ -175,8 +174,6 @@ func autoRouteForCategory(category string, prompt string, config SimpleRouterCon
 		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonSummarizationBalanced
 	case CategoryExtractionJSON:
 		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonExtractionJSONBalanced
-	case CategorySafetySensitive:
-		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonSafetySensitiveBalanced
 	case CategorySupportRefund:
 		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
 	case CategoryUnknown:
