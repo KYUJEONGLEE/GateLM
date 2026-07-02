@@ -50,6 +50,11 @@ const FORBIDDEN_BASE_URL_QUERY_KEYS = new Set([
   'token',
   'access_token',
   'authorization',
+  'credential',
+  'credentials',
+  'secret',
+  'password',
+  'pwd',
 ]);
 
 @Injectable()
@@ -136,6 +141,9 @@ export class ProviderConnectionsService {
       where: { status },
       orderBy: [{ sortOrder: 'asc' }, { providerKey: 'asc' }],
       take: limit + 1,
+      ...(query.cursor
+        ? { cursor: { providerKey: query.cursor }, skip: 1 }
+        : {}),
     });
     const hasMore = presets.length > limit;
     const page = presets.slice(0, limit);
@@ -144,7 +152,9 @@ export class ProviderConnectionsService {
       data: page.map((preset) => this.toProviderPresetResponse(preset)),
       pagination: {
         limit,
-        nextCursor: null,
+        nextCursor: hasMore
+          ? page[page.length - 1]?.providerKey ?? null
+          : null,
         hasMore,
       },
     };
@@ -184,7 +194,7 @@ export class ProviderConnectionsService {
     const credential = credentialRequired
       ? this.resolveProviderCredential(providerConnection)
       : null;
-    const endpoint = this.toModelsEndpoint(providerConnection.baseUrl);
+    const endpoint = this.toModelsEndpoint(providerConnection);
     const payload = await this.fetchProviderModels({
       credential,
       endpoint,
@@ -334,12 +344,40 @@ export class ProviderConnectionsService {
     return bindings;
   }
 
-  private toModelsEndpoint(baseUrl: string): string {
-    const parsedUrl = this.toSafeParsedBaseUrl(baseUrl);
-    parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/+$/, '')}/models`;
+  private toModelsEndpoint(providerConnection: ProviderConnection): string {
+    const parsedUrl = this.toSafeParsedBaseUrl(providerConnection.baseUrl);
+    const modelsEndpointPath = this.toModelsEndpointPath(providerConnection);
+    parsedUrl.pathname = `${parsedUrl.pathname.replace(
+      /\/+$/,
+      '',
+    )}${modelsEndpointPath}`;
     parsedUrl.hash = '';
 
     return parsedUrl.toString();
+  }
+
+  private toModelsEndpointPath(providerConnection: ProviderConnection): string {
+    const modelsEndpointPath = this.toRecordOrNull(
+      providerConnection.providerConfig,
+    )?.modelsEndpointPath;
+
+    if (typeof modelsEndpointPath !== 'string') {
+      return '/models';
+    }
+
+    const path = modelsEndpointPath.trim();
+
+    if (
+      path.length === 0 ||
+      !path.startsWith('/') ||
+      path.startsWith('//') ||
+      path.includes('?') ||
+      path.includes('#')
+    ) {
+      return '/models';
+    }
+
+    return path;
   }
 
   private toSafeBaseUrl(baseUrl: string): string {
@@ -492,6 +530,11 @@ export class ProviderConnectionsService {
   }
 
   private toUnixTimestampIsoString(value: unknown): string | null {
+    if (typeof value === 'string') {
+      const date = new Date(value.trim());
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
       return null;
     }

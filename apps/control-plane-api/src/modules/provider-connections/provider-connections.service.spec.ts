@@ -133,6 +133,76 @@ describe('ProviderConnectionsService', () => {
     expect(JSON.stringify(result)).not.toContain('Bearer ');
   });
 
+  it('sets provider preset pagination cursor from the last returned provider key', async () => {
+    const { service, prisma } = createService();
+    prisma.providerPreset.findMany.mockResolvedValue([
+      {
+        providerKey: 'openai',
+        displayName: 'OpenAI',
+        adapterType: 'openai_compatible',
+        baseUrl: 'https://api.openai.com/v1',
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: 'ACTIVE',
+        sortOrder: 10,
+        providerConfig: {},
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        providerKey: 'openrouter',
+        displayName: 'OpenRouter',
+        adapterType: 'openai_compatible',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: 'ACTIVE',
+        sortOrder: 20,
+        providerConfig: {},
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        providerKey: 'groq',
+        displayName: 'Groq',
+        adapterType: 'openai_compatible',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: 'ACTIVE',
+        sortOrder: 30,
+        providerConfig: {},
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ]);
+
+    const result = await service.listProviderPresets({
+      cursor: 'mistral',
+      limit: 2,
+    });
+
+    expect(prisma.providerPreset.findMany).toHaveBeenCalledWith({
+      cursor: { providerKey: 'mistral' },
+      orderBy: [{ sortOrder: 'asc' }, { providerKey: 'asc' }],
+      skip: 1,
+      take: 3,
+      where: { status: 'ACTIVE' },
+    });
+    expect(result.data).toHaveLength(2);
+    expect(result.pagination).toEqual({
+      limit: 2,
+      nextCursor: 'openrouter',
+      hasMore: true,
+    });
+  });
+
   it('discovers provider models with an environment credential binding', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000905';
@@ -196,6 +266,39 @@ describe('ProviderConnectionsService', () => {
     expect(JSON.stringify(result)).not.toContain(providerCredential);
   });
 
+  it('discovers provider models from a custom provider models endpoint path', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000911';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.example.com/openai',
+        provider: 'custom-openai',
+        resolver: 'none',
+        secretRef: null,
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+          modelsEndpointPath: '/v1/custom-models',
+        },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [{ id: 'custom-model', object: 'model' }],
+      }),
+    } as unknown as Response);
+
+    await service.discoverProviderModels(projectId, 'custom-openai');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.example.com/openai/v1/custom-models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('normalizes provider model created timestamps in milliseconds', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000908';
@@ -235,6 +338,43 @@ describe('ProviderConnectionsService', () => {
     );
   });
 
+  it('normalizes provider model created timestamps from ISO strings', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000912';
+    const createdAtIso = '2026-07-02T00:00:00.000Z';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'http://mock-provider:8090/v1',
+        provider: 'mock',
+        providerConfig: {
+          adapterType: 'mock',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'mock-balanced',
+            object: 'model',
+            created: createdAtIso,
+            owned_by: 'mock',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'mock');
+
+    expect(result.models[0]?.createdAt).toBe(createdAtIso);
+  });
+
   it('rejects provider model discovery when a required credential is not bound', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000906';
@@ -258,27 +398,32 @@ describe('ProviderConnectionsService', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('rejects provider model discovery base URLs with api-key query material', async () => {
-    const { service, prisma } = createService();
-    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.findUnique.mockResolvedValue(
-      providerConnection('00000000-0000-4000-8000-000000000907', {
-        baseUrl: 'https://api.openai.com/v1?api-key=synthetic',
-        provider: 'openai-main',
-        resolver: 'none',
-        providerConfig: {
-          adapterType: 'openai_compatible',
-          credentialRequired: false,
-        },
-      }),
-    );
-    global.fetch = jest.fn();
+  it.each(['api-key', 'credential', 'credentials', 'secret', 'password', 'pwd'])(
+    'rejects provider model discovery base URLs with %s query material',
+    async (queryKey) => {
+      const { service, prisma } = createService();
+      prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+      prisma.providerConnection.findUnique.mockResolvedValue(
+        providerConnection('00000000-0000-4000-8000-000000000907', {
+          baseUrl: `https://api.openai.com/v1?${queryKey}=synthetic`,
+          provider: 'openai-main',
+          resolver: 'none',
+          providerConfig: {
+            adapterType: 'openai_compatible',
+            credentialRequired: false,
+          },
+        }),
+      );
+      global.fetch = jest.fn();
 
-    await expect(
-      service.discoverProviderModels(projectId, 'openai-main'),
-    ).rejects.toThrow('Provider baseUrl must not contain credential material.');
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
+      await expect(
+        service.discoverProviderModels(projectId, 'openai-main'),
+      ).rejects.toThrow(
+        'Provider baseUrl must not contain credential material.',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects invalid provider model discovery base URLs with a clear message', async () => {
     const { service, prisma } = createService();

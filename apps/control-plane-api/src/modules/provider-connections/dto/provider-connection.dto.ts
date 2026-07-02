@@ -97,6 +97,12 @@ export class ListProviderPresetsQueryDto {
   @Max(100)
   limit?: number = 50;
 
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{1,63}$/)
+  cursor?: string;
+
   @IsOptional()
   @IsEnum(ResourceStatus)
   status?: ResourceStatus = ResourceStatus.ACTIVE;
