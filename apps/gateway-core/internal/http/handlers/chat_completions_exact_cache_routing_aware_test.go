@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/ports"
@@ -340,10 +341,12 @@ func routingAwareExercise(t *testing.T, handler *ChatCompletionsHandler, request
 }
 
 type routingAwareRoute struct {
-	providerName string
-	modelID      string
-	reason       string
-	decisionHash string
+	providerName      string
+	modelID           string
+	reason            string
+	category          string
+	routingPolicyHash string
+	decisionHash      string
 }
 
 type routingAwarePipeline struct {
@@ -362,6 +365,22 @@ func (p routingAwarePipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 	if route.reason == "" {
 		route.reason = "routing_aware_test"
 	}
+	if route.category == "" {
+		route.category = routingdomain.CategoryGeneral
+	}
+	if route.routingPolicyHash == "" {
+		route.routingPolicyHash = "routing_policy_routing_aware_test"
+	}
+	material := routingdomain.DecisionMaterial{
+		RoutingMode:   routingdomain.RoutingModeAuto,
+		Category:      route.category,
+		Tier:          routingdomain.TierBalanced,
+		Capability:    routingdomain.CapabilityChat,
+		PolicyVariant: routingdomain.PolicyVariantDefault,
+	}
+	if route.decisionHash == "" {
+		route.decisionHash, _ = routingdomain.DecisionKeyHash(material)
+	}
 	gatewayCtx.Runtime.Snapshot = runtimeconfig.RuntimeSnapshotProvenance{
 		RuntimeSnapshotID:      "runtime_snapshot_routing_aware_test",
 		RuntimeSnapshotVersion: 1,
@@ -372,15 +391,22 @@ func (p routingAwarePipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 	gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.RoutingPolicy{
 		FallbackProvider:  "provider-b",
 		FallbackModel:     "model_low",
-		RoutingPolicyHash: "routing_policy_routing_aware_test",
+		RoutingPolicyHash: route.routingPolicyHash,
 	}
 	gatewayCtx.Runtime.HasRoutingPolicy = true
 	gatewayCtx.Routing.RequestedModel = gatewayCtx.Request.RequestedModel
 	gatewayCtx.Routing.SelectedProvider = route.providerName
 	gatewayCtx.Routing.SelectedModel = route.modelID
 	gatewayCtx.Routing.RoutingReason = route.reason
-	gatewayCtx.Routing.RoutingPolicyHash = "routing_policy_routing_aware_test"
+	gatewayCtx.Routing.RoutingPolicyHash = route.routingPolicyHash
 	gatewayCtx.Routing.RoutingDecisionKeyHash = route.decisionHash
+	gatewayCtx.Routing.RoutingDecisionMaterial = map[string]string{
+		"routingMode":   material.RoutingMode,
+		"category":      material.Category,
+		"tier":          material.Tier,
+		"capability":    material.Capability,
+		"policyVariant": material.PolicyVariant,
+	}
 	return nil
 }
 

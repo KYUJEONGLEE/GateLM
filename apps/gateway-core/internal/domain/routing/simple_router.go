@@ -117,7 +117,6 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if requestedModel == "" {
 		requestedModel = config.DefaultModel
 	}
-
 	category := NewRuleBasedCategoryClassifier().Classify(req.PromptText)
 	capability := capabilityForCategory(category)
 

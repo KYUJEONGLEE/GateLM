@@ -36,16 +36,42 @@ type GatewayBudgetScope = {
   resolvedBy?: string;
 };
 
+export type LiveGatewayRequestLogFilters = {
+  applicationId?: string;
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  cacheStatus?: string;
+  from?: string;
+  limit?: number;
+  model?: string;
+  provider?: string;
+  requestId?: string;
+  resolvedBy?: string;
+  status?: string;
+  to?: string;
+};
+
 const LIVE_RANGE_HOURS = 24;
 
-export async function getLiveGatewayRequestLogs(): Promise<InvocationLogRecord[] | undefined> {
+export async function getLiveGatewayRequestLogs(
+  filters: LiveGatewayRequestLogFilters = {}
+): Promise<InvocationLogRecord[] | undefined> {
   const config = getLiveGatewayConfig();
-  const { from, to } = getLiveRange();
+  const defaultRange = getLiveRange();
   const query = new URLSearchParams({
-    from,
-    limit: "50",
-    to
+    from: filters.from ?? defaultRange.from,
+    limit: String(filters.limit ?? 50),
+    to: filters.to ?? defaultRange.to
   });
+  appendOptionalQuery(query, "applicationId", filters.applicationId);
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "cacheStatus", filters.cacheStatus);
+  appendOptionalQuery(query, "status", filters.status);
+  appendOptionalQuery(query, "model", filters.model);
+  appendOptionalQuery(query, "provider", filters.provider);
+  appendOptionalQuery(query, "requestId", filters.requestId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(
     `${config.baseUrl}/api/projects/${encodeURIComponent(config.projectId)}/logs?${query.toString()}`,
@@ -63,6 +89,13 @@ export async function getLiveGatewayRequestLogs(): Promise<InvocationLogRecord[]
 
   const payload = (await response.json().catch(() => ({}))) as GatewayProjectLogsResponse;
   return (payload.data ?? []).map((item) => toInvocationRecord(item, config.projectId));
+}
+
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+  if (normalized) {
+    query.set(key, normalized);
+  }
 }
 
 function getLiveRange() {

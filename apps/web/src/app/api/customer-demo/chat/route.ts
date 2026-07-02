@@ -18,12 +18,15 @@ type GatewayCallResult = {
   requestBody: CustomerDemoRequest["body"];
   requestHeaders: CustomerDemoHeader[];
   requestId: string;
+  streaming: CustomerDemoExchange["streaming"];
 };
 
 type LiveScenarioDefinition = {
   detectedTypes: string[];
   gatewayPrompt: string;
 };
+
+type ProviderFailureMode = "error" | "timeout";
 
 const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Request-Id",
@@ -61,6 +64,14 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
   "rate-limited": {
     detectedTypes: [],
     gatewayPrompt: "Write one more local stack response after quota is exhausted."
+  },
+  "provider-timeout": {
+    detectedTypes: [],
+    gatewayPrompt: "Write a short safe provider timeout fallback response."
+  },
+  "provider-fallback": {
+    detectedTypes: [],
+    gatewayPrompt: "Write a short safe provider error fallback response."
   }
 };
 
@@ -83,7 +94,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const gatewayResult = await executeLiveScenario(payload.scenarioId);
+    const gatewayResult = await executeLiveScenario(
+      payload.scenarioId,
+      payload.stream,
+      payload.message
+    );
 
     return NextResponse.json({
       exchange: buildLiveExchange({
@@ -102,24 +117,42 @@ export async function POST(request: Request) {
 
 async function readRequestPayload(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as {
+    message?: unknown;
     scenarioId?: unknown;
+    stream?: unknown;
     tenantId?: unknown;
   };
 
   return {
+    message: normalizeUserMessage(payload.message),
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
+    stream: payload.stream === true,
     tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
   };
+}
+
+function normalizeUserMessage(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const message = value.trim();
+
+  return message.length > 0 ? message.slice(0, 2000) : undefined;
 }
 
 function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioId {
   return Object.hasOwn(LIVE_SCENARIOS, value);
 }
 
-async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
+async function executeLiveScenario(
+  scenarioId: CustomerDemoScenarioId,
+  stream: boolean,
+  message?: string
+) {
   if (scenarioId === "cache-hit") {
-    await callGateway("cache-hit", "warmup");
-    return callGateway("cache-hit", "hit");
+    await callGateway("cache-hit", "warmup", { message });
+    return callGateway("cache-hit", "hit", { message, stream });
   }
 
   if (scenarioId === "rate-limited") {
@@ -128,7 +161,7 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
 
     // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
-      latestResult = await callGateway("rate-limited", String(index + 1));
+      latestResult = await callGateway("rate-limited", String(index + 1), { message, stream });
 
       if (latestResult.httpStatus === 429) {
         return latestResult;
@@ -140,17 +173,46 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId) {
     }
   }
 
-  return callGateway(scenarioId, "1");
+  if (scenarioId === "provider-timeout") {
+    return executeProviderFailureScenario(scenarioId, "timeout");
+  }
+
+  if (scenarioId === "provider-fallback") {
+    return executeProviderFailureScenario(scenarioId, "error");
+  }
+
+  return callGateway(scenarioId, "1", { message, stream });
+}
+
+async function executeProviderFailureScenario(
+  scenarioId: CustomerDemoScenarioId,
+  mode: ProviderFailureMode
+) {
+  const config = getLiveGatewayConfig();
+
+  await configureProviderFailureControl(mode);
+
+  try {
+    return await callGateway(scenarioId, mode, { stream: false });
+  } finally {
+    await resetProviderFailureControl(config).catch(() => undefined);
+  }
 }
 
 async function callGateway(
   scenarioId: CustomerDemoScenarioId,
-  requestIdSuffix: string
+  requestIdSuffix: string,
+  options: { message?: string; stream?: boolean } = {}
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig();
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
-  const requestBody = buildGatewayRequestBody(definition, scenarioId);
+  const requestBody = buildGatewayRequestBody(
+    definition,
+    scenarioId,
+    options.stream === true,
+    options.message
+  );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -166,20 +228,25 @@ async function callGateway(
     cache: "no-store"
   });
 
+  const responseText = await response.text();
+
   return {
-    body: await readGatewayResponseBody(response),
+    body: buildGatewayResponseBody(response, responseText, requestBody.stream),
     headers: response.headers,
     httpStatus: response.status,
     latencyMs: Date.now() - startedAt,
     requestBody: buildDisplayRequestBody(requestBody),
     requestHeaders: buildDisplayRequestHeaders(requestId),
-    requestId
+    requestId,
+    streaming: buildGatewayStreamingSummary(response, responseText, requestBody.stream)
   };
 }
 
 function buildGatewayRequestBody(
   definition: LiveScenarioDefinition,
-  scenarioId: CustomerDemoScenarioId
+  scenarioId: CustomerDemoScenarioId,
+  stream: boolean,
+  message?: string
 ): CustomerDemoRequest["body"] {
   return {
     model: "auto",
@@ -190,12 +257,12 @@ function buildGatewayRequestBody(
       },
       {
         role: "user",
-        content: definition.gatewayPrompt
+        content: message ?? definition.gatewayPrompt
       }
     ],
     max_tokens: 128,
     temperature: 0.2,
-    stream: false,
+    stream,
     metadata: {
       demoScenario: scenarioId,
       source: "web-customer-demo"
@@ -212,6 +279,39 @@ function buildGatewayRequestBody(
   };
 }
 
+async function configureProviderFailureControl(mode: ProviderFailureMode) {
+  const config = getLiveGatewayConfig();
+  const response = await fetch(`${config.providerFailureControlUrl}/__mock/config`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      failModels: config.providerFailureModels,
+      mode
+    }),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error("Provider failure control is unavailable.");
+  }
+}
+
+async function resetProviderFailureControl(config = getLiveGatewayConfig()) {
+  await fetch(`${config.providerFailureControlUrl}/__mock/config`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      failModels: [],
+      mode: "off"
+    }),
+    cache: "no-store"
+  });
+}
+
 function buildDisplayRequestBody(
   requestBody: CustomerDemoRequest["body"]
 ): CustomerDemoRequest["body"] {
@@ -226,9 +326,11 @@ function buildDisplayRequestBody(
   };
 }
 
-async function readGatewayResponseBody(response: Response): Promise<JsonRecord> {
-  const text = await response.text();
-
+function buildGatewayResponseBody(
+  response: Response,
+  text: string,
+  streamRequested: boolean
+): JsonRecord {
   if (!text.trim()) {
     return {
       error: {
@@ -236,6 +338,18 @@ async function readGatewayResponseBody(response: Response): Promise<JsonRecord> 
         message: "Gateway returned an empty response.",
         request_id: response.headers.get("X-GateLM-Request-Id") ?? "",
         type: "gatelm_gateway_error"
+      }
+    };
+  }
+
+  if (streamRequested && isEventStreamResponse(response)) {
+    const summary = parseGatewaySseSummary(text);
+
+    return {
+      streaming: {
+        chunkCount: summary.chunkCount,
+        completed: summary.completed,
+        contentWithheld: true
       }
     };
   }
@@ -253,6 +367,66 @@ async function readGatewayResponseBody(response: Response): Promise<JsonRecord> 
       request_id: response.headers.get("X-GateLM-Request-Id") ?? "",
       type: "gatelm_gateway_error"
     }
+  };
+}
+
+function buildGatewayStreamingSummary(
+  response: Response,
+  text: string,
+  requested: boolean
+): CustomerDemoExchange["streaming"] {
+  if (!requested) {
+    return {
+      completed: null,
+      contentType: response.headers.get("Content-Type"),
+      chunkCount: null,
+      requested: false
+    };
+  }
+
+  const summary = isEventStreamResponse(response)
+    ? parseGatewaySseSummary(text)
+    : {
+        chunkCount: 0,
+        completed: false
+      };
+
+  return {
+    completed: summary.completed,
+    contentType: response.headers.get("Content-Type"),
+    chunkCount: summary.chunkCount,
+    requested: true
+  };
+}
+
+function isEventStreamResponse(response: Response) {
+  return response.headers.get("Content-Type")?.includes("text/event-stream") ?? false;
+}
+
+function parseGatewaySseSummary(text: string) {
+  let chunkCount = 0;
+  let completed = false;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) {
+      continue;
+    }
+
+    const value = line.slice("data:".length).trim();
+
+    if (value === "[DONE]") {
+      completed = true;
+      continue;
+    }
+
+    if (value) {
+      chunkCount += 1;
+    }
+  }
+
+  return {
+    chunkCount,
+    completed
   };
 }
 
@@ -287,7 +461,11 @@ function buildLiveExchange({
   const actualScenarioId = status === "rate_limited" ? "rate-limited" : scenarioId;
   const displayScenario =
     allScenarios.find((item) => item.scenarioId === actualScenarioId) ?? scenario;
-  const assistantMessage = getDisplayAssistantMessage(status, scenario.assistantMessage);
+  const assistantMessage = getDisplayAssistantMessage(
+    status,
+    gatewayResult.body,
+    scenario.assistantMessage
+  );
 
   return {
     assistantMessage,
@@ -305,7 +483,7 @@ function buildLiveExchange({
       body: gatewayResult.requestBody
     },
     requestId,
-    requestLogHref: `/tenants/${tenantId}/request-logs/${requestId}`,
+    requestLogHref: `/tenants/${tenantId}/request-logs?requestId=${encodeURIComponent(requestId)}`,
     response: {
       body: buildDisplayResponseBody(gatewayResult.body),
       headers: buildResponseHeaders(gatewayResult.headers),
@@ -313,6 +491,7 @@ function buildLiveExchange({
     },
     scenarioId: actualScenarioId,
     status,
+    streaming: gatewayResult.streaming,
     title: displayScenario.title
   };
 }
@@ -416,9 +595,13 @@ function normalizeMaskingAction(value: string | undefined): CustomerDemoExchange
   return "none";
 }
 
-function getDisplayAssistantMessage(status: CustomerDemoExchange["status"], fallback: string) {
+function getDisplayAssistantMessage(
+  status: CustomerDemoExchange["status"],
+  body: JsonRecord,
+  fallback: string
+) {
   if (status === "success") {
-    return "Gateway request completed successfully.";
+    return getAssistantContent(body) ?? "Gateway request completed successfully.";
   }
 
   if (status === "cache_hit") {
@@ -438,6 +621,38 @@ function getDisplayAssistantMessage(status: CustomerDemoExchange["status"], fall
   }
 
   return fallback;
+}
+
+function getAssistantContent(body: JsonRecord) {
+  const choices = body.choices;
+
+  if (!Array.isArray(choices)) {
+    return undefined;
+  }
+
+  for (const choice of choices) {
+    if (!isJsonRecord(choice)) {
+      continue;
+    }
+
+    const message = choice.message;
+
+    if (isJsonRecord(message)) {
+      const content = message.content;
+
+      if (typeof content === "string" && content.trim()) {
+        return content.trim();
+      }
+    }
+
+    const text = choice.text;
+
+    if (typeof text === "string" && text.trim()) {
+      return text.trim();
+    }
+  }
+
+  return undefined;
 }
 
 function getNestedString(record: JsonRecord, path: string[]) {

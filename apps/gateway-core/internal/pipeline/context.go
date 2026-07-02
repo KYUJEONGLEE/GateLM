@@ -53,6 +53,7 @@ type RequestContext struct {
 	RoutingReason              string
 	RoutingPolicyHash          string
 	RoutingDecisionKeyHash     string
+	PromptCategory             string
 
 	MaskingAction           string
 	MaskingDetectedTypes    []string
@@ -67,6 +68,15 @@ type RequestContext struct {
 	CacheKeyVersion     string
 	CacheDecisionReason string
 	FallbackOccurred    bool
+
+	SemanticCacheHit            bool
+	SemanticSimilarity          float64
+	SemanticMatchedRequestID    string
+	SemanticCacheThreshold      float64
+	SemanticCachePolicyVersion  string
+	SemanticCacheDecisionReason string
+	EmbeddingProvider           string
+	SemanticCacheStoreCandidate bool
 
 	Provider          string
 	Model             string

@@ -3,7 +3,9 @@ export type CustomerDemoScenarioId =
   | "redacted"
   | "blocked"
   | "cache-hit"
-  | "rate-limited";
+  | "rate-limited"
+  | "provider-timeout"
+  | "provider-fallback";
 
 export type CustomerDemoIntegrationMode = "fixture" | "gateway";
 
@@ -24,7 +26,7 @@ export type CustomerDemoRequest = {
     }>;
     max_tokens?: number;
     temperature?: number;
-    stream: false;
+    stream: boolean;
     metadata: Record<string, string>;
     gate_lm: {
       cache: {
@@ -59,6 +61,12 @@ export type CustomerDemoExchange = {
   response: CustomerDemoResponse;
   scenarioId: CustomerDemoScenarioId;
   status: string;
+  streaming: {
+    completed: boolean | null;
+    contentType: string | null;
+    chunkCount: number | null;
+    requested: boolean;
+  };
   title: string;
 };
 
@@ -71,7 +79,10 @@ export type CustomerDemoModel = {
 };
 
 export interface GatewayChatClient {
-  sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange>;
+  sendChatCompletion(
+    scenarioId: CustomerDemoScenarioId,
+    options?: { message?: string; stream?: boolean }
+  ): Promise<CustomerDemoExchange>;
 }
 
 export class FixtureGatewayChatClient implements GatewayChatClient {
@@ -81,28 +92,53 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
   }
 
-  async sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange> {
+  async sendChatCompletion(
+    scenarioId: CustomerDemoScenarioId,
+    options: { message?: string; stream?: boolean } = {}
+  ): Promise<CustomerDemoExchange> {
     const scenario = this.scenarioMap.get(scenarioId);
 
     if (!scenario) {
       throw new Error(`Unknown customer demo scenario: ${scenarioId}`);
     }
 
-    return scenario;
+    return options.stream
+      ? {
+          ...scenario,
+          request: {
+            ...scenario.request,
+            body: {
+              ...scenario.request.body,
+              stream: true
+            }
+          },
+          streaming: {
+            completed: true,
+            contentType: "fixture",
+            chunkCount: 0,
+            requested: true
+          }
+        }
+      : scenario;
   }
 }
 
 export class RouteGatewayChatClient implements GatewayChatClient {
   constructor(private readonly tenantId: string) {}
 
-  async sendChatCompletion(scenarioId: CustomerDemoScenarioId): Promise<CustomerDemoExchange> {
+  async sendChatCompletion(
+    scenarioId: CustomerDemoScenarioId,
+    options: { message?: string; stream?: boolean } = {}
+  ): Promise<CustomerDemoExchange> {
     const response = await fetch("/api/customer-demo/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        message: options.message,
         scenarioId,
+        stream: options.stream === true,
         tenantId: this.tenantId
       })
     });

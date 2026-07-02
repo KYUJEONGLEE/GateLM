@@ -15,8 +15,9 @@ const (
 	CacheStatusError        = "error"
 	CacheStatusStoreSkipped = "store_skipped"
 
-	CacheTypeNone  = "none"
-	CacheTypeExact = "exact"
+	CacheTypeNone     = "none"
+	CacheTypeExact    = "exact"
+	CacheTypeSemantic = "semantic"
 
 	MaskingActionBlocked = "blocked"
 )

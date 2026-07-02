@@ -1,10 +1,17 @@
 package config
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+)
+
+const (
+	SemanticCacheStoreInMemory         = "in_memory"
+	SemanticCacheEmbeddingProviderFake = "fake"
 )
 
 type Config struct {
@@ -57,10 +64,35 @@ type Config struct {
 	RateLimitEnabled         bool
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
+	SemanticCache            SemanticCacheConfig
+}
+
+type SemanticCacheConfig struct {
+	Enabled             bool
+	Threshold           float64
+	TopK                int
+	TTL                 time.Duration
+	Store               string
+	MaxEntries          int
+	EmbeddingProvider   string
+	EmbeddingModel      string
+	EmbeddingDimensions int
+	EmbeddingTimeout    time.Duration
+	OpenAIBaseURL       string
+	PolicyVersion       string
+	KeyVersion          string
+	AllowCategories     []string
+	DenyCategories      []string
 }
 
 func Load() Config {
-	return Config{
+	cfg, _ := LoadWithError()
+	return cfg
+}
+
+func LoadWithError() (Config, error) {
+	semanticCache, err := LoadSemanticCacheConfig()
+	cfg := Config{
 		Port:                     envString("GATEWAY_PORT", "8080"),
 		DatabaseURL:              envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
 		RedisURL:                 envString("REDIS_URL", "redis://localhost:6379"),
@@ -110,7 +142,42 @@ func Load() Config {
 		RateLimitEnabled:         envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:      envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:           envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
+		SemanticCache:            semanticCache,
 	}
+	return cfg, err
+}
+
+func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
+	enabled, err := semanticEnvBool("SEMANTIC_CACHE_ENABLED", false)
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	store := semanticEnvString("SEMANTIC_CACHE_STORE", SemanticCacheStoreInMemory)
+	if store != SemanticCacheStoreInMemory {
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache store %q", store)
+	}
+	embeddingProvider := semanticEnvString("SEMANTIC_CACHE_EMBEDDING_PROVIDER", SemanticCacheEmbeddingProviderFake)
+	if embeddingProvider != SemanticCacheEmbeddingProviderFake {
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache embedding provider %q", embeddingProvider)
+	}
+
+	return SemanticCacheConfig{
+		Enabled:             enabled,
+		Threshold:           semanticEnvFloat("SEMANTIC_CACHE_THRESHOLD", 0.92, 0, 1),
+		TopK:                semanticEnvInt("SEMANTIC_CACHE_TOP_K", 3, 1),
+		TTL:                 time.Duration(semanticEnvInt("SEMANTIC_CACHE_TTL_SECONDS", 3600, 1)) * time.Second,
+		Store:               store,
+		MaxEntries:          semanticEnvInt("SEMANTIC_CACHE_MAX_ENTRIES", 1000, 1),
+		EmbeddingProvider:   embeddingProvider,
+		EmbeddingModel:      semanticEnvString("SEMANTIC_CACHE_EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingDimensions: semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", 0, 0),
+		EmbeddingTimeout:    time.Duration(semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", 3000, 1)) * time.Millisecond,
+		OpenAIBaseURL:       semanticEnvString("SEMANTIC_CACHE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		PolicyVersion:       semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
+		KeyVersion:          semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
+		AllowCategories:     semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
+		DenyCategories:      semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "reasoning", "sensitive", "tool_call", "unknown"}),
+	}, nil
 }
 
 func envString(key string, fallback string) string {
@@ -189,6 +256,72 @@ func envBool(key string, fallback bool) bool {
 	}
 
 	return parsed
+}
+
+func semanticEnvString(key string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		value = strings.TrimSpace(os.Getenv("GATEWAY_" + key))
+	}
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func semanticEnvBool(key string, fallback bool) (bool, error) {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func semanticEnvFloat(key string, fallback float64, minVal float64, maxVal float64) float64 {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed < minVal || parsed > maxVal {
+		return fallback
+	}
+	return parsed
+}
+
+func semanticEnvInt(key string, fallback int, minVal int) int {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < minVal {
+		return fallback
+	}
+	return parsed
+}
+
+func semanticEnvCSV(key string, fallback []string) []string {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return append([]string{}, fallback...)
+	}
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	if len(values) == 0 {
+		return append([]string{}, fallback...)
+	}
+	return values
 }
 
 func DatabaseDriverURL(rawURL string) string {
