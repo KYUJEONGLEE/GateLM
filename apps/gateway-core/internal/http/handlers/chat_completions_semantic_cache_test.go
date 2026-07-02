@@ -142,6 +142,97 @@ func TestChatCompletionsSemanticCacheCategoryDenylistBypasses(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
+	t.Run("similar requests hit", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+
+		first := harness.exercise(t, "sc_ko_hit_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+		second := harness.exercise(t, "sc_ko_hit_second", routingAwareChatBody("auto", "패스워드 초기화는 어떻게 해?"))
+
+		if first.Code != http.StatusOK || second.Code != http.StatusOK {
+			t.Fatalf("한국어 유사 요청은 모두 성공해야 함: first=%d second=%d body=%s", first.Code, second.Code, second.Body.String())
+		}
+		if harness.provider.calls != 1 {
+			t.Fatalf("한국어 유사 요청 semantic hit는 provider 재호출 금지: calls=%d", harness.provider.calls)
+		}
+		resp := decodeSemanticChatResponse(t, second)
+		if resp.GateLM == nil || !resp.GateLM.SemanticCacheHit || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic {
+			t.Fatalf("한국어 유사 요청 semantic hit metadata 불일치: %+v", resp.GateLM)
+		}
+	})
+
+	t.Run("unrelated request misses", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+
+		harness.exercise(t, "sc_ko_miss_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+		rr := harness.exercise(t, "sc_ko_miss_second", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("한국어 비유사 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.provider.calls != 2 {
+			t.Fatalf("한국어 비유사 요청은 semantic miss 후 provider 호출이어야 함: calls=%d", harness.provider.calls)
+		}
+		if len(harness.semantic.searchResults) < 2 || harness.semantic.searchResults[1].Reason != cachekey.SemanticCacheReasonThresholdMiss {
+			t.Fatalf("한국어 비유사 요청 lookup reason은 threshold_miss여야 함: %+v", harness.semantic.searchResults)
+		}
+	})
+
+	t.Run("code category bypasses", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.routes["sc_ko_code"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryCode}
+
+		rr := harness.exercise(t, "sc_ko_code", routingAwareChatBody("auto", "이 코드 설명해줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("한국어 code 요청은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+			t.Fatalf("한국어 code category는 semantic lookup/store 금지: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		}
+		logged := harness.latestLog(t)
+		if logged.PromptCategory != routingdomain.CategoryCode || logged.SemanticCacheDecisionReason != "semantic_category_disabled" {
+			t.Fatalf("한국어 code bypass log 불일치: category=%q reason=%q", logged.PromptCategory, logged.SemanticCacheDecisionReason)
+		}
+	})
+
+	t.Run("translation category bypasses", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.routes["sc_ko_translation"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryTranslation}
+
+		rr := harness.exercise(t, "sc_ko_translation", routingAwareChatBody("auto", "이 문장을 영어로 번역해줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("한국어 translation 요청은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+			t.Fatalf("한국어 translation category는 semantic lookup/store 금지: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		}
+		logged := harness.latestLog(t)
+		if logged.PromptCategory != routingdomain.CategoryTranslation || logged.SemanticCacheDecisionReason != "semantic_category_disabled" {
+			t.Fatalf("한국어 translation bypass log 불일치: category=%q reason=%q", logged.PromptCategory, logged.SemanticCacheDecisionReason)
+		}
+	})
+
+	t.Run("support refund category is allowed", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.routes["sc_ko_refund"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+
+		rr := harness.exercise(t, "sc_ko_refund", routingAwareChatBody("auto", "배송비도 환불되나요?"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("한국어 support_refund 요청은 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.semantic.searchCalls != 1 || harness.semantic.upsertCalls != 1 {
+			t.Fatalf("한국어 support_refund는 semantic 후보로 lookup/store되어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		}
+		logged := harness.latestLog(t)
+		if logged.PromptCategory != routingdomain.CategorySupportRefund || logged.CacheType != invocationlog.CacheTypeSemantic {
+			t.Fatalf("한국어 support_refund cache log 불일치: category=%q cacheType=%q", logged.PromptCategory, logged.CacheType)
+		}
+	})
+}
+
 func TestChatCompletionsSemanticCacheTenantProjectApplicationIsolation(t *testing.T) {
 	semantic := newCountingSemanticCacheService(true)
 	first := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant-a", "project-a", "app-a")

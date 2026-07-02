@@ -1132,9 +1132,11 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 		h.markSemanticCacheBypass(reqCtx, "exact_cache_hit", promptCategory)
 		return false
 	}
-	if err := h.populateRoutingAwareCacheIdentity(ctx, reqCtx, chatReq.Model); err != nil {
-		h.markSemanticCacheBypass(reqCtx, "semantic_boundary_unavailable", promptCategory)
-		return false
+	if reqCtx.RoutingDecisionKeyHash == "" {
+		if err := h.populateRoutingAwareCacheIdentity(ctx, reqCtx, chatReq.Model); err != nil {
+			h.markSemanticCacheBypass(reqCtx, "semantic_boundary_unavailable", promptCategory)
+			return false
+		}
 	}
 	boundary, ok := h.semanticCacheBoundary(reqCtx, chatReq)
 	if !ok {

@@ -101,7 +101,7 @@ func normalizeSemanticText(text string) string {
 
 func containsAny(text string, needles ...string) bool {
 	for _, needle := range needles {
-		if strings.Contains(text, strings.ToLower(needle)) || strings.Contains(text, needle) {
+		if strings.Contains(text, strings.ToLower(needle)) {
 			return true
 		}
 	}

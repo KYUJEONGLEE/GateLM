@@ -167,6 +167,67 @@ func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 	}
 }
 
+func TestKoreanCategoryClassifierCoverage(t *testing.T) {
+	cases := []struct {
+		name     string
+		category string
+		prompts  []string
+	}{
+		{
+			name:     "support_refund",
+			category: CategorySupportRefund,
+			prompts: []string{
+				"배송비도 환불되나요?",
+				"반품하면 배송비도 돌려받나요?",
+				"주문 취소하고 싶어요",
+				"결제 취소 가능한가요?",
+				"교환이나 환불은 어디서 하나요?",
+			},
+		},
+		{
+			name:     "translation",
+			category: CategoryTranslation,
+			prompts: []string{
+				"이 문장을 영어로 번역해줘",
+				"이걸 한국어로 바꿔줘",
+				"일본어로 번역해줘",
+				"다음 문장을 중국어로 옮겨줘",
+			},
+		},
+		{
+			name:     "code",
+			category: CategoryCode,
+			prompts: []string{
+				"이 코드 설명해줘",
+				"이 함수 왜 에러나?",
+				"컴파일 오류가 나요",
+				"실행하면 버그가 생겨요",
+				"```go\nconst value = 1\n``` 코드 블록이 포함된 요청",
+			},
+		},
+		{
+			name:     "general",
+			category: CategoryGeneral,
+			prompts: []string{
+				"비밀번호 재설정 방법 알려줘",
+				"API Key 발급 방법 알려줘",
+				"사용량은 어디서 확인해?",
+				"계정 설정은 어디서 바꿔?",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		for _, prompt := range tc.prompts {
+			t.Run(tc.name+"/"+prompt, func(t *testing.T) {
+				if got := ClassifyCategory(prompt); got != tc.category {
+					t.Fatalf("한국어 category 분류 불일치: prompt=%q got=%q want=%q", prompt, got, tc.category)
+				}
+			})
+		}
+	}
+}
+
 func TestRoutingDecisionKeyHashChangesWhenCategoryChanges(t *testing.T) {
 	base := DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,

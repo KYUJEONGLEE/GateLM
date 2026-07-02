@@ -210,11 +210,12 @@ func validateSemanticCacheEntry(entry SemanticCacheEntry) error {
 }
 
 func isUsableSemanticVector(vector []float64) bool {
-	if len(vector) == 0 {
-		return false
+	for _, value := range vector {
+		if value != 0 {
+			return true
+		}
 	}
-	_, err := CosineSimilarity(vector, vector)
-	return err == nil
+	return false
 }
 
 func containsForbiddenSemanticCachePayload(payload []byte) bool {

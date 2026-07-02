@@ -31,7 +31,7 @@ func CosineSimilarity(left []float64, right []float64) (float64, error) {
 		return 0, ErrSemanticVectorZero
 	}
 
-	similarity := dot / (math.Sqrt(leftSquares) * math.Sqrt(rightSquares))
+	similarity := dot / math.Sqrt(leftSquares*rightSquares)
 	if similarity > 1 {
 		return 1, nil
 	}
