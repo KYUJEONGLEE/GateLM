@@ -113,6 +113,7 @@ type LlmInvocationLog struct {
 	MaskingDetectedTypes        []string
 	MaskingDetectedCount        int
 	RedactedPromptPreview       string
+	PromptCapture               PromptCaptureFields
 	RuntimeSnapshot             runtimeconfig.RuntimeSnapshotProvenance
 	CreatedAt                   time.Time
 	CompletedAt                 *time.Time
@@ -169,6 +170,7 @@ type RequestDetail struct {
 	Routing         RoutingFields
 	Masking         MaskingFields
 	SafetySummary   SafetySummaryFields
+	PromptCapture   PromptCaptureFields
 	RuntimeSnapshot *runtimeconfig.RuntimeSnapshotProvenance
 	Error           ErrorFields
 	CreatedAt       time.Time
@@ -571,6 +573,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 			RedactedPromptPreview: log.RedactedPromptPreview,
 		},
 		SafetySummary:   safetySummary,
+		PromptCapture:   normalizePromptCaptureFields(log.PromptCapture),
 		RuntimeSnapshot: runtimeSnapshotPointer(log.RuntimeSnapshot, log.CreatedAt),
 		Error: ErrorFields{
 			ErrorCode:    log.ErrorCode,
@@ -580,6 +583,25 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		CreatedAt:   log.CreatedAt,
 		CompletedAt: log.CompletedAt,
 	}
+}
+
+func normalizePromptCaptureFields(fields PromptCaptureFields) PromptCaptureFields {
+	fields.Mode = strings.TrimSpace(fields.Mode)
+	fields.Visibility = strings.TrimSpace(fields.Visibility)
+	fields.CapturedPrompt = strings.TrimSpace(fields.CapturedPrompt)
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	if !fields.Enabled {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+		fields.CapturedPrompt = ""
+		fields.Truncated = false
+	}
+	if fields.Visibility == "" {
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+	}
+	return fields
 }
 
 func requestDetailProviderCalled(log LlmInvocationLog) bool {
