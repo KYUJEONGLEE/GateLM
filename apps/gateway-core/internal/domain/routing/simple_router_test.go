@@ -116,6 +116,40 @@ func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t 
 	}))
 }
 
+func TestSimpleRouterRequestConfigPreservesBaseCandidateStatuses(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_base",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock", Model: "mock-fast", Status: RouteCandidateUnavailable},
+			{Provider: "mock", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 1},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "brief status update",
+		Config: &SimpleRouterConfig{
+			PolicyHash:          "hash_runtime_routing_policy",
+			ShortPromptMaxChars: 300,
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", ReasonProviderHealthFallback, "hash_runtime_routing_policy", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryGeneral,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
 func TestSimpleRouterRoutingDecisionHashChangesByCategory(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",

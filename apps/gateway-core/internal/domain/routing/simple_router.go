@@ -115,6 +115,43 @@ func normalizeSimpleRouterConfig(config SimpleRouterConfig) SimpleRouterConfig {
 	return config
 }
 
+func mergeSimpleRouterConfig(base SimpleRouterConfig, override SimpleRouterConfig) SimpleRouterConfig {
+	merged := base
+	overrideDefaultProvider := strings.TrimSpace(override.DefaultProvider)
+	if overrideDefaultProvider != "" {
+		merged.DefaultProvider = overrideDefaultProvider
+	}
+	if strings.TrimSpace(override.DefaultModel) != "" {
+		merged.DefaultModel = override.DefaultModel
+	}
+	if strings.TrimSpace(override.LowCostProvider) != "" {
+		merged.LowCostProvider = override.LowCostProvider
+	} else if overrideDefaultProvider != "" {
+		merged.LowCostProvider = overrideDefaultProvider
+	}
+	if strings.TrimSpace(override.LowCostModel) != "" {
+		merged.LowCostModel = override.LowCostModel
+	}
+	if strings.TrimSpace(override.HighQualityProvider) != "" {
+		merged.HighQualityProvider = override.HighQualityProvider
+	} else if overrideDefaultProvider != "" {
+		merged.HighQualityProvider = overrideDefaultProvider
+	}
+	if strings.TrimSpace(override.HighQualityModel) != "" {
+		merged.HighQualityModel = override.HighQualityModel
+	}
+	if strings.TrimSpace(override.PolicyHash) != "" {
+		merged.PolicyHash = override.PolicyHash
+	}
+	if override.ShortPromptMaxChars > 0 {
+		merged.ShortPromptMaxChars = override.ShortPromptMaxChars
+	}
+	if len(override.CandidateStatuses) > 0 {
+		merged.CandidateStatuses = append([]RouteCandidateStatus(nil), override.CandidateStatuses...)
+	}
+	return normalizeSimpleRouterConfig(merged)
+}
+
 func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
 	config := SimpleRouterConfig{}
 	if r != nil {
@@ -132,7 +169,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	}
 	config = normalizeSimpleRouterConfig(config)
 	if req.Config != nil {
-		config = normalizeSimpleRouterConfig(*req.Config)
+		config = mergeSimpleRouterConfig(config, *req.Config)
 	}
 
 	requestedModel := strings.TrimSpace(req.RequestedModel)
@@ -212,14 +249,14 @@ func applyCandidateStatusFallback(provider string, model string, tier string, re
 		return provider, model, tier, reason, PolicyVariantDefault
 	}
 
-	fallback, ok := bestAvailableRouteCandidate(provider, model, tier, config)
+	fallback, ok := bestAvailableRouteCandidate(provider, model, config)
 	if !ok {
 		return provider, model, tier, reason, PolicyVariantDefault
 	}
 	return fallback.Provider, fallback.Model, fallback.Tier, ReasonProviderHealthFallback, PolicyVariantProviderHealthFallback
 }
 
-func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, originalTier string, config SimpleRouterConfig) (RouteCandidateStatus, bool) {
+func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, config SimpleRouterConfig) (RouteCandidateStatus, bool) {
 	candidates := routeCandidatesForConfig(config)
 	var selected RouteCandidateStatus
 	found := false
@@ -230,7 +267,7 @@ func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, or
 		if candidate.Status == RouteCandidateUnavailable {
 			continue
 		}
-		if !routeCandidateAllowedForHealthFallback(originalTier, candidate.Tier) {
+		if !routeCandidateAllowedForHealthFallback(candidate.Tier) {
 			continue
 		}
 		if !found || routeCandidateLess(candidate, selected) {
@@ -241,16 +278,8 @@ func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, or
 	return selected, found
 }
 
-func routeCandidateAllowedForHealthFallback(originalTier string, candidateTier string) bool {
-	originalTier = canonicalTier(originalTier)
-	candidateTier = canonicalTier(candidateTier)
-	if candidateTier == TierHighQuality {
-		return false
-	}
-	if originalTier == TierHighQuality {
-		return candidateTier == TierBalanced || candidateTier == TierLowCost
-	}
-	return candidateTier == originalTier || candidateTier == TierBalanced || candidateTier == TierLowCost
+func routeCandidateAllowedForHealthFallback(candidateTier string) bool {
+	return canonicalTier(candidateTier) != TierHighQuality
 }
 
 func routeCandidatesForConfig(config SimpleRouterConfig) []RouteCandidateStatus {
