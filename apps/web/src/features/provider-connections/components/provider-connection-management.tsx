@@ -695,10 +695,10 @@ export function ProviderConnectionManagement({
                     </td>
                     <td>
                       <span className="project-muted">
-                        {nullableText(provider.credentialPreview.prefix, "none")}
+                        {nullableText(provider.credentialPreview?.prefix, "none")}
                       </span>
                       <small className="project-muted">
-                        last4: {nullableText(provider.credentialPreview.last4, "none")}
+                        last4: {nullableText(provider.credentialPreview?.last4, "none")}
                       </small>
                     </td>
                     <td>
@@ -771,8 +771,8 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
       "credentialRequired",
       provider.resolver !== "none"
     ),
-    credentialLast4: nullableText(provider.credentialPreview.last4, ""),
-    credentialPrefix: nullableText(provider.credentialPreview.prefix, ""),
+    credentialLast4: nullableText(provider.credentialPreview?.last4, ""),
+    credentialPrefix: nullableText(provider.credentialPreview?.prefix, ""),
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
     models: getProviderConfigModels(provider.providerConfig).join(", "),

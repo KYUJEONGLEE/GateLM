@@ -601,8 +601,9 @@ function DashboardTabPanel({
   }
 
   if (activeTab === "safety") {
-    const redactedCount = sumRecordMatches(overview.maskingActionCounts, ["redact"]);
-    const maskingBlockedCount = sumRecordMatches(overview.maskingActionCounts, ["block"]);
+    const maskingActionCounts = overview.maskingActionCounts ?? {};
+    const redactedCount = sumRecordMatches(maskingActionCounts, ["redact"]);
+    const maskingBlockedCount = sumRecordMatches(maskingActionCounts, ["block"]);
 
     return (
       <section className="dashboard-tab-panel" aria-label={text.tabs.safety}>
@@ -620,13 +621,13 @@ function DashboardTabPanel({
               <h3>{text.maskingActions}</h3>
             </div>
             <div className="compact-list">
-              {Object.entries(overview.maskingActionCounts).map(([action, count]) => (
+              {Object.entries(maskingActionCounts).map(([action, count]) => (
                 <div className="compact-row" key={action}>
                   <span>{action}</span>
                   <strong>{formatInteger(count)}</strong>
                 </div>
               ))}
-              {Object.keys(overview.maskingActionCounts).length === 0 ? <EmptyRow /> : null}
+              {Object.keys(maskingActionCounts).length === 0 ? <EmptyRow /> : null}
             </div>
           </article>
         </section>
@@ -1263,7 +1264,11 @@ function toConicGradient(rows: Array<{ color: string; value: number }>, total: n
   return `conic-gradient(${stops.join(", ")})`;
 }
 
-function sumRecordMatches(record: Record<string, number>, needles: string[]) {
+function sumRecordMatches(record: Record<string, number> | null | undefined, needles: string[]) {
+  if (!record) {
+    return 0;
+  }
+
   return Object.entries(record).reduce((sum, [key, value]) => {
     const normalizedKey = key.toLowerCase();
 
