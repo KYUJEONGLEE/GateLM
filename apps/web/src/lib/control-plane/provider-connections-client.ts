@@ -101,7 +101,7 @@ export async function getProviderConnectionsModel(
       }
     : {
         items: getFallbackProviderPresets(),
-        loadError: presetResult.error,
+        loadError: presetResult.status === 404 ? null : presetResult.error,
         source: "fallback" as const
       };
 
@@ -359,6 +359,15 @@ async function readProviderDiscoveryResponse(response: Response): Promise<Provid
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 404) {
+      return {
+        error:
+          "Provider model discovery API is not available in the current Control Plane build.",
+        ok: false,
+        status: response.status
+      };
+    }
+
     return {
       error: getErrorMessage(payload, response.status),
       ok: false,

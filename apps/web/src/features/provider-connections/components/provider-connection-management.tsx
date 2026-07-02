@@ -30,6 +30,7 @@ type ProviderResponsePayload = {
   discovery?: ProviderModelDiscovery;
   error?: string;
   provider?: ProviderConnectionRecord;
+  status?: number;
 };
 
 const providerStatuses: ProviderConnectionStatus[] = ["ACTIVE", "DEGRADED", "DISABLED"];
@@ -269,7 +270,12 @@ export function ProviderConnectionManagement({
 
     if (!response.ok || !payload.discovery) {
       setSubmitState({
-        message: payload.error ?? "Provider model discovery failed.",
+        message:
+          payload.status === 404
+            ? locale === "ko"
+              ? "현재 Control Plane 빌드에 모델 조회 API가 없습니다. Models 칸에 모델명을 직접 입력하세요."
+              : "Model discovery API is not available in this Control Plane build. Enter model names manually."
+            : payload.error ?? "Provider model discovery failed.",
         status: "error"
       });
       setDiscoveringProvider(null);
