@@ -56,6 +56,85 @@ func TestExtractRoutingSignalsUsesBoundedCheapSignals(t *testing.T) {
 	}
 }
 
+func TestDefaultCategoryPolicyIsLoadedFromDataFile(t *testing.T) {
+	policy := DefaultCategoryPolicy()
+
+	if policy.SchemaVersion != "gatelm.routing-category-policy.v1" {
+		t.Fatalf("unexpected schema version: %q", policy.SchemaVersion)
+	}
+	if policy.PolicyVersion != "route_category_policy_v1" {
+		t.Fatalf("unexpected policy version: %q", policy.PolicyVersion)
+	}
+	if len(policy.CategoryPriority) == 0 {
+		t.Fatalf("expected category priority from policy file")
+	}
+	if len(policy.Rules[CategoryCode].Contains) == 0 {
+		t.Fatalf("expected code category keywords from policy file")
+	}
+}
+
+func TestRuleBasedCategoryClassifierUsesPolicyPriority(t *testing.T) {
+	policy := DefaultCategoryPolicy()
+	policy.CategoryPriority = []string{CategorySupportRefund, CategoryTranslation}
+
+	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
+	actual := classifier.Classify("환불 정책을 영어로 번역해줘")
+
+	if actual != CategorySupportRefund {
+		t.Fatalf("expected policy priority to choose support_refund, got %s", actual)
+	}
+}
+
+func TestRuleBasedCategoryClassifierClonesExternalPolicy(t *testing.T) {
+	policy := CategoryPolicy{
+		MaxScanBytes:     maxCategoryScanBytes,
+		CategoryPriority: []string{CategorySupportRefund},
+		Rules: map[string]CategoryRule{
+			CategorySupportRefund: {Contains: []string{"refund"}},
+		},
+	}
+
+	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
+	policy.CategoryPriority[0] = CategoryCode
+	policy.Rules[CategorySupportRefund] = CategoryRule{}
+
+	if actual := classifier.Classify("refund request"); actual != CategorySupportRefund {
+		t.Fatalf("expected classifier to keep cloned policy, got %s", actual)
+	}
+}
+
+func TestCategoryRuleSupportsRequiresAnyTokenWithoutRequiresToken(t *testing.T) {
+	policy := CategoryPolicy{
+		MaxScanBytes:     maxCategoryScanBytes,
+		CategoryPriority: []string{CategoryReasoning},
+		Rules: map[string]CategoryRule{
+			CategoryReasoning: {RequiresAnyToken: []string{"compare", "tradeoff"}},
+		},
+	}
+	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
+
+	if actual := classifier.Classify("compare these options"); actual != CategoryReasoning {
+		t.Fatalf("expected requiresAnyToken-only rule to classify reasoning, got %s", actual)
+	}
+	if actual := classifier.Classify("plain message"); actual != CategoryGeneral {
+		t.Fatalf("expected empty or unmet rule to stay general, got %s", actual)
+	}
+}
+
+func TestDefaultCategoryPolicyReturnsClone(t *testing.T) {
+	policy := DefaultCategoryPolicy()
+	policy.CategoryPriority[0] = CategorySupportRefund
+	policy.Rules[CategoryCode] = CategoryRule{}
+
+	fresh := DefaultCategoryPolicy()
+	if fresh.CategoryPriority[0] != CategoryCode {
+		t.Fatalf("expected fresh default priority to remain code, got %s", fresh.CategoryPriority[0])
+	}
+	if len(fresh.Rules[CategoryCode].Contains) == 0 {
+		t.Fatalf("expected fresh default code keywords to remain intact")
+	}
+}
+
 func TestRuleBasedCategoryClassifierScansBoundedPromptPrefix(t *testing.T) {
 	classifier := NewRuleBasedCategoryClassifier()
 
