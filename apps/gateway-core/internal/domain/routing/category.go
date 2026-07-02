@@ -11,7 +11,7 @@ const maxCategoryScanBytes = 2048
 var (
 	translationCategoryKeywords = []string{
 		"translate", "translation", "in english", "into korean", "into english", "to english",
-		"번역", "영어로", "한국어로", "일본어로", "중국어로",
+		"번역", "영어로", "영문으로", "한국어로", "일본어로", "중국어로",
 	}
 	codeCategoryKeywords = []string{
 		"code", "coding", "function", "stack trace", "exception", "refactor", "typescript", "javascript",

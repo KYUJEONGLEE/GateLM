@@ -48,6 +48,22 @@ func TestSemanticFakeEmbeddingProviderDeterministic(t *testing.T) {
 	if unrelatedSimilarity >= 0.92 {
 		t.Fatalf("사용량 통계 문장은 threshold 미만이어야 함: got %f", unrelatedSimilarity)
 	}
+
+	refundFirst, err := provider.Embed(ctx, EmbeddingInput{NormalizedText: "배송비도 환불되나요?"})
+	if err != nil {
+		t.Fatalf("support_refund 첫 embedding 생성 실패: %v", err)
+	}
+	refundSecond, err := provider.Embed(ctx, EmbeddingInput{NormalizedText: "반품하면 배송비도 돌려받나요?"})
+	if err != nil {
+		t.Fatalf("support_refund 유사 embedding 생성 실패: %v", err)
+	}
+	refundSimilarity, err := CosineSimilarity(refundFirst.Vector, refundSecond.Vector)
+	if err != nil {
+		t.Fatalf("support_refund cosine 계산 실패: %v", err)
+	}
+	if refundSimilarity < 0.92 {
+		t.Fatalf("support_refund 유사 문장은 threshold 이상이어야 함: got %f", refundSimilarity)
+	}
 }
 
 func TestSemanticCosineSimilarity(t *testing.T) {
@@ -395,7 +411,7 @@ func TestSemanticCacheFactoryRejectsUnknownImplementations(t *testing.T) {
 	if _, err := NewSemanticCacheStore("qdrant", 10); err == nil {
 		t.Fatalf("지원하지 않는 semantic cache store는 에러여야 함")
 	}
-	if _, err := NewSemanticCacheEmbeddingProvider("openai", "text-embedding-3-small"); err == nil {
+	if _, err := NewSemanticCacheEmbeddingProvider("unknown", "text-embedding-3-small"); err == nil {
 		t.Fatalf("지원하지 않는 embedding provider는 에러여야 함")
 	}
 }
