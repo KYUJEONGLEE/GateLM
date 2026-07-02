@@ -89,6 +89,30 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
     scenarioId: "rate-limited",
     status: "rate_limited",
     title: "Rate limit"
+  },
+  {
+    cacheStatus: "miss",
+    description: "Primary provider timeout is recovered by the configured Mock fallback path.",
+    detectedTypes: [],
+    httpStatus: 200,
+    maskingAction: "none",
+    promptPreview: "Write a short safe provider timeout fallback response.",
+    providerCall: "called",
+    scenarioId: "provider-timeout",
+    status: "success",
+    title: "Provider timeout"
+  },
+  {
+    cacheStatus: "miss",
+    description: "Primary provider error is recovered by the configured Mock fallback path.",
+    detectedTypes: [],
+    httpStatus: 200,
+    maskingAction: "none",
+    promptPreview: "Write a short safe provider error fallback response.",
+    providerCall: "called",
+    scenarioId: "provider-fallback",
+    status: "success",
+    title: "Provider fallback"
   }
 ];
 
@@ -157,6 +181,12 @@ function buildLiveScenario(
     },
     scenarioId: template.scenarioId,
     status: template.status,
+    streaming: {
+      completed: null,
+      contentType: null,
+      chunkCount: null,
+      requested: false
+    },
     title: template.title
   };
 }

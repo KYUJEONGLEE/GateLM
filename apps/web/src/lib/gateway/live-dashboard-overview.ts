@@ -122,15 +122,28 @@ type LiveDashboardOverviewResponse = {
 
 const LIVE_RANGE_HOURS = 24;
 
+export type LiveDashboardOverviewFilters = {
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  projectId?: string;
+  resolvedBy?: string;
+};
+
 export async function getLiveDashboardOverview(
-  tenantId: string
+  tenantId: string,
+  filters: LiveDashboardOverviewFilters = {}
 ): Promise<DashboardOverview | undefined> {
   const config = getLiveGatewayConfig();
   const { from, to } = getLiveRange();
   const query = new URLSearchParams({
     from,
+    tenantId,
     to
   });
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "projectId", filters.projectId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(`${config.baseUrl}/api/dashboard/overview?${query.toString()}`, {
     headers: {
@@ -150,6 +163,13 @@ export async function getLiveDashboardOverview(
   }
 
   return toDashboardOverview(payload.data, tenantId, from, to);
+}
+
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+  if (normalized) {
+    query.set(key, normalized);
+  }
 }
 
 function getLiveRange() {
