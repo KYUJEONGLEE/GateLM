@@ -242,6 +242,48 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_detect_returns_semantic_person_placeholders_for_recruiting_context(self) -> None:
+        applicant_name = "Alex Kim"
+        interviewer_name = "Jamie Park"
+        prompt = f"applicant {applicant_name} sent resume to interviewer {interviewer_name}."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(
+            lambda _text: [
+                {
+                    "entity_group": "person_name",
+                    "score": 0.98,
+                    "start": prompt.index(applicant_name),
+                    "end": prompt.index(applicant_name) + len(applicant_name),
+                    "word": applicant_name,
+                },
+                {
+                    "entity_group": "person_name",
+                    "score": 0.97,
+                    "start": prompt.index(interviewer_name),
+                    "end": prompt.index(interviewer_name) + len(interviewer_name),
+                    "word": interviewer_name,
+                },
+            ]
+        )
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "[APPLICANT_1] sent resume to [INTERVIEWER_1].",
+        )
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
+        self.assertNotIn(applicant_name, body_text)
+        self.assertNotIn(interviewer_name, body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
     def test_detect_returns_relationship_preserving_role_placeholders(self) -> None:
         owner_name = "\uae40\ubbfc\uc218"
         approver_name = "\uc774\uc724\uc9c0"

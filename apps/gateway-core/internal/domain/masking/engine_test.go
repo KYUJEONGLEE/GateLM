@@ -160,6 +160,27 @@ func TestP0EngineUsesRoleAwarePlaceholdersForKoreanPersonRoles(t *testing.T) {
 	}
 }
 
+func TestP0EngineUsesSemanticPlaceholdersForRecruitingPersonRoles(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "applicant Alex Kim sent resume to interviewer Jamie Park. \uc9c0\uc6d0\uc790 \uc774\uc724\uc9c0\uac00 \uba74\uc811\uad00 \uae40\ubbfc\uc218\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4.",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[APPLICANT_1] sent resume to [INTERVIEWER_1]. [APPLICANT_2]\uac00 [INTERVIEWER_2]\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected semantic role placeholders %q, got %q", expected, result.RedactedPrompt)
+	}
+	for _, rawValue := range []string{"Alex Kim", "Jamie Park", "\uc774\uc724\uc9c0", "\uae40\ubbfc\uc218"} {
+		if strings.Contains(result.RedactedPrompt, rawValue) {
+			t.Fatalf("redacted prompt must not include raw value %q: %q", rawValue, result.RedactedPrompt)
+		}
+	}
+}
+
 func TestP0EnginePreservesBusinessRoleRelationship(t *testing.T) {
 	engine := NewP0Engine()
 

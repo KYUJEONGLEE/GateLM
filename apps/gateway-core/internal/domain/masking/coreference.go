@@ -244,7 +244,15 @@ func hasASCIILetter(value string) bool {
 }
 
 func isPersonCoreferencePlaceholder(placeholder string) bool {
-	for _, prefix := range []string{"[PERSON_", "[CUSTOMER_", "[AGENT_", "[DOCTOR_", "[PATIENT_"} {
+	for _, prefix := range []string{
+		"[PERSON_",
+		"[CUSTOMER_",
+		"[AGENT_",
+		"[DOCTOR_",
+		"[PATIENT_",
+		"[APPLICANT_",
+		"[INTERVIEWER_",
+	} {
 		if strings.HasPrefix(placeholder, prefix) {
 			return true
 		}

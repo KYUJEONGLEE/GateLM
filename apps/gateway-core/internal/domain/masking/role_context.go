@@ -80,6 +80,35 @@ var personRoleContextLabels = []personRoleContextLabel{
 			"\ud658\uc790",
 		},
 	},
+	{
+		prefix: "APPLICANT",
+		labels: []string{
+			"applicant",
+			"applicant name",
+			"candidate",
+			"candidate name",
+			"\uc9c0\uc6d0\uc790",
+			"\uc9c0\uc6d0\uc790\uba85",
+		},
+		consumableLabels: []string{
+			"applicant",
+			"candidate",
+			"\uc9c0\uc6d0\uc790",
+		},
+	},
+	{
+		prefix: "INTERVIEWER",
+		labels: []string{
+			"interviewer",
+			"interviewer name",
+			"\uba74\uc811\uad00",
+			"\uba74\uc811\uad00\uba85",
+		},
+		consumableLabels: []string{
+			"interviewer",
+			"\uba74\uc811\uad00",
+		},
+	},
 }
 
 func inferPersonRolePrefix(input string, start int) string {

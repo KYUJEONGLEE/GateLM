@@ -544,6 +544,32 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             ),
         )
 
+    def test_redact_prompt_uses_semantic_placeholders_for_recruiting_person_roles(self) -> None:
+        applicant_name = "Alex Kim"
+        interviewer_name = "Jamie Park"
+        korean_applicant_name = "\uc774\uc724\uc9c0"
+        korean_interviewer_name = "\uae40\ubbfc\uc218"
+        prompt = (
+            f"applicant {applicant_name} sent a resume to interviewer {interviewer_name}. "
+            f"\uc9c0\uc6d0\uc790 {korean_applicant_name}\uac00 "
+            f"\uba74\uc811\uad00 {korean_interviewer_name}\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
+        )
+
+        signals = [
+            signal(prompt, "person_name", applicant_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", interviewer_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", korean_applicant_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", korean_interviewer_name, "[PERSON_NAME_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "[APPLICANT_1] sent a resume to [INTERVIEWER_1]. "
+                "[APPLICANT_2]\uac00 [INTERVIEWER_2]\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
+            ),
+        )
+
     def test_redact_prompt_uses_role_aware_placeholders_for_korean_person_roles(self) -> None:
         customer_name = "\uc774\uc724\uc9c0"
         agent_name = "\uae40\ubbfc\uc218"

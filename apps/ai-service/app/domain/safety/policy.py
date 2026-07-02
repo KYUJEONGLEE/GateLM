@@ -26,7 +26,9 @@ ENTITY_PLACEHOLDER_PREFIX_BY_DETECTOR_TYPE = {
     "email": "EMAIL",
     "phone_number": "PHONE_NUMBER",
 }
-PERSON_ROLE_PLACEHOLDER_PREFIXES = frozenset({"CUSTOMER", "AGENT", "DOCTOR", "PATIENT"})
+PERSON_ROLE_PLACEHOLDER_PREFIXES = frozenset(
+    {"CUSTOMER", "AGENT", "DOCTOR", "PATIENT", "APPLICANT", "INTERVIEWER"}
+)
 PERSON_ROLE_CONTEXT_LABELS = (
     (
         "CUSTOMER",
@@ -67,6 +69,26 @@ PERSON_ROLE_CONTEXT_LABELS = (
             "\ud658\uc790",
         ),
     ),
+    (
+        "APPLICANT",
+        (
+            "applicant",
+            "applicant name",
+            "candidate",
+            "candidate name",
+            "\uc9c0\uc6d0\uc790",
+            "\uc9c0\uc6d0\uc790\uba85",
+        ),
+    ),
+    (
+        "INTERVIEWER",
+        (
+            "interviewer",
+            "interviewer name",
+            "\uba74\uc811\uad00",
+            "\uba74\uc811\uad00\uba85",
+        ),
+    ),
 )
 PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
@@ -101,6 +123,21 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
         (
             "patient",
             "\ud658\uc790",
+        ),
+    ),
+    (
+        "APPLICANT",
+        (
+            "applicant",
+            "candidate",
+            "\uc9c0\uc6d0\uc790",
+        ),
+    ),
+    (
+        "INTERVIEWER",
+        (
+            "interviewer",
+            "\uba74\uc811\uad00",
         ),
     ),
 )
@@ -181,6 +218,8 @@ PERSON_COREFERENCE_PLACEHOLDER_PREFIXES = (
     "[AGENT_",
     "[DOCTOR_",
     "[PATIENT_",
+    "[APPLICANT_",
+    "[INTERVIEWER_",
 )
 PERSON_NAME_STRUCTURE_SUFFIXES = (
     "\uc5d0\uac8c",

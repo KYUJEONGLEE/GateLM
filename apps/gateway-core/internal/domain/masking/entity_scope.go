@@ -129,7 +129,7 @@ func entityPlaceholderPrefix(detectorType string, rolePrefix string) (string, bo
 
 func isSupportedPersonRolePrefix(prefix string) bool {
 	switch prefix {
-	case "CUSTOMER", "AGENT", "DOCTOR", "PATIENT":
+	case "CUSTOMER", "AGENT", "DOCTOR", "PATIENT", "APPLICANT", "INTERVIEWER":
 		return true
 	default:
 		return false
