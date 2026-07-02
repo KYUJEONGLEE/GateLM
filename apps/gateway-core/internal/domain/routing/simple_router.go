@@ -99,6 +99,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 		requestedModel = config.DefaultModel
 	}
 
+	category := NewRuleBasedCategoryClassifier().Classify(req.PromptText)
+	capability := capabilityForCategory(category)
+
 	decision := Decision{
 		RequestedModel:             requestedModel,
 		SelectedProvider:           config.DefaultProvider,
@@ -112,9 +115,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 			decision.SelectedModelID = config.LowCostModel
 			decision.RoutingDecisionMaterial = DecisionMaterial{
 				RoutingMode:   RoutingModeAuto,
-				Category:      CategoryUnknown,
+				Category:      category,
 				Tier:          TierLowCost,
-				Capability:    CapabilityChat,
+				Capability:    capability,
 				PolicyVariant: PolicyVariantDefault,
 			}
 			decision.RoutingReason = ReasonShortPromptLowCost
@@ -126,9 +129,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 		decision.SelectedModelID = config.DefaultModel
 		decision.RoutingDecisionMaterial = DecisionMaterial{
 			RoutingMode:   RoutingModeAuto,
-			Category:      CategoryUnknown,
+			Category:      category,
 			Tier:          TierBalanced,
-			Capability:    CapabilityChat,
+			Capability:    capability,
 			PolicyVariant: PolicyVariantDefault,
 		}
 		decision.RoutingReason = ReasonDefaultBalanced
@@ -140,9 +143,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	decision.SelectedModelID = requestedModel
 	decision.RoutingDecisionMaterial = DecisionMaterial{
 		RoutingMode:   RoutingModePinned,
-		Category:      CategoryUnknown,
+		Category:      category,
 		Tier:          TierBalanced,
-		Capability:    CapabilityChat,
+		Capability:    capability,
 		PolicyVariant: PolicyVariantDefault,
 	}
 	decision.RoutingReason = ReasonPinned
