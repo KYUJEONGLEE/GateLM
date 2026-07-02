@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -237,7 +238,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	providerReq := chatReq
 	providerReq.RequestID = requestID
-	providerReq.Stream = false
 	reqCtx.SelectedProvider = target.ProviderName
 	reqCtx.SelectedModel = target.ModelID
 	if reqCtx.RoutingReason == "" {
@@ -248,6 +248,13 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.Model = reqCtx.SelectedModel
 	ensureCacheDefaults(reqCtx)
 
+	if reqCtx.Stream {
+		providerReq.Stream = true
+		h.handleStreamingProvider(w, r, reqCtx, providerReq, target, startedAt)
+		return
+	}
+
+	providerReq.Stream = false
 	providerStartedAt := time.Now()
 	providerResp, err := target.Adapter.CreateChatCompletion(r.Context(), target.ExecutionConfig, providerReq)
 	providerDuration := time.Since(providerStartedAt)
@@ -374,15 +381,16 @@ func (h *ChatCompletionsHandler) runtimePolicyPipeline() GatewayPipeline {
 }
 
 type providerCallTarget struct {
-	Adapter         provider.Adapter
-	ExecutionConfig provider.ExecutionConfig
-	Catalog         providercatalog.Catalog
-	ProviderName    string
-	AdapterType     string
-	ModelID         string
-	ModelName       string
-	FromCatalog     bool
-	Fallback        bool
+	Adapter            provider.Adapter
+	ExecutionConfig    provider.ExecutionConfig
+	Catalog            providercatalog.Catalog
+	ProviderName       string
+	AdapterType        string
+	ModelID            string
+	ModelName          string
+	StreamingSupported bool
+	FromCatalog        bool
+	Fallback           bool
 }
 
 type providerResolutionFailure struct {
@@ -489,16 +497,25 @@ func (h *ChatCompletionsHandler) resolveLegacyProviderCallTarget(reqCtx *pipelin
 	}
 	modelID := firstNonEmpty(reqCtx.SelectedModel, requestedModel, h.DefaultModel)
 	return providerCallTarget{
-		Adapter:      adapter,
-		ProviderName: firstNonEmpty(providerName, adapter.AdapterType()),
-		AdapterType:  adapter.AdapterType(),
-		ModelID:      modelID,
-		ModelName:    modelID,
+		Adapter:            adapter,
+		ProviderName:       firstNonEmpty(providerName, adapter.AdapterType()),
+		AdapterType:        adapter.AdapterType(),
+		ModelID:            modelID,
+		ModelName:          modelID,
+		StreamingSupported: legacyAdapterSupportsStreaming(adapter),
 		ExecutionConfig: provider.ExecutionConfig{
 			ProviderName: firstNonEmpty(providerName, adapter.AdapterType()),
 			AdapterType:  adapter.AdapterType(),
 		},
 	}, nil
+}
+
+func legacyAdapterSupportsStreaming(adapter provider.Adapter) bool {
+	if adapter == nil {
+		return false
+	}
+	_, ok := adapter.(provider.StreamingAdapter)
+	return ok
 }
 
 func (h *ChatCompletionsHandler) providerCallTargetFromCatalog(ctx context.Context, catalog providercatalog.Catalog, catalogProvider providercatalog.Provider, catalogModel providercatalog.Model, fallback bool) (providerCallTarget, error) {
@@ -530,14 +547,15 @@ func (h *ChatCompletionsHandler) providerCallTargetFromCatalog(ctx context.Conte
 
 	timeout := time.Duration(catalogProvider.TimeoutMs) * time.Millisecond
 	return providerCallTarget{
-		Adapter:      adapter,
-		Catalog:      catalog,
-		ProviderName: catalogProvider.ProviderName,
-		AdapterType:  catalogProvider.AdapterType,
-		ModelID:      catalogModel.ModelID,
-		ModelName:    catalogModel.ModelName,
-		FromCatalog:  true,
-		Fallback:     fallback,
+		Adapter:            adapter,
+		Catalog:            catalog,
+		ProviderName:       catalogProvider.ProviderName,
+		AdapterType:        catalogProvider.AdapterType,
+		ModelID:            catalogModel.ModelID,
+		ModelName:          catalogModel.ModelName,
+		StreamingSupported: catalogModel.Capabilities.StreamingSupported,
+		FromCatalog:        true,
+		Fallback:           fallback,
 		ExecutionConfig: provider.ExecutionConfig{
 			ProviderID:         catalogProvider.ProviderID,
 			ProviderName:       catalogProvider.ProviderName,
@@ -657,6 +675,304 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 	})
 
 	h.writeChatCompletionResponse(r.Context(), w, reqCtx, fallbackResp)
+}
+
+func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, startedAt time.Time) {
+	streamAdapter, ok := target.Adapter.(provider.StreamingAdapter)
+	if !target.StreamingSupported || !ok {
+		h.writeStreamingUnsupported(w, reqCtx)
+		return
+	}
+
+	providerStartedAt := time.Now()
+	stream, err := streamAdapter.CreateChatCompletionStream(r.Context(), target.ExecutionConfig, chatReq)
+	openDuration := time.Since(providerStartedAt)
+	reqCtx.ProviderLatencyMs = openDuration.Milliseconds()
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	if err != nil {
+		h.handleStreamingOpenFailure(w, r, reqCtx, chatReq, target, err, openDuration, startedAt)
+		return
+	}
+
+	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream)
+	providerDuration := time.Since(providerStartedAt)
+	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
+	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+	if usage != nil {
+		reqCtx.PromptTokens = usage.PromptTokens
+		reqCtx.CompletionTokens = usage.CompletionTokens
+		reqCtx.TotalTokens = usage.TotalTokens
+	}
+
+	if streamErr == nil {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: reqCtx.SelectedProvider,
+			SelectedModel:    reqCtx.SelectedModel,
+			Status:           invocationlog.StatusSuccess,
+			HTTPStatus:       http.StatusOK,
+			ErrorCode:        "none",
+			DurationSeconds:  providerDuration.Seconds(),
+		})
+		reqCtx.Status = invocationlog.StatusSuccess
+		reqCtx.HTTPStatus = http.StatusOK
+		reqCtx.ErrorCode = ""
+		reqCtx.ErrorMessage = ""
+		reqCtx.ErrorStage = ""
+		reqCtx.SavedCostMicroUSD = 0
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
+		return
+	}
+
+	status := http.StatusBadGateway
+	code := provider.SafeErrorCode(streamErr)
+	message := "Provider streaming response failed."
+	outcome := "interrupted"
+	terminalStatus := invocationlog.StatusFailed
+	if errors.Is(streamErr, context.Canceled) {
+		status = gatewayerrors.StatusClientClosedRequest
+		code = "internal_error"
+		message = "Request was cancelled."
+		outcome = "cancelled"
+		terminalStatus = invocationlog.StatusCancelled
+	}
+
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		Status:           terminalStatus,
+		HTTPStatus:       status,
+		ErrorCode:        code,
+		DurationSeconds:  providerDuration.Seconds(),
+	})
+	reqCtx.Status = terminalStatus
+	reqCtx.HTTPStatus = status
+	reqCtx.ErrorCode = code
+	reqCtx.ErrorMessage = message
+	reqCtx.ErrorStage = "stream_provider_response"
+	reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
+	reqCtx.DomainOutcomes.Provider = invocationlog.ProviderOutcome{
+		Outcome:            streamingProviderFailureOutcome(streamErr),
+		SelectedProvider:   stringPointerValue(reqCtx.SelectedProvider),
+		SelectedModel:      stringPointerValue(reqCtx.SelectedModel),
+		LatencyMs:          providerLatencyForLog(reqCtx),
+		SanitizedErrorCode: stringPointerValue(code),
+	}
+	reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{Outcome: "not_called"}
+	if !started {
+		writeGatewayErrorWithContext(w, reqCtx, status, code, message, "stream_provider_response")
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
+		reqCtx.DomainOutcomes.Provider = invocationlog.ProviderOutcome{
+			Outcome:            streamingProviderFailureOutcome(streamErr),
+			SelectedProvider:   stringPointerValue(reqCtx.SelectedProvider),
+			SelectedModel:      stringPointerValue(reqCtx.SelectedModel),
+			LatencyMs:          providerLatencyForLog(reqCtx),
+			SanitizedErrorCode: stringPointerValue(code),
+		}
+		reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{Outcome: "not_called"}
+	}
+}
+
+func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time) {
+	code := provider.SafeErrorCode(err)
+	if errors.Is(err, context.Canceled) {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: reqCtx.SelectedProvider,
+			SelectedModel:    reqCtx.SelectedModel,
+			Status:           invocationlog.StatusCancelled,
+			HTTPStatus:       gatewayerrors.StatusClientClosedRequest,
+			ErrorCode:        "internal_error",
+			DurationSeconds:  providerDuration.Seconds(),
+		})
+		writeGatewayErrorWithContext(w, reqCtx, gatewayerrors.StatusClientClosedRequest, "internal_error", "Request was cancelled.", "open_provider_stream")
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "cancelled")
+		return
+	}
+
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		Status:           invocationlog.StatusFailed,
+		HTTPStatus:       http.StatusBadGateway,
+		ErrorCode:        code,
+		DurationSeconds:  providerDuration.Seconds(),
+	})
+
+	if !provider.AllowsFallback(err) {
+		reqCtx.DomainOutcomes = withStreamingOutcome(
+			h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{Outcome: "not_called"}),
+			reqCtx,
+			"not_streaming",
+		)
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider streaming request failed.", "open_provider_stream")
+		return
+	}
+
+	fallbackTarget, fallbackErr := h.resolveFallbackTarget(r.Context(), reqCtx, target)
+	if fallbackErr != nil {
+		reqCtx.DomainOutcomes = withStreamingOutcome(
+			h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+				Outcome: "disabled",
+				Reason:  stringPointerValue("fallback_not_configured"),
+			}),
+			reqCtx,
+			"not_streaming",
+		)
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider streaming request failed and fallback is unavailable.", "open_provider_stream")
+		return
+	}
+
+	fallbackAdapter, ok := fallbackTarget.Adapter.(provider.StreamingAdapter)
+	if !fallbackTarget.StreamingSupported || !ok {
+		reqCtx.DomainOutcomes = withStreamingOutcome(
+			h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+				Outcome:          "disabled",
+				FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+				Reason:           stringPointerValue("streaming_not_supported"),
+			}),
+			reqCtx,
+			"not_streaming",
+		)
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, code, "Provider streaming request failed and streaming fallback is unavailable.", "open_provider_stream")
+		return
+	}
+
+	fallbackReq := chatReq
+	fallbackReq.Model = fallbackTarget.ModelName
+	fallbackReq.Stream = true
+	fallbackStartedAt := time.Now()
+	stream, fallbackCallErr := fallbackAdapter.CreateChatCompletionStream(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
+	if fallbackCallErr != nil {
+		fallbackDuration := time.Since(fallbackStartedAt)
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: fallbackTarget.ProviderName,
+			SelectedModel:    fallbackTarget.ModelID,
+			Status:           invocationlog.StatusFailed,
+			HTTPStatus:       http.StatusBadGateway,
+			ErrorCode:        "fallback_failed",
+			DurationSeconds:  fallbackDuration.Seconds(),
+		})
+		reqCtx.DomainOutcomes = withStreamingOutcome(
+			h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+				Outcome:          "failed",
+				FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+				Reason:           stringPointerValue("fallback_provider_failed"),
+			}),
+			reqCtx,
+			"not_streaming",
+		)
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "fallback_failed", "Provider streaming request failed and fallback failed.", "open_provider_stream")
+		return
+	}
+
+	primaryOutcomes := h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
+		Outcome:          "success",
+		FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+		Reason:           stringPointerValue(code),
+	})
+	reqCtx.DomainOutcomes = primaryOutcomes
+	originalSelectedProvider := reqCtx.SelectedProvider
+	originalSelectedModel := reqCtx.SelectedModel
+	reqCtx.SelectedProvider = fallbackTarget.ProviderName
+	reqCtx.SelectedModel = fallbackTarget.ModelID
+	reqCtx.Provider = fallbackTarget.ProviderName
+	reqCtx.Model = fallbackTarget.ModelID
+
+	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream)
+	fallbackDuration := time.Since(fallbackStartedAt)
+	if usage != nil {
+		reqCtx.PromptTokens = usage.PromptTokens
+		reqCtx.CompletionTokens = usage.CompletionTokens
+		reqCtx.TotalTokens = usage.TotalTokens
+	}
+	if streamErr == nil {
+		h.recordProviderRequest(metrics.ProviderRequest{
+			SelectedProvider: fallbackTarget.ProviderName,
+			SelectedModel:    fallbackTarget.ModelID,
+			Status:           invocationlog.StatusSuccess,
+			HTTPStatus:       http.StatusOK,
+			ErrorCode:        "none",
+			DurationSeconds:  fallbackDuration.Seconds(),
+		})
+		reqCtx.Status = invocationlog.StatusSuccess
+		reqCtx.HTTPStatus = http.StatusOK
+		reqCtx.ErrorCode = ""
+		reqCtx.ErrorMessage = ""
+		reqCtx.ErrorStage = ""
+		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
+		reqCtx.SavedCostMicroUSD = 0
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
+		return
+	}
+
+	reqCtx.SelectedProvider = originalSelectedProvider
+	reqCtx.SelectedModel = originalSelectedModel
+	reqCtx.Provider = originalSelectedProvider
+	reqCtx.Model = originalSelectedModel
+	status := http.StatusBadGateway
+	streamCode := provider.SafeErrorCode(streamErr)
+	outcome := "interrupted"
+	terminalStatus := invocationlog.StatusFailed
+	if errors.Is(streamErr, context.Canceled) {
+		status = gatewayerrors.StatusClientClosedRequest
+		streamCode = "internal_error"
+		outcome = "cancelled"
+		terminalStatus = invocationlog.StatusCancelled
+	}
+	h.recordProviderRequest(metrics.ProviderRequest{
+		SelectedProvider: fallbackTarget.ProviderName,
+		SelectedModel:    fallbackTarget.ModelID,
+		Status:           terminalStatus,
+		HTTPStatus:       status,
+		ErrorCode:        streamCode,
+		DurationSeconds:  fallbackDuration.Seconds(),
+	})
+	reqCtx.Status = terminalStatus
+	reqCtx.HTTPStatus = status
+	reqCtx.ErrorCode = streamCode
+	reqCtx.ErrorMessage = "Provider streaming fallback response failed."
+	reqCtx.ErrorStage = "stream_provider_response"
+	reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
+	reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{
+		Outcome:          "failed",
+		FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+		Reason:           stringPointerValue("fallback_provider_failed"),
+	}
+	if !started {
+		writeGatewayErrorWithContext(w, reqCtx, status, streamCode, "Provider streaming fallback response failed.", "stream_provider_response")
+		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, outcome)
+		reqCtx.DomainOutcomes.Fallback = invocationlog.FallbackOutcome{
+			Outcome:          "failed",
+			FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
+			Reason:           stringPointerValue("fallback_provider_failed"),
+		}
+	}
+}
+
+func streamingProviderFailureOutcome(err error) string {
+	switch provider.ErrorKindOf(err) {
+	case provider.ErrorKindTimeout:
+		return "timeout"
+	case provider.ErrorKindUnauthorized:
+		return "unauthorized"
+	default:
+		return "error"
+	}
+}
+
+func (h *ChatCompletionsHandler) writeStreamingUnsupported(w http.ResponseWriter, reqCtx *pipeline.RequestContext) {
+	writeGatewayErrorWithContext(w, reqCtx, http.StatusBadRequest, "streaming_not_supported", "Selected provider model does not support streaming.", "resolve_provider_streaming")
+	outcomes := buildDomainOutcomesFromRequestContext(reqCtx)
+	outcomes.Provider = invocationlog.ProviderOutcome{
+		Outcome:          "not_called",
+		SelectedProvider: stringPointerValue(reqCtx.SelectedProvider),
+		SelectedModel:    stringPointerValue(reqCtx.SelectedModel),
+	}
+	outcomes.Fallback = invocationlog.FallbackOutcome{Outcome: "not_called"}
+	outcomes.Streaming = invocationlog.StreamingOutcome{
+		Outcome:            "not_streaming",
+		StreamingRequested: reqCtx.Stream,
+	}
+	reqCtx.DomainOutcomes = outcomes
 }
 
 func (h *ChatCompletionsHandler) resolveFallbackTarget(ctx context.Context, reqCtx *pipeline.RequestContext, primary providerCallTarget) (providerCallTarget, error) {
@@ -1018,12 +1334,82 @@ func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, re
 	return true, nil
 }
 
+func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, stream provider.ChatCompletionStreamReader) (bool, *provider.Usage, error) {
+	if err := ctx.Err(); err != nil {
+		return false, nil, err
+	}
+	if stream == nil {
+		return false, nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("provider stream is not initialized"))
+	}
+	defer stream.Close()
+
+	firstEvent, err := stream.Next()
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, nil, err
+	}
+
+	setGatewayHeaders(w, reqCtx)
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flushResponse(w)
+
+	var usage *provider.Usage
+	if err == nil {
+		if firstEvent.Usage != nil {
+			usage = firstEvent.Usage
+		}
+		if err := writeSSEDataRaw(w, firstEvent.Data); err != nil {
+			return true, usage, err
+		}
+		flushResponse(w)
+	}
+
+	for err == nil {
+		if err := ctx.Err(); err != nil {
+			return true, usage, err
+		}
+		event, nextErr := stream.Next()
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+		if nextErr != nil {
+			return true, usage, nextErr
+		}
+		if event.Usage != nil {
+			usage = event.Usage
+		}
+		if err := writeSSEDataRaw(w, event.Data); err != nil {
+			return true, usage, err
+		}
+		flushResponse(w)
+	}
+	if err := ctx.Err(); err != nil {
+		return true, usage, err
+	}
+	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
+		return true, usage, err
+	}
+	flushResponse(w)
+	return true, usage, nil
+}
+
 func writeSSEData(w http.ResponseWriter, payload any) error {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(w, "data: %s\n\n", encoded)
+	return err
+}
+
+func writeSSEDataRaw(w http.ResponseWriter, payload json.RawMessage) error {
+	if len(payload) == 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "data: %s\n\n", payload)
 	return err
 }
 
@@ -1148,6 +1534,13 @@ func streamingFinalDomainOutcomes(reqCtx *pipeline.RequestContext, outcome strin
 		reqCtx.ErrorCode = originalErrorCode
 		reqCtx.ErrorMessage = originalErrorMessage
 		reqCtx.ErrorStage = originalErrorStage
+	}
+	return withStreamingOutcome(outcomes, reqCtx, outcome)
+}
+
+func withStreamingOutcome(outcomes invocationlog.DomainOutcomes, reqCtx *pipeline.RequestContext, outcome string) invocationlog.DomainOutcomes {
+	if reqCtx == nil {
+		return outcomes
 	}
 	outcomes.Streaming = invocationlog.StreamingOutcome{
 		Outcome:            outcome,
