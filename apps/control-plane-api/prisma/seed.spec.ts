@@ -8,6 +8,7 @@ import {
   DEMO_MOCK_PROVIDER_ID,
   DEMO_OPENAI_PROVIDER_ID,
   DEMO_RUNTIME_CONFIG_VERSION,
+  PROVIDER_PRESETS,
   seedDemoData,
 } from './seed';
 
@@ -148,6 +149,38 @@ describe('Control Plane demo seed baseline', () => {
     );
   });
 
+  it('upserts global provider presets for common OpenAI-compatible providers', async () => {
+    const tx = createMockTransaction();
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await seedDemoData(client as unknown as PrismaClient);
+
+    expect(tx.providerPreset.upsert).toHaveBeenCalledTimes(
+      PROVIDER_PRESETS.length,
+    );
+    expect(tx.providerPreset.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { providerKey: 'openai' },
+        create: expect.objectContaining({
+          adapterType: 'openai_compatible',
+          baseUrl: 'https://api.openai.com/v1',
+          credentialRequired: true,
+          defaultResolver: 'environment',
+          modelsEndpointPath: '/models',
+        }),
+      }),
+    );
+    expect(
+      tx.providerPreset.upsert.mock.calls.map(
+        ([args]) => args.create.providerKey,
+      ),
+    ).toEqual(['openai', 'openrouter', 'groq', 'mistral', 'together']);
+  });
+
   it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
     const tx = createMockTransaction();
     tx.providerConnection.upsert.mockImplementation(
@@ -198,6 +231,7 @@ function createMockTransaction() {
     tenant: { upsert: jest.fn() },
     project: { upsert: jest.fn() },
     application: { upsert: jest.fn() },
+    providerPreset: { upsert: jest.fn() },
     providerConnection: {
       upsert: jest.fn().mockResolvedValue({ id: 'provider-demo-id' }),
     },

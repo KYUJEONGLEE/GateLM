@@ -22,6 +22,7 @@ describe('ProviderConnectionsService', () => {
     service: ProviderConnectionsService;
     prisma: {
       project: { findUnique: jest.Mock };
+      providerPreset: { findMany: jest.Mock };
       providerConnection: {
         findMany: jest.Mock;
         findUnique: jest.Mock;
@@ -32,6 +33,9 @@ describe('ProviderConnectionsService', () => {
     const prisma = {
       project: {
         findUnique: jest.fn(),
+      },
+      providerPreset: {
+        findMany: jest.fn(),
       },
       providerConnection: {
         findUnique: jest.fn(),
@@ -83,6 +87,50 @@ describe('ProviderConnectionsService', () => {
       prefix: 'mock_',
       last4: '9xA1',
     });
+  });
+
+  it('lists provider presets without credential material', async () => {
+    const { service, prisma } = createService();
+    prisma.providerPreset.findMany.mockResolvedValue([
+      {
+        providerKey: 'openai',
+        displayName: 'OpenAI',
+        adapterType: 'openai_compatible',
+        baseUrl: 'https://api.openai.com/v1',
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: 'ACTIVE',
+        sortOrder: 10,
+        providerConfig: {
+          requestFormat: 'openai_chat_completions',
+        },
+        createdAt,
+        updatedAt: createdAt,
+      },
+    ]);
+
+    const result = await service.listProviderPresets({});
+
+    expect(prisma.providerPreset.findMany).toHaveBeenCalledWith({
+      orderBy: [{ sortOrder: 'asc' }, { providerKey: 'asc' }],
+      take: 51,
+      where: { status: 'ACTIVE' },
+    });
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        adapterType: 'openai_compatible',
+        baseUrl: 'https://api.openai.com/v1',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        displayName: 'OpenAI',
+        modelsEndpointPath: '/models',
+        providerKey: 'openai',
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain('Authorization');
+    expect(JSON.stringify(result)).not.toContain('Bearer ');
   });
 
   it('discovers provider models with an environment credential binding', async () => {

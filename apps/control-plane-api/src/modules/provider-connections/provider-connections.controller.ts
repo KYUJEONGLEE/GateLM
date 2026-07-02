@@ -15,8 +15,10 @@ import { AdminAuthGuard } from '@/common/guards/admin-auth.guard';
 import { DataEnvelope, ListEnvelope } from '@/common/types/envelope';
 
 import {
+  ListProviderPresetsQueryDto,
   ListProvidersQueryDto,
   ProviderModelDiscoveryResponseDto,
+  ProviderPresetResponseDto,
   ProviderResponseDto,
   UpsertProviderDto,
 } from './dto/provider-connection.dto';
@@ -49,6 +51,13 @@ export class ProviderConnectionsController {
     @Query() query: ListProvidersQueryDto,
   ): Promise<ListEnvelope<ProviderResponseDto>> {
     return this.providerConnectionsService.listProviders(projectId, query);
+  }
+
+  @Get('provider-presets')
+  async listProviderPresets(
+    @Query() query: ListProviderPresetsQueryDto,
+  ): Promise<ListEnvelope<ProviderPresetResponseDto>> {
+    return this.providerConnectionsService.listProviderPresets(query);
   }
 
   @Post('projects/:projectId/providers/:provider/discover-models')

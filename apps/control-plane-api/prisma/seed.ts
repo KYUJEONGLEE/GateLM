@@ -40,6 +40,43 @@ const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
 const CONFIG_HASH_ALGORITHM =
   'sha256(canonical_json(runtimeConfig_without_configHash))';
 const DEMO_MODELS = ['mock-fast', 'mock-balanced'] as const;
+export const PROVIDER_PRESETS = [
+  {
+    providerKey: 'openai',
+    displayName: 'OpenAI',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.openai.com/v1',
+    sortOrder: 10,
+  },
+  {
+    providerKey: 'openrouter',
+    displayName: 'OpenRouter',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    sortOrder: 20,
+  },
+  {
+    providerKey: 'groq',
+    displayName: 'Groq',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    sortOrder: 30,
+  },
+  {
+    providerKey: 'mistral',
+    displayName: 'Mistral AI',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.mistral.ai/v1',
+    sortOrder: 40,
+  },
+  {
+    providerKey: 'together',
+    displayName: 'Together AI',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.together.xyz/v1',
+    sortOrder: 50,
+  },
+] as const;
 
 type DemoProviderMode = 'mock' | 'actual';
 
@@ -306,6 +343,8 @@ export function buildDemoRuntimeConfigDocument(
 
 export async function seedDemoData(client: PrismaClient): Promise<void> {
   await client.$transaction(async (tx) => {
+    await seedProviderPresets(tx);
+
     await tx.tenant.upsert({
       where: { id: DEMO_TENANT_ID },
       update: {
@@ -630,6 +669,55 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       },
     });
   });
+}
+
+async function seedProviderPresets(
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  for (const preset of PROVIDER_PRESETS) {
+    await tx.providerPreset.upsert({
+      where: { providerKey: preset.providerKey },
+      update: {
+        displayName: preset.displayName,
+        adapterType: preset.adapterType,
+        baseUrl: preset.baseUrl,
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: ResourceStatus.ACTIVE,
+        sortOrder: preset.sortOrder,
+        providerConfig: providerPresetConfig(preset.providerKey),
+      },
+      create: {
+        providerKey: preset.providerKey,
+        displayName: preset.displayName,
+        adapterType: preset.adapterType,
+        baseUrl: preset.baseUrl,
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: ResourceStatus.ACTIVE,
+        sortOrder: preset.sortOrder,
+        providerConfig: providerPresetConfig(preset.providerKey),
+      },
+    });
+  }
+}
+
+function providerPresetConfig(providerKey: string): Prisma.InputJsonObject {
+  return {
+    providerKey,
+    adapterType: 'openai_compatible',
+    requestFormat: 'openai_chat_completions',
+    modelsEndpointPath: '/models',
+    credentialRequired: true,
+    modelDiscovery: {
+      type: 'openai_compatible_models',
+      cacheTtlSeconds: 3600,
+    },
+  };
 }
 
 function buildDemoRuntimeSnapshot(

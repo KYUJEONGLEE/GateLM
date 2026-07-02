@@ -1,4 +1,4 @@
-import { ProviderConnectionStatus } from '@prisma/client';
+import { ProviderConnectionStatus, ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
@@ -89,6 +89,19 @@ export class ListProvidersQueryDto {
   cursor?: string;
 }
 
+export class ListProviderPresetsQueryDto {
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 50;
+
+  @IsOptional()
+  @IsEnum(ResourceStatus)
+  status?: ResourceStatus = ResourceStatus.ACTIVE;
+}
+
 export interface ProviderCredentialPreviewDto {
   prefix: string | null;
   last4: string | null;
@@ -106,6 +119,22 @@ export interface ProviderResponseDto {
   resolver: string;
   credentialPreview: ProviderCredentialPreviewDto;
   providerConfig: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProviderPresetResponseDto {
+  adapterType: string;
+  baseUrl: string;
+  credentialRequired: boolean;
+  defaultResolver: string;
+  defaultTimeoutMs: number;
+  displayName: string;
+  modelsEndpointPath: string;
+  providerConfig: Record<string, unknown> | null;
+  providerKey: string;
+  sortOrder: number;
+  status: ResourceStatus;
   createdAt: string;
   updatedAt: string;
 }

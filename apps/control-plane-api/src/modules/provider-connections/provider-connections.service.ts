@@ -10,15 +10,19 @@ import {
   Prisma,
   ProviderConnection,
   ProviderConnectionStatus,
+  ProviderPreset,
+  ResourceStatus,
 } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
+  ListProviderPresetsQueryDto,
   ListProvidersQueryDto,
   ProviderModelDiscoveryItemDto,
   ProviderModelDiscoveryResponseDto,
+  ProviderPresetResponseDto,
   ProviderResponseDto,
   UpsertProviderDto,
 } from './dto/provider-connection.dto';
@@ -118,6 +122,29 @@ export class ProviderConnectionsService {
       pagination: {
         limit,
         nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
+      },
+    };
+  }
+
+  async listProviderPresets(
+    query: ListProviderPresetsQueryDto,
+  ): Promise<ListEnvelope<ProviderPresetResponseDto>> {
+    const limit = query.limit ?? 50;
+    const status = query.status ?? ResourceStatus.ACTIVE;
+    const presets = await this.prisma.providerPreset.findMany({
+      where: { status },
+      orderBy: [{ sortOrder: 'asc' }, { providerKey: 'asc' }],
+      take: limit + 1,
+    });
+    const hasMore = presets.length > limit;
+    const page = presets.slice(0, limit);
+
+    return {
+      data: page.map((preset) => this.toProviderPresetResponse(preset)),
+      pagination: {
+        limit,
+        nextCursor: null,
         hasMore,
       },
     };
@@ -554,6 +581,26 @@ export class ProviderConnectionsService {
       providerConfig: this.toRecordOrNull(providerConnection.providerConfig),
       createdAt: providerConnection.createdAt.toISOString(),
       updatedAt: providerConnection.updatedAt.toISOString(),
+    };
+  }
+
+  private toProviderPresetResponse(
+    providerPreset: ProviderPreset,
+  ): ProviderPresetResponseDto {
+    return {
+      adapterType: providerPreset.adapterType,
+      baseUrl: providerPreset.baseUrl,
+      credentialRequired: providerPreset.credentialRequired,
+      defaultResolver: providerPreset.defaultResolver,
+      defaultTimeoutMs: providerPreset.defaultTimeoutMs,
+      displayName: providerPreset.displayName,
+      modelsEndpointPath: providerPreset.modelsEndpointPath,
+      providerConfig: this.toRecordOrNull(providerPreset.providerConfig),
+      providerKey: providerPreset.providerKey,
+      sortOrder: providerPreset.sortOrder,
+      status: providerPreset.status,
+      createdAt: providerPreset.createdAt.toISOString(),
+      updatedAt: providerPreset.updatedAt.toISOString(),
     };
   }
 
