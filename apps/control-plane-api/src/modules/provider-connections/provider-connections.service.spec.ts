@@ -8,12 +8,24 @@ describe('ProviderConnectionsService', () => {
   const projectId = '00000000-0000-4000-8000-000000000200';
   const tenantId = '00000000-0000-4000-8000-000000000100';
   const createdAt = new Date('2026-06-27T00:00:00.000Z');
+  const originalEnv = { ...process.env };
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.env = { ...originalEnv };
+    global.fetch = originalFetch;
+  });
 
   function createService(): {
     service: ProviderConnectionsService;
     prisma: {
       project: { findUnique: jest.Mock };
-      providerConnection: { upsert: jest.Mock; findMany: jest.Mock };
+      providerConnection: {
+        findMany: jest.Mock;
+        findUnique: jest.Mock;
+        upsert: jest.Mock;
+      };
     };
   } {
     const prisma = {
@@ -21,6 +33,7 @@ describe('ProviderConnectionsService', () => {
         findUnique: jest.fn(),
       },
       providerConnection: {
+        findUnique: jest.fn(),
         upsert: jest.fn(),
         findMany: jest.fn(),
       },
@@ -71,6 +84,114 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
+  it('discovers provider models with an environment credential binding', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000905';
+    const providerCredential = 'test-provider-credential';
+    process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP = `provider_credential:${providerId}=OPENAI_API_KEY`;
+    process.env.OPENAI_API_KEY = providerCredential;
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        resolver: 'environment',
+        secretRef: `provider_credential:${providerId}`,
+        providerConfig: { adapterType: 'openai_compatible' },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'gpt-4o-mini',
+            object: 'model',
+            created: 1715367049,
+            owned_by: 'openai',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(
+      projectId,
+      'openai-main',
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/models',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${providerCredential}`,
+        }),
+        method: 'GET',
+      }),
+    );
+    expect(result).toMatchObject({
+      adapterType: 'openai_compatible',
+      credentialRequired: true,
+      modelCount: 1,
+      models: [
+        expect.objectContaining({
+          modelName: 'gpt-4o-mini',
+          ownedBy: 'openai',
+          provider: 'openai-main',
+          providerId,
+        }),
+      ],
+      provider: 'openai-main',
+      providerId,
+    });
+    expect(JSON.stringify(result)).not.toContain(providerCredential);
+  });
+
+  it('rejects provider model discovery when a required credential is not bound', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000906';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        resolver: 'environment',
+        secretRef: `provider_credential:${providerId}`,
+        providerConfig: { adapterType: 'openai_compatible' },
+      }),
+    );
+    global.fetch = jest.fn();
+
+    await expect(
+      service.discoverProviderModels(projectId, 'openai-main'),
+    ).rejects.toThrow(
+      'Provider credential reference is not bound to an available environment variable.',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider model discovery base URLs with credential query material', async () => {
+    const { service, prisma } = createService();
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection('00000000-0000-4000-8000-000000000907', {
+        baseUrl: 'https://api.openai.com/v1?api_key=synthetic',
+        provider: 'openai-main',
+        resolver: 'none',
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+      }),
+    );
+    global.fetch = jest.fn();
+
+    await expect(
+      service.discoverProviderModels(projectId, 'openai-main'),
+    ).rejects.toThrow('Provider baseUrl must not contain credential material.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('sets hasMore and nextCursor from limit plus one pagination', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
@@ -119,7 +240,10 @@ describe('ProviderConnectionsService', () => {
     );
   });
 
-  function providerConnection(id: string) {
+  function providerConnection(
+    id: string,
+    overrides: Partial<ProviderConnectionFixture> = {},
+  ): ProviderConnectionFixture {
     return {
       id,
       tenantId,
@@ -136,6 +260,25 @@ describe('ProviderConnectionsService', () => {
       providerConfig: { model: 'mock-fast' },
       createdAt,
       updatedAt: createdAt,
+      ...overrides,
     };
   }
+
+  type ProviderConnectionFixture = {
+    baseUrl: string;
+    createdAt: Date;
+    credentialLast4: string | null;
+    credentialPrefix: string | null;
+    displayName: string;
+    id: string;
+    projectId: string;
+    provider: string;
+    providerConfig: Prisma.JsonValue;
+    resolver: string;
+    secretRef: string | null;
+    status: ProviderConnectionStatus;
+    tenantId: string;
+    timeoutMs: number;
+    updatedAt: Date;
+  };
 });

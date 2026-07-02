@@ -16,6 +16,7 @@ import { DataEnvelope, ListEnvelope } from '@/common/types/envelope';
 
 import {
   ListProvidersQueryDto,
+  ProviderModelDiscoveryResponseDto,
   ProviderResponseDto,
   UpsertProviderDto,
 } from './dto/provider-connection.dto';
@@ -48,5 +49,19 @@ export class ProviderConnectionsController {
     @Query() query: ListProvidersQueryDto,
   ): Promise<ListEnvelope<ProviderResponseDto>> {
     return this.providerConnectionsService.listProviders(projectId, query);
+  }
+
+  @Post('projects/:projectId/providers/:provider/discover-models')
+  @HttpCode(HttpStatus.OK)
+  async discoverProviderModels(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('provider') provider: string,
+  ): Promise<DataEnvelope<ProviderModelDiscoveryResponseDto>> {
+    return {
+      data: await this.providerConnectionsService.discoverProviderModels(
+        projectId,
+        provider,
+      ),
+    };
   }
 }

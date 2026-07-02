@@ -109,3 +109,25 @@ export interface ProviderResponseDto {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ProviderModelDiscoveryItemDto {
+  createdAt: string | null;
+  displayName: string;
+  modelName: string;
+  object: string | null;
+  ownedBy: string | null;
+  provider: string;
+  providerId: string;
+  source: 'provider_models_endpoint';
+}
+
+export interface ProviderModelDiscoveryResponseDto {
+  adapterType: string;
+  baseUrl: string;
+  credentialRequired: boolean;
+  discoveredAt: string;
+  modelCount: number;
+  models: ProviderModelDiscoveryItemDto[];
+  provider: string;
+  providerId: string;
+}
