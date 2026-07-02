@@ -80,6 +80,32 @@ func TestAdapterCreateChatCompletionStreamReadsMockProviderSSE(t *testing.T) {
 	}
 }
 
+func TestAdapterCreateChatCompletionStreamRemovesOnlyOneSpaceAfterDataPrefix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		fmt.Fprint(w, `data:  {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"leading space"},"finish_reason":null}]}`+"\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	stream, err := NewAdapter(server.URL, server.Client()).CreateChatCompletionStream(context.Background(), provider.ExecutionConfig{}, provider.ChatCompletionRequest{
+		RequestID: "request_mock_stream_space",
+		Model:     "mock-balanced",
+	})
+	if err != nil {
+		t.Fatalf("CreateChatCompletionStream returned error: %v", err)
+	}
+	defer stream.Close()
+
+	event, err := stream.Next()
+	if err != nil {
+		t.Fatalf("stream event failed: %v", err)
+	}
+	if !strings.HasPrefix(string(event.Data), " ") {
+		t.Fatalf("expected one leading payload space to be preserved, got %q", string(event.Data))
+	}
+}
+
 func TestAdapterCreateChatCompletionStreamMapsProviderStatusSafely(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "raw provider body must not be surfaced", http.StatusGatewayTimeout)
@@ -98,5 +124,23 @@ func TestAdapterCreateChatCompletionStreamMapsProviderStatusSafely(t *testing.T)
 	}
 	if strings.Contains(err.Error(), "raw provider body") {
 		t.Fatalf("provider raw error body leaked: %v", err)
+	}
+}
+
+func TestClassifyMockTransportAndReadErrorsPreserveCancellationAndTimeout(t *testing.T) {
+	cancelErr := fmt.Errorf("wrapped cancellation: %w", context.Canceled)
+	if err := classifyMockTransportError(context.Background(), cancelErr); !errors.Is(err, context.Canceled) {
+		t.Fatalf("transport cancellation must be preserved, got %v", err)
+	}
+	if err := classifyMockStreamReadError(context.Background(), cancelErr); !errors.Is(err, context.Canceled) {
+		t.Fatalf("stream read cancellation must be preserved, got %v", err)
+	}
+
+	timeoutErr := fmt.Errorf("wrapped timeout: %w", context.DeadlineExceeded)
+	if err := classifyMockTransportError(context.Background(), timeoutErr); provider.SafeErrorCode(err) != provider.ErrorCodeProviderTimeout {
+		t.Fatalf("transport deadline must map to provider timeout, got %s err=%v", provider.SafeErrorCode(err), err)
+	}
+	if err := classifyMockStreamReadError(context.Background(), timeoutErr); provider.SafeErrorCode(err) != provider.ErrorCodeProviderTimeout {
+		t.Fatalf("stream read deadline must map to provider timeout, got %s err=%v", provider.SafeErrorCode(err), err)
 	}
 }

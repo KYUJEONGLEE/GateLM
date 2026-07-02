@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -144,11 +145,10 @@ func (r *mockStreamReader) Next() (provider.ChatCompletionStreamEvent, error) {
 			}
 			return provider.ChatCompletionStreamEvent{}, classifyMockStreamReadError(r.ctx, err)
 		}
-		payload = strings.TrimSpace(payload)
-		if payload == "" {
+		if strings.TrimSpace(payload) == "" {
 			continue
 		}
-		if payload == "[DONE]" {
+		if strings.TrimSpace(payload) == "[DONE]" {
 			return provider.ChatCompletionStreamEvent{}, io.EOF
 		}
 
@@ -206,7 +206,11 @@ func (r *mockStreamReader) readEventData() (string, error) {
 		}
 
 		if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimLeft(line[len("data:"):], " "))
+			data := line[len("data:"):]
+			if strings.HasPrefix(data, " ") {
+				data = data[1:]
+			}
+			dataLines = append(dataLines, data)
 		}
 
 		if errors.Is(err, io.EOF) {
@@ -234,23 +238,41 @@ func classifyMockStatus(resp *http.Response) error {
 }
 
 func classifyMockTransportError(ctx context.Context, err error) error {
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, ctxErr)
-		}
-		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctxErr)
+	if cancellation := mockContextError(ctx, err, context.Canceled); cancellation != nil {
+		return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, cancellation)
+	}
+	if timeout := mockContextError(ctx, err, context.DeadlineExceeded); timeout != nil {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, timeout)
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, err)
 	}
 	return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
 }
 
 func classifyMockStreamReadError(ctx context.Context, err error) error {
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, ctxErr)
-		}
-		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctxErr)
+	if cancellation := mockContextError(ctx, err, context.Canceled); cancellation != nil {
+		return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, cancellation)
+	}
+	if timeout := mockContextError(ctx, err, context.DeadlineExceeded); timeout != nil {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, timeout)
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, err)
 	}
 	return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, err)
+}
+
+func mockContextError(ctx context.Context, err error, target error) error {
+	if errors.Is(err, target) {
+		return err
+	}
+	if ctx != nil && errors.Is(ctx.Err(), target) {
+		return ctx.Err()
+	}
+	return nil
 }
 
 func drainMockProviderErrorBody(body io.Reader) {

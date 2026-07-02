@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
 const VALID_MODES = new Set(["mock", "live"]);
+const MOCK_RESPONSE_PRIMARY_MARKERS = [
+  "GateLM mock streaming 응답입니다.",
+  "GateLM self-host mock streaming 응답입니다.",
+];
+const MOCK_RESPONSE_REQUIRED_MARKERS = [
+  "실제 Provider 비용 없이 SSE relay를 확인합니다.",
+];
 
 const HELP = `GateLM Gateway streaming 확인
 
@@ -19,12 +26,13 @@ const HELP = `GateLM Gateway streaming 확인
   GATELM_STREAM_TIMEOUT_MS        기본값 30000
 
 모드 설명:
-  mock: 로컬 mock RuntimeSnapshot으로 Gateway가 실행 중일 때 비용 없이 SSE relay를 확인하는 안내를 출력합니다.
+  mock: Gateway가 mock provider로 라우팅되도록 먼저 구성한 뒤 deterministic mock 응답인지 검증합니다.
   live: 실제 Provider relay 확인용 안내를 출력합니다. Provider 비용이 발생할 수 있습니다.
 
 주의:
-  GATELM_STREAM_SMOKE_MODE는 출력과 주의 문구만 바꿉니다.
+  GATELM_STREAM_SMOKE_MODE는 Gateway provider 라우팅을 강제하지 않습니다.
   실제 Provider 선택과 비용 발생 여부는 Gateway 서버의 RuntimeSnapshot과 provider 설정이 결정합니다.
+  mock 모드에서도 Gateway가 actual RuntimeSnapshot으로 떠 있으면 실제 Provider 비용이 발생할 수 있습니다.
   이 스크립트는 수동 smoke 전용이며 CI에서 실행하지 않습니다.
   API Key, App Token, Authorization header, Provider Key는 출력하지 않습니다.
 
@@ -60,6 +68,7 @@ const startedAt = Date.now();
 let firstChunkAt = null;
 let chunkCount = 0;
 let done = false;
+const streamedText = [];
 
 try {
   console.log("GateLM Gateway streaming 확인");
@@ -118,6 +127,13 @@ try {
   console.log(`- 첫 chunk까지 걸린 시간: ${firstChunkAt === null ? "수신 없음" : `${firstChunkAt - startedAt}ms`}`);
   console.log(`- 전체 소요 시간: ${durationMs}ms`);
   console.log(`- 완료 여부: ${done ? "DONE 수신" : "DONE 미수신"}`);
+
+  if (mode === "mock" && !isDeterministicMockResponse(streamedText.join(""))) {
+    console.error("\nmock 검증 실패: deterministic mock provider 응답이 아닙니다.");
+    console.error("GATELM_STREAM_SMOKE_MODE=mock은 Gateway 라우팅을 강제하지 않습니다.");
+    console.error("Gateway를 mock RuntimeSnapshot/static mock provider 설정으로 다시 띄운 뒤 재실행해주세요.");
+    process.exit(2);
+  }
 } catch (error) {
   if (error?.name === "AbortError") {
     console.error(`요청 시간이 초과되었습니다: ${timeoutMs}ms`);
@@ -159,7 +175,9 @@ function handleData(data) {
   }
 
   if (pieces.length > 0) {
-    process.stdout.write(pieces.join(""));
+    const text = pieces.join("");
+    streamedText.push(text);
+    process.stdout.write(text);
   }
 
   if (parsed.usage) {
@@ -197,12 +215,23 @@ function drainEvents(buffer, onData) {
     const dataLines = event
       .split("\n")
       .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice("data:".length).trimStart());
+      .map((line) => removeOptionalSSESpace(line.slice("data:".length)));
     if (dataLines.length > 0) {
       onData(dataLines.join("\n").trim());
     }
   }
   return remainder;
+}
+
+function removeOptionalSSESpace(value) {
+  return value.startsWith(" ") ? value.slice(1) : value;
+}
+
+function isDeterministicMockResponse(text) {
+  return (
+    MOCK_RESPONSE_PRIMARY_MARKERS.some((marker) => text.includes(marker)) &&
+    MOCK_RESPONSE_REQUIRED_MARKERS.every((marker) => text.includes(marker))
+  );
 }
 
 function normalizeMode(value) {
