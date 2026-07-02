@@ -229,10 +229,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
-	if reqCtx.Stream {
-		bypassExactCache(reqCtx, "streaming_request")
-		gatewayCtx = newGatewayContext(reqCtx, promptText)
-	} else if shouldLookupExactCache(gatewayCtx) {
+	if shouldLookupExactCache(gatewayCtx) {
 		if err := h.populateRoutingAwareCacheIdentity(r.Context(), reqCtx, chatReq.Model); err != nil {
 			h.writeProviderResolutionFailure(w, reqCtx, err)
 			return
@@ -334,9 +331,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	if gatewayCtx == nil {
 		return true
-	}
-	if gatewayCtx.Request.Stream {
-		return false
 	}
 	if !gatewayExactCachePolicyAllowsLookup(gatewayCtx) {
 		return false
@@ -848,7 +842,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	}
 
 	streamMetrics := h.startStreamMetrics(reqCtx.SelectedProvider, reqCtx.SelectedModel, providerStartedAt)
-	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
+	started, usage, cacheableResp, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	providerDuration := time.Since(providerStartedAt)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
@@ -875,6 +869,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		reqCtx.ErrorStage = ""
 		reqCtx.SavedCostMicroUSD = 0
 		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
+		h.writeExactCache(context.WithoutCancel(r.Context()), reqCtx, cacheableResp)
 		return
 	}
 
@@ -1033,7 +1028,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	reqCtx.Model = fallbackTarget.ModelID
 
 	streamMetrics := h.startStreamMetrics(fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackStartedAt)
-	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
+	started, usage, _, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	fallbackDuration := time.Since(fallbackStartedAt)
 	if usage != nil {
 		reqCtx.PromptTokens = usage.PromptTokens
@@ -1423,7 +1418,7 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 }
 
 func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
-	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil || reqCtx.Stream || reqCtx.FallbackOccurred {
+	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil || reqCtx.FallbackOccurred {
 		return
 	}
 
@@ -1772,18 +1767,24 @@ func streamEventHasContentDelta(payload json.RawMessage) bool {
 	return false
 }
 
-func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, stream provider.ChatCompletionStreamReader, streamMetrics *streamRelayMetricsRecorder) (bool, *provider.Usage, error) {
+func writeProviderStreamingChatCompletion(
+	ctx context.Context,
+	w http.ResponseWriter,
+	reqCtx *pipeline.RequestContext,
+	stream provider.ChatCompletionStreamReader,
+	streamMetrics *streamRelayMetricsRecorder,
+) (bool, *provider.Usage, *provider.ChatCompletionResponse, error) {
 	if err := ctx.Err(); err != nil {
-		return false, nil, err
+		return false, nil, nil, err
 	}
 	if stream == nil {
-		return false, nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("provider stream is not initialized"))
+		return false, nil, nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("provider stream is not initialized"))
 	}
 	defer stream.Close()
 
 	firstEvent, err := stream.Next()
 	if err != nil && !errors.Is(err, io.EOF) {
-		return false, nil, err
+		return false, nil, nil, err
 	}
 
 	setGatewayHeaders(w, reqCtx)
@@ -1794,13 +1795,15 @@ func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWr
 	w.WriteHeader(http.StatusOK)
 	flushResponse(w)
 
+	accumulator := newStreamingCacheAccumulator(reqCtx)
 	var usage *provider.Usage
 	if err == nil {
 		if firstEvent.Usage != nil {
 			usage = firstEvent.Usage
 		}
+		accumulator.add(firstEvent)
 		if err := writeSSEDataRaw(w, firstEvent.Data); err != nil {
-			return true, usage, err
+			return true, usage, nil, err
 		}
 		flushResponse(w)
 		streamMetrics.recordTTFTIfContent(firstEvent.Data, time.Now())
@@ -1808,32 +1811,159 @@ func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWr
 
 	for err == nil {
 		if err := ctx.Err(); err != nil {
-			return true, usage, err
+			return true, usage, nil, err
 		}
 		event, nextErr := stream.Next()
 		if errors.Is(nextErr, io.EOF) {
 			break
 		}
 		if nextErr != nil {
-			return true, usage, nextErr
+			return true, usage, nil, nextErr
 		}
 		if event.Usage != nil {
 			usage = event.Usage
 		}
+		accumulator.add(event)
 		if err := writeSSEDataRaw(w, event.Data); err != nil {
-			return true, usage, err
+			return true, usage, nil, err
 		}
 		flushResponse(w)
 		streamMetrics.recordTTFTIfContent(event.Data, time.Now())
 	}
 	if err := ctx.Err(); err != nil {
-		return true, usage, err
+		return true, usage, nil, err
 	}
 	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
-		return true, usage, err
+		return true, usage, nil, err
 	}
 	flushResponse(w)
-	return true, usage, nil
+	return true, usage, accumulator.response(usage), nil
+}
+
+type streamingCacheAccumulator struct {
+	id      string
+	created int64
+	model   string
+	choices map[int]*streamingCacheChoice
+	order   []int
+}
+
+type streamingCacheChoice struct {
+	index        int
+	role         string
+	content      strings.Builder
+	finishReason string
+}
+
+func newStreamingCacheAccumulator(reqCtx *pipeline.RequestContext) *streamingCacheAccumulator {
+	model := ""
+	if reqCtx != nil {
+		model = firstNonEmpty(reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
+	}
+
+	return &streamingCacheAccumulator{
+		model:   model,
+		choices: map[int]*streamingCacheChoice{},
+	}
+}
+
+func (a *streamingCacheAccumulator) add(event provider.ChatCompletionStreamEvent) {
+	if a == nil || len(event.Data) == 0 {
+		return
+	}
+
+	var chunk streamingChatCompletionChunk
+	if err := json.Unmarshal(event.Data, &chunk); err != nil {
+		return
+	}
+
+	if strings.TrimSpace(chunk.ID) != "" && a.id == "" {
+		a.id = chunk.ID
+	}
+	if chunk.Created != 0 && a.created == 0 {
+		a.created = chunk.Created
+	}
+	if strings.TrimSpace(chunk.Model) != "" {
+		a.model = chunk.Model
+	}
+
+	for _, choice := range chunk.Choices {
+		cachedChoice := a.choice(choice.Index)
+		if strings.TrimSpace(choice.Delta.Role) != "" {
+			cachedChoice.role = choice.Delta.Role
+		}
+		if choice.Delta.Content != "" {
+			cachedChoice.content.WriteString(choice.Delta.Content)
+		}
+		if choice.FinishReason != nil {
+			cachedChoice.finishReason = *choice.FinishReason
+		}
+	}
+}
+
+func (a *streamingCacheAccumulator) choice(index int) *streamingCacheChoice {
+	if existing, ok := a.choices[index]; ok {
+		return existing
+	}
+
+	choice := &streamingCacheChoice{
+		index: index,
+		role:  "assistant",
+	}
+	a.choices[index] = choice
+	a.order = append(a.order, index)
+	return choice
+}
+
+func (a *streamingCacheAccumulator) response(usage *provider.Usage) *provider.ChatCompletionResponse {
+	if a == nil || len(a.order) == 0 {
+		return nil
+	}
+
+	choices := make([]provider.ChatChoice, 0, len(a.order))
+	for _, index := range a.order {
+		choice := a.choices[index]
+		if choice == nil {
+			continue
+		}
+
+		finishReason := choice.finishReason
+		if strings.TrimSpace(finishReason) == "" {
+			finishReason = "stop"
+		}
+
+		content, err := json.Marshal(choice.content.String())
+		if err != nil {
+			continue
+		}
+
+		choices = append(choices, provider.ChatChoice{
+			Index: choice.index,
+			Message: provider.ChatMessage{
+				Role:    firstNonEmpty(choice.role, "assistant"),
+				Content: json.RawMessage(content),
+			},
+			FinishReason: finishReason,
+		})
+	}
+
+	if len(choices) == 0 {
+		return nil
+	}
+
+	created := a.created
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+
+	return &provider.ChatCompletionResponse{
+		ID:      firstNonEmpty(a.id, "chatcmpl_"+middleware.NewRequestID()),
+		Object:  "chat.completion",
+		Created: created,
+		Model:   a.model,
+		Choices: choices,
+		Usage:   usage,
+	}
 }
 
 func writeSSEData(w http.ResponseWriter, payload any) error {
@@ -2332,11 +2462,9 @@ func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
 	payload, _ := json.Marshal(struct {
 		Temperature *float64 `json:"temperature,omitempty"`
 		MaxTokens   *int     `json:"max_tokens,omitempty"`
-		Stream      bool     `json:"stream"`
 	}{
 		Temperature: chatReq.Temperature,
 		MaxTokens:   chatReq.MaxTokens,
-		Stream:      chatReq.Stream,
 	})
 	sum := sha256.Sum256(payload)
 	return "sha256:" + hex.EncodeToString(sum[:])

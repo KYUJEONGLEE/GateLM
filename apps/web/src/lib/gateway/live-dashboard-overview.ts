@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveDashboardOverviewResponse = {
@@ -135,9 +136,10 @@ export async function getLiveDashboardOverview(
 ): Promise<DashboardOverview | undefined> {
   const config = getLiveGatewayConfig();
   const { from, to } = getLiveRange();
+  const gatewayTenantId = toGatewayTenantId(tenantId);
   const query = new URLSearchParams({
     from,
-    tenantId,
+    tenantId: gatewayTenantId,
     to
   });
   appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
@@ -170,6 +172,14 @@ function appendOptionalQuery(query: URLSearchParams, key: string, value: string 
   if (normalized) {
     query.set(key, normalized);
   }
+}
+
+function toGatewayTenantId(tenantId: string) {
+  return isUuid(tenantId) ? tenantId : getControlPlaneTenantId();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getLiveRange() {
