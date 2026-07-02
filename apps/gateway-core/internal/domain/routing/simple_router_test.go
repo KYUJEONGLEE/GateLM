@@ -297,7 +297,7 @@ func TestSimpleRouterFallsBackWhenSelectedCandidateUnavailable(t *testing.T) {
 	}))
 }
 
-func TestSimpleRouterHealthFallbackUsesPriorityThenLatency(t *testing.T) {
+func TestSimpleRouterHealthFallbackDoesNotEscalateLowCostToHighQuality(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock-default",
 		DefaultModel:        "mock-balanced",
@@ -322,10 +322,10 @@ func TestSimpleRouterHealthFallbackUsesPriorityThenLatency(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, expectedDecision("auto", "mock-premium", "mock-smart", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+	assertDecision(t, decision, expectedDecision("auto", "mock-default", "mock-balanced", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
 		Category:      CategorySupportRefund,
-		Tier:          TierHighQuality,
+		Tier:          TierBalanced,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantProviderHealthFallback,
 	}))

@@ -212,14 +212,14 @@ func applyCandidateStatusFallback(provider string, model string, tier string, re
 		return provider, model, tier, reason, PolicyVariantDefault
 	}
 
-	fallback, ok := bestAvailableRouteCandidate(provider, model, config)
+	fallback, ok := bestAvailableRouteCandidate(provider, model, tier, config)
 	if !ok {
 		return provider, model, tier, reason, PolicyVariantDefault
 	}
 	return fallback.Provider, fallback.Model, fallback.Tier, ReasonProviderHealthFallback, PolicyVariantProviderHealthFallback
 }
 
-func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, config SimpleRouterConfig) (RouteCandidateStatus, bool) {
+func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, originalTier string, config SimpleRouterConfig) (RouteCandidateStatus, bool) {
 	candidates := routeCandidatesForConfig(config)
 	var selected RouteCandidateStatus
 	found := false
@@ -230,12 +230,27 @@ func bestAvailableRouteCandidate(excludeProvider string, excludeModel string, co
 		if candidate.Status == RouteCandidateUnavailable {
 			continue
 		}
+		if !routeCandidateAllowedForHealthFallback(originalTier, candidate.Tier) {
+			continue
+		}
 		if !found || routeCandidateLess(candidate, selected) {
 			selected = candidate
 			found = true
 		}
 	}
 	return selected, found
+}
+
+func routeCandidateAllowedForHealthFallback(originalTier string, candidateTier string) bool {
+	originalTier = canonicalTier(originalTier)
+	candidateTier = canonicalTier(candidateTier)
+	if candidateTier == TierHighQuality {
+		return false
+	}
+	if originalTier == TierHighQuality {
+		return candidateTier == TierBalanced || candidateTier == TierLowCost
+	}
+	return candidateTier == originalTier || candidateTier == TierBalanced || candidateTier == TierLowCost
 }
 
 func routeCandidatesForConfig(config SimpleRouterConfig) []RouteCandidateStatus {
