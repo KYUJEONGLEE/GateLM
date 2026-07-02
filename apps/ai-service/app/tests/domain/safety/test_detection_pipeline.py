@@ -207,6 +207,41 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertNotIn(raw_name, decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
 
+    def test_adjacent_address_fragments_merge_into_one_address_placeholder(self) -> None:
+        raw_address = "\uc11c\uc6b8\ud2b9\ubcc4\uc2dc \ub9c8\ud3ec\uad6c \ub3d9\uad50\ub3d9 123-45"
+        prompt = f"\ubc30\uc1a1\uc9c0\ub294 {raw_address} \uc785\ub2c8\ub2e4."
+        fragments = [
+            "\uc11c\uc6b8\ud2b9\ubcc4\uc2dc",
+            "\ub9c8\ud3ec\uad6c",
+            "\ub3d9\uad50\ub3d9 123-45",
+        ]
+
+        detections = [
+            Detection(
+                detector_type="postal_address",
+                source="koelectra_privacy_ner",
+                start=prompt.index(fragment),
+                end=prompt.index(fragment) + len(fragment),
+                confidence=0.96,
+            )
+            for fragment in fragments
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {"postal_address": detector("postal_address", "redact", "[ADDRESS_REDACTED]")},
+        )
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=signals,
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.detected_types, ("postal_address",))
+        self.assertEqual(decision.detected_count, 1)
+        self.assertEqual(decision.redacted_prompt_preview, "\ubc30\uc1a1\uc9c0\ub294 [ADDRESS_1] \uc785\ub2c8\ub2e4.")
+        self.assertNotIn(raw_address, decision.redacted_prompt_preview or "")
+
     def test_overlapping_same_detector_spans_are_unioned(self) -> None:
         raw_email = "alice@example.invalid"
         prompt = f"Contact {raw_email}."

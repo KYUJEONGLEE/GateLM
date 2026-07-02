@@ -596,6 +596,52 @@ func TestEffectiveDetectionsPrefersBlockingOverlap(t *testing.T) {
 	}
 }
 
+func TestEngineMergesAdjacentAddressFragments(t *testing.T) {
+	fragments := []string{
+		"\uc11c\uc6b8\ud2b9\ubcc4\uc2dc",
+		"\ub9c8\ud3ec\uad6c",
+		"\ub3d9\uad50\ub3d9 123-45",
+	}
+	prompt := "\ubc30\uc1a1\uc9c0\ub294 " + strings.Join(fragments, " ") + " \uc785\ub2c8\ub2e4."
+	detections := make([]Detection, 0, len(fragments))
+	for _, fragment := range fragments {
+		start := strings.Index(prompt, fragment)
+		if start < 0 {
+			t.Fatalf("test fragment not found: %q", fragment)
+		}
+		detections = append(detections, Detection{
+			Type:        string(DetectorPostalAddress),
+			Start:       start,
+			End:         start + len(fragment),
+			Action:      ActionRedacted,
+			Placeholder: PlaceholderPostalAddress,
+			Priority:    35,
+		})
+	}
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: detections}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "\ubc30\uc1a1\uc9c0\ub294 [ADDRESS_1] \uc785\ub2c8\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected merged address placeholder %q, got %q", expected, result.RedactedPrompt)
+	}
+	if result.DetectedCount != 1 {
+		t.Fatalf("expected one merged address detection, got %d", result.DetectedCount)
+	}
+	for _, fragment := range fragments {
+		if strings.Contains(result.RedactedPrompt, fragment) {
+			t.Fatalf("redacted prompt must not include address fragment %q: %q", fragment, result.RedactedPrompt)
+		}
+	}
+}
+
 type staticDetector struct {
 	detections []Detection
 }

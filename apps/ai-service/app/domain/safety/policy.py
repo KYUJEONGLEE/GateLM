@@ -276,6 +276,7 @@ MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "private_url": frozenset(":/?=&%#._-+"),
     "webhook_url": frozenset(":/?=&%#._-+"),
     "database_url": frozenset(":/?=&%#._-+"),
+    "postal_address": frozenset(" \t\r\n,"),
     "phone_number": frozenset(" -.()"),
     "account_number": frozenset("-_"),
     "account_id": frozenset("-_"),
