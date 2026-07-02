@@ -25,7 +25,7 @@ func TestSimpleRouterRoutesShortAutoPromptToLowCostModel(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonShortPromptLowCost, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryUnknown,
+		Category:      CategorySupportRefund,
 		Tier:          TierLowCost,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
@@ -76,7 +76,7 @@ func TestSimpleRouterKeepsExplicitModelPinned(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("mock-smart", "mock", "mock-smart", ReasonPinned, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModePinned,
-		Category:      CategoryUnknown,
+		Category:      CategoryGeneral,
 		Tier:          TierBalanced,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
@@ -109,11 +109,80 @@ func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t 
 
 	assertDecision(t, decision, expectedDecision("auto", "runtime-provider", "runtime-fast", ReasonShortPromptLowCost, "hash_runtime_routing_policy", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryUnknown,
+		Category:      CategoryGeneral,
 		Tier:          TierLowCost,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
 	}))
+}
+
+func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	cases := []struct {
+		name     string
+		prompt   string
+		category string
+	}{
+		{name: "RT-CATEGORY-001 refund", prompt: "배송비도 환불되나요?", category: CategorySupportRefund},
+		{name: "RT-CATEGORY-002 general", prompt: "비밀번호 재설정 방법 알려줘", category: CategoryGeneral},
+		{name: "RT-CATEGORY-003 translation", prompt: "이 문장을 영어로 번역해줘", category: CategoryTranslation},
+		{name: "RT-CATEGORY-004 code block", prompt: "```ts\nconst value = 1\n``` 이 에러를 봐줘", category: CategoryCode},
+		{name: "RT-CATEGORY-005 empty", prompt: "", category: CategoryUnknown},
+		{name: "RT-CATEGORY-006 translation priority", prompt: "환불 정책을 영어로 번역해줘", category: CategoryTranslation},
+		{name: "RT-CATEGORY-006 code priority", prompt: "이 코드를 영어로 번역해줘", category: CategoryCode},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision, err := router.DecideRoute(context.Background(), Request{
+				RequestedModel: "auto",
+				PromptText:     tc.prompt,
+			})
+			if err != nil {
+				t.Fatalf("DecideRoute returned error: %v", err)
+			}
+			if decision.RoutingDecisionMaterial.Category != tc.category {
+				t.Fatalf("category 불일치: got %q want %q", decision.RoutingDecisionMaterial.Category, tc.category)
+			}
+			expectedHash, err := DecisionKeyHash(decision.RoutingDecisionMaterial)
+			if err != nil {
+				t.Fatalf("routing decision hash 생성 실패: %v", err)
+			}
+			if decision.RoutingDecisionKeyHash != expectedHash {
+				t.Fatalf("routingDecisionKeyHash는 category 포함 material에서 생성되어야 함: got %q want %q", decision.RoutingDecisionKeyHash, expectedHash)
+			}
+		})
+	}
+}
+
+func TestRoutingDecisionKeyHashChangesWhenCategoryChanges(t *testing.T) {
+	base := DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryGeneral,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}
+	generalHash, err := DecisionKeyHash(base)
+	if err != nil {
+		t.Fatalf("general hash 생성 실패: %v", err)
+	}
+
+	base.Category = CategorySupportRefund
+	refundHash, err := DecisionKeyHash(base)
+	if err != nil {
+		t.Fatalf("support_refund hash 생성 실패: %v", err)
+	}
+	if generalHash == refundHash {
+		t.Fatalf("RT-CATEGORY-007 category가 다르면 routingDecisionKeyHash도 달라야 함: %q", generalHash)
+	}
 }
 
 func assertDecision(t *testing.T, actual Decision, expected Decision) {

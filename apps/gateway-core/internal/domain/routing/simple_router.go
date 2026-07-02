@@ -98,6 +98,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if requestedModel == "" {
 		requestedModel = config.DefaultModel
 	}
+	category := ClassifyCategory(req.PromptText)
 
 	decision := Decision{
 		RequestedModel:             requestedModel,
@@ -112,7 +113,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 			decision.SelectedModelID = config.LowCostModel
 			decision.RoutingDecisionMaterial = DecisionMaterial{
 				RoutingMode:   RoutingModeAuto,
-				Category:      CategoryUnknown,
+				Category:      category,
 				Tier:          TierLowCost,
 				Capability:    CapabilityChat,
 				PolicyVariant: PolicyVariantDefault,
@@ -126,7 +127,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 		decision.SelectedModelID = config.DefaultModel
 		decision.RoutingDecisionMaterial = DecisionMaterial{
 			RoutingMode:   RoutingModeAuto,
-			Category:      CategoryUnknown,
+			Category:      category,
 			Tier:          TierBalanced,
 			Capability:    CapabilityChat,
 			PolicyVariant: PolicyVariantDefault,
@@ -140,7 +141,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	decision.SelectedModelID = requestedModel
 	decision.RoutingDecisionMaterial = DecisionMaterial{
 		RoutingMode:   RoutingModePinned,
-		Category:      CategoryUnknown,
+		Category:      category,
 		Tier:          TierBalanced,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,

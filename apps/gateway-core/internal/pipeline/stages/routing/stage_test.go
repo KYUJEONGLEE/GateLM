@@ -27,6 +27,13 @@ func TestStageWritesRoutingFields(t *testing.T) {
 			SelectedModel:    "mock-fast",
 			RoutingReason:    routing.ReasonShortPromptLowCost,
 			PolicyHash:       "route_p0_v1",
+			RoutingDecisionMaterial: routing.DecisionMaterial{
+				RoutingMode:   routing.RoutingModeAuto,
+				Category:      routing.CategorySupportRefund,
+				Tier:          routing.TierLowCost,
+				Capability:    routing.CapabilityChat,
+				PolicyVariant: routing.PolicyVariantDefault,
+			},
 		},
 	}
 	stage := NewStage(router)
@@ -52,6 +59,41 @@ func TestStageWritesRoutingFields(t *testing.T) {
 	}
 	if gatewayCtx.Routing.RoutingPolicyHash != "route_p0_v1" {
 		t.Fatalf("expected route_p0_v1 policy hash, got %s", gatewayCtx.Routing.RoutingPolicyHash)
+	}
+	if gatewayCtx.Routing.RoutingDecisionMaterial["category"] != routing.CategorySupportRefund {
+		t.Fatalf("expected routing category material to be written, got %#v", gatewayCtx.Routing.RoutingDecisionMaterial)
+	}
+}
+
+func TestStageWritesRoutingCategoryMaterial(t *testing.T) {
+	router := &fakeRouter{
+		decision: routing.Decision{
+			RequestedModel:          "auto",
+			SelectedProvider:        "mock",
+			SelectedModel:           "mock-fast",
+			RoutingReason:           routing.ReasonShortPromptLowCost,
+			PolicyHash:              "route_p0_v1",
+			RoutingDecisionKeyHash:  "sha256:routing-category-test",
+			RoutingDecisionMaterial: routing.DecisionMaterial{Category: routing.CategoryTranslation},
+		},
+	}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{
+			RequestedModel: "auto",
+			PromptText:     "이 문장을 영어로 번역해줘",
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+
+	if gatewayCtx.Routing.RoutingDecisionMaterial["category"] != routing.CategoryTranslation {
+		t.Fatalf("routing stage는 decision category를 material map에 보존해야 함: %#v", gatewayCtx.Routing.RoutingDecisionMaterial)
+	}
+	if gatewayCtx.Routing.RoutingDecisionKeyHash != "sha256:routing-category-test" {
+		t.Fatalf("routingDecisionKeyHash 보존 불일치: %q", gatewayCtx.Routing.RoutingDecisionKeyHash)
 	}
 }
 
