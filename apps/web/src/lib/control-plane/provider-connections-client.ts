@@ -48,7 +48,7 @@ type ProviderRequestResult =
       status: number;
     };
 
-type ProviderListResult =
+export type ProviderListResult =
   | {
       data: ProviderConnectionRecord[];
       ok: true;
@@ -90,7 +90,7 @@ export async function getProviderConnectionsModel(
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
   const [listResult, presetResult] = await Promise.all([
-    listProviders(controlPlaneProjectId),
+    listProviderConnections(controlPlaneProjectId),
     listProviderPresets()
   ]);
   const providerPresets = presetResult.ok
@@ -178,7 +178,7 @@ export async function discoverProviderModels(provider: string): Promise<Provider
   }
 }
 
-async function listProviders(projectId: string): Promise<ProviderListResult> {
+export async function listProviderConnections(projectId: string): Promise<ProviderListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers?limit=50`,
