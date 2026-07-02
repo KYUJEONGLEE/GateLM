@@ -25,7 +25,7 @@ func TestSimpleRouterRoutesShortAutoPromptToLowCostModel(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonShortPromptLowCost, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryUnknown,
+		Category:      CategorySupportRefund,
 		Tier:          TierLowCost,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
@@ -51,7 +51,7 @@ func TestSimpleRouterRoutesLongAutoPromptToDefaultModel(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", ReasonDefaultBalanced, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryUnknown,
+		Category:      CategoryGeneral,
 		Tier:          TierBalanced,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
@@ -76,7 +76,7 @@ func TestSimpleRouterKeepsExplicitModelPinned(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("mock-smart", "mock", "mock-smart", ReasonPinned, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModePinned,
-		Category:      CategoryUnknown,
+		Category:      CategoryGeneral,
 		Tier:          TierBalanced,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
@@ -109,11 +109,46 @@ func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t 
 
 	assertDecision(t, decision, expectedDecision("auto", "runtime-provider", "runtime-fast", ReasonShortPromptLowCost, "hash_runtime_routing_policy", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryUnknown,
+		Category:      CategoryGeneral,
 		Tier:          TierLowCost,
 		Capability:    CapabilityChat,
 		PolicyVariant: PolicyVariantDefault,
 	}))
+}
+
+func TestSimpleRouterRoutingDecisionHashChangesByCategory(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	codeDecision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Fix this TypeScript function error.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+	translationDecision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "이 문장을 영어로 번역해줘.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	if codeDecision.RoutingDecisionMaterial.Category != CategoryCode {
+		t.Fatalf("expected code category, got %#v", codeDecision.RoutingDecisionMaterial)
+	}
+	if translationDecision.RoutingDecisionMaterial.Category != CategoryTranslation {
+		t.Fatalf("expected translation category, got %#v", translationDecision.RoutingDecisionMaterial)
+	}
+	if codeDecision.RoutingDecisionKeyHash == translationDecision.RoutingDecisionKeyHash {
+		t.Fatal("expected category to affect routing decision key hash")
+	}
 }
 
 func assertDecision(t *testing.T, actual Decision, expected Decision) {
