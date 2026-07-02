@@ -1896,6 +1896,111 @@ select {
   grid-column: span 2;
 }
 
+.provider-readonly-summary {
+  display: grid;
+  gap: 5px;
+  min-height: 38px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.provider-readonly-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.policy-field textarea[readonly] {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.provider-model-selection {
+  display: grid;
+  gap: 10px;
+  min-height: 74px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.provider-model-selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.provider-model-selection-toolbar div {
+  display: flex;
+  gap: 8px;
+}
+
+.provider-model-selection-toolbar button {
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.provider-model-selection-toolbar button:hover {
+  border-color: var(--brand-blue);
+  color: var(--brand-blue);
+}
+
+.provider-model-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.provider-model-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.provider-model-checkbox input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-blue);
+}
+
+.provider-model-checkbox span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.provider-model-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .provider-form-actions {
   display: flex;
   justify-content: flex-end;

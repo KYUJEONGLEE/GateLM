@@ -171,14 +171,22 @@ export function ProviderConnectionManagement({
   const router = useRouter();
   const text = providerText[locale];
   const [providers, setProviders] = useState<ProviderConnectionRecord[]>(model.providers);
-  const [formValues, setFormValues] =
-    useState<ProviderConnectionFormValues>(getInitialProviderForm(model.providers));
+  const [formValues, setFormValues] = useState<ProviderConnectionFormValues>(emptyProviderForm);
+  const [modelOptionsByProvider, setModelOptionsByProvider] = useState<Record<string, string[]>>(
+    () => getInitialModelOptions(model.providers)
+  );
   const [pendingAction, setPendingAction] = useState(false);
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
   });
+  const selectedModels = splitModelNames(formValues.models);
+  const availableModels = getAvailableProviderModels(
+    modelOptionsByProvider,
+    formValues.provider,
+    selectedModels
+  );
 
   async function submitProvider() {
     const validationError = validateProviderForm(formValues, locale);
@@ -218,6 +226,12 @@ export function ProviderConnectionManagement({
       ...current.filter((provider) => provider.provider !== savedProvider.provider),
       savedProvider
     ]);
+    setModelOptionsByProvider((current) => ({
+      ...current,
+      [savedProvider.provider]: current[savedProvider.provider]?.length
+        ? current[savedProvider.provider]
+        : getProviderConfigModels(savedProvider.providerConfig).filter(isChatCompletionModelName)
+    }));
     setFormValues(getProviderFormValues(savedProvider));
     setSubmitState({
       message: locale === "ko" ? "Provider가 저장되었습니다." : "Provider saved.",
@@ -283,28 +297,44 @@ export function ProviderConnectionManagement({
     }
 
     const discoveredModels = payload.discovery.models.map((item) => item.modelName);
+    const chatModels = filterChatCompletionModels(discoveredModels);
+    const skippedModelCount = discoveredModels.length - chatModels.length;
 
+    setModelOptionsByProvider((current) => ({
+      ...current,
+      [normalizedProvider]: chatModels
+    }));
     setFormValues((current) => {
       return {
         ...baseValues,
         adapterType: payload.discovery?.adapterType ?? current.adapterType,
         baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
         credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
-        models: mergeModelNames(baseValues.models, discoveredModels),
+        models: chatModels.join(", "),
         provider: normalizedProvider
       };
     });
     setSubmitState({
       message:
         locale === "ko"
-          ? `${discoveredModels.length}개 모델을 찾았습니다. 저장하면 Provider 설정에 반영됩니다.`
-          : `${discoveredModels.length} models discovered. Save the provider to store them.`,
+          ? `${chatModels.length}개 chat 모델을 반영했습니다. 제외된 비채팅 모델: ${skippedModelCount}개.`
+          : `${chatModels.length} chat models applied. Excluded non-chat models: ${skippedModelCount}.`,
       status: "success"
     });
     setDiscoveringProvider(null);
   }
 
   function editFromProvider(provider: ProviderConnectionRecord) {
+    const providerModels = getProviderConfigModels(provider.providerConfig).filter(
+      isChatCompletionModelName
+    );
+
+    setModelOptionsByProvider((current) => ({
+      ...current,
+      [provider.provider]: current[provider.provider]?.length
+        ? current[provider.provider]
+        : providerModels
+    }));
     setFormValues(getProviderFormValues(provider));
     setSubmitState({ message: "", status: "idle" });
   }
@@ -316,8 +346,15 @@ export function ProviderConnectionManagement({
       return;
     }
 
-    setFormValues((current) => ({
-      ...current,
+    const savedProvider = providers.find((provider) => provider.provider === providerKey);
+
+    if (savedProvider) {
+      editFromProvider(savedProvider);
+      return;
+    }
+
+    setFormValues({
+      ...emptyProviderForm,
       adapterType: preset.adapterType,
       baseUrl: preset.baseUrl,
       credentialRequired: preset.credentialRequired,
@@ -326,8 +363,30 @@ export function ProviderConnectionManagement({
       provider: preset.providerKey,
       resolver: preset.defaultResolver,
       timeoutMs: preset.defaultTimeoutMs
-    }));
+    });
     setSubmitState({ message: "", status: "idle" });
+  }
+
+  function toggleModelSelection(modelName: string, checked: boolean) {
+    const selectedModelSet = new Set(selectedModels);
+
+    if (checked) {
+      selectedModelSet.add(modelName);
+    } else {
+      selectedModelSet.delete(modelName);
+    }
+
+    setFormValues((current) => ({
+      ...current,
+      models: availableModels.filter((modelName) => selectedModelSet.has(modelName)).join(", ")
+    }));
+  }
+
+  function setAllModelSelections(checked: boolean) {
+    setFormValues((current) => ({
+      ...current,
+      models: checked ? availableModels.join(", ") : ""
+    }));
   }
 
   return (
@@ -366,28 +425,15 @@ export function ProviderConnectionManagement({
               onChange={(event) => applyProviderPreset(event.target.value)}
               value={getSelectedPresetKey(model.providerPresets.items, formValues.provider)}
             >
-              <option value="">Custom</option>
+              <option value="">
+                {locale === "ko" ? "Provider 선택" : "Select provider"}
+              </option>
               {model.providerPresets.items.map((preset) => (
                 <option key={preset.providerKey} value={preset.providerKey}>
                   {preset.displayName}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="policy-field">
-            <span>{text.provider}</span>
-            <input
-              maxLength={64}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  provider: event.target.value.trim()
-                }))
-              }
-              pattern="^[a-z][a-z0-9_-]{1,63}$"
-              type="text"
-              value={formValues.provider}
-            />
           </label>
           <label className="policy-field">
             <span>{text.displayName}</span>
@@ -401,20 +447,6 @@ export function ProviderConnectionManagement({
               }
               type="text"
               value={formValues.displayName}
-            />
-          </label>
-          <label className="policy-field provider-wide-field">
-            <span>{text.baseUrl}</span>
-            <input
-              maxLength={2048}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  baseUrl: event.target.value
-                }))
-              }
-              type="url"
-              value={formValues.baseUrl}
             />
           </label>
           <label className="policy-field">
@@ -435,185 +467,64 @@ export function ProviderConnectionManagement({
               ))}
             </select>
           </label>
-          <label className="policy-field">
-            <span>{text.timeoutMs}</span>
-            <input
-              max={maxProviderTimeoutMs}
-              min={minProviderTimeoutMs}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  timeoutMs: Number(event.target.value)
-                }))
-              }
-              type="number"
-              value={formValues.timeoutMs}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.adapterType}</span>
-            <input
-              maxLength={80}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  adapterType: event.target.value.trim()
-                }))
-              }
-              placeholder="openai_compatible"
-              type="text"
-              value={formValues.adapterType}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.modelsEndpointPath}</span>
-            <input
-              maxLength={120}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  modelsEndpointPath: event.target.value.trim()
-                }))
-              }
-              placeholder="/models"
-              type="text"
-              value={formValues.modelsEndpointPath}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.requestFormat}</span>
-            <select
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  requestFormat:
-                    event.target.value === "mock_chat_completions"
-                      ? "mock_chat_completions"
-                      : "openai_chat_completions"
-                }))
-              }
-              value={formValues.requestFormat}
-            >
-              <option value="openai_chat_completions">openai_chat_completions</option>
-              <option value="mock_chat_completions">mock_chat_completions</option>
-            </select>
-          </label>
-          <label className="policy-field">
-            <span>{text.apiVersion}</span>
-            <input
-              maxLength={80}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  apiVersion: event.target.value.trim()
-                }))
-              }
-              placeholder="optional"
-              type="text"
-              value={formValues.apiVersion}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.failureMode}</span>
-            <select
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  failureMode:
-                    event.target.value === "fail_open_to_fallback"
-                      ? "fail_open_to_fallback"
-                      : "fail_closed"
-                }))
-              }
-              value={formValues.failureMode}
-            >
-              <option value="fail_closed">fail_closed</option>
-              <option value="fail_open_to_fallback">fail_open_to_fallback</option>
-            </select>
-          </label>
-          <label className="policy-toggle-row provider-form-toggle">
-            <input
-              checked={formValues.credentialRequired}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  credentialRequired: event.target.checked
-                }))
-              }
-              type="checkbox"
-            />
-            <span>{text.credentialRequired}</span>
-          </label>
-          <label className="policy-field">
-            <span>{text.resolver}</span>
-            <input
-              maxLength={80}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  resolver: event.target.value
-                }))
-              }
-              type="text"
-              value={formValues.resolver}
-            />
-          </label>
+          <div className="policy-field provider-wide-field">
+            <span>{locale === "ko" ? "연결 정보" : "Connection"}</span>
+            <div className="provider-readonly-summary">
+              <strong>
+                {formValues.baseUrl ||
+                  (locale === "ko" ? "Provider를 선택하세요." : "Select a provider.")}
+              </strong>
+              {formValues.provider ? (
+                <small className="project-muted">
+                  {formValues.provider} / {formValues.adapterType} / {formValues.resolver}
+                </small>
+              ) : null}
+            </div>
+          </div>
           <label className="policy-field provider-wide-field">
-            <span>{text.secretRef}</span>
-            <input
-              maxLength={200}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  secretRef: event.target.value
-                }))
-              }
-              type="text"
-              value={formValues.secretRef}
-            />
-          </label>
-          <label className="policy-field provider-wide-field">
-            <span>{text.models}</span>
-            <textarea
-              maxLength={1200}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  models: event.target.value
-                }))
-              }
-              placeholder="gpt-4o-mini, gpt-4o"
-              value={formValues.models}
-            />
+            <span>{locale === "ko" ? "사용 모델 선택" : "Model selection"}</span>
+            <div className="provider-model-selection">
+              {availableModels.length > 0 ? (
+                <>
+                  <div className="provider-model-selection-toolbar">
+                    <strong>
+                      {locale === "ko"
+                        ? `${selectedModels.length} / ${availableModels.length}개 선택`
+                        : `${selectedModels.length} / ${availableModels.length} selected`}
+                    </strong>
+                    <div>
+                      <button onClick={() => setAllModelSelections(true)} type="button">
+                        {locale === "ko" ? "전체 선택" : "Select all"}
+                      </button>
+                      <button onClick={() => setAllModelSelections(false)} type="button">
+                        {locale === "ko" ? "전체 해제" : "Clear"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="provider-model-checkbox-grid">
+                    {availableModels.map((modelName) => (
+                      <label key={modelName} className="provider-model-checkbox">
+                        <input
+                          checked={selectedModels.includes(modelName)}
+                          onChange={(event) =>
+                            toggleModelSelection(modelName, event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                        <span>{modelName}</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="provider-model-empty">
+                  {locale === "ko"
+                    ? "Provider를 저장한 뒤 모델 조회를 누르면 선택 가능한 모델이 표시됩니다."
+                    : "Save the provider, then discover models to choose from them."}
+                </p>
+              )}
+            </div>
             <small className="project-muted">{text.discoveryOpenAiOnly}</small>
-          </label>
-          <label className="policy-field">
-            <span>{text.credentialPrefix}</span>
-            <input
-              maxLength={40}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  credentialPrefix: event.target.value
-                }))
-              }
-              type="text"
-              value={formValues.credentialPrefix}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.credentialLast4}</span>
-            <input
-              maxLength={16}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  credentialLast4: event.target.value
-                }))
-              }
-              type="text"
-              value={formValues.credentialLast4}
-            />
           </label>
           <div className="provider-form-actions">
             <Button
@@ -637,9 +548,18 @@ export function ProviderConnectionManagement({
             >
               {discoveringProvider === formValues.provider ? "..." : text.discoverModels}
             </Button>
-            <Button disabled={pendingAction} onClick={() => void submitProvider()} type="button">
+            <Button
+              disabled={
+                pendingAction ||
+                !formValues.provider.trim() ||
+                !formValues.displayName.trim() ||
+                !formValues.baseUrl.trim()
+              }
+              onClick={() => void submitProvider()}
+              type="button"
+            >
               <PlugZap aria-hidden="true" />
-              {text.register}
+              {text.save}
             </Button>
           </div>
         </div>
@@ -751,10 +671,6 @@ export function ProviderConnectionManagement({
   );
 }
 
-function getInitialProviderForm(providers: ProviderConnectionRecord[]) {
-  return providers[0] ? getProviderFormValues(providers[0]) : emptyProviderForm;
-}
-
 function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConnectionFormValues {
   const providerConfig = provider.providerConfig;
 
@@ -775,7 +691,9 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     credentialPrefix: nullableText(provider.credentialPreview?.prefix, ""),
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
-    models: getProviderConfigModels(provider.providerConfig).join(", "),
+    models: getProviderConfigModels(provider.providerConfig)
+      .filter(isChatCompletionModelName)
+      .join(", "),
     modelsEndpointPath: getProviderConfigString(providerConfig, "modelsEndpointPath", "/models"),
     provider: provider.provider,
     requestFormat: getProviderConfigRequestFormat(providerConfig, provider),
@@ -790,6 +708,27 @@ function getSelectedPresetKey(presets: ProviderPresetRecord[], provider: string)
   return presets.some((preset) => preset.providerKey === provider) ? provider : "";
 }
 
+function getInitialModelOptions(providers: ProviderConnectionRecord[]) {
+  return Object.fromEntries(
+    providers.map((provider) => [
+      provider.provider,
+      getProviderConfigModels(provider.providerConfig).filter(isChatCompletionModelName)
+    ])
+  );
+}
+
+function getAvailableProviderModels(
+  modelOptionsByProvider: Record<string, string[]>,
+  provider: string,
+  selectedModels: string[]
+) {
+  const providerOptions = modelOptionsByProvider[provider.trim()] ?? [];
+
+  return Array.from(
+    new Set([...providerOptions, ...selectedModels].filter(isChatCompletionModelName))
+  );
+}
+
 function isDiscoverSupportedProvider(provider: string) {
   return provider.trim().startsWith("openai");
 }
@@ -800,13 +739,56 @@ function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: s
   return providers.some((item) => item.provider === normalizedProvider);
 }
 
-function mergeModelNames(existingValue: string, discoveredModels: string[]) {
-  const existingModels = existingValue
+const nonChatModelNameTokens = [
+  "audio",
+  "babbage",
+  "codex",
+  "computer-use",
+  "dall-e",
+  "davinci",
+  "embed",
+  "image",
+  "moderation",
+  "realtime",
+  "sora",
+  "tts",
+  "transcribe",
+  "whisper"
+];
+
+function splitModelNames(value: string) {
+  return value
     .split(/[\n,]/)
     .map((model) => model.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter(isChatCompletionModelName);
+}
 
-  return Array.from(new Set([...existingModels, ...discoveredModels])).join(", ");
+function filterChatCompletionModels(modelNames: string[]) {
+  return Array.from(
+    new Set(
+      modelNames
+        .map((modelName) => modelName.trim())
+        .filter(Boolean)
+        .filter(isChatCompletionModelName)
+    )
+  );
+}
+
+function isChatCompletionModelName(modelName: string) {
+  const normalizedModelName = modelName.toLowerCase();
+
+  if (nonChatModelNameTokens.some((token) => normalizedModelName.includes(token))) {
+    return false;
+  }
+
+  return (
+    normalizedModelName.startsWith("gpt-") ||
+    normalizedModelName.startsWith("o1") ||
+    normalizedModelName.startsWith("o3") ||
+    normalizedModelName.startsWith("o4") ||
+    normalizedModelName.startsWith("chat-")
+  );
 }
 
 function formatProviderStatus(status: ProviderConnectionStatus) {
@@ -816,8 +798,8 @@ function formatProviderStatus(status: ProviderConnectionStatus) {
 function validateProviderForm(values: ProviderConnectionFormValues, locale: Locale) {
   if (!values.provider.trim() || !values.displayName.trim() || !values.baseUrl.trim()) {
     return locale === "ko"
-      ? "Provider key, 표시 이름, Base URL을 입력하세요."
-      : "Provider key, display name, and base URL are required.";
+      ? "Provider를 선택하고 표시 이름을 입력하세요."
+      : "Select a provider and enter a display name.";
   }
 
   if (!providerKeyPattern.test(values.provider)) {

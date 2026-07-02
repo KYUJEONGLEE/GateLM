@@ -216,6 +216,7 @@ async function listProviderPresets(): Promise<ProviderPresetListResult> {
 function toProviderPayload(values: ProviderConnectionFormValues) {
   const models = splitProviderModels(values.models);
   const providerConfig = toProviderConfig(values, models);
+  const secretRef = values.secretRef.trim() || getDefaultProviderSecretRef(values);
 
   return {
     baseUrl: values.baseUrl.trim(),
@@ -225,10 +226,30 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     provider: values.provider.trim(),
     providerConfig,
     resolver: values.resolver.trim() || undefined,
-    secretRef: values.secretRef.trim() || undefined,
+    secretRef: secretRef || undefined,
     status: values.status,
     timeoutMs: values.timeoutMs
   };
+}
+
+function getDefaultProviderSecretRef(values: ProviderConnectionFormValues) {
+  if (
+    !values.credentialRequired ||
+    values.resolver.trim().toLowerCase() !== "environment"
+  ) {
+    return "";
+  }
+
+  const provider = values.provider.trim().toLowerCase();
+  if (!provider) {
+    return "";
+  }
+
+  if (provider === "openai" || provider === "openai-main") {
+    return "credential_ref_openai_main";
+  }
+
+  return `credential_ref_${provider.replace(/[^a-z0-9]+/g, "_")}_main`;
 }
 
 function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {
@@ -505,6 +526,14 @@ function getErrorMessage(payload: unknown, status: number) {
 
     if (typeof message === "string") {
       return message;
+    }
+
+    if (message && typeof message === "object") {
+      const nestedMessage = (message as Record<string, unknown>).message;
+
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+        return nestedMessage;
+      }
     }
   }
 

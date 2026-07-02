@@ -333,6 +333,7 @@ export function getCustomerDemoModel(): CustomerDemoModel {
         record
       });
     }),
+    surface: "demo",
     tenantId: runtime.runtimeConfig.tenantId
   };
 }

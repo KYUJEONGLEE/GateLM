@@ -8,6 +8,8 @@ const HARD_RATE_LIMIT_MAX_ATTEMPTS = 60;
 export type LiveGatewayConfig = {
   apiKey: string;
   appToken: string;
+  applicationChatMaxTokens: number;
+  applicationChatModel: string;
   baseUrl: string;
   projectId: string;
   providerFailureControlUrl: string;
@@ -22,6 +24,9 @@ export function getLiveGatewayConfig(): LiveGatewayConfig {
     appToken:
       firstEnv("GATELM_DEMO_APP_TOKEN", "GATELM_GATEWAY_APP_TOKEN", "GATEWAY_APP_TOKEN")
       ?? "glm_app_token_test_redacted",
+    applicationChatMaxTokens: getApplicationChatMaxTokens(),
+    applicationChatModel:
+      firstEnv("GATELM_APPLICATION_CHAT_MODEL", "GATEWAY_APPLICATION_CHAT_MODEL") ?? "auto",
     baseUrl: normalizeBaseUrl(
       firstEnv("GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL")
         ?? `http://${defaultGatewayHost()}:${process.env.GATEWAY_PORT ?? "8080"}`
@@ -66,6 +71,16 @@ function getRateLimitMaxAttempts() {
   }
 
   return DEFAULT_RATE_LIMIT_MAX_ATTEMPTS;
+}
+
+function getApplicationChatMaxTokens() {
+  const configured = parsePositiveInt(process.env.GATELM_APPLICATION_CHAT_MAX_TOKENS);
+
+  if (configured) {
+    return clamp(configured, 64, 2048);
+  }
+
+  return 512;
 }
 
 function getProviderFailureModels() {

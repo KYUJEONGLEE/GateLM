@@ -8,6 +8,7 @@ export type CustomerDemoScenarioId =
   | "provider-fallback";
 
 export type CustomerDemoIntegrationMode = "fixture" | "gateway";
+export type CustomerDemoSurface = "application" | "demo";
 
 export type CustomerDemoHeader = {
   name: string;
@@ -75,6 +76,7 @@ export type CustomerDemoModel = {
   integrationMode: CustomerDemoIntegrationMode;
   projectId: string;
   scenarios: CustomerDemoExchange[];
+  surface: CustomerDemoSurface;
   tenantId: string;
 };
 
@@ -124,7 +126,10 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
 }
 
 export class RouteGatewayChatClient implements GatewayChatClient {
-  constructor(private readonly tenantId: string) {}
+  constructor(
+    private readonly tenantId: string,
+    private readonly surface: CustomerDemoSurface
+  ) {}
 
   async sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
@@ -138,6 +143,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
       body: JSON.stringify({
         message: options.message,
         scenarioId,
+        surface: this.surface,
         stream: options.stream === true,
         tenantId: this.tenantId
       })

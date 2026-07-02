@@ -259,8 +259,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	providerReq := chatReq
-	providerReq.RequestID = requestID
+	providerReq := providerRequestForTarget(chatReq, requestID)
 	reqCtx.SelectedProvider = target.ProviderName
 	reqCtx.SelectedProviderID = target.ProviderID
 	reqCtx.SelectedProviderCatalogKey = firstNonEmpty(reqCtx.SelectedProviderCatalogKey, target.ProviderName)
@@ -776,7 +775,7 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 		return
 	}
 
-	fallbackReq := chatReq
+	fallbackReq := providerRequestForTarget(chatReq, reqCtx.RequestID)
 	fallbackReq.Model = fallbackTarget.ModelName
 	fallbackStartedAt := time.Now()
 	fallbackResp, fallbackCallErr := fallbackTarget.Adapter.CreateChatCompletion(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
@@ -985,7 +984,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		return
 	}
 
-	fallbackReq := chatReq
+	fallbackReq := providerRequestForTarget(chatReq, reqCtx.RequestID)
 	fallbackReq.Model = fallbackTarget.ModelName
 	fallbackReq.Stream = true
 	fallbackStartedAt := time.Now()
@@ -2181,6 +2180,14 @@ func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipelin
 		EstimatedCostUSD:            formatCostMicroUSD(reqCtx.CostMicroUSD),
 		LatencyMs:                   reqCtx.LatencyMs,
 	}
+}
+
+func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID string) provider.ChatCompletionRequest {
+	req := chatReq
+	req.RequestID = strings.TrimSpace(requestID)
+	req.Metadata = nil
+	req.GateLM = nil
+	return req
 }
 
 func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {

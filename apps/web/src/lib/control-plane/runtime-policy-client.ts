@@ -103,6 +103,8 @@ type ProviderCatalogResult =
       status: number;
     };
 
+const RUNTIME_POLICY_DRAFT_CONFIG_VERSION = "draft";
+
 export async function getRuntimePolicyModel(routeTenantId: string): Promise<RuntimePolicyModel> {
   const applicationId = getControlPlaneApplicationId();
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
@@ -316,19 +318,28 @@ export async function getRuntimePolicyConfigForApplication(
 export async function saveRuntimePolicyDraft(
   values: RuntimePolicyDraftValues
 ): Promise<ControlPlaneRequestResult> {
-  return writeRuntimeConfig("draft", values);
+  return writeRuntimeConfig("draft", values, {
+    draftConfigVersion: RUNTIME_POLICY_DRAFT_CONFIG_VERSION
+  });
 }
 
 export async function publishRuntimePolicy(
   values: RuntimePolicyDraftValues
 ): Promise<ControlPlaneRequestResult> {
-  const draft = await writeRuntimeConfig("draft", values);
+  const draftConfigVersion = RUNTIME_POLICY_DRAFT_CONFIG_VERSION;
+  const publishedConfigVersion = createPublishedRuntimeConfigVersion();
+  const draft = await writeRuntimeConfig("draft", values, {
+    draftConfigVersion
+  });
 
   if (!draft.ok) {
     return draft;
   }
 
-  return writeRuntimeConfig("publish", values);
+  return writeRuntimeConfig("publish", values, {
+    draftConfigVersion,
+    publishedConfigVersion
+  });
 }
 
 export async function rollbackRuntimePolicy(
@@ -492,16 +503,20 @@ async function fetchProviderCatalog(catalogId: string): Promise<ProviderCatalogR
 
 async function writeRuntimeConfig(
   mode: "draft" | "publish",
-  values: RuntimePolicyDraftValues
+  values: RuntimePolicyDraftValues,
+  options: {
+    draftConfigVersion?: string;
+    publishedConfigVersion?: string;
+  } = {}
 ): Promise<ControlPlaneRequestResult> {
   const applicationId = getControlPlaneApplicationId();
   const endpoint = mode === "draft" ? "draft" : "publish";
   const body =
     mode === "draft"
-      ? toDraftRequest(values)
+      ? toDraftRequest(values, options.draftConfigVersion ?? values.configVersion)
       : {
-          configVersion: values.configVersion,
-          draftConfigVersion: values.configVersion,
+          configVersion: options.publishedConfigVersion ?? createPublishedRuntimeConfigVersion(),
+          draftConfigVersion: options.draftConfigVersion ?? values.configVersion,
           effectiveAt: new Date().toISOString()
         };
 
@@ -528,7 +543,11 @@ async function writeRuntimeConfig(
   }
 }
 
-function toDraftRequest(values: RuntimePolicyDraftValues) {
+function createPublishedRuntimeConfigVersion() {
+  return `runtime_config_${Date.now()}`;
+}
+
+function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string) {
   return {
     budgetPolicy: {
       enabled: values.budgetEnabled,
@@ -539,7 +558,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues) {
       enabled: values.cacheEnabled,
       ttlSeconds: values.cacheTtlSeconds
     },
-    configVersion: values.configVersion,
+    configVersion,
     effectiveAt: new Date().toISOString(),
     rateLimit: {
       enabled: values.rateLimitEnabled,

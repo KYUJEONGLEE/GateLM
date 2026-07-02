@@ -9,12 +9,16 @@ export default async function ApplicationPage() {
   const integrationMode = getCustomerDemoIntegrationMode();
   const model =
     integrationMode === "fixture" ? getCustomerDemoModel() : getCustomerDemoLiveModel();
+  const applicationModel = {
+    ...model,
+    surface: "application" as const
+  };
 
   return (
     <CustomerDemoApp
-      key={`${model.tenantId}:${model.projectId}:${model.applicationId}`}
+      key={`${applicationModel.tenantId}:${applicationModel.projectId}:${applicationModel.applicationId}`}
       locale={locale}
-      model={model}
+      model={applicationModel}
     />
   );
 }

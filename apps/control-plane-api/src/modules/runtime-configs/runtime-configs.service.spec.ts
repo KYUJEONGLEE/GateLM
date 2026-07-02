@@ -345,7 +345,7 @@ describe('RuntimeConfigsService', () => {
     expect(result.publishState).toBe('active');
     expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v1');
     expect(result.providers[0]?.credentialRef).toEqual({
-      credentialRefId: `provider_credential:${providerId}`,
+      credentialRefId: 'secret/provider/mock',
       credentialVersion: 1,
       credentialState: 'active',
     });

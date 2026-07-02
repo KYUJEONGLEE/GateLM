@@ -2189,7 +2189,7 @@ export class RuntimeConfigsService {
           provider.credentialRef ??
           (provider.secretRef
             ? {
-                credentialRefId: `provider_credential:${provider.providerId}`,
+                credentialRefId: provider.secretRef,
                 credentialVersion: 1,
                 credentialState:
                   provider.status === 'active' ? 'active' : 'disabled',
@@ -2222,7 +2222,7 @@ export class RuntimeConfigsService {
       return null;
     }
     return {
-      credentialRefId: `provider_credential:${provider.id}`,
+      credentialRefId: provider.secretRef,
       credentialVersion: 1,
       credentialState:
         provider.status === ProviderConnectionStatus.ACTIVE
