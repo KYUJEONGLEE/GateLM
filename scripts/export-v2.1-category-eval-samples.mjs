@@ -7,7 +7,17 @@ const defaultInputPath = "docs/v2.1.0/fixtures/category-evaluation-capture.fixtu
 const defaultDatasetVersion = "category_eval_capture_2026_07_02_v1";
 const schemaVersion = "gatelm.category-evaluation-record.v1";
 
-const allowedCategories = new Set(["general", "code", "translation", "support_refund", "unknown"]);
+const allowedCategories = new Set([
+  "general",
+  "code",
+  "translation",
+  "summarization",
+  "extraction_json",
+  "support_refund",
+  "reasoning",
+  "safety_sensitive",
+  "unknown",
+]);
 const allowedLabelSources = new Set(["human_review", "synthetic_fixture", "llm_judge_candidate"]);
 const allowedConsentTypes = new Set(["synthetic", "operator_opt_in", "customer_opt_in"]);
 const allowedSources = new Set(["synthetic_fixture", "gateway_redacted_sample", "manual_seed"]);

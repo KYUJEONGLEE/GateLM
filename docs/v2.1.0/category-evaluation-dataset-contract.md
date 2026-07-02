@@ -22,14 +22,21 @@ Given a redacted prompt, what category should the classifier return?
 
 ## 3. 카테고리 분류 체계
 
-첫 평가셋은 현재의 low-cardinality 라우팅 카테고리를 사용한다.
+첫 평가셋은 상용 LLM 라우팅에서 자주 쓰이는 low-cardinality 업무 카테고리를 사용한다.
+
+이 목록은 평가셋/분류기 검증용 taxonomy다. Runtime Gateway가 모든 카테고리를 즉시 별도 라우팅한다는 뜻은 아니다.
+`unknown`은 업무 카테고리가 아니라 비어 있거나 분류 불가능한 입력을 위한 안전 fallback이다.
 
 | Category | 의미 | 라우팅 의도 |
 |---|---|---|
-| `general` | 일반 대화, 요약, 설명, 아직 분류되지 않은 업무 요청 | 기본 라우팅 또는 길이 기반 라우팅 |
+| `general` | 일반 대화, 간단한 설명, 아직 별도 업무로 분류되지 않은 요청 | 기본 라우팅 또는 길이 기반 라우팅 |
 | `code` | 프로그래밍, 디버깅, stack trace, 리팩터링, 구현 도움 | 고품질 모델 라우팅 후보 |
 | `translation` | 언어 간 번역 또는 문장 재작성 | 균형형 모델 라우팅 후보 |
+| `summarization` | 문서, 회의록, 긴 글 요약 | long-context 또는 요약 최적화 모델 라우팅 후보 |
+| `extraction_json` | 정보 추출, JSON 변환, 구조화 출력 | JSON mode 또는 구조화 출력 강한 모델 라우팅 후보 |
 | `support_refund` | 환불, 결제, 취소, 반품, 고객 지원 | 저비용 모델 라우팅 후보 |
+| `reasoning` | 복잡한 분석, 비교, 계획, 의사결정 | 고성능 reasoning 모델 라우팅 후보 |
+| `safety_sensitive` | 개인정보, credential, 보안 위험이 포함될 수 있는 요청 | 차단 또는 safety-first 라우팅 후보 |
 | `unknown` | 비어 있거나, 유효하지 않거나, 분류가 불가능한 입력 | 안전한 fallback |
 
 새 카테고리가 `RoutingDecisionKey` 또는 cache key material에 영향을 주려면 먼저 계약을 갱신해야 한다.

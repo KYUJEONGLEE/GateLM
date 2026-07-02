@@ -34,7 +34,11 @@
         "general",
         "code",
         "translation",
+        "summarization",
+        "extraction_json",
         "support_refund",
+        "reasoning",
+        "safety_sensitive",
         "unknown"
       ]
     },
