@@ -40,6 +40,26 @@
             "pattern": "^[a-z][a-z0-9_\\-]*$"
           },
           "uniqueItems": true
+        },
+        "policyAllowedTypes": {
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Type labels only; raw detected values, offsets, and prompt fragments are forbidden.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        },
+        "mandatoryProtectedTypes": {
+          "description": "High-risk detector types protected regardless of optional PII masking state. Type labels only.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
         }
       }
     },

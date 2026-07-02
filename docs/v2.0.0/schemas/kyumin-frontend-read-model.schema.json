@@ -572,6 +572,24 @@
           },
           "uniqueItems": true
         },
+        "policyAllowedTypes": {
+          "description": "Detector type names explicitly allowed by RuntimeSnapshot policy. Raw values are never included.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "mandatoryProtectedTypes": {
+          "description": "Mandatory detector type names protected regardless of optional PII policy toggles. Raw values are never included.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
         "detectedCount": {
           "$ref": "#/$defs/nonNegativeInteger"
         },

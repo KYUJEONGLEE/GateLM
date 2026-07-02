@@ -35,6 +35,8 @@
       "detectedTypes": [
         "email"
       ],
+      "policyAllowedTypes": [],
+      "mandatoryProtectedTypes": [],
       "detectedCount": 1,
       "redactedPromptPreview": "Please summarize the account update for [EMAIL_REDACTED]."
     },

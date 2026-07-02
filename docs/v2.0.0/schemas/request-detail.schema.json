@@ -352,6 +352,20 @@
           },
           "description": "Category-level summary only. Raw detected values, offsets, and prompt fragments are forbidden."
         },
+        "policyAllowedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Type labels only; raw values, offsets, and prompt fragments are forbidden."
+        },
+        "mandatoryProtectedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "High-risk detector types protected even when optional PII masking is disabled. Type labels only."
+        },
         "maskingAction": {
           "type": [
             "string",

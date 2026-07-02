@@ -69,11 +69,13 @@ type BudgetOutcome struct {
 }
 
 type SafetyOutcome struct {
-	Outcome               string   `json:"outcome"`
-	MaskingAction         string   `json:"maskingAction,omitempty"`
-	DetectedTypes         []string `json:"detectedTypes,omitempty"`
-	DetectedCount         int      `json:"detectedCount"`
-	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
+	Outcome                 string   `json:"outcome"`
+	MaskingAction           string   `json:"maskingAction,omitempty"`
+	DetectedTypes           []string `json:"detectedTypes,omitempty"`
+	DetectedCount           int      `json:"detectedCount"`
+	PolicyAllowedTypes      []string `json:"policyAllowedTypes,omitempty"`
+	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes,omitempty"`
+	RedactedPromptPreview   *string  `json:"redactedPromptPreview"`
 }
 
 type RoutingOutcome struct {
@@ -195,33 +197,35 @@ func DomainOutcomesForInvocationLog(log LlmInvocationLog) DomainOutcomes {
 		return log.DomainOutcomes
 	}
 	terminal := TerminalLog{
-		RequestID:             log.RequestID,
-		TraceID:               log.TraceID,
-		ApplicationID:         log.ApplicationID,
-		BudgetScope:           log.BudgetScope,
-		RuntimeSnapshot:       log.RuntimeSnapshot,
-		RateLimitDecision:     nil,
-		Stream:                log.Stream,
-		RequestedModel:        log.RequestedModel,
-		Provider:              log.Provider,
-		Model:                 log.Model,
-		SelectedProvider:      log.SelectedProvider,
-		SelectedModel:         log.SelectedModel,
-		RoutingReason:         log.RoutingReason,
-		ProviderLatencyMs:     log.ProviderLatencyMs,
-		Status:                log.Status,
-		HTTPStatus:            log.HTTPStatus,
-		ErrorCode:             log.ErrorCode,
-		ErrorStage:            log.ErrorStage,
-		CacheStatus:           log.CacheStatus,
-		CacheType:             log.CacheType,
-		CacheHitRequestID:     log.CacheHitRequestID,
-		MaskingAction:         log.MaskingAction,
-		MaskingDetectedTypes:  log.MaskingDetectedTypes,
-		MaskingDetectedCount:  log.MaskingDetectedCount,
-		RedactedPromptPreview: log.RedactedPromptPreview,
-		LatencyMs:             log.LatencyMs,
-		CreatedAt:             log.CreatedAt,
+		RequestID:               log.RequestID,
+		TraceID:                 log.TraceID,
+		ApplicationID:           log.ApplicationID,
+		BudgetScope:             log.BudgetScope,
+		RuntimeSnapshot:         log.RuntimeSnapshot,
+		RateLimitDecision:       nil,
+		Stream:                  log.Stream,
+		RequestedModel:          log.RequestedModel,
+		Provider:                log.Provider,
+		Model:                   log.Model,
+		SelectedProvider:        log.SelectedProvider,
+		SelectedModel:           log.SelectedModel,
+		RoutingReason:           log.RoutingReason,
+		ProviderLatencyMs:       log.ProviderLatencyMs,
+		Status:                  log.Status,
+		HTTPStatus:              log.HTTPStatus,
+		ErrorCode:               log.ErrorCode,
+		ErrorStage:              log.ErrorStage,
+		CacheStatus:             log.CacheStatus,
+		CacheType:               log.CacheType,
+		CacheHitRequestID:       log.CacheHitRequestID,
+		MaskingAction:           log.MaskingAction,
+		MaskingDetectedTypes:    log.MaskingDetectedTypes,
+		MaskingDetectedCount:    log.MaskingDetectedCount,
+		PolicyAllowedTypes:      log.PolicyAllowedTypes,
+		MandatoryProtectedTypes: log.MandatoryProtectedTypes,
+		RedactedPromptPreview:   log.RedactedPromptPreview,
+		LatencyMs:               log.LatencyMs,
+		CreatedAt:               log.CreatedAt,
 	}
 	if log.CompletedAt != nil {
 		terminal.CompletedAt = *log.CompletedAt
@@ -371,11 +375,13 @@ func safetyOutcome(log TerminalLog) SafetyOutcome {
 		action = ""
 	}
 	return SafetyOutcome{
-		Outcome:               outcome,
-		MaskingAction:         action,
-		DetectedTypes:         append([]string{}, log.MaskingDetectedTypes...),
-		DetectedCount:         log.MaskingDetectedCount,
-		RedactedPromptPreview: stringPointer(log.RedactedPromptPreview),
+		Outcome:                 outcome,
+		MaskingAction:           action,
+		DetectedTypes:           append([]string{}, log.MaskingDetectedTypes...),
+		DetectedCount:           log.MaskingDetectedCount,
+		PolicyAllowedTypes:      append([]string{}, log.PolicyAllowedTypes...),
+		MandatoryProtectedTypes: append([]string{}, log.MandatoryProtectedTypes...),
+		RedactedPromptPreview:   stringPointer(log.RedactedPromptPreview),
 	}
 }
 

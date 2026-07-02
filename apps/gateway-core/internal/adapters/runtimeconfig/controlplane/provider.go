@@ -161,7 +161,13 @@ type runtimeSnapshotPolicies struct {
 }
 
 type runtimeSnapshotSafetyPolicy struct {
-	PolicyHash string `json:"policyHash"`
+	PolicyHash  string                          `json:"policyHash"`
+	DetectorSet []runtimeSnapshotDetectorPolicy `json:"detectorSet"`
+}
+
+type runtimeSnapshotDetectorPolicy struct {
+	DetectorType string `json:"detectorType"`
+	Action       string `json:"action"`
 }
 
 type runtimeSnapshotRoutingPolicy struct {
@@ -220,6 +226,14 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 	fallbackProvider := firstNonEmpty(r.Policies.Fallback.FallbackProvider, defaultProvider)
 	fallbackModel := firstNonEmpty(r.Policies.Fallback.FallbackModel, defaultModel)
 
+	detectorSet := make([]runtimeconfig.DetectorPolicy, 0, len(r.Policies.Safety.DetectorSet))
+	for _, detector := range r.Policies.Safety.DetectorSet {
+		detectorSet = append(detectorSet, runtimeconfig.DetectorPolicy{
+			DetectorType: detector.DetectorType,
+			Action:       detector.Action,
+		})
+	}
+
 	return runtimeconfig.ExecutionSnapshot{
 		ConfigHash:    configHash,
 		TenantID:      actual.tenantID,
@@ -255,6 +269,7 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: securityPolicyHash,
+			DetectorSet:        detectorSet,
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
 			DefaultProvider:     defaultProvider,
