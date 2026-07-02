@@ -161,6 +161,7 @@ Report는 prompt text를 출력하면 안 된다. 실패 예시는 `sampleId`, `
 
 ```powershell
 corepack pnpm run verify:v2.1-category-eval
+corepack pnpm run v2.1:routing:evaluate
 corepack pnpm run verify:v2-docs
 ```
 
