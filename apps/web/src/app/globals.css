@@ -1534,8 +1534,7 @@ select {
   height: 16px;
 }
 
-.project-create-form,
-.tenant-create-form {
+.project-create-form {
   display: grid;
   grid-template-columns: minmax(180px, 0.65fr) minmax(260px, 1fr) auto;
   gap: 12px;
@@ -3553,13 +3552,11 @@ select {
   }
 
   .project-create-form,
-  .tenant-create-form,
   .api-key-issue-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .project-create-form button,
-  .tenant-create-form button,
   .api-key-form-actions {
     grid-column: span 2;
   }
@@ -3700,7 +3697,6 @@ select {
   .policy-routing-grid,
   .policy-status-grid,
   .project-create-form,
-  .tenant-create-form,
   .api-key-issue-form,
   .provider-form-grid,
   .policy-detector-row {
@@ -3768,7 +3764,6 @@ select {
   }
 
   .project-create-form button,
-  .tenant-create-form button,
   .api-key-form-actions {
     grid-column: auto;
   }

@@ -17,8 +17,7 @@ export type ManagementNavItem =
   | "model-catalog"
   | "policies"
   | "project"
-  | "provider"
-  | "tenants";
+  | "provider";
 export type AnalyticsNavItem = "health" | "metrics" | "request-logs";
 
 type ConsoleShellProps = {
@@ -58,14 +57,6 @@ const navigationItems: Array<{
       ko: "관리"
     },
     children: [
-      {
-        labels: {
-          en: "Tenants",
-          ko: "Tenant"
-        },
-        item: "tenants",
-        path: (tenantId) => `/tenants/${tenantId}/tenants`
-      },
       {
         labels: {
           en: "Project",
