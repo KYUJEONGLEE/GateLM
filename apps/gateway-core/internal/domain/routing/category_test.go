@@ -17,10 +17,20 @@ func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 		expected string
 	}{
 		{name: "empty", prompt: "   ", expected: CategoryUnknown},
-		{name: "general", prompt: "Tell me a quick summary of this feature.", expected: CategoryGeneral},
+		{name: "general", prompt: "Explain how this feature works.", expected: CategoryGeneral},
 		{name: "code", prompt: "Fix this TypeScript error in my function.", expected: CategoryCode},
 		{name: "translation", prompt: "이 문장을 영어로 번역해줘.", expected: CategoryTranslation},
+		{name: "summarization", prompt: "Summarize the meeting notes into three bullets.", expected: CategorySummarization},
+		{name: "extraction json", prompt: "Extract the order id and status as JSON.", expected: CategoryExtractionJSON},
+		{name: "extraction json schema underscore", prompt: "Return the response with json_schema fields.", expected: CategoryExtractionJSON},
+		{name: "extraction json korean format", prompt: "결과를 json 포맷으로 변환해줘.", expected: CategoryExtractionJSON},
+		{name: "plain extraction stays general", prompt: "이메일 주소만 추출해줘.", expected: CategoryGeneral},
+		{name: "plain structure stays general", prompt: "문장 구조화 방법을 알려줘.", expected: CategoryGeneral},
+		{name: "plain cleanup stays general", prompt: "생각 정리 방법을 알려줘.", expected: CategoryGeneral},
 		{name: "support refund", prompt: "Write a short refund response for a customer.", expected: CategorySupportRefund},
+		{name: "reasoning", prompt: "Compare these rollout options and explain the tradeoff.", expected: CategoryReasoning},
+		{name: "routing does not own api key safety", prompt: "Check whether this api key handling guide is safe.", expected: CategoryGeneral},
+		{name: "routing does not own authorization safety", prompt: "Review the authorization header handling policy.", expected: CategoryGeneral},
 	}
 
 	for _, tt := range tests {
@@ -29,6 +39,20 @@ func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 				t.Fatalf("expected %s, got %s", tt.expected, actual)
 			}
 		})
+	}
+}
+
+func TestExtractRoutingSignalsUsesBoundedCheapSignals(t *testing.T) {
+	signals := ExtractRoutingSignals("Extract the invoice id as JSON.")
+
+	if signals.Category != CategoryExtractionJSON {
+		t.Fatalf("expected extraction_json, got %s", signals.Category)
+	}
+	if !signals.WantsStructuredOutput || signals.HasCodeSignal || signals.NeedsReasoning {
+		t.Fatalf("unexpected routing signals: %+v", signals)
+	}
+	if signals.PromptLength == 0 {
+		t.Fatalf("expected prompt length to be recorded")
 	}
 }
 

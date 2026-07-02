@@ -3,14 +3,16 @@ package cache
 import "strings"
 
 const (
-	SemanticCacheCategoryGeneral       = "general"
-	SemanticCacheCategorySupportRefund = "support_refund"
-	SemanticCacheCategoryCode          = "code"
-	SemanticCacheCategoryTranslation   = "translation"
-	SemanticCacheCategoryReasoning     = "reasoning"
-	SemanticCacheCategorySensitive     = "sensitive"
-	SemanticCacheCategoryToolCall      = "tool_call"
-	SemanticCacheCategoryUnknown       = "unknown"
+	SemanticCacheCategoryGeneral         = "general"
+	SemanticCacheCategorySupportRefund   = "support_refund"
+	SemanticCacheCategoryCode            = "code"
+	SemanticCacheCategoryTranslation     = "translation"
+	SemanticCacheCategorySummarization   = "summarization"
+	SemanticCacheCategoryExtractionJSON  = "extraction_json"
+	SemanticCacheCategoryReasoning       = "reasoning"
+	SemanticCacheCategorySensitive       = "sensitive"
+	SemanticCacheCategoryToolCall        = "tool_call"
+	SemanticCacheCategoryUnknown         = "unknown"
 )
 
 type SemanticCacheCategoryPolicy struct {
@@ -46,6 +48,10 @@ func CanonicalSemanticCacheCategory(category string) string {
 		return SemanticCacheCategoryCode
 	case SemanticCacheCategoryTranslation:
 		return SemanticCacheCategoryTranslation
+	case SemanticCacheCategorySummarization:
+		return SemanticCacheCategorySummarization
+	case SemanticCacheCategoryExtractionJSON:
+		return SemanticCacheCategoryExtractionJSON
 	case SemanticCacheCategoryReasoning:
 		return SemanticCacheCategoryReasoning
 	case SemanticCacheCategorySensitive:

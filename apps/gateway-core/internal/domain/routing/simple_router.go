@@ -10,12 +10,15 @@ const (
 	DefaultPolicyHash          = "route_p0_v1"
 	DefaultShortPromptMaxChars = 300
 
-	ReasonShortPromptLowCost   = "short_prompt_low_cost"
-	ReasonDefaultBalanced      = "default_balanced"
-	ReasonPinned               = "pinned"
-	ReasonCodeHighQuality      = "category_code_high_quality"
-	ReasonTranslationBalanced  = "category_translation_balanced"
-	ReasonSupportRefundLowCost = "category_support_refund_low_cost"
+	ReasonShortPromptLowCost     = "short_prompt_low_cost"
+	ReasonDefaultBalanced        = "default_balanced"
+	ReasonPinned                 = "pinned"
+	ReasonCodeHighQuality        = "category_code_high_quality"
+	ReasonTranslationBalanced    = "category_translation_balanced"
+	ReasonSummarizationBalanced  = "category_summarization_balanced"
+	ReasonExtractionJSONBalanced = "category_extraction_json_balanced"
+	ReasonSupportRefundLowCost   = "category_support_refund_low_cost"
+	ReasonReasoningHighQuality   = "category_reasoning_high_quality"
 )
 
 type SimpleRouterConfig struct {
@@ -163,10 +166,18 @@ func autoRouteForCategory(category string, prompt string, config SimpleRouterCon
 	switch canonicalCategory(category) {
 	case CategoryCode:
 		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
+	case CategoryReasoning:
+		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonReasoningHighQuality
 	case CategoryTranslation:
 		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonTranslationBalanced
+	case CategorySummarization:
+		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonSummarizationBalanced
+	case CategoryExtractionJSON:
+		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonExtractionJSONBalanced
 	case CategorySupportRefund:
 		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
+	case CategoryUnknown:
+		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
 	}
 
 	if utf8.RuneCountInString(prompt) <= config.ShortPromptMaxChars {

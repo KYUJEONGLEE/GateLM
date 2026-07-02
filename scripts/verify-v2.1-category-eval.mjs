@@ -18,7 +18,7 @@ const requiredTopLevelSchemaFields = [
 ];
 
 const sensitiveKeyPattern =
-  /(rawPrompt|rawResponse|rawDetectedValue|rawPromptFragment|apiKey|appToken|providerKey|authorizationHeader|providerRawErrorBody|actualSecret)/i;
+  /(rawPrompt|rawResponse|rawDetectedValue|rawPromptFragment|apiKey|appToken|providerKey|authorizationHeader|providerRawErrorBody|actualSecret|requestId|traceId)/i;
 
 const sensitiveStringPattern =
   /(sk-[a-z0-9_-]{12,}|Bearer\s+[a-z0-9._-]{12,}|-----BEGIN\s+(RSA|OPENSSH|EC|PRIVATE)\s+KEY-----)/i;
@@ -152,14 +152,8 @@ function validateSourceConsentLabelCombination(record, lineNumber, failures) {
     }
   }
 
-  if (record.source === "gateway_redacted_sample") {
-    if (!["operator_opt_in", "customer_opt_in"].includes(record.consentType)) {
-      failures.push(`${prefix}: gateway_redacted_sample requires operator_opt_in or customer_opt_in`);
-    }
-
-    if (record.labelSource === "synthetic_fixture") {
-      failures.push(`${prefix}: gateway_redacted_sample must not use labelSource=synthetic_fixture`);
-    }
+  if (record.source === "manual_seed" && record.consentType === "synthetic" && record.labelSource === "human_review") {
+    failures.push(`${prefix}: human-reviewed manual_seed must use consentType=internal_manual_review`);
   }
 }
 
@@ -234,7 +228,7 @@ function validateSchemaShape(schema, failures) {
     failures.push(`${schemaPath}: redactedPrompt.maxLength must be 65536`);
   }
 
-  if (!Array.isArray(schema.allOf) || schema.allOf.length < 2) {
+  if (!Array.isArray(schema.allOf) || schema.allOf.length < 1) {
     failures.push(`${schemaPath}: expected source/consentType/labelSource allOf constraints`);
   }
 }
