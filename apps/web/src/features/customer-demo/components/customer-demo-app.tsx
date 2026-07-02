@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { Button } from "@/components/ui/button";
-import {
-  formatDisplayIdentifier,
-  formatTenantDisplayName
-} from "@/lib/formatting/display-identifiers";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
@@ -26,41 +23,25 @@ const customerDemoText: Record<
   Locale,
   {
     actions: {
-      detail: string;
       loading: string;
       replay: string;
       send: string;
-      streaming: string;
     };
-    assistantLabel: string;
     chatPreview: string;
-    context: {
-      application: string;
-      project: string;
-      tenant: string;
-    };
-    detectedNone: string;
     error: string;
-    gatewayRequest: string;
-    gatewayResult: string;
     language: string;
-    requestMetadata: string;
-    responseMetadata: string;
     scenarios: Record<
       CustomerDemoScenarioId,
       {
         title: string;
       }
     >;
-    scenarioSelector: string;
     summary: {
       cache: string;
-      http: string;
       latency: string;
       masking: string;
     };
     title: string;
-    userLabel: string;
     withheld: {
       assistant: string;
       blocked: string;
@@ -76,26 +57,13 @@ const customerDemoText: Record<
 > = {
   en: {
     actions: {
-      detail: "Open request detail",
       loading: "Processing...",
       replay: "Replay fixture request",
-      send: "Send Gateway request",
-      streaming: "Send streaming request"
+      send: "Send Gateway request"
     },
-    assistantLabel: "Assistant / Gateway outcome",
     chatPreview: "conversation",
-    context: {
-      application: "Application",
-      project: "Project",
-      tenant: "Tenant"
-    },
-    detectedNone: "none",
     error: "Unable to load this request state.",
-    gatewayRequest: "Gateway request",
-    gatewayResult: "Gateway result",
     language: "Console language",
-    requestMetadata: "Request metadata",
-    responseMetadata: "Response metadata",
     scenarios: {
       blocked: {
         title: "Blocked"
@@ -119,15 +87,12 @@ const customerDemoText: Record<
         title: "Safe request"
       }
     },
-    scenarioSelector: "Request path",
     summary: {
       cache: "Cache",
-      http: "HTTP status",
       latency: "Latency",
       masking: "Masking"
     },
     title: "Gateway request",
-    userLabel: "Customer message",
     withheld: {
       assistant: "Gateway response content is withheld from the console. Use metadata and request detail for verification.",
       blocked: "Blocked before provider call.",
@@ -142,26 +107,13 @@ const customerDemoText: Record<
   },
   ko: {
     actions: {
-      detail: "요청 상세 열기",
       loading: "처리 중...",
       replay: "Fixture 요청 재실행",
-      send: "Gateway 요청 전송",
-      streaming: "Streaming 요청 전송"
+      send: "Gateway 요청 전송"
     },
-    assistantLabel: "Assistant / Gateway 결과",
     chatPreview: "대화",
-    context: {
-      application: "애플리케이션",
-      project: "프로젝트",
-      tenant: "테넌트"
-    },
-    detectedNone: "없음",
     error: "요청 상태를 불러오지 못했습니다.",
-    gatewayRequest: "Gateway 요청",
-    gatewayResult: "Gateway 결과",
     language: "콘솔 언어",
-    requestMetadata: "요청 메타데이터",
-    responseMetadata: "응답 메타데이터",
     scenarios: {
       blocked: {
         title: "차단"
@@ -185,15 +137,12 @@ const customerDemoText: Record<
         title: "Safe 요청"
       }
     },
-    scenarioSelector: "처리 유형",
     summary: {
       cache: "캐시",
-      http: "HTTP 상태",
       latency: "지연 시간",
       masking: "마스킹"
     },
     title: "Gateway 요청",
-    userLabel: "고객 메시지",
     withheld: {
       assistant: "Gateway 응답 원문은 콘솔에 표시하지 않습니다. 검증은 metadata와 요청 상세에서 확인합니다.",
       blocked: "Provider 호출 전에 차단되었습니다.",
@@ -223,27 +172,9 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const requestInFlight = useRef(false);
   const hasScenarios = model.scenarios.length > 0;
-  const hasRequestDetail = isRequestDetailAvailable(exchange);
-  const canSendStreaming = hasScenarios && isStreamingSupportedScenario(exchange.scenarioId);
   const text = customerDemoText[locale];
   const exchangeText = text.scenarios[exchange.scenarioId];
-  const tenantLabel = formatTenantDisplayName(model.tenantId);
   const chatMessages = getChatMessages(exchange, locale, text);
-
-  const previewScenario = useCallback((scenarioId: CustomerDemoScenarioId) => {
-    if (requestInFlight.current) {
-      return;
-    }
-
-    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
-
-    if (!scenario) {
-      return;
-    }
-
-    setLoadError(null);
-    setExchange(model.integrationMode === "gateway" ? buildPendingExchange(model, scenario) : scenario);
-  }, [model]);
 
   const sendScenario = useCallback(async (
     scenarioId: CustomerDemoScenarioId,
@@ -287,33 +218,6 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
       </header>
 
       <section className="customer-chat-stage" aria-label="Local application chat">
-        <aside className="customer-chat-scenario-rail" aria-label={text.scenarioSelector}>
-          <div className="customer-demo-section-title">
-            <span>{tenantLabel}</span>
-            <h2>{text.scenarioSelector}</h2>
-          </div>
-          <div className="customer-chat-scenario-list">
-            {model.scenarios.map((scenario) => {
-              const scenarioText = text.scenarios[scenario.scenarioId];
-
-              return (
-                <button
-                  className="customer-chat-scenario-chip"
-                  data-active={scenario.scenarioId === exchange.scenarioId}
-                  data-status={scenario.status}
-                  disabled={isLoading}
-                  key={scenario.scenarioId}
-                  onClick={() => previewScenario(scenario.scenarioId)}
-                  type="button"
-                >
-                  <span>{scenario.httpStatus}</span>
-                  <strong>{scenarioText.title}</strong>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
         <section className="customer-chat-phone" aria-busy={isLoading}>
           <header className="customer-chat-phone-header">
             <button aria-label="Back" className="customer-chat-icon-button" type="button">
@@ -402,53 +306,6 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             </Button>
           </footer>
         </section>
-
-        <aside className="customer-chat-evidence" aria-label={text.gatewayResult}>
-          <div className="customer-chat-evidence-header">
-            <p className="console-kicker">{text.gatewayResult}</p>
-            <h2>{exchange.status}</h2>
-          </div>
-          <dl className="customer-chat-evidence-grid">
-            <Metric label={text.summary.http} value={String(exchange.httpStatus)} />
-            <Metric label={text.summary.cache} value={exchange.cacheStatus} />
-            <Metric label={text.summary.masking} value={exchange.maskingAction} />
-            <Metric label={text.summary.latency} value={`${exchange.latencyMs} ms`} />
-            <Metric label="Request ID" value={formatDisplayIdentifier(exchange.requestId)} />
-            <Metric label="Provider" value={exchange.providerCall} />
-            <Metric
-              label="Detected"
-              value={
-                exchange.detectedTypes.length > 0
-                  ? exchange.detectedTypes.join(", ")
-                  : text.detectedNone
-              }
-            />
-            <Metric
-              label="Stream"
-              value={exchange.streaming.requested ? text.actions.streaming : "off"}
-            />
-          </dl>
-          <div className="customer-chat-evidence-actions">
-            <Button
-              className="secondary-button"
-              disabled={isLoading || !canSendStreaming}
-              onClick={() => sendScenario(exchange.scenarioId, { stream: true })}
-              type="button"
-              variant="outline"
-            >
-              {isLoading ? text.actions.loading : text.actions.streaming}
-            </Button>
-            {hasRequestDetail ? (
-              <Link className="secondary-button" href={exchange.requestLogHref}>
-                {text.actions.detail}
-              </Link>
-            ) : (
-              <Button className="secondary-button" disabled type="button" variant="outline">
-                {text.actions.detail}
-              </Button>
-            )}
-          </div>
-        </aside>
       </section>
     </main>
   );
@@ -503,18 +360,6 @@ function buildPendingExchange(
     },
     title: scenario.title
   };
-}
-
-function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
-  return (
-    exchange.requestId !== "pending-live-request" &&
-    exchange.requestId !== "not-configured" &&
-    exchange.requestLogHref.includes(`/request-logs?requestId=${encodeURIComponent(exchange.requestId)}`)
-  );
-}
-
-function isStreamingSupportedScenario(scenarioId: CustomerDemoScenarioId) {
-  return scenarioId !== "provider-timeout" && scenarioId !== "provider-fallback";
 }
 
 function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
@@ -640,15 +485,6 @@ function getChatMessages(
       side: "incoming" as const
     }
   ];
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
 }
 
 function getSafeOutcomeMessage(
