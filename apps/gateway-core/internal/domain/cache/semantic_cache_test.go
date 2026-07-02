@@ -346,6 +346,7 @@ func TestSemanticCacheServiceNormalizesInputInternally(t *testing.T) {
 		TopK:          3,
 		TTL:           time.Hour,
 		PolicyVersion: "v1",
+		HitPolicy:     testSemanticHitPolicy(t),
 	})
 
 	decision, err := service.Upsert(ctx, SemanticCacheStoreRequest{
@@ -375,11 +376,98 @@ func TestSemanticCacheServiceNormalizesInputInternally(t *testing.T) {
 	}
 }
 
+func TestSemanticCacheServiceRequiresIntentMaterialForHit(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	store := NewInMemorySemanticCacheStore(10)
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	provider := NewFakeEmbeddingProvider("fake-test")
+	service := NewSemanticCacheService(store, provider, SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+		HitPolicy:     testSemanticHitPolicy(t),
+	})
+
+	legacyEntry := testSemanticEntry("entry-legacy", "request-legacy", boundary, testSemanticVector(t, provider, "비밀번호 재설정 방법 알려줘"), now, now.Add(time.Hour))
+	if err := store.Upsert(ctx, legacyEntry); err != nil {
+		t.Fatalf("legacy semantic entry 저장 실패: %v", err)
+	}
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:       boundary,
+		NormalizedText: "패스워드 초기화는 어떻게 해?",
+	})
+	if err != nil {
+		t.Fatalf("semantic search 실패: %v", err)
+	}
+	if result.Hit || decision.SemanticCacheHit {
+		t.Fatalf("intent material 없는 legacy entry는 similarity가 높아도 hit 금지여야 함: result=%+v decision=%+v", result, decision)
+	}
+	if decision.SemanticCacheDecisionReason != SemanticCacheReasonIntentMaterialMissing {
+		t.Fatalf("legacy entry miss reason 불일치: %+v", decision)
+	}
+}
+
+func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	store := NewInMemorySemanticCacheStore(10)
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
+	service := NewSemanticCacheService(store, provider, SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+		HitPolicy:     testSemanticHitPolicy(t),
+	})
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:       boundary,
+		NormalizedText: "비밀번호 재설정 방법 알려줘",
+	})
+	if err != nil {
+		t.Fatalf("semantic search 실패: %v", err)
+	}
+	if result.Hit || len(result.QueryVector) == 0 || decision.SemanticCacheDecisionReason != SemanticCacheReasonNoBoundaryMatch {
+		t.Fatalf("첫 lookup은 miss이고 query vector를 반환해야 함: result=%+v decision=%+v", result, decision)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("lookup에서 embedding을 1회 생성해야 함: got %d", provider.calls)
+	}
+
+	decision, err = service.Upsert(ctx, SemanticCacheStoreRequest{
+		EntryID:         "entry-reuse",
+		RequestID:       "request-reuse",
+		Boundary:        boundary,
+		NormalizedText:  "비밀번호 재설정 방법 알려줘",
+		EmbeddingVector: result.QueryVector,
+		CachedResponse:  []byte(`{"answer":"normalized safe response"}`),
+		Now:             now,
+	})
+	if err != nil {
+		t.Fatalf("semantic upsert 실패: %v", err)
+	}
+	if decision.SemanticCacheDecisionReason != SemanticCacheReasonStored {
+		t.Fatalf("store decision reason 불일치: %+v", decision)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("제공된 embedding vector가 있으면 store에서 embedding을 재생성하면 안 됨: got %d", provider.calls)
+	}
+}
+
 func TestSemanticCacheServiceRejectsForbiddenInputAfterNormalization(t *testing.T) {
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)
 	service := NewSemanticCacheService(NewInMemorySemanticCacheStore(10), NewFakeEmbeddingProvider("fake-test"), SemanticCacheServiceConfig{
-		Enabled: true,
+		Enabled:   true,
+		HitPolicy: testSemanticHitPolicy(t),
 	})
 
 	_, _, err := service.Search(ctx, SemanticCacheLookupRequest{
@@ -499,4 +587,22 @@ func testSemanticEntry(entryID string, requestID string, boundary SemanticCacheB
 		ExpiresAt:                  expiresAt,
 		SemanticCachePolicyVersion: "v1",
 	}
+}
+
+type countingTestEmbeddingProvider struct {
+	delegate FakeEmbeddingProvider
+	calls    int
+}
+
+func (p *countingTestEmbeddingProvider) Embed(ctx context.Context, input EmbeddingInput) (EmbeddingResult, error) {
+	p.calls++
+	return p.delegate.Embed(ctx, input)
+}
+
+func (p *countingTestEmbeddingProvider) ProviderName() string {
+	return p.delegate.ProviderName()
+}
+
+func (p *countingTestEmbeddingProvider) ModelName() string {
+	return p.delegate.ModelName()
 }

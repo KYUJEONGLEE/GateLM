@@ -4,6 +4,7 @@ import "strings"
 
 const (
 	SemanticCacheCategoryGeneral       = "general"
+	SemanticCacheCategoryAccountAccess = "account_access"
 	SemanticCacheCategorySupportRefund = "support_refund"
 	SemanticCacheCategoryCode          = "code"
 	SemanticCacheCategoryTranslation   = "translation"
@@ -40,6 +41,8 @@ func CanonicalSemanticCacheCategory(category string) string {
 	switch strings.TrimSpace(strings.ToLower(category)) {
 	case SemanticCacheCategoryGeneral:
 		return SemanticCacheCategoryGeneral
+	case SemanticCacheCategoryAccountAccess:
+		return SemanticCacheCategoryAccountAccess
 	case SemanticCacheCategorySupportRefund:
 		return SemanticCacheCategorySupportRefund
 	case SemanticCacheCategoryCode:

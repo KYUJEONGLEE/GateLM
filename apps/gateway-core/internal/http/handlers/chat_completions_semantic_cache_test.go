@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,30 @@ func TestChatCompletionsSemanticCacheFirstRequestMissThenStores(t *testing.T) {
 	}
 	if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonStored {
 		t.Fatalf("provider 성공 후 semantic store reason이 남아야 함: %q", logged.SemanticCacheDecisionReason)
+	}
+}
+
+func TestChatCompletionsSemanticCacheMissReusesLookupEmbeddingForStore(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+
+	rr := harness.exercise(t, "sc_embedding_reuse", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Semantic Cache miss 후 store 요청은 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if semantic.searchCalls != 1 || semantic.upsertCalls != 1 {
+		t.Fatalf("miss 후 lookup/store 호출 수 불일치: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+	}
+	if embeddingProvider.calls != 1 {
+		t.Fatalf("lookup에서 만든 embedding vector를 store에 재사용해야 함: embeddingCalls=%d", embeddingProvider.calls)
+	}
+	if len(semantic.searchResults) != 1 || len(semantic.searchResults[0].QueryVector) == 0 {
+		t.Fatalf("lookup miss 결과에는 store 재사용용 query vector가 있어야 함: %+v", semantic.searchResults)
+	}
+	if len(semantic.storeRequests) != 1 || len(semantic.storeRequests[0].EmbeddingVector) == 0 {
+		t.Fatalf("store request에는 재사용 embedding vector가 전달되어야 함: %+v", semantic.storeRequests)
 	}
 }
 
@@ -231,10 +256,58 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 			t.Fatalf("한국어 support_refund cache log 불일치: category=%q cacheType=%q", logged.PromptCategory, logged.CacheType)
 		}
 	})
+
+	t.Run("support refund similar requests hit", func(t *testing.T) {
+		semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, supportRefundSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")})
+		harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+		harness.routes["sc_ko_refund_hit_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+		harness.routes["sc_ko_refund_hit_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+
+		first := harness.exercise(t, "sc_ko_refund_hit_first", routingAwareChatBody("auto", "배송비도 환불되나요?"))
+		second := harness.exercise(t, "sc_ko_refund_hit_second", routingAwareChatBody("auto", "반품하면 배송비도 돌려받나요?"))
+
+		if first.Code != http.StatusOK || second.Code != http.StatusOK {
+			t.Fatalf("한국어 support_refund 유사 요청은 모두 성공해야 함: first=%d second=%d body=%s", first.Code, second.Code, second.Body.String())
+		}
+		if harness.provider.calls != 1 {
+			t.Fatalf("한국어 support_refund 유사 요청 hit는 provider 재호출 금지: calls=%d", harness.provider.calls)
+		}
+		resp := decodeSemanticChatResponse(t, second)
+		if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || !resp.GateLM.SemanticCacheHit || resp.GateLM.ProviderCalled {
+			t.Fatalf("한국어 support_refund semantic hit metadata 불일치: %+v", resp.GateLM)
+		}
+		if resp.GateLM.SemanticMatchedRequestID != "sc_ko_refund_hit_first" {
+			t.Fatalf("support_refund semanticMatchedRequestId는 첫 요청이어야 함: %q", resp.GateLM.SemanticMatchedRequestID)
+		}
+	})
+
+	t.Run("support refund hard negative misses", func(t *testing.T) {
+		semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, supportRefundSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")})
+		harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+		harness.routes["sc_ko_refund_negative_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+		harness.routes["sc_ko_refund_negative_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+
+		first := harness.exercise(t, "sc_ko_refund_negative_first", routingAwareChatBody("auto", "배송비도 환불되나요?"))
+		second := harness.exercise(t, "sc_ko_refund_negative_second", routingAwareChatBody("auto", "주문 취소하고 싶어요"))
+
+		if first.Code != http.StatusOK || second.Code != http.StatusOK {
+			t.Fatalf("support_refund hard negative 요청은 모두 provider flow로 성공해야 함: first=%d second=%d body=%s", first.Code, second.Code, second.Body.String())
+		}
+		if harness.provider.calls != 2 {
+			t.Fatalf("shipping fee refund와 order cancel은 similarity가 높아도 provider 재호출이어야 함: calls=%d", harness.provider.calls)
+		}
+		if len(harness.semantic.searchResults) < 2 || harness.semantic.searchResults[1].Reason != cachekey.SemanticCacheReasonHardNegative {
+			t.Fatalf("support_refund hard negative lookup reason 불일치: %+v", harness.semantic.searchResults)
+		}
+		resp := decodeSemanticChatResponse(t, second)
+		if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || !resp.GateLM.ProviderCalled {
+			t.Fatalf("support_refund hard negative metadata 불일치: %+v", resp.GateLM)
+		}
+	})
 }
 
 func TestChatCompletionsSemanticCacheTenantProjectApplicationIsolation(t *testing.T) {
-	semantic := newCountingSemanticCacheService(true)
+	semantic := newCountingSemanticCacheService(t, true)
 	first := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant-a", "project-a", "app-a")
 	second := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant-b", "project-a", "app-a")
 
@@ -259,7 +332,7 @@ func TestChatCompletionsSemanticCacheTenantProjectApplicationIsolation(t *testin
 		}},
 	} {
 		t.Run(mutate.name, func(t *testing.T) {
-			shared := newCountingSemanticCacheService(true)
+			shared := newCountingSemanticCacheService(t, true)
 			a, b := mutate.make(shared)
 			a.exercise(t, "sc_"+mutate.name+"_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
 			b.exercise(t, "sc_"+mutate.name+"_second", routingAwareChatBody("auto", "패스워드 초기화는 어떻게 해?"))
@@ -319,6 +392,22 @@ func TestChatCompletionsSemanticCacheRoutingDecisionKeyHashIsolation(t *testing.
 
 	if harness.provider.calls != 2 {
 		t.Fatalf("routingDecisionKeyHash가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
+	}
+}
+
+func TestChatCompletionsSemanticCachePromptCategoryIsolation(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+	harness.routes["sc_category_boundary_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+	harness.routes["sc_category_boundary_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategorySupportRefund}
+
+	harness.exercise(t, "sc_category_boundary_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+	harness.exercise(t, "sc_category_boundary_second", routingAwareChatBody("auto", "배송비도 환불되나요?"))
+
+	if harness.provider.calls != 2 {
+		t.Fatalf("promptCategory가 다르면 semantic hit 금지: calls=%d", harness.provider.calls)
+	}
+	if len(harness.semantic.searchResults) < 2 || harness.semantic.searchResults[1].Reason != cachekey.SemanticCacheReasonNoBoundaryMatch {
+		t.Fatalf("promptCategory 차이는 boundary miss로 기록되어야 함: %+v", harness.semantic.searchResults)
 	}
 }
 
@@ -467,7 +556,7 @@ func newSemanticCacheHarnessWithIdentity(t *testing.T, semantic *countingSemanti
 
 func newSemanticCacheHarnessWithProvider(t *testing.T, enabled bool, adapters ...*routingAwareProviderAdapter) *semanticCacheHarness {
 	t.Helper()
-	return newSemanticCacheHarnessWithService(t, newCountingSemanticCacheService(enabled), adapters...)
+	return newSemanticCacheHarnessWithService(t, newCountingSemanticCacheService(t, enabled), adapters...)
 }
 
 func newSemanticCacheHarnessWithService(t *testing.T, semantic *countingSemanticCacheService, adapters ...*routingAwareProviderAdapter) *semanticCacheHarness {
@@ -543,17 +632,75 @@ type countingSemanticCacheService struct {
 	searchResults  []cachekey.SemanticCacheSearchResult
 }
 
-func newCountingSemanticCacheService(enabled bool) *countingSemanticCacheService {
+func newCountingSemanticCacheService(t *testing.T, enabled bool) *countingSemanticCacheService {
+	t.Helper()
+	return newCountingSemanticCacheServiceWithEmbeddingProvider(t, enabled, cachekey.NewFakeEmbeddingProvider("fake-test"))
+}
+
+func newCountingSemanticCacheServiceWithEmbeddingProvider(t *testing.T, enabled bool, embeddingProvider cachekey.EmbeddingProvider) *countingSemanticCacheService {
+	t.Helper()
 	store := cachekey.NewInMemorySemanticCacheStore(100)
-	embeddingProvider := cachekey.NewFakeEmbeddingProvider("fake-test")
 	service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
 		Enabled:       enabled,
 		Threshold:     0.92,
 		TopK:          3,
 		TTL:           time.Hour,
 		PolicyVersion: "v1",
+		HitPolicy:     testHandlerSemanticHitPolicy(t),
 	})
 	return &countingSemanticCacheService{service: service}
+}
+
+func testHandlerSemanticHitPolicy(t *testing.T) *cachekey.SemanticCacheHitPolicy {
+	t.Helper()
+	policy, err := cachekey.LoadSemanticCacheHitPolicyFile(filepath.Join("..", "..", "domain", "cache", "testdata", "semantic_cache_policy_ko_v1.json"))
+	if err != nil {
+		t.Fatalf("semantic cache test policy 로드 실패: %v", err)
+	}
+	return &policy
+}
+
+type countingSemanticEmbeddingProvider struct {
+	delegate cachekey.FakeEmbeddingProvider
+	calls    int
+}
+
+func (p *countingSemanticEmbeddingProvider) Embed(ctx context.Context, input cachekey.EmbeddingInput) (cachekey.EmbeddingResult, error) {
+	p.calls++
+	return p.delegate.Embed(ctx, input)
+}
+
+func (p *countingSemanticEmbeddingProvider) ProviderName() string {
+	return p.delegate.ProviderName()
+}
+
+func (p *countingSemanticEmbeddingProvider) ModelName() string {
+	return p.delegate.ModelName()
+}
+
+type supportRefundSemanticEmbeddingProvider struct {
+	delegate cachekey.FakeEmbeddingProvider
+}
+
+func (p supportRefundSemanticEmbeddingProvider) Embed(ctx context.Context, input cachekey.EmbeddingInput) (cachekey.EmbeddingResult, error) {
+	if err := ctx.Err(); err != nil {
+		return cachekey.EmbeddingResult{}, err
+	}
+	normalized := strings.ToLower(input.NormalizedText)
+	if strings.Contains(normalized, "배송비") ||
+		strings.Contains(normalized, "반품") ||
+		strings.Contains(normalized, "주문 취소") {
+		return cachekey.EmbeddingResult{Vector: []float64{0, 0, 1, 0, 0, 0}, Model: p.ModelName()}, nil
+	}
+	return p.delegate.Embed(ctx, input)
+}
+
+func (p supportRefundSemanticEmbeddingProvider) ProviderName() string {
+	return p.delegate.ProviderName()
+}
+
+func (p supportRefundSemanticEmbeddingProvider) ModelName() string {
+	return p.delegate.ModelName()
 }
 
 func (s *countingSemanticCacheService) Enabled() bool {

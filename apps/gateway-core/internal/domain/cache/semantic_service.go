@@ -18,20 +18,24 @@ type SemanticCacheServiceConfig struct {
 	TopK          int
 	TTL           time.Duration
 	PolicyVersion string
+	HitPolicy     *SemanticCacheHitPolicy
 }
 
 type SemanticCacheLookupRequest struct {
 	Boundary       SemanticCacheBoundary
 	NormalizedText string
+	IntentMaterial SemanticCacheIntentMaterial
 }
 
 type SemanticCacheStoreRequest struct {
-	EntryID        string
-	RequestID      string
-	Boundary       SemanticCacheBoundary
-	NormalizedText string
-	CachedResponse []byte
-	Now            time.Time
+	EntryID         string
+	RequestID       string
+	Boundary        SemanticCacheBoundary
+	NormalizedText  string
+	IntentMaterial  SemanticCacheIntentMaterial
+	EmbeddingVector []float64
+	CachedResponse  []byte
+	Now             time.Time
 }
 
 type SemanticCacheService struct {
@@ -53,6 +57,14 @@ func NewSemanticCacheService(store SemanticCacheStore, embeddingProvider Embeddi
 	config.PolicyVersion = strings.TrimSpace(config.PolicyVersion)
 	if config.PolicyVersion == "" {
 		config.PolicyVersion = "v1"
+	}
+	if config.HitPolicy != nil {
+		normalizedPolicy, err := config.HitPolicy.Normalize()
+		if err == nil {
+			config.HitPolicy = &normalizedPolicy
+		} else {
+			config.HitPolicy = nil
+		}
 	}
 	return SemanticCacheService{
 		store:             store,
@@ -105,13 +117,23 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		result.Reason = SemanticCacheReasonInvalidVector
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
+	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
+	if s.intentPolicyConfigured() && !intentOK {
+		result.Reason = intentReason
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 
 	embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: normalizedText})
 	if err != nil {
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), err
 	}
-	result, err = s.store.Search(ctx, request.Boundary, embedding.Vector, s.config.Threshold, s.config.TopK)
+	queryVector := append([]float64(nil), embedding.Vector...)
+	threshold := s.intentThreshold(intentMaterial)
+	result, err = s.store.Search(ctx, request.Boundary, queryVector, threshold, s.config.TopK)
+	result.QueryVector = queryVector
+	result.IntentMaterial = intentMaterial
+	result = s.applyHitPolicy(result, intentMaterial, threshold)
 	return result, result.Decision(true, providerName, s.config.PolicyVersion), err
 }
 
@@ -140,21 +162,35 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 		result.Reason = SemanticCacheReasonPayloadUnsafe
 		return result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
+	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
+	if s.intentPolicyConfigured() && !intentOK {
+		result.Reason = intentReason
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
+	if !s.intentPolicyConfigured() {
+		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 
 	now := request.Now
 	if now.IsZero() {
 		now = time.Now()
 	}
-	embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: normalizedText})
-	if err != nil {
-		result.Reason = SemanticCacheReasonEmbeddingFailure
-		return result.Decision(true, providerName, s.config.PolicyVersion), err
+	embeddingVector := append([]float64(nil), request.EmbeddingVector...)
+	if !isUsableSemanticVector(embeddingVector) {
+		embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: normalizedText})
+		if err != nil {
+			result.Reason = SemanticCacheReasonEmbeddingFailure
+			return result.Decision(true, providerName, s.config.PolicyVersion), err
+		}
+		embeddingVector = append([]float64(nil), embedding.Vector...)
 	}
-	err = s.store.Upsert(ctx, SemanticCacheEntry{
+	err := s.store.Upsert(ctx, SemanticCacheEntry{
 		EntryID:                    request.EntryID,
 		RequestID:                  request.RequestID,
 		Boundary:                   request.Boundary,
-		EmbeddingVector:            embedding.Vector,
+		IntentMaterial:             intentMaterial,
+		EmbeddingVector:            embeddingVector,
 		CachedResponse:             request.CachedResponse,
 		CreatedAt:                  now,
 		ExpiresAt:                  now.Add(s.config.TTL),
@@ -172,10 +208,83 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 	return result.Decision(true, providerName, s.config.PolicyVersion), nil
 }
 
+func (s SemanticCacheService) intentPolicyConfigured() bool {
+	return s.config.HitPolicy != nil && s.config.HitPolicy.Configured()
+}
+
+func (s SemanticCacheService) intentMaterial(category string, normalizedText string, provided SemanticCacheIntentMaterial) (SemanticCacheIntentMaterial, string, bool) {
+	provided = provided.Normalize()
+	if !provided.IsZero() {
+		return provided, SemanticCacheReasonHit, true
+	}
+	if !s.intentPolicyConfigured() {
+		return SemanticCacheIntentMaterial{}, SemanticCacheReasonIntentPolicyUnavailable, false
+	}
+	material, decision := s.config.HitPolicy.Materialize(category, normalizedText)
+	return material, firstSemanticReason(decision.Reason, SemanticCacheReasonIntentUnavailable), !material.IsZero()
+}
+
+func (s SemanticCacheService) intentThreshold(material SemanticCacheIntentMaterial) float64 {
+	if s.intentPolicyConfigured() {
+		return s.config.HitPolicy.CategoryThreshold(material.Category, s.config.Threshold)
+	}
+	return s.config.Threshold
+}
+
+func (s SemanticCacheService) applyHitPolicy(result SemanticCacheSearchResult, requestMaterial SemanticCacheIntentMaterial, threshold float64) SemanticCacheSearchResult {
+	if !result.Hit || len(result.Matches) == 0 {
+		return result
+	}
+	if !s.intentPolicyConfigured() {
+		result.Hit = false
+		result.MatchedEntry = nil
+		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
+		return result
+	}
+
+	bestRejectedReason := ""
+	filteredMatches := make([]SemanticCacheMatch, 0, len(result.Matches))
+	for _, match := range result.Matches {
+		decision := s.config.HitPolicy.Evaluate(requestMaterial, match.Entry.IntentMaterial, match.Similarity, threshold)
+		if decision.ProviderBypassAllowed {
+			filteredMatches = append(filteredMatches, match)
+			continue
+		}
+		if bestRejectedReason == "" {
+			bestRejectedReason = firstSemanticReason(decision.Reason, SemanticCacheReasonIntentMismatch)
+			result.Similarity = match.Similarity
+		}
+	}
+	if len(filteredMatches) == 0 {
+		result.Hit = false
+		result.MatchedEntry = nil
+		result.Reason = firstSemanticReason(bestRejectedReason, SemanticCacheReasonIntentMismatch)
+		result.Matches = nil
+		return result
+	}
+
+	best := filteredMatches[0].Entry.Clone()
+	result.Hit = true
+	result.MatchedEntry = &best
+	result.Similarity = filteredMatches[0].Similarity
+	result.Reason = SemanticCacheReasonHit
+	result.Matches = filteredMatches
+	return result
+}
+
 func safeSemanticCacheText(text string) (string, bool) {
 	normalized := normalizeSemanticText(text)
 	if normalized == "" {
 		return "", false
 	}
 	return normalized, !containsForbiddenSemanticCachePayload([]byte(normalized))
+}
+
+func firstSemanticReason(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

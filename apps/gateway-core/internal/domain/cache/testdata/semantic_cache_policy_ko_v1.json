@@ -1,0 +1,138 @@
+{
+  "semanticCachePolicyVersion": "v1",
+  "canonicalizationVersion": "ko-canon-v1",
+  "synonymPolicyVersion": "ko-synonym-v1",
+  "defaultThreshold": 0.92,
+  "categories": {
+    "general": {
+      "enabled": true,
+      "mode": "strict_hit",
+      "categoryThreshold": 0.92,
+      "requiresIntent": true,
+      "requiresRequiredSlots": true,
+      "requiresHardNegative": true
+    },
+    "account_access": {
+      "enabled": true,
+      "mode": "strict_hit",
+      "categoryThreshold": 0.92,
+      "requiresIntent": true,
+      "requiresRequiredSlots": true,
+      "requiresHardNegative": true
+    },
+    "support_refund": {
+      "enabled": true,
+      "mode": "strict_hit",
+      "categoryThreshold": 0.92,
+      "requiresIntent": true,
+      "requiresRequiredSlots": true,
+      "requiresHardNegative": true
+    },
+    "translation": {
+      "enabled": false,
+      "mode": "disabled"
+    },
+    "code": {
+      "enabled": false,
+      "mode": "disabled"
+    },
+    "unknown": {
+      "enabled": false,
+      "mode": "disabled"
+    }
+  },
+  "synonyms": {
+    "ko": {
+      "password": ["비밀번호", "패스워드", "비번", "password"],
+      "password_reset": ["재설정", "초기화", "리셋", "reset"],
+      "api_key": ["API Key", "API 키", "api key"],
+      "create": ["발급", "생성", "만들", "새로 만들"],
+      "usage": ["사용량", "이용량", "사용 통계", "사용량 통계"],
+      "monthly": ["이번 달", "월간", "당월"],
+      "refund": ["환불", "환급", "돌려받"],
+      "return": ["반품", "반송"],
+      "cancel": ["취소"],
+      "order": ["주문"],
+      "exchange": ["교환", "교환 신청"],
+      "shipping_fee": ["배송비", "운송비", "반품 배송비"]
+    }
+  },
+  "intents": {
+    "account.password_reset": {
+      "category": "account_access",
+      "matchAll": ["password", "password_reset"],
+      "requiredSlots": {
+        "accountAction": "password_reset"
+      },
+      "priority": 100
+    },
+    "account.api_key_create": {
+      "category": "account_access",
+      "matchAll": ["api_key", "create"],
+      "requiredSlots": {
+        "accountAction": "api_key_create",
+        "credentialKind": "api_key"
+      },
+      "priority": 90
+    },
+    "usage.monthly_usage_check": {
+      "category": "general",
+      "matchAll": ["usage"],
+      "requiredSlots": {
+        "usageObject": "api_usage",
+        "usagePeriod": "monthly"
+      },
+      "priority": 80
+    },
+    "support_refund.shipping_fee_refund": {
+      "category": "support_refund",
+      "matchAll": ["shipping_fee", "refund"],
+      "requiredSlots": {
+        "supportAction": "refund",
+        "refundObject": "shipping_fee"
+      },
+      "priority": 100
+    },
+    "support_refund.return_shipping_fee": {
+      "category": "support_refund",
+      "matchAll": ["return", "shipping_fee"],
+      "requiredSlots": {
+        "supportAction": "return",
+        "refundObject": "shipping_fee"
+      },
+      "priority": 80
+    },
+    "support_refund.order_cancel": {
+      "category": "support_refund",
+      "matchAll": ["order", "cancel"],
+      "requiredSlots": {
+        "supportAction": "cancel",
+        "cancelObject": "order"
+      },
+      "priority": 100
+    },
+    "support_refund.exchange_request": {
+      "category": "support_refund",
+      "matchAll": ["exchange"],
+      "requiredSlots": {
+        "supportAction": "exchange",
+        "exchangeObject": "item"
+      },
+      "priority": 90
+    }
+  },
+  "forbiddenIntentPairs": [
+    {
+      "category": "support_refund",
+      "first": "support_refund.shipping_fee_refund",
+      "second": "support_refund.order_cancel",
+      "reason": "shipping fee refund and order cancel are not answer-compatible"
+    },
+    {
+      "category": "support_refund",
+      "first": "support_refund.return_shipping_fee",
+      "second": "support_refund.exchange_request",
+      "reason": "return shipping fee and exchange request are not answer-compatible"
+    }
+  ]
+}
