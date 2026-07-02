@@ -47,7 +47,6 @@ const (
 	CategoryExtractionJSON  = "extraction_json"
 	CategorySupportRefund   = "support_refund"
 	CategoryReasoning       = "reasoning"
-	CategorySafetySensitive = "safety_sensitive"
 
 	TierLowCost     = "low_cost"
 	TierBalanced    = "balanced"
@@ -59,7 +58,6 @@ const (
 	CapabilityTranslation   = "translation"
 	CapabilitySummarization = "summarization"
 	CapabilityJSON          = "json"
-	CapabilitySafety        = "safety"
 
 	PolicyVariantDefault = "default"
 )
@@ -97,7 +95,7 @@ func canonicalRoutingMode(value string) string {
 func canonicalCategory(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySummarization, CategoryExtractionJSON, CategorySupportRefund, CategoryReasoning, CategorySafetySensitive, CategoryUnknown:
+	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySummarization, CategoryExtractionJSON, CategorySupportRefund, CategoryReasoning, CategoryUnknown:
 		return value
 	default:
 		return CategoryUnknown
@@ -117,7 +115,7 @@ func canonicalTier(value string) string {
 func canonicalCapability(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation, CapabilitySummarization, CapabilityJSON, CapabilitySafety:
+	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation, CapabilitySummarization, CapabilityJSON:
 		return value
 	default:
 		return CapabilityChat

@@ -11,7 +11,6 @@ const (
 	SemanticCacheCategoryExtractionJSON  = "extraction_json"
 	SemanticCacheCategoryReasoning       = "reasoning"
 	SemanticCacheCategorySensitive       = "sensitive"
-	SemanticCacheCategorySafetySensitive = "safety_sensitive"
 	SemanticCacheCategoryToolCall        = "tool_call"
 	SemanticCacheCategoryUnknown         = "unknown"
 )
@@ -57,8 +56,6 @@ func CanonicalSemanticCacheCategory(category string) string {
 		return SemanticCacheCategoryReasoning
 	case SemanticCacheCategorySensitive:
 		return SemanticCacheCategorySensitive
-	case SemanticCacheCategorySafetySensitive:
-		return SemanticCacheCategorySafetySensitive
 	case SemanticCacheCategoryToolCall:
 		return SemanticCacheCategoryToolCall
 	case SemanticCacheCategoryUnknown:

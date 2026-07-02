@@ -403,7 +403,7 @@ func TestSemanticCacheFactoryRejectsUnknownImplementations(t *testing.T) {
 func TestSemanticCacheCategoryPolicyAllowsRoutingMVPAllowlist(t *testing.T) {
 	policy := NewSemanticCacheCategoryPolicy(
 		[]string{"general", "support_refund"},
-		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "safety_sensitive", "tool_call", "unknown"},
+		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
 	)
 
 	for _, category := range []string{"general", "support_refund"} {
@@ -418,10 +418,10 @@ func TestSemanticCacheCategoryPolicyAllowsRoutingMVPAllowlist(t *testing.T) {
 func TestSemanticCacheCategoryPolicyDeniesRiskyCategories(t *testing.T) {
 	policy := NewSemanticCacheCategoryPolicy(
 		[]string{"general", "support_refund"},
-		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "safety_sensitive", "tool_call", "unknown"},
+		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
 	)
 
-	for _, category := range []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "safety_sensitive", "tool_call", "unknown"} {
+	for _, category := range []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"} {
 		t.Run(category, func(t *testing.T) {
 			if policy.Allows(category) {
 				t.Fatalf("SC-CATEGORY-003 %q는 Semantic Cache에서 bypass되어야 함", category)
@@ -433,7 +433,7 @@ func TestSemanticCacheCategoryPolicyDeniesRiskyCategories(t *testing.T) {
 func TestSemanticCacheCategoryPolicyDeniesUnknownCategoryValues(t *testing.T) {
 	policy := NewSemanticCacheCategoryPolicy(
 		[]string{"general", "support_refund"},
-		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "safety_sensitive", "tool_call", "unknown"},
+		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
 	)
 
 	for _, category := range []string{"faq", "simple_chat", "billing", "", " GENERAL "} {

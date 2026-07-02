@@ -38,7 +38,6 @@
         "extraction_json",
         "support_refund",
         "reasoning",
-        "safety_sensitive",
         "unknown"
       ]
     },
