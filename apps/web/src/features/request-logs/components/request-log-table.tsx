@@ -344,9 +344,9 @@ export function RequestLogTable({
                           <StatusBadge status={record.status} />
                         </td>
                         <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
-                        <td>{record.maskingAction}</td>
+                        <td>{record.domainOutcomes?.safety?.outcome ?? record.maskingAction}</td>
                         <td>
-                          {record.cacheType}:{record.cacheStatus}
+                          {record.cacheType}:{record.domainOutcomes?.cache?.outcome ?? record.cacheStatus}
                         </td>
                         <td>{formatLatency(record.latencyMs)}</td>
                         <td>{formatInteger(record.totalTokens)}</td>

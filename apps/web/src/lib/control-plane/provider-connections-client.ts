@@ -48,7 +48,7 @@ type ProviderRequestResult =
       status: number;
     };
 
-type ProviderListResult =
+export type ProviderListResult =
   | {
       data: ProviderConnectionRecord[];
       ok: true;
@@ -90,7 +90,7 @@ export async function getProviderConnectionsModel(
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
   const [listResult, presetResult] = await Promise.all([
-    listProviders(controlPlaneProjectId),
+    listProviderConnections(controlPlaneProjectId),
     listProviderPresets()
   ]);
   const providerPresets = presetResult.ok
@@ -178,7 +178,7 @@ export async function discoverProviderModels(provider: string): Promise<Provider
   }
 }
 
-async function listProviders(projectId: string): Promise<ProviderListResult> {
+export async function listProviderConnections(projectId: string): Promise<ProviderListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers?limit=50`,
@@ -216,6 +216,9 @@ async function listProviderPresets(): Promise<ProviderPresetListResult> {
 function toProviderPayload(values: ProviderConnectionFormValues) {
   const models = splitProviderModels(values.models);
   const providerConfig = toProviderConfig(values, models);
+  const secretRef =
+    values.secretRef.trim() ||
+    (values.isEdit ? "" : getDefaultProviderSecretRef(values));
 
   return {
     baseUrl: values.baseUrl.trim(),
@@ -225,10 +228,30 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     provider: values.provider.trim(),
     providerConfig,
     resolver: values.resolver.trim() || undefined,
-    secretRef: values.secretRef.trim() || undefined,
+    secretRef: secretRef || undefined,
     status: values.status,
     timeoutMs: values.timeoutMs
   };
+}
+
+function getDefaultProviderSecretRef(values: ProviderConnectionFormValues) {
+  if (
+    !values.credentialRequired ||
+    values.resolver.trim().toLowerCase() !== "environment"
+  ) {
+    return "";
+  }
+
+  const provider = values.provider.trim().toLowerCase();
+  if (!provider) {
+    return "";
+  }
+
+  if (provider === "openai" || provider === "openai-main") {
+    return "credential_ref_openai_main";
+  }
+
+  return `credential_ref_${provider.replace(/[^a-z0-9]+/g, "_")}_main`;
 }
 
 function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {
@@ -505,6 +528,14 @@ function getErrorMessage(payload: unknown, status: number) {
 
     if (typeof message === "string") {
       return message;
+    }
+
+    if (message && typeof message === "object") {
+      const nestedMessage = (message as Record<string, unknown>).message;
+
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+        return nestedMessage;
+      }
     }
   }
 

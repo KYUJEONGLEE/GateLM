@@ -5,7 +5,8 @@ import type {
   CustomerDemoExchange,
   CustomerDemoHeader,
   CustomerDemoRequest,
-  CustomerDemoScenarioId
+  CustomerDemoScenarioId,
+  CustomerDemoSurface
 } from "@/lib/gateway/customer-demo-client";
 
 type JsonRecord = Record<string, unknown>;
@@ -97,7 +98,8 @@ export async function POST(request: Request) {
     const gatewayResult = await executeLiveScenario(
       payload.scenarioId,
       payload.stream,
-      payload.message
+      payload.message,
+      payload.surface
     );
 
     return NextResponse.json({
@@ -120,6 +122,7 @@ async function readRequestPayload(request: Request) {
     message?: unknown;
     scenarioId?: unknown;
     stream?: unknown;
+    surface?: unknown;
     tenantId?: unknown;
   };
 
@@ -127,6 +130,7 @@ async function readRequestPayload(request: Request) {
     message: normalizeUserMessage(payload.message),
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
     stream: payload.stream === true,
+    surface: normalizeCustomerDemoSurface(payload.surface),
     tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
   };
 }
@@ -145,14 +149,19 @@ function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioI
   return Object.hasOwn(LIVE_SCENARIOS, value);
 }
 
+function normalizeCustomerDemoSurface(value: unknown): CustomerDemoSurface {
+  return value === "application" ? "application" : "demo";
+}
+
 async function executeLiveScenario(
   scenarioId: CustomerDemoScenarioId,
   stream: boolean,
-  message?: string
+  message: string | undefined,
+  surface: CustomerDemoSurface
 ) {
   if (scenarioId === "cache-hit") {
-    await callGateway("cache-hit", "warmup", { message });
-    return callGateway("cache-hit", "hit", { message, stream });
+    await callGateway("cache-hit", "warmup", { message, surface });
+    return callGateway("cache-hit", "hit", { message, stream, surface });
   }
 
   if (scenarioId === "rate-limited") {
@@ -161,7 +170,7 @@ async function executeLiveScenario(
 
     // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
-      latestResult = await callGateway("rate-limited", String(index + 1), { message, stream });
+      latestResult = await callGateway("rate-limited", String(index + 1), { message, stream, surface });
 
       if (latestResult.httpStatus === 429) {
         return latestResult;
@@ -181,7 +190,7 @@ async function executeLiveScenario(
     return executeProviderFailureScenario(scenarioId, "error");
   }
 
-  return callGateway(scenarioId, "1", { message, stream });
+  return callGateway(scenarioId, "1", { message, stream, surface });
 }
 
 async function executeProviderFailureScenario(
@@ -202,7 +211,7 @@ async function executeProviderFailureScenario(
 async function callGateway(
   scenarioId: CustomerDemoScenarioId,
   requestIdSuffix: string,
-  options: { message?: string; stream?: boolean } = {}
+  options: { message?: string; stream?: boolean; surface?: CustomerDemoSurface } = {}
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig();
   const definition = LIVE_SCENARIOS[scenarioId];
@@ -211,7 +220,10 @@ async function callGateway(
     definition,
     scenarioId,
     options.stream === true,
-    options.message
+    options.message,
+    options.surface ?? "demo",
+    config.applicationChatModel,
+    config.applicationChatMaxTokens
   );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
@@ -246,10 +258,13 @@ function buildGatewayRequestBody(
   definition: LiveScenarioDefinition,
   scenarioId: CustomerDemoScenarioId,
   stream: boolean,
-  message?: string
+  message: string | undefined,
+  surface: CustomerDemoSurface,
+  applicationChatModel: string,
+  applicationChatMaxTokens: number
 ): CustomerDemoRequest["body"] {
   return {
-    model: "auto",
+    model: surface === "application" ? applicationChatModel : "auto",
     messages: [
       {
         role: "system",
@@ -260,12 +275,12 @@ function buildGatewayRequestBody(
         content: message ?? definition.gatewayPrompt
       }
     ],
-    max_tokens: 128,
+    max_tokens: surface === "application" ? applicationChatMaxTokens : 128,
     temperature: 0.2,
     stream,
     metadata: {
       demoScenario: scenarioId,
-      source: "web-customer-demo"
+      source: surface === "application" ? "web-application-chat" : "web-customer-demo"
     },
     gate_lm: {
       cache: {
@@ -346,6 +361,16 @@ function buildGatewayResponseBody(
     const summary = parseGatewaySseSummary(text);
 
     return {
+      choices: summary.assistantContent
+        ? [
+            {
+              message: {
+                content: summary.assistantContent,
+                role: "assistant"
+              }
+            }
+          ]
+        : [],
       streaming: {
         chunkCount: summary.chunkCount,
         completed: summary.completed,
@@ -404,6 +429,7 @@ function isEventStreamResponse(response: Response) {
 }
 
 function parseGatewaySseSummary(text: string) {
+  const contentParts: string[] = [];
   let chunkCount = 0;
   let completed = false;
 
@@ -412,7 +438,7 @@ function parseGatewaySseSummary(text: string) {
       continue;
     }
 
-    const value = line.slice("data:".length).trim();
+    const value = stripSingleLeadingSseSpace(line.slice("data:".length));
 
     if (value === "[DONE]") {
       completed = true;
@@ -421,13 +447,50 @@ function parseGatewaySseSummary(text: string) {
 
     if (value) {
       chunkCount += 1;
+      const parsed = safeJsonParse(value);
+      const content = getStreamingChunkContent(parsed);
+
+      if (content) {
+        contentParts.push(content);
+      }
     }
   }
 
   return {
+    assistantContent: contentParts.join("").trim(),
     chunkCount,
     completed
   };
+}
+
+function stripSingleLeadingSseSpace(value: string) {
+  return value.startsWith(" ") ? value.slice(1) : value;
+}
+
+function getStreamingChunkContent(value: unknown) {
+  if (!isJsonRecord(value) || !Array.isArray(value.choices)) {
+    return "";
+  }
+
+  return value.choices
+    .map((choice) => {
+      if (!isJsonRecord(choice)) {
+        return "";
+      }
+
+      const delta = choice.delta;
+      if (isJsonRecord(delta) && typeof delta.content === "string") {
+        return delta.content;
+      }
+
+      const message = choice.message;
+      if (isJsonRecord(message) && typeof message.content === "string") {
+        return message.content;
+      }
+
+      return typeof choice.text === "string" ? choice.text : "";
+    })
+    .join("");
 }
 
 function safeJsonParse(text: string): unknown {
@@ -576,7 +639,7 @@ function getGatewayStatus(result: GatewayCallResult): CustomerDemoExchange["stat
     return "rate_limited";
   }
 
-  if (result.httpStatus === 403 && errorCode === "sensitive_data_blocked") {
+  if (isBlockedGatewayError(result.httpStatus, errorCode)) {
     return "blocked";
   }
 
@@ -585,6 +648,20 @@ function getGatewayStatus(result: GatewayCallResult): CustomerDemoExchange["stat
   }
 
   return "failed";
+}
+
+function isBlockedGatewayError(httpStatus: number, errorCode: string | undefined) {
+  if (httpStatus !== 401 && httpStatus !== 403) {
+    return false;
+  }
+
+  return (
+    errorCode === "budget_blocked" ||
+    errorCode === "invalid_api_key" ||
+    errorCode === "invalid_app_token" ||
+    errorCode === "scope_mismatch" ||
+    errorCode === "sensitive_data_blocked"
+  );
 }
 
 function normalizeMaskingAction(value: string | undefined): CustomerDemoExchange["maskingAction"] {
@@ -616,7 +693,7 @@ function getDisplayAssistantMessage(
     return "Rate limit applied before provider call.";
   }
 
-  if (status === "error") {
+  if (status === "error" || status === "failed") {
     return "Gateway returned a sanitized error.";
   }
 

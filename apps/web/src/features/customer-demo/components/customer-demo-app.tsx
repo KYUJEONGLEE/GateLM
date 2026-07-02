@@ -139,11 +139,11 @@ const themeStorageKey = "gatelm_console_theme";
 export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const client = useMemo(() => {
     if (model.integrationMode === "gateway") {
-      return new RouteGatewayChatClient(model.tenantId);
+      return new RouteGatewayChatClient(model.tenantId, model.surface);
     }
 
     return new FixtureGatewayChatClient(model.scenarios);
-  }, [model.integrationMode, model.scenarios, model.tenantId]);
+  }, [model.integrationMode, model.scenarios, model.surface, model.tenantId]);
   const [, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -223,6 +223,8 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     }
 
     const message = inputValue.trim();
+    const streamRequested =
+      options.stream ?? (model.integrationMode === "gateway" && model.surface !== "application");
 
     if (!message) {
       return;
@@ -245,12 +247,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
 
     try {
       if (scenario && model.integrationMode === "gateway") {
-        setExchange(buildPendingExchange(model, scenario, options));
+        setExchange(buildPendingExchange(model, scenario, { stream: streamRequested }));
       }
 
       const nextExchange = await client.sendChatCompletion("safe", {
         message,
-        stream: options.stream
+        stream: streamRequested
       });
 
       setExchange(nextExchange);

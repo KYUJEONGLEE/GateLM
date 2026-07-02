@@ -171,12 +171,17 @@ export function RequestLogDetailPanel({
         title="Gateway outcome"
         rows={[
           ["Terminal status", record.terminalStatus ?? record.status],
+          ["Auth", domainOutcomes?.auth?.outcome ?? text.none],
+          ["Runtime", domainOutcomes?.runtime?.outcome ?? text.none],
           ["Rate limit", domainOutcomes?.rateLimit?.outcome ?? text.none],
+          ["Budget", domainOutcomes?.budget?.outcome ?? text.none],
           ["Safety", domainOutcomes?.safety?.outcome ?? text.none],
           ["Routing", domainOutcomes?.routing?.outcome ?? text.none],
           ["Cache", domainOutcomes?.cache?.outcome ?? text.none],
           ["Provider", domainOutcomes?.provider?.outcome ?? text.none],
-          ["Fallback", domainOutcomes?.fallback?.outcome ?? text.none]
+          ["Fallback", domainOutcomes?.fallback?.outcome ?? text.none],
+          ["Streaming", domainOutcomes?.streaming?.outcome ?? text.none],
+          ["Logging", domainOutcomes?.logging?.outcome ?? text.none]
         ]}
       />
 
@@ -185,12 +190,31 @@ export function RequestLogDetailPanel({
         rows={[
           ["Selected provider", nullableText(record.selectedProvider)],
           ["Selected model", nullableText(record.selectedModel)],
+          ["Provider called", record.providerCalled ? text.yes : text.no],
+          ["Routing reason", nullableText(record.routingReason, text.none)],
           ["Cache", `${record.cacheType}:${record.cacheStatus}`],
+          ["Cache decision", nullableText(record.cacheDecisionReason, text.none)],
           [
             "Cache hit request",
             nullableText(
               record.cacheHitRequestId ? formatDisplayIdentifier(record.cacheHitRequestId) : null
             )
+          ],
+          ["Prompt category", nullableText(record.promptCategory, text.none)],
+          ["Semantic cache", record.semanticCacheHit ? text.yes : text.no],
+          ["Semantic similarity", formatOptionalPercent(record.semanticSimilarity, text.none)],
+          [
+            "Semantic matched request",
+            nullableText(
+              record.semanticMatchedRequestId
+                ? formatDisplayIdentifier(record.semanticMatchedRequestId)
+                : null,
+              text.none
+            )
+          ],
+          [
+            "Semantic decision",
+            nullableText(record.semanticCacheDecisionReason, text.none)
           ]
         ]}
       />
@@ -201,7 +225,11 @@ export function RequestLogDetailPanel({
           ["Total tokens", formatInteger(record.totalTokens)],
           ["Estimated cost", formatMicroUsd(record.costMicroUsd)],
           ["Saved cost", formatMicroUsd(record.savedCostMicroUsd)],
-          ["Latency", formatLatency(record.latencyMs)],
+          ["Total latency", formatLatency(record.latencySummary?.totalLatencyMs ?? record.latencyMs)],
+          [
+            "Gateway latency",
+            formatLatency(record.latencySummary?.gatewayInternalLatencyMs ?? record.latencyMs)
+          ],
           [
             "Provider latency",
             formatLatency(record.latencySummary?.providerLatencyMs ?? record.providerLatencyMs)
@@ -281,6 +309,17 @@ function formatMicroUsd(value: number) {
     minimumFractionDigits: 0,
     style: "currency"
   }).format(value / 1_000_000);
+}
+
+function formatOptionalPercent(value: number | null | undefined, fallback: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+    style: "percent"
+  }).format(value);
 }
 
 function identifierToDisplayName(value: string, fallback: string) {

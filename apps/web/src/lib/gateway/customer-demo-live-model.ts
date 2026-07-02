@@ -126,6 +126,7 @@ export function getCustomerDemoLiveModel(): CustomerDemoModel {
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>
       buildLiveScenario(template, runtimeConfig.tenantId)
     ),
+    surface: "demo",
     tenantId: runtimeConfig.tenantId
   };
 }
@@ -135,7 +136,7 @@ function buildLiveScenario(
   tenantId: string
 ): CustomerDemoExchange {
   return {
-    assistantMessage: "A live Gateway response will replace this preview after the request runs.",
+    assistantMessage: "Ready to send.",
     cacheStatus: template.cacheStatus,
     description: template.description,
     detectedTypes: template.detectedTypes,
