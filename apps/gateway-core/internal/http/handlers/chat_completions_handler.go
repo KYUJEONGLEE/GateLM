@@ -1956,9 +1956,11 @@ func routingDecisionMaterialFromRequestContext(reqCtx *pipeline.RequestContext) 
 	}
 	tier := routingdomain.TierBalanced
 	switch strings.TrimSpace(reqCtx.RoutingReason) {
-	case routingdomain.ReasonShortPromptLowCost:
+	case routingdomain.ReasonShortPromptLowCost, routingdomain.ReasonSupportRefundLowCost:
 		tier = routingdomain.TierLowCost
-	case routingdomain.ReasonDefaultBalanced, routingdomain.ReasonPinned, "", "not_routed":
+	case routingdomain.ReasonCodeHighQuality:
+		tier = routingdomain.TierHighQuality
+	case routingdomain.ReasonDefaultBalanced, routingdomain.ReasonTranslationBalanced, routingdomain.ReasonPinned, "", "not_routed":
 		tier = routingdomain.TierBalanced
 	}
 	return routingdomain.DecisionMaterial{

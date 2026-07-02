@@ -10,9 +10,12 @@ const (
 	DefaultPolicyHash          = "route_p0_v1"
 	DefaultShortPromptMaxChars = 300
 
-	ReasonShortPromptLowCost = "short_prompt_low_cost"
-	ReasonDefaultBalanced    = "default_balanced"
-	ReasonPinned             = "pinned"
+	ReasonShortPromptLowCost   = "short_prompt_low_cost"
+	ReasonDefaultBalanced      = "default_balanced"
+	ReasonPinned               = "pinned"
+	ReasonCodeHighQuality      = "category_code_high_quality"
+	ReasonTranslationBalanced  = "category_translation_balanced"
+	ReasonSupportRefundLowCost = "category_support_refund_low_cost"
 )
 
 type SimpleRouterConfig struct {
@@ -110,31 +113,17 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	}
 
 	if strings.EqualFold(requestedModel, "auto") {
-		if utf8.RuneCountInString(req.PromptText) <= config.ShortPromptMaxChars {
-			decision.SelectedModel = config.LowCostModel
-			decision.SelectedModelID = config.LowCostModel
-			decision.RoutingDecisionMaterial = DecisionMaterial{
-				RoutingMode:   RoutingModeAuto,
-				Category:      category,
-				Tier:          TierLowCost,
-				Capability:    capability,
-				PolicyVariant: PolicyVariantDefault,
-			}
-			decision.RoutingReason = ReasonShortPromptLowCost
-			decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
-			return decision, nil
-		}
-
-		decision.SelectedModel = config.DefaultModel
-		decision.SelectedModelID = config.DefaultModel
+		selectedModel, tier, reason := autoRouteForCategory(category, req.PromptText, config)
+		decision.SelectedModel = selectedModel
+		decision.SelectedModelID = selectedModel
 		decision.RoutingDecisionMaterial = DecisionMaterial{
 			RoutingMode:   RoutingModeAuto,
 			Category:      category,
-			Tier:          TierBalanced,
+			Tier:          tier,
 			Capability:    capability,
 			PolicyVariant: PolicyVariantDefault,
 		}
-		decision.RoutingReason = ReasonDefaultBalanced
+		decision.RoutingReason = reason
 		decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
 		return decision, nil
 	}
@@ -151,4 +140,20 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	decision.RoutingReason = ReasonPinned
 	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
 	return decision, nil
+}
+
+func autoRouteForCategory(category string, prompt string, config SimpleRouterConfig) (string, string, string) {
+	switch canonicalCategory(category) {
+	case CategoryCode:
+		return config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
+	case CategoryTranslation:
+		return config.DefaultModel, TierBalanced, ReasonTranslationBalanced
+	case CategorySupportRefund:
+		return config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
+	}
+
+	if utf8.RuneCountInString(prompt) <= config.ShortPromptMaxChars {
+		return config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
+	}
+	return config.DefaultModel, TierBalanced, ReasonDefaultBalanced
 }

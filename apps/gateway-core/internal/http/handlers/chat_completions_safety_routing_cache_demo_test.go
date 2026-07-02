@@ -36,7 +36,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	if first.Header().Get("X-GateLM-Cache-Status") != "miss" || firstResp.GateLM.CacheStatus != "miss" {
 		t.Fatalf("expected first safe request to miss exact cache, header=%q gate_lm=%#v", first.Header().Get("X-GateLM-Cache-Status"), firstResp.GateLM)
 	}
-	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "short_prompt_low_cost" {
+	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "category_support_refund_low_cost" {
 		t.Fatalf("unexpected model=auto routing result: %#v", firstResp.GateLM)
 	}
 	if *demo.providerCalls != 1 || demo.cacheStore.setCalls != 1 || demo.cacheStore.getCalls != 1 {
