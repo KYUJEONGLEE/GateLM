@@ -65,8 +65,8 @@ func main() {
 		exitWithError(err)
 	}
 
-	report := evaluate(*datasetPath, *classifierVersion, records)
-	payload, err := marshalReport(report, *pretty)
+	evalReport := evaluate(*datasetPath, *classifierVersion, records)
+	payload, err := marshalReport(evalReport, *pretty)
 	if err != nil {
 		exitWithError(err)
 	}
@@ -82,8 +82,8 @@ func main() {
 		fmt.Println(string(payload))
 	}
 
-	if *minAccuracy > 0 && report.Accuracy < *minAccuracy {
-		exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", report.Accuracy, *minAccuracy))
+	if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
+		exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
 	}
 }
 
@@ -93,14 +93,14 @@ func loadDataset(datasetPath string) ([]datasetRecord, error) {
 		return nil, fmt.Errorf("read dataset %q: %w", datasetPath, err)
 	}
 
-	trimmed := strings.TrimSpace(string(payload))
+	trimmed := strings.TrimPrefix(strings.TrimSpace(string(payload)), "\ufeff")
 	if trimmed == "" {
 		return nil, fmt.Errorf("dataset %q is empty", datasetPath)
 	}
 
 	if strings.HasPrefix(trimmed, "[") {
 		var records []datasetRecord
-		if err := json.Unmarshal(payload, &records); err != nil {
+		if err := json.Unmarshal([]byte(trimmed), &records); err != nil {
 			return nil, fmt.Errorf("decode JSON dataset %q: %w", datasetPath, err)
 		}
 		return validateRecords(records)
