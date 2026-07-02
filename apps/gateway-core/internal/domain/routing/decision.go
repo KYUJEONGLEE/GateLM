@@ -39,14 +39,14 @@ const (
 	RoutingModeAuto   = "auto"
 	RoutingModePinned = "pinned"
 
-	CategoryUnknown         = "unknown"
-	CategoryGeneral         = "general"
-	CategoryCode            = "code"
-	CategoryTranslation     = "translation"
-	CategorySummarization   = "summarization"
-	CategoryExtractionJSON  = "extraction_json"
-	CategorySupportRefund   = "support_refund"
-	CategoryReasoning       = "reasoning"
+	CategoryUnknown        = "unknown"
+	CategoryGeneral        = "general"
+	CategoryCode           = "code"
+	CategoryTranslation    = "translation"
+	CategorySummarization  = "summarization"
+	CategoryExtractionJSON = "extraction_json"
+	CategorySupportRefund  = "support_refund"
+	CategoryReasoning      = "reasoning"
 
 	TierLowCost     = "low_cost"
 	TierBalanced    = "balanced"
@@ -59,7 +59,8 @@ const (
 	CapabilitySummarization = "summarization"
 	CapabilityJSON          = "json"
 
-	PolicyVariantDefault = "default"
+	PolicyVariantDefault                = "default"
+	PolicyVariantProviderHealthFallback = "provider_health_fallback"
 )
 
 func CanonicalDecisionMaterial(material DecisionMaterial) DecisionMaterial {
@@ -125,7 +126,7 @@ func canonicalCapability(value string) string {
 func canonicalPolicyVariant(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case PolicyVariantDefault:
+	case PolicyVariantDefault, PolicyVariantProviderHealthFallback:
 		return value
 	default:
 		return PolicyVariantDefault
