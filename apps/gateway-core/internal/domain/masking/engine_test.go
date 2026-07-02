@@ -327,6 +327,39 @@ func TestEnginePreservesEnglishCoreferenceForPreviousUniqueSubject(t *testing.T)
 	}
 }
 
+func TestEnginePreservesStructureAroundOverextendedPIISpans(t *testing.T) {
+	nameWithHonorific := "\uc774\uc724\uc9c0\ub2d8"
+	emailWithCopula := "yoonji@example.com\uc785\ub2c8\ub2e4"
+	prompt := nameWithHonorific + "\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 " + emailWithCopula + "."
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: []Detection{
+			personDetection(prompt, nameWithHonorific, 1),
+			{
+				Type:        string(DetectorEmail),
+				Start:       strings.Index(prompt, emailWithCopula),
+				End:         strings.Index(prompt, emailWithCopula) + len(emailWithCopula),
+				Action:      ActionRedacted,
+				Placeholder: PlaceholderEmail,
+				Priority:    10,
+			},
+		}}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\ub2d8\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 [EMAIL_1]\uc785\ub2c8\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected structure-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, "\uc774\uc724\uc9c0") || strings.Contains(result.RedactedPrompt, "yoonji@example.com") {
+		t.Fatalf("redacted prompt must not contain raw PII: %q", result.RedactedPrompt)
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

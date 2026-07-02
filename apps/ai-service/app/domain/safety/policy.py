@@ -18,6 +18,7 @@ from app.schemas.safety import SafetyDetector
 
 
 PREVIEW_MAX_CHARS = 120
+EMAIL_VALUE_PATTERN = re.compile(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", re.IGNORECASE)
 ENTITY_PLACEHOLDER_PREFIX_BY_DETECTOR_TYPE = {
     "person_name": "PERSON",
     "organization_name": "ORGANIZATION",
@@ -362,7 +363,10 @@ def redact_prompt(
     scope = entity_scope or EntityMaskingScope()
     replacements: list[tuple[int, int, str]] = []
     person_replacements: list[tuple[int, int, str]] = []
-    for signal in signals:
+    for raw_signal in signals:
+        signal = _normalize_signal_span(raw_signal, prompt_text)
+        if signal is None:
+            continue
         role_prefix, replacement_start = _person_role_context(prompt_text, signal)
         start = replacement_start if replacement_start is not None else signal.start
         if start < 0 or signal.end > len(prompt_text) or signal.end <= start:
@@ -813,11 +817,51 @@ def _normalize_signal_span(
             end -= 1
             continue
         break
+    start, end = _structure_preserving_signal_span(
+        signal.detector_type,
+        prompt_text,
+        start,
+        end,
+    )
     if end <= start:
         return None
     if start == signal.start and end == signal.end:
         return signal
     return replace(signal, start=start, end=end)
+
+
+def _structure_preserving_signal_span(
+    detector_type: str,
+    prompt_text: str,
+    start: int,
+    end: int,
+) -> tuple[int, int]:
+    if detector_type == "person_name":
+        return start, _trim_person_name_structure_suffix(prompt_text, start, end)
+    if detector_type == "email":
+        return _email_value_span(prompt_text, start, end)
+    return start, end
+
+
+def _trim_person_name_structure_suffix(prompt_text: str, start: int, end: int) -> int:
+    while end > start:
+        value = prompt_text[start:end]
+        next_end = end
+        for suffix in ("\ub2d8", "\uc528"):
+            if value.endswith(suffix):
+                next_end = end - len(suffix)
+                break
+        if next_end == end:
+            return end
+        end = next_end
+    return end
+
+
+def _email_value_span(prompt_text: str, start: int, end: int) -> tuple[int, int]:
+    match = EMAIL_VALUE_PATTERN.search(prompt_text[start:end])
+    if match is None:
+        return start, end
+    return start + match.start(), start + match.end()
 
 
 def _signals_from_overlap_clusters(signals: list[SafetySignal]) -> list[SafetySignal]:

@@ -790,6 +790,26 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             "[PERSON_1] emailed [PERSON_2]. [PERSON_1] waited for a reply.",
         )
 
+    def test_redact_prompt_preserves_structure_around_overextended_pii_spans(self) -> None:
+        name_with_honorific = "\uc774\uc724\uc9c0\ub2d8"
+        email_with_copula = "yoonji@example.com\uc785\ub2c8\ub2e4"
+        prompt = f"{name_with_honorific}\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 {email_with_copula}."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", name_with_honorific, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "email", email_with_copula, "[EMAIL_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\ub2d8\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 [EMAIL_1]\uc785\ub2c8\ub2e4.",
+        )
+        self.assertNotIn("\uc774\uc724\uc9c0", redacted)
+        self.assertNotIn("yoonji@example.com", redacted)
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."

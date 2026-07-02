@@ -382,6 +382,48 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_detect_preserves_structure_around_overextended_pii_spans(self) -> None:
+        name_with_honorific = "\uc774\uc724\uc9c0\ub2d8"
+        email_with_copula = "yoonji@example.com\uc785\ub2c8\ub2e4"
+        prompt = f"{name_with_honorific}\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 {email_with_copula}."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(
+            lambda _text: [
+                {
+                    "entity_group": "person_name",
+                    "score": 0.98,
+                    "start": prompt.index(name_with_honorific),
+                    "end": prompt.index(name_with_honorific) + len(name_with_honorific),
+                    "word": name_with_honorific,
+                },
+                {
+                    "entity_group": "private_email",
+                    "score": 0.97,
+                    "start": prompt.index(email_with_copula),
+                    "end": prompt.index(email_with_copula) + len(email_with_copula),
+                    "word": email_with_copula,
+                },
+            ]
+        )
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "[PERSON_1]\ub2d8\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 [EMAIL_1]\uc785\ub2c8\ub2e4.",
+        )
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email", "person_name"])
+        self.assertNotIn("\uc774\uc724\uc9c0", body_text)
+        self.assertNotIn("yoonji@example.com", body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
     def test_validation_error_does_not_echo_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL}."
         client = TestClient(create_app())

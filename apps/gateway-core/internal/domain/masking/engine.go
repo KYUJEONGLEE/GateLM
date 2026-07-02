@@ -43,7 +43,7 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		securityPolicyVersionID = DefaultSecurityPolicyVersionID
 	}
 
-	effective := effectiveDetections(e.registry.Detect(req.Prompt))
+	effective := effectiveDetections(normalizeDetectionSpans(req.Prompt, e.registry.Detect(req.Prompt)))
 	if len(effective) == 0 {
 		return Result{
 			Action:                  ActionNone,
