@@ -674,7 +674,7 @@ export class RuntimeConfigsService {
             models,
             args.dto.routingPolicy?.highQualityProvider ??
               defaultModel.provider,
-            args.dto.routingPolicy?.highQualityModel ?? defaultModel.model,
+            args.dto.routingPolicy?.highQualityModel,
           )
         : undefined;
     const fallbackModel = this.resolveModelForProvider(
