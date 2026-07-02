@@ -3,6 +3,7 @@ import {
   BadRequestException,
   GatewayTimeoutException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -39,6 +40,7 @@ const SAFE_CATALOG_TOKEN_PATTERN = /^[a-z][a-z0-9_:-]{0,79}$/;
 const SAFE_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,127}$/;
 const FORBIDDEN_BASE_URL_QUERY_KEYS = new Set([
   'api_key',
+  'api-key',
   'apikey',
   'key',
   'token',
@@ -48,6 +50,8 @@ const FORBIDDEN_BASE_URL_QUERY_KEYS = new Set([
 
 @Injectable()
 export class ProviderConnectionsService {
+  private readonly logger = new Logger(ProviderConnectionsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async upsertProvider(
@@ -321,7 +325,7 @@ export class ProviderConnectionsService {
     try {
       parsedUrl = new URL(baseUrl.trim());
     } catch {
-      throw new BadRequestException('Provider baseUrl is not executable.');
+      throw new BadRequestException('Provider baseUrl is invalid.');
     }
 
     if (parsedUrl.username || parsedUrl.password) {
@@ -404,6 +408,7 @@ export class ProviderConnectionsService {
         );
       }
 
+      this.logger.warn(this.toSafeProviderDiscoveryFailureLog(error));
       throw new BadGatewayException('Provider model discovery failed.');
     } finally {
       clearTimeout(timeoutHandle);
@@ -464,13 +469,35 @@ export class ProviderConnectionsService {
       return null;
     }
 
-    const date = new Date(value * 1000);
+    const timestampInMs = value > 9999999999 ? value : value * 1000;
+    const date = new Date(timestampInMs);
 
     if (Number.isNaN(date.getTime())) {
       return null;
     }
 
     return date.toISOString();
+  }
+
+  private toSafeProviderDiscoveryFailureLog(error: unknown): string {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    const errorCode = this.toSafeErrorCode(error);
+
+    return `Provider model discovery upstream call failed. errorName=${errorName}; errorCode=${errorCode}`;
+  }
+
+  private toSafeErrorCode(error: unknown): string {
+    if (!error || typeof error !== 'object') {
+      return 'unknown';
+    }
+
+    const code = (error as { code?: unknown }).code;
+
+    if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(code)) {
+      return 'unknown';
+    }
+
+    return code;
   }
 
   private toOptionalCredentialUpdate(

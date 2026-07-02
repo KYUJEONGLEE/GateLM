@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Prisma, ProviderConnectionStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -147,6 +148,45 @@ describe('ProviderConnectionsService', () => {
     expect(JSON.stringify(result)).not.toContain(providerCredential);
   });
 
+  it('normalizes provider model created timestamps in milliseconds', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000908';
+    const createdAtMs = 1715367049000;
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'http://mock-provider:8090/v1',
+        provider: 'mock',
+        providerConfig: {
+          adapterType: 'mock',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'mock-balanced',
+            object: 'model',
+            created: createdAtMs,
+            owned_by: 'mock',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'mock');
+
+    expect(result.models[0]?.createdAt).toBe(
+      new Date(createdAtMs).toISOString(),
+    );
+  });
+
   it('rejects provider model discovery when a required credential is not bound', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000906';
@@ -170,12 +210,12 @@ describe('ProviderConnectionsService', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('rejects provider model discovery base URLs with credential query material', async () => {
+  it('rejects provider model discovery base URLs with api-key query material', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
     prisma.providerConnection.findUnique.mockResolvedValue(
       providerConnection('00000000-0000-4000-8000-000000000907', {
-        baseUrl: 'https://api.openai.com/v1?api_key=synthetic',
+        baseUrl: 'https://api.openai.com/v1?api-key=synthetic',
         provider: 'openai-main',
         resolver: 'none',
         providerConfig: {
@@ -190,6 +230,60 @@ describe('ProviderConnectionsService', () => {
       service.discoverProviderModels(projectId, 'openai-main'),
     ).rejects.toThrow('Provider baseUrl must not contain credential material.');
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid provider model discovery base URLs with a clear message', async () => {
+    const { service, prisma } = createService();
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection('00000000-0000-4000-8000-000000000909', {
+        baseUrl: 'not a valid url',
+        provider: 'openai-main',
+        resolver: 'none',
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+      }),
+    );
+    global.fetch = jest.fn();
+
+    await expect(
+      service.discoverProviderModels(projectId, 'openai-main'),
+    ).rejects.toThrow('Provider baseUrl is invalid.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('logs provider model discovery transport failures without credential material', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000910';
+    const providerCredential = 'test-provider-credential';
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP = `provider_credential:${providerId}=OPENAI_API_KEY`;
+    process.env.OPENAI_API_KEY = providerCredential;
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        resolver: 'environment',
+        secretRef: `provider_credential:${providerId}`,
+        providerConfig: { adapterType: 'openai_compatible' },
+      }),
+    );
+    const transportError = new Error('synthetic network failure');
+    Object.assign(transportError, { code: 'ECONNRESET' });
+    global.fetch = jest.fn().mockRejectedValue(transportError);
+
+    await expect(
+      service.discoverProviderModels(projectId, 'openai-main'),
+    ).rejects.toThrow('Provider model discovery failed.');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Provider model discovery upstream call failed. errorName=Error; errorCode=ECONNRESET',
+    );
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(providerCredential);
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('Authorization');
   });
 
   it('sets hasMore and nextCursor from limit plus one pagination', async () => {
