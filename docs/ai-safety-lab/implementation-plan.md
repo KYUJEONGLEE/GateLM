@@ -90,6 +90,7 @@ HF model output label
 | `private_url` | `private_url` |
 | `private_date` | `private_date` |
 | `secret` | `secret` |
+| `ORG-B` / `ORG-I` | `organization_name` |
 
 모델마다 label 이름이 다르므로 adapter가 label을 GateLM detector type으로 번역한다.
 

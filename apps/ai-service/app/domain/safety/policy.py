@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections import Counter
 from dataclasses import replace
 
@@ -17,6 +18,13 @@ from app.schemas.safety import SafetyDetector
 
 
 PREVIEW_MAX_CHARS = 120
+ENTITY_PLACEHOLDER_PREFIX_BY_DETECTOR_TYPE = {
+    "person_name": "PERSON",
+    "organization_name": "ORGANIZATION",
+    "postal_address": "ADDRESS",
+    "email": "EMAIL",
+    "phone_number": "PHONE_NUMBER",
+}
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "email": frozenset("._-+@"),
@@ -107,16 +115,48 @@ def effective_signals(
     return _merge_adjacent_similar_signals(selected, prompt_text)
 
 
-def redact_prompt(prompt_text: str, signals: list[SafetySignal]) -> str:
+class EntityMaskingScope:
+    def __init__(self) -> None:
+        self._placeholders: dict[str, dict[str, str]] = {}
+        self._counters: dict[str, int] = {}
+
+    def placeholder_for(self, detector_type: str, raw_value: str, fallback: str) -> str:
+        prefix = ENTITY_PLACEHOLDER_PREFIX_BY_DETECTOR_TYPE.get(detector_type)
+        if prefix is None:
+            return fallback
+
+        normalized = _normalize_entity_key(detector_type, raw_value)
+        if normalized == "":
+            return fallback
+
+        placeholders = self._placeholders.setdefault(detector_type, {})
+        existing = placeholders.get(normalized)
+        if existing is not None:
+            return existing
+
+        next_index = self._counters.get(detector_type, 0) + 1
+        self._counters[detector_type] = next_index
+        placeholder = f"[{prefix}_{next_index}]"
+        placeholders[normalized] = placeholder
+        return placeholder
+
+
+def redact_prompt(
+    prompt_text: str,
+    signals: list[SafetySignal],
+    *,
+    entity_scope: EntityMaskingScope | None = None,
+) -> str:
     if not signals:
         return prompt_text
+    scope = entity_scope or EntityMaskingScope()
     chunks: list[str] = []
     offset = 0
     for signal in signals:
         if signal.start < offset or signal.end > len(prompt_text):
             continue
         chunks.append(prompt_text[offset:signal.start])
-        chunks.append(signal.placeholder)
+        chunks.append(_placeholder_for_signal(prompt_text, signal, scope))
         offset = signal.end
     chunks.append(prompt_text[offset:])
     return "".join(chunks)
@@ -127,6 +167,27 @@ def preview_redacted_prompt(redacted_prompt: str) -> str:
     if len(normalized) <= PREVIEW_MAX_CHARS:
         return normalized
     return normalized[:PREVIEW_MAX_CHARS] + "..."
+
+
+def _placeholder_for_signal(
+    prompt_text: str,
+    signal: SafetySignal,
+    entity_scope: EntityMaskingScope,
+) -> str:
+    if signal.action != "redact":
+        return signal.placeholder
+    raw_value = prompt_text[signal.start : signal.end]
+    return entity_scope.placeholder_for(signal.detector_type, raw_value, signal.placeholder)
+
+
+def _normalize_entity_key(detector_type: str, raw_value: str) -> str:
+    if detector_type in {"person_name", "organization_name", "postal_address"}:
+        return " ".join(raw_value.strip().split())
+    if detector_type == "email":
+        return raw_value.strip()
+    if detector_type == "phone_number":
+        return re.sub(r"\D", "", raw_value)
+    return raw_value.strip()
 
 
 def _action_rank(action: str) -> int:

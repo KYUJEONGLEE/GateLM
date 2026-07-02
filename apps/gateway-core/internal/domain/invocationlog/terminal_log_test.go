@@ -44,9 +44,9 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		MaskingAction:           "redacted",
 		MaskingDetectedTypes:    []string{"email"},
 		MaskingDetectedCount:    1,
-		RedactedPromptPreview:   "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptPreview:   "Send a reply to [EMAIL_1].",
 		SecurityPolicyVersionID: "sec_p0_v1",
-		RedactedPromptForHash:   "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptForHash:   "Send a reply to [EMAIL_1].",
 		StartedAt:               startedAt,
 		CompletedAt:             completedAt,
 	})

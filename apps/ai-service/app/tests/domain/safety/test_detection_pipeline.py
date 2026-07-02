@@ -35,7 +35,7 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertEqual(decision.action, "redacted")
         self.assertEqual(decision.detected_types, ("email",))
         self.assertEqual(decision.detected_count, 1)
-        self.assertIn("[EMAIL_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertIn("[EMAIL_1]", decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
         self.assertFalse(hasattr(detections[0], "word"))
         self.assertFalse(hasattr(detections[0], "raw_value"))
@@ -202,7 +202,7 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertEqual(decision.detected_count, 2)
         self.assertEqual(
             decision.redacted_prompt_preview,
-            "Contact [PERSON_NAME_REDACTED] Example at [EMAIL_REDACTED].",
+            "Contact [PERSON_1] Example at [EMAIL_1].",
         )
         self.assertNotIn(raw_name, decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
@@ -240,7 +240,7 @@ class DetectionPipelineTests(unittest.TestCase):
 
         self.assertEqual(decision.detected_types, ("email",))
         self.assertEqual(decision.detected_count, 1)
-        self.assertEqual(decision.redacted_prompt_preview, "Contact [EMAIL_REDACTED].")
+        self.assertEqual(decision.redacted_prompt_preview, "Contact [EMAIL_1].")
         self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
 
     def test_overlapping_block_cluster_redacts_union_span(self) -> None:
@@ -318,7 +318,7 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertEqual(decision.detected_count, 2)
         self.assertEqual(
             decision.redacted_prompt_preview,
-            "Review [PERSON_NAME_REDACTED]/[PERSON_NAME_REDACTED].",
+            "Review [PERSON_1]/[PERSON_2].",
         )
 
     def test_boundary_punctuation_is_preserved_outside_redaction_span(self) -> None:
@@ -345,7 +345,7 @@ class DetectionPipelineTests(unittest.TestCase):
             security_policy_hash="hash_security_policy_test",
         )
 
-        self.assertEqual(decision.redacted_prompt_preview, "Contact [EMAIL_REDACTED], please.")
+        self.assertEqual(decision.redacted_prompt_preview, "Contact [EMAIL_1], please.")
         self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
 
 

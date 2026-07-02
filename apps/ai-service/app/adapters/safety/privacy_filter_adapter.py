@@ -9,9 +9,14 @@ from app.domain.safety.detectors import ALLOWED_DETECTOR_TYPES
 
 
 DEFAULT_PRIVACY_FILTER_MODEL = "openai/privacy-filter"
+DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME = "openai--privacy-filter"
 DEFAULT_PRIVACY_FILTER_SOURCE = "openai_privacy_filter"
+KOELECTRA_PRIVACY_NER_MODEL = "amoeba04/koelectra-small-v3-privacy-ner"
+KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME = "amoeba04--koelectra-small-v3-privacy-ner"
+KOELECTRA_PRIVACY_NER_SOURCE = "koelectra_privacy_ner"
 
 DEFAULT_LABEL_MAP: Mapping[str, str] = {
+    "acc": "account_number",
     "account": "account_id",
     "account_id": "account_id",
     "account_number": "account_number",
@@ -21,33 +26,44 @@ DEFAULT_LABEL_MAP: Mapping[str, str] = {
     "bank_account": "bank_account",
     "card": "credit_card",
     "cloud_access_key": "cloud_access_key",
+    "crd": "credit_card",
     "credit_card": "credit_card",
     "customer_id": "customer_id",
     "database_url": "database_url",
     "date_of_birth": "date_of_birth",
     "date": "private_date",
+    "dln": "driver_license",
     "dob": "date_of_birth",
     "driver_license": "driver_license",
     "email": "email",
+    "ema": "email",
     "github_token": "github_token",
+    "id": "account_id",
     "ip": "ip_address",
     "ip_address": "ip_address",
     "jwt": "jwt",
     "loc": "postal_address",
     "location": "postal_address",
+    "org": "organization_name",
+    "organization": "organization_name",
+    "organization_name": "organization_name",
     "passport_number": "passport_number",
     "per": "person_name",
     "person": "person_name",
     "person_name": "person_name",
+    "phn": "phone_number",
     "phone": "phone_number",
     "phone_number": "phone_number",
     "private_address": "postal_address",
     "private_date": "private_date",
     "private_email": "email",
+    "private_organization": "organization_name",
     "private_person": "person_name",
     "private_phone": "phone_number",
     "private_url": "private_url",
     "provider_api_key": "provider_api_key",
+    "psp": "passport_number",
+    "pwd": "password_assignment",
     "resident_registration_number": "resident_registration_number",
     "rrn": "resident_registration_number",
     "secret": "secret",
@@ -69,6 +85,7 @@ class PrivacyFilterAdapter:
         source: str = DEFAULT_PRIVACY_FILTER_SOURCE,
         label_map: Mapping[str, str] | None = None,
         min_confidence: float = DEFAULT_ML_MIN_CONFIDENCE,
+        aggregation_strategy: str | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._classifier = classifier
@@ -76,6 +93,7 @@ class PrivacyFilterAdapter:
         self.source = source
         self.label_map = label_map or DEFAULT_LABEL_MAP
         self.min_confidence = min_confidence
+        self.aggregation_strategy = aggregation_strategy or aggregation_strategy_for_model(model_name)
 
     def detect(self, text: str) -> list[Detection]:
         if text == "":
@@ -113,7 +131,7 @@ class PrivacyFilterAdapter:
         return pipeline(
             task="token-classification",
             model=self.model_name,
-            aggregation_strategy="simple",
+            aggregation_strategy=self.aggregation_strategy,
         )
 
     def _detection_from_item(self, item: Mapping[str, Any], text_length: int) -> Detection | None:
@@ -146,16 +164,63 @@ def normalize_label(raw_label: str, label_map: Mapping[str, str] | None = None) 
     key = raw_label.strip()
     if key == "":
         return None
-    normalized = _strip_bio_prefix(key).lower()
+    normalized = _strip_bio_marker(key).lower()
     mapped = (label_map or DEFAULT_LABEL_MAP).get(normalized)
     if mapped is None:
         return None
     return mapped.strip() or None
 
 
+def source_for_model(model_name: str) -> str:
+    if _is_default_privacy_filter_model(model_name):
+        return DEFAULT_PRIVACY_FILTER_SOURCE
+    if _is_koelectra_privacy_ner_model(model_name):
+        return KOELECTRA_PRIVACY_NER_SOURCE
+    return "huggingface_token_classifier"
+
+
+def aggregation_strategy_for_model(model_name: str) -> str:
+    if _is_koelectra_privacy_ner_model(model_name):
+        return "none"
+    return "simple"
+
+
+def public_model_id_for_model(model_name: str) -> str:
+    if _is_default_privacy_filter_model(model_name):
+        return DEFAULT_PRIVACY_FILTER_MODEL
+    if _is_koelectra_privacy_ner_model(model_name):
+        return KOELECTRA_PRIVACY_NER_MODEL
+    return model_name
+
+
+def _is_default_privacy_filter_model(model_name: str) -> bool:
+    normalized = model_name.replace("\\", "/").rstrip("/")
+    return normalized == DEFAULT_PRIVACY_FILTER_MODEL or normalized.endswith(
+        f"/{DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME}"
+    )
+
+
+def _is_koelectra_privacy_ner_model(model_name: str) -> bool:
+    normalized = model_name.replace("\\", "/").rstrip("/")
+    return normalized == KOELECTRA_PRIVACY_NER_MODEL or normalized.endswith(
+        f"/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}"
+    )
+
+
+def _strip_bio_marker(label: str) -> str:
+    without_prefix = _strip_bio_prefix(label)
+    return _strip_bio_suffix(without_prefix)
+
+
 def _strip_bio_prefix(label: str) -> str:
     if len(label) > 2 and label[1] == "-" and label[0].upper() in {"B", "I", "E", "S", "U"}:
         return label[2:]
+    return label
+
+
+def _strip_bio_suffix(label: str) -> str:
+    if len(label) > 2 and label[-2] == "-" and label[-1].upper() in {"B", "I", "E", "S", "U"}:
+        return label[:-2]
     return label
 
 

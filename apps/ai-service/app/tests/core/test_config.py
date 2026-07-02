@@ -4,10 +4,45 @@ import os
 import unittest
 from unittest.mock import patch
 
+from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
+from app.core.config import DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID, load_settings
 from app.main import run
 
 
 class AiServiceLauncherConfigTests(unittest.TestCase):
+    def test_settings_loads_configured_ai_safety_detector_model_id(self) -> None:
+        env = {
+            "AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID": KOELECTRA_PRIVACY_NER_MODEL,
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_model_id, KOELECTRA_PRIVACY_NER_MODEL)
+
+    def test_settings_rejects_blank_or_whitespace_model_id(self) -> None:
+        env = {
+            "AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID": "bad model id",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_model_id, DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID)
+
+    def test_settings_loads_additional_ai_safety_detector_model_ids(self) -> None:
+        env = {
+            "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS": (
+                f"{KOELECTRA_PRIVACY_NER_MODEL}, custom/example-token-classifier,"
+                f"{KOELECTRA_PRIVACY_NER_MODEL}, bad model id"
+            ),
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(
+            settings.ai_safety_additional_detector_model_ids,
+            (KOELECTRA_PRIVACY_NER_MODEL, "custom/example-token-classifier"),
+        )
+
     def test_launcher_passes_access_log_setting_to_uvicorn(self) -> None:
         env = {
             "AI_SERVICE_HOST": "127.0.0.9",

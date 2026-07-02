@@ -17,6 +17,7 @@ type Engine struct {
 type ApplyRequest struct {
 	Prompt                  string
 	SecurityPolicyVersionID string
+	EntityScope             *EntityScope
 }
 
 func NewEngine(registry Registry, securityPolicyVersionID string) Engine {
@@ -63,6 +64,11 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		}
 	}
 
+	entityScope := req.EntityScope
+	if entityScope == nil {
+		entityScope = NewEntityScope()
+	}
+	effective = detectionsWithEntityPlaceholders(req.Prompt, effective, entityScope)
 	redactedPrompt := redact(req.Prompt, effective)
 	return Result{
 		Action:                  action,
@@ -72,6 +78,23 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		RedactedPromptPreview:   PreviewRedactedPrompt(redactedPrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}, nil
+}
+
+func detectionsWithEntityPlaceholders(input string, detections []Detection, entityScope *EntityScope) []Detection {
+	if len(detections) == 0 || entityScope == nil {
+		return detections
+	}
+
+	withPlaceholders := make([]Detection, len(detections))
+	copy(withPlaceholders, detections)
+	for index, detection := range withPlaceholders {
+		if detection.Action != ActionRedacted || detection.Start < 0 || detection.End > len(input) || detection.End <= detection.Start {
+			continue
+		}
+		rawValue := input[detection.Start:detection.End]
+		withPlaceholders[index].Placeholder = entityScope.PlaceholderFor(detection.Type, rawValue, detection.Placeholder)
+	}
+	return withPlaceholders
 }
 
 func PreviewRedactedPrompt(prompt string) string {

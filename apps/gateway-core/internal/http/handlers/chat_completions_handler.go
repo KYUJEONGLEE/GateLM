@@ -728,6 +728,7 @@ func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []pr
 	redactedMessages := make([]provider.ChatMessage, len(messages))
 	results := make([]maskdomain.Result, 0, len(messages))
 	redactedPromptParts := make([]string, 0, len(messages))
+	entityScope := maskdomain.NewEntityScope()
 	if strings.TrimSpace(securityPolicyVersionID) == "" {
 		securityPolicyVersionID = h.SecurityPolicyVersionID
 	}
@@ -741,6 +742,7 @@ func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []pr
 		result, err := h.MaskingEngine.Apply(ctx, maskdomain.ApplyRequest{
 			Prompt:                  content,
 			SecurityPolicyVersionID: securityPolicyVersionID,
+			EntityScope:             entityScope,
 		})
 		if err != nil {
 			return maskdomain.Result{}, nil, "", err

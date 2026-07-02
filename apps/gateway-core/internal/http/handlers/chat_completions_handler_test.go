@@ -1178,13 +1178,13 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 			name:        "email",
 			prompt:      "Write a safe reply to user@example.invalid about the refund.",
 			rawValue:    "user@example.invalid",
-			placeholder: "[EMAIL_REDACTED]",
+			placeholder: "[EMAIL_1]",
 		},
 		{
 			name:        "phone",
 			prompt:      "Write a safe reply asking them to call 010-0000-0000 tomorrow.",
 			rawValue:    "010-0000-0000",
-			placeholder: "[PHONE_NUMBER_REDACTED]",
+			placeholder: "[PHONE_NUMBER_1]",
 		},
 	}
 
@@ -1253,6 +1253,128 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 				t.Fatalf("redacted prompt preview must not include raw sensitive value %q: %q", tt.rawValue, logged.RedactedPromptPreview)
 			}
 		})
+	}
+}
+
+func TestChatCompletionsHandlerKeepsEntityScopeAcrossRequestMessages(t *testing.T) {
+	chatCalls := 0
+	var providerRequests []provider.ChatCompletionRequest
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls:    &chatCalls,
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "system",
+				Content: json.RawMessage(jsonStringLiteral("Primary contact is first@example.invalid.")),
+			},
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral("Email second@example.invalid, then first@example.invalid.")),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
+	}
+
+	providerPrompt := recordedProviderPrompt(t, providerRequests)
+	expected := "Primary contact is [EMAIL_1].\nEmail [EMAIL_2], then [EMAIL_1]."
+	if providerPrompt != expected {
+		t.Fatalf("expected request-scoped redacted prompt %q, got %q", expected, providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "first@example.invalid") || strings.Contains(providerPrompt, "second@example.invalid") {
+		t.Fatalf("provider prompt must not include raw emails: %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].RedactedPromptPreview != expected {
+		t.Fatalf("expected request-scoped log preview %q, got %q", expected, logWriter.logs[0].RedactedPromptPreview)
+	}
+}
+
+func TestChatCompletionsHandlerKeepsFirstPersonRoleAcrossRequestMessages(t *testing.T) {
+	chatCalls := 0
+	var providerRequests []provider.ChatCompletionRequest
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls:    &chatCalls,
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "system",
+				Content: json.RawMessage(jsonStringLiteral("customer_name=Alex Kim")),
+			},
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral("patient_name=Alex Kim")),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
+	}
+
+	providerPrompt := recordedProviderPrompt(t, providerRequests)
+	expected := "customer_name=[CUSTOMER_1]\npatient_name=[CUSTOMER_1]"
+	if providerPrompt != expected {
+		t.Fatalf("expected request-scoped role-aware prompt %q, got %q", expected, providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "Alex Kim") || strings.Contains(providerPrompt, "[PATIENT_1]") {
+		t.Fatalf("provider prompt must keep first role without raw person name: %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].RedactedPromptPreview != expected {
+		t.Fatalf("expected role-aware log preview %q, got %q", expected, logWriter.logs[0].RedactedPromptPreview)
 	}
 }
 

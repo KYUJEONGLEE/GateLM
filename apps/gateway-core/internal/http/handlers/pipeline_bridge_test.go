@@ -350,7 +350,7 @@ func TestApplyGatewayContextCopiesMaskingMetadata(t *testing.T) {
 			Action:                  "redacted",
 			DetectedTypes:           []string{"email"},
 			DetectedCount:           1,
-			RedactedPromptPreview:   "Contact [EMAIL_REDACTED].",
+			RedactedPromptPreview:   "Contact [EMAIL_1].",
 			SecurityPolicyVersionID: "security_policy_p0_v1",
 		},
 	}
@@ -366,7 +366,7 @@ func TestApplyGatewayContextCopiesMaskingMetadata(t *testing.T) {
 	if reqCtx.MaskingDetectedCount != 1 {
 		t.Fatalf("expected masking detected count 1, got %d", reqCtx.MaskingDetectedCount)
 	}
-	if reqCtx.RedactedPromptPreview != "Contact [EMAIL_REDACTED]." {
+	if reqCtx.RedactedPromptPreview != "Contact [EMAIL_1]." {
 		t.Fatalf("unexpected redacted prompt preview: %q", reqCtx.RedactedPromptPreview)
 	}
 	if reqCtx.SecurityPolicyVersionID != "security_policy_p0_v1" {

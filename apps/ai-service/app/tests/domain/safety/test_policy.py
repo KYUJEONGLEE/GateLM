@@ -33,7 +33,7 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(decision.detected_types, ("api_key", "email"))
         self.assertEqual(decision.detected_count, 2)
         self.assertEqual(decision.block_reason, "sensitive_data_blocked")
-        self.assertIn("[EMAIL_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertIn("[EMAIL_1]", decision.redacted_prompt_preview or "")
         self.assertIn("[API_KEY_REDACTED]", decision.redacted_prompt_preview or "")
         self.assertNotIn("1234567890abcdef", decision.redacted_prompt_preview or "")
 
@@ -494,8 +494,46 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(prompt[signals[0].start : signals[0].end], "alex@example.test")
         self.assertEqual(
             redact_prompt(prompt, signals),
-            "Contact ( [EMAIL_REDACTED] ) for the synthetic demo.",
+            "Contact ( [EMAIL_1] ) for the synthetic demo.",
         )
+
+    def test_redact_prompt_uses_entity_consistent_placeholders_for_supported_pii(self) -> None:
+        prompt = (
+            "Contact Alex Kim at alex@example.test. "
+            "Alex Kim can use alex@example.test or 010-0000-0000 and 010 0000 0000."
+        )
+
+        signals = [
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "email", "alex@example.test", "[EMAIL_REDACTED]"),
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]", occurrence=2),
+            signal(prompt, "email", "alex@example.test", "[EMAIL_REDACTED]", occurrence=2),
+            signal(prompt, "phone_number", "010-0000-0000", "[PHONE_NUMBER_REDACTED]"),
+            signal(prompt, "phone_number", "010 0000 0000", "[PHONE_NUMBER_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "Contact [PERSON_1] at [EMAIL_1]. "
+                "[PERSON_1] can use [EMAIL_1] or [PHONE_NUMBER_1] and [PHONE_NUMBER_1]."
+            ),
+        )
+
+    def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
+        raw_secret = "syntheticSecretValue1234567890abcdef"
+        prompt = f"Review secret {raw_secret} for Alex Kim."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "secret", raw_secret, "[SECRET_REDACTED]", action="block"),
+                signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(redacted, "Review secret [SECRET_REDACTED] for [PERSON_1].")
+        self.assertNotIn(raw_secret, redacted)
 
     def test_noop_evaluator_returns_none_without_preview(self) -> None:
         decision = NoopSafetyEvaluator().evaluate(
@@ -571,7 +609,7 @@ def assert_redacted_detector(
     test_case.assertEqual(decision.action, "redacted")
     test_case.assertEqual(decision.detected_types, (detector_type,))
     test_case.assertEqual(decision.detected_count, 1)
-    test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")
+    test_case.assertIn(expected_placeholder(detector_type, placeholder), decision.redacted_prompt_preview or "")
     test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
 
 
@@ -605,6 +643,43 @@ def detector(
         action=action,
         placeholder=placeholder,
     )
+
+
+def expected_placeholder(detector_type: str, fallback: str) -> str:
+    return {
+        "person_name": "[PERSON_1]",
+        "organization_name": "[ORGANIZATION_1]",
+        "postal_address": "[ADDRESS_1]",
+        "email": "[EMAIL_1]",
+        "phone_number": "[PHONE_NUMBER_1]",
+    }.get(detector_type, fallback)
+
+
+def signal(
+    prompt: str,
+    detector_type: str,
+    raw_value: str,
+    placeholder: str,
+    *,
+    action: str = "redact",
+    occurrence: int = 1,
+) -> SafetySignal:
+    start = nth_index(prompt, raw_value, occurrence)
+    return SafetySignal(
+        detector_type=detector_type,
+        start=start,
+        end=start + len(raw_value),
+        action=action,
+        placeholder=placeholder,
+        priority=10,
+    )
+
+
+def nth_index(text: str, value: str, occurrence: int) -> int:
+    start = -1
+    for _ in range(occurrence):
+        start = text.index(value, start + 1)
+    return start
 
 
 if __name__ == "__main__":

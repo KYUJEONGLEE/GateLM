@@ -29,6 +29,10 @@ def get_ai_safety_detector_service(request: Request) -> AiSafetyDetectorService:
     service = getattr(request.app.state, "ai_safety_detector_service", None)
     if isinstance(service, AiSafetyDetectorService):
         return service
-    service = AiSafetyDetectorService()
+    settings = get_settings(request)
+    service = AiSafetyDetectorService(
+        model_id=settings.ai_safety_detector_model_id,
+        additional_model_ids=settings.ai_safety_additional_detector_model_ids,
+    )
     request.app.state.ai_safety_detector_service = service
     return service

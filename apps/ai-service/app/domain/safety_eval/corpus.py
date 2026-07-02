@@ -25,6 +25,7 @@ REQUIRED_TOP_LEVEL_FIELDS = {
     "expectedGatewayEffects",
     "tags",
 }
+OPTIONAL_COVERAGE_DETECTOR_TYPES = {"organization_name"}
 REDACT_DETECTOR_TYPES = {
     "email",
     "phone_number",
@@ -33,6 +34,7 @@ REDACT_DETECTOR_TYPES = {
     "private_date",
     "private_url",
     "person_name",
+    "organization_name",
     "customer_id",
     "employee_id",
     "account_id",
@@ -220,7 +222,7 @@ def validate_coverage(cases: list[CorpusCase]) -> None:
     missing_actions = REQUIRED_ACTIONS - seen_actions
     if missing_actions:
         raise SafetyEvalError(f"missing action coverage: {sorted(missing_actions)}")
-    missing_detectors = DETECTOR_TYPES - seen_detectors
+    missing_detectors = (DETECTOR_TYPES - OPTIONAL_COVERAGE_DETECTOR_TYPES) - seen_detectors
     if missing_detectors:
         raise SafetyEvalError(f"missing detector coverage: {sorted(missing_detectors)}")
 

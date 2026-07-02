@@ -26,11 +26,111 @@ func TestP0EngineRedactsEmailAndPhone(t *testing.T) {
 	if result.DetectedCount != 2 {
 		t.Fatalf("expected detected count 2, got %d", result.DetectedCount)
 	}
-	if !strings.Contains(result.RedactedPrompt, PlaceholderEmail) || !strings.Contains(result.RedactedPrompt, PlaceholderPhoneNumber) {
+	if !strings.Contains(result.RedactedPrompt, "[EMAIL_1]") || !strings.Contains(result.RedactedPrompt, "[PHONE_NUMBER_1]") {
 		t.Fatalf("expected placeholders in redacted prompt, got %q", result.RedactedPrompt)
 	}
 	if strings.Contains(result.RedactedPrompt, "user@example.invalid") || strings.Contains(result.RedactedPrompt, "010-0000-0000") {
 		t.Fatalf("redacted prompt must not contain raw sensitive values: %q", result.RedactedPrompt)
+	}
+}
+
+func TestP0EngineUsesEntityConsistentPlaceholdersForRepeatedPII(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "Contact user@example.invalid, then user@example.invalid again. Call 010-0000-0000 or 010 0000 0000.",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	if result.Action != ActionRedacted {
+		t.Fatalf("expected redacted action, got %s", result.Action)
+	}
+	if strings.Count(result.RedactedPrompt, "[EMAIL_1]") != 2 {
+		t.Fatalf("expected repeated email to reuse [EMAIL_1], got %q", result.RedactedPrompt)
+	}
+	if strings.Count(result.RedactedPrompt, "[PHONE_NUMBER_1]") != 2 {
+		t.Fatalf("expected normalized repeated phone to reuse [PHONE_NUMBER_1], got %q", result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, "user@example.invalid") ||
+		strings.Contains(result.RedactedPrompt, "010-0000-0000") ||
+		strings.Contains(result.RedactedPrompt, "010 0000 0000") {
+		t.Fatalf("redacted prompt must not contain raw sensitive values: %q", result.RedactedPrompt)
+	}
+}
+
+func TestP0EngineRedactsConservativeLabeledNameOrganizationAndAddress(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "customer_name=Alex Kim, organization=Acme Corp, address=100 Example Street",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	if result.Action != ActionRedacted {
+		t.Fatalf("expected redacted action, got %s", result.Action)
+	}
+	for _, placeholder := range []string{"[PERSON_1]", "[ORGANIZATION_1]", "[ADDRESS_1]"} {
+		if !strings.Contains(result.RedactedPrompt, placeholder) {
+			t.Fatalf("expected redacted prompt to contain %s, got %q", placeholder, result.RedactedPrompt)
+		}
+	}
+	for _, rawValue := range []string{"Alex Kim", "Acme Corp", "100 Example Street"} {
+		if strings.Contains(result.RedactedPrompt, rawValue) {
+			t.Fatalf("redacted prompt must not include raw value %q: %q", rawValue, result.RedactedPrompt)
+		}
+	}
+	if !reflect.DeepEqual(result.DetectedTypes, []string{"organization_name", "person_name", "postal_address"}) {
+		t.Fatalf("expected stable sorted detected types, got %#v", result.DetectedTypes)
+	}
+}
+
+func TestP0EngineUsesRoleAwarePlaceholdersForExplicitPersonRoles(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "customer_name=Alex Kim, agent_name=Jamie Park, doctor_name=Pat Lee, patient_name=Riley Cho, name=Taylor Lee",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	if result.Action != ActionRedacted {
+		t.Fatalf("expected redacted action, got %s", result.Action)
+	}
+	for _, placeholder := range []string{"[CUSTOMER_1]", "[AGENT_1]", "[DOCTOR_1]", "[PATIENT_1]", "[PERSON_1]"} {
+		if !strings.Contains(result.RedactedPrompt, placeholder) {
+			t.Fatalf("expected redacted prompt to contain %s, got %q", placeholder, result.RedactedPrompt)
+		}
+	}
+	for _, rawValue := range []string{"Alex Kim", "Jamie Park", "Pat Lee", "Riley Cho", "Taylor Lee"} {
+		if strings.Contains(result.RedactedPrompt, rawValue) {
+			t.Fatalf("redacted prompt must not include raw value %q: %q", rawValue, result.RedactedPrompt)
+		}
+	}
+}
+
+func TestP0EngineKeepsFirstRoleForRepeatedPersonName(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "customer_name=Alex Kim, patient_name=Alex Kim",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	if strings.Count(result.RedactedPrompt, "[CUSTOMER_1]") != 2 {
+		t.Fatalf("expected repeated person to keep first role placeholder, got %q", result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, "[PATIENT_1]") {
+		t.Fatalf("expected first role to win over later conflicting role, got %q", result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, "Alex Kim") {
+		t.Fatalf("redacted prompt must not include raw person name: %q", result.RedactedPrompt)
 	}
 }
 

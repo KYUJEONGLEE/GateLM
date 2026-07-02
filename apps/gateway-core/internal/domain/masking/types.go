@@ -13,6 +13,9 @@ type DetectorType string
 const (
 	DetectorEmail                      DetectorType = "email"
 	DetectorPhoneNumber                DetectorType = "phone_number"
+	DetectorPostalAddress              DetectorType = "postal_address"
+	DetectorPersonName                 DetectorType = "person_name"
+	DetectorOrganizationName           DetectorType = "organization_name"
 	DetectorResidentRegistrationNumber DetectorType = "resident_registration_number"
 	DetectorAPIKey                     DetectorType = "api_key"
 	DetectorAuthorizationHeader        DetectorType = "authorization_header"
@@ -23,6 +26,9 @@ const (
 const (
 	PlaceholderEmail                      = "[EMAIL_REDACTED]"
 	PlaceholderPhoneNumber                = "[PHONE_NUMBER_REDACTED]"
+	PlaceholderPostalAddress              = "[ADDRESS_REDACTED]"
+	PlaceholderPersonName                 = "[PERSON_NAME_REDACTED]"
+	PlaceholderOrganizationName           = "[ORGANIZATION_NAME_REDACTED]"
 	PlaceholderResidentRegistrationNumber = "[RESIDENT_REGISTRATION_NUMBER_REDACTED]"
 	PlaceholderAPIKey                     = "[API_KEY_REDACTED]"
 	PlaceholderAuthorizationHeader        = "[AUTHORIZATION_HEADER_REDACTED]"
@@ -41,7 +47,7 @@ type Result struct {
 
 func P0ActionForDetector(detectorType string) (Action, bool) {
 	switch DetectorType(detectorType) {
-	case DetectorEmail, DetectorPhoneNumber:
+	case DetectorEmail, DetectorPhoneNumber, DetectorPostalAddress, DetectorPersonName, DetectorOrganizationName:
 		return ActionRedacted, true
 	case DetectorResidentRegistrationNumber, DetectorAPIKey, DetectorAuthorizationHeader, DetectorJWT, DetectorPrivateKey:
 		return ActionBlocked, true
@@ -56,6 +62,12 @@ func PlaceholderForDetector(detectorType string) (string, bool) {
 		return PlaceholderEmail, true
 	case DetectorPhoneNumber:
 		return PlaceholderPhoneNumber, true
+	case DetectorPostalAddress:
+		return PlaceholderPostalAddress, true
+	case DetectorPersonName:
+		return PlaceholderPersonName, true
+	case DetectorOrganizationName:
+		return PlaceholderOrganizationName, true
 	case DetectorResidentRegistrationNumber:
 		return PlaceholderResidentRegistrationNumber, true
 	case DetectorAPIKey:

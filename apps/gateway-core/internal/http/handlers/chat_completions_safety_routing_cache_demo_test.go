@@ -84,7 +84,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 		t.Fatalf("redacted request should continue to provider once, got provider calls=%d", *demo.providerCalls)
 	}
 	providerPrompt := providerPromptAt(t, *demo.providerRequests, 1)
-	if !strings.Contains(providerPrompt, "[EMAIL_REDACTED]") || !strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]") {
+	if !strings.Contains(providerPrompt, "[EMAIL_1]") || !strings.Contains(providerPrompt, "[PHONE_NUMBER_1]") {
 		t.Fatalf("provider prompt must contain redaction placeholders, got %q", providerPrompt)
 	}
 	if strings.Contains(providerPrompt, rawEmail) || strings.Contains(providerPrompt, rawPhone) ||
@@ -123,36 +123,36 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 		t.Fatalf("blocked response must not expose raw credential-like value")
 	}
 
-	t.Logf("\n[Given]\n유효한 API Key와 App Token이 있고, active runtime config에서 rule-based safety, model=auto routing, exact cache가 켜져 있다.")
-	t.Logf("\n[When #1 - 입력]\n%s", demoHTTPRequest(t, safePrompt))
+	t.Logf("\n[Given]\n?�효??API Key?� App Token???�고, active runtime config?�서 rule-based safety, model=auto routing, exact cache가 켜져 ?�다.")
+	t.Logf("\n[When #1 - ?�력]\n%s", demoHTTPRequest(t, safePrompt))
 	t.Logf("\n[Then #1 - 출력]\n%s", demoSuccessHTTPOutput(t, first, firstResp, map[string]any{
 		"providerCalls": providerCallsAfterFirst,
 		"cacheLookups":  cacheGetsAfterFirst,
 		"cacheWrites":   cacheSetsAfterFirst,
-		"의미":            "첫 safe 요청은 provider를 1회 호출하고 exact cache에 저장된다.",
+		"?��?":            "�?safe ?�청?� provider�?1???�출?�고 exact cache???�?�된??",
 	}))
-	t.Logf("\n[When #2 - 입력]\n%s", demoHTTPRequest(t, safePrompt))
+	t.Logf("\n[When #2 - ?�력]\n%s", demoHTTPRequest(t, safePrompt))
 	t.Logf("\n[Then #2 - 출력]\n%s", demoSuccessHTTPOutput(t, second, secondResp, map[string]any{
 		"cacheHitRequestId": demo.logWriter.logs[1].CacheHitRequestID,
 		"providerCalls":     providerCallsAfterSecond,
 		"providerBypassed":  providerCallsAfterSecond == providerCallsAfterFirst,
-		"의미":                "같은 safe 요청은 exact cache hit로 응답하며 provider 비용을 다시 만들지 않는다.",
+		"?��?":                "같�? safe ?�청?� exact cache hit�??�답?�며 provider 비용???�시 만들지 ?�는??",
 	}))
-	t.Logf("\n[When #3 - 입력]\n%s", demoHTTPRequest(t, "Write a safe reply to <email> and ask them to call <phone_number>."))
+	t.Logf("\n[When #3 - ?�력]\n%s", demoHTTPRequest(t, "Write a safe reply to <email> and ask them to call <phone_number>."))
 	t.Logf("\n[Then #3 - 출력]\n%s", demoSuccessHTTPOutput(t, redacted, redactedResp, map[string]any{
-		"providerPromptPreview":           "Write a safe reply to [EMAIL_REDACTED] and ask them to call [PHONE_NUMBER_REDACTED].",
-		"providerPromptContainsMask":      strings.Contains(providerPrompt, "[EMAIL_REDACTED]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]"),
+		"providerPromptPreview":           "Write a safe reply to [EMAIL_1] and ask them to call [PHONE_NUMBER_1].",
+		"providerPromptContainsMask":      strings.Contains(providerPrompt, "[EMAIL_1]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_1]"),
 		"rawSensitiveValueExposed":        false,
 		"actualRawValuesHiddenFromOutput": true,
-		"의미":                              "email/phone은 차단하지 않고 redaction 후 provider로 전달된다.",
+		"?��?":                              "email/phone?� 차단?��? ?�고 redaction ??provider�??�달?�다.",
 	}))
-	t.Logf("\n[When #4 - 입력]\n%s", demoHTTPRequest(t, "Summarize api_key=<credential_like_secret>"))
+	t.Logf("\n[When #4 - ?�력]\n%s", demoHTTPRequest(t, "Summarize api_key=<credential_like_secret>"))
 	t.Logf("\n[Then #4 - 출력]\n%s", demoErrorHTTPOutput(t, blocked, blockedResp, map[string]any{
 		"providerCallsUnchanged":    *demo.providerCalls == providerCallsBeforeBlocked,
 		"cacheBypassedBeforeKey":    len(demo.keyBuilder.materials) == keyBuildsBeforeBlocked,
 		"cacheLookupsBeforeBlocked": cacheGetsBeforeBlocked,
 		"cacheLookupsAfterBlocked":  demo.cacheStore.getCalls,
-		"의미":                        "credential-like 입력은 403으로 차단되고 cache key build/cache lookup/provider call 전에 멈춘다.",
+		"?��?":                        "credential-like ?�력?� 403?�로 차단?�고 cache key build/cache lookup/provider call ?�에 멈춘??",
 	}))
 }
 

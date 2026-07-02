@@ -1,6 +1,9 @@
 ARG PYTHON_VERSION=3.12
+ARG AI_SERVICE_INSTALL_ML_DEPS=false
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+
+ARG AI_SERVICE_INSTALL_ML_DEPS
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -15,7 +18,11 @@ ENV PATH=/opt/venv/bin:${PATH}
 COPY apps/ai-service/pyproject.toml ./pyproject.toml
 COPY apps/ai-service/app ./app
 
-RUN pip install --no-cache-dir .
+RUN if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
+    pip install --no-cache-dir ".[ml]"; \
+  else \
+    pip install --no-cache-dir .; \
+  fi
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runner
 

@@ -39,6 +39,7 @@ DEFAULT_DETECTION_PRIORITIES: Mapping[str, int] = {
     "employee_id": 33,
     "account_id": 34,
     "postal_address": 35,
+    "organization_name": 36,
     "phone_number": 40,
     "ip_address": 45,
     "email": 50,

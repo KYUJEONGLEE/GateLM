@@ -6,6 +6,10 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app.adapters.safety import PrivacyFilterAdapter
+from app.adapters.safety.privacy_filter_adapter import (
+    KOELECTRA_PRIVACY_NER_MODEL,
+    source_for_model,
+)
 from app.main import create_app
 from app.services.ai_safety_detector import AiSafetyDetectorService
 
@@ -42,7 +46,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["model"]["runtime"], "cpu_only")
         self.assertEqual(body["mode"], "shadow")
         self.assertEqual(body["outcome"], "redacted")
-        self.assertEqual(body["redactedPrompt"], "Contact [EMAIL_REDACTED] for the demo.")
+        self.assertEqual(body["redactedPrompt"], "Contact [EMAIL_1] for the demo.")
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email"])
         self.assertEqual(body["detections"][0]["detectorType"], "email")
         self.assertNotIn(SYNTHETIC_EMAIL, body_text)
@@ -107,6 +111,95 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["detections"][0]["action"], "block")
         self.assertNotIn(SYNTHETIC_ACCOUNT_NUMBER, body_text)
 
+    def test_detect_keeps_public_model_id_for_local_privacy_filter_path(self) -> None:
+        prompt = "Write a safe synthetic demo reply."
+        local_model_path = ".cache/huggingface/models/openai--privacy-filter"
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(
+            lambda _text: [],
+            model_name=local_model_path,
+        )
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["model"]["modelId"], "openai/privacy-filter")
+        self.assertEqual(body["outcome"], "passed")
+
+    def test_detect_runs_default_and_koelectra_detectors_together(self) -> None:
+        synthetic_email = "koelectra-sidecar@example.test"
+        synthetic_org = "SyntheticOrgToken"
+        synthetic_resident_number = "syntheticResidentNumberToken"
+        prompt = (
+            f"Contact {synthetic_email} for {synthetic_org} and validate resident "
+            f"registration number {synthetic_resident_number}."
+        )
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifiers(
+            (
+                "openai/privacy-filter",
+                lambda _text: [
+                    {
+                        "entity_group": "private_email",
+                        "score": 0.98,
+                        "start": prompt.index(synthetic_email),
+                        "end": prompt.index(synthetic_email) + len(synthetic_email),
+                        "word": synthetic_email,
+                    }
+                ],
+            ),
+            (
+                KOELECTRA_PRIVACY_NER_MODEL,
+                lambda _text: [
+                    {
+                        "entity_group": "ORG-B",
+                        "score": 0.95,
+                        "start": prompt.index(synthetic_org),
+                        "end": prompt.index(synthetic_org) + len(synthetic_org),
+                        "word": synthetic_org,
+                    },
+                    {
+                        "entity_group": "RRN-B",
+                        "score": 0.97,
+                        "start": prompt.index(synthetic_resident_number),
+                        "end": prompt.index(synthetic_resident_number) + len(synthetic_resident_number),
+                        "word": synthetic_resident_number,
+                    }
+                ],
+            ),
+        )
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["model"]["modelId"], "openai/privacy-filter")
+        self.assertEqual(body["outcome"], "blocked")
+        self.assertEqual(
+            body["redactedPrompt"],
+            (
+                "Contact [EMAIL_1] for [ORGANIZATION_1] "
+                "and validate resident registration "
+                "number [RESIDENT_REGISTRATION_NUMBER_REDACTED]."
+            ),
+        )
+        self.assertEqual(
+            body["detectorSummary"]["detectorCategories"],
+            ["email", "organization_name", "resident_registration_number"],
+        )
+        detection_sources = {detection["source"] for detection in body["detections"]}
+        self.assertEqual(detection_sources, {"openai_privacy_filter", "koelectra_privacy_ner"})
+        self.assertNotIn(synthetic_email, body_text)
+        self.assertNotIn(synthetic_org, body_text)
+        self.assertNotIn(synthetic_resident_number, body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
     def test_validation_error_does_not_echo_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL}."
         client = TestClient(create_app())
@@ -122,19 +215,34 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn(prompt, response_text)
 
 
-def service_with_classifier(classifier: object) -> AiSafetyDetectorService:
+def service_with_classifier(
+    classifier: object,
+    *,
+    model_name: str = "openai/privacy-filter",
+) -> AiSafetyDetectorService:
+    return service_with_classifiers((model_name, classifier))
+
+
+def service_with_classifiers(*model_classifiers: tuple[str, object]) -> AiSafetyDetectorService:
     return AiSafetyDetectorService(
-        adapter=PrivacyFilterAdapter(classifier=classifier),  # type: ignore[arg-type]
+        adapters=tuple(
+            PrivacyFilterAdapter(  # type: ignore[arg-type]
+                classifier=classifier,
+                model_name=model_name,
+                source=source_for_model(model_name),
+            )
+            for model_name, classifier in model_classifiers
+        ),
     )
 
 
-def payload(prompt_text: str) -> dict[str, object]:
+def payload(prompt_text: str, *, locale: str = "en-US") -> dict[str, object]:
     return {
         "contractVersion": "ai-safety-detector.v1",
         "mode": "shadow",
         "input": {
             "promptText": prompt_text,
-            "locale": "en-US",
+            "locale": locale,
         },
         "detectorConfig": {
             "detectorSet": "privacy-filter-default",
