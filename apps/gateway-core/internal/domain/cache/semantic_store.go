@@ -148,6 +148,9 @@ func (s *InMemorySemanticCacheStore) Upsert(ctx context.Context, entry SemanticC
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.entries == nil {
+		s.entries = map[string]SemanticCacheEntry{}
+	}
 	s.deleteExpiredLocked(now)
 	s.entries[entry.EntryID] = entry
 	s.enforceMaxEntriesLocked()

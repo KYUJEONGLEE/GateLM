@@ -5,6 +5,8 @@ import (
 	"unicode"
 )
 
+const maxCategoryClassifierChars = 2000
+
 func ClassifyCategory(promptText string) string {
 	normalized := normalizeCategoryClassifierText(promptText)
 	if normalized == "" {
@@ -26,7 +28,12 @@ func ClassifyCategory(promptText string) string {
 }
 
 func normalizeCategoryClassifierText(promptText string) string {
-	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(promptText))), " ")
+	trimmed := strings.TrimSpace(promptText)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = truncateCategoryClassifierText(trimmed, maxCategoryClassifierChars)
+	return strings.Join(strings.Fields(strings.ToLower(trimmed)), " ")
 }
 
 func containsCodeSignal(text string) bool {
@@ -43,9 +50,12 @@ func containsCodeSignal(text string) bool {
 	}
 	for _, token := range categoryTokens(text) {
 		switch token {
-		case "function", "class", "const", "let", "func", "select", "insert", "update", "delete", "go", "sql", "bug":
+		case "function", "class", "const", "func", "sql":
 			return true
 		}
+	}
+	if containsSQLCodePattern(text, categoryTokens(text)) {
+		return true
 	}
 	return false
 }
@@ -101,4 +111,58 @@ func categoryTokens(text string) []string {
 	return strings.FieldsFunc(text, func(r rune) bool {
 		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
 	})
+}
+
+func truncateCategoryClassifierText(text string, maxChars int) string {
+	if maxChars <= 0 {
+		return ""
+	}
+	count := 0
+	for index := range text {
+		if count == maxChars {
+			return text[:index]
+		}
+		count++
+	}
+	return text
+}
+
+func containsSQLCodePattern(text string, tokens []string) bool {
+	if strings.Contains(text, "select *") {
+		return true
+	}
+	for i, token := range tokens {
+		switch token {
+		case "insert":
+			if nextToken(tokens, i) == "into" {
+				return true
+			}
+		case "update":
+			if hasToken(tokens[i+1:], "set") {
+				return true
+			}
+		case "delete":
+			if nextToken(tokens, i) == "from" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func nextToken(tokens []string, index int) string {
+	next := index + 1
+	if next >= len(tokens) {
+		return ""
+	}
+	return tokens[next]
+}
+
+func hasToken(tokens []string, target string) bool {
+	for _, token := range tokens {
+		if token == target {
+			return true
+		}
+	}
+	return false
 }

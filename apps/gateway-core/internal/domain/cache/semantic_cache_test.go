@@ -92,6 +92,7 @@ func TestSemanticInMemoryStoreHit(t *testing.T) {
 	boundary := testSemanticBoundary(t, nil)
 	store := NewInMemorySemanticCacheStore(10)
 	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
 
 	entryVector := testSemanticVector(t, provider, "비밀번호 재설정 방법 알려줘")
 	err := store.Upsert(ctx, testSemanticEntry("entry-1", "request-1", boundary, entryVector, now, now.Add(time.Hour)))
@@ -121,6 +122,7 @@ func TestSemanticInMemoryStoreMissByThreshold(t *testing.T) {
 	boundary := testSemanticBoundary(t, nil)
 	store := NewInMemorySemanticCacheStore(10)
 	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
 
 	err := store.Upsert(ctx, testSemanticEntry("entry-1", "request-1", boundary, testSemanticVector(t, provider, "비밀번호 재설정 방법 알려줘"), now, now.Add(time.Hour)))
 	if err != nil {
@@ -145,6 +147,7 @@ func TestSemanticInMemoryStoreMissByBoundary(t *testing.T) {
 	baseBoundary := testSemanticBoundary(t, nil)
 	store := NewInMemorySemanticCacheStore(10)
 	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
 
 	err := store.Upsert(ctx, testSemanticEntry("entry-1", "request-1", baseBoundary, testSemanticVector(t, provider, "비밀번호 재설정 방법 알려줘"), now, now.Add(time.Hour)))
 	if err != nil {
@@ -193,6 +196,7 @@ func TestSemanticInMemoryStoreTTLExpired(t *testing.T) {
 	store := NewInMemorySemanticCacheStore(10)
 	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
 	store.now = func() time.Time { return now }
+	store.now = func() time.Time { return now }
 
 	err := store.Upsert(ctx, testSemanticEntry("entry-1", "request-1", boundary, testSemanticVector(t, provider, "비밀번호 재설정 방법 알려줘"), now.Add(-2*time.Hour), now.Add(-time.Hour)))
 	if err != nil {
@@ -216,6 +220,7 @@ func TestSemanticInMemoryStoreTopKOrdering(t *testing.T) {
 	boundary := testSemanticBoundary(t, nil)
 	store := NewInMemorySemanticCacheStore(10)
 	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
 
 	entries := []struct {
 		entryID string
@@ -249,6 +254,7 @@ func TestSemanticInMemoryStoreMaxEntriesPolicy(t *testing.T) {
 	boundary := testSemanticBoundary(t, nil)
 	store := NewInMemorySemanticCacheStore(2)
 	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
 
 	for i, entryID := range []string{"entry-oldest", "entry-middle", "entry-newest"} {
 		err := store.Upsert(ctx, testSemanticEntry(entryID, "request-"+entryID, boundary, []float64{1, float64(i) / 100}, now.Add(time.Duration(i)*time.Minute), now.Add(time.Hour)))
@@ -268,6 +274,30 @@ func TestSemanticInMemoryStoreMaxEntriesPolicy(t *testing.T) {
 	}
 	if _, ok := store.entries["entry-newest"]; !ok {
 		t.Fatalf("entry-newest는 남아 있어야 함")
+	}
+}
+
+func TestSemanticInMemoryStoreDirectInitUpsertInitializesEntries(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	store := &InMemorySemanticCacheStore{}
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+
+	err := store.Upsert(ctx, testSemanticEntry("entry-direct", "request-direct", boundary, []float64{1, 0}, now, now.Add(time.Hour)))
+	if err != nil {
+		t.Fatalf("직접 초기화한 store도 panic 없이 저장되어야 함: %v", err)
+	}
+	if len(store.entries) != 1 {
+		t.Fatalf("직접 초기화한 store의 entries map이 초기화되어야 함: got %d", len(store.entries))
+	}
+
+	result, err := store.Search(ctx, boundary, []float64{1, 0}, 0.90, 1)
+	if err != nil {
+		t.Fatalf("직접 초기화한 store search 실패: %v", err)
+	}
+	if !result.Hit || result.MatchedEntry == nil || result.MatchedEntry.RequestID != "request-direct" {
+		t.Fatalf("직접 초기화한 store에서도 저장된 entry가 조회되어야 함: %+v", result)
 	}
 }
 
@@ -301,6 +331,63 @@ func TestSemanticInMemoryStoreRejectsForbiddenSensitivePayload(t *testing.T) {
 				t.Fatalf("unsafe payload는 in-memory store에 남으면 안 됨")
 			}
 		})
+	}
+}
+
+func TestSemanticCacheServiceNormalizesInputInternally(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	store := NewInMemorySemanticCacheStore(10)
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	service := NewSemanticCacheService(store, NewFakeEmbeddingProvider("fake-test"), SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+	})
+
+	decision, err := service.Upsert(ctx, SemanticCacheStoreRequest{
+		EntryID:        "entry-normalized",
+		RequestID:      "request-normalized",
+		Boundary:       boundary,
+		NormalizedText: "  PASSWORD    RESET  ",
+		CachedResponse: []byte(`{"answer":"safe response"}`),
+		Now:            now,
+	})
+	if err != nil {
+		t.Fatalf("정규화 전 입력도 service 내부에서 canonical normalize 후 저장되어야 함: %v", err)
+	}
+	if decision.SemanticCacheDecisionReason != SemanticCacheReasonStored {
+		t.Fatalf("store decision reason 불일치: %+v", decision)
+	}
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:       boundary,
+		NormalizedText: "password reset",
+	})
+	if err != nil {
+		t.Fatalf("정규화된 query search 실패: %v", err)
+	}
+	if !result.Hit || !decision.SemanticCacheHit || decision.SemanticMatchedRequestID != "request-normalized" {
+		t.Fatalf("service 내부 정규화 후 같은 의미 입력은 hit이어야 함: result=%+v decision=%+v", result, decision)
+	}
+}
+
+func TestSemanticCacheServiceRejectsForbiddenInputAfterNormalization(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	service := NewSemanticCacheService(NewInMemorySemanticCacheStore(10), NewFakeEmbeddingProvider("fake-test"), SemanticCacheServiceConfig{
+		Enabled: true,
+	})
+
+	_, _, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:       boundary,
+		NormalizedText: "  RAW    PROMPT = customer secret  ",
+	})
+	if !errors.Is(err, ErrSemanticCacheInputUnsafe) {
+		t.Fatalf("금지 material은 내부 정규화 후에도 차단되어야 함: %v", err)
 	}
 }
 

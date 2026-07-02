@@ -281,25 +281,25 @@ func semanticEnvBool(key string, fallback bool) (bool, error) {
 	return parsed, nil
 }
 
-func semanticEnvFloat(key string, fallback float64, min float64, max float64) float64 {
+func semanticEnvFloat(key string, fallback float64, minVal float64, maxVal float64) float64 {
 	value := semanticEnvString(key, "")
 	if value == "" {
 		return fallback
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil || parsed < min || parsed > max {
+	if err != nil || parsed < minVal || parsed > maxVal {
 		return fallback
 	}
 	return parsed
 }
 
-func semanticEnvInt(key string, fallback int, min int) int {
+func semanticEnvInt(key string, fallback int, minVal int) int {
 	value := semanticEnvString(key, "")
 	if value == "" {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed < min {
+	if err != nil || parsed < minVal {
 		return fallback
 	}
 	return parsed

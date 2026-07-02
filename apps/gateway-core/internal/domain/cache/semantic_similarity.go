@@ -32,10 +32,10 @@ func CosineSimilarity(left []float64, right []float64) (float64, error) {
 	}
 
 	similarity := dot / (math.Sqrt(leftSquares) * math.Sqrt(rightSquares))
-	if similarity > 1 && similarity < 1.000000000001 {
+	if similarity > 1 {
 		return 1, nil
 	}
-	if similarity < -1 && similarity > -1.000000000001 {
+	if similarity < -1 {
 		return -1, nil
 	}
 	return similarity, nil

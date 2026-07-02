@@ -100,12 +100,13 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheEmbeddingProviderUnavailable
 	}
-	if !isSafeNormalizedSemanticText(request.NormalizedText) {
+	normalizedText, ok := safeSemanticCacheText(request.NormalizedText)
+	if !ok {
 		result.Reason = SemanticCacheReasonInvalidVector
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
 
-	embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: request.NormalizedText})
+	embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: normalizedText})
 	if err != nil {
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), err
@@ -134,7 +135,8 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheEmbeddingProviderUnavailable
 	}
-	if !isSafeNormalizedSemanticText(request.NormalizedText) {
+	normalizedText, ok := safeSemanticCacheText(request.NormalizedText)
+	if !ok {
 		result.Reason = SemanticCacheReasonPayloadUnsafe
 		return result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
@@ -143,7 +145,7 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 	if now.IsZero() {
 		now = time.Now()
 	}
-	embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: request.NormalizedText})
+	embedding, err := s.embeddingProvider.Embed(ctx, EmbeddingInput{NormalizedText: normalizedText})
 	if err != nil {
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result.Decision(true, providerName, s.config.PolicyVersion), err
@@ -170,13 +172,10 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 	return result.Decision(true, providerName, s.config.PolicyVersion), nil
 }
 
-func isSafeNormalizedSemanticText(text string) bool {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return false
+func safeSemanticCacheText(text string) (string, bool) {
+	normalized := normalizeSemanticText(text)
+	if normalized == "" {
+		return "", false
 	}
-	if trimmed != normalizeSemanticText(trimmed) {
-		return false
-	}
-	return !containsForbiddenSemanticCachePayload([]byte(trimmed))
+	return normalized, !containsForbiddenSemanticCachePayload([]byte(normalized))
 }

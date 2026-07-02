@@ -137,6 +137,11 @@ func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 		{name: "RT-CATEGORY-005 empty", prompt: "", category: CategoryUnknown},
 		{name: "RT-CATEGORY-006 translation priority", prompt: "환불 정책을 영어로 번역해줘", category: CategoryTranslation},
 		{name: "RT-CATEGORY-006 code priority", prompt: "이 코드를 영어로 번역해줘", category: CategoryCode},
+		{name: "RT-CATEGORY-008 ambiguous go let words stay general", prompt: "Let me know if we can go ahead with the weekly update", category: CategoryGeneral},
+		{name: "RT-CATEGORY-009 select update delete words stay general", prompt: "Please select a plan, update my profile, and delete the old address", category: CategoryGeneral},
+		{name: "RT-CATEGORY-010 bug without code context stays general", prompt: "I found a bug in my order status page", category: CategoryGeneral},
+		{name: "RT-CATEGORY-011 SQL pattern is code", prompt: "select * from users where id = 1", category: CategoryCode},
+		{name: "RT-CATEGORY-012 long prompt only uses classifier prefix", prompt: strings.Repeat("hello ", 420) + "```go\nconst value = 1\n```", category: CategoryGeneral},
 	}
 
 	for _, tc := range cases {
