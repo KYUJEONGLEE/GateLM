@@ -69,6 +69,15 @@ export type DomainOutcomes = {
   logging: DomainOutcome;
 };
 
+export type PromptCapture = {
+  capturedPrompt: string | null;
+  enabled: boolean;
+  maxChars: number;
+  mode: "disabled" | "log_safe_full";
+  truncated: boolean;
+  visibility: "admin_request_detail";
+};
+
 export type InvocationLogRecord = {
   requestId: string;
   traceId: string;
@@ -138,6 +147,7 @@ export type InvocationLogRecord = {
     detectorCategories: string[];
     maskingAction: string | null;
   };
+  promptCapture?: PromptCapture;
   httpStatus: number;
   errorCode: string | null;
   errorMessage: string | null;

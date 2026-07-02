@@ -2749,6 +2749,10 @@ select {
   overflow-wrap: anywhere;
 }
 
+.detail-section .detail-preformatted {
+  white-space: pre-wrap;
+}
+
 .onboarding-layout {
   display: grid;
   grid-template-columns: 1fr;

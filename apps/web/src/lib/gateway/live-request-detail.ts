@@ -56,6 +56,14 @@ type GatewayRequestDetailResponse = {
       redactedPromptPreview?: string | null;
     };
     model?: string;
+    promptCapture?: {
+      capturedPrompt?: string | null;
+      enabled?: boolean;
+      maxChars?: number;
+      mode?: "disabled" | "log_safe_full";
+      truncated?: boolean;
+      visibility?: "admin_request_detail";
+    };
     projectId?: string;
     provider?: string;
     providerCalled?: boolean;
@@ -226,6 +234,7 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       detectorCategories: data.safetySummary?.detectorCategories ?? data.masking?.maskingDetectedTypes ?? [],
       maskingAction: data.safetySummary?.maskingAction ?? maskingAction
     },
+    promptCapture: normalizePromptCapture(data.promptCapture),
     httpStatus: data.httpStatus ?? 0,
     errorCode: data.error?.errorCode ?? null,
     errorMessage: data.error?.errorMessage ?? null,
@@ -238,6 +247,19 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       }
     }
   };
+}
+
+function normalizePromptCapture(
+  value: NonNullable<GatewayRequestDetailResponse["data"]>["promptCapture"]
+) {
+  return {
+    capturedPrompt: value?.capturedPrompt ?? null,
+    enabled: value?.enabled ?? false,
+    maxChars: value?.maxChars ?? 8000,
+    mode: value?.mode ?? "disabled",
+    truncated: value?.truncated ?? false,
+    visibility: value?.visibility ?? "admin_request_detail"
+  } as const;
 }
 
 function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {
