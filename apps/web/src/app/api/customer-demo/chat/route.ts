@@ -620,7 +620,7 @@ function getGatewayStatus(result: GatewayCallResult): CustomerDemoExchange["stat
     return "rate_limited";
   }
 
-  if (result.httpStatus === 403 && errorCode === "sensitive_data_blocked") {
+  if (isBlockedGatewayError(result.httpStatus, errorCode)) {
     return "blocked";
   }
 
@@ -629,6 +629,20 @@ function getGatewayStatus(result: GatewayCallResult): CustomerDemoExchange["stat
   }
 
   return "failed";
+}
+
+function isBlockedGatewayError(httpStatus: number, errorCode: string | undefined) {
+  if (httpStatus !== 401 && httpStatus !== 403) {
+    return false;
+  }
+
+  return (
+    errorCode === "budget_blocked" ||
+    errorCode === "invalid_api_key" ||
+    errorCode === "invalid_app_token" ||
+    errorCode === "scope_mismatch" ||
+    errorCode === "sensitive_data_blocked"
+  );
 }
 
 function normalizeMaskingAction(value: string | undefined): CustomerDemoExchange["maskingAction"] {
