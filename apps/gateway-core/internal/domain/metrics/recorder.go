@@ -183,9 +183,10 @@ func streamBaseLabels(selectedProvider string, selectedModel string) []Label {
 }
 
 func normalizeStreamOutcome(outcome string) string {
-	switch strings.TrimSpace(outcome) {
+	trimmed := strings.TrimSpace(outcome)
+	switch trimmed {
 	case "completed", "interrupted", "cancelled":
-		return strings.TrimSpace(outcome)
+		return trimmed
 	default:
 		return "interrupted"
 	}

@@ -1573,6 +1573,9 @@ func streamEventHasContentDelta(payload json.RawMessage) bool {
 	if len(payload) == 0 {
 		return false
 	}
+	if !bytes.Contains(payload, []byte(`"content"`)) {
+		return false
+	}
 	var chunk struct {
 		Choices []struct {
 			Delta struct {
