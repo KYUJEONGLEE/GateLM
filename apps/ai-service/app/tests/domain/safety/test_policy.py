@@ -520,6 +520,59 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             ),
         )
 
+    def test_redact_prompt_uses_role_aware_placeholders_for_explicit_person_roles(self) -> None:
+        prompt = (
+            "customer Alex Kim asked agent Jamie Park. "
+            "patient Alex Kim later called doctor Pat Lee. "
+            "name Taylor Lee"
+        )
+
+        signals = [
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", "Jamie Park", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]", occurrence=2),
+            signal(prompt, "person_name", "Pat Lee", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", "Taylor Lee", "[PERSON_NAME_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "[CUSTOMER_1] asked [AGENT_1]. "
+                "[CUSTOMER_1] later called [DOCTOR_1]. "
+                "name [PERSON_1]"
+            ),
+        )
+
+    def test_redact_prompt_uses_role_aware_placeholders_for_korean_person_roles(self) -> None:
+        customer_name = "\uc774\uc724\uc9c0"
+        agent_name = "\uae40\ubbfc\uc218"
+        doctor_name = "\ubc15\uc9c0\ud6c8"
+        patient_name = "\ucd5c\uc11c\uc5f0"
+        prompt = (
+            f"\uace0\uac1d {customer_name}\uac00 "
+            f"\uc0c1\ub2f4\uc6d0 {agent_name}\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. "
+            f"\ub2f4\ub2f9 \uc758\uc0ac {doctor_name}\uc774 "
+            f"\ud658\uc790 {patient_name}\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
+        )
+
+        signals = [
+            signal(prompt, "person_name", customer_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", agent_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", doctor_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", patient_name, "[PERSON_NAME_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "[CUSTOMER_1]\uac00 "
+                "[AGENT_1]\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. "
+                "[DOCTOR_1]\uc774 "
+                "[PATIENT_1]\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
+            ),
+        )
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."

@@ -92,7 +92,14 @@ func detectionsWithEntityPlaceholders(input string, detections []Detection, enti
 			continue
 		}
 		rawValue := input[detection.Start:detection.End]
-		withPlaceholders[index].Placeholder = entityScope.PlaceholderFor(detection.Type, rawValue, detection.Placeholder)
+		roleContext := personRoleContext{}
+		if DetectorType(detection.Type) == DetectorPersonName {
+			roleContext = inferPersonRoleContext(input, detection.Start)
+		}
+		withPlaceholders[index].Placeholder = entityScope.PlaceholderForRole(detection.Type, rawValue, roleContext.prefix, detection.Placeholder)
+		if roleContext.consumeLabel {
+			withPlaceholders[index].Start = roleContext.redactStart
+		}
 	}
 	return withPlaceholders
 }

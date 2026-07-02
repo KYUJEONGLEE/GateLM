@@ -19,7 +19,11 @@ func NewEntityScope() *EntityScope {
 }
 
 func (s *EntityScope) PlaceholderFor(detectorType string, rawValue string, fallback string) string {
-	prefix, ok := entityPlaceholderPrefix(detectorType)
+	return s.PlaceholderForRole(detectorType, rawValue, "", fallback)
+}
+
+func (s *EntityScope) PlaceholderForRole(detectorType string, rawValue string, rolePrefix string, fallback string) string {
+	prefix, ok := entityPlaceholderPrefix(detectorType, rolePrefix)
 	if !ok {
 		return fallback
 	}
@@ -44,15 +48,18 @@ func (s *EntityScope) PlaceholderFor(detectorType string, rawValue string, fallb
 		return placeholder
 	}
 
-	s.counters[detectorType]++
-	placeholder := fmt.Sprintf("[%s_%d]", prefix, s.counters[detectorType])
+	s.counters[prefix]++
+	placeholder := fmt.Sprintf("[%s_%d]", prefix, s.counters[prefix])
 	typePlaceholders[normalized] = placeholder
 	return placeholder
 }
 
-func entityPlaceholderPrefix(detectorType string) (string, bool) {
+func entityPlaceholderPrefix(detectorType string, rolePrefix string) (string, bool) {
 	switch DetectorType(detectorType) {
 	case DetectorPersonName:
+		if isSupportedPersonRolePrefix(rolePrefix) {
+			return rolePrefix, true
+		}
 		return "PERSON", true
 	case DetectorOrganizationName:
 		return "ORGANIZATION", true
@@ -64,6 +71,15 @@ func entityPlaceholderPrefix(detectorType string) (string, bool) {
 		return "PHONE_NUMBER", true
 	default:
 		return "", false
+	}
+}
+
+func isSupportedPersonRolePrefix(prefix string) bool {
+	switch prefix {
+	case "CUSTOMER", "AGENT", "DOCTOR", "PATIENT":
+		return true
+	default:
+		return false
 	}
 }
 

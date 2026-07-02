@@ -200,6 +200,48 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_detect_returns_role_aware_person_placeholders(self) -> None:
+        customer_name = "Alex Kim"
+        agent_name = "Jamie Park"
+        prompt = f"customer {customer_name} asked agent {agent_name} for help."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(
+            lambda _text: [
+                {
+                    "entity_group": "person_name",
+                    "score": 0.98,
+                    "start": prompt.index(customer_name),
+                    "end": prompt.index(customer_name) + len(customer_name),
+                    "word": customer_name,
+                },
+                {
+                    "entity_group": "person_name",
+                    "score": 0.97,
+                    "start": prompt.index(agent_name),
+                    "end": prompt.index(agent_name) + len(agent_name),
+                    "word": agent_name,
+                },
+            ]
+        )
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "[CUSTOMER_1] asked [AGENT_1] for help.",
+        )
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
+        self.assertNotIn(customer_name, body_text)
+        self.assertNotIn(agent_name, body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
     def test_validation_error_does_not_echo_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL}."
         client = TestClient(create_app())

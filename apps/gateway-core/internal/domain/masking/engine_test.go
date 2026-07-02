@@ -134,6 +134,32 @@ func TestP0EngineKeepsFirstRoleForRepeatedPersonName(t *testing.T) {
 	}
 }
 
+func TestP0EngineUsesRoleAwarePlaceholdersForKoreanPersonRoles(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "\uace0\uac1d \uc774\uc724\uc9c0\uac00 \uc0c1\ub2f4\uc6d0 \uae40\ubbfc\uc218\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. \ub2f4\ub2f9 \uc758\uc0ac \ubc15\uc9c0\ud6c8\uc774 \ud658\uc790 \ucd5c\uc11c\uc5f0\uc5d0\uac8c \uc124\uba85\ud588\ub2e4.",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[CUSTOMER_1]\uac00 [AGENT_1]\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. [DOCTOR_1]\uc774 [PATIENT_1]\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected role labels to be folded into placeholders %q, got %q", expected, result.RedactedPrompt)
+	}
+	for _, placeholder := range []string{"[CUSTOMER_1]", "[AGENT_1]", "[DOCTOR_1]", "[PATIENT_1]"} {
+		if !strings.Contains(result.RedactedPrompt, placeholder) {
+			t.Fatalf("expected redacted prompt to contain %s, got %q", placeholder, result.RedactedPrompt)
+		}
+	}
+	for _, rawValue := range []string{"\uc774\uc724\uc9c0", "\uae40\ubbfc\uc218", "\ubc15\uc9c0\ud6c8", "\ucd5c\uc11c\uc5f0"} {
+		if strings.Contains(result.RedactedPrompt, rawValue) {
+			t.Fatalf("redacted prompt must not include raw value %q: %q", rawValue, result.RedactedPrompt)
+		}
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

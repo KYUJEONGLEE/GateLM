@@ -25,6 +25,84 @@ ENTITY_PLACEHOLDER_PREFIX_BY_DETECTOR_TYPE = {
     "email": "EMAIL",
     "phone_number": "PHONE_NUMBER",
 }
+PERSON_ROLE_PLACEHOLDER_PREFIXES = frozenset({"CUSTOMER", "AGENT", "DOCTOR", "PATIENT"})
+PERSON_ROLE_CONTEXT_LABELS = (
+    (
+        "CUSTOMER",
+        (
+            "customer",
+            "customer name",
+            "client",
+            "\uace0\uac1d",
+            "\uace0\uac1d\uba85",
+        ),
+    ),
+    (
+        "AGENT",
+        (
+            "agent",
+            "agent name",
+            "support agent",
+            "\uc0c1\ub2f4\uc6d0",
+            "\uc0c1\ub2f4\uc0ac",
+        ),
+    ),
+    (
+        "DOCTOR",
+        (
+            "doctor",
+            "doctor name",
+            "physician",
+            "\uc758\uc0ac",
+            "\ub2f4\ub2f9 \uc758\uc0ac",
+            "\uc8fc\uce58\uc758",
+        ),
+    ),
+    (
+        "PATIENT",
+        (
+            "patient",
+            "patient name",
+            "\ud658\uc790",
+        ),
+    ),
+)
+PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
+    (
+        "CUSTOMER",
+        (
+            "customer",
+            "client",
+            "\uace0\uac1d",
+        ),
+    ),
+    (
+        "AGENT",
+        (
+            "support agent",
+            "agent",
+            "\uc0c1\ub2f4\uc6d0",
+            "\uc0c1\ub2f4\uc0ac",
+        ),
+    ),
+    (
+        "DOCTOR",
+        (
+            "doctor",
+            "physician",
+            "\ub2f4\ub2f9 \uc758\uc0ac",
+            "\uc758\uc0ac",
+            "\uc8fc\uce58\uc758",
+        ),
+    ),
+    (
+        "PATIENT",
+        (
+            "patient",
+            "\ud658\uc790",
+        ),
+    ),
+)
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "email": frozenset("._-+@"),
@@ -120,10 +198,19 @@ class EntityMaskingScope:
         self._placeholders: dict[str, dict[str, str]] = {}
         self._counters: dict[str, int] = {}
 
-    def placeholder_for(self, detector_type: str, raw_value: str, fallback: str) -> str:
+    def placeholder_for(
+        self,
+        detector_type: str,
+        raw_value: str,
+        fallback: str,
+        *,
+        role_prefix: str | None = None,
+    ) -> str:
         prefix = ENTITY_PLACEHOLDER_PREFIX_BY_DETECTOR_TYPE.get(detector_type)
         if prefix is None:
             return fallback
+        if detector_type == "person_name" and role_prefix in PERSON_ROLE_PLACEHOLDER_PREFIXES:
+            prefix = role_prefix
 
         normalized = _normalize_entity_key(detector_type, raw_value)
         if normalized == "":
@@ -134,8 +221,8 @@ class EntityMaskingScope:
         if existing is not None:
             return existing
 
-        next_index = self._counters.get(detector_type, 0) + 1
-        self._counters[detector_type] = next_index
+        next_index = self._counters.get(prefix, 0) + 1
+        self._counters[prefix] = next_index
         placeholder = f"[{prefix}_{next_index}]"
         placeholders[normalized] = placeholder
         return placeholder
@@ -153,10 +240,12 @@ def redact_prompt(
     chunks: list[str] = []
     offset = 0
     for signal in signals:
-        if signal.start < offset or signal.end > len(prompt_text):
+        role_prefix, replacement_start = _person_role_context(prompt_text, signal)
+        start = replacement_start if replacement_start is not None else signal.start
+        if start < offset or signal.end > len(prompt_text):
             continue
-        chunks.append(prompt_text[offset:signal.start])
-        chunks.append(_placeholder_for_signal(prompt_text, signal, scope))
+        chunks.append(prompt_text[offset:start])
+        chunks.append(_placeholder_for_signal(prompt_text, signal, scope, role_prefix=role_prefix))
         offset = signal.end
     chunks.append(prompt_text[offset:])
     return "".join(chunks)
@@ -173,11 +262,18 @@ def _placeholder_for_signal(
     prompt_text: str,
     signal: SafetySignal,
     entity_scope: EntityMaskingScope,
+    *,
+    role_prefix: str | None = None,
 ) -> str:
     if signal.action != "redact":
         return signal.placeholder
     raw_value = prompt_text[signal.start : signal.end]
-    return entity_scope.placeholder_for(signal.detector_type, raw_value, signal.placeholder)
+    return entity_scope.placeholder_for(
+        signal.detector_type,
+        raw_value,
+        signal.placeholder,
+        role_prefix=role_prefix,
+    )
 
 
 def _normalize_entity_key(detector_type: str, raw_value: str) -> str:
@@ -188,6 +284,58 @@ def _normalize_entity_key(detector_type: str, raw_value: str) -> str:
     if detector_type == "phone_number":
         return re.sub(r"\D", "", raw_value)
     return raw_value.strip()
+
+
+def _person_role_prefix(prompt_text: str, signal: SafetySignal) -> str | None:
+    return _person_role_context(prompt_text, signal)[0]
+
+
+def _person_role_context(prompt_text: str, signal: SafetySignal) -> tuple[str | None, int | None]:
+    if signal.detector_type != "person_name":
+        return None, None
+    if signal.start < 0 or signal.start > len(prompt_text):
+        return None, None
+
+    context = _normalize_person_role_context(prompt_text[: signal.start])
+    if not context:
+        return None, None
+
+    for prefix, labels in PERSON_ROLE_CONTEXT_LABELS:
+        for label in labels:
+            if context == label or context.endswith(f" {label}"):
+                return prefix, _person_role_replacement_start(prompt_text[: signal.start], prefix)
+    return None, None
+
+
+def _normalize_person_role_context(value: str) -> str:
+    normalized = value.strip()
+    normalized = normalized.removesuffix(":")
+    normalized = normalized.removesuffix("=")
+    normalized = normalized.strip().lower()
+    normalized = normalized.replace("_", " ").replace("-", " ")
+    return " ".join(normalized.split())
+
+
+def _person_role_replacement_start(context: str, role_prefix: str) -> int | None:
+    trimmed = context.rstrip()
+    lower = trimmed.lower()
+    for prefix, labels in PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS:
+        if prefix != role_prefix:
+            continue
+        for label in labels:
+            label_start = len(lower) - len(label)
+            if label_start < 0 or not lower.endswith(label):
+                continue
+            if not _has_person_role_label_boundary(lower, label_start):
+                continue
+            return len(trimmed) - len(label)
+    return None
+
+
+def _has_person_role_label_boundary(value: str, label_start: int) -> bool:
+    if label_start <= 0:
+        return True
+    return value[label_start - 1].isspace() or value[label_start - 1] in "([{,.;:"
 
 
 def _action_rank(action: str) -> int:
