@@ -161,6 +161,26 @@ BUSINESS_ROLE_LABELS = (
     "AE",
 )
 KOREAN_PARTICLE_START_CHARS = frozenset("\uc740\ub294\uc774\uac00\uc744\ub97c\uc5d0\uaed8\uc640\uacfc\ub3c4\ub9cc\uc73c\ub85c")
+KOREAN_SUBJECT_PARTICLE_CHARS = frozenset("\uc740\ub294\uc774\uac00")
+SENTENCE_TERMINATOR_CHARS = frozenset(".!?\u3002\uff01\uff1f")
+SENTENCE_INITIAL_COREFERENCE_LABELS = (
+    ("\ud574\ub2f9 \uc9c1\uc6d0", True),
+    ("\uadf8 \uc0ac\ub78c", True),
+    ("\uc704 \uc0ac\ub78c", True),
+    ("\uadf8\ub140", True),
+    ("\uadf8\ubd84", True),
+    ("\uadf8", True),
+    ("they", False),
+    ("she", False),
+    ("he", False),
+)
+PERSON_COREFERENCE_PLACEHOLDER_PREFIXES = (
+    "[PERSON_",
+    "[CUSTOMER_",
+    "[AGENT_",
+    "[DOCTOR_",
+    "[PATIENT_",
+)
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "email": frozenset("._-+@"),
@@ -341,19 +361,19 @@ def redact_prompt(
         return prompt_text
     scope = entity_scope or EntityMaskingScope()
     replacements: list[tuple[int, int, str]] = []
+    person_replacements: list[tuple[int, int, str]] = []
     for signal in signals:
         role_prefix, replacement_start = _person_role_context(prompt_text, signal)
         start = replacement_start if replacement_start is not None else signal.start
         if start < 0 or signal.end > len(prompt_text) or signal.end <= start:
             continue
-        replacements.append(
-            (
-                start,
-                signal.end,
-                _placeholder_for_signal(prompt_text, signal, scope, role_prefix=role_prefix),
-            )
-        )
+        placeholder = _placeholder_for_signal(prompt_text, signal, scope, role_prefix=role_prefix)
+        replacement = (start, signal.end, placeholder)
+        replacements.append(replacement)
+        if signal.detector_type == "person_name" and signal.action == "redact":
+            person_replacements.append(replacement)
     replacements.extend(_business_role_replacements(prompt_text, replacements))
+    replacements.extend(_coreference_replacements(prompt_text, person_replacements, replacements))
     return _apply_prompt_replacements(prompt_text, replacements)
 
 
@@ -378,6 +398,161 @@ def _business_role_replacements(
 
 def _role_pattern(role: str) -> str:
     return re.escape(role).replace(r"\ ", r"\s+")
+
+
+def _coreference_replacements(
+    prompt_text: str,
+    person_replacements: list[tuple[int, int, str]],
+    protected_replacements: list[tuple[int, int, str]],
+) -> list[tuple[int, int, str]]:
+    sentences = _sentence_ranges(prompt_text)
+    if len(sentences) < 2:
+        return []
+
+    replacements: list[tuple[int, int, str]] = []
+    for sentence_index in range(1, len(sentences)):
+        coreference_span = _sentence_initial_coreference_span(prompt_text, sentences[sentence_index])
+        if coreference_span is None:
+            continue
+
+        placeholder = _previous_sentence_subject_placeholder(
+            prompt_text,
+            sentences[sentence_index - 1],
+            person_replacements,
+        )
+        if placeholder is None:
+            continue
+
+        start, end = coreference_span
+        if _overlaps_any_replacement(start, end, protected_replacements):
+            continue
+        if _overlaps_any_replacement(start, end, replacements):
+            continue
+        replacements.append((start, end, placeholder))
+    return replacements
+
+
+def _sentence_ranges(prompt_text: str) -> list[tuple[int, int]]:
+    if prompt_text == "":
+        return []
+
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    for index, char in enumerate(prompt_text):
+        if char not in SENTENCE_TERMINATOR_CHARS:
+            continue
+        end = index + 1
+        ranges.append((start, end))
+        start = end
+    if start < len(prompt_text):
+        ranges.append((start, len(prompt_text)))
+    return ranges
+
+
+def _sentence_initial_coreference_span(
+    prompt_text: str,
+    sentence: tuple[int, int],
+) -> tuple[int, int] | None:
+    start = _first_non_space_index(prompt_text, sentence[0], sentence[1])
+    if start is None:
+        return None
+
+    for label, is_korean in SENTENCE_INITIAL_COREFERENCE_LABELS:
+        end = start + len(label)
+        if end > sentence[1]:
+            continue
+        raw_value = prompt_text[start:end]
+        if is_korean:
+            if raw_value == label and _has_korean_coreference_boundary(prompt_text, end):
+                return start, end
+            continue
+        if raw_value.lower() == label and _has_english_word_boundary(prompt_text, end):
+            return start, end
+    return None
+
+
+def _first_non_space_index(prompt_text: str, start: int, end: int) -> int | None:
+    for index in range(start, end):
+        if not prompt_text[index].isspace():
+            return index
+    return None
+
+
+def _has_korean_coreference_boundary(prompt_text: str, end: int) -> bool:
+    if end >= len(prompt_text):
+        return True
+    return prompt_text[end] in KOREAN_SUBJECT_PARTICLE_CHARS
+
+
+def _has_english_word_boundary(prompt_text: str, end: int) -> bool:
+    if end >= len(prompt_text):
+        return True
+    next_char = prompt_text[end]
+    return not (next_char.isalnum() or next_char == "_")
+
+
+def _previous_sentence_subject_placeholder(
+    prompt_text: str,
+    sentence: tuple[int, int],
+    person_replacements: list[tuple[int, int, str]],
+) -> str | None:
+    people = sorted(
+        (
+            replacement
+            for replacement in person_replacements
+            if sentence[0] <= replacement[0] and replacement[1] <= sentence[1] and replacement[1] > replacement[0]
+        ),
+        key=lambda replacement: (replacement[0], replacement[1]),
+    )
+    if not people or _has_person_group_conjunction(prompt_text, people):
+        return None
+
+    candidates: list[tuple[int, int, str]] = []
+    for replacement in people:
+        start, end, placeholder = replacement
+        if not _is_person_coreference_placeholder(placeholder):
+            continue
+        if _is_korean_subject_candidate(prompt_text, end) or _is_english_subject_candidate(prompt_text, sentence, start, end):
+            candidates.append(replacement)
+    if len(candidates) != 1:
+        return None
+    return candidates[0][2]
+
+
+def _has_person_group_conjunction(
+    prompt_text: str,
+    people: list[tuple[int, int, str]],
+) -> bool:
+    for index in range(len(people) - 1):
+        between = prompt_text[people[index][1] : people[index + 1][0]].strip()
+        if between in {"\uc640", "\uacfc", "\ub791", "\ud558\uace0", "&"}:
+            return True
+        if between.lower() == "and":
+            return True
+    return False
+
+
+def _is_korean_subject_candidate(prompt_text: str, end: int) -> bool:
+    if end >= len(prompt_text):
+        return False
+    return prompt_text[end] in KOREAN_SUBJECT_PARTICLE_CHARS
+
+
+def _is_english_subject_candidate(
+    prompt_text: str,
+    sentence: tuple[int, int],
+    start: int,
+    end: int,
+) -> bool:
+    return _first_non_space_index(prompt_text, sentence[0], sentence[1]) == start and _has_ascii_letter(prompt_text[start:end])
+
+
+def _has_ascii_letter(value: str) -> bool:
+    return any("A" <= char <= "Z" or "a" <= char <= "z" for char in value)
+
+
+def _is_person_coreference_placeholder(placeholder: str) -> bool:
+    return placeholder.startswith(PERSON_COREFERENCE_PLACEHOLDER_PREFIXES)
 
 
 def _has_business_role_boundary(prompt_text: str, start: int, end: int) -> bool:

@@ -249,6 +249,84 @@ func TestEngineDoesNotLinkAmbiguousKoreanPersonAlias(t *testing.T) {
 	}
 }
 
+func TestEnginePreservesCoreferenceForPreviousUniqueSubject(t *testing.T) {
+	senderName := "\uc774\uc724\uc9c0"
+	recipientName := "\uae40\ubbfc\uc218"
+	prompt := senderName + "\uac00 " + recipientName + "\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. " +
+		"\uadf8\ub140\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: []Detection{
+			personDetection(prompt, senderName, 1),
+			personDetection(prompt, recipientName, 1),
+		}}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\uac00 [PERSON_2]\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. " +
+		"[PERSON_1]\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected coreference-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	if strings.Contains(result.RedactedPrompt, senderName) ||
+		strings.Contains(result.RedactedPrompt, recipientName) ||
+		strings.Contains(result.RedactedPrompt, "\uadf8\ub140") {
+		t.Fatalf("redacted prompt must not include raw person/coreference text: %q", result.RedactedPrompt)
+	}
+}
+
+func TestEngineLeavesCoreferenceWhenPreviousSubjectIsAmbiguous(t *testing.T) {
+	firstName := "\uc774\uc724\uc9c0"
+	secondName := "\uae40\ubbfc\uc218"
+	prompt := firstName + "\uc640 " + secondName + "\uac00 \ucc38\uc11d\ud588\ub2e4. " +
+		"\uadf8\ub140\ub294 \ubc1c\ud45c\ub97c \uc900\ube44\ud588\ub2e4."
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: []Detection{
+			personDetection(prompt, firstName, 1),
+			personDetection(prompt, secondName, 1),
+		}}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\uc640 [PERSON_2]\uac00 \ucc38\uc11d\ud588\ub2e4. " +
+		"\uadf8\ub140\ub294 \ubc1c\ud45c\ub97c \uc900\ube44\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected ambiguous coreference to stay unchanged %q, got %q", expected, result.RedactedPrompt)
+	}
+}
+
+func TestEnginePreservesEnglishCoreferenceForPreviousUniqueSubject(t *testing.T) {
+	senderName := "Alex Kim"
+	recipientName := "Jamie Park"
+	prompt := senderName + " emailed " + recipientName + ". She waited for a reply."
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: []Detection{
+			personDetection(prompt, senderName, 1),
+			personDetection(prompt, recipientName, 1),
+		}}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1] emailed [PERSON_2]. [PERSON_1] waited for a reply."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected English coreference-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

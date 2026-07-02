@@ -70,6 +70,7 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 	}
 	effective = detectionsWithEntityPlaceholders(req.Prompt, effective, entityScope)
 	redactionDetections := withRelationshipRolePlaceholders(req.Prompt, effective)
+	redactionDetections = withCoreferencePlaceholders(req.Prompt, effective, redactionDetections)
 	redactedPrompt := redact(req.Prompt, redactionDetections)
 	return Result{
 		Action:                  action,

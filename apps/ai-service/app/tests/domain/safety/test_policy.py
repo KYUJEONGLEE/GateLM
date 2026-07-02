@@ -723,6 +723,73 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertNotIn(second_name, redacted)
         self.assertNotIn(f"{alias}\ub2d8", redacted)
 
+    def test_redact_prompt_preserves_coreference_for_previous_unique_subject(self) -> None:
+        sender_name = "\uc774\uc724\uc9c0"
+        recipient_name = "\uae40\ubbfc\uc218"
+        prompt = (
+            f"{sender_name}\uac00 {recipient_name}\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
+            "\uadf8\ub140\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", sender_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", recipient_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            (
+                "[PERSON_1]\uac00 [PERSON_2]\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
+                "[PERSON_1]\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+            ),
+        )
+        self.assertNotIn(sender_name, redacted)
+        self.assertNotIn(recipient_name, redacted)
+        self.assertNotIn("\uadf8\ub140", redacted)
+
+    def test_redact_prompt_leaves_coreference_when_previous_subject_is_ambiguous(self) -> None:
+        first_name = "\uc774\uc724\uc9c0"
+        second_name = "\uae40\ubbfc\uc218"
+        prompt = (
+            f"{first_name}\uc640 {second_name}\uac00 \ucc38\uc11d\ud588\ub2e4. "
+            "\uadf8\ub140\ub294 \ubc1c\ud45c\ub97c \uc900\ube44\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", first_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", second_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\uc640 [PERSON_2]\uac00 \ucc38\uc11d\ud588\ub2e4. "
+            "\uadf8\ub140\ub294 \ubc1c\ud45c\ub97c \uc900\ube44\ud588\ub2e4.",
+        )
+
+    def test_redact_prompt_preserves_english_coreference_for_previous_unique_subject(self) -> None:
+        sender_name = "Alex Kim"
+        recipient_name = "Jamie Park"
+        prompt = f"{sender_name} emailed {recipient_name}. She waited for a reply."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", sender_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", recipient_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1] emailed [PERSON_2]. [PERSON_1] waited for a reply.",
+        )
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."
