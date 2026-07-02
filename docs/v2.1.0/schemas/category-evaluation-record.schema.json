@@ -46,23 +46,20 @@
       "type": "string",
       "enum": [
         "human_review",
-        "synthetic_fixture",
-        "llm_judge_candidate"
+        "synthetic_fixture"
       ]
     },
     "consentType": {
       "type": "string",
       "enum": [
         "synthetic",
-        "operator_opt_in",
-        "customer_opt_in"
+        "internal_manual_review"
       ]
     },
     "source": {
       "type": "string",
       "enum": [
         "synthetic_fixture",
-        "gateway_redacted_sample",
         "manual_seed"
       ]
     },
@@ -128,34 +125,6 @@
           },
           "labelSource": {
             "const": "synthetic_fixture"
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "source": {
-            "const": "gateway_redacted_sample"
-          }
-        },
-        "required": [
-          "source"
-        ]
-      },
-      "then": {
-        "properties": {
-          "consentType": {
-            "enum": [
-              "operator_opt_in",
-              "customer_opt_in"
-            ]
-          },
-          "labelSource": {
-            "enum": [
-              "human_review",
-              "llm_judge_candidate"
-            ]
           }
         }
       }

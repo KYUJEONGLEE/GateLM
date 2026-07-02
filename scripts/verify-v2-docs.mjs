@@ -1,7 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyCategoryEvaluationCaptureExport } from "./export-v2.1-category-eval-samples.mjs";
 import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -454,9 +453,6 @@ function main() {
   assertSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
   for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
-    fail(failure);
-  }
-  for (const failure of verifyCategoryEvaluationCaptureExport({ rootDir })) {
     fail(failure);
   }
 
