@@ -59,11 +59,11 @@ const (
 
 func CanonicalDecisionMaterial(material DecisionMaterial) DecisionMaterial {
 	return DecisionMaterial{
-		RoutingMode:   canonicalValue(material.RoutingMode, RoutingModeAuto, map[string]struct{}{RoutingModeAuto: {}, RoutingModePinned: {}}),
-		Category:      canonicalValue(material.Category, CategoryUnknown, map[string]struct{}{CategoryGeneral: {}, CategoryCode: {}, CategoryTranslation: {}, CategorySupportRefund: {}, CategoryUnknown: {}}),
-		Tier:          canonicalValue(material.Tier, TierBalanced, map[string]struct{}{TierLowCost: {}, TierBalanced: {}, TierHighQuality: {}}),
-		Capability:    canonicalValue(material.Capability, CapabilityChat, map[string]struct{}{CapabilityChat: {}, CapabilityReasoning: {}, CapabilityCode: {}, CapabilityTranslation: {}}),
-		PolicyVariant: canonicalValue(material.PolicyVariant, PolicyVariantDefault, map[string]struct{}{PolicyVariantDefault: {}}),
+		RoutingMode:   canonicalRoutingMode(material.RoutingMode),
+		Category:      canonicalCategory(material.Category),
+		Tier:          canonicalTier(material.Tier),
+		Capability:    canonicalCapability(material.Capability),
+		PolicyVariant: canonicalPolicyVariant(material.PolicyVariant),
 	}
 }
 
@@ -77,13 +77,52 @@ func DecisionKeyHash(material DecisionMaterial) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func canonicalValue(value string, fallback string, allowed map[string]struct{}) string {
+func canonicalRoutingMode(value string) string {
 	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
-	}
-	if _, ok := allowed[value]; ok {
+	switch value {
+	case RoutingModeAuto, RoutingModePinned:
 		return value
+	default:
+		return RoutingModeAuto
 	}
-	return fallback
+}
+
+func canonicalCategory(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySupportRefund, CategoryUnknown:
+		return value
+	default:
+		return CategoryUnknown
+	}
+}
+
+func canonicalTier(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case TierLowCost, TierBalanced, TierHighQuality:
+		return value
+	default:
+		return TierBalanced
+	}
+}
+
+func canonicalCapability(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation:
+		return value
+	default:
+		return CapabilityChat
+	}
+}
+
+func canonicalPolicyVariant(value string) string {
+	value = strings.TrimSpace(value)
+	switch value {
+	case PolicyVariantDefault:
+		return value
+	default:
+		return PolicyVariantDefault
+	}
 }

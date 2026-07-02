@@ -530,7 +530,9 @@ func (h *ChatCompletionsHandler) populateRoutingAwareCacheIdentity(ctx context.C
 		reqCtx.SelectedModelID = firstNonEmpty(reqCtx.SelectedModelID, reqCtx.SelectedModel, requestedModel, h.DefaultModel)
 		reqCtx.SelectedModel = firstNonEmpty(reqCtx.SelectedModel, reqCtx.SelectedModelID)
 		reqCtx.ProviderCatalogContentHash = firstNonEmpty(reqCtx.ProviderCatalogContentHash, ref.ContentHash, "legacy-provider-catalog-v1")
-		reqCtx.RoutingDecisionKeyHash = firstNonEmpty(reqCtx.RoutingDecisionKeyHash, routingDecisionKeyHashFromRequestContext(reqCtx))
+		if reqCtx.RoutingDecisionKeyHash == "" {
+			reqCtx.RoutingDecisionKeyHash = routingDecisionKeyHashFromRequestContext(reqCtx)
+		}
 		return nil
 	}
 	if h.ProviderCatalogResolver == nil {
@@ -598,7 +600,9 @@ func (h *ChatCompletionsHandler) populateRoutingAwareCacheIdentity(ctx context.C
 	reqCtx.SelectedModel = catalogModel.ModelID
 	reqCtx.SelectedModelID = catalogModel.ModelID
 	reqCtx.ProviderCatalogContentHash = catalog.ContentHash
-	reqCtx.RoutingDecisionKeyHash = firstNonEmpty(reqCtx.RoutingDecisionKeyHash, routingDecisionKeyHashFromRequestContext(reqCtx))
+	if reqCtx.RoutingDecisionKeyHash == "" {
+		reqCtx.RoutingDecisionKeyHash = routingDecisionKeyHashFromRequestContext(reqCtx)
+	}
 	return nil
 }
 
@@ -1009,7 +1013,10 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 	if maskedRequestBodyHash == "" {
 		maskedRequestBodyHash = redactedPromptHash(redactedPrompt)
 	}
-	routingDecisionHash := firstNonEmpty(reqCtx.RoutingDecisionKeyHash, routingDecisionKeyHashFromRequestContext(reqCtx))
+	routingDecisionHash := reqCtx.RoutingDecisionKeyHash
+	if routingDecisionHash == "" {
+		routingDecisionHash = routingDecisionKeyHashFromRequestContext(reqCtx)
+	}
 	reqCtx.RoutingDecisionKeyHash = routingDecisionHash
 	reqCtx.CacheKeyVersion = cachekey.ExactKeyMaterialVersion
 	providerID := reqCtx.SelectedProviderID
