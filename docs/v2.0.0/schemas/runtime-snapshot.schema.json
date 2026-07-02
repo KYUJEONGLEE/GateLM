@@ -305,6 +305,53 @@
           "minLength": 1,
           "description": "Optional additive field for category-aware routing. If omitted, Gateway falls back to defaultModel."
         },
+        "candidateStatuses": {
+          "type": "array",
+          "description": "Optional v2.1 routing health input. This carries low-cardinality provider/model candidate status only; it must not contain raw prompts, raw provider errors, credentials, or headers.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "type": "string",
+                "minLength": 1
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "tier": {
+                "type": "string",
+                "enum": [
+                  "low_cost",
+                  "balanced",
+                  "high_quality"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "degraded",
+                  "unavailable"
+                ]
+              },
+              "fallbackPriority": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "latencyP95Ms": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "provider",
+              "model",
+              "status"
+            ]
+          }
+        },
         "routingPolicyHash": {
           "type": "string",
           "minLength": 1

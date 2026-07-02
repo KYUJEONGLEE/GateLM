@@ -112,6 +112,7 @@ type RoutingPolicy struct {
 	FallbackProvider    string
 	FallbackModel       string
 	ShortPromptMaxChars int
+	CandidateStatuses   []routing.RouteCandidateStatus
 	RoutingPolicyHash   string
 }
 
@@ -147,6 +148,7 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.RoutingPolicy.HighQualityModel = strings.TrimSpace(c.RoutingPolicy.HighQualityModel)
 	c.RoutingPolicy.FallbackProvider = strings.TrimSpace(c.RoutingPolicy.FallbackProvider)
 	c.RoutingPolicy.FallbackModel = strings.TrimSpace(c.RoutingPolicy.FallbackModel)
+	c.RoutingPolicy.CandidateStatuses = normalizeRoutingCandidateStatuses(c.RoutingPolicy.CandidateStatuses)
 	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
 	c.CachePolicy.CachePolicyHash = strings.TrimSpace(c.CachePolicy.CachePolicyHash)
@@ -216,6 +218,7 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.RoutingPolicy.HighQualityModel = strings.TrimSpace(s.RoutingPolicy.HighQualityModel)
 	s.RoutingPolicy.FallbackProvider = strings.TrimSpace(s.RoutingPolicy.FallbackProvider)
 	s.RoutingPolicy.FallbackModel = strings.TrimSpace(s.RoutingPolicy.FallbackModel)
+	s.RoutingPolicy.CandidateStatuses = normalizeRoutingCandidateStatuses(s.RoutingPolicy.CandidateStatuses)
 	s.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash)
 	s.CachePolicy.Type = strings.TrimSpace(s.CachePolicy.Type)
 	s.CachePolicy.CachePolicyHash = strings.TrimSpace(s.CachePolicy.CachePolicyHash)
@@ -257,7 +260,26 @@ func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
 		HighQualityModel:    highQualityModel,
 		PolicyHash:          p.RoutingPolicyHash,
 		ShortPromptMaxChars: p.ShortPromptMaxChars,
+		CandidateStatuses:   append([]routing.RouteCandidateStatus(nil), p.CandidateStatuses...),
 	}
+}
+
+func normalizeRoutingCandidateStatuses(statuses []routing.RouteCandidateStatus) []routing.RouteCandidateStatus {
+	if len(statuses) == 0 {
+		return nil
+	}
+	normalized := make([]routing.RouteCandidateStatus, 0, len(statuses))
+	for _, status := range statuses {
+		status.Provider = strings.TrimSpace(status.Provider)
+		status.Model = strings.TrimSpace(status.Model)
+		status.Tier = strings.TrimSpace(status.Tier)
+		status.Status = strings.TrimSpace(status.Status)
+		if status.Provider == "" || status.Model == "" {
+			continue
+		}
+		normalized = append(normalized, status)
+	}
+	return normalized
 }
 
 func (c ActiveConfig) RuntimeSnapshotProvenance(publishedAt time.Time, gatewayInstanceID string) RuntimeSnapshotProvenance {

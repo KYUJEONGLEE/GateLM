@@ -820,6 +820,9 @@ describe('RuntimeConfigsService', () => {
     });
     expect(result.policies.routing.defaultProvider).toBe('mock');
     expect(result.policies.routing.lowCostModel).toBe('mock-fast');
+    expect(result.policies.routing.candidateStatuses).toEqual(
+      activeDocument.routingPolicy.candidateStatuses,
+    );
     expect(result.policies.safety.requestSideRequired).toBe(true);
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
@@ -1815,6 +1818,15 @@ describe('RuntimeConfigsService', () => {
           defaultModel: 'mock-fast',
           lowCostProvider: 'mock',
           lowCostModel: 'mock-fast',
+          candidateStatuses: [
+            {
+              provider: 'mock',
+              model: 'mock-fast',
+              tier: 'low_cost',
+              status: 'available',
+              fallbackPriority: 20,
+            },
+          ],
           routingPolicyHash: 'e'.repeat(64),
         },
         cache: {
@@ -1967,6 +1979,15 @@ describe('RuntimeConfigsService', () => {
         fallbackProvider: 'mock',
         fallbackModel: 'mock-fast',
         shortPromptMaxChars: 500,
+        candidateStatuses: [
+          {
+            provider: 'mock',
+            model: 'mock-fast',
+            tier: 'low_cost',
+            status: 'available',
+            fallbackPriority: 20,
+          },
+        ],
         routingPolicyHash: 'e'.repeat(64),
       },
       pricingRules: [

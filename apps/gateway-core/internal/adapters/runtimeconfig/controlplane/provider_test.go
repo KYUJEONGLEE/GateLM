@@ -61,6 +61,13 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 	if snapshot.RoutingPolicy.HighQualityProvider != "openai-premium" || snapshot.RoutingPolicy.HighQualityModel != "gpt-test-smart" {
 		t.Fatalf("expected high-quality routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
 	}
+	if len(snapshot.RoutingPolicy.CandidateStatuses) != 3 {
+		t.Fatalf("expected routing candidate statuses, got %+v", snapshot.RoutingPolicy.CandidateStatuses)
+	}
+	if snapshot.RoutingPolicy.CandidateStatuses[1].Status != "unavailable" ||
+		snapshot.RoutingPolicy.CandidateStatuses[1].FallbackPriority != 20 {
+		t.Fatalf("expected candidate health status to survive snapshot mapping: %+v", snapshot.RoutingPolicy.CandidateStatuses[1])
+	}
 }
 
 func TestProviderRejectsRuntimeSnapshotLookupKeyMismatch(t *testing.T) {
@@ -155,7 +162,12 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				LowCostModel:        "gpt-test-mini",
 				HighQualityProvider: "openai-premium",
 				HighQualityModel:    "gpt-test-smart",
-				RoutingPolicyHash:   "hash_routing_policy_live",
+				CandidateStatuses: []runtimeSnapshotRouteCandidateStatus{
+					{Provider: "openai-main", Model: "gpt-test-low", Status: "available", FallbackPriority: 10},
+					{Provider: "openai-low", Model: "gpt-test-mini", Status: "unavailable", FallbackPriority: 20},
+					{Provider: "openai-premium", Model: "gpt-test-smart", Status: "available", FallbackPriority: 30},
+				},
+				RoutingPolicyHash: "hash_routing_policy_live",
 			},
 			Cache: runtimeSnapshotCachePolicy{
 				ExactCacheEnabled: true,

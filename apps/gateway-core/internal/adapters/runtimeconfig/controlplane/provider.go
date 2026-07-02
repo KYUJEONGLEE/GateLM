@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -165,13 +166,23 @@ type runtimeSnapshotSafetyPolicy struct {
 }
 
 type runtimeSnapshotRoutingPolicy struct {
-	DefaultProvider     string `json:"defaultProvider"`
-	DefaultModel        string `json:"defaultModel"`
-	LowCostProvider     string `json:"lowCostProvider"`
-	LowCostModel        string `json:"lowCostModel"`
-	HighQualityProvider string `json:"highQualityProvider"`
-	HighQualityModel    string `json:"highQualityModel"`
-	RoutingPolicyHash   string `json:"routingPolicyHash"`
+	DefaultProvider     string                                `json:"defaultProvider"`
+	DefaultModel        string                                `json:"defaultModel"`
+	LowCostProvider     string                                `json:"lowCostProvider"`
+	LowCostModel        string                                `json:"lowCostModel"`
+	HighQualityProvider string                                `json:"highQualityProvider"`
+	HighQualityModel    string                                `json:"highQualityModel"`
+	CandidateStatuses   []runtimeSnapshotRouteCandidateStatus `json:"candidateStatuses"`
+	RoutingPolicyHash   string                                `json:"routingPolicyHash"`
+}
+
+type runtimeSnapshotRouteCandidateStatus struct {
+	Provider         string `json:"provider"`
+	Model            string `json:"model"`
+	Tier             string `json:"tier"`
+	Status           string `json:"status"`
+	FallbackPriority int    `json:"fallbackPriority"`
+	LatencyP95Ms     int    `json:"latencyP95Ms"`
 }
 
 type runtimeSnapshotCachePolicy struct {
@@ -265,6 +276,7 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			HighQualityModel:    highQualityModel,
 			FallbackProvider:    fallbackProvider,
 			FallbackModel:       fallbackModel,
+			CandidateStatuses:   toRouteCandidateStatuses(r.Policies.Routing.CandidateStatuses),
 			RoutingPolicyHash:   routingPolicyHash,
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
@@ -273,6 +285,24 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			CachePolicyHash: r.Policies.Cache.CachePolicyHash,
 		},
 	}, nil
+}
+
+func toRouteCandidateStatuses(statuses []runtimeSnapshotRouteCandidateStatus) []routing.RouteCandidateStatus {
+	if len(statuses) == 0 {
+		return nil
+	}
+	mapped := make([]routing.RouteCandidateStatus, 0, len(statuses))
+	for _, status := range statuses {
+		mapped = append(mapped, routing.RouteCandidateStatus{
+			Provider:         status.Provider,
+			Model:            status.Model,
+			Tier:             status.Tier,
+			Status:           status.Status,
+			FallbackPriority: status.FallbackPriority,
+			LatencyP95Ms:     status.LatencyP95Ms,
+		})
+	}
+	return mapped
 }
 
 func firstNonEmpty(values ...string) string {

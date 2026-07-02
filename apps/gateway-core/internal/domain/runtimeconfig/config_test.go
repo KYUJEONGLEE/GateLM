@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 )
 
 func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
@@ -116,7 +117,10 @@ func TestRoutingPolicySimpleRouterConfigUsesHighQualityModelWhenConfigured(t *te
 		HighQualityModel:    "mock-smart",
 		FallbackProvider:    "mock",
 		FallbackModel:       "mock-fallback",
-		RoutingPolicyHash:   "hash_routing_policy_test",
+		CandidateStatuses: []routing.RouteCandidateStatus{
+			{Provider: "mock-cheap", Model: "mock-fast", Status: routing.RouteCandidateUnavailable, FallbackPriority: 20},
+		},
+		RoutingPolicyHash: "hash_routing_policy_test",
 	}
 
 	config := policy.SimpleRouterConfig()
@@ -126,6 +130,9 @@ func TestRoutingPolicySimpleRouterConfigUsesHighQualityModelWhenConfigured(t *te
 	}
 	if config.HighQualityProvider != "mock-premium" || config.HighQualityModel != "mock-smart" {
 		t.Fatalf("expected high-quality route to use configured provider/model: %#v", config)
+	}
+	if len(config.CandidateStatuses) != 1 || config.CandidateStatuses[0].Status != routing.RouteCandidateUnavailable {
+		t.Fatalf("expected candidate statuses to pass to simple router config: %#v", config.CandidateStatuses)
 	}
 }
 

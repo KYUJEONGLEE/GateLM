@@ -447,6 +447,15 @@ export interface RuntimeConfigCachePolicyResponseDto {
   ttlSeconds: number;
 }
 
+export interface RuntimeConfigRoutingCandidateStatusResponseDto {
+  provider: string;
+  model: string;
+  tier?: 'low_cost' | 'balanced' | 'high_quality';
+  status: 'available' | 'degraded' | 'unavailable';
+  fallbackPriority?: number;
+  latencyP95Ms?: number;
+}
+
 export interface RuntimeConfigRoutingPolicyResponseDto {
   type: 'simple';
   autoModel: 'auto';
@@ -459,6 +468,7 @@ export interface RuntimeConfigRoutingPolicyResponseDto {
   fallbackProvider: string;
   fallbackModel: string;
   shortPromptMaxChars: number;
+  candidateStatuses: RuntimeConfigRoutingCandidateStatusResponseDto[];
   routingPolicyHash: string;
 }
 
@@ -627,6 +637,7 @@ export interface RuntimeSnapshotRoutingPolicyDto {
   lowCostModel: string;
   highQualityProvider?: string;
   highQualityModel?: string;
+  candidateStatuses: RuntimeConfigRoutingCandidateStatusResponseDto[];
   routingPolicyHash: string;
 }
 

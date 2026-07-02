@@ -41,6 +41,7 @@ import {
   RuntimeConfigPricingRuleResponseDto,
   RuntimeConfigProviderDto,
   RuntimeConfigRateLimitResponseDto,
+  RuntimeConfigRoutingCandidateStatusResponseDto,
   RuntimeConfigRoutingPolicyResponseDto,
   RuntimeConfigSafetyDetectorResponseDto,
   RuntimeConfigSafetyPolicyResponseDto,
@@ -704,6 +705,7 @@ export class RuntimeConfigsService {
     const safetyPolicy = this.resolveSafetyPolicy(args.dto.safetyPolicy);
     const routingPolicy = this.resolveRoutingPolicy({
       dto: args.dto,
+      providers,
       defaultModel,
       lowCostModel,
       highQualityModel,
@@ -1494,11 +1496,28 @@ export class RuntimeConfigsService {
 
   private resolveRoutingPolicy(args: {
     dto: UpsertRuntimeConfigDraftDto;
+    providers: ProviderConnection[];
     defaultModel: RuntimeConfigModelResponseDto;
     lowCostModel: RuntimeConfigModelResponseDto;
     highQualityModel?: RuntimeConfigModelResponseDto;
     fallbackModel: RuntimeConfigModelResponseDto;
   }): RuntimeConfigRoutingPolicyResponseDto {
+    const candidateStatuses = this.resolveRoutingCandidateStatuses({
+      providers: args.providers,
+      candidates: [
+        { model: args.defaultModel, tier: 'balanced', priority: 10 },
+        { model: args.lowCostModel, tier: 'low_cost', priority: 20 },
+        ...(args.highQualityModel
+          ? [
+              {
+                model: args.highQualityModel,
+                tier: 'high_quality' as const,
+                priority: 30,
+              },
+            ]
+          : []),
+      ],
+    });
     const routingPolicyWithoutHash = {
       type: 'simple',
       autoModel: 'auto',
@@ -1516,6 +1535,7 @@ export class RuntimeConfigsService {
       fallbackModel: args.fallbackModel.model,
       shortPromptMaxChars:
         args.dto.routingPolicy?.shortPromptMaxChars ?? 500,
+      candidateStatuses,
     } as const;
 
     return {
@@ -1524,6 +1544,61 @@ export class RuntimeConfigsService {
         this.canonicalJson(routingPolicyWithoutHash),
       ),
     };
+  }
+
+  private resolveRoutingCandidateStatuses(args: {
+    providers: ProviderConnection[];
+    candidates: Array<{
+      model: RuntimeConfigModelResponseDto;
+      tier: RuntimeConfigRoutingCandidateStatusResponseDto['tier'];
+      priority: number;
+    }>;
+  }): RuntimeConfigRoutingCandidateStatusResponseDto[] {
+    const providersByName = new Map(
+      args.providers.map((provider) => [provider.provider, provider]),
+    );
+    const seen = new Set<string>();
+    const statuses: RuntimeConfigRoutingCandidateStatusResponseDto[] = [];
+
+    for (const candidate of args.candidates) {
+      const key = this.toModelKey(
+        candidate.model.provider,
+        candidate.model.model,
+      );
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      statuses.push({
+        provider: candidate.model.provider,
+        model: candidate.model.model,
+        tier: candidate.tier,
+        status: this.toRoutingCandidateStatus(
+          providersByName.get(candidate.model.provider),
+          candidate.model,
+        ),
+        fallbackPriority: candidate.priority,
+      });
+    }
+
+    return statuses;
+  }
+
+  private toRoutingCandidateStatus(
+    provider: ProviderConnection | undefined,
+    model: RuntimeConfigModelResponseDto,
+  ): RuntimeConfigRoutingCandidateStatusResponseDto['status'] {
+    if (!provider || model.status === 'disabled') {
+      return 'unavailable';
+    }
+    const providerStatus = this.toProviderStatus(provider.status);
+    if (providerStatus === 'disabled') {
+      return 'unavailable';
+    }
+    if (providerStatus === 'degraded') {
+      return 'degraded';
+    }
+    return 'available';
   }
 
   private resolvePricingRules(
@@ -1711,6 +1786,7 @@ export class RuntimeConfigsService {
                 highQualityModel: document.routingPolicy.highQualityModel,
               }
             : {}),
+          candidateStatuses: document.routingPolicy.candidateStatuses,
           routingPolicyHash: document.routingPolicy.routingPolicyHash,
         },
         cache: {

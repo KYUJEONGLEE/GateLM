@@ -794,6 +794,7 @@ function buildDemoRuntimeSnapshot(
               highQualityModel: document.routingPolicy.highQualityModel,
             }
           : {}),
+        candidateStatuses: document.routingPolicy.candidateStatuses,
         routingPolicyHash: document.routingPolicy.routingPolicyHash,
       },
       cache: {
@@ -1222,6 +1223,23 @@ function buildRoutingPolicy(
     shortPromptMaxChars: number;
   }> = {},
 ): ActiveRuntimeConfigResponseDto['routingPolicy'] {
+  const candidateStatuses: ActiveRuntimeConfigResponseDto['routingPolicy']['candidateStatuses'] =
+    [
+      {
+        provider: overrides.defaultProvider ?? DEMO_PROVIDER,
+        model: overrides.defaultModel ?? 'mock-balanced',
+        tier: 'balanced',
+        status: 'available',
+        fallbackPriority: 10,
+      },
+      {
+        provider: overrides.lowCostProvider ?? DEMO_PROVIDER,
+        model: overrides.lowCostModel ?? 'mock-fast',
+        tier: 'low_cost',
+        status: 'available',
+        fallbackPriority: 20,
+      },
+    ];
   const routingPolicyWithoutHash = {
     type: 'simple',
     autoModel: 'auto',
@@ -1232,7 +1250,11 @@ function buildRoutingPolicy(
     fallbackProvider: overrides.fallbackProvider ?? DEMO_PROVIDER,
     fallbackModel: overrides.fallbackModel ?? 'mock-balanced',
     shortPromptMaxChars: overrides.shortPromptMaxChars ?? 500,
-  } as const;
+    candidateStatuses,
+  } satisfies Omit<
+    ActiveRuntimeConfigResponseDto['routingPolicy'],
+    'routingPolicyHash'
+  >;
 
   return {
     ...routingPolicyWithoutHash,

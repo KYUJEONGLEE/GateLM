@@ -48,6 +48,22 @@
       "lowCostModel": "low_cost_chat_model",
       "highQualityProvider": "synthetic_primary_provider",
       "highQualityModel": "high_quality_chat_model",
+      "candidateStatuses": [
+        {
+          "provider": "synthetic_primary_provider",
+          "model": "low_cost_chat_model",
+          "tier": "low_cost",
+          "status": "available",
+          "fallbackPriority": 20
+        },
+        {
+          "provider": "synthetic_primary_provider",
+          "model": "high_quality_chat_model",
+          "tier": "high_quality",
+          "status": "available",
+          "fallbackPriority": 30
+        }
+      ],
       "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
     },
     "cache": {
