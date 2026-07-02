@@ -103,6 +103,64 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
         ),
     ),
 )
+BUSINESS_ROLE_LABELS = (
+    "\uc5d0\uc2a4\uceec\ub808\uc774\uc158 \ub2f4\ub2f9\uc790",
+    "\ud504\ub85c\uc81d\ud2b8 \ub9e4\ub2c8\uc800",
+    "\uad00\ub9ac\ucc45\uc784\uc790",
+    "\ubc30\uc815\ub300\uc0c1\uc790",
+    "\uc601\uc5c5\ub2f4\ub2f9\uc790",
+    "\uacc4\uc815\ub2f4\ub2f9\uc790",
+    "\ucc44\uc6a9\ub2f4\ub2f9\uc790",
+    "\ubc95\ubb34\ub2f4\ub2f9\uc790",
+    "\uacc4\uc57d\ub2f4\ub2f9\uc790",
+    "\ud68c\uacc4\ub2f4\ub2f9\uc790",
+    "\uc815\uc0b0\ub2f4\ub2f9\uc790",
+    "\uc288\ud37c\ubc14\uc774\uc800",
+    "\ub2f4\ub2f9\uc790",
+    "\uc2b9\uc778\uc790",
+    "\uac80\ud1a0\uc790",
+    "\uc694\uccad\uc790",
+    "\uacb0\uc7ac\uc790",
+    "\uae30\uc548\uc790",
+    "\ucc98\ub9ac\uc790",
+    "\uc811\uc218\uc790",
+    "\ucc38\uc870\uc790",
+    "\uad00\ub9ac\uc790",
+    "\ubcf8\ubd80\uc7a5",
+    "\ucc45\uc784\uc790",
+    "\uc6b4\uc601\uc790",
+    "\uc2e4\ubb34\uc790",
+    "\uc791\uc131\uc790",
+    "\uc218\uc2e0\uc790",
+    "\ubc1c\uc2e0\uc790",
+    "\ubcf4\uace0\uc790",
+    "\ud53c\ubcf4\uace0\uc790",
+    "\ud611\uc5c5\uc790",
+    "\uac80\uc218\uc790",
+    "\ubc30\uc815\uc790",
+    "\uc0c1\ub2f4\uc6d0",
+    "\uc0c1\ub2f4\uc0ac",
+    "\ud300\uc7a5",
+    "\ub9e4\ub2c8\uc800",
+    "\uc0c1\uc0ac",
+    "\ubd80\ud558",
+    "\ub9ac\ub354",
+    "\ud30c\ud2b8\uc7a5",
+    "\uc2e4\uc7a5",
+    "\uac1c\ubc1c\uc790",
+    "\ub514\uc790\uc774\ub108",
+    "\uc9c0\uc6d0\uc790",
+    "\uba74\uc811\uad00",
+    "\ud3c9\uac00\uc790",
+    "CSM",
+    "PM",
+    "PO",
+    "PL",
+    "QA",
+    "AM",
+    "AE",
+)
+KOREAN_PARTICLE_START_CHARS = frozenset("\uc740\ub294\uc774\uac00\uc744\ub97c\uc5d0\uaed8\uc640\uacfc\ub3c4\ub9cc\uc73c\ub85c")
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
     "email": frozenset("._-+@"),
@@ -237,16 +295,91 @@ def redact_prompt(
     if not signals:
         return prompt_text
     scope = entity_scope or EntityMaskingScope()
-    chunks: list[str] = []
-    offset = 0
+    replacements: list[tuple[int, int, str]] = []
     for signal in signals:
         role_prefix, replacement_start = _person_role_context(prompt_text, signal)
         start = replacement_start if replacement_start is not None else signal.start
-        if start < offset or signal.end > len(prompt_text):
+        if start < 0 or signal.end > len(prompt_text) or signal.end <= start:
+            continue
+        replacements.append(
+            (
+                start,
+                signal.end,
+                _placeholder_for_signal(prompt_text, signal, scope, role_prefix=role_prefix),
+            )
+        )
+    replacements.extend(_business_role_replacements(prompt_text, replacements))
+    return _apply_prompt_replacements(prompt_text, replacements)
+
+
+def _business_role_replacements(
+    prompt_text: str,
+    protected_replacements: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]],
+) -> list[tuple[int, int, str]]:
+    replacements: list[tuple[int, int, str]] = []
+    for role in BUSINESS_ROLE_LABELS:
+        pattern = re.compile(_role_pattern(role), re.IGNORECASE)
+        for match in pattern.finditer(prompt_text):
+            start, end = match.span()
+            if not _has_business_role_boundary(prompt_text, start, end):
+                continue
+            if _overlaps_any_replacement(start, end, protected_replacements):
+                continue
+            if _overlaps_any_replacement(start, end, replacements):
+                continue
+            replacements.append((start, end, f"[ROLE:{role}]"))
+    return replacements
+
+
+def _role_pattern(role: str) -> str:
+    return re.escape(role).replace(r"\ ", r"\s+")
+
+
+def _has_business_role_boundary(prompt_text: str, start: int, end: int) -> bool:
+    if start > 0:
+        previous = prompt_text[start - 1]
+        if previous.isalnum() or _is_korean_syllable(previous):
+            return False
+    if end >= len(prompt_text):
+        return True
+
+    next_char = prompt_text[end]
+    if next_char.isspace() or next_char in "\"')]}>,;:.":
+        return True
+    if next_char in KOREAN_PARTICLE_START_CHARS:
+        return True
+    return False
+
+
+def _is_korean_syllable(value: str) -> bool:
+    return len(value) == 1 and "\uac00" <= value <= "\ud7a3"
+
+
+def _overlaps_any_replacement(
+    start: int,
+    end: int,
+    replacements: tuple[tuple[int, int, str], ...] | list[tuple[int, int, str]],
+) -> bool:
+    for existing_start, existing_end, _ in replacements:
+        if start < existing_end and existing_start < end:
+            return True
+    return False
+
+
+def _apply_prompt_replacements(
+    prompt_text: str,
+    replacements: list[tuple[int, int, str]],
+) -> str:
+    if not replacements:
+        return prompt_text
+    chunks: list[str] = []
+    offset = 0
+    for start, end, placeholder in sorted(replacements, key=lambda item: (item[0], item[1])):
+        if start < offset or end > len(prompt_text) or end <= start:
             continue
         chunks.append(prompt_text[offset:start])
-        chunks.append(_placeholder_for_signal(prompt_text, signal, scope, role_prefix=role_prefix))
-        offset = signal.end
+        chunks.append(placeholder)
+        offset = end
     chunks.append(prompt_text[offset:])
     return "".join(chunks)
 
@@ -303,6 +436,8 @@ def _person_role_context(prompt_text: str, signal: SafetySignal) -> tuple[str | 
     for prefix, labels in PERSON_ROLE_CONTEXT_LABELS:
         for label in labels:
             if context == label or context.endswith(f" {label}"):
+                if _is_possessive_business_role_context(context, label):
+                    return None, None
                 return prefix, _person_role_replacement_start(prompt_text[: signal.start], prefix)
     return None, None
 
@@ -336,6 +471,16 @@ def _has_person_role_label_boundary(value: str, label_start: int) -> bool:
     if label_start <= 0:
         return True
     return value[label_start - 1].isspace() or value[label_start - 1] in "([{,.;:"
+
+
+def _is_possessive_business_role_context(context: str, label: str) -> bool:
+    if label not in BUSINESS_ROLE_LABELS:
+        return False
+    role_start = len(context) - len(label)
+    if role_start < 0:
+        return False
+    before_role = context[:role_start].rstrip()
+    return before_role.endswith("\uc758")
 
 
 def _action_rank(action: str) -> int:

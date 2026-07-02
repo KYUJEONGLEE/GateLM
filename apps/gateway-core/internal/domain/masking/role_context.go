@@ -97,6 +97,9 @@ func inferPersonRoleContext(input string, start int) personRoleContext {
 	for _, candidate := range personRoleContextLabels {
 		for _, label := range candidate.labels {
 			if context == label || strings.HasSuffix(context, " "+label) {
+				if isPossessiveBusinessRoleContext(context, label) {
+					return personRoleContext{}
+				}
 				redactStart, consumeLabel := personRoleLabelRedactStart(input[:start], candidate)
 				return personRoleContext{
 					prefix:       candidate.prefix,
@@ -142,4 +145,15 @@ func hasPersonRoleLabelBoundary(value string, labelStart int) bool {
 	}
 	r, _ := utf8.DecodeLastRuneInString(value[:labelStart])
 	return unicode.IsSpace(r) || strings.ContainsRune("([{,.;:", r)
+}
+
+func isPossessiveBusinessRoleContext(context string, label string) bool {
+	if !isBusinessRoleLabel(label) {
+		return false
+	}
+	roleStart := len(context) - len(label)
+	if roleStart < 0 {
+		return false
+	}
+	return strings.HasSuffix(strings.TrimSpace(context[:roleStart]), "\uc758")
 }

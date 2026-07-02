@@ -573,6 +573,99 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             ),
         )
 
+    def test_redact_prompt_preserves_business_role_relationship(self) -> None:
+        owner_name = "\uae40\ubbfc\uc218"
+        approver_name = "\uc774\uc724\uc9c0"
+        prompt = f"{owner_name}\uc758 \ud300\uc7a5 {approver_name}\uac00 \uc2b9\uc778\ud588\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", owner_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", approver_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\uc758 [ROLE:\ud300\uc7a5] [PERSON_2]\uac00 \uc2b9\uc778\ud588\ub2e4.",
+        )
+        self.assertNotIn(owner_name, redacted)
+        self.assertNotIn(approver_name, redacted)
+
+    def test_redact_prompt_preserves_all_allowed_business_roles(self) -> None:
+        roles = [
+            "\ud300\uc7a5",
+            "\ub9e4\ub2c8\uc800",
+            "\uc0c1\uc0ac",
+            "\ubd80\ud558",
+            "\ub2f4\ub2f9\uc790",
+            "\uc2b9\uc778\uc790",
+            "\uac80\ud1a0\uc790",
+            "\uc694\uccad\uc790",
+            "\uacb0\uc7ac\uc790",
+            "\uae30\uc548\uc790",
+            "\ucc98\ub9ac\uc790",
+            "\uc811\uc218\uc790",
+            "\ucc38\uc870\uc790",
+            "\uad00\ub9ac\uc790",
+            "\ub9ac\ub354",
+            "\ud30c\ud2b8\uc7a5",
+            "\uc2e4\uc7a5",
+            "\ubcf8\ubd80\uc7a5",
+            "\ucc45\uc784\uc790",
+            "\uc6b4\uc601\uc790",
+            "\uad00\ub9ac\ucc45\uc784\uc790",
+            "\uc2e4\ubb34\uc790",
+            "\uc791\uc131\uc790",
+            "\uc218\uc2e0\uc790",
+            "\ubc1c\uc2e0\uc790",
+            "\ubcf4\uace0\uc790",
+            "\ud53c\ubcf4\uace0\uc790",
+            "\ud611\uc5c5\uc790",
+            "\uac80\uc218\uc790",
+            "\ubc30\uc815\uc790",
+            "\ubc30\uc815\ub300\uc0c1\uc790",
+            "\uc0c1\ub2f4\uc6d0",
+            "\uc0c1\ub2f4\uc0ac",
+            "\uc288\ud37c\ubc14\uc774\uc800",
+            "\uc5d0\uc2a4\uceec\ub808\uc774\uc158 \ub2f4\ub2f9\uc790",
+            "PM",
+            "PO",
+            "PL",
+            "\ud504\ub85c\uc81d\ud2b8 \ub9e4\ub2c8\uc800",
+            "\uac1c\ubc1c\uc790",
+            "\ub514\uc790\uc774\ub108",
+            "QA",
+            "\uc601\uc5c5\ub2f4\ub2f9\uc790",
+            "\uacc4\uc815\ub2f4\ub2f9\uc790",
+            "AM",
+            "AE",
+            "CSM",
+            "\uc9c0\uc6d0\uc790",
+            "\uba74\uc811\uad00",
+            "\ud3c9\uac00\uc790",
+            "\ucc44\uc6a9\ub2f4\ub2f9\uc790",
+            "\ubc95\ubb34\ub2f4\ub2f9\uc790",
+            "\uacc4\uc57d\ub2f4\ub2f9\uc790",
+            "\ud68c\uacc4\ub2f4\ub2f9\uc790",
+            "\uc815\uc0b0\ub2f4\ub2f9\uc790",
+        ]
+
+        for role in roles:
+            with self.subTest(role=role):
+                prompt = f"\uae40\ubbfc\uc218\uc758 {role} \uc774\uc724\uc9c0\uac00 \ucc98\ub9ac\ud588\ub2e4."
+                redacted = redact_prompt(
+                    prompt,
+                    [
+                        signal(prompt, "person_name", "\uae40\ubbfc\uc218", "[PERSON_NAME_REDACTED]"),
+                        signal(prompt, "person_name", "\uc774\uc724\uc9c0", "[PERSON_NAME_REDACTED]"),
+                    ],
+                )
+                self.assertIn(f"[ROLE:{role}]", redacted)
+                self.assertNotIn("\uae40\ubbfc\uc218", redacted)
+                self.assertNotIn("\uc774\uc724\uc9c0", redacted)
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."

@@ -160,6 +160,27 @@ func TestP0EngineUsesRoleAwarePlaceholdersForKoreanPersonRoles(t *testing.T) {
 	}
 }
 
+func TestP0EnginePreservesBusinessRoleRelationship(t *testing.T) {
+	engine := NewP0Engine()
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "\uae40\ubbfc\uc218\uc758 \ud300\uc7a5 \uc774\uc724\uc9c0\uac00 \uc2b9\uc778\ud588\ub2e4.",
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\uc758 [ROLE:\ud300\uc7a5] [PERSON_2]\uac00 \uc2b9\uc778\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected role-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	for _, rawValue := range []string{"\uae40\ubbfc\uc218", "\uc774\uc724\uc9c0"} {
+		if strings.Contains(result.RedactedPrompt, rawValue) {
+			t.Fatalf("redacted prompt must not include raw person name %q: %q", rawValue, result.RedactedPrompt)
+		}
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

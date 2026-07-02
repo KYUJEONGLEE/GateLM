@@ -69,7 +69,8 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		entityScope = NewEntityScope()
 	}
 	effective = detectionsWithEntityPlaceholders(req.Prompt, effective, entityScope)
-	redactedPrompt := redact(req.Prompt, effective)
+	redactionDetections := withRelationshipRolePlaceholders(req.Prompt, effective)
+	redactedPrompt := redact(req.Prompt, redactionDetections)
 	return Result{
 		Action:                  action,
 		DetectedTypes:           detectedTypes(effective),
