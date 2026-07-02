@@ -29,6 +29,10 @@ const requiredMetricFamilies = [
   "gatelm_masking_actions_total",
   "gatelm_log_writes_total",
   "gatelm_log_write_duration_seconds",
+  "gatelm_streams_active",
+  "gatelm_stream_relay_total",
+  "gatelm_stream_duration_seconds",
+  "gatelm_stream_time_to_first_token_seconds",
 ];
 
 const forbiddenMetricLabels = [

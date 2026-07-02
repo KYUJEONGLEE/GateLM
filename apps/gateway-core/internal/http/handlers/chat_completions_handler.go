@@ -848,7 +848,8 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		return
 	}
 
-	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream)
+	streamMetrics := h.startStreamMetrics(reqCtx.SelectedProvider, reqCtx.SelectedModel, providerStartedAt)
+	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	providerDuration := time.Since(providerStartedAt)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
@@ -859,6 +860,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	}
 
 	if streamErr == nil {
+		streamMetrics.finish("completed", "none", time.Now())
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
@@ -889,6 +891,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		outcome = "cancelled"
 		terminalStatus = invocationlog.StatusCancelled
 	}
+	streamMetrics.finish(outcome, code, time.Now())
 
 	h.recordProviderRequest(metrics.ProviderRequest{
 		SelectedProvider: reqCtx.SelectedProvider,
@@ -1030,7 +1033,8 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	reqCtx.Provider = fallbackTarget.ProviderName
 	reqCtx.Model = fallbackTarget.ModelID
 
-	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream)
+	streamMetrics := h.startStreamMetrics(fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackStartedAt)
+	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	fallbackDuration := time.Since(fallbackStartedAt)
 	if usage != nil {
 		reqCtx.PromptTokens = usage.PromptTokens
@@ -1038,6 +1042,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		reqCtx.TotalTokens = usage.TotalTokens
 	}
 	if streamErr == nil {
+		streamMetrics.finish("completed", "none", time.Now())
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: fallbackTarget.ProviderName,
 			SelectedModel:    fallbackTarget.ModelID,
@@ -1071,6 +1076,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		outcome = "cancelled"
 		terminalStatus = invocationlog.StatusCancelled
 	}
+	streamMetrics.finish(outcome, streamCode, time.Now())
 	h.recordProviderRequest(metrics.ProviderRequest{
 		SelectedProvider: fallbackTarget.ProviderName,
 		SelectedModel:    fallbackTarget.ModelID,
@@ -1685,7 +1691,89 @@ func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, re
 	return true, nil
 }
 
-func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, stream provider.ChatCompletionStreamReader) (bool, *provider.Usage, error) {
+type streamRelayMetricsRecorder struct {
+	registry         *metrics.Registry
+	selectedProvider string
+	selectedModel    string
+	startedAt        time.Time
+	ttftRecorded     bool
+	finished         bool
+}
+
+func (h *ChatCompletionsHandler) startStreamMetrics(selectedProvider string, selectedModel string, startedAt time.Time) *streamRelayMetricsRecorder {
+	if h == nil || h.MetricsRegistry == nil {
+		return nil
+	}
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+	h.MetricsRegistry.StreamStarted(selectedProvider, selectedModel)
+	return &streamRelayMetricsRecorder{
+		registry:         h.MetricsRegistry,
+		selectedProvider: selectedProvider,
+		selectedModel:    selectedModel,
+		startedAt:        startedAt,
+	}
+}
+
+func (r *streamRelayMetricsRecorder) recordTTFTIfContent(payload json.RawMessage, observedAt time.Time) {
+	if r == nil || r.registry == nil || r.ttftRecorded || !streamEventHasContentDelta(payload) {
+		return
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now()
+	}
+	r.ttftRecorded = true
+	r.registry.StreamTimeToFirstToken(metrics.StreamTimeToFirstToken{
+		SelectedProvider: r.selectedProvider,
+		SelectedModel:    r.selectedModel,
+		DurationSeconds:  observedAt.Sub(r.startedAt).Seconds(),
+	})
+}
+
+func (r *streamRelayMetricsRecorder) finish(outcome string, errorCode string, completedAt time.Time) {
+	if r == nil || r.registry == nil || r.finished {
+		return
+	}
+	if completedAt.IsZero() {
+		completedAt = time.Now()
+	}
+	r.finished = true
+	r.registry.StreamFinished(metrics.StreamRelay{
+		SelectedProvider: r.selectedProvider,
+		SelectedModel:    r.selectedModel,
+		Outcome:          outcome,
+		ErrorCode:        errorCode,
+		DurationSeconds:  completedAt.Sub(r.startedAt).Seconds(),
+	})
+}
+
+func streamEventHasContentDelta(payload json.RawMessage) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	if !bytes.Contains(payload, []byte(`"content"`)) {
+		return false
+	}
+	var chunk struct {
+		Choices []struct {
+			Delta struct {
+				Content *string `json:"content"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(payload, &chunk); err != nil {
+		return false
+	}
+	for _, choice := range chunk.Choices {
+		if choice.Delta.Content != nil && *choice.Delta.Content != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, stream provider.ChatCompletionStreamReader, streamMetrics *streamRelayMetricsRecorder) (bool, *provider.Usage, error) {
 	if err := ctx.Err(); err != nil {
 		return false, nil, err
 	}
@@ -1716,6 +1804,7 @@ func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWr
 			return true, usage, err
 		}
 		flushResponse(w)
+		streamMetrics.recordTTFTIfContent(firstEvent.Data, time.Now())
 	}
 
 	for err == nil {
@@ -1736,6 +1825,7 @@ func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWr
 			return true, usage, err
 		}
 		flushResponse(w)
+		streamMetrics.recordTTFTIfContent(event.Data, time.Now())
 	}
 	if err := ctx.Err(); err != nil {
 		return true, usage, err
