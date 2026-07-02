@@ -465,6 +465,36 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_detect_preserves_honorific_and_role_markers_around_person_names(self) -> None:
+        raw_span = "\uae40\ubbfc\uc218 \ud300\uc7a5\ub2d8\uaed8"
+        prompt = f"{raw_span} \uc5f0\ub77d\ud588\ub2e4."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(
+            lambda _text: [
+                {
+                    "entity_group": "person_name",
+                    "score": 0.98,
+                    "start": prompt.index(raw_span),
+                    "end": prompt.index(raw_span) + len(raw_span),
+                    "word": raw_span,
+                },
+            ]
+        )
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(body["redactedPrompt"], "[PERSON_1] \ud300\uc7a5\ub2d8\uaed8 \uc5f0\ub77d\ud588\ub2e4.")
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
+        self.assertNotIn("\uae40\ubbfc\uc218", body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
     def test_validation_error_does_not_echo_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL}."
         client = TestClient(create_app())

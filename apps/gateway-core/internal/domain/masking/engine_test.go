@@ -394,6 +394,41 @@ func TestEnginePreservesKoreanParticlesAroundPersonNames(t *testing.T) {
 	}
 }
 
+func TestEnginePreservesHonorificAndRoleMarkersAroundPersonNames(t *testing.T) {
+	rawSpans := []string{
+		"\uc774\uc724\uc9c0\ub2d8",
+		"\uae40\ubbfc\uc218 \ud300\uc7a5\ub2d8\uaed8",
+		"\ubc15\uc9c0\ud6c8 \uc120\uc0dd\ub2d8\uc774",
+		"\ucd5c\uc11c\uc5f0 \ub300\ud45c\ub2d8\uc5d0\uac8c",
+	}
+	prompt := rawSpans[0] + "\uc774 " + rawSpans[1] + " \uc5f0\ub77d\ud588\ub2e4. " +
+		rawSpans[2] + " " + rawSpans[3] + " \uc548\ub0b4\ud588\ub2e4."
+	detections := make([]Detection, 0, len(rawSpans))
+	for _, rawSpan := range rawSpans {
+		detections = append(detections, personDetection(prompt, rawSpan, 1))
+	}
+	engine := NewEngine(
+		NewRegistry(staticDetector{detections: detections}),
+		DefaultSecurityPolicyVersionID,
+	)
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+
+	expected := "[PERSON_1]\ub2d8\uc774 [PERSON_2] \ud300\uc7a5\ub2d8\uaed8 \uc5f0\ub77d\ud588\ub2e4. " +
+		"[PERSON_3] \uc120\uc0dd\ub2d8\uc774 [PERSON_4] \ub300\ud45c\ub2d8\uc5d0\uac8c \uc548\ub0b4\ud588\ub2e4."
+	if result.RedactedPrompt != expected {
+		t.Fatalf("expected honorific-preserving prompt %q, got %q", expected, result.RedactedPrompt)
+	}
+	for _, rawName := range []string{"\uc774\uc724\uc9c0", "\uae40\ubbfc\uc218", "\ubc15\uc9c0\ud6c8", "\ucd5c\uc11c\uc5f0"} {
+		if strings.Contains(result.RedactedPrompt, rawName) {
+			t.Fatalf("redacted prompt must not contain raw person name %q: %q", rawName, result.RedactedPrompt)
+		}
+	}
+}
+
 func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 	tests := []struct {
 		name         string

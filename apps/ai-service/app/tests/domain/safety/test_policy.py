@@ -834,6 +834,33 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         )
         self.assertNotIn(person_name, redacted)
 
+    def test_redact_prompt_preserves_honorific_and_role_markers_around_person_names(self) -> None:
+        raw_spans = [
+            "\uc774\uc724\uc9c0\ub2d8",
+            "\uae40\ubbfc\uc218 \ud300\uc7a5\ub2d8\uaed8",
+            "\ubc15\uc9c0\ud6c8 \uc120\uc0dd\ub2d8\uc774",
+            "\ucd5c\uc11c\uc5f0 \ub300\ud45c\ub2d8\uc5d0\uac8c",
+        ]
+        prompt = (
+            f"{raw_spans[0]}\uc774 {raw_spans[1]} \uc5f0\ub77d\ud588\ub2e4. "
+            f"{raw_spans[2]} {raw_spans[3]} \uc548\ub0b4\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [signal(prompt, "person_name", raw_span, "[PERSON_NAME_REDACTED]") for raw_span in raw_spans],
+        )
+
+        self.assertEqual(
+            redacted,
+            (
+                "[PERSON_1]\ub2d8\uc774 [PERSON_2] \ud300\uc7a5\ub2d8\uaed8 \uc5f0\ub77d\ud588\ub2e4. "
+                "[PERSON_3] \uc120\uc0dd\ub2d8\uc774 [PERSON_4] \ub300\ud45c\ub2d8\uc5d0\uac8c \uc548\ub0b4\ud588\ub2e4."
+            ),
+        )
+        for raw_name in ["\uc774\uc724\uc9c0", "\uae40\ubbfc\uc218", "\ubc15\uc9c0\ud6c8", "\ucd5c\uc11c\uc5f0"]:
+            self.assertNotIn(raw_name, redacted)
+
     def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
         raw_secret = "syntheticSecretValue1234567890abcdef"
         prompt = f"Review secret {raw_secret} for Alex Kim."

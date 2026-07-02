@@ -184,6 +184,7 @@ PERSON_COREFERENCE_PLACEHOLDER_PREFIXES = (
 )
 PERSON_NAME_STRUCTURE_SUFFIXES = (
     "\uc5d0\uac8c",
+    "\uaed8",
     "\uc5d0\uc11c",
     "\uc73c\ub85c",
     "\ub2d8",
@@ -201,6 +202,34 @@ PERSON_NAME_STRUCTURE_SUFFIXES = (
     "\ub3c4",
     "\ub9cc",
     "\ub85c",
+)
+HONORIFIC_ROLE_PARTICLES = (
+    "\uc5d0\uac8c",
+    "\uaed8",
+    "\uc740",
+    "\ub294",
+    "\uc774",
+    "\uac00",
+    "\uc744",
+    "\ub97c",
+    "\uc5d0",
+    "\uc640",
+    "\uacfc",
+    "\uc758",
+    "\ub3c4",
+    "\ub9cc",
+    "\ub85c",
+    "\uc73c\ub85c",
+    "",
+)
+HONORIFIC_ROLE_MARKERS = tuple(
+    dict.fromkeys(
+        (
+            "\uc120\uc0dd\ub2d8",
+            "\ub300\ud45c\ub2d8",
+            *(f"{role}\ub2d8" for role in BUSINESS_ROLE_LABELS),
+        )
+    )
 )
 DEFAULT_MERGEABLE_INFIX_CHARS = frozenset()
 MERGEABLE_INFIX_CHARS_BY_DETECTOR_TYPE = {
@@ -864,6 +893,10 @@ def _structure_preserving_signal_span(
 
 
 def _trim_person_name_structure_suffix(prompt_text: str, start: int, end: int) -> int:
+    honorific_marker_start = _honorific_role_marker_start(prompt_text[start:end])
+    if honorific_marker_start is not None:
+        return start + honorific_marker_start
+
     while end > start:
         value = prompt_text[start:end]
         next_end = end
@@ -880,6 +913,21 @@ def _trim_person_name_structure_suffix(prompt_text: str, start: int, end: int) -
 def _is_korean_person_stem(value: str) -> bool:
     key = value.replace(" ", "")
     return 2 <= len(key) <= 4 and _is_korean_alias_key(key)
+
+
+def _honorific_role_marker_start(value: str) -> int | None:
+    for marker in HONORIFIC_ROLE_MARKERS:
+        for particle in HONORIFIC_ROLE_PARTICLES:
+            suffix = f"{marker}{particle}"
+            if not value.endswith(suffix):
+                continue
+            before_marker_with_space = value[: -len(suffix)] if suffix != "" else value
+            before_marker = before_marker_with_space.rstrip()
+            if before_marker == "" or len(before_marker) == len(before_marker_with_space):
+                continue
+            if _is_korean_person_stem(before_marker):
+                return len(before_marker)
+    return None
 
 
 def _email_value_span(prompt_text: str, start: int, end: int) -> tuple[int, int]:
