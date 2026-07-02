@@ -139,7 +139,7 @@ func TestChatCompletionsExactCacheRoutingAwareDifferentRequestParamsMustMiss(t *
 	}
 }
 
-func TestChatCompletionsExactCacheRoutingAwareStreamBypassesLookupAndStore(t *testing.T) {
+func TestChatCompletionsExactCacheRoutingAwareStreamMissLooksUpAndStores(t *testing.T) {
 	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-stream"))
 	harness.routes = map[string]routingAwareRoute{
 		"request_stream": {providerName: "provider-a", modelID: "model_low"},
@@ -150,11 +150,90 @@ func TestChatCompletionsExactCacheRoutingAwareStreamBypassesLookupAndStore(t *te
 	if rr.Code != http.StatusOK {
 		t.Fatalf("stream 요청은 성공해야 한다. status=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if harness.keyBuilder.calls != 0 || harness.cacheStore.getCalls != 0 || harness.cacheStore.setCalls != 0 {
-		t.Fatalf("stream=true는 exact cache lookup/store를 bypass해야 한다. key=%d get=%d set=%d", harness.keyBuilder.calls, harness.cacheStore.getCalls, harness.cacheStore.setCalls)
+	if harness.keyBuilder.calls != 1 || harness.cacheStore.getCalls != 1 || harness.cacheStore.setCalls != 1 {
+		t.Fatalf("stream=true miss는 exact cache lookup 후 store해야 한다. key=%d get=%d set=%d", harness.keyBuilder.calls, harness.cacheStore.getCalls, harness.cacheStore.setCalls)
 	}
-	if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "bypass" {
-		t.Fatalf("stream=true request log/detail 판단을 위해 cache status는 bypass여야 한다. cache=%q", got)
+	if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "miss" {
+		t.Fatalf("stream=true miss는 cache status miss여야 한다. cache=%q", got)
+	}
+}
+
+func TestChatCompletionsExactCacheRoutingAwareRepeatedStreamUsesExactCache(t *testing.T) {
+	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-stream-repeat"))
+	harness.routes = map[string]routingAwareRoute{
+		"request_stream_first":  {providerName: "provider-a", modelID: "model_low"},
+		"request_stream_second": {providerName: "provider-a", modelID: "model_low"},
+	}
+
+	first := harness.exercise(t, "request_stream_first", routingAwareStreamBody("auto", "same prompt"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first stream 요청은 성공해야 한다. status=%d body=%s", first.Code, first.Body.String())
+	}
+	if got := first.Header().Get("X-GateLM-Cache-Status"); got != "miss" {
+		t.Fatalf("first stream 요청은 cache miss여야 한다. cache=%q", got)
+	}
+	providerCallsAfterFirst := harness.provider.calls
+	setCallsAfterFirst := harness.cacheStore.setCalls
+
+	second := harness.exercise(t, "request_stream_second", routingAwareStreamBody("auto", "same prompt"))
+	if second.Code != http.StatusOK {
+		t.Fatalf("second stream 요청은 성공해야 한다. status=%d body=%s", second.Code, second.Body.String())
+	}
+	if got := second.Header().Get("X-GateLM-Cache-Status"); got != "hit" {
+		t.Fatalf("repeated stream 요청은 exact cache hit여야 한다. cache=%q", got)
+	}
+	if harness.provider.calls != providerCallsAfterFirst {
+		t.Fatalf("stream cache hit는 provider를 다시 호출하면 안 된다. before=%d after=%d", providerCallsAfterFirst, harness.provider.calls)
+	}
+	if harness.cacheStore.setCalls != setCallsAfterFirst {
+		t.Fatalf("stream cache hit는 새 cache write를 만들면 안 된다. before=%d after=%d", setCallsAfterFirst, harness.cacheStore.setCalls)
+	}
+	if !strings.Contains(second.Body.String(), "data:") ||
+		!strings.Contains(second.Body.String(), `"content":"routing "`) ||
+		!strings.Contains(second.Body.String(), `"content":"aware "`) ||
+		!strings.Contains(second.Body.String(), `"content":"response"`) {
+		t.Fatalf("stream cache hit response가 SSE payload를 포함해야 한다. body=%s", second.Body.String())
+	}
+}
+
+func TestChatCompletionsExactCacheRoutingAwareStreamCanUseExistingExactCache(t *testing.T) {
+	harness := newRoutingAwareCacheHarness(t, routingAwareCatalog("sha256:routing-aware-catalog-stream-hit"))
+	harness.routes = map[string]routingAwareRoute{
+		"request_stream_warmup": {providerName: "provider-a", modelID: "model_low"},
+		"request_stream_hit":    {providerName: "provider-a", modelID: "model_low"},
+	}
+
+	first := harness.exercise(t, "request_stream_warmup", routingAwareChatBody("auto", "same prompt"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("warmup 요청은 성공해야 한다. status=%d body=%s", first.Code, first.Body.String())
+	}
+	if got := first.Header().Get("X-GateLM-Cache-Status"); got != "miss" {
+		t.Fatalf("warmup은 cache miss여야 한다. cache=%q", got)
+	}
+	providerCallsAfterWarmup := harness.provider.calls
+	setCallsAfterWarmup := harness.cacheStore.setCalls
+
+	second := harness.exercise(t, "request_stream_hit", routingAwareStreamBody("auto", "same prompt"))
+	if second.Code != http.StatusOK {
+		t.Fatalf("stream hit 요청은 성공해야 한다. status=%d body=%s", second.Code, second.Body.String())
+	}
+	if got := second.Header().Get("X-GateLM-Cache-Status"); got != "hit" {
+		t.Fatalf("stream 요청도 기존 exact cache를 써야 한다. cache=%q", got)
+	}
+	if contentType := second.Header().Get("Content-Type"); !strings.Contains(contentType, "text/event-stream") {
+		t.Fatalf("stream cache hit는 SSE로 응답해야 한다. content-type=%q", contentType)
+	}
+	if harness.provider.calls != providerCallsAfterWarmup {
+		t.Fatalf("cache hit는 provider를 다시 호출하면 안 된다. before=%d after=%d", providerCallsAfterWarmup, harness.provider.calls)
+	}
+	if harness.cacheStore.setCalls != setCallsAfterWarmup {
+		t.Fatalf("cache hit는 새 cache write를 만들면 안 된다. before=%d after=%d", setCallsAfterWarmup, harness.cacheStore.setCalls)
+	}
+	if !strings.Contains(second.Body.String(), "data:") ||
+		!strings.Contains(second.Body.String(), `"content":"routing "`) ||
+		!strings.Contains(second.Body.String(), `"content":"aware "`) ||
+		!strings.Contains(second.Body.String(), `"content":"response"`) {
+		t.Fatalf("stream cache hit response가 SSE payload를 포함해야 한다. body=%s", second.Body.String())
 	}
 }
 

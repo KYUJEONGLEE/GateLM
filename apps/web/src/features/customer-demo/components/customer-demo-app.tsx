@@ -223,8 +223,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     }
 
     const message = inputValue.trim();
-    const streamRequested =
-      options.stream ?? (model.integrationMode === "gateway" && model.surface !== "application");
+    const streamRequested = options.stream ?? (model.integrationMode === "gateway");
 
     if (!message) {
       return;
@@ -250,20 +249,62 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         setExchange(buildPendingExchange(model, scenario, { stream: streamRequested }));
       }
 
-      const nextExchange = await client.sendChatCompletion("safe", {
-        message,
-        stream: streamRequested
-      });
+      const assistantMessageId = `assistant-${Date.now()}`;
+      let streamedAssistantMessage = "";
+      const nextExchange = streamRequested
+        ? await client.sendChatCompletionStream(
+            "safe",
+            {
+              message,
+              stream: true
+            },
+            {
+              onDelta: (content) => {
+                streamedAssistantMessage += content;
+                setMessages((current) => {
+                  if (current.some((item) => item.id === assistantMessageId)) {
+                    return current.map((item) =>
+                      item.id === assistantMessageId
+                        ? {
+                            ...item,
+                            body: streamedAssistantMessage
+                          }
+                        : item
+                    );
+                  }
+
+                  return [
+                    ...current,
+                    {
+                      body: streamedAssistantMessage,
+                      id: assistantMessageId,
+                      side: "incoming"
+                    }
+                  ];
+                });
+              }
+            }
+          )
+        : await client.sendChatCompletion("safe", {
+            message,
+            stream: false
+          });
 
       setExchange(nextExchange);
-      setMessages((current) => [
-        ...current,
-        {
-          body: nextExchange.assistantMessage,
-          id: `assistant-${Date.now()}`,
-          side: "incoming"
+      setMessages((current) => {
+        if (streamedAssistantMessage && current.some((item) => item.id === assistantMessageId)) {
+          return current;
         }
-      ]);
+
+        return [
+          ...current,
+          {
+            body: nextExchange.assistantMessage,
+            id: assistantMessageId,
+            side: "incoming"
+          }
+        ];
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : text.error;
 

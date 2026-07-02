@@ -4,6 +4,7 @@ import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model
 import type {
   CustomerDemoExchange,
   CustomerDemoHeader,
+  CustomerDemoModel,
   CustomerDemoRequest,
   CustomerDemoScenarioId,
   CustomerDemoSurface
@@ -25,6 +26,19 @@ type GatewayCallResult = {
 type LiveScenarioDefinition = {
   detectedTypes: string[];
   gatewayPrompt: string;
+};
+
+type GatewaySseSummary = {
+  assistantContent: string;
+  chunkCount: number;
+  completed: boolean;
+};
+
+type GatewaySseDataResult = {
+  content: string;
+  done: boolean;
+  hasValue: boolean;
+  value: string;
 };
 
 type ProviderFailureMode = "error" | "timeout";
@@ -88,15 +102,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown customer demo scenario." }, { status: 400 });
   }
 
-  const scenario = model.scenarios.find((item) => item.scenarioId === payload.scenarioId);
+  const scenarioId = payload.scenarioId;
+  const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
 
   if (!scenario) {
     return NextResponse.json({ error: "Customer demo scenario is not configured." }, { status: 404 });
   }
 
+  if (payload.stream && payload.surface === "application") {
+    return streamLiveScenario({
+      model,
+      payload,
+      scenario,
+      scenarioId
+    });
+  }
+
   try {
     const gatewayResult = await executeLiveScenario(
-      payload.scenarioId,
+      scenarioId,
       payload.stream,
       payload.message,
       payload.surface
@@ -107,7 +131,7 @@ export async function POST(request: Request) {
         allScenarios: model.scenarios,
         gatewayResult,
         scenario,
-        scenarioId: payload.scenarioId,
+        scenarioId,
         tenantId: model.tenantId
       })
     });
@@ -115,6 +139,70 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Gateway integration request failed.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
+}
+
+function streamLiveScenario({
+  model,
+  payload,
+  scenario,
+  scenarioId
+}: {
+  model: CustomerDemoModel;
+  payload: Awaited<ReturnType<typeof readRequestPayload>>;
+  scenario: CustomerDemoExchange;
+  scenarioId: CustomerDemoScenarioId;
+}) {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        if (scenarioId === "cache-hit") {
+          await callGateway("cache-hit", "warmup", {
+            message: payload.message,
+            surface: payload.surface
+          });
+        }
+
+        const gatewayResult = await callGatewayStreaming(
+          scenarioId,
+          "1",
+          {
+            message: payload.message,
+            stream: true,
+            surface: payload.surface
+          },
+          (content) => {
+            enqueueSse(controller, encoder, "delta", { content });
+          }
+        );
+        const exchange = buildLiveExchange({
+          allScenarios: model.scenarios,
+          gatewayResult,
+          scenario,
+          scenarioId,
+          tenantId: model.tenantId
+        });
+
+        enqueueSse(controller, encoder, "exchange", { exchange });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Gateway integration request failed.";
+        enqueueSse(controller, encoder, "error", { error: message });
+      } finally {
+        enqueueSse(controller, encoder, "done", {});
+        controller.close();
+      }
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "X-Accel-Buffering": "no"
+    }
+  });
 }
 
 async function readRequestPayload(request: Request) {
@@ -254,6 +342,74 @@ async function callGateway(
   };
 }
 
+async function callGatewayStreaming(
+  scenarioId: CustomerDemoScenarioId,
+  requestIdSuffix: string,
+  options: { message?: string; stream?: boolean; surface?: CustomerDemoSurface },
+  onDelta: (content: string) => void
+): Promise<GatewayCallResult> {
+  const config = getLiveGatewayConfig();
+  const definition = LIVE_SCENARIOS[scenarioId];
+  const requestId = buildRequestId(scenarioId, requestIdSuffix);
+  const requestBody = buildGatewayRequestBody(
+    definition,
+    scenarioId,
+    options.stream === true,
+    options.message,
+    options.surface ?? "application",
+    config.applicationChatModel,
+    config.applicationChatMaxTokens
+  );
+  const startedAt = Date.now();
+  const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+      "X-GateLM-App-Token": config.appToken,
+      "X-GateLM-End-User-Id": "customer_user_demo_live",
+      "X-GateLM-Feature-Id": "support-reply",
+      "X-GateLM-Request-Id": requestId
+    },
+    body: JSON.stringify(requestBody),
+    cache: "no-store"
+  });
+
+  if (!response.body || !isEventStreamResponse(response)) {
+    const responseText = await response.text();
+
+    return {
+      body: buildGatewayResponseBody(response, responseText, requestBody.stream),
+      headers: response.headers,
+      httpStatus: response.status,
+      latencyMs: Date.now() - startedAt,
+      requestBody: buildDisplayRequestBody(requestBody),
+      requestHeaders: buildDisplayRequestHeaders(requestId),
+      requestId,
+      streaming: buildGatewayStreamingSummary(response, responseText, requestBody.stream)
+    };
+  }
+
+  const summary = await readGatewaySseStream(response, onDelta);
+  const body = buildGatewayStreamingResponseBody(summary);
+
+  return {
+    body,
+    headers: response.headers,
+    httpStatus: response.status,
+    latencyMs: Date.now() - startedAt,
+    requestBody: buildDisplayRequestBody(requestBody),
+    requestHeaders: buildDisplayRequestHeaders(requestId),
+    requestId,
+    streaming: {
+      completed: summary.completed,
+      contentType: response.headers.get("Content-Type"),
+      chunkCount: summary.chunkCount,
+      requested: true
+    }
+  };
+}
+
 function buildGatewayRequestBody(
   definition: LiveScenarioDefinition,
   scenarioId: CustomerDemoScenarioId,
@@ -360,23 +516,7 @@ function buildGatewayResponseBody(
   if (streamRequested && isEventStreamResponse(response)) {
     const summary = parseGatewaySseSummary(text);
 
-    return {
-      choices: summary.assistantContent
-        ? [
-            {
-              message: {
-                content: summary.assistantContent,
-                role: "assistant"
-              }
-            }
-          ]
-        : [],
-      streaming: {
-        chunkCount: summary.chunkCount,
-        completed: summary.completed,
-        contentWithheld: true
-      }
-    };
+    return buildGatewayStreamingResponseBody(summary);
   }
 
   const parsed = safeJsonParse(text);
@@ -391,6 +531,26 @@ function buildGatewayResponseBody(
       message: "Gateway returned a non-object JSON response.",
       request_id: response.headers.get("X-GateLM-Request-Id") ?? "",
       type: "gatelm_gateway_error"
+    }
+  };
+}
+
+function buildGatewayStreamingResponseBody(summary: GatewaySseSummary): JsonRecord {
+  return {
+    choices: summary.assistantContent
+      ? [
+          {
+            message: {
+              content: summary.assistantContent,
+              role: "assistant"
+            }
+          }
+        ]
+      : [],
+    streaming: {
+      chunkCount: summary.chunkCount,
+      completed: summary.completed,
+      contentWithheld: true
     }
   };
 }
@@ -434,24 +594,96 @@ function parseGatewaySseSummary(text: string) {
   let completed = false;
 
   for (const line of text.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) {
+    const result = readGatewaySseDataLine(line);
+
+    if (!result.hasValue) {
       continue;
     }
 
-    const value = stripSingleLeadingSseSpace(line.slice("data:".length));
-
-    if (value === "[DONE]") {
+    if (result.done) {
       completed = true;
       continue;
     }
 
-    if (value) {
-      chunkCount += 1;
-      const parsed = safeJsonParse(value);
-      const content = getStreamingChunkContent(parsed);
+    chunkCount += 1;
 
-      if (content) {
-        contentParts.push(content);
+    if (result.content) {
+      contentParts.push(result.content);
+    }
+  }
+
+  return {
+    assistantContent: contentParts.join("").trim(),
+    chunkCount,
+    completed
+  };
+}
+
+async function readGatewaySseStream(
+  response: Response,
+  onDelta: (content: string) => void
+): Promise<GatewaySseSummary> {
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    return {
+      assistantContent: "",
+      chunkCount: 0,
+      completed: false
+    };
+  }
+
+  const decoder = new TextDecoder();
+  const contentParts: string[] = [];
+  let buffer = "";
+  let chunkCount = 0;
+  let completed = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split(/\r?\n\r?\n/);
+    buffer = frames.pop() ?? "";
+
+    for (const frame of frames) {
+      const result = readGatewaySseFrame(frame);
+
+      if (!result.hasValue) {
+        continue;
+      }
+
+      if (result.done) {
+        completed = true;
+        continue;
+      }
+
+      chunkCount += 1;
+
+      if (result.content) {
+        contentParts.push(result.content);
+        onDelta(result.content);
+      }
+    }
+  }
+
+  buffer += decoder.decode();
+
+  if (buffer.trim()) {
+    const result = readGatewaySseFrame(buffer);
+
+    if (result.done) {
+      completed = true;
+    } else if (result.hasValue) {
+      chunkCount += 1;
+
+      if (result.content) {
+        contentParts.push(result.content);
+        onDelta(result.content);
       }
     }
   }
@@ -463,8 +695,72 @@ function parseGatewaySseSummary(text: string) {
   };
 }
 
+function readGatewaySseFrame(frame: string) {
+  const data = frame
+    .split(/\r?\n/)
+    .map(readGatewaySseDataLine)
+    .filter((result) => result.hasValue)
+    .map((result) => result.value)
+    .join("\n");
+
+  return parseGatewaySseData(data);
+}
+
+function readGatewaySseDataLine(line: string): GatewaySseDataResult {
+  if (!line.startsWith("data:")) {
+    return {
+      content: "",
+      done: false,
+      hasValue: false,
+      value: ""
+    };
+  }
+
+  return parseGatewaySseData(stripSingleLeadingSseSpace(line.slice("data:".length)));
+}
+
+function parseGatewaySseData(value: string): GatewaySseDataResult {
+  if (!value) {
+    return {
+      content: "",
+      done: false,
+      hasValue: false,
+      value: ""
+    };
+  }
+
+  if (value === "[DONE]") {
+    return {
+      content: "",
+      done: true,
+      hasValue: true,
+      value
+    };
+  }
+
+  const parsed = safeJsonParse(value);
+
+  return {
+    content: getStreamingChunkContent(parsed),
+    done: false,
+    hasValue: true,
+    value
+  };
+}
+
 function stripSingleLeadingSseSpace(value: string) {
   return value.startsWith(" ") ? value.slice(1) : value;
+}
+
+function enqueueSse(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  event: string,
+  payload: unknown
+) {
+  controller.enqueue(
+    encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)
+  );
 }
 
 function getStreamingChunkContent(value: unknown) {
