@@ -73,6 +73,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SelectedModelID:            reqCtx.SelectedModelID,
 			ProviderCatalogContentHash: reqCtx.ProviderCatalogContentHash,
 			RoutingDecisionKeyHash:     reqCtx.RoutingDecisionKeyHash,
+			RoutingDecisionMaterial:    map[string]string{"category": reqCtx.PromptCategory},
 			RoutingReason:              reqCtx.RoutingReason,
 			RoutingPolicyHash:          reqCtx.RoutingPolicyHash,
 		},
@@ -185,6 +186,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	}
 	if gatewayCtx.Routing.RoutingDecisionKeyHash != "" {
 		reqCtx.RoutingDecisionKeyHash = gatewayCtx.Routing.RoutingDecisionKeyHash
+	}
+	if category := gatewayCtx.Routing.RoutingDecisionMaterial["category"]; category != "" {
+		reqCtx.PromptCategory = category
 	}
 	if gatewayCtx.Routing.RoutingReason != "" {
 		reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason

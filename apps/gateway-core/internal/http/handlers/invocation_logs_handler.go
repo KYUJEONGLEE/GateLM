@@ -254,6 +254,7 @@ type requestDetailDataResponse struct {
 	Model           string                             `json:"model"`
 	RequestedModel  string                             `json:"requestedModel"`
 	SelectedModel   string                             `json:"selectedModel"`
+	ProviderCalled  bool                               `json:"providerCalled"`
 	Usage           usageResponse                      `json:"usage"`
 	UsageSummary    usageSummaryResponse               `json:"usageSummary"`
 	Cost            costResponse                       `json:"cost"`
@@ -320,17 +321,31 @@ type latencySummaryResponse struct {
 }
 
 type cacheResponse struct {
-	CacheStatus       string  `json:"cacheStatus"`
-	CacheType         string  `json:"cacheType"`
-	CacheKeyHash      *string `json:"cacheKeyHash"`
-	CacheHitRequestID *string `json:"cacheHitRequestId"`
+	CacheStatus                 string   `json:"cacheStatus"`
+	CacheOutcome                string   `json:"cacheOutcome"`
+	CacheType                   string   `json:"cacheType"`
+	CacheKeyHash                *string  `json:"cacheKeyHash"`
+	CacheHitRequestID           *string  `json:"cacheHitRequestId"`
+	CacheDecisionReason         *string  `json:"cacheDecisionReason"`
+	SemanticCacheHit            bool     `json:"semanticCacheHit"`
+	SemanticSimilarity          *float64 `json:"semanticSimilarity"`
+	SemanticMatchedRequestID    *string  `json:"semanticMatchedRequestId"`
+	SemanticCacheThreshold      *float64 `json:"semanticCacheThreshold"`
+	SemanticCachePolicyVersion  *string  `json:"semanticCachePolicyVersion"`
+	SemanticCacheDecisionReason *string  `json:"semanticCacheDecisionReason"`
+	EmbeddingProvider           *string  `json:"embeddingProvider"`
+	PromptCategory              *string  `json:"promptCategory"`
 }
 
 type routingResponse struct {
-	RoutingReason    *string `json:"routingReason"`
-	RoutingRuleID    *string `json:"routingRuleId"`
-	SelectedProvider *string `json:"selectedProvider"`
-	SelectedModel    *string `json:"selectedModel"`
+	RoutingReason          *string `json:"routingReason"`
+	RoutingRuleID          *string `json:"routingRuleId"`
+	SelectedProvider       *string `json:"selectedProvider"`
+	SelectedProviderID     *string `json:"selectedProviderId"`
+	SelectedModel          *string `json:"selectedModel"`
+	SelectedModelID        *string `json:"selectedModelId"`
+	RoutingPolicyHash      *string `json:"routingPolicyHash"`
+	RoutingDecisionKeyHash *string `json:"routingDecisionKeyHash"`
 }
 
 type maskingResponse struct {
@@ -617,6 +632,7 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		Model:           detail.Model,
 		RequestedModel:  detail.RequestedModel,
 		SelectedModel:   detail.SelectedModel,
+		ProviderCalled:  detail.ProviderCalled,
 		Usage: usageResponse{
 			PromptTokens:     detail.Usage.PromptTokens,
 			CompletionTokens: detail.Usage.CompletionTokens,
@@ -644,16 +660,30 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
 		},
 		Cache: cacheResponse{
-			CacheStatus:       detail.Cache.CacheStatus,
-			CacheType:         detail.Cache.CacheType,
-			CacheKeyHash:      stringPointerOrNil(detail.Cache.CacheKeyHash),
-			CacheHitRequestID: stringPointerOrNil(detail.Cache.CacheHitRequestID),
+			CacheStatus:                 detail.Cache.CacheStatus,
+			CacheOutcome:                detail.Cache.CacheOutcome,
+			CacheType:                   detail.Cache.CacheType,
+			CacheKeyHash:                stringPointerOrNil(detail.Cache.CacheKeyHash),
+			CacheHitRequestID:           stringPointerOrNil(detail.Cache.CacheHitRequestID),
+			CacheDecisionReason:         stringPointerOrNil(detail.Cache.CacheDecisionReason),
+			SemanticCacheHit:            detail.Cache.SemanticCacheHit,
+			SemanticSimilarity:          float64PointerOrNil(detail.Cache.SemanticSimilarity),
+			SemanticMatchedRequestID:    stringPointerOrNil(detail.Cache.SemanticMatchedRequestID),
+			SemanticCacheThreshold:      float64PointerOrNil(detail.Cache.SemanticCacheThreshold),
+			SemanticCachePolicyVersion:  stringPointerOrNil(detail.Cache.SemanticCachePolicyVersion),
+			SemanticCacheDecisionReason: stringPointerOrNil(detail.Cache.SemanticCacheDecisionReason),
+			EmbeddingProvider:           stringPointerOrNil(detail.Cache.EmbeddingProvider),
+			PromptCategory:              stringPointerOrNil(detail.Cache.PromptCategory),
 		},
 		Routing: routingResponse{
-			RoutingReason:    stringPointerOrNil(detail.Routing.RoutingReason),
-			RoutingRuleID:    stringPointerOrNil(detail.Routing.RoutingRuleID),
-			SelectedProvider: stringPointerOrNil(detail.Routing.SelectedProvider),
-			SelectedModel:    stringPointerOrNil(detail.Routing.SelectedModel),
+			RoutingReason:          stringPointerOrNil(detail.Routing.RoutingReason),
+			RoutingRuleID:          stringPointerOrNil(detail.Routing.RoutingRuleID),
+			SelectedProvider:       stringPointerOrNil(detail.Routing.SelectedProvider),
+			SelectedProviderID:     stringPointerOrNil(detail.Routing.SelectedProviderID),
+			SelectedModel:          stringPointerOrNil(detail.Routing.SelectedModel),
+			SelectedModelID:        stringPointerOrNil(detail.Routing.SelectedModelID),
+			RoutingPolicyHash:      stringPointerOrNil(detail.Routing.RoutingPolicyHash),
+			RoutingDecisionKeyHash: stringPointerOrNil(detail.Routing.RoutingDecisionKeyHash),
 		},
 		Masking: maskingResponse{
 			MaskingAction:         detail.Masking.MaskingAction,
@@ -933,6 +963,13 @@ func copyInt64Map(values map[string]int64) map[string]int64 {
 func stringPointerOrNil(value string) *string {
 	value = strings.TrimSpace(value)
 	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func float64PointerOrNil(value float64) *float64 {
+	if value <= 0 {
 		return nil
 	}
 	return &value

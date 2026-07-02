@@ -42,7 +42,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.LoadWithError()
+	if err != nil {
+		log.Fatalf("gateway-core configuration failed: %v", err)
+	}
 	if err := validateRuntimeSnapshotMode(cfg); err != nil {
 		log.Fatalf("gateway-core invalid GATEWAY_RUNTIME_SNAPSHOT_MODE: %v", err)
 	}
