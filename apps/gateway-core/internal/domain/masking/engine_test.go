@@ -109,6 +109,63 @@ func TestP0EngineLeavesSafePromptUnchanged(t *testing.T) {
 	}
 }
 
+func TestP0EngineAppliesDetectorPolicyAllowWithLogSafePrompt(t *testing.T) {
+	engine := NewP0Engine()
+	prompt := "Contact user@example.invalid or 010-0000-0000."
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: prompt,
+		DetectorPolicies: []DetectorPolicy{
+			{DetectorType: string(DetectorPhoneNumber), Action: PolicyActionAllow},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.Action != ActionRedacted {
+		t.Fatalf("expected redacted action from email, got %s", result.Action)
+	}
+	if !reflect.DeepEqual(result.DetectedTypes, []string{"email"}) {
+		t.Fatalf("expected only email as protected detection, got %#v", result.DetectedTypes)
+	}
+	if !reflect.DeepEqual(result.PolicyAllowedTypes, []string{"phone_number"}) {
+		t.Fatalf("expected phone as policy allowed type, got %#v", result.PolicyAllowedTypes)
+	}
+	if !strings.Contains(result.RedactedPrompt, "010-0000-0000") {
+		t.Fatalf("provider prompt should keep allowed phone value, got %q", result.RedactedPrompt)
+	}
+	if strings.Contains(result.LogSafePrompt, "010-0000-0000") || strings.Contains(result.RedactedPromptPreview, "010-0000-0000") {
+		t.Fatalf("log-safe prompt and preview must not include allowed raw phone: prompt=%q preview=%q", result.LogSafePrompt, result.RedactedPromptPreview)
+	}
+	if !strings.Contains(result.LogSafePrompt, PlaceholderPhoneNumber) {
+		t.Fatalf("expected log-safe prompt to mask allowed phone, got %q", result.LogSafePrompt)
+	}
+}
+
+func TestP0EngineKeepsMandatoryDetectorProtectedWhenAllowRequested(t *testing.T) {
+	engine := NewP0Engine()
+	rawSecret := "test_secret_token_redacted_for_demo_only_1234567890"
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{
+		Prompt: "api_key=" + rawSecret,
+		DetectorPolicies: []DetectorPolicy{
+			{DetectorType: string(DetectorAPIKey), Action: PolicyActionAllow},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.Action != ActionBlocked {
+		t.Fatalf("mandatory api key must remain blocked, got %s", result.Action)
+	}
+	if !reflect.DeepEqual(result.MandatoryProtectedTypes, []string{"api_key"}) {
+		t.Fatalf("expected mandatory protected api_key, got %#v", result.MandatoryProtectedTypes)
+	}
+	if strings.Contains(result.RedactedPrompt, rawSecret) || strings.Contains(result.LogSafePrompt, rawSecret) {
+		t.Fatalf("mandatory raw secret must not remain in protected prompts")
+	}
+}
+
 func TestP0EngineBoundsRedactedPromptPreview(t *testing.T) {
 	engine := NewP0Engine()
 	prompt := strings.Repeat("safe ", 40)
