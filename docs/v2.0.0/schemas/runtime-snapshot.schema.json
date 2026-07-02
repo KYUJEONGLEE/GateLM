@@ -225,7 +225,7 @@
         },
         "requestSideRequired": {
           "type": "boolean",
-          "description": "When true, request-side safety must finish before cache, routing, provider call, or streaming start."
+          "description": "When true, request-side safety must finish before routing, exact cache, provider call, or streaming start."
         },
         "policyHash": {
           "type": "string",

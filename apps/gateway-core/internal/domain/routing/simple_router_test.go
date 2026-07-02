@@ -23,13 +23,13 @@ func TestSimpleRouterRoutesShortAutoPromptToLowCostModel(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, Decision{
-		RequestedModel:   "auto",
-		SelectedProvider: "mock",
-		SelectedModel:    "mock-fast",
-		RoutingReason:    ReasonShortPromptLowCost,
-		PolicyHash:       "route_p0_v1",
-	})
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonShortPromptLowCost, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryUnknown,
+		Tier:          TierLowCost,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
 }
 
 func TestSimpleRouterRoutesLongAutoPromptToDefaultModel(t *testing.T) {
@@ -49,13 +49,13 @@ func TestSimpleRouterRoutesLongAutoPromptToDefaultModel(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, Decision{
-		RequestedModel:   "auto",
-		SelectedProvider: "mock",
-		SelectedModel:    "mock-balanced",
-		RoutingReason:    ReasonDefaultBalanced,
-		PolicyHash:       "route_p0_v1",
-	})
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", ReasonDefaultBalanced, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryUnknown,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
 }
 
 func TestSimpleRouterKeepsExplicitModelPinned(t *testing.T) {
@@ -74,13 +74,13 @@ func TestSimpleRouterKeepsExplicitModelPinned(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, Decision{
-		RequestedModel:   "mock-smart",
-		SelectedProvider: "mock",
-		SelectedModel:    "mock-smart",
-		RoutingReason:    ReasonPinned,
-		PolicyHash:       "route_p0_v1",
-	})
+	assertDecision(t, decision, expectedDecision("mock-smart", "mock", "mock-smart", ReasonPinned, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModePinned,
+		Category:      CategoryUnknown,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
 }
 
 func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t *testing.T) {
@@ -107,13 +107,13 @@ func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t 
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, Decision{
-		RequestedModel:   "auto",
-		SelectedProvider: "runtime-provider",
-		SelectedModel:    "runtime-fast",
-		RoutingReason:    ReasonShortPromptLowCost,
-		PolicyHash:       "hash_runtime_routing_policy",
-	})
+	assertDecision(t, decision, expectedDecision("auto", "runtime-provider", "runtime-fast", ReasonShortPromptLowCost, "hash_runtime_routing_policy", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryUnknown,
+		Tier:          TierLowCost,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
 }
 
 func assertDecision(t *testing.T, actual Decision, expected Decision) {
@@ -121,5 +121,23 @@ func assertDecision(t *testing.T, actual Decision, expected Decision) {
 
 	if actual != expected {
 		t.Fatalf("unexpected decision:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+}
+
+func expectedDecision(requestedModel string, selectedProvider string, selectedModel string, reason string, policyHash string, material DecisionMaterial) Decision {
+	hash, err := DecisionKeyHash(material)
+	if err != nil {
+		panic(err)
+	}
+	return Decision{
+		RequestedModel:             requestedModel,
+		SelectedProvider:           selectedProvider,
+		SelectedProviderCatalogKey: selectedProvider,
+		SelectedModel:              selectedModel,
+		SelectedModelID:            selectedModel,
+		RoutingReason:              reason,
+		PolicyHash:                 policyHash,
+		RoutingDecisionMaterial:    material,
+		RoutingDecisionKeyHash:     hash,
 	}
 }

@@ -85,7 +85,7 @@ Reject:
 - `budgetScopeType/budgetScopeId` as active snapshot lookup key
 - `no_snapshot/not_checked` inside actual RuntimeSnapshot provenance object
 
-## PR-3. Budget, Request-Side Safety, Exact Cache, Routing
+## PR-3. Budget, Request-Side Safety, Routing, Exact Cache
 
 | Scenario | Input / Setup | Expected result | Evidence |
 |---|---|---|---|
@@ -97,14 +97,21 @@ Reject:
 | rate limit | fixed window exceeded | terminal status `rate_limited`, provider `not_called` | Gateway test |
 | safety redact | detector redacts safe summary | provider can proceed with sanitized path; no raw detected value stored | safety/Gateway test |
 | safety block | detector blocks | provider not called, cache not written, streaming not started | Gateway test |
-| exact cache hit | exact cache contains candidate | provider bypassed and provider outcome `not_called` | cache/Gateway test |
+| exact cache hit | routing-aware exact cache contains candidate for same tenant/project/application/category/providerId/modelId/providerCatalogHash/routingDecisionKeyHash | provider bypassed and provider outcome `not_called` | cache/Gateway test |
 | model auto | requested model `auto` | selected provider/model and routing reason recorded | routing test |
 
 Execution order:
 
 ```text
-auth/context -> RuntimeSnapshot -> budget/rate limit -> safety -> exact cache -> routing -> provider/fallback
+auth/context -> RuntimeSnapshot -> budget/rate limit -> safety -> routing/category/provider/model decision -> routing-aware exact cache -> provider/fallback
 ```
+
+PR-3 routing-aware exact cache note:
+
+- Exact Cache key generation and lookup happen after routing/category/provider/model decision.
+- Cache key material uses stable execution identity: `providerId`, `modelId`, `providerCatalogHash`, and `routingDecisionKeyHash`.
+- `providerName`, display name, raw prompt, prompt fragment, raw detected value, secret, and provider raw error body are forbidden in cache key material.
+- `stream=true` bypasses Exact Cache until a streaming cache contract is explicitly defined.
 
 PR-3 budget scope note:
 

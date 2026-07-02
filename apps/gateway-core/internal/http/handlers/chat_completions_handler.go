@@ -201,14 +201,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	promptText = redactedPrompt
 
 	gatewayCtx := newGatewayContext(reqCtx, promptText)
-	if shouldLookupExactCache(gatewayCtx) {
-		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
-		applyExactCacheLookupToGatewayContext(gatewayCtx, reqCtx, cachePayload, cacheHitRequestID, cacheHit)
-	}
-	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, startedAt) {
-		return
-	}
-
 	if h.PreProviderPipeline != nil {
 		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 			if isPreCacheGatewayError(err) {
@@ -219,6 +211,19 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		applyGatewayContext(reqCtx, gatewayCtx)
+	}
+
+	if reqCtx.Stream {
+		bypassExactCache(reqCtx, "streaming_request")
+		gatewayCtx = newGatewayContext(reqCtx, promptText)
+	} else if shouldLookupExactCache(gatewayCtx) {
+		if err := h.populateRoutingAwareCacheIdentity(r.Context(), reqCtx, chatReq.Model); err != nil {
+			h.writeProviderResolutionFailure(w, reqCtx, err)
+			return
+		}
+		gatewayCtx = newGatewayContext(reqCtx, promptText)
+		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
+		applyExactCacheLookupToGatewayContext(gatewayCtx, reqCtx, cachePayload, cacheHitRequestID, cacheHit)
 	}
 	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, startedAt) {
 		return
@@ -239,7 +244,11 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	providerReq.RequestID = requestID
 	providerReq.Stream = false
 	reqCtx.SelectedProvider = target.ProviderName
+	reqCtx.SelectedProviderID = target.ProviderID
+	reqCtx.SelectedProviderCatalogKey = firstNonEmpty(reqCtx.SelectedProviderCatalogKey, target.ProviderName)
 	reqCtx.SelectedModel = target.ModelID
+	reqCtx.SelectedModelID = target.ModelID
+	reqCtx.ProviderCatalogContentHash = firstNonEmpty(reqCtx.ProviderCatalogContentHash, target.CatalogHash)
 	if reqCtx.RoutingReason == "" {
 		reqCtx.RoutingReason = "not_routed"
 	}
@@ -299,6 +308,9 @@ func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	if gatewayCtx == nil {
 		return true
 	}
+	if gatewayCtx.Request.Stream {
+		return false
+	}
 	if !gatewayExactCachePolicyAllowsLookup(gatewayCtx) {
 		return false
 	}
@@ -309,6 +321,27 @@ func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	default:
 		return false
 	}
+}
+
+func bypassExactCache(reqCtx *pipeline.RequestContext, reason string) {
+	if reqCtx == nil {
+		return
+	}
+	reqCtx.CacheStatus = cachestage.CacheStatusBypass
+	reqCtx.CacheType = cachestage.CacheTypeNone
+	reqCtx.CacheKeyHash = ""
+	reqCtx.CacheHitRequestID = ""
+	reqCtx.CacheKeyVersion = ""
+	reqCtx.CacheDecisionReason = firstNonEmpty(reason, "bypassed")
+}
+
+func skipExactCacheStore(reqCtx *pipeline.RequestContext, reason string) {
+	if reqCtx == nil {
+		return
+	}
+	reqCtx.CacheStatus = cachestage.CacheStatusStoreSkipped
+	reqCtx.CacheType = cachestage.CacheTypeExact
+	reqCtx.CacheDecisionReason = firstNonEmpty(reason, "store_skipped")
 }
 
 func gatewayExactCachePolicyAllowsLookup(gatewayCtx *request.GatewayContext) bool {
@@ -340,6 +373,9 @@ func applyExactCacheLookupToGatewayContext(gatewayCtx *request.GatewayContext, r
 	gatewayCtx.Cache.CacheType = reqCtx.CacheType
 	gatewayCtx.Cache.CacheKeyHash = reqCtx.CacheKeyHash
 	gatewayCtx.Cache.CacheHitRequestID = ""
+	gatewayCtx.Cache.CacheKeyVersion = reqCtx.CacheKeyVersion
+	gatewayCtx.Cache.CacheDecisionReason = reqCtx.CacheDecisionReason
+	gatewayCtx.Cache.FallbackOccurred = reqCtx.FallbackOccurred
 	gatewayCtx.Cache.Payload = nil
 	if hit {
 		gatewayCtx.Cache.CacheStatus = cachestage.CacheStatusHit
@@ -351,6 +387,9 @@ func applyExactCacheLookupToGatewayContext(gatewayCtx *request.GatewayContext, r
 
 func exactCachePolicyAllowsLookup(reqCtx *pipeline.RequestContext) bool {
 	if reqCtx == nil {
+		return false
+	}
+	if reqCtx.Stream {
 		return false
 	}
 	if !reqCtx.HasRuntimeCachePolicy {
@@ -377,10 +416,12 @@ type providerCallTarget struct {
 	Adapter         provider.Adapter
 	ExecutionConfig provider.ExecutionConfig
 	Catalog         providercatalog.Catalog
+	ProviderID      string
 	ProviderName    string
 	AdapterType     string
 	ModelID         string
 	ModelName       string
+	CatalogHash     string
 	FromCatalog     bool
 	Fallback        bool
 }
@@ -469,10 +510,100 @@ func (h *ChatCompletionsHandler) resolveProviderCallTarget(ctx context.Context, 
 	}
 
 	reqCtx.SelectedProvider = catalogProvider.ProviderName
+	reqCtx.SelectedProviderID = catalogProvider.ProviderID
+	reqCtx.SelectedProviderCatalogKey = catalogProvider.ProviderName
 	reqCtx.SelectedModel = catalogModel.ModelID
+	reqCtx.SelectedModelID = catalogModel.ModelID
+	reqCtx.ProviderCatalogContentHash = catalog.ContentHash
 	reqCtx.Provider = catalogProvider.ProviderName
 	reqCtx.Model = catalogModel.ModelID
 	return h.providerCallTargetFromCatalog(ctx, catalog, catalogProvider, catalogModel, false)
+}
+
+func (h *ChatCompletionsHandler) populateRoutingAwareCacheIdentity(ctx context.Context, reqCtx *pipeline.RequestContext, requestedModel string) error {
+	if reqCtx == nil {
+		return nil
+	}
+	ref := reqCtx.RuntimeSnapshot.ProviderCatalogRef.Normalize()
+	if h.ProviderCatalogResolver == nil && ref.IsZero() {
+		reqCtx.SelectedProviderCatalogKey = firstNonEmpty(reqCtx.SelectedProviderCatalogKey, reqCtx.SelectedProvider, h.DefaultProvider)
+		reqCtx.SelectedModelID = firstNonEmpty(reqCtx.SelectedModelID, reqCtx.SelectedModel, requestedModel, h.DefaultModel)
+		reqCtx.SelectedModel = firstNonEmpty(reqCtx.SelectedModel, reqCtx.SelectedModelID)
+		reqCtx.ProviderCatalogContentHash = firstNonEmpty(reqCtx.ProviderCatalogContentHash, ref.ContentHash, "legacy-provider-catalog-v1")
+		if reqCtx.RoutingDecisionKeyHash == "" {
+			reqCtx.RoutingDecisionKeyHash = routingDecisionKeyHashFromRequestContext(reqCtx)
+		}
+		return nil
+	}
+	if h.ProviderCatalogResolver == nil {
+		return providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Provider catalog is unavailable.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrUnavailable,
+		}
+	}
+	catalog, err := h.ProviderCatalogResolver.GetCatalog(ctx, ref, providercatalog.Scope{
+		TenantID:      reqCtx.TenantID,
+		ProjectID:     reqCtx.ProjectID,
+		ApplicationID: reqCtx.ApplicationID,
+	})
+	if err != nil {
+		code := "provider_catalog_unavailable"
+		if errors.Is(err, providercatalog.ErrMismatch) {
+			code = "provider_catalog_mismatch"
+		}
+		return providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       code,
+			message:    "Provider catalog could not be verified.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+	catalog = catalog.Normalize()
+	if !catalog.Matches(ref) {
+		return providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_mismatch",
+			message:    "Provider catalog reference mismatch.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrMismatch,
+		}
+	}
+	providerName := firstNonEmpty(reqCtx.SelectedProvider, h.DefaultProvider)
+	catalogProvider, err := catalog.ProviderByName(providerName)
+	if err != nil {
+		return providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Gateway provider is not configured.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+	modelID := firstNonEmpty(reqCtx.SelectedModel, requestedModel, h.DefaultModel)
+	catalogModel, err := catalogProvider.ModelByID(modelID)
+	if err != nil {
+		return providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Gateway provider model is not configured.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+	reqCtx.SelectedProvider = catalogProvider.ProviderName
+	reqCtx.SelectedProviderID = catalogProvider.ProviderID
+	reqCtx.SelectedProviderCatalogKey = catalogProvider.ProviderName
+	reqCtx.SelectedModel = catalogModel.ModelID
+	reqCtx.SelectedModelID = catalogModel.ModelID
+	reqCtx.ProviderCatalogContentHash = catalog.ContentHash
+	if reqCtx.RoutingDecisionKeyHash == "" {
+		reqCtx.RoutingDecisionKeyHash = routingDecisionKeyHashFromRequestContext(reqCtx)
+	}
+	return nil
 }
 
 func (h *ChatCompletionsHandler) resolveLegacyProviderCallTarget(reqCtx *pipeline.RequestContext, requestedModel string) (providerCallTarget, error) {
@@ -494,6 +625,7 @@ func (h *ChatCompletionsHandler) resolveLegacyProviderCallTarget(reqCtx *pipelin
 		AdapterType:  adapter.AdapterType(),
 		ModelID:      modelID,
 		ModelName:    modelID,
+		CatalogHash:  "legacy-provider-catalog-v1",
 		ExecutionConfig: provider.ExecutionConfig{
 			ProviderName: firstNonEmpty(providerName, adapter.AdapterType()),
 			AdapterType:  adapter.AdapterType(),
@@ -532,10 +664,12 @@ func (h *ChatCompletionsHandler) providerCallTargetFromCatalog(ctx context.Conte
 	return providerCallTarget{
 		Adapter:      adapter,
 		Catalog:      catalog,
+		ProviderID:   catalogProvider.ProviderID,
 		ProviderName: catalogProvider.ProviderName,
 		AdapterType:  catalogProvider.AdapterType,
 		ModelID:      catalogModel.ModelID,
 		ModelName:    catalogModel.ModelName,
+		CatalogHash:  catalog.ContentHash,
 		FromCatalog:  true,
 		Fallback:     fallback,
 		ExecutionConfig: provider.ExecutionConfig{
@@ -646,10 +780,8 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 	reqCtx.ErrorStage = ""
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	reqCtx.SavedCostMicroUSD = 0
-	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
-		reqCtx.CacheStatus = cachestage.CacheStatusMiss
-		reqCtx.CacheType = cachestage.CacheTypeExact
-	}
+	reqCtx.FallbackOccurred = true
+	skipExactCacheStore(reqCtx, "fallback_response_store_bypassed")
 	reqCtx.DomainOutcomes = h.providerFailureDomainOutcomes(reqCtx, target, err, invocationlog.FallbackOutcome{
 		Outcome:          "success",
 		FallbackProvider: stringPointerValue(fallbackTarget.ProviderName),
@@ -834,13 +966,11 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 
 func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
 	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) {
-		reqCtx.CacheStatus = cachestage.CacheStatusBypass
-		reqCtx.CacheType = cachestage.CacheTypeNone
+		bypassExactCache(reqCtx, "masking_blocked")
 		return nil, "", false
 	}
 	if h.ExactCacheStore == nil || h.ExactCacheKeyBuilder == nil {
-		reqCtx.CacheStatus = cachestage.CacheStatusBypass
-		reqCtx.CacheType = cachestage.CacheTypeNone
+		bypassExactCache(reqCtx, "cache_dependency_unavailable")
 		return nil, "", false
 	}
 
@@ -848,6 +978,7 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	if err != nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusError
 		reqCtx.CacheType = cachestage.CacheTypeExact
+		reqCtx.CacheDecisionReason = "key_build_error"
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "error")
 		return nil, "", false
 	}
@@ -857,6 +988,7 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	if err != nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusError
 		reqCtx.CacheType = cachestage.CacheTypeExact
+		reqCtx.CacheDecisionReason = "lookup_error"
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "error")
 		return nil, "", false
 	}
@@ -864,32 +996,56 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 	if !lookup.Hit {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
+		reqCtx.CacheDecisionReason = "routing_aware_key_miss"
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
 		return nil, "", false
 	}
 
 	reqCtx.CacheStatus = cachestage.CacheStatusHit
 	reqCtx.CacheType = cachestage.CacheTypeExact
+	reqCtx.CacheDecisionReason = "routing_aware_key_hit"
 	h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
 	return lookup.Payload, lookup.CacheHitRequestID, true
 }
 
 func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) (string, error) {
+	maskedRequestBodyHash := normalizedMaskedRequestBodyHash(chatReq)
+	if maskedRequestBodyHash == "" {
+		maskedRequestBodyHash = redactedPromptHash(redactedPrompt)
+	}
+	routingDecisionHash := reqCtx.RoutingDecisionKeyHash
+	if routingDecisionHash == "" {
+		routingDecisionHash = routingDecisionKeyHashFromRequestContext(reqCtx)
+	}
+	reqCtx.RoutingDecisionKeyHash = routingDecisionHash
+	reqCtx.CacheKeyVersion = cachekey.ExactKeyMaterialVersion
+	providerID := reqCtx.SelectedProviderID
+	providerCatalogStableKey := ""
+	if strings.TrimSpace(providerID) == "" {
+		providerCatalogStableKey = firstNonEmpty(reqCtx.SelectedProviderCatalogKey, reqCtx.SelectedProvider, h.DefaultProvider)
+	}
 	return h.ExactCacheKeyBuilder.BuildExactKey(ctx, cachekey.KeyMaterial{
-		TenantID:                 reqCtx.TenantID,
-		ProjectID:                reqCtx.ProjectID,
-		ApplicationID:            reqCtx.ApplicationID,
-		RequestedModel:           firstNonEmpty(reqCtx.RequestedModel, chatReq.Model, h.DefaultModel),
-		SecurityPolicyVersionID:  firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID),
-		RoutingPolicyVersionID:   firstNonEmpty(reqCtx.RoutingPolicyHash, reqCtx.RuntimeRoutingPolicy.RoutingPolicyHash, routingdomain.DefaultPolicyHash),
-		CachePolicyHash:          firstNonEmpty(reqCtx.RuntimeCachePolicy.CachePolicyHash, h.CachePolicyHash),
-		NormalizedRedactedPrompt: redactedPrompt,
-		RequestParamsHash:        requestParamsHash(chatReq),
+		TenantID:                        reqCtx.TenantID,
+		ProjectID:                       reqCtx.ProjectID,
+		ApplicationID:                   reqCtx.ApplicationID,
+		RequestedModel:                  firstNonEmpty(reqCtx.RequestedModel, chatReq.Model, h.DefaultModel),
+		ProviderCatalogContentHash:      firstNonEmpty(reqCtx.ProviderCatalogContentHash, reqCtx.RuntimeSnapshot.ProviderCatalogRef.ContentHash, "legacy-provider-catalog-v1"),
+		ProviderID:                      providerID,
+		ProviderCatalogStableKey:        providerCatalogStableKey,
+		ModelID:                         firstNonEmpty(reqCtx.SelectedModelID, reqCtx.SelectedModel, chatReq.Model, h.DefaultModel),
+		RoutingPolicyHash:               firstNonEmpty(reqCtx.RoutingPolicyHash, reqCtx.RuntimeRoutingPolicy.RoutingPolicyHash, routingdomain.DefaultPolicyHash),
+		RoutingDecisionKeyHash:          routingDecisionHash,
+		CachePolicyHash:                 firstNonEmpty(reqCtx.RuntimeCachePolicy.CachePolicyHash, h.CachePolicyHash),
+		SafetyPolicyHash:                firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID, h.SecurityPolicyVersionID),
+		MaskingPolicyHash:               firstNonEmpty(reqCtx.SecurityPolicyVersionID, reqCtx.SecurityPolicyHash, h.SecurityPolicyVersionID),
+		NormalizedMaskedRequestBodyHash: maskedRequestBodyHash,
+		RequestParamsHash:               requestParamsHash(chatReq),
+		CacheVersion:                    cachekey.ExactKeyMaterialVersion,
 	})
 }
 
 func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
-	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil {
+	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil || reqCtx.Stream || reqCtx.FallbackOccurred {
 		return
 	}
 
@@ -1335,7 +1491,7 @@ func buildDomainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invo
 func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
 	payload, _ := json.Marshal(struct {
 		Temperature *float64 `json:"temperature,omitempty"`
-		MaxTokens   *int     `json:"maxTokens,omitempty"`
+		MaxTokens   *int     `json:"max_tokens,omitempty"`
 		Stream      bool     `json:"stream"`
 	}{
 		Temperature: chatReq.Temperature,
@@ -1344,6 +1500,65 @@ func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
 	})
 	sum := sha256.Sum256(payload)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func normalizedMaskedRequestBodyHash(chatReq provider.ChatCompletionRequest) string {
+	payload, err := json.Marshal(struct {
+		Model    string                 `json:"model"`
+		Messages []provider.ChatMessage `json:"messages"`
+	}{
+		Model:    strings.TrimSpace(chatReq.Model),
+		Messages: chatReq.Messages,
+	})
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func redactedPromptHash(redactedPrompt string) string {
+	sum := sha256.Sum256([]byte(cachekey.NormalizeRedactedPrompt(redactedPrompt)))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func routingDecisionKeyHashFromRequestContext(reqCtx *pipeline.RequestContext) string {
+	material := routingDecisionMaterialFromRequestContext(reqCtx)
+	hash, err := routingdomain.DecisionKeyHash(material)
+	if err != nil {
+		return ""
+	}
+	return hash
+}
+
+func routingDecisionMaterialFromRequestContext(reqCtx *pipeline.RequestContext) routingdomain.DecisionMaterial {
+	if reqCtx == nil {
+		return routingdomain.DecisionMaterial{
+			RoutingMode:   routingdomain.RoutingModeAuto,
+			Category:      routingdomain.CategoryUnknown,
+			Tier:          routingdomain.TierBalanced,
+			Capability:    routingdomain.CapabilityChat,
+			PolicyVariant: routingdomain.PolicyVariantDefault,
+		}
+	}
+	routingMode := routingdomain.RoutingModePinned
+	if strings.EqualFold(strings.TrimSpace(reqCtx.RequestedModel), "auto") {
+		routingMode = routingdomain.RoutingModeAuto
+	}
+	tier := routingdomain.TierBalanced
+	switch strings.TrimSpace(reqCtx.RoutingReason) {
+	case routingdomain.ReasonShortPromptLowCost:
+		tier = routingdomain.TierLowCost
+	case routingdomain.ReasonDefaultBalanced, routingdomain.ReasonPinned, "", "not_routed":
+		tier = routingdomain.TierBalanced
+	}
+	return routingdomain.DecisionMaterial{
+		RoutingMode:   routingMode,
+		Category:      routingdomain.CategoryUnknown,
+		Tier:          tier,
+		Capability:    routingdomain.CapabilityChat,
+		PolicyVariant: routingdomain.PolicyVariantDefault,
+	}
 }
 
 func (h *ChatCompletionsHandler) writeAuthFailureLog(ctx context.Context, reqCtx *pipeline.RequestContext, startedAt time.Time, completedAt time.Time) {
@@ -1390,58 +1605,63 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 	providerLatencyMs := providerLatencyForLog(reqCtx)
 	logStartedAt := time.Now()
 	err := h.TerminalLogWriter.WriteTerminalLog(ctx, invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
-		RequestID:               reqCtx.RequestID,
-		TraceID:                 reqCtx.TraceID,
-		TenantID:                reqCtx.TenantID,
-		ProjectID:               reqCtx.ProjectID,
-		ApplicationID:           reqCtx.ApplicationID,
-		BudgetScope:             reqCtx.BudgetScope,
-		APIKeyID:                reqCtx.APIKeyID,
-		AppTokenID:              reqCtx.AppTokenID,
-		EndUserID:               reqCtx.EndUserID,
-		FeatureID:               reqCtx.FeatureID,
-		ConfigHash:              reqCtx.ConfigHash,
-		SecurityPolicyHash:      reqCtx.SecurityPolicyHash,
-		RuntimeSnapshot:         reqCtx.RuntimeSnapshot,
-		RateLimitDecision:       reqCtx.RateLimitDecision,
-		BudgetDecision:          reqCtx.BudgetDecision,
-		Endpoint:                reqCtx.Endpoint,
-		Method:                  reqCtx.Method,
-		Source:                  invocationlog.SourceCustomerApp,
-		Stream:                  reqCtx.Stream,
-		RequestedProvider:       reqCtx.RequestedProvider,
-		RequestedModel:          reqCtx.RequestedModel,
-		Provider:                reqCtx.Provider,
-		Model:                   reqCtx.Model,
-		SelectedProvider:        reqCtx.SelectedProvider,
-		SelectedModel:           reqCtx.SelectedModel,
-		RoutingReason:           reqCtx.RoutingReason,
-		RoutingPolicyHash:       reqCtx.RoutingPolicyHash,
-		PromptTokens:            reqCtx.PromptTokens,
-		CompletionTokens:        reqCtx.CompletionTokens,
-		TotalTokens:             reqCtx.TotalTokens,
-		CostMicroUSD:            reqCtx.CostMicroUSD,
-		SavedCostMicroUSD:       reqCtx.SavedCostMicroUSD,
-		LatencyMs:               reqCtx.LatencyMs,
-		ProviderLatencyMs:       providerLatencyMs,
-		Status:                  reqCtx.Status,
-		HTTPStatus:              reqCtx.HTTPStatus,
-		ErrorCode:               reqCtx.ErrorCode,
-		ErrorMessage:            reqCtx.ErrorMessage,
-		ErrorStage:              reqCtx.ErrorStage,
-		CacheStatus:             reqCtx.CacheStatus,
-		CacheType:               reqCtx.CacheType,
-		CacheKeyHash:            reqCtx.CacheKeyHash,
-		CacheHitRequestID:       reqCtx.CacheHitRequestID,
-		MaskingAction:           reqCtx.MaskingAction,
-		MaskingDetectedTypes:    reqCtx.MaskingDetectedTypes,
-		MaskingDetectedCount:    reqCtx.MaskingDetectedCount,
-		RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
-		SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
-		DomainOutcomes:          reqCtx.DomainOutcomes,
-		RedactedPromptForHash:   redactedPrompt,
-		StartedAt:               startedAt,
-		CompletedAt:             completedAt,
+		RequestID:                  reqCtx.RequestID,
+		TraceID:                    reqCtx.TraceID,
+		TenantID:                   reqCtx.TenantID,
+		ProjectID:                  reqCtx.ProjectID,
+		ApplicationID:              reqCtx.ApplicationID,
+		BudgetScope:                reqCtx.BudgetScope,
+		APIKeyID:                   reqCtx.APIKeyID,
+		AppTokenID:                 reqCtx.AppTokenID,
+		EndUserID:                  reqCtx.EndUserID,
+		FeatureID:                  reqCtx.FeatureID,
+		ConfigHash:                 reqCtx.ConfigHash,
+		SecurityPolicyHash:         reqCtx.SecurityPolicyHash,
+		RuntimeSnapshot:            reqCtx.RuntimeSnapshot,
+		RateLimitDecision:          reqCtx.RateLimitDecision,
+		BudgetDecision:             reqCtx.BudgetDecision,
+		Endpoint:                   reqCtx.Endpoint,
+		Method:                     reqCtx.Method,
+		Source:                     invocationlog.SourceCustomerApp,
+		Stream:                     reqCtx.Stream,
+		RequestedProvider:          reqCtx.RequestedProvider,
+		RequestedModel:             reqCtx.RequestedModel,
+		Provider:                   reqCtx.Provider,
+		Model:                      reqCtx.Model,
+		SelectedProvider:           reqCtx.SelectedProvider,
+		SelectedModel:              reqCtx.SelectedModel,
+		RoutingReason:              reqCtx.RoutingReason,
+		RoutingPolicyHash:          reqCtx.RoutingPolicyHash,
+		PromptTokens:               reqCtx.PromptTokens,
+		CompletionTokens:           reqCtx.CompletionTokens,
+		TotalTokens:                reqCtx.TotalTokens,
+		CostMicroUSD:               reqCtx.CostMicroUSD,
+		SavedCostMicroUSD:          reqCtx.SavedCostMicroUSD,
+		LatencyMs:                  reqCtx.LatencyMs,
+		ProviderLatencyMs:          providerLatencyMs,
+		Status:                     reqCtx.Status,
+		HTTPStatus:                 reqCtx.HTTPStatus,
+		ErrorCode:                  reqCtx.ErrorCode,
+		ErrorMessage:               reqCtx.ErrorMessage,
+		ErrorStage:                 reqCtx.ErrorStage,
+		CacheStatus:                reqCtx.CacheStatus,
+		CacheType:                  reqCtx.CacheType,
+		CacheKeyHash:               reqCtx.CacheKeyHash,
+		CacheHitRequestID:          reqCtx.CacheHitRequestID,
+		CacheKeyVersion:            reqCtx.CacheKeyVersion,
+		CacheDecisionReason:        reqCtx.CacheDecisionReason,
+		FallbackOccurred:           reqCtx.FallbackOccurred,
+		ProviderCatalogContentHash: reqCtx.ProviderCatalogContentHash,
+		RoutingDecisionKeyHash:     reqCtx.RoutingDecisionKeyHash,
+		MaskingAction:              reqCtx.MaskingAction,
+		MaskingDetectedTypes:       reqCtx.MaskingDetectedTypes,
+		MaskingDetectedCount:       reqCtx.MaskingDetectedCount,
+		RedactedPromptPreview:      reqCtx.RedactedPromptPreview,
+		SecurityPolicyVersionID:    reqCtx.SecurityPolicyVersionID,
+		DomainOutcomes:             reqCtx.DomainOutcomes,
+		RedactedPromptForHash:      redactedPrompt,
+		StartedAt:                  startedAt,
+		CompletedAt:                completedAt,
 	}))
 	h.recordLogWrite("terminal", err, time.Since(logStartedAt))
 	if err != nil {
