@@ -234,8 +234,20 @@ def scan_path_for_forbidden_sensitive_values(path: Path) -> None:
 
 def scan_text_for_forbidden_sensitive_values(text: str, label: str) -> None:
     for field_name in FORBIDDEN_FIELD_NAMES:
-        if re.search(rf'"{re.escape(field_name)}"\s*:', text):
+        if _contains_forbidden_field_reference(text, field_name):
             raise SafetyEvalError(f"{label}: forbidden field name {field_name!r} found")
     for pattern_name, pattern in FORBIDDEN_LITERAL_PATTERNS.items():
         if pattern.search(text):
             raise SafetyEvalError(f"{label}: forbidden sensitive literal pattern {pattern_name!r} found")
+
+
+def _contains_forbidden_field_reference(text: str, field_name: str) -> bool:
+    escaped = re.escape(field_name)
+    return any(
+        re.search(pattern, text)
+        for pattern in (
+            rf'"{escaped}"\s*:',
+            rf"`{escaped}`",
+            rf"(?m)^\s*(?:[-*]\s*)?(?:\*\*)?{escaped}(?:\*\*)?\s*:",
+        )
+    )

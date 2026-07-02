@@ -129,14 +129,6 @@ def preview_redacted_prompt(redacted_prompt: str) -> str:
     return normalized[:PREVIEW_MAX_CHARS] + "..."
 
 
-def _action_rank(action: str) -> int:
-    if action == "block":
-        return 2
-    if action == "redact":
-        return 1
-    return 0
-
-
 def _confidence_rank(confidence: float) -> float:
     if not math.isfinite(confidence):
         return 0
@@ -145,10 +137,6 @@ def _confidence_rank(confidence: float) -> float:
     if confidence > 1:
         return 1
     return confidence
-
-
-def _overlaps(left: SafetySignal, right: SafetySignal) -> bool:
-    return left.start < right.end and right.start < left.end
 
 
 def _normalize_signal_span(
