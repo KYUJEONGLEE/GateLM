@@ -1,6 +1,10 @@
 package routing
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 	classifier := NewRuleBasedCategoryClassifier()
@@ -23,5 +27,28 @@ func TestRuleBasedCategoryClassifierUsesLowCardinalityCategories(t *testing.T) {
 				t.Fatalf("expected %s, got %s", tt.expected, actual)
 			}
 		})
+	}
+}
+
+func TestRuleBasedCategoryClassifierScansBoundedPromptPrefix(t *testing.T) {
+	classifier := NewRuleBasedCategoryClassifier()
+
+	if actual := classifier.Classify("환불 " + strings.Repeat("가", maxCategoryScanBytes)); actual != CategorySupportRefund {
+		t.Fatalf("expected prefix keyword to classify support refund, got %s", actual)
+	}
+
+	if actual := classifier.Classify(strings.Repeat("a", maxCategoryScanBytes+100) + " refund"); actual != CategoryGeneral {
+		t.Fatalf("expected keyword beyond scan prefix to be ignored, got %s", actual)
+	}
+}
+
+func TestCategoryScanPrefixKeepsUTF8Boundary(t *testing.T) {
+	prefix := categoryScanPrefix(strings.Repeat("가", maxCategoryScanBytes))
+
+	if len(prefix) > maxCategoryScanBytes {
+		t.Fatalf("expected prefix length <= %d, got %d", maxCategoryScanBytes, len(prefix))
+	}
+	if !utf8.ValidString(prefix) {
+		t.Fatalf("expected UTF-8 safe prefix, got %q", prefix)
 	}
 }
