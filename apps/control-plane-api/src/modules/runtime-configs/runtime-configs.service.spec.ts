@@ -137,6 +137,40 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('b'.repeat(64));
   });
 
+  it('keeps optional high-quality routing model in the runtime policy', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      providerConfig: { models: ['mock-fast', 'mock-balanced', 'mock-smart'] },
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {
+      routingPolicy: {
+        defaultProvider: 'mock',
+        defaultModel: 'mock-balanced',
+        lowCostProvider: 'mock',
+        lowCostModel: 'mock-fast',
+        highQualityProvider: 'mock',
+        highQualityModel: 'mock-smart',
+      },
+    });
+
+    expect(result.runtimeConfig.routingPolicy).toEqual(
+      expect.objectContaining({
+        defaultModel: 'mock-balanced',
+        lowCostModel: 'mock-fast',
+        highQualityProvider: 'mock',
+        highQualityModel: 'mock-smart',
+      }),
+    );
+    expect(result.runtimeConfig.routingPolicy.routingPolicyHash).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+  });
+
   it('publishes a draft as the single active runtime config snapshot', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -723,6 +757,7 @@ describe('RuntimeConfigsService', () => {
       warningThresholdPercent: 80,
     });
     expect(result.policies.routing.defaultProvider).toBe('mock');
+    expect(result.policies.routing.lowCostModel).toBe('mock-fast');
     expect(result.policies.safety.requestSideRequired).toBe(true);
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
@@ -1716,6 +1751,8 @@ describe('RuntimeConfigsService', () => {
           defaultRequestedModel: 'auto',
           defaultProvider: 'mock',
           defaultModel: 'mock-fast',
+          lowCostProvider: 'mock',
+          lowCostModel: 'mock-fast',
           routingPolicyHash: 'e'.repeat(64),
         },
         cache: {

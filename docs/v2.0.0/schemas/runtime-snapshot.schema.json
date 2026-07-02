@@ -285,6 +285,26 @@
           "type": "string",
           "minLength": 1
         },
+        "lowCostProvider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional additive field for category-aware routing. If omitted, Gateway falls back to defaultProvider."
+        },
+        "lowCostModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional additive field for category-aware routing. If omitted, Gateway falls back to defaultModel."
+        },
+        "highQualityProvider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional additive field for category-aware routing. If omitted, Gateway falls back to defaultProvider."
+        },
+        "highQualityModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional additive field for category-aware routing. If omitted, Gateway falls back to defaultModel."
+        },
         "routingPolicyHash": {
           "type": "string",
           "minLength": 1

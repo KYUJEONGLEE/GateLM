@@ -156,6 +156,7 @@ func TestSimpleRouterRoutesCodeCategoryToHighQualityModel(t *testing.T) {
 		DefaultProvider:     "mock",
 		DefaultModel:        "mock-balanced",
 		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
 		HighQualityModel:    "mock-smart",
 		PolicyHash:          "route_p0_v1",
 		ShortPromptMaxChars: 300,
@@ -169,7 +170,7 @@ func TestSimpleRouterRoutesCodeCategoryToHighQualityModel(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-smart", ReasonCodeHighQuality, "route_p0_v1", DecisionMaterial{
+	assertDecision(t, decision, expectedDecision("auto", "mock-premium", "mock-smart", ReasonCodeHighQuality, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
 		Category:      CategoryCode,
 		Tier:          TierHighQuality,
@@ -209,6 +210,7 @@ func TestSimpleRouterRoutesLongSupportRefundCategoryToLowCostModel(t *testing.T)
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",
 		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
 		LowCostModel:        "mock-fast",
 		HighQualityModel:    "mock-smart",
 		PolicyHash:          "route_p0_v1",
@@ -223,7 +225,7 @@ func TestSimpleRouterRoutesLongSupportRefundCategoryToLowCostModel(t *testing.T)
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-fast", ReasonSupportRefundLowCost, "route_p0_v1", DecisionMaterial{
+	assertDecision(t, decision, expectedDecision("auto", "mock-cheap", "mock-fast", ReasonSupportRefundLowCost, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
 		Category:      CategorySupportRefund,
 		Tier:          TierLowCost,

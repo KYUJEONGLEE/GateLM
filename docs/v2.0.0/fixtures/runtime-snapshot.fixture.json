@@ -44,6 +44,10 @@
       "defaultRequestedModel": "auto",
       "defaultProvider": "synthetic_primary_provider",
       "defaultModel": "low_cost_chat_model",
+      "lowCostProvider": "synthetic_primary_provider",
+      "lowCostModel": "low_cost_chat_model",
+      "highQualityProvider": "synthetic_primary_provider",
+      "highQualityModel": "high_quality_chat_model",
       "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
     },
     "cache": {

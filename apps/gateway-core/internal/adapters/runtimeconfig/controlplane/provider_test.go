@@ -55,6 +55,12 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 	if snapshot.RoutingPolicy.DefaultProvider != "openai-main" || snapshot.RoutingPolicy.DefaultModel != "gpt-test-low" {
 		t.Fatalf("unexpected routing policy: %+v", snapshot.RoutingPolicy)
 	}
+	if snapshot.RoutingPolicy.LowCostProvider != "openai-low" || snapshot.RoutingPolicy.LowCostModel != "gpt-test-mini" {
+		t.Fatalf("expected low-cost routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
+	}
+	if snapshot.RoutingPolicy.HighQualityProvider != "openai-premium" || snapshot.RoutingPolicy.HighQualityModel != "gpt-test-smart" {
+		t.Fatalf("expected high-quality routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
+	}
 }
 
 func TestProviderRejectsRuntimeSnapshotLookupKeyMismatch(t *testing.T) {
@@ -143,9 +149,13 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				PolicyHash: "hash_security_policy_live",
 			},
 			Routing: runtimeSnapshotRoutingPolicy{
-				DefaultProvider:   "openai-main",
-				DefaultModel:      "gpt-test-low",
-				RoutingPolicyHash: "hash_routing_policy_live",
+				DefaultProvider:     "openai-main",
+				DefaultModel:        "gpt-test-low",
+				LowCostProvider:     "openai-low",
+				LowCostModel:        "gpt-test-mini",
+				HighQualityProvider: "openai-premium",
+				HighQualityModel:    "gpt-test-smart",
+				RoutingPolicyHash:   "hash_routing_policy_live",
 			},
 			Cache: runtimeSnapshotCachePolicy{
 				ExactCacheEnabled: true,
