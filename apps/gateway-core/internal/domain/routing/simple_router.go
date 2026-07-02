@@ -100,24 +100,52 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	}
 
 	decision := Decision{
-		RequestedModel:   requestedModel,
-		SelectedProvider: config.DefaultProvider,
-		PolicyHash:       config.PolicyHash,
+		RequestedModel:             requestedModel,
+		SelectedProvider:           config.DefaultProvider,
+		SelectedProviderCatalogKey: config.DefaultProvider,
+		PolicyHash:                 config.PolicyHash,
 	}
 
 	if strings.EqualFold(requestedModel, "auto") {
 		if utf8.RuneCountInString(req.PromptText) <= config.ShortPromptMaxChars {
 			decision.SelectedModel = config.LowCostModel
+			decision.SelectedModelID = config.LowCostModel
+			decision.RoutingDecisionMaterial = DecisionMaterial{
+				RoutingMode:   RoutingModeAuto,
+				Category:      CategoryUnknown,
+				Tier:          TierLowCost,
+				Capability:    CapabilityChat,
+				PolicyVariant: PolicyVariantDefault,
+			}
 			decision.RoutingReason = ReasonShortPromptLowCost
+			decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
 			return decision, nil
 		}
 
 		decision.SelectedModel = config.DefaultModel
+		decision.SelectedModelID = config.DefaultModel
+		decision.RoutingDecisionMaterial = DecisionMaterial{
+			RoutingMode:   RoutingModeAuto,
+			Category:      CategoryUnknown,
+			Tier:          TierBalanced,
+			Capability:    CapabilityChat,
+			PolicyVariant: PolicyVariantDefault,
+		}
 		decision.RoutingReason = ReasonDefaultBalanced
+		decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
 		return decision, nil
 	}
 
 	decision.SelectedModel = requestedModel
+	decision.SelectedModelID = requestedModel
+	decision.RoutingDecisionMaterial = DecisionMaterial{
+		RoutingMode:   RoutingModePinned,
+		Category:      CategoryUnknown,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}
 	decision.RoutingReason = ReasonPinned
+	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(decision.RoutingDecisionMaterial)
 	return decision, nil
 }

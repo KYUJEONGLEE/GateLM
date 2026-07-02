@@ -72,20 +72,29 @@ type MaskingContext struct {
 }
 
 type RoutingContext struct {
-	RequestedModel    string
-	SelectedProvider  string
-	SelectedModel     string
-	RoutingReason     string
-	RoutingPolicyHash string
+	RequestedModel             string
+	SelectedProvider           string
+	SelectedProviderID         string
+	SelectedProviderCatalogKey string
+	SelectedModel              string
+	SelectedModelID            string
+	ProviderCatalogContentHash string
+	RoutingDecisionKeyHash     string
+	RoutingDecisionMaterial    map[string]string
+	RoutingReason              string
+	RoutingPolicyHash          string
 }
 
 type CacheContext struct {
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
-	SavedCostMicroUSD int64
-	Payload           []byte
+	CacheStatus         string
+	CacheType           string
+	CacheKeyHash        string
+	CacheHitRequestID   string
+	CacheKeyVersion     string
+	CacheDecisionReason string
+	FallbackOccurred    bool
+	SavedCostMicroUSD   int64
+	Payload             []byte
 }
 
 type StatusContext struct {
@@ -114,6 +123,9 @@ func (c *GatewayContext) BypassCache() {
 	c.Cache.CacheType = "none"
 	c.Cache.CacheKeyHash = ""
 	c.Cache.CacheHitRequestID = ""
+	c.Cache.CacheKeyVersion = ""
+	c.Cache.CacheDecisionReason = "bypassed"
+	c.Cache.FallbackOccurred = false
 	c.Cache.SavedCostMicroUSD = 0
 	c.Cache.Payload = nil
 }

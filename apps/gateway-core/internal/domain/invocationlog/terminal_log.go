@@ -57,10 +57,15 @@ type TerminalLog struct {
 	ErrorMessage string
 	ErrorStage   string
 
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
+	CacheStatus                string
+	CacheType                  string
+	CacheKeyHash               string
+	CacheHitRequestID          string
+	CacheKeyVersion            string
+	CacheDecisionReason        string
+	FallbackOccurred           bool
+	ProviderCatalogContentHash string
+	RoutingDecisionKeyHash     string
 
 	MaskingAction           string
 	MaskingDetectedTypes    []string
@@ -121,10 +126,15 @@ type TerminalLogInput struct {
 	ErrorMessage string
 	ErrorStage   string
 
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
+	CacheStatus                string
+	CacheType                  string
+	CacheKeyHash               string
+	CacheHitRequestID          string
+	CacheKeyVersion            string
+	CacheDecisionReason        string
+	FallbackOccurred           bool
+	ProviderCatalogContentHash string
+	RoutingDecisionKeyHash     string
 
 	MaskingAction           string
 	MaskingDetectedTypes    []string
@@ -211,6 +221,20 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if runtimeSnapshot.ContentHash != "" {
 		metadata["runtimeSnapshot"] = runtimeSnapshot.Metadata()
 	}
+	if strings.TrimSpace(input.CacheKeyVersion) != "" {
+		metadata["cacheKeyVersion"] = strings.TrimSpace(input.CacheKeyVersion)
+	}
+	if strings.TrimSpace(input.CacheDecisionReason) != "" {
+		metadata["cacheDecisionReason"] = strings.TrimSpace(input.CacheDecisionReason)
+	}
+	if strings.TrimSpace(input.ProviderCatalogContentHash) != "" {
+		metadata["providerCatalogContentHash"] = strings.TrimSpace(input.ProviderCatalogContentHash)
+	}
+	if strings.TrimSpace(input.RoutingDecisionKeyHash) != "" {
+		metadata["routingDecisionKeyHash"] = strings.TrimSpace(input.RoutingDecisionKeyHash)
+	}
+	metadata["fallbackOccurred"] = input.FallbackOccurred
+	metadata["providerCalled"] = terminalProviderCalled(input)
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
 	budgetDecision := input.BudgetDecision.Clone()
@@ -260,10 +284,15 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		ErrorMessage: strings.TrimSpace(input.ErrorMessage),
 		ErrorStage:   strings.TrimSpace(input.ErrorStage),
 
-		CacheStatus:       firstNonEmptyString(input.CacheStatus, CacheStatusBypass),
-		CacheType:         firstNonEmptyString(input.CacheType, CacheTypeNone),
-		CacheKeyHash:      strings.TrimSpace(input.CacheKeyHash),
-		CacheHitRequestID: strings.TrimSpace(input.CacheHitRequestID),
+		CacheStatus:                firstNonEmptyString(input.CacheStatus, CacheStatusBypass),
+		CacheType:                  firstNonEmptyString(input.CacheType, CacheTypeNone),
+		CacheKeyHash:               strings.TrimSpace(input.CacheKeyHash),
+		CacheHitRequestID:          strings.TrimSpace(input.CacheHitRequestID),
+		CacheKeyVersion:            strings.TrimSpace(input.CacheKeyVersion),
+		CacheDecisionReason:        strings.TrimSpace(input.CacheDecisionReason),
+		FallbackOccurred:           input.FallbackOccurred,
+		ProviderCatalogContentHash: strings.TrimSpace(input.ProviderCatalogContentHash),
+		RoutingDecisionKeyHash:     strings.TrimSpace(input.RoutingDecisionKeyHash),
 
 		MaskingAction:           firstNonEmptyString(input.MaskingAction, "none"),
 		MaskingDetectedTypes:    append([]string{}, input.MaskingDetectedTypes...),
@@ -303,4 +332,17 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func terminalProviderCalled(input TerminalLogInput) bool {
+	if strings.TrimSpace(input.CacheStatus) == CacheStatusHit {
+		return false
+	}
+	if strings.TrimSpace(input.Status) == StatusBlocked || strings.TrimSpace(input.Status) == StatusRateLimited || strings.TrimSpace(input.Status) == StatusCancelled {
+		return false
+	}
+	if input.ProviderLatencyMs != nil {
+		return true
+	}
+	return strings.TrimSpace(input.Provider) != "" || strings.TrimSpace(input.SelectedProvider) != ""
 }

@@ -601,6 +601,8 @@ func legacyCacheOutcome(cacheStatus string) string {
 		return "miss"
 	case CacheStatusError:
 		return "error"
+	case CacheStatusStoreSkipped:
+		return "store_skipped"
 	case CacheStatusBypass:
 		return "bypassed"
 	default:
