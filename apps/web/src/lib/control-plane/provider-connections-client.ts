@@ -8,7 +8,9 @@ import {
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
-  ProviderConnectionsModel
+  ProviderConnectionsModel,
+  ProviderModelDiscovery,
+  ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
 
 type RuntimeConfigFixture = {
@@ -58,18 +60,57 @@ type ProviderListResult =
       status: number;
     };
 
+type ProviderPresetListResult =
+  | {
+      data: ProviderPresetRecord[];
+      ok: true;
+      status: number;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
+
+type ProviderDiscoveryResult =
+  | {
+      data: ProviderModelDiscovery;
+      ok: true;
+      status: number;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
+
 export async function getProviderConnectionsModel(
   routeTenantId: string
 ): Promise<ProviderConnectionsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
-  const listResult = await listProviders(controlPlaneProjectId);
+  const [listResult, presetResult] = await Promise.all([
+    listProviders(controlPlaneProjectId),
+    listProviderPresets()
+  ]);
+  const providerPresets = presetResult.ok
+    ? {
+        items: presetResult.data,
+        loadError: null,
+        source: "control-plane" as const
+      }
+    : {
+        items: getFallbackProviderPresets(),
+        loadError: presetResult.error,
+        source: "fallback" as const
+      };
 
   if (listResult.ok) {
     return {
       controlPlaneBaseUrl,
       controlPlaneProjectId,
       loadError: null,
+      providerPresets,
       providers: listResult.data,
       routeTenantId,
       source: "control-plane"
@@ -80,6 +121,7 @@ export async function getProviderConnectionsModel(
     controlPlaneBaseUrl,
     controlPlaneProjectId,
     loadError: listResult.error,
+    providerPresets,
     providers: getFixtureProviders(),
     routeTenantId,
     source: "fixture"
@@ -114,6 +156,28 @@ export async function upsertProviderConnection(
   }
 }
 
+export async function discoverProviderModels(provider: string): Promise<ProviderDiscoveryResult> {
+  const projectId = getControlPlaneProjectId();
+
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(provider)}/discover-models`,
+      {
+        cache: "no-store",
+        method: "POST"
+      }
+    );
+
+    return readProviderDiscoveryResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
 async function listProviders(projectId: string): Promise<ProviderListResult> {
   try {
     const response = await fetch(
@@ -124,6 +188,22 @@ async function listProviders(projectId: string): Promise<ProviderListResult> {
     );
 
     return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+async function listProviderPresets(): Promise<ProviderPresetListResult> {
+  try {
+    const response = await fetch(`${getControlPlaneBaseUrl()}/admin/v1/provider-presets`, {
+      cache: "no-store"
+    });
+
+    return readProviderPresetListResponse(response);
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -170,6 +250,11 @@ function toProviderConfig(values: ProviderConnectionFormValues, models: string[]
 
   if (apiVersion) {
     providerConfig.apiVersion = apiVersion;
+  }
+
+  const modelsEndpointPath = values.modelsEndpointPath.trim();
+  if (modelsEndpointPath) {
+    providerConfig.modelsEndpointPath = modelsEndpointPath;
   }
 
   return providerConfig;
@@ -242,6 +327,62 @@ async function readProviderListResponse(response: Response): Promise<ProviderLis
   };
 }
 
+async function readProviderPresetListResponse(response: Response): Promise<ProviderPresetListResult> {
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    return {
+      error: getErrorMessage(payload, response.status),
+      ok: false,
+      status: response.status
+    };
+  }
+
+  const presets = getProviderPresetsFromPayload(payload);
+
+  if (!presets) {
+    return {
+      error: "Control Plane response did not include provider presets.",
+      ok: false,
+      status: response.status
+    };
+  }
+
+  return {
+    data: presets,
+    ok: true,
+    status: response.status
+  };
+}
+
+async function readProviderDiscoveryResponse(response: Response): Promise<ProviderDiscoveryResult> {
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    return {
+      error: getErrorMessage(payload, response.status),
+      ok: false,
+      status: response.status
+    };
+  }
+
+  const discovery = getProviderDiscoveryFromPayload(payload);
+
+  if (!discovery) {
+    return {
+      error: "Control Plane response did not include discovered models.",
+      ok: false,
+      status: response.status
+    };
+  }
+
+  return {
+    data: discovery,
+    ok: true,
+    status: response.status
+  };
+}
+
 function getProviderFromPayload(payload: unknown): ProviderConnectionRecord | null {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -255,6 +396,77 @@ function getProviderFromPayload(payload: unknown): ProviderConnectionRecord | nu
   }
 
   return toProviderRecord(provider);
+}
+
+function getProviderPresetsFromPayload(payload: unknown): ProviderPresetRecord[] | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const data = record.data;
+  const values = Array.isArray(data)
+    ? data
+    : data && typeof data === "object" && Array.isArray((data as Record<string, unknown>).items)
+      ? ((data as Record<string, unknown>).items as unknown[])
+      : Array.isArray(record.items)
+        ? record.items
+        : null;
+
+  if (!values) {
+    return null;
+  }
+
+  const presets = values.map(toProviderPresetRecord);
+
+  if (presets.some((preset) => preset === null)) {
+    return null;
+  }
+
+  return presets as ProviderPresetRecord[];
+}
+
+function getProviderDiscoveryFromPayload(payload: unknown): ProviderModelDiscovery | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const value = record.data ?? record;
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const discovery = value as Record<string, unknown>;
+  const models = Array.isArray(discovery.models)
+    ? discovery.models.map(toProviderDiscoveredModel)
+    : null;
+
+  if (
+    typeof discovery.providerId !== "string" ||
+    typeof discovery.provider !== "string" ||
+    typeof discovery.adapterType !== "string" ||
+    typeof discovery.baseUrl !== "string" ||
+    typeof discovery.credentialRequired !== "boolean" ||
+    typeof discovery.discoveredAt !== "string" ||
+    typeof discovery.modelCount !== "number" ||
+    !models ||
+    models.some((model) => model === null)
+  ) {
+    return null;
+  }
+
+  return {
+    adapterType: discovery.adapterType,
+    baseUrl: discovery.baseUrl,
+    credentialRequired: discovery.credentialRequired,
+    discoveredAt: discovery.discoveredAt,
+    modelCount: discovery.modelCount,
+    models: models as ProviderModelDiscovery["models"],
+    provider: discovery.provider,
+    providerId: discovery.providerId
+  };
 }
 
 function getProvidersFromPayload(payload: unknown): ProviderConnectionRecord[] | null {
@@ -290,6 +502,66 @@ function getErrorMessage(payload: unknown, status: number) {
   return `Control Plane request failed with HTTP ${status}.`;
 }
 
+function toProviderPresetRecord(value: unknown): ProviderPresetRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (
+    typeof record.providerKey !== "string" ||
+    typeof record.displayName !== "string" ||
+    typeof record.adapterType !== "string" ||
+    typeof record.baseUrl !== "string" ||
+    typeof record.modelsEndpointPath !== "string" ||
+    typeof record.credentialRequired !== "boolean" ||
+    typeof record.defaultResolver !== "string" ||
+    typeof record.defaultTimeoutMs !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    adapterType: record.adapterType,
+    baseUrl: record.baseUrl,
+    credentialRequired: record.credentialRequired,
+    defaultResolver: record.defaultResolver,
+    defaultTimeoutMs: record.defaultTimeoutMs,
+    displayName: record.displayName,
+    modelsEndpointPath: record.modelsEndpointPath,
+    providerKey: record.providerKey
+  };
+}
+
+function toProviderDiscoveredModel(value: unknown): ProviderModelDiscovery["models"][number] | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (
+    typeof record.providerId !== "string" ||
+    typeof record.provider !== "string" ||
+    typeof record.modelName !== "string" ||
+    typeof record.displayName !== "string" ||
+    typeof record.object !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    createdAt: typeof record.createdAt === "string" ? record.createdAt : null,
+    displayName: record.displayName,
+    modelName: record.modelName,
+    object: record.object,
+    ownedBy: typeof record.ownedBy === "string" ? record.ownedBy : null,
+    provider: record.provider,
+    providerId: record.providerId
+  };
+}
+
 function getFixtureProviders(): ProviderConnectionRecord[] {
   const runtimeConfig = (runtimeConfigFixture as RuntimeConfigFixture).runtimeConfig;
   const timestamp = runtimeConfig.generatedAt;
@@ -319,6 +591,41 @@ function getFixtureProviders(): ProviderConnectionRecord[] {
     timeoutMs: provider.timeoutMs,
     updatedAt: timestamp
   }));
+}
+
+function getFallbackProviderPresets(): ProviderPresetRecord[] {
+  return [
+    {
+      adapterType: "openai_compatible",
+      baseUrl: "https://api.openai.com/v1",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "OpenAI",
+      modelsEndpointPath: "/models",
+      providerKey: "openai"
+    },
+    {
+      adapterType: "openai_compatible",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "Gemini",
+      modelsEndpointPath: "/models",
+      providerKey: "gemini"
+    },
+    {
+      adapterType: "anthropic",
+      baseUrl: "https://api.anthropic.com/v1",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "Claude",
+      modelsEndpointPath: "/models",
+      providerKey: "claude"
+    }
+  ];
 }
 
 function toProviderRecord(value: unknown): ProviderConnectionRecord | null {

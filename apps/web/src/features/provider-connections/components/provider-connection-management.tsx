@@ -9,7 +9,9 @@ import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
   ProviderConnectionsModel,
-  ProviderConnectionStatus
+  ProviderConnectionStatus,
+  ProviderModelDiscovery,
+  ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
@@ -25,6 +27,7 @@ type SubmitState = {
 };
 
 type ProviderResponsePayload = {
+  discovery?: ProviderModelDiscovery;
   error?: string;
   provider?: ProviderConnectionRecord;
 };
@@ -44,6 +47,7 @@ const emptyProviderForm: ProviderConnectionFormValues = {
   displayName: "",
   failureMode: "fail_closed",
   models: "",
+  modelsEndpointPath: "/models",
   provider: "",
   requestFormat: "openai_chat_completions",
   resolver: "none",
@@ -64,13 +68,17 @@ const providerText: Record<
     credentialLast4: string;
     credentialPrefix: string;
     displayName: string;
+    discoverModels: string;
+    discoveryOpenAiOnly: string;
     empty: string;
     fixtureFallback: string;
     management: string;
     models: string;
+    modelsEndpointPath: string;
     failureMode: string;
     projectId: string;
     provider: string;
+    providerPreset: string;
     providerConfig: string;
     providerId: string;
     register: string;
@@ -95,13 +103,17 @@ const providerText: Record<
     credentialLast4: "Credential last 4",
     credentialPrefix: "Credential prefix",
     displayName: "Display name",
+    discoverModels: "Discover models",
+    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI providers first.",
     empty: "No provider connections found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture provider connection.",
     management: "management",
     models: "Models",
+    modelsEndpointPath: "Models endpoint",
     failureMode: "Failure mode",
     projectId: "Project ID",
     provider: "Provider key",
+    providerPreset: "Provider preset",
     providerConfig: "Provider config",
     providerId: "Provider ID",
     register: "Register provider",
@@ -125,13 +137,17 @@ const providerText: Record<
     credentialLast4: "Credential last 4",
     credentialPrefix: "Credential prefix",
     displayName: "표시 이름",
+    discoverModels: "모델 조회",
+    discoveryOpenAiOnly: "모델 조회는 우선 OpenAI Provider에서만 활성화합니다.",
     empty: "Provider connection이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture Provider connection을 표시 중입니다.",
     management: "관리",
     models: "Models",
+    modelsEndpointPath: "Models endpoint",
     failureMode: "Failure mode",
     projectId: "Project ID",
     provider: "Provider key",
+    providerPreset: "Provider preset",
     providerConfig: "Provider config",
     providerId: "Provider ID",
     register: "Provider 등록",
@@ -157,6 +173,7 @@ export function ProviderConnectionManagement({
   const [formValues, setFormValues] =
     useState<ProviderConnectionFormValues>(getInitialProviderForm(model.providers));
   const [pendingAction, setPendingAction] = useState(false);
+  const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
@@ -209,8 +226,101 @@ export function ProviderConnectionManagement({
     router.refresh();
   }
 
+  async function discoverModels(provider = formValues.provider) {
+    const normalizedProvider = provider.trim();
+    const providerRecord = providers.find((item) => item.provider === normalizedProvider);
+    const baseValues = providerRecord ? getProviderFormValues(providerRecord) : null;
+
+    if (!isDiscoverSupportedProvider(normalizedProvider)) {
+      setSubmitState({
+        message: text.discoveryOpenAiOnly,
+        status: "error"
+      });
+      return;
+    }
+
+    if (!baseValues) {
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? "Provider를 먼저 저장한 뒤 모델을 조회하세요."
+            : "Save the provider before discovering models.",
+        status: "error"
+      });
+      return;
+    }
+
+    setDiscoveringProvider(normalizedProvider);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/provider-connections", {
+      body: JSON.stringify({
+        action: "discover-models",
+        values: {
+          provider: normalizedProvider
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
+
+    if (!response.ok || !payload.discovery) {
+      setSubmitState({
+        message: payload.error ?? "Provider model discovery failed.",
+        status: "error"
+      });
+      setDiscoveringProvider(null);
+      return;
+    }
+
+    const discoveredModels = payload.discovery.models.map((item) => item.modelName);
+
+    setFormValues((current) => {
+      return {
+        ...baseValues,
+        adapterType: payload.discovery?.adapterType ?? current.adapterType,
+        baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
+        credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
+        models: mergeModelNames(baseValues.models, discoveredModels),
+        provider: normalizedProvider
+      };
+    });
+    setSubmitState({
+      message:
+        locale === "ko"
+          ? `${discoveredModels.length}개 모델을 찾았습니다. 저장하면 Provider 설정에 반영됩니다.`
+          : `${discoveredModels.length} models discovered. Save the provider to store them.`,
+      status: "success"
+    });
+    setDiscoveringProvider(null);
+  }
+
   function editFromProvider(provider: ProviderConnectionRecord) {
     setFormValues(getProviderFormValues(provider));
+    setSubmitState({ message: "", status: "idle" });
+  }
+
+  function applyProviderPreset(providerKey: string) {
+    const preset = model.providerPresets.items.find((item) => item.providerKey === providerKey);
+
+    if (!preset) {
+      return;
+    }
+
+    setFormValues((current) => ({
+      ...current,
+      adapterType: preset.adapterType,
+      baseUrl: preset.baseUrl,
+      credentialRequired: preset.credentialRequired,
+      displayName: preset.displayName,
+      modelsEndpointPath: preset.modelsEndpointPath,
+      provider: preset.providerKey,
+      resolver: preset.defaultResolver,
+      timeoutMs: preset.defaultTimeoutMs
+    }));
     setSubmitState({ message: "", status: "idle" });
   }
 
@@ -228,6 +338,11 @@ export function ProviderConnectionManagement({
           {text.fixtureFallback} {model.loadError}
         </p>
       ) : null}
+      {model.providerPresets.source === "fallback" && model.providerPresets.loadError ? (
+        <p className="policy-alert" data-status="warning">
+          {model.providerPresets.loadError}
+        </p>
+      ) : null}
       {submitState.message ? (
         <p className="policy-alert" data-status={submitState.status}>
           {submitState.message}
@@ -239,6 +354,20 @@ export function ProviderConnectionManagement({
           <h3>{text.register}</h3>
         </div>
         <div className="provider-form-grid">
+          <label className="policy-field">
+            <span>{text.providerPreset}</span>
+            <select
+              onChange={(event) => applyProviderPreset(event.target.value)}
+              value={getSelectedPresetKey(model.providerPresets.items, formValues.provider)}
+            >
+              <option value="">Custom</option>
+              {model.providerPresets.items.map((preset) => (
+                <option key={preset.providerKey} value={preset.providerKey}>
+                  {preset.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="policy-field">
             <span>{text.provider}</span>
             <input
@@ -328,6 +457,21 @@ export function ProviderConnectionManagement({
               placeholder="openai_compatible"
               type="text"
               value={formValues.adapterType}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.modelsEndpointPath}</span>
+            <input
+              maxLength={120}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  modelsEndpointPath: event.target.value.trim()
+                }))
+              }
+              placeholder="/models"
+              type="text"
+              value={formValues.modelsEndpointPath}
             />
           </label>
           <label className="policy-field">
@@ -435,6 +579,7 @@ export function ProviderConnectionManagement({
               placeholder="gpt-4o-mini, gpt-4o"
               value={formValues.models}
             />
+            <small className="project-muted">{text.discoveryOpenAiOnly}</small>
           </label>
           <label className="policy-field">
             <span>{text.credentialPrefix}</span>
@@ -472,6 +617,19 @@ export function ProviderConnectionManagement({
               variant="outline"
             >
               {locale === "ko" ? "초기화" : "Reset"}
+            </Button>
+            <Button
+              disabled={
+                pendingAction ||
+                discoveringProvider !== null ||
+                !isDiscoverSupportedProvider(formValues.provider) ||
+                !isRegisteredProvider(providers, formValues.provider)
+              }
+              onClick={() => void discoverModels()}
+              type="button"
+              variant="outline"
+            >
+              {discoveringProvider === formValues.provider ? "..." : text.discoverModels}
             </Button>
             <Button disabled={pendingAction} onClick={() => void submitProvider()} type="button">
               <PlugZap aria-hidden="true" />
@@ -549,13 +707,30 @@ export function ProviderConnectionManagement({
                     <td>
                       <div className="project-row-actions">
                         <Button
-                          disabled={pendingAction}
+                          disabled={pendingAction || discoveringProvider !== null}
                           onClick={() => editFromProvider(provider)}
                           type="button"
                           variant="outline"
                         >
                           <Save aria-hidden="true" />
                           {text.save}
+                        </Button>
+                        <Button
+                          disabled={
+                            pendingAction ||
+                            discoveringProvider !== null ||
+                            !isDiscoverSupportedProvider(provider.provider)
+                          }
+                          onClick={() => {
+                            editFromProvider(provider);
+                            void discoverModels(provider.provider);
+                          }}
+                          type="button"
+                          variant="outline"
+                        >
+                          {discoveringProvider === provider.provider
+                            ? "..."
+                            : text.discoverModels}
                         </Button>
                       </div>
                     </td>
@@ -595,6 +770,7 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
     models: getProviderConfigModels(provider.providerConfig).join(", "),
+    modelsEndpointPath: getProviderConfigString(providerConfig, "modelsEndpointPath", "/models"),
     provider: provider.provider,
     requestFormat: getProviderConfigRequestFormat(providerConfig, provider),
     resolver: provider.resolver,
@@ -602,6 +778,29 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     status: provider.status,
     timeoutMs: provider.timeoutMs
   };
+}
+
+function getSelectedPresetKey(presets: ProviderPresetRecord[], provider: string) {
+  return presets.some((preset) => preset.providerKey === provider) ? provider : "";
+}
+
+function isDiscoverSupportedProvider(provider: string) {
+  return provider.trim().startsWith("openai");
+}
+
+function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: string) {
+  const normalizedProvider = provider.trim();
+
+  return providers.some((item) => item.provider === normalizedProvider);
+}
+
+function mergeModelNames(existingValue: string, discoveredModels: string[]) {
+  const existingModels = existingValue
+    .split(/[\n,]/)
+    .map((model) => model.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set([...existingModels, ...discoveredModels])).join(", ");
 }
 
 function formatProviderStatus(status: ProviderConnectionStatus) {

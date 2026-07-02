@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { upsertProviderConnection } from "@/lib/control-plane/provider-connections-client";
+import {
+  discoverProviderModels,
+  upsertProviderConnection
+} from "@/lib/control-plane/provider-connections-client";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionStatus
@@ -15,6 +18,31 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+
+  if (payload.action === "discover-models") {
+    const provider = getProviderFromPayload(payload.values);
+
+    if (!provider) {
+      return NextResponse.json({ error: "Invalid provider discovery payload." }, { status: 400 });
+    }
+
+    const result = await discoverProviderModels(provider);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: result.error,
+          status: result.status
+        },
+        { status: result.status > 0 ? result.status : 502 }
+      );
+    }
+
+    return NextResponse.json({
+      discovery: result.data,
+      status: result.status
+    });
+  }
 
   if (payload.action !== "upsert") {
     return NextResponse.json({ error: "Unknown provider action." }, { status: 400 });
@@ -70,8 +98,23 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     typeof record.secretRef === "string" &&
     typeof record.credentialPrefix === "string" &&
     typeof record.credentialLast4 === "string" &&
+    typeof record.modelsEndpointPath === "string" &&
     isProviderStatus(record.status)
   );
+}
+
+function getProviderFromPayload(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const provider = (value as Record<string, unknown>).provider;
+
+  if (typeof provider !== "string" || !/^[a-z][a-z0-9_-]{1,63}$/.test(provider)) {
+    return null;
+  }
+
+  return provider;
 }
 
 function isProviderStatus(value: unknown): value is ProviderConnectionStatus {
