@@ -81,7 +81,7 @@ export type CustomerDemoModel = {
 export interface GatewayChatClient {
   sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
-    options?: { stream?: boolean }
+    options?: { message?: string; stream?: boolean }
   ): Promise<CustomerDemoExchange>;
 }
 
@@ -94,7 +94,7 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
 
   async sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
-    options: { stream?: boolean } = {}
+    options: { message?: string; stream?: boolean } = {}
   ): Promise<CustomerDemoExchange> {
     const scenario = this.scenarioMap.get(scenarioId);
 
@@ -128,7 +128,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
 
   async sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
-    options: { stream?: boolean } = {}
+    options: { message?: string; stream?: boolean } = {}
   ): Promise<CustomerDemoExchange> {
     const response = await fetch("/api/customer-demo/chat", {
       method: "POST",
@@ -136,6 +136,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        message: options.message,
         scenarioId,
         stream: options.stream === true,
         tenantId: this.tenantId

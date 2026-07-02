@@ -37,7 +37,6 @@ const policyText: Record<
   Locale,
   {
     activeConfig: string;
-    application: string;
     budget: string;
     budgetEnforcement: string;
     budgetWarning: string;
@@ -45,14 +44,13 @@ const policyText: Record<
     cacheEnabled: string;
     cacheTtl: string;
     catalogVersion: string;
-    contentHash: string;
-    configHash: string;
     configVersion: string;
     completionPrice: string;
-    controlPlane: string;
     defaultRoute: string;
     detectors: string;
     detectorType: string;
+    close: string;
+    details: string;
     enabled: string;
     fallbackRoute: string;
     fixtureFallback: string;
@@ -63,6 +61,7 @@ const policyText: Record<
     model: string;
     models: string;
     placeholder: string;
+    policyDetails: string;
     pricing: string;
     pricingVersion: string;
     promptPrice: string;
@@ -76,9 +75,9 @@ const policyText: Record<
     remove: string;
     rollback: string;
     routing: string;
+    routingAdvanced: string;
     runtimeSnapshot: string;
     saveDraft: string;
-    securityPolicyHash: string;
     shortPrompt: string;
     snapshotState: string;
     snapshotVersion: string;
@@ -89,7 +88,6 @@ const policyText: Record<
 > = {
   en: {
     activeConfig: "Active config",
-    application: "Application",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetWarning: "Warning threshold",
@@ -97,14 +95,13 @@ const policyText: Record<
     cacheEnabled: "Cache enabled",
     cacheTtl: "TTL seconds",
     catalogVersion: "Catalog version",
-    contentHash: "Content hash",
-    configHash: "Config hash",
     configVersion: "Config version",
     completionPrice: "Completion micro USD",
-    controlPlane: "Control Plane",
     defaultRoute: "Default route",
     detectors: "Safety detectors",
     detectorType: "Detector",
+    close: "Close",
+    details: "Details",
     enabled: "Enabled",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
@@ -115,6 +112,7 @@ const policyText: Record<
     model: "Model",
     models: "Models",
     placeholder: "Placeholder",
+    policyDetails: "Policy details",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
     promptPrice: "Prompt micro USD",
@@ -128,9 +126,9 @@ const policyText: Record<
     remove: "Remove",
     rollback: "Rollback",
     routing: "Routing",
+    routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Save draft",
-    securityPolicyHash: "Security policy hash",
     shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -140,7 +138,6 @@ const policyText: Record<
   },
   ko: {
     activeConfig: "Active config",
-    application: "애플리케이션",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetWarning: "Warning threshold",
@@ -148,14 +145,13 @@ const policyText: Record<
     cacheEnabled: "캐시 사용",
     cacheTtl: "TTL 초",
     catalogVersion: "Catalog version",
-    contentHash: "Content hash",
-    configHash: "Config hash",
     configVersion: "Config version",
     completionPrice: "Completion micro USD",
-    controlPlane: "Control Plane",
     defaultRoute: "Default route",
     detectors: "Safety detector",
     detectorType: "Detector",
+    close: "닫기",
+    details: "상세보기",
     enabled: "사용",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
@@ -166,6 +162,7 @@ const policyText: Record<
     model: "Model",
     models: "Models",
     placeholder: "Placeholder",
+    policyDetails: "정책 상세",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
     promptPrice: "Prompt micro USD",
@@ -179,9 +176,9 @@ const policyText: Record<
     remove: "삭제",
     rollback: "Rollback",
     routing: "Routing",
+    routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Draft 저장",
-    securityPolicyHash: "Security policy hash",
     shortPrompt: "Short prompt 기준",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -200,17 +197,13 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     message: "",
     status: "idle"
   });
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   const displayConfig =
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
       : model.activeConfig;
-  const sourceLabel = model.source === "control-plane" ? text.controlPlane : "fixture";
-  const detectorSummary = useMemo(
-    () => draftValues.detectors.filter((detector) => detector.enabled).length,
-    [draftValues.detectors]
-  );
   const providerOptions = model.activeConfig.providers;
   const modelOptionsByProvider = useMemo(
     () => groupModelsByProvider(draftValues.models),
@@ -335,6 +328,9 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           <h2>{text.title}</h2>
         </div>
         <div className="policy-actions">
+          <Button onClick={() => setIsDetailOpen(true)} type="button" variant="outline">
+            {text.details}
+          </Button>
           <Button
             disabled={isSubmitting}
             onClick={() => void submitPolicy("save-draft")}
@@ -355,23 +351,6 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
         </div>
       </section>
 
-      <section className="policy-status-grid" aria-label="Runtime policy status">
-        <PolicyStat label={text.activeConfig} value={displayConfig.publishState} />
-        <PolicyStat label={text.application} value={model.applicationId} />
-        <PolicyStat label={text.controlPlane} value={sourceLabel} />
-        <PolicyStat label={text.detectors} value={String(detectorSummary)} />
-        <PolicyStat
-          label={text.runtimeSnapshot}
-          value={model.runtimeSnapshot.snapshot?.runtimeState ?? "unavailable"}
-        />
-        <PolicyStat
-          label={text.providerCatalog}
-          value={model.providerCatalog.summary?.catalogVersion.toString() ?? "unavailable"}
-        />
-        <PolicyStat label={text.history} value={String(model.history.items.length)} />
-        <PolicyStat label={text.models} value={String(draftValues.models.length)} />
-      </section>
-
       {model.source === "fixture" ? (
         <p className="policy-alert" data-status="warning">
           {text.fixtureFallback} {model.loadError}
@@ -383,7 +362,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
         </p>
       ) : null}
 
-      <section className="policy-layout">
+      <section className="policy-layout policy-settings-list">
         <article className="console-panel policy-editor-panel">
           <div className="panel-heading">
             <h3>{text.budget}</h3>
@@ -471,35 +450,27 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           />
         </article>
 
-        <article className="console-panel policy-editor-panel">
+        <article className="console-panel policy-editor-panel wide-panel">
           <div className="panel-heading">
-            <h3>{text.cache}</h3>
+            <h3>{text.detectors}</h3>
           </div>
-          <label className="policy-toggle-row">
-            <input
-              checked={draftValues.cacheEnabled}
-              onChange={(event) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  cacheEnabled: event.target.checked
-                }))
-              }
-              type="checkbox"
-            />
-            <span>{text.cacheEnabled}</span>
-          </label>
-          <PolicyNumberField
-            label={text.cacheTtl}
-            max={86400}
-            min={1}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                cacheTtlSeconds: value
-              }))
-            }
-            value={draftValues.cacheTtlSeconds}
-          />
+          <div className="policy-detector-list">
+            {draftValues.detectors.map((detector, index) => (
+              <DetectorEditor
+                detector={detector}
+                key={detector.type}
+                labels={text}
+                onChange={(nextDetector) =>
+                  setDraftValues((current) => ({
+                    ...current,
+                    detectors: current.detectors.map((item, itemIndex) =>
+                      itemIndex === index ? nextDetector : item
+                    )
+                  }))
+                }
+              />
+            ))}
+          </div>
         </article>
 
         <article className="console-panel policy-editor-panel">
@@ -535,6 +506,12 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
               selectedModel={draftValues.routingFallbackModel}
             />
           </div>
+        </article>
+
+        <article className="console-panel policy-editor-panel">
+          <div className="panel-heading">
+            <h3>{text.routingAdvanced}</h3>
+          </div>
           <PolicyNumberField
             label={text.shortPrompt}
             max={100000}
@@ -551,70 +528,33 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article className="console-panel policy-editor-panel">
           <div className="panel-heading">
-            <h3>{text.providerCatalog}</h3>
+            <h3>{text.cache}</h3>
           </div>
-          {model.providerCatalog.loadError ? (
-            <p className="policy-alert" data-status="warning">
-              {model.providerCatalog.loadError}
-            </p>
-          ) : null}
-          {model.providerCatalog.canonicalLoadError ? (
-            <p className="policy-alert" data-status="warning">
-              {model.providerCatalog.canonicalLoadError}
-            </p>
-          ) : null}
-          {model.providerCatalog.summary ? (
-            <dl className="policy-summary-list">
-              <div>
-                <dt>{text.catalogVersion}</dt>
-                <dd>{model.providerCatalog.summary.catalogVersion}</dd>
-              </div>
-              <div>
-                <dt>{text.providerCount}</dt>
-                <dd>
-                  {model.providerCatalog.summary.providerCount} / {text.models}:{" "}
-                  {model.providerCatalog.summary.modelCount}
-                </dd>
-              </div>
-              <div>
-                <dt>{text.contentHash}</dt>
-                <dd>{model.providerCatalog.summary.contentHash}</dd>
-              </div>
-              <div>
-                <dt>canonical by-id</dt>
-                <dd>
-                  {model.providerCatalog.canonicalVerified === null
-                    ? "not_checked"
-                    : model.providerCatalog.canonicalVerified
-                      ? "verified"
-                      : "mismatch"}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <dl className="policy-summary-list">
-              <div>
-                <dt>active catalog</dt>
-                <dd>unavailable</dd>
-              </div>
-              <div>
-                <dt>canonical by-id</dt>
-                <dd>not_checked</dd>
-              </div>
-            </dl>
-          )}
-          <dl className="policy-summary-list">
-            {providerOptions.map((provider) => (
-              <div key={provider.providerId}>
-                <dt>
-                  {provider.displayName} / {provider.provider}
-                </dt>
-                <dd>
-                  {provider.status} / {provider.resolver} / {provider.models.join(", ")}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <label className="policy-toggle-row">
+            <input
+              checked={draftValues.cacheEnabled}
+              onChange={(event) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  cacheEnabled: event.target.checked
+                }))
+              }
+              type="checkbox"
+            />
+            <span>{text.cacheEnabled}</span>
+          </label>
+          <PolicyNumberField
+            label={text.cacheTtl}
+            max={86400}
+            min={1}
+            onChange={(value) =>
+              setDraftValues((current) => ({
+                ...current,
+                cacheTtlSeconds: value
+              }))
+            }
+            value={draftValues.cacheTtlSeconds}
+          />
         </article>
 
         <article className="console-panel policy-editor-panel">
@@ -630,114 +570,138 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
               <dt>{text.publishedAt}</dt>
               <dd>{formatDateTime(displayConfig.publishedAt)}</dd>
             </div>
-            <div>
-              <dt>{text.configHash}</dt>
-              <dd>{displayConfig.configHash}</dd>
-            </div>
-            <div>
-              <dt>{text.securityPolicyHash}</dt>
-              <dd>{displayConfig.safetyPolicy.securityPolicyHash}</dd>
-            </div>
           </dl>
         </article>
-
-        <article className="console-panel policy-editor-panel">
-          <div className="panel-heading">
-            <h3>{text.runtimeSnapshot}</h3>
-          </div>
-          {model.runtimeSnapshot.loadError ? (
-            <p className="policy-alert" data-status="warning">
-              {model.runtimeSnapshot.loadError}
-            </p>
-          ) : null}
-          {model.runtimeSnapshot.snapshot ? (
-            <RuntimeSnapshotDetail snapshot={model.runtimeSnapshot.snapshot} text={text} />
-          ) : (
-            <dl className="policy-summary-list">
-              <div>
-                <dt>{text.snapshotState}</dt>
-                <dd>unavailable</dd>
-              </div>
-            </dl>
-          )}
-        </article>
-
-        <article className="console-panel policy-editor-panel wide-panel">
-          <div className="panel-heading">
-            <h3>{text.history}</h3>
-          </div>
-          {model.history.loadError ? (
-            <p className="policy-alert" data-status="warning">
-              {model.history.loadError}
-            </p>
-          ) : null}
-          {model.history.detailLoadError ? (
-            <p className="policy-alert" data-status="warning">
-              {model.history.detailLoadError}
-            </p>
-          ) : null}
-          {model.history.detail ? (
-            <dl className="policy-summary-list">
-              <div>
-                <dt>detail version</dt>
-                <dd>
-                  {model.history.detail.configVersion} / {model.history.detail.publishState}
-                </dd>
-              </div>
-              <div>
-                <dt>detail shape</dt>
-                <dd>
-                  providers {model.history.detail.providerCount} / models{" "}
-                  {model.history.detail.modelCount} / detectors{" "}
-                  {model.history.detail.detectorCount}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <dl className="policy-summary-list">
-              <div>
-                <dt>detail version</dt>
-                <dd>unavailable</dd>
-              </div>
-            </dl>
-          )}
-          {model.history.items.length > 0 ? (
-            <RuntimeHistoryTable
-              activeConfigVersion={displayConfig.configVersion}
-              isSubmitting={isSubmitting || rollbackTarget !== null}
-              items={model.history.items}
-              onRollback={(configVersion) => void rollbackPolicy(configVersion)}
-              rollbackTarget={rollbackTarget}
-              text={text}
-            />
-          ) : (
-            <p className="empty-state">No runtime config history returned.</p>
-          )}
-        </article>
-
-        <article className="console-panel policy-editor-panel wide-panel">
-          <div className="panel-heading">
-            <h3>{text.detectors}</h3>
-          </div>
-          <div className="policy-detector-list">
-            {draftValues.detectors.map((detector, index) => (
-              <DetectorEditor
-                detector={detector}
-                key={detector.type}
-                labels={text}
-                onChange={(nextDetector) =>
-                  setDraftValues((current) => ({
-                    ...current,
-                    detectors: current.detectors.map((item, itemIndex) =>
-                      itemIndex === index ? nextDetector : item
-                    )
-                  }))
-                }
-              />
-            ))}
-          </div>
-        </article>
       </section>
+
+      {isDetailOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsDetailOpen(false)} role="presentation">
+          <section
+            aria-labelledby="policy-detail-title"
+            aria-modal="true"
+            className="modal-panel policy-detail-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="panel-heading">
+              <h3 id="policy-detail-title">{text.policyDetails}</h3>
+              <Button onClick={() => setIsDetailOpen(false)} type="button" variant="outline">
+                {text.close}
+              </Button>
+            </div>
+
+            <div className="policy-detail-layout">
+              <article className="console-panel policy-editor-panel">
+                <div className="panel-heading">
+                  <h3>{text.runtimeSnapshot}</h3>
+                </div>
+                {model.runtimeSnapshot.loadError ? (
+                  <p className="policy-alert" data-status="warning">
+                    {model.runtimeSnapshot.loadError}
+                  </p>
+                ) : null}
+                {model.runtimeSnapshot.snapshot ? (
+                  <RuntimeSnapshotDetail snapshot={model.runtimeSnapshot.snapshot} text={text} />
+                ) : (
+                  <dl className="policy-summary-list">
+                    <div>
+                      <dt>{text.snapshotState}</dt>
+                      <dd>unavailable</dd>
+                    </div>
+                  </dl>
+                )}
+              </article>
+
+              <article className="console-panel policy-editor-panel">
+                <div className="panel-heading">
+                  <h3>{text.providerCatalog}</h3>
+                </div>
+                {model.providerCatalog.loadError ? (
+                  <p className="policy-alert" data-status="warning">
+                    {model.providerCatalog.loadError}
+                  </p>
+                ) : null}
+                {model.providerCatalog.canonicalLoadError ? (
+                  <p className="policy-alert" data-status="warning">
+                    {model.providerCatalog.canonicalLoadError}
+                  </p>
+                ) : null}
+                {model.providerCatalog.summary ? (
+                  <dl className="policy-summary-list">
+                    <div>
+                      <dt>{text.catalogVersion}</dt>
+                      <dd>{model.providerCatalog.summary.catalogVersion}</dd>
+                    </div>
+                    <div>
+                      <dt>{text.providerCount}</dt>
+                      <dd>
+                        {model.providerCatalog.summary.providerCount} / {text.models}:{" "}
+                        {model.providerCatalog.summary.modelCount}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>canonical by-id</dt>
+                      <dd>
+                        {model.providerCatalog.canonicalVerified === null
+                          ? "not_checked"
+                          : model.providerCatalog.canonicalVerified
+                            ? "verified"
+                            : "mismatch"}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <dl className="policy-summary-list">
+                    <div>
+                      <dt>active catalog</dt>
+                      <dd>unavailable</dd>
+                    </div>
+                    <div>
+                      <dt>canonical by-id</dt>
+                      <dd>not_checked</dd>
+                    </div>
+                  </dl>
+                )}
+                <dl className="policy-summary-list">
+                  {providerOptions.map((provider) => (
+                    <div key={provider.providerId}>
+                      <dt>
+                        {provider.displayName} / {provider.provider}
+                      </dt>
+                      <dd>
+                        {provider.status} / {provider.resolver} / {provider.models.join(", ")}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+
+              <article className="console-panel policy-editor-panel wide-panel">
+                <div className="panel-heading">
+                  <h3>{text.history}</h3>
+                </div>
+                {model.history.loadError ? (
+                  <p className="policy-alert" data-status="warning">
+                    {model.history.loadError}
+                  </p>
+                ) : null}
+                {model.history.items.length > 0 ? (
+                  <RuntimeHistoryTable
+                    activeConfigVersion={displayConfig.configVersion}
+                    isSubmitting={isSubmitting || rollbackTarget !== null}
+                    items={model.history.items}
+                    onRollback={(configVersion) => void rollbackPolicy(configVersion)}
+                    rollbackTarget={rollbackTarget}
+                    text={text}
+                  />
+                ) : (
+                  <p className="empty-state">No runtime config history returned.</p>
+                )}
+              </article>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -840,25 +804,6 @@ function RuntimeSnapshotDetail({
           </dd>
         </div>
       </dl>
-
-      <dl className="policy-summary-list">
-        <div>
-          <dt>{text.routing} hash</dt>
-          <dd>{snapshot.policies.routing.routingPolicyHash}</dd>
-        </div>
-        <div>
-          <dt>{text.securityPolicyHash}</dt>
-          <dd>{snapshot.policies.safety.policyHash}</dd>
-        </div>
-        <div>
-          <dt>{text.cache} hash</dt>
-          <dd>{snapshot.policies.cache.cachePolicyHash}</dd>
-        </div>
-        <div>
-          <dt>{text.contentHash}</dt>
-          <dd>{snapshot.contentHash}</dd>
-        </div>
-      </dl>
     </div>
   );
 }
@@ -904,7 +849,6 @@ function RuntimeHistoryTable({
             <th>{text.configVersion}</th>
             <th>{text.mode}</th>
             <th>{text.publishedAt}</th>
-            <th>{text.configHash}</th>
             <th />
           </tr>
         </thead>
@@ -924,9 +868,6 @@ function RuntimeHistoryTable({
                 <td>{item.publishState}</td>
                 <td>{item.publishedAt ? formatDateTime(item.publishedAt) : "-"}</td>
                 <td>
-                  <code className="project-code">{item.configHash}</code>
-                </td>
-                <td>
                   <div className="project-row-actions">
                     <Button
                       disabled={isSubmitting || isActive || !item.canRollback}
@@ -943,15 +884,6 @@ function RuntimeHistoryTable({
           })}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function PolicyStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric-card policy-stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
     </div>
   );
 }

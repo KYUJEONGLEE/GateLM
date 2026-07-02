@@ -1,7 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  ArrowUp,
+  Bot,
+  MessageSquarePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings as SettingsIcon
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { Button } from "@/components/ui/button";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
@@ -9,8 +16,7 @@ import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
   type CustomerDemoExchange,
-  type CustomerDemoModel,
-  type CustomerDemoScenarioId
+  type CustomerDemoModel
 } from "@/lib/gateway/customer-demo-client";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -19,145 +25,116 @@ type CustomerDemoAppProps = {
   model: CustomerDemoModel;
 };
 
+type LocalChatMessage = {
+  body: string;
+  id: string;
+  side: "incoming" | "outgoing";
+};
+
+type ConsoleTheme = "dark" | "light";
+
 const customerDemoText: Record<
   Locale,
   {
     actions: {
       loading: string;
+      newChat: string;
       replay: string;
       send: string;
     };
+    appName: string;
     chatPreview: string;
+    disclaimer: string;
+    emptyState: {
+      subtitle: string;
+      title: string;
+    };
     error: string;
+    inputPlaceholder: string;
     language: string;
-    scenarios: Record<
-      CustomerDemoScenarioId,
-      {
-        title: string;
-      }
-    >;
-    summary: {
-      cache: string;
-      latency: string;
-      masking: string;
+    sidebar: {
+      application: string;
+      current: string;
+      dark: string;
+      language: string;
+      light: string;
+      newConversation: string;
+      openSidebar: string;
+      settings: string;
+      closeSidebar: string;
+      theme: string;
+      user: string;
     };
     title: string;
-    withheld: {
-      assistant: string;
-      blocked: string;
-      cacheHit: string;
-      customer: string;
-      error: string;
-      pending: string;
-      rateLimited: string;
-      success: string;
-    };
-    webConsole: string;
   }
 > = {
   en: {
     actions: {
       loading: "Processing...",
-      replay: "Replay fixture request",
-      send: "Send Gateway request"
+      newChat: "New chat",
+      replay: "Send again",
+      send: "Send"
     },
+    appName: "Acme Support",
     chatPreview: "conversation",
+    disclaimer: "AI can make mistakes. Verify important information.",
+    emptyState: {
+      subtitle: "Start a new conversation with Acme Support.",
+      title: "What can I help with?"
+    },
     error: "Unable to load this request state.",
+    inputPlaceholder: "Ask Acme support anything",
     language: "Console language",
-    scenarios: {
-      blocked: {
-        title: "Blocked"
-      },
-      "cache-hit": {
-        title: "Cache hit"
-      },
-      "rate-limited": {
-        title: "Rate limit"
-      },
-      "provider-fallback": {
-        title: "Provider fallback"
-      },
-      "provider-timeout": {
-        title: "Provider timeout"
-      },
-      redacted: {
-        title: "Redaction"
-      },
-      safe: {
-        title: "Safe request"
-      }
+    sidebar: {
+      application: "Application",
+      current: "Current conversation",
+      dark: "Dark",
+      language: "Language",
+      light: "Light",
+      newConversation: "New conversation",
+      openSidebar: "Open sidebar",
+      settings: "User settings",
+      closeSidebar: "Close sidebar",
+      theme: "Theme",
+      user: "User"
     },
-    summary: {
-      cache: "Cache",
-      latency: "Latency",
-      masking: "Masking"
-    },
-    title: "Gateway request",
-    withheld: {
-      assistant: "Gateway response content is withheld from the console. Use metadata and request detail for verification.",
-      blocked: "Blocked before provider call.",
-      cacheHit: "Served from exact cache.",
-      customer: "Customer prompt content is withheld from the console.",
-      error: "Gateway returned a sanitized error.",
-      pending: "Ready to send through Gateway.",
-      rateLimited: "Rate limit applied before provider call.",
-      success: "Gateway request completed successfully."
-    },
-    webConsole: "Web Console"
+    title: "Acme Support"
   },
   ko: {
     actions: {
       loading: "처리 중...",
-      replay: "Fixture 요청 재실행",
-      send: "Gateway 요청 전송"
+      newChat: "새 채팅",
+      replay: "다시 전송",
+      send: "전송"
     },
+    appName: "Acme Support",
     chatPreview: "대화",
+    disclaimer: "AI는 실수할 수 있습니다. 중요한 정보는 다시 확인하세요.",
+    emptyState: {
+      subtitle: "Acme Support와 새 대화를 시작하세요.",
+      title: "무엇을 도와드릴까요?"
+    },
     error: "요청 상태를 불러오지 못했습니다.",
+    inputPlaceholder: "Acme 지원팀에 메시지 입력",
     language: "콘솔 언어",
-    scenarios: {
-      blocked: {
-        title: "차단"
-      },
-      "cache-hit": {
-        title: "캐시 적중"
-      },
-      "rate-limited": {
-        title: "Rate limit"
-      },
-      "provider-fallback": {
-        title: "Provider fallback"
-      },
-      "provider-timeout": {
-        title: "Provider timeout"
-      },
-      redacted: {
-        title: "Redaction"
-      },
-      safe: {
-        title: "Safe 요청"
-      }
+    sidebar: {
+      application: "Application",
+      current: "현재 대화",
+      dark: "다크",
+      language: "언어",
+      light: "라이트",
+      newConversation: "새 대화",
+      openSidebar: "좌측탭 열기",
+      settings: "사용자 설정",
+      closeSidebar: "좌측탭 닫기",
+      theme: "테마",
+      user: "User"
     },
-    summary: {
-      cache: "캐시",
-      latency: "지연 시간",
-      masking: "마스킹"
-    },
-    title: "Gateway 요청",
-    withheld: {
-      assistant: "Gateway 응답 원문은 콘솔에 표시하지 않습니다. 검증은 metadata와 요청 상세에서 확인합니다.",
-      blocked: "Provider 호출 전에 차단되었습니다.",
-      cacheHit: "Exact Cache에서 응답했습니다.",
-      customer: "고객 prompt 원문은 콘솔에 표시하지 않습니다.",
-      error: "Gateway가 정제된 오류만 반환했습니다.",
-      pending: "Gateway로 전송할 준비가 되었습니다.",
-      rateLimited: "Provider 호출 전에 Rate Limit이 적용되었습니다.",
-      success: "Gateway 요청이 성공적으로 완료되었습니다."
-    },
-    webConsole: "웹 콘솔"
+    title: "Acme Support"
   }
 };
 
-type CustomerDemoCopy = (typeof customerDemoText)[Locale];
+const themeStorageKey = "gatelm_console_theme";
 
 export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const client = useMemo(() => {
@@ -167,87 +144,239 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
 
     return new FixtureGatewayChatClient(model.scenarios);
   }, [model.integrationMode, model.scenarios, model.tenantId]);
-  const [exchange, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
+  const [, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<LocalChatMessage[]>([]);
+  const [theme, setTheme] = useState<ConsoleTheme>("light");
   const requestInFlight = useRef(false);
+  const threadRef = useRef<HTMLDivElement | null>(null);
   const hasScenarios = model.scenarios.length > 0;
   const text = customerDemoText[locale];
-  const exchangeText = text.scenarios[exchange.scenarioId];
-  const chatMessages = getChatMessages(exchange, locale, text);
+  const firstUserMessage = messages.find((message) => message.side === "outgoing");
+  const currentConversationTitle = firstUserMessage?.body ?? text.sidebar.newConversation;
+  const currentConversationAuthor = messages.length > 0 ? text.chatPreview : text.appName;
 
-  const sendScenario = useCallback(async (
-    scenarioId: CustomerDemoScenarioId,
+  useEffect(() => {
+    const initialTheme = readStoredTheme() ?? readDocumentTheme();
+    setTheme(initialTheme);
+    applyTheme(initialTheme);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const syncSidebarState = () => setIsSidebarOpen(!mobileQuery.matches);
+
+    syncSidebarState();
+    mobileQuery.addEventListener("change", syncSidebarState);
+
+    return () => mobileQuery.removeEventListener("change", syncSidebarState);
+  }, []);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+
+    if (!thread) {
+      return;
+    }
+
+    thread.scrollTo({
+      top: thread.scrollHeight,
+      behavior: "smooth"
+    });
+  }, [messages, isLoading]);
+
+  const startNewChat = useCallback(() => {
+    if (requestInFlight.current) {
+      return;
+    }
+
+    setExchange(buildInitialExchange(model));
+    setInputValue("");
+    setLoadError(null);
+    setMessages([]);
+  }, [model]);
+
+  const toggleSidebar = useCallback(() => {
+    setIsUserSettingsOpen(false);
+    setIsSidebarOpen((current) => !current);
+  }, []);
+
+  function selectTheme(nextTheme: ConsoleTheme) {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    writeStoredTheme(nextTheme);
+  }
+
+  const sendUserMessage = useCallback(async (
     options: { stream?: boolean } = {}
   ) => {
     if (requestInFlight.current) {
       return;
     }
 
-    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+    const message = inputValue.trim();
+
+    if (!message) {
+      return;
+    }
+
+    const scenario = model.scenarios.find((item) => item.scenarioId === "safe");
 
     requestInFlight.current = true;
     setIsLoading(true);
+    setInputValue("");
     setLoadError(null);
+    setMessages((current) => [
+      ...current,
+      {
+        body: message,
+        id: `user-${Date.now()}`,
+        side: "outgoing"
+      }
+    ]);
 
     try {
       if (scenario && model.integrationMode === "gateway") {
         setExchange(buildPendingExchange(model, scenario, options));
       }
 
-      setExchange(await client.sendChatCompletion(scenarioId, options));
+      const nextExchange = await client.sendChatCompletion("safe", {
+        message,
+        stream: options.stream
+      });
+
+      setExchange(nextExchange);
+      setMessages((current) => [
+        ...current,
+        {
+          body: nextExchange.assistantMessage,
+          id: `assistant-${Date.now()}`,
+          side: "incoming"
+        }
+      ]);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : text.error);
+      const errorMessage = error instanceof Error ? error.message : text.error;
+
+      setLoadError(errorMessage);
+      setMessages((current) => [
+        ...current,
+        {
+          body: errorMessage,
+          id: `assistant-error-${Date.now()}`,
+          side: "incoming"
+        }
+      ]);
     } finally {
       requestInFlight.current = false;
       setIsLoading(false);
     }
-  }, [client, model, text.error]);
+  }, [client, inputValue, model, text.error]);
 
   return (
-    <main className="customer-demo-shell customer-chat-shell">
-      <header className="customer-demo-header">
-        <Link className="customer-demo-brand" href="/">
-          <span>AC</span>
-          <strong>Acme Local Application</strong>
-        </Link>
-        <div className="customer-demo-header-meta">
-          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          <Link href={`/tenants/${model.tenantId}/dashboard`}>{text.webConsole}</Link>
-        </div>
-      </header>
+    <main className="customer-demo-shell customer-chat-shell" data-sidebar-open={isSidebarOpen}>
+      <aside className="customer-chat-sidebar" aria-label="Application navigation">
+        <button
+          aria-expanded={isSidebarOpen}
+          aria-label={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
+          className="customer-chat-sidebar-toggle"
+          onClick={toggleSidebar}
+          title={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
+          type="button"
+        >
+          {isSidebarOpen ? (
+            <PanelLeftClose aria-hidden="true" size={18} strokeWidth={2.2} />
+          ) : (
+            <PanelLeftOpen aria-hidden="true" size={18} strokeWidth={2.2} />
+          )}
+        </button>
+        <section className="customer-chat-sidebar-history" aria-label={text.sidebar.current}>
+          <span>{text.sidebar.application}</span>
+          <div className="customer-chat-sidebar-card">
+            <strong>{text.appName}</strong>
+            <small>{formatDisplayIdentifier(model.applicationId)}</small>
+          </div>
 
-      <section className="customer-chat-stage" aria-label="Local application chat">
-        <section className="customer-chat-phone" aria-busy={isLoading}>
-          <header className="customer-chat-phone-header">
-            <button aria-label="Back" className="customer-chat-icon-button" type="button">
-              ‹
-            </button>
-            <div className="customer-chat-room">
-              <div className="customer-chat-room-avatars" aria-hidden="true">
-                <span>T</span>
-                <span>M</span>
-                <span>G</span>
+          <button
+            className="customer-chat-new-button"
+            disabled={isLoading}
+            onClick={startNewChat}
+            type="button"
+          >
+            <MessageSquarePlus size={16} strokeWidth={2} />
+            {text.actions.newChat}
+          </button>
+
+          <span>{text.sidebar.current}</span>
+          <div className="customer-chat-sidebar-card">
+            <strong>{currentConversationTitle}</strong>
+            <small>{currentConversationAuthor}</small>
+          </div>
+        </section>
+
+        <div className="customer-chat-user-wrap">
+          {isUserSettingsOpen ? (
+            <div className="customer-chat-settings-popover" aria-label={text.sidebar.settings}>
+              <div className="customer-chat-settings-row">
+                <span>{text.sidebar.language}</span>
+                <LanguageSwitcher ariaLabel={text.language} locale={locale} />
               </div>
-              <div>
-                <h1>{text.title}</h1>
-                <p>
-                  {formatDisplayIdentifier(model.applicationId)} · {exchangeText.title}
-                </p>
+              <div className="customer-chat-settings-row">
+                <span>{text.sidebar.theme}</span>
+                <div className="theme-segmented-control" data-density="compact">
+                  <button
+                    data-active={theme === "light"}
+                    onClick={() => selectTheme("light")}
+                    type="button"
+                  >
+                    {text.sidebar.light}
+                  </button>
+                  <button
+                    data-active={theme === "dark"}
+                    onClick={() => selectTheme("dark")}
+                    type="button"
+                  >
+                    {text.sidebar.dark}
+                  </button>
+                </div>
               </div>
             </div>
-            <Link
-              aria-label={text.webConsole}
-              className="customer-chat-icon-button"
-              href={`/tenants/${model.tenantId}/dashboard`}
+          ) : null}
+          <div className="customer-chat-user-card">
+            <strong>{text.sidebar.user}</strong>
+            <button
+              aria-expanded={isUserSettingsOpen}
+              aria-label={text.sidebar.settings}
+              className="customer-chat-settings-button"
+              data-open={isUserSettingsOpen}
+              onClick={() => setIsUserSettingsOpen((current) => !current)}
+              title={text.sidebar.settings}
+              type="button"
             >
-              ⋯
-            </Link>
-          </header>
+              <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
+            </button>
+          </div>
+        </div>
+      </aside>
 
-          <div className="customer-chat-thread" aria-label={text.chatPreview}>
+      <section className="customer-chat-main" aria-busy={isLoading}>
+        <section className="customer-chat-content" aria-label="Application chat">
+          <div className="customer-chat-thread" aria-label={text.chatPreview} ref={threadRef}>
             {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
-            {chatMessages.map((message) => (
+            {messages.length === 0 && !isLoading ? (
+              <div className="customer-chat-empty-state">
+                <h1>{text.emptyState.title}</h1>
+                <p>{text.emptyState.subtitle}</p>
+              </div>
+            ) : null}
+            {messages.map((message) => (
               <article
                 className="customer-chat-message"
                 data-side={message.side}
@@ -255,18 +384,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
               >
                 {message.side === "incoming" ? (
                   <span className="customer-chat-avatar" aria-hidden="true">
-                    {message.avatar}
+                    <Bot size={18} strokeWidth={2} />
                   </span>
                 ) : null}
                 <div className="customer-chat-message-body">
-                  <span>{message.author}</span>
                   <p>{message.body}</p>
                 </div>
-                {message.side === "outgoing" ? (
-                  <span className="customer-chat-avatar" aria-hidden="true">
-                    {message.avatar}
-                  </span>
-                ) : null}
               </article>
             ))}
             {isLoading ? (
@@ -278,37 +401,77 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             ) : null}
           </div>
 
-          <footer className="customer-chat-composer">
-            <div className="customer-chat-tools">
-              <button aria-label="Add attachment" type="button">+</button>
-              <button aria-label="Open camera" type="button">◉</button>
-              <button aria-label="Open image picker" type="button">▧</button>
-              <button aria-label="Record voice" type="button">♬</button>
-            </div>
-            <div className="customer-chat-input">
-              <span>Aa</span>
-              <strong>{text.withheld.customer}</strong>
-            </div>
-            <button className="customer-chat-emoji" type="button" aria-label="Emoji">
-              ☺
-            </button>
+          <form
+            className="customer-chat-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void sendUserMessage();
+            }}
+          >
+            <label className="customer-chat-input">
+              <input
+                aria-label={text.inputPlaceholder}
+                disabled={isLoading || !hasScenarios}
+                onChange={(event) => setInputValue(event.target.value)}
+                placeholder={text.inputPlaceholder}
+                type="text"
+                value={inputValue}
+              />
+            </label>
             <Button
               className="customer-chat-send-button"
-              disabled={isLoading || !hasScenarios}
-              onClick={() => sendScenario(exchange.scenarioId)}
-              type="button"
+              disabled={isLoading || !hasScenarios || inputValue.trim().length === 0}
+              type="submit"
             >
-              {isLoading
-                ? text.actions.loading
-                : model.integrationMode === "gateway"
-                  ? text.actions.send
-                  : text.actions.replay}
+              <ArrowUp size={19} strokeWidth={2.6} />
+              <span>
+                {isLoading
+                  ? text.actions.loading
+                  : model.integrationMode === "gateway"
+                    ? text.actions.send
+                    : text.actions.replay}
+              </span>
             </Button>
-          </footer>
+          </form>
         </section>
+        <p className="customer-chat-disclaimer">{text.disclaimer}</p>
       </section>
     </main>
   );
+}
+
+function readDocumentTheme(): ConsoleTheme {
+  if (typeof document === "undefined") {
+    return "light";
+  }
+
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme: ConsoleTheme) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.theme = theme;
+}
+
+function readStoredTheme(): ConsoleTheme | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.localStorage.getItem(themeStorageKey);
+
+  return storedValue === "dark" || storedValue === "light" ? storedValue : null;
+}
+
+function writeStoredTheme(theme: ConsoleTheme) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(themeStorageKey, theme);
 }
 
 function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
@@ -330,7 +493,7 @@ function buildPendingExchange(
 
   return {
     ...scenario,
-    assistantMessage: "Ready to send this scenario through the live Gateway.",
+    assistantMessage: "Ready to send.",
     cacheStatus: "pending",
     httpStatus: 0,
     latencyMs: 0,
@@ -437,91 +600,4 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
     },
     title: "No scenario configured"
   };
-}
-
-function getChatMessages(
-  exchange: CustomerDemoExchange,
-  locale: Locale,
-  text: CustomerDemoCopy
-) {
-  const isKorean = locale === "ko";
-
-  return [
-    {
-      author: "Travis",
-      avatar: "T",
-      body: isKorean
-        ? "오늘 고객 응대 문구를 Gateway 경로로 확인해보자."
-        : "Let's run this support reply through the Gateway path.",
-      id: "travis-open",
-      side: "incoming" as const
-    },
-    {
-      author: "You",
-      avatar: "Y",
-      body: text.withheld.customer,
-      id: "user-prompt",
-      side: "outgoing" as const
-    },
-    {
-      author: "Michael",
-      avatar: "M",
-      body: getSafeOutcomeMessage(exchange, text.withheld),
-      id: "michael-outcome",
-      side: "incoming" as const
-    },
-    {
-      author: "You",
-      avatar: "Y",
-      body: `${text.summary.cache}: ${exchange.cacheStatus} · ${text.summary.masking}: ${exchange.maskingAction}`,
-      id: "user-metadata",
-      side: "outgoing" as const
-    },
-    {
-      author: "Gina",
-      avatar: "G",
-      body: `HTTP ${exchange.httpStatus} · ${text.summary.latency} ${exchange.latencyMs} ms`,
-      id: "gina-status",
-      side: "incoming" as const
-    }
-  ];
-}
-
-function getSafeOutcomeMessage(
-  exchange: CustomerDemoExchange,
-  text: {
-    assistant: string;
-    blocked: string;
-    cacheHit: string;
-    error: string;
-    pending: string;
-    rateLimited: string;
-    success: string;
-  }
-) {
-  if (exchange.status === "pending") {
-    return text.pending;
-  }
-
-  if (exchange.status === "blocked") {
-    return text.blocked;
-  }
-
-  if (exchange.status === "rate_limited") {
-    return text.rateLimited;
-  }
-
-  if (exchange.status === "cache_hit") {
-    return text.cacheHit;
-  }
-
-  if (exchange.status === "success") {
-    return text.success;
-  }
-
-  if (exchange.status === "error") {
-    return text.error;
-  }
-
-  return text.assistant;
 }

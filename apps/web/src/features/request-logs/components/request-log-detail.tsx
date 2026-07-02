@@ -1,9 +1,6 @@
 import Link from "next/link";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import {
-  formatDisplayIdentifier,
-  formatTenantDisplayName
-} from "@/lib/formatting/display-identifiers";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   formatDateTime,
   formatInteger,
@@ -126,17 +123,14 @@ export function RequestLogDetailPanel({
   timezone
 }: Omit<RequestLogDetailProps, "tenantId">) {
   const text = requestDetailText[locale];
-  const runtimeSnapshot = record.metadata.runtime.runtimeSnapshot;
   const domainOutcomes = record.domainOutcomes;
+  const hasErrorDetail = Boolean(record.errorCode || record.errorStage || record.errorMessage);
 
   return (
     <article className="console-panel detail-panel detail-panel-stack">
       <DetailSection
         title="Request context"
         rows={[
-          ["Trace ID", record.traceId],
-          ["Endpoint", `${record.method} ${record.endpoint}`],
-          ["Source", record.source],
           ["Created", formatDateTime(record.createdAt, timezone)],
           ["Completed", formatDateTime(record.completedAt, timezone)],
           ["HTTP status", String(record.httpStatus)]
@@ -168,19 +162,8 @@ export function RequestLogDetailPanel({
       <DetailSection
         title="Identity"
         rows={[
-          ["Tenant", formatTenantDisplayName(record.tenantId)],
-          ["Project", record.projectId],
-          ["Application", formatDisplayIdentifier(record.applicationId)],
-          [
-            "Budget scope",
-            `${record.budgetScope.budgetScopeType}:${formatDisplayIdentifier(record.budgetScope.budgetScopeId)}`
-          ],
-          ["Resolved by", record.budgetScope.resolvedBy],
-          [
-            "End user",
-            nullableText(record.endUserId ? formatDisplayIdentifier(record.endUserId) : null)
-          ],
-          ["Feature", nullableText(record.featureId)]
+          ["Project", formatProjectDisplayName(record.projectId)],
+          ["Application", formatApplicationDisplayName(record.applicationId)]
         ]}
       />
 
@@ -188,42 +171,20 @@ export function RequestLogDetailPanel({
         title="Gateway outcome"
         rows={[
           ["Terminal status", record.terminalStatus ?? record.status],
-          ["Auth", domainOutcomes?.auth?.outcome ?? text.none],
-          ["Runtime", domainOutcomes?.runtime?.outcome ?? text.none],
           ["Rate limit", domainOutcomes?.rateLimit?.outcome ?? text.none],
-          ["Budget", domainOutcomes?.budget?.outcome ?? text.none],
           ["Safety", domainOutcomes?.safety?.outcome ?? text.none],
           ["Routing", domainOutcomes?.routing?.outcome ?? text.none],
           ["Cache", domainOutcomes?.cache?.outcome ?? text.none],
           ["Provider", domainOutcomes?.provider?.outcome ?? text.none],
-          ["Fallback", domainOutcomes?.fallback?.outcome ?? text.none],
-          ["Streaming", domainOutcomes?.streaming?.outcome ?? text.none],
-          ["Logging", domainOutcomes?.logging?.outcome ?? text.none]
-        ]}
-      />
-
-      <DetailSection
-        title="Outcome detail"
-        rows={[
-          ["Budget reason", nullableText(domainOutcomes?.budget?.reason ?? null, text.none)],
-          ["Budget code", nullableText(domainOutcomes?.budget?.code ?? null, text.none)],
-          ["Provider reason", nullableText(domainOutcomes?.provider?.reason ?? null, text.none)],
-          ["Provider code", nullableText(domainOutcomes?.provider?.code ?? null, text.none)],
-          ["Fallback reason", nullableText(domainOutcomes?.fallback?.reason ?? null, text.none)],
-          ["Fallback code", nullableText(domainOutcomes?.fallback?.code ?? null, text.none)],
-          ["Streaming reason", nullableText(domainOutcomes?.streaming?.reason ?? null, text.none)],
-          ["Streaming code", nullableText(domainOutcomes?.streaming?.code ?? null, text.none)],
-          ["Streaming requested", record.stream ? text.yes : text.no]
+          ["Fallback", domainOutcomes?.fallback?.outcome ?? text.none]
         ]}
       />
 
       <DetailSection
         title="Routing and cache"
         rows={[
-          ["Requested model", nullableText(record.requestedModel)],
           ["Selected provider", nullableText(record.selectedProvider)],
           ["Selected model", nullableText(record.selectedModel)],
-          ["Routing reason", nullableText(record.routingReason)],
           ["Cache", `${record.cacheType}:${record.cacheStatus}`],
           [
             "Cache hit request",
@@ -235,33 +196,12 @@ export function RequestLogDetailPanel({
       />
 
       <DetailSection
-        title="Governance"
-        rows={[
-          ["Rate limit allowed", record.rateLimitDecision.allowed ? text.yes : text.no],
-          [
-            "Scope",
-            `${record.rateLimitDecision.scope}:${formatDisplayIdentifier(record.rateLimitDecision.scopeId)}`
-          ],
-          ["Limit", String(record.rateLimitDecision.limit)],
-          ["Remaining", String(record.rateLimitDecision.remaining)],
-          ["Reason", record.rateLimitDecision.reason],
-          ["Retry after", `${record.rateLimitDecision.retryAfterSeconds}s`]
-        ]}
-      />
-
-      <DetailSection
         title="Usage and latency"
         rows={[
-          ["Prompt tokens", formatInteger(record.promptTokens)],
-          ["Completion tokens", formatInteger(record.completionTokens)],
           ["Total tokens", formatInteger(record.totalTokens)],
-          ["Cost micro USD", formatInteger(record.costMicroUsd)],
-          ["Saved cost micro USD", formatInteger(record.savedCostMicroUsd)],
+          ["Estimated cost", formatMicroUsd(record.costMicroUsd)],
+          ["Saved cost", formatMicroUsd(record.savedCostMicroUsd)],
           ["Latency", formatLatency(record.latencyMs)],
-          [
-            "Gateway internal latency",
-            formatLatency(record.latencySummary?.gatewayInternalLatencyMs ?? record.latencyMs)
-          ],
           [
             "Provider latency",
             formatLatency(record.latencySummary?.providerLatencyMs ?? record.providerLatencyMs)
@@ -269,37 +209,16 @@ export function RequestLogDetailPanel({
         ]}
       />
 
-      <DetailSection
-        title="Error"
-        rows={[
-          ["Error code", nullableText(record.errorCode, text.none)],
-          ["Error stage", nullableText(record.errorStage, text.none)],
-          ["Message", nullableText(record.errorMessage, text.none)]
-        ]}
-      />
-
-      <DetailSection
-        title="RuntimeSnapshot provenance"
-        rows={
-          runtimeSnapshot
-            ? [
-                ["Snapshot ID", runtimeSnapshot.runtimeSnapshotId],
-                ["Snapshot version", String(runtimeSnapshot.runtimeSnapshotVersion)],
-                ["Runtime state", runtimeSnapshot.runtimeState],
-                ["Content hash", runtimeSnapshot.contentHash],
-                ["Published", formatDateTime(runtimeSnapshot.publishedAt, timezone)],
-                ["Published by", runtimeSnapshot.publishedBy],
-                ["Gateway instance", runtimeSnapshot.gatewayInstanceId],
-                ["Legacy config hash", runtimeSnapshot.legacyHashes.configHash],
-                ["Legacy security policy hash", runtimeSnapshot.legacyHashes.securityPolicyHash],
-                ["Legacy routing policy hash", runtimeSnapshot.legacyHashes.routingPolicyHash]
-              ]
-            : [
-                ["Snapshot", text.none],
-                ["Runtime outcome", domainOutcomes?.runtime?.outcome ?? text.none]
-              ]
-        }
-      />
+      {hasErrorDetail ? (
+        <DetailSection
+          title="Error"
+          rows={[
+            ["Error code", nullableText(record.errorCode, text.none)],
+            ["Error stage", nullableText(record.errorStage, text.none)],
+            ["Message", nullableText(record.errorMessage, text.none)]
+          ]}
+        />
+      ) : null}
     </article>
   );
 }
@@ -318,4 +237,62 @@ function DetailSection({ rows, title }: { rows: Array<[string, string]>; title: 
       </dl>
     </section>
   );
+}
+
+function formatProjectDisplayName(projectId: string) {
+  const normalized = formatDisplayIdentifier(projectId);
+
+  if (
+    projectId === "live_gateway_project" ||
+    projectId === "00000000-0000-4000-8000-000000000200"
+  ) {
+    return "Default project";
+  }
+
+  if (normalized.includes("synthetic")) {
+    return "Synthetic project";
+  }
+
+  if (normalized.includes("project_ai")) {
+    return "AI project";
+  }
+
+  return identifierToDisplayName(normalized, "Project");
+}
+
+function formatApplicationDisplayName(applicationId: string) {
+  const normalized = formatDisplayIdentifier(applicationId);
+
+  if (applicationId === "live_gateway_application" || normalized === "app_customer") {
+    return "Acme Support";
+  }
+
+  if (normalized.includes("employee_chat")) {
+    return "Employee Chat";
+  }
+
+  return identifierToDisplayName(normalized, "Application");
+}
+
+function formatMicroUsd(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: 6,
+    minimumFractionDigits: 0,
+    style: "currency"
+  }).format(value / 1_000_000);
+}
+
+function identifierToDisplayName(value: string, fallback: string) {
+  const normalized = value
+    .replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, "")
+    .replace(/^(app|application|project)_/i, "")
+    .replaceAll(/[_-]+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  return normalized.replaceAll(/\b\w/g, (character) => character.toUpperCase());
 }

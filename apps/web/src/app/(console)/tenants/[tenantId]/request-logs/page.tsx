@@ -29,6 +29,7 @@ type RequestLogsPageProps = {
     provider?: string;
     requestId?: string;
     resolvedBy?: string;
+    searchRequestId?: string;
     status?: string;
   }>;
 };
@@ -105,7 +106,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
   const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
   const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
-  const requestId = normalizeOptionalText(searchParams?.requestId);
+  const requestId = normalizeOptionalText(searchParams?.searchRequestId);
   const { from, to } = createdRange(created);
 
   return {

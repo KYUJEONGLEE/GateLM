@@ -94,7 +94,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const gatewayResult = await executeLiveScenario(payload.scenarioId, payload.stream);
+    const gatewayResult = await executeLiveScenario(
+      payload.scenarioId,
+      payload.stream,
+      payload.message
+    );
 
     return NextResponse.json({
       exchange: buildLiveExchange({
@@ -113,26 +117,42 @@ export async function POST(request: Request) {
 
 async function readRequestPayload(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as {
+    message?: unknown;
     scenarioId?: unknown;
     stream?: unknown;
     tenantId?: unknown;
   };
 
   return {
+    message: normalizeUserMessage(payload.message),
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
     stream: payload.stream === true,
     tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
   };
 }
 
+function normalizeUserMessage(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const message = value.trim();
+
+  return message.length > 0 ? message.slice(0, 2000) : undefined;
+}
+
 function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioId {
   return Object.hasOwn(LIVE_SCENARIOS, value);
 }
 
-async function executeLiveScenario(scenarioId: CustomerDemoScenarioId, stream: boolean) {
+async function executeLiveScenario(
+  scenarioId: CustomerDemoScenarioId,
+  stream: boolean,
+  message?: string
+) {
   if (scenarioId === "cache-hit") {
-    await callGateway("cache-hit", "warmup");
-    return callGateway("cache-hit", "hit", { stream });
+    await callGateway("cache-hit", "warmup", { message });
+    return callGateway("cache-hit", "hit", { message, stream });
   }
 
   if (scenarioId === "rate-limited") {
@@ -141,7 +161,7 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId, stream: b
 
     // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
-      latestResult = await callGateway("rate-limited", String(index + 1), { stream });
+      latestResult = await callGateway("rate-limited", String(index + 1), { message, stream });
 
       if (latestResult.httpStatus === 429) {
         return latestResult;
@@ -161,7 +181,7 @@ async function executeLiveScenario(scenarioId: CustomerDemoScenarioId, stream: b
     return executeProviderFailureScenario(scenarioId, "error");
   }
 
-  return callGateway(scenarioId, "1", { stream });
+  return callGateway(scenarioId, "1", { message, stream });
 }
 
 async function executeProviderFailureScenario(
@@ -182,12 +202,17 @@ async function executeProviderFailureScenario(
 async function callGateway(
   scenarioId: CustomerDemoScenarioId,
   requestIdSuffix: string,
-  options: { stream?: boolean } = {}
+  options: { message?: string; stream?: boolean } = {}
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig();
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
-  const requestBody = buildGatewayRequestBody(definition, scenarioId, options.stream === true);
+  const requestBody = buildGatewayRequestBody(
+    definition,
+    scenarioId,
+    options.stream === true,
+    options.message
+  );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -220,7 +245,8 @@ async function callGateway(
 function buildGatewayRequestBody(
   definition: LiveScenarioDefinition,
   scenarioId: CustomerDemoScenarioId,
-  stream: boolean
+  stream: boolean,
+  message?: string
 ): CustomerDemoRequest["body"] {
   return {
     model: "auto",
@@ -231,7 +257,7 @@ function buildGatewayRequestBody(
       },
       {
         role: "user",
-        content: definition.gatewayPrompt
+        content: message ?? definition.gatewayPrompt
       }
     ],
     max_tokens: 128,
@@ -435,7 +461,11 @@ function buildLiveExchange({
   const actualScenarioId = status === "rate_limited" ? "rate-limited" : scenarioId;
   const displayScenario =
     allScenarios.find((item) => item.scenarioId === actualScenarioId) ?? scenario;
-  const assistantMessage = getDisplayAssistantMessage(status, scenario.assistantMessage);
+  const assistantMessage = getDisplayAssistantMessage(
+    status,
+    gatewayResult.body,
+    scenario.assistantMessage
+  );
 
   return {
     assistantMessage,
@@ -565,9 +595,13 @@ function normalizeMaskingAction(value: string | undefined): CustomerDemoExchange
   return "none";
 }
 
-function getDisplayAssistantMessage(status: CustomerDemoExchange["status"], fallback: string) {
+function getDisplayAssistantMessage(
+  status: CustomerDemoExchange["status"],
+  body: JsonRecord,
+  fallback: string
+) {
   if (status === "success") {
-    return "Gateway request completed successfully.";
+    return getAssistantContent(body) ?? "Gateway request completed successfully.";
   }
 
   if (status === "cache_hit") {
@@ -587,6 +621,38 @@ function getDisplayAssistantMessage(status: CustomerDemoExchange["status"], fall
   }
 
   return fallback;
+}
+
+function getAssistantContent(body: JsonRecord) {
+  const choices = body.choices;
+
+  if (!Array.isArray(choices)) {
+    return undefined;
+  }
+
+  for (const choice of choices) {
+    if (!isJsonRecord(choice)) {
+      continue;
+    }
+
+    const message = choice.message;
+
+    if (isJsonRecord(message)) {
+      const content = message.content;
+
+      if (typeof content === "string" && content.trim()) {
+        return content.trim();
+      }
+    }
+
+    const text = choice.text;
+
+    if (typeof text === "string" && text.trim()) {
+      return text.trim();
+    }
+  }
+
+  return undefined;
 }
 
 function getNestedString(record: JsonRecord, path: string[]) {

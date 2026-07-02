@@ -73,7 +73,6 @@ const dashboardText: Record<
       successful: string;
       traffic: string;
     };
-    database: string;
     filter: {
       apply: string;
       budgetScopeId: string;
@@ -96,7 +95,6 @@ const dashboardText: Record<
     actionRequestLogs: "Open request logs",
     backToOverview: "Back to overview",
     costByModel: "Cost by model",
-    database: "Database",
     filter: {
       apply: "Apply",
       budgetScopeId: "Budget scope",
@@ -156,7 +154,6 @@ const dashboardText: Record<
     actionRequestLogs: "요청 로그 열기",
     backToOverview: "Overview로 돌아가기",
     costByModel: "모델별 비용",
-    database: "Database",
     filter: {
       apply: "적용",
       budgetScopeId: "Budget scope",
@@ -258,7 +255,6 @@ export function DashboardOverviewView({
       </section>
 
       <DashboardTabs activeTab={activeTab} filters={filters} overview={overview} text={text} />
-      <DashboardFilterBar activeTab={activeTab} filters={filters} overview={overview} text={text} />
 
       {activeTab === "overview" ? (
         <>
@@ -268,7 +264,10 @@ export function DashboardOverviewView({
           href={dashboardHref(overview.filters.tenantId, filters, "requests")}
         >
           <div className="panel-heading dashboard-chart-heading">
-            <h3>{text.charts.requestTrend}</h3>
+            <div className="dashboard-chart-title-row">
+              <h3>{text.charts.requestTrend}</h3>
+              <strong>{formatInteger(overview.totalRequests)}</strong>
+            </div>
             <div className="dashboard-chart-legend">
               <span data-color="blue">{text.charts.traffic}</span>
               <span data-color="red">{text.charts.successful}</span>
@@ -294,15 +293,6 @@ export function DashboardOverviewView({
           </div>
           <PieShareChart rows={modelShareRows} />
         </Link>
-      </section>
-
-      <section className="metric-grid" aria-label="Dashboard overview metrics">
-        <MetricCard label={text.metrics.totalRequests} value={formatInteger(overview.totalRequests)} />
-        <MetricCard
-          label={text.database}
-          tone={overview.dataFreshness.source ? "success" : "danger"}
-          value={overview.dataFreshness.source ? "connected" : "unavailable"}
-        />
       </section>
 
       <section className="dashboard-grid">
@@ -350,7 +340,7 @@ function DashboardTabs({
       : baseHref;
 
   return (
-    <nav className="dashboard-tab-row" aria-label="Dashboard sections">
+    <section className="dashboard-tab-row" aria-label="Dashboard sections">
       <a
         aria-label={text.backToOverview}
         className="dashboard-overview-return"
@@ -371,7 +361,8 @@ function DashboardTabs({
           );
         })}
       </div>
-    </nav>
+      <DashboardFilterBar activeTab={activeTab} filters={filters} overview={overview} text={text} />
+    </section>
   );
 }
 
@@ -393,12 +384,19 @@ function DashboardFilterBar({
     >
       {activeTab !== "overview" ? <input name="tab" type="hidden" value={activeTab} /> : null}
       <label className="request-log-filter-control">
-        <span>{text.filter.projectId}</span>
-        <input defaultValue={filters.projectId} name="projectId" placeholder="project id" />
+        <input
+          aria-label={text.filter.projectId}
+          defaultValue={filters.projectId}
+          name="projectId"
+          placeholder="project id"
+        />
       </label>
       <label className="request-log-filter-control">
-        <span>{text.filter.budgetScopeType}</span>
-        <select defaultValue={filters.budgetScopeType} name="budgetScopeType">
+        <select
+          aria-label={text.filter.budgetScopeType}
+          defaultValue={filters.budgetScopeType}
+          name="budgetScopeType"
+        >
           <option value="">All</option>
           <option value="application">application</option>
           <option value="project">project</option>
@@ -406,12 +404,20 @@ function DashboardFilterBar({
         </select>
       </label>
       <label className="request-log-filter-control">
-        <span>{text.filter.budgetScopeId}</span>
-        <input defaultValue={filters.budgetScopeId} name="budgetScopeId" placeholder="scope id" />
+        <input
+          aria-label={text.filter.budgetScopeId}
+          defaultValue={filters.budgetScopeId}
+          name="budgetScopeId"
+          placeholder="scope id"
+        />
       </label>
       <label className="request-log-filter-control">
-        <span>{text.filter.resolvedBy}</span>
-        <input defaultValue={filters.resolvedBy} name="resolvedBy" placeholder="resolved by" />
+        <input
+          aria-label={text.filter.resolvedBy}
+          defaultValue={filters.resolvedBy}
+          name="resolvedBy"
+          placeholder="resolved by"
+        />
       </label>
       <div className="dashboard-filter-actions">
         <button className="secondary-button" type="submit">
@@ -1036,23 +1042,6 @@ function sumBudgetScopeCostMicroUsd(overview: DashboardOverview) {
 
 function microUsdToUsdString(value: number) {
   return (value / 1_000_000).toFixed(6);
-}
-
-function MetricCard({
-  label,
-  tone = "neutral",
-  value
-}: {
-  label: string;
-  tone?: "neutral" | "success" | "warning" | "danger";
-  value: string;
-}) {
-  return (
-    <article className="metric-card" data-tone={tone}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
-  );
 }
 
 function LineTrendChart({

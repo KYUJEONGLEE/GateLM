@@ -180,7 +180,7 @@ export function RequestLogTable({
                 <input
                   aria-label={text.searchLabel}
                   defaultValue={filters.requestId}
-                  name="requestId"
+                  name="searchRequestId"
                   placeholder={text.searchPlaceholder}
                   type="search"
                 />
@@ -374,6 +374,7 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
   if (filters.status) {
     query.set("status", filters.status);
   }
+  appendRequestLogQuery(query, "searchRequestId", filters.requestId);
   if (filters.model) {
     query.set("model", filters.model);
   }

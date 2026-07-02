@@ -18,7 +18,7 @@ export type ManagementNavItem =
   | "policies"
   | "project"
   | "provider";
-export type AnalyticsNavItem = "health" | "metrics" | "request-logs";
+export type AnalyticsNavItem = "health" | "request-logs";
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
@@ -108,14 +108,6 @@ const navigationItems: Array<{
       },
       {
         labels: {
-          en: "Metrics",
-          ko: "Metrics"
-        },
-        item: "metrics",
-        path: (tenantId) => `/tenants/${tenantId}/metrics`
-      },
-      {
-        labels: {
           en: "Request logs",
           ko: "요청 로그"
         },
@@ -123,6 +115,7 @@ const navigationItems: Array<{
         path: (tenantId) => `/tenants/${tenantId}/request-logs`
       }
     ],
+    path: (tenantId) => `/tenants/${tenantId}/request-logs`,
     section: "analytics"
   }
 ];
@@ -235,7 +228,7 @@ export function ConsoleShell({
   }
 
   function isChildActive(child: ChildNavigationItem) {
-    if (child.item === "health" || child.item === "metrics" || child.item === "request-logs") {
+    if (child.item === "health" || child.item === "request-logs") {
       return child.item === activeAnalyticsItem;
     }
 

@@ -4,7 +4,7 @@ import type { CustomerDemoIntegrationMode } from "@/lib/gateway/customer-demo-cl
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
-export default async function LocalApplicationPage() {
+export default async function ApplicationPage() {
   const locale = await getRequestLocale();
   const integrationMode = getCustomerDemoIntegrationMode();
   const model =
