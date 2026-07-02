@@ -104,5 +104,57 @@
     "language",
     "redactionVersion",
     "createdAt"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "synthetic_fixture"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "consentType": {
+            "const": "synthetic"
+          },
+          "labelSource": {
+            "const": "synthetic_fixture"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "gateway_redacted_sample"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "consentType": {
+            "enum": [
+              "operator_opt_in",
+              "customer_opt_in"
+            ]
+          },
+          "labelSource": {
+            "enum": [
+              "human_review",
+              "llm_judge_candidate"
+            ]
+          }
+        }
+      }
+    }
   ]
 }

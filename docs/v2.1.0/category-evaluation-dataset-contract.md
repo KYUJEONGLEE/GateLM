@@ -45,7 +45,7 @@ Given a redacted prompt, what category should the classifier return?
 | `schemaVersion` | string | 반드시 `gatelm.category-evaluation-record.v1`이어야 한다 |
 | `datasetVersion` | string | 평가셋 릴리즈 식별자. 예: `category_eval_2026_07_02_v1` |
 | `sampleId` | string | 안정적인 synthetic 또는 generated sample id. raw prompt text를 인코딩하면 안 된다 |
-| `redactedPrompt` | string | 평가에 사용하는 safety-masked prompt text |
+| `redactedPrompt` | string | 평가에 사용하는 safety-masked prompt text. 최대 65536자 |
 | `expectedCategory` | string | 승인된 카테고리 분류 체계 값 중 하나 |
 | `labelSource` | string | label이 만들어진 방식 |
 | `consentType` | string | 이 sample을 사용할 수 있는 근거 |
@@ -88,6 +88,16 @@ Given a redacted prompt, what category should the classifier return?
 - `mixed`
 - `unknown`
 
+조합 제약:
+
+| source | consentType | labelSource |
+|---|---|---|
+| `synthetic_fixture` | `synthetic` | `synthetic_fixture` |
+| `gateway_redacted_sample` | `operator_opt_in` 또는 `customer_opt_in` | `human_review` 또는 `llm_judge_candidate` |
+| `manual_seed` | 허용 값 중 하나 | 허용 값 중 하나 |
+
+`manual_seed`는 사람이 만든 synthetic seed와 opt-in 샘플 수동 정리본이 모두 들어올 수 있으므로 PR1에서는 강하게 묶지 않는다.
+
 ## 6. 금지 데이터
 
 평가셋 레코드, fixture, review note, script, report에는 아래 값이 포함되면 안 된다.
@@ -129,6 +139,13 @@ expectedCategory == actualCategory
 | `confusionMatrix` | expected category와 actual category의 count |
 
 Report는 raw prompt text를 출력하면 안 된다. 실패 예시는 `sampleId`, `expectedCategory`, `actualCategory`만 보여줄 수 있다.
+
+계약과 fixture를 바꾸면 아래 검증을 실행해야 한다.
+
+```powershell
+corepack pnpm run verify:v2.1-category-eval
+corepack pnpm run verify:v2-docs
+```
 
 ## 8. PR 분리
 
