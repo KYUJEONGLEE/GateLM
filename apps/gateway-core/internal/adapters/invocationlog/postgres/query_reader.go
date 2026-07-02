@@ -620,6 +620,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
 	var err error
+	applyInvocationMetadataFields(&log, metadataJSON)
 	log.DomainOutcomes, err = decodeDomainOutcomesMetadata(metadataJSON)
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
@@ -719,6 +720,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	if completedAt.Valid {
 		log.CompletedAt = &completedAt.Time
 	}
+	applyInvocationMetadataFields(&log, metadataJSON)
 	log.RuntimeSnapshot, err = decodeRuntimeSnapshotBridgeMetadata(metadataJSON, log.CreatedAt)
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
@@ -777,12 +779,26 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 }
 
 type invocationMetadataJSON struct {
-	TerminalStatus       string                            `json:"terminalStatus"`
-	RuntimeSnapshot      *runtimeSnapshotMetadataJSON      `json:"runtimeSnapshot"`
-	Runtime              *runtimeMetadataJSON              `json:"runtime"`
-	DomainOutcomes       *invocationlog.DomainOutcomes     `json:"domainOutcomes"`
-	GatewayStageOutcomes *gatewayStageOutcomesMetadataJSON `json:"gatewayStageOutcomes"`
-	StageOutcomes        *gatewayStageOutcomesMetadataJSON `json:"stageOutcomes"`
+	TerminalStatus              string                            `json:"terminalStatus"`
+	RuntimeSnapshot             *runtimeSnapshotMetadataJSON      `json:"runtimeSnapshot"`
+	Runtime                     *runtimeMetadataJSON              `json:"runtime"`
+	DomainOutcomes              *invocationlog.DomainOutcomes     `json:"domainOutcomes"`
+	GatewayStageOutcomes        *gatewayStageOutcomesMetadataJSON `json:"gatewayStageOutcomes"`
+	StageOutcomes               *gatewayStageOutcomesMetadataJSON `json:"stageOutcomes"`
+	CacheDecisionReason         string                            `json:"cacheDecisionReason"`
+	ProviderCalled              bool                              `json:"providerCalled"`
+	SelectedProviderID          string                            `json:"selectedProviderId"`
+	SelectedModelID             string                            `json:"selectedModelId"`
+	RoutingPolicyHash           string                            `json:"routingPolicyHash"`
+	RoutingDecisionKeyHash      string                            `json:"routingDecisionKeyHash"`
+	PromptCategory              string                            `json:"promptCategory"`
+	SemanticCacheHit            bool                              `json:"semanticCacheHit"`
+	SemanticSimilarity          float64                           `json:"semanticSimilarity"`
+	SemanticMatchedRequestID    string                            `json:"semanticMatchedRequestId"`
+	SemanticCacheThreshold      float64                           `json:"semanticCacheThreshold"`
+	SemanticCachePolicyVersion  string                            `json:"semanticCachePolicyVersion"`
+	SemanticCacheDecisionReason string                            `json:"semanticCacheDecisionReason"`
+	EmbeddingProvider           string                            `json:"embeddingProvider"`
 }
 
 type runtimeMetadataJSON struct {
@@ -807,6 +823,78 @@ type runtimeSnapshotMetadataJSON struct {
 type gatewayStageOutcomesMetadataJSON struct {
 	TerminalStatus string                        `json:"terminalStatus"`
 	DomainOutcomes *invocationlog.DomainOutcomes `json:"domainOutcomes"`
+}
+
+func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []byte) {
+	if log == nil || len(raw) == 0 || string(raw) == "null" {
+		return
+	}
+	var metadata invocationMetadataJSON
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return
+	}
+	if strings.TrimSpace(metadata.CacheDecisionReason) != "" {
+		log.CacheDecisionReason = strings.TrimSpace(metadata.CacheDecisionReason)
+	}
+	if metadata.ProviderCalled {
+		log.ProviderCalled = true
+	}
+	if strings.TrimSpace(metadata.SelectedProviderID) != "" {
+		log.SelectedProviderID = strings.TrimSpace(metadata.SelectedProviderID)
+	}
+	if strings.TrimSpace(metadata.SelectedModelID) != "" {
+		log.SelectedModelID = strings.TrimSpace(metadata.SelectedModelID)
+	}
+	if routingPolicyHash := routingPolicyHashFromMetadata(metadata); routingPolicyHash != "" {
+		log.RoutingPolicyHash = routingPolicyHash
+	}
+	if strings.TrimSpace(metadata.RoutingDecisionKeyHash) != "" {
+		log.RoutingDecisionKeyHash = strings.TrimSpace(metadata.RoutingDecisionKeyHash)
+	}
+	if strings.TrimSpace(metadata.PromptCategory) != "" {
+		log.PromptCategory = strings.TrimSpace(metadata.PromptCategory)
+	}
+	log.SemanticCacheHit = metadata.SemanticCacheHit
+	if metadata.SemanticSimilarity > 0 {
+		log.SemanticSimilarity = metadata.SemanticSimilarity
+	}
+	if strings.TrimSpace(metadata.SemanticMatchedRequestID) != "" {
+		log.SemanticMatchedRequestID = strings.TrimSpace(metadata.SemanticMatchedRequestID)
+	}
+	if metadata.SemanticCacheThreshold > 0 {
+		log.SemanticCacheThreshold = metadata.SemanticCacheThreshold
+	}
+	if strings.TrimSpace(metadata.SemanticCachePolicyVersion) != "" {
+		log.SemanticCachePolicyVersion = strings.TrimSpace(metadata.SemanticCachePolicyVersion)
+	}
+	if strings.TrimSpace(metadata.SemanticCacheDecisionReason) != "" {
+		log.SemanticCacheDecisionReason = strings.TrimSpace(metadata.SemanticCacheDecisionReason)
+	}
+	if strings.TrimSpace(metadata.EmbeddingProvider) != "" {
+		log.EmbeddingProvider = strings.TrimSpace(metadata.EmbeddingProvider)
+	}
+}
+
+func routingPolicyHashFromMetadata(metadata invocationMetadataJSON) string {
+	if strings.TrimSpace(metadata.RoutingPolicyHash) != "" {
+		return strings.TrimSpace(metadata.RoutingPolicyHash)
+	}
+	if metadata.RuntimeSnapshot != nil {
+		if routingPolicyHash := strings.TrimSpace(metadata.RuntimeSnapshot.LegacyHashes.Normalize().RoutingPolicyHash); routingPolicyHash != "" {
+			return routingPolicyHash
+		}
+	}
+	if metadata.Runtime != nil {
+		if metadata.Runtime.RuntimeSnapshot != nil {
+			if routingPolicyHash := strings.TrimSpace(metadata.Runtime.RuntimeSnapshot.LegacyHashes.Normalize().RoutingPolicyHash); routingPolicyHash != "" {
+				return routingPolicyHash
+			}
+		}
+		if routingPolicyHash := strings.TrimSpace(metadata.Runtime.legacyHashes().RoutingPolicyHash); routingPolicyHash != "" {
+			return routingPolicyHash
+		}
+	}
+	return ""
 }
 
 // decodeRuntimeSnapshotBridgeMetadata accepts v2 RuntimeSnapshot metadata plus v1 runtime hash metadata.

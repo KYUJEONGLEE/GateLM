@@ -21,6 +21,7 @@ const (
 	CacheStatusStoreSkipped = "store_skipped"
 	CacheTypeNone           = "none"
 	CacheTypeExact          = "exact"
+	CacheTypeSemantic       = "semantic"
 	SourceCustomerApp       = "customer_app"
 	CurrencyUSD             = "USD"
 
