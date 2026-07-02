@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 type ChatMessage struct {
@@ -52,11 +53,33 @@ type GateLMMetadata struct {
 	RequestedModel   string `json:"requestedModel"`
 	SelectedProvider string `json:"selectedProvider"`
 	SelectedModel    string `json:"selectedModel"`
+	TerminalStatus   string `json:"terminalStatus,omitempty"`
+	DomainOutcomes   any    `json:"domainOutcomes,omitempty"`
 	CacheStatus      string `json:"cacheStatus"`
 	RoutingReason    string `json:"routingReason,omitempty"`
 	MaskingAction    string `json:"maskingAction"`
 	EstimatedCostUSD string `json:"estimatedCostUsd,omitempty"`
 	LatencyMs        int64  `json:"latencyMs"`
+}
+
+type ExecutionConfig struct {
+	ProviderID         string
+	ProviderName       string
+	AdapterType        string
+	BaseURL            string
+	Timeout            time.Duration
+	CredentialRequired bool
+	Credential         *ResolvedCredential
+	AdapterConfig      AdapterConfig
+}
+
+type AdapterConfig struct {
+	RequestFormat string
+	APIVersion    string
+}
+
+type ResolvedCredential struct {
+	Value string
 }
 
 type ModelListResponse struct {
@@ -73,7 +96,7 @@ type ModelInfo struct {
 }
 
 type Adapter interface {
-	Name() string
-	ListModels(ctx context.Context) (*ModelListResponse, error)
-	CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error)
+	AdapterType() string
+	ListModels(ctx context.Context, config ExecutionConfig) (*ModelListResponse, error)
+	CreateChatCompletion(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (*ChatCompletionResponse, error)
 }

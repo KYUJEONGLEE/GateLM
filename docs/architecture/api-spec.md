@@ -1,6 +1,8 @@
 # GateLM API Spec
 
-> P0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`의 P0 API 목록을 우선한다. P0 cache status는 `hit/miss/bypass/error`만 사용하고 exact 여부는 `cacheType=exact`로 표현한다. P0 `stream=true` 거부는 HTTP 400 `streaming_not_supported`다. 이 문서의 `MVP` 또는 `1차 구현` 표현이 P0 문서와 충돌하면 P1/P2 후보 또는 참고 설계로 본다.
+> Credential Lifecycle v1 override: for API Key/App Token issue, list, rotate, revoke, and Gateway credential error behavior, `docs/v1.0.0/contracts.md`, `docs/v1.0.0/fixtures/credential-lifecycle.fixture.json`, and `docs/v1.0.0/schemas/credential-lifecycle.schema.json` are the source of truth. In v1, revoke is idempotent: already revoked credentials return 200 with the existing `revokedAt`, not 409. Rotate is allowed only for active and unexpired credentials; invalid rotate states return 409 conflict.
+
+> v1.0.0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 
@@ -473,7 +475,15 @@ allow, block, warn, mask, route, fallback
 | GET | `/v1/models` | Gateway API Key | 사용 가능한 모델 목록. OpenAI-compatible |
 | POST | `/v1/chat/completions` | Gateway API Key + App Token | Chat Completions. P0는 non-stream, SSE streaming은 P1 |
 
-## 3.13 Health
+## 3.13 Internal AI Service / Remote Safety
+
+| Method | Endpoint | 인증 | 설명 |
+|---|---|---:|---|
+| POST | `/internal/v1/safety/evaluate` | Internal service call | Optional RemoteSafetyEngine shadow/evaluation endpoint. Not required for v1 smoke and not authoritative for Gateway production blocking. |
+
+Request/response schema, versioning, fallback behavior, and sanitized error handling are defined in `docs/v1.0.0/remote-safety-engine-contract.md`.
+
+## 3.14 Health
 
 | Method | Endpoint | 인증 | 설명 |
 |---|---|---:|---|
@@ -1680,6 +1690,8 @@ Error Response:
 
 ## 8.8 DELETE `/api/app-tokens/:appTokenId`
 
+> v1.0.0 Credential Lifecycle override: App Token revoke is idempotent. If the token is already revoked, return 200 with the existing `revokedAt` and do not update DB state. The older `409 already revoked` wording in this architecture draft is superseded by `docs/v1.0.0/contracts.md` and the credential-lifecycle fixture/schema.
+
 App Token을 폐기한다. Hard delete가 아니라 revoke 처리한다.
 
 인증: Project Admin
@@ -1708,7 +1720,6 @@ Error Response:
 
 - `403 FORBIDDEN`
 - `404 NOT_FOUND`
-- `409 CONFLICT`: 이미 revoked
 
 ---
 
@@ -1866,6 +1877,8 @@ Error Response:
 
 ## 9.5 POST `/api/api-keys/:apiKeyId/rotate`
 
+> v1.0.0 Credential Lifecycle override: API Key rotate is allowed only when `status=active && (expiresAt=null || expiresAt>now)`. Revoked, disabled, expired, or already-expired active credentials return `409 conflict`.
+
 기존 API Key를 폐기하고 새 key를 발급한다. 새 원문 key는 이 응답에서만 1회 반환한다.
 
 인증: Project Admin
@@ -1904,9 +1917,11 @@ Error Response:
 
 - `403 FORBIDDEN`
 - `404 NOT_FOUND`
-- `409 CONFLICT`: 이미 revoked
+- `409 CONFLICT`: v1 rotate is allowed only for active and unexpired credentials
 
 ## 9.6 DELETE `/api/api-keys/:apiKeyId`
+
+> v1.0.0 Credential Lifecycle override: API Key revoke is idempotent. If the key is already revoked, return 200 with the existing `revokedAt` and do not update DB state. The older `409 already revoked` wording in this architecture draft is superseded by `docs/v1.0.0/contracts.md` and the credential-lifecycle fixture/schema.
 
 인증: Project Admin
 
@@ -1934,7 +1949,6 @@ Error Response:
 
 - `403 FORBIDDEN`
 - `404 NOT_FOUND`
-- `409 CONFLICT`: 이미 revoked
 
 ---
 
@@ -3471,7 +3485,7 @@ Error Response:
 ## 14.3 GET `/api/llm-requests/:requestId`
 
 Detail Drawer에 필요한 단일 요청 상세를 조회한다.
-P0 response shape은 `docs/p0/p0-log-event-payload.md`의 Request Detail API 최소 필드를 우선한다.
+v1.0.0 response shape은 `docs/v1.0.0/contracts.md`의 Request Detail / Invocation Log 계약을 우선한다. 과거 P0 response shape은 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
 
 인증: Project Member
 
@@ -4231,7 +4245,7 @@ Error Response:
 
 ## 16.2 POST `/v1/chat/completions`
 
-OpenAI-compatible Chat Completions API다. GateLM은 이 요청 안에서 인증, App Token 검증, 민감정보 마스킹, Cache, Model Routing, Provider 호출, 비동기 이벤트 발행을 수행한다. Rate Limit, Quota, Budget hard block, Runtime Policy 고도화는 P1/P2 후보이며 P0 필수는 아니다.
+OpenAI-compatible Chat Completions API다. GateLM은 이 요청 안에서 인증, App Token 검증, Rate Limit, 민감정보 마스킹, Cache, Model Routing, Provider 호출, 로그/지표 기록을 수행한다. v1.0.0에서는 `applicationId` 기준 PostgreSQL-backed Rate Limit이 필수 pre-check다. Quota, Budget hard block, Runtime Policy 고도화는 v2 후보로 둔다.
 
 인증: Gateway API Key + App Token. Project 정책에 따라 App Token optional 가능하지만 기본은 required.
 
@@ -4387,8 +4401,8 @@ Error Response:
 3. Tenant / Project / Application 식별
 4. App Token 검증
 5. Scope / IP allowlist / status / expiresAt 확인
-6. Rate Limit / Quota / Budget pre-check는 P1/P2 후보. P0에서는 disabled 또는 no-op
-7. Runtime Policy pre-check는 P1/P2 후보. P0에서는 JSON config 기반 최소 정책
+6. Rate Limit pre-check. v1.0.0에서는 `applicationId` 기준 PostgreSQL-backed fixed window를 적용한다. Quota / Budget pre-check는 v2 후보
+7. Runtime Policy pre-check. v1.0.0에서는 ActiveRuntimeConfig 기반 최소 정책을 적용하고, 고도화된 editor/evaluator는 v2 후보
 8. Text-only validation
 9. 민감정보 탐지
 10. Mask 또는 Block
@@ -4617,7 +4631,7 @@ Allowed values:
 }
 ```
 
-HTTP status는 기본 `422`를 사용한다. 인증/인가 정책 차단과 결합된 경우 `403`을 사용할 수 있다.
+v1 Gateway hot path에서 HTTP status는 `403`을 사용한다. `422`는 Control Plane policy validation 또는 custom detector validation처럼 요청 설정 자체를 검증하는 문맥에서만 사용한다.
 
 ## 24.3 Analytics masking API 제한
 

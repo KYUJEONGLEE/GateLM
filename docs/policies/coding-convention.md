@@ -1,6 +1,6 @@
 # GateLM Coding Convention
 
-> P0 범위 안내: 이 문서는 장기 구현 기준과 확장 원칙을 포함한다. 현재 구현 범위는 `docs/p0/p0-contract.md`와 `docs/p0/implementation-cut.md`를 우선한다. 이 문서의 `MVP` 표현은 현재 P0 필수 범위를 자동으로 의미하지 않는다.
+> v1.0.0 범위 안내: 이 문서는 장기 구현 기준과 확장 원칙을 포함한다. 현재 구현 범위는 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 우선한다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다.
 
 ## 문서 목적
 

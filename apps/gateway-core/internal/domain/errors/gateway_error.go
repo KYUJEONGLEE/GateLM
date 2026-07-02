@@ -46,6 +46,14 @@ func ScopeMismatch(stage string) GatewayError {
 	return New(403, "scope_mismatch", "Tenant, project, or application scope mismatch.", stage)
 }
 
+func RateLimited(stage string) GatewayError {
+	return New(429, "rate_limited", "Rate limit exceeded.", stage)
+}
+
+func BudgetBlocked(stage string) GatewayError {
+	return New(403, "budget_blocked", "Budget policy blocked this request.", stage)
+}
+
 func RequestCancelled(stage string, cause error) GatewayError {
 	return NewWithCause(StatusClientClosedRequest, "internal_error", "Request was cancelled.", stage, cause)
 }

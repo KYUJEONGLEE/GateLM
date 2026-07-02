@@ -6,9 +6,12 @@ import (
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/http/handlers"
 	"gatelm/apps/gateway-core/internal/pipeline"
@@ -17,14 +20,19 @@ import (
 )
 
 type RouterOptions struct {
-	APIKeyAuthenticator  handlers.APIKeyAuthenticator
-	AppTokenValidator    handlers.AppTokenValidator
-	AuthFailureLogWriter invocationlog.AuthFailureLogWriter
-	TerminalLogWriter    invocationlog.TerminalLogWriter
-	InvocationLogReader  invocationlog.Reader
-	ExactCacheStore      ports.CacheStore
-	ExactCacheKeyBuilder handlers.ExactCacheKeyBuilder
-	PreProviderPipeline  handlers.GatewayPipeline
+	APIKeyAuthenticator   handlers.APIKeyAuthenticator
+	AppTokenValidator     handlers.AppTokenValidator
+	AuthFailureLogWriter  invocationlog.AuthFailureLogWriter
+	TerminalLogWriter     invocationlog.TerminalLogWriter
+	InvocationLogReader   invocationlog.Reader
+	ExactCacheStore       ports.CacheStore
+	ExactCacheKeyBuilder  handlers.ExactCacheKeyBuilder
+	MetricsRegistry       *metrics.Registry
+	RateLimitPipeline     handlers.GatewayPipeline
+	RuntimePolicyPipeline handlers.GatewayPipeline
+	PreProviderPipeline   handlers.GatewayPipeline
+	ProviderCatalogs      providercatalog.Resolver
+	Credentials           credentials.Resolver
 }
 
 type RouterOption func(*RouterOptions)
@@ -61,9 +69,35 @@ func WithExactCache(store ports.CacheStore, keyBuilder handlers.ExactCacheKeyBui
 	}
 }
 
+func WithMetrics(registry *metrics.Registry) RouterOption {
+	return func(options *RouterOptions) {
+		options.MetricsRegistry = registry
+	}
+}
+
 func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) RouterOption {
 	return func(options *RouterOptions) {
 		options.PreProviderPipeline = preProviderPipeline
+	}
+}
+
+func WithRateLimitPipeline(rateLimitPipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.RateLimitPipeline = rateLimitPipeline
+		options.RuntimePolicyPipeline = rateLimitPipeline
+	}
+}
+
+func WithRuntimePolicyPipeline(runtimePolicyPipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.RuntimePolicyPipeline = runtimePolicyPipeline
+	}
+}
+
+func WithProviderExecution(providerCatalogs providercatalog.Resolver, credentialResolver credentials.Resolver) RouterOption {
+	return func(options *RouterOptions) {
+		options.ProviderCatalogs = providerCatalogs
+		options.Credentials = credentialResolver
 	}
 }
 
@@ -135,8 +169,13 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	if exactCacheKeyBuilder == nil && cfg.ExactCacheKeySecret != "" {
 		exactCacheKeyBuilder = cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret))
 	}
+	metricsRegistry := routerOptions.MetricsRegistry
+	if metricsRegistry == nil {
+		metricsRegistry = metrics.NewRegistry()
+	}
 
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
+	mux.Handle("GET /metrics", handlers.MetricsHandler{Registry: metricsRegistry})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
 		Timeout: cfg.ReadinessTimeout,
 		Checks:  readinessChecks,
@@ -161,24 +200,38 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
 		Providers:               providers,
+		ProviderCatalogResolver: routerOptions.ProviderCatalogs,
+		CredentialResolver:      routerOptions.Credentials,
 		DefaultModel:            cfg.DefaultModel,
 		DefaultProvider:         cfg.DefaultProvider,
 		MaxRequestBodyBytes:     cfg.MaxRequestBodyBytes,
 		APIKeyAuthenticator:     apiKeyAuthenticator,
 		AppTokenValidator:       appTokenValidator,
-		ExpectedTenantID:        cfg.DemoTenantID,
-		ExpectedProjectID:       cfg.DemoProjectID,
-		ExpectedAppID:           cfg.DemoApplicationID,
+		ExpectedTenantID:        cfg.ExpectedTenantID,
+		ExpectedProjectID:       cfg.ExpectedProjectID,
+		ExpectedAppID:           cfg.ExpectedApplicationID,
+		RuntimePolicyPipeline:   firstNonNilPipeline(routerOptions.RuntimePolicyPipeline, routerOptions.RateLimitPipeline),
+		RateLimitPipeline:       routerOptions.RateLimitPipeline,
 		PreProviderPipeline:     preProviderPipeline,
 		AuthFailureLogWriter:    authFailureLogWriter,
 		TerminalLogWriter:       terminalLogWriter,
 		MaskingEngine:           maskdomain.NewP0Engine(),
+		MetricsRegistry:         metricsRegistry,
 		ExactCacheStore:         routerOptions.ExactCacheStore,
 		ExactCacheKeyBuilder:    exactCacheKeyBuilder,
 		ExactCacheTTL:           cfg.ExactCacheTTL,
-		CachePolicyHash:         "cache_p0_v1",
-		SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
+		CachePolicyHash:         cfg.CachePolicyHash,
+		SecurityPolicyVersionID: cfg.SecurityPolicyHash,
 	}))
 
 	return mux
+}
+
+func firstNonNilPipeline(pipelines ...handlers.GatewayPipeline) handlers.GatewayPipeline {
+	for _, pipeline := range pipelines {
+		if pipeline != nil {
+			return pipeline
+		}
+	}
+	return nil
 }

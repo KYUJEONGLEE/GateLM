@@ -1,14 +1,23 @@
 package request
 
-import "time"
+import (
+	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+)
 
 type GatewayContext struct {
-	Request  RequestContext
-	Identity IdentityContext
-	Masking  MaskingContext
-	Routing  RoutingContext
-	Cache    CacheContext
-	Status   StatusContext
+	Request    RequestContext
+	Identity   IdentityContext
+	Budget     budget.Scope
+	Runtime    RuntimeContext
+	Governance GovernanceContext
+	Masking    MaskingContext
+	Routing    RoutingContext
+	Cache      CacheContext
+	Status     StatusContext
 }
 
 type RequestContext struct {
@@ -30,6 +39,27 @@ type IdentityContext struct {
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+}
+
+type RuntimeContext struct {
+	ConfigHash         string
+	SecurityPolicyHash string
+	RoutingPolicyHash  string
+	Snapshot           runtimeconfig.RuntimeSnapshotProvenance
+
+	RateLimitConfig    ratelimit.Config
+	HasRateLimitConfig bool
+	BudgetPolicy       budget.Policy
+	HasBudgetPolicy    bool
+	RoutingPolicy      runtimeconfig.RoutingPolicy
+	HasRoutingPolicy   bool
+	CachePolicy        runtimeconfig.CachePolicy
+	HasCachePolicy     bool
+}
+
+type GovernanceContext struct {
+	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 }
 
 type MaskingContext struct {
@@ -68,10 +98,22 @@ type StatusContext struct {
 
 func (c *GatewayContext) SetError(httpStatus int, code string, message string, stage string) {
 	c.Status = StatusContext{
-		Status:       "error",
+		Status:       "failed",
 		HTTPStatus:   httpStatus,
 		ErrorCode:    code,
 		ErrorMessage: message,
 		ErrorStage:   stage,
 	}
+}
+
+func (c *GatewayContext) BypassCache() {
+	if c == nil {
+		return
+	}
+	c.Cache.CacheStatus = "bypass"
+	c.Cache.CacheType = "none"
+	c.Cache.CacheKeyHash = ""
+	c.Cache.CacheHitRequestID = ""
+	c.Cache.SavedCostMicroUSD = 0
+	c.Cache.Payload = nil
 }

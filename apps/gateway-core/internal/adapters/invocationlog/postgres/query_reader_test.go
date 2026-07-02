@@ -72,6 +72,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				"request_001",
 				"project_demo",
 				sql.NullString{String: "app_demo", Valid: true},
+				sql.NullString{String: "application", Valid: true},
+				sql.NullString{String: "app_demo", Valid: true},
+				sql.NullString{String: "default_application", Valid: true},
 				"mock",
 				"mock-fast",
 				sql.NullString{String: "auto", Valid: true},
@@ -88,6 +91,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				sql.NullString{String: "low_cost", Valid: true},
 				"none",
 				createdAt,
+				[]byte(`{}`),
 			}},
 		},
 	}
@@ -109,6 +113,14 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	item := items[0]
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
+	}
+	if item.BudgetScope.Type != "application" || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != "default_application" {
+		t.Fatalf("unexpected budget scope: %+v", item.BudgetScope)
+	}
+	if item.TerminalStatus != invocationlog.StatusSuccess ||
+		item.DomainOutcomes.Provider.Outcome != "success" ||
+		item.DomainOutcomes.Cache.Outcome != "miss" {
+		t.Fatalf("unexpected list item outcomes: %+v", item)
 	}
 	if !strings.Contains(db.query, "order by created_at desc, request_id desc") {
 		t.Fatalf("expected stable descending sort, got %s", db.query)
@@ -132,6 +144,9 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			"tenant_demo",
 			"project_demo",
 			sql.NullString{String: "app_demo", Valid: true},
+			sql.NullString{String: "application", Valid: true},
+			sql.NullString{String: "app_demo", Valid: true},
+			sql.NullString{String: "default_application", Valid: true},
 			invocationlog.StatusSuccess,
 			200,
 			"mock",
@@ -159,6 +174,7 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_REDACTED]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
 		}},
 	}
 
@@ -177,6 +193,22 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	if detail.Cache.CacheKeyHash != "sha256:cache" || detail.Routing.SelectedProvider != "mock" {
 		t.Fatalf("unexpected cache/routing detail: %+v %+v", detail.Cache, detail.Routing)
 	}
+	if detail.BudgetScope.Type != "application" || detail.BudgetScope.ID != "app_demo" || detail.BudgetScope.ResolvedBy != "default_application" {
+		t.Fatalf("unexpected budget scope detail: %+v", detail.BudgetScope)
+	}
+	if detail.TerminalStatus != invocationlog.StatusSuccess ||
+		detail.DomainOutcomes.Provider.Outcome != "success" ||
+		detail.DomainOutcomes.Cache.Outcome != "miss" ||
+		detail.DomainOutcomes.Safety.Outcome != "redacted" {
+		t.Fatalf("unexpected detail outcomes: %+v", detail.DomainOutcomes)
+	}
+	if detail.RuntimeSnapshot == nil ||
+		detail.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_query_test" ||
+		detail.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		detail.RuntimeSnapshot.RuntimeState != "snapshot_active" ||
+		detail.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_query_test" {
+		t.Fatalf("unexpected runtime snapshot detail: %+v", detail.RuntimeSnapshot)
+	}
 	for _, expected := range []string{
 		"tenant_id = $1",
 		"project_id = $2",
@@ -191,18 +223,68 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 	}
 }
 
+func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testing.T) {
+	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":{"safety":{"outcome":"passed","detectedTypes":null,"detectedCount":0}}}`))
+	if err != nil {
+		t.Fatalf("expected decode to succeed, got %v", err)
+	}
+	if outcomes.Safety.DetectedTypes == nil {
+		t.Fatalf("expected detected types to be normalized to an empty slice")
+	}
+	if len(outcomes.Safety.DetectedTypes) != 0 {
+		t.Fatalf("expected empty detected types, got %#v", outcomes.Safety.DetectedTypes)
+	}
+}
+
+func TestDecodeDomainOutcomesMetadataNormalizesNullDomainOutcomes(t *testing.T) {
+	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":null}`))
+	if err != nil {
+		t.Fatalf("expected decode to succeed, got %v", err)
+	}
+	if outcomes.Safety.DetectedTypes == nil {
+		t.Fatalf("expected detected types to be normalized to an empty slice")
+	}
+	if !outcomes.IsZero() {
+		t.Fatalf("expected zero domain outcomes, got %+v", outcomes)
+	}
+}
+
 func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
+	lastLogCreatedAt := from.Add(30 * time.Minute)
 	db := &fakeQueryer{
 		row: fakeRow{values: []any{
-			int64(4),
-			int64(2),
+			int64(6),
+			int64(3),
 			int64(1),
 			int64(1),
-			int64(56),
 			int64(1),
-			sql.NullFloat64{Float64: 50, Valid: true},
+			int64(0),
+			int64(1),
+			int64(3),
+			int64(1),
+			int64(13),
+			int64(20),
+			int64(33),
+			int64(100),
+			int64(50),
+			sql.NullFloat64{Float64: 63.3333333333, Valid: true},
+			sql.NullFloat64{Float64: 100, Valid: true},
+			sql.NullFloat64{Float64: 20, Valid: true},
+			sql.NullFloat64{Float64: 34, Valid: true},
+			sql.NullFloat64{Float64: 86, Valid: true},
+			sql.NullFloat64{Float64: 120, Valid: true},
+			[]byte(`{"success":3,"blocked":1,"rate_limited":1,"failed":1,"cancelled":1}`),
+			[]byte(`{"none":4,"redacted":1,"blocked":1}`),
+			[]byte(`{"passed":4,"redacted":1,"blocked":1}`),
+			[]byte(`{"hit":1,"miss":2,"bypassed":3}`),
+			[]byte(`{"success":1,"not_called":5}`),
+			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
+			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			[]byte(`[{"applicationId":"app_demo","requestCount":6,"costMicroUsd":100}]`),
+			[]byte(`[{"budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application","requestCount":6,"costMicroUsd":100}]`),
+			sql.NullTime{Time: lastLogCreatedAt, Valid: true},
 		}},
 	}
 
@@ -216,14 +298,68 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected dashboard overview to succeed, got %v", err)
 	}
-	if overview.TotalRequests != 4 || overview.SuccessfulRequests != 2 || overview.BlockedRequests != 1 || overview.CacheHitRequests != 1 {
+	if overview.TotalRequests != 6 || overview.SuccessfulRequests != 3 || overview.FailedRequests != 1 || overview.BlockedRequests != 1 || overview.RateLimitedRequests != 1 {
 		t.Fatalf("unexpected overview counts: %+v", overview)
 	}
-	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.25) {
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 3 || overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 1.0/3.0) {
 		t.Fatalf("unexpected cache hit rate: %+v", overview.CacheHitRate)
+	}
+	if overview.PromptTokens != 13 || overview.CompletionTokens != 20 || overview.TotalTokens != 33 || overview.TotalCostUSD != "0.000100" || overview.SavedCostUSD != "0.000050" {
+		t.Fatalf("unexpected token/cost totals: %+v", overview)
+	}
+	if overview.AverageLatencyMs == nil || !floatEquals(*overview.AverageLatencyMs, 63.3333333333) || overview.P95LatencyMs == nil || !floatEquals(*overview.P95LatencyMs, 100) {
+		t.Fatalf("unexpected latency metrics: avg=%+v p95=%+v", overview.AverageLatencyMs, overview.P95LatencyMs)
+	}
+	if overview.StatusCounts[invocationlog.StatusRateLimited] != 1 || overview.MaskingActionCounts["redacted"] != 1 {
+		t.Fatalf("unexpected status/masking counts: status=%+v masking=%+v", overview.StatusCounts, overview.MaskingActionCounts)
+	}
+	if overview.CancelledRequests != 0 || overview.FallbackSuccessCount != 1 {
+		t.Fatalf("unexpected cancelled/fallback counts: %+v", overview)
+	}
+	if overview.SafetyOutcomeCounts["blocked"] != 1 || overview.CacheOutcomeCounts["hit"] != 1 || overview.FallbackOutcomeCounts["success"] != 1 {
+		t.Fatalf("unexpected outcome counts: safety=%+v cache=%+v fallback=%+v", overview.SafetyOutcomeCounts, overview.CacheOutcomeCounts, overview.FallbackOutcomeCounts)
+	}
+	if overview.Performance.P95GatewayInternalLatencyMs == nil || !floatEquals(*overview.Performance.P95GatewayInternalLatencyMs, 20) ||
+		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {
+		t.Fatalf("unexpected performance split: %+v", overview.Performance)
+	}
+	if len(overview.ApplicationBreakdown) != 1 || overview.ApplicationBreakdown[0].ApplicationID != "app_demo" {
+		t.Fatalf("unexpected application breakdown: %+v", overview.ApplicationBreakdown)
+	}
+	if len(overview.RoutingCountByModel) != 1 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
+		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
+	}
+	if len(overview.CostByModel) != 1 || overview.CostByModel[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
+	}
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
+	}
+	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
+		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
 	}
 	if !strings.Contains(db.query, "from p0_llm_invocation_logs") || !strings.Contains(db.query, "tenant_id = $3") || !strings.Contains(db.query, "project_id = $4") {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
+	}
+	for _, expected := range []string{
+		"terminal_status = 'failed'",
+		"terminal_status = 'rate_limited'",
+		"cache_eligible_requests",
+		"saved_cost_micro_usd",
+		"percentile_disc(0.95)",
+		"status_counts",
+		"masking_action_counts",
+		"safety_outcome_counts",
+		"cache_outcome_counts",
+		"fallback_outcome_counts",
+		"routing_count_by_model",
+		"cost_by_model",
+		"application_breakdown",
+		"budget_scope_breakdown",
+	} {
+		if !strings.Contains(db.query, expected) {
+			t.Fatalf("expected dashboard query to contain %q, got %s", expected, db.query)
+		}
 	}
 	if len(db.args) != 4 || db.args[2] != "tenant_demo" || db.args[3] != "project_demo" {
 		t.Fatalf("unexpected dashboard query args: %#v", db.args)

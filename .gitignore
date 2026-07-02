@@ -11,11 +11,23 @@ credentials.json
 service-account.json
 
 node_modules/
+.pnpm-store/
 dist/
 build/
 .next/
 coverage/
+*.tsbuildinfo
+reports/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
 
 .DS_Store
 Thumbs.db
 desktop.ini
+
+.cache/
+.tmp/

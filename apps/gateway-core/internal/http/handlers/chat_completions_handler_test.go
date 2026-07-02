@@ -11,17 +11,26 @@ import (
 	"strings"
 	"testing"
 
+	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
+	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	"gatelm/apps/gateway-core/internal/domain/auth"
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	maskdomain "gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
+	budgetstage "gatelm/apps/gateway-core/internal/pipeline/stages/budget"
+	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/ports"
 )
 
@@ -116,6 +125,9 @@ func TestChatCompletionsHandlerCallsMockProvider(t *testing.T) {
 	if resp.GateLM.SelectedProvider != "mock" {
 		t.Fatalf("unexpected selected provider metadata: %s", resp.GateLM.SelectedProvider)
 	}
+	if resp.GateLM.TerminalStatus != invocationlog.StatusSuccess {
+		t.Fatalf("unexpected terminal status metadata: %#v", resp.GateLM)
+	}
 }
 
 func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
@@ -160,6 +172,9 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 	if logged.ProviderLatencyMs == nil {
 		t.Fatalf("success log must include provider latency: %+v", logged)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != "success" || logged.DomainOutcomes.Cache.Outcome != "miss" {
+		t.Fatalf("unexpected success domain outcomes: %+v", logged.DomainOutcomes)
 	}
 	if logged.RequestBodyHash == "" || logged.PromptHash == "" {
 		t.Fatalf("expected request and prompt hashes: %+v", logged)
@@ -245,38 +260,150 @@ func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.
 	}
 }
 
-func TestChatCompletionsHandlerRejectsStreaming(t *testing.T) {
+func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	providerRequests := []provider.ChatCompletionRequest{}
 	handler := ChatCompletionsHandler{
-		Providers:       provider.NewRegistry("mock"),
-		DefaultModel:    "mock-balanced",
-		DefaultProvider: "mock",
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
-		"model": "mock-balanced",
-		"messages": [{"role": "user", "content": "Write a short refund response."}],
-		"stream": true
-	}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Write a short refund response.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-
-	var resp gatewayErrorResponse
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error response: %v", err)
+	if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("expected event-stream content type, got %q", got)
 	}
-	if resp.Error.Code != "streaming_not_supported" {
-		t.Fatalf("unexpected error code: %s", resp.Error.Code)
+	body := rr.Body.String()
+	if !strings.Contains(body, "data:") || !strings.Contains(body, "Mock") || !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected SSE chunks and done marker, got %q", body)
+	}
+	if strings.Count(body, "data:") < 3 {
+		t.Fatalf("expected multiple SSE chunks, got %q", body)
+	}
+	if len(providerRequests) != 1 {
+		t.Fatalf("expected one provider request, got %d", len(providerRequests))
+	}
+	if providerRequests[0].Stream {
+		t.Fatalf("thin slice must not require upstream provider streaming")
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream || logged.Status != invocationlog.StatusSuccess || logged.HTTPStatus != http.StatusOK {
+		t.Fatalf("unexpected streaming terminal log: %+v", logged)
+	}
+	if logged.DomainOutcomes.Streaming.Outcome != "completed" ||
+		!logged.DomainOutcomes.Streaming.StreamingRequested ||
+		logged.DomainOutcomes.Provider.Outcome != "success" {
+		t.Fatalf("unexpected streaming domain outcomes: %+v", logged.DomainOutcomes)
+	}
+	loggedJSON, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal terminal log: %v", err)
+	}
+	if strings.Contains(string(loggedJSON), "Mock response") {
+		t.Fatalf("terminal log must not store streamed response chunks: %s", string(loggedJSON))
 	}
 }
 
-func TestChatCompletionsHandlerAuthenticatesBeforeRejectingStreaming(t *testing.T) {
+func TestChatCompletionsHandlerStreamingPreservesResponseWhitespace(t *testing.T) {
+	content := "첫 줄\n\n```go\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n```\n끝  두칸"
+	contentJSON, err := json.Marshal(content)
+	if err != nil {
+		t.Fatalf("marshal content: %v", err)
+	}
+
+	calls := 0
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", staticProviderAdapter{
+			calls: &calls,
+			response: &provider.ChatCompletionResponse{
+				ID:      "mock_chatcmpl_whitespace",
+				Object:  "chat.completion",
+				Created: 1782108000,
+				Model:   "mock-balanced",
+				Choices: []provider.ChatChoice{{
+					Index: 0,
+					Message: provider.ChatMessage{
+						Role:    "assistant",
+						Content: contentJSON,
+					},
+					FinishReason: "stop",
+				}},
+			},
+		}),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Return formatted code.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if calls != 1 {
+		t.Fatalf("expected one provider call, got %d", calls)
+	}
+	if got := streamedAssistantContent(t, rr.Body.String()); got != content {
+		t.Fatalf("streamed content must preserve whitespace\nwant: %q\n got: %q\nbody: %s", content, got, rr.Body.String())
+	}
+}
+
+func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Write a short refund response."))).WithContext(ctx)
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+	cancel()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("cancelled request must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerAuthenticatesBeforeStreaming(t *testing.T) {
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock"),
 		DefaultModel:    "mock-balanced",
@@ -430,7 +557,7 @@ func TestChatCompletionsHandlerRejectsNilProviderResponse(t *testing.T) {
 	}
 	logged := logWriter.logs[0]
 	assertTerminalLogMatchesGatewayErrorResponse(t, logged, rr, resp)
-	if logged.Status != invocationlog.StatusError || logged.HTTPStatus != http.StatusBadGateway {
+	if logged.Status != invocationlog.StatusFailed || logged.HTTPStatus != http.StatusBadGateway {
 		t.Fatalf("unexpected provider error log status: %+v", logged)
 	}
 	if logged.ErrorCode != "provider_error" || logged.ErrorStage != "call_provider_with_timeout_retry_fallback" {
@@ -792,7 +919,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForPipelineFailure(t *testing.T)
 	}
 	logged := logWriter.logs[0]
 	assertTerminalLogMatchesGatewayErrorResponse(t, logged, rr, resp)
-	if logged.Status != invocationlog.StatusError || logged.HTTPStatus != http.StatusInternalServerError {
+	if logged.Status != invocationlog.StatusFailed || logged.HTTPStatus != http.StatusInternalServerError {
 		t.Fatalf("unexpected pipeline failure status: %+v", logged)
 	}
 	if logged.ErrorCode != "internal_error" || logged.ErrorStage != "gateway_pipeline" {
@@ -1246,6 +1373,49 @@ func TestChatCompletionsHandlerWritesTerminalLogForBlockedRequest(t *testing.T) 
 	}
 }
 
+func TestChatCompletionsHandlerStreamingSafetyBlockNeverStartsStreamOrProvider(t *testing.T) {
+	chatCalls := 0
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	rawSecret := "test_secret_token_redacted_for_demo_only_1234567890"
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("Summarize api_key="+rawSecret)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("safety block must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("safety block must not call provider, got %d calls", chatCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.Status != invocationlog.StatusBlocked ||
+		logged.DomainOutcomes.Streaming.Outcome != "not_streaming" ||
+		logged.DomainOutcomes.Provider.Outcome != "not_called" ||
+		logged.DomainOutcomes.Cache.Outcome != "bypassed" {
+		t.Fatalf("unexpected streaming safety block log: %+v", logged.DomainOutcomes)
+	}
+	if strings.Contains(rr.Body.String(), rawSecret) {
+		t.Fatalf("blocked response must not include raw sensitive value")
+	}
+}
+
 func TestChatCompletionsHandlerSameSafeRequestMissThenHit(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
@@ -1427,6 +1597,50 @@ func TestChatCompletionsHandlerDoesNotSetHitRequestIDBeforeCachedPayloadDecodes(
 	}
 }
 
+func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
+	reqCtx := pipeline.NewRequestContext(pipeline.NewRequestContextInput{
+		RequestID: "request_current",
+		TraceID:   "request_current",
+		Endpoint:  "/v1/chat/completions",
+		Method:    http.MethodPost,
+	})
+	reqCtx.TenantID = testTenantID
+	reqCtx.ProjectID = testProjectID
+	reqCtx.ApplicationID = testAppID
+	reqCtx.RequestedModel = "auto"
+	reqCtx.RoutingPolicyHash = "hash_routing_policy_test"
+	reqCtx.SecurityPolicyHash = "hash_security_policy_test"
+	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:cache-key"}
+	handler := ChatCompletionsHandler{
+		ExactCacheKeyBuilder: keyBuilder,
+		CachePolicyHash:      "cache_p0_v1",
+	}
+
+	key, err := handler.buildExactCacheKey(
+		context.Background(),
+		reqCtx,
+		provider.ChatCompletionRequest{Model: "mock-balanced"},
+		"Write a short safe cached response.",
+	)
+
+	if err != nil {
+		t.Fatalf("expected cache key build, got %v", err)
+	}
+	if key != "hmac-sha256:cache-key" {
+		t.Fatalf("unexpected cache key: %s", key)
+	}
+	if keyBuilder.material.SecurityPolicyVersionID != "hash_security_policy_test" {
+		t.Fatalf("expected runtime security hash in cache material, got %#v", keyBuilder.material)
+	}
+	if keyBuilder.material.RoutingPolicyVersionID != "hash_routing_policy_test" {
+		t.Fatalf("expected runtime routing hash in cache material, got %#v", keyBuilder.material)
+	}
+	if keyBuilder.material.RequestedModel != "auto" {
+		t.Fatalf("expected requested model in cache material, got %#v", keyBuilder.material)
+	}
+}
+
 func TestChatCompletionsHandlerFallsBackToProviderWhenCachedPayloadIsInvalid(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
@@ -1529,10 +1743,12 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 			Payload:           cachedPayload,
 		},
 	}
+	preflight := &fakeGatewayPipeline{}
 	handler := ChatCompletionsHandler{
 		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
 		DefaultModel:         "mock-balanced",
 		DefaultProvider:      "mock",
+		PreProviderPipeline:  preflight,
 		ExactCacheStore:      cacheStore,
 		ExactCacheKeyBuilder: &recordingExactKeyBuilder{key: "hmac-sha256:cache-hit-key"},
 	}
@@ -1551,6 +1767,9 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if chatCalls != 0 {
 		t.Fatalf("cache hit must not call provider, got %d provider calls", chatCalls)
 	}
+	if preflight.calls != 0 {
+		t.Fatalf("cache hit must not run pre-provider routing pipeline, got %d calls", preflight.calls)
+	}
 	if cacheStore.setCalls != 0 {
 		t.Fatalf("cache hit must not write cache, got %d set calls", cacheStore.setCalls)
 	}
@@ -1568,8 +1787,17 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if resp.GateLM.RequestID != "request_current" {
 		t.Fatalf("expected current request id on cache hit, got %q", resp.GateLM.RequestID)
 	}
-	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-balanced" {
+	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "" || resp.GateLM.SelectedModel != "" ||
+		resp.GateLM.RoutingReason != "exact_cache_hit_provider_bypass" {
 		t.Fatalf("unexpected gate_lm cache/routing metadata: %#v", resp.GateLM)
+	}
+	outcomes, ok := resp.GateLM.DomainOutcomes.(map[string]any)
+	if !ok {
+		t.Fatalf("expected domain outcomes map on cache hit, got %#v", resp.GateLM.DomainOutcomes)
+	}
+	routingOutcome, ok := outcomes["routing"].(map[string]any)
+	if !ok || routingOutcome["outcome"] != "skipped" || routingOutcome["routingReason"] != "exact_cache_hit_provider_bypass" {
+		t.Fatalf("expected skipped routing outcome on cache hit, got %#v", outcomes["routing"])
 	}
 }
 
@@ -1617,7 +1845,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	resp := decodeChatCompletionResponse(t, rr)
 	logged := logWriter.logs[0]
 	assertTerminalLogMatchesSuccessResponse(t, logged, rr, resp)
-	if logged.Status != invocationlog.StatusCacheHit || logged.CacheStatus != invocationlog.CacheStatusHit {
+	if logged.Status != invocationlog.StatusSuccess || logged.CacheStatus != invocationlog.CacheStatusHit {
 		t.Fatalf("unexpected cache hit log status: %+v", logged)
 	}
 	if logged.CacheType != invocationlog.CacheTypeExact || logged.CacheKeyHash != "hmac-sha256:cache-key" || logged.CacheHitRequestID != "request_previous" {
@@ -1631,6 +1859,13 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	}
 	if logged.ProviderLatencyMs != nil {
 		t.Fatalf("cache hit provider latency must be nil, got %+v", logged.ProviderLatencyMs)
+	}
+	if logged.DomainOutcomes.Cache.Outcome != "hit" || logged.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("unexpected cache hit domain outcomes: %+v", logged.DomainOutcomes)
+	}
+	if logged.DomainOutcomes.Routing.Outcome != "skipped" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.RoutingReason) != "exact_cache_hit_provider_bypass" {
+		t.Fatalf("cache hit must skip routing with bypass reason, got %+v", logged.DomainOutcomes.Routing)
 	}
 }
 
@@ -1763,6 +1998,113 @@ func TestChatCompletionsHandlerBypassesCacheForBlockedRequestBeforeKeyBuilderAnd
 	}
 }
 
+func TestChatCompletionsHandlerBudgetBlockStopsBeforeCacheRoutingAndProvider(t *testing.T) {
+	chatCalls := 0
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:must-not-build"}
+	cacheStore := &recordingExactCacheStore{}
+	preflight := &fakeGatewayPipeline{}
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := pipeline.New(budgetstage.NewStage(handlerBudgetChecker{decision: budget.Decision{
+		Allowed: false,
+		Outcome: budget.OutcomeBlocked,
+		Reason:  "monthly_limit_exceeded",
+	}}))
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		PreProviderPipeline:   preflight,
+		ExactCacheStore:       cacheStore,
+		ExactCacheKeyBuilder:  keyBuilder,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "auto",
+		"messages": [{"role": "user", "content": "short prompt"}]
+	}`))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 0 {
+		t.Fatalf("budget block must not call provider, got %d provider calls", chatCalls)
+	}
+	if preflight.calls != 0 {
+		t.Fatalf("budget block must stop before pre-provider pipeline, got %d calls", preflight.calls)
+	}
+	if keyBuilder.calls != 0 || cacheStore.getCalls != 0 || cacheStore.setCalls != 0 {
+		t.Fatalf("budget block must bypass key builder and cache store, got key=%d get=%d set=%d", keyBuilder.calls, cacheStore.getCalls, cacheStore.setCalls)
+	}
+	if got := rr.Header().Get("X-GateLM-Cache-Status"); got != "bypass" {
+		t.Fatalf("expected cache bypass header, got %q", got)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.DomainOutcomes.Budget.Outcome != budget.OutcomeBlocked ||
+		logged.DomainOutcomes.Cache.Outcome != "bypassed" ||
+		logged.DomainOutcomes.Provider.Outcome != "not_called" ||
+		logged.DomainOutcomes.Routing.Outcome != "not_checked" {
+		t.Fatalf("unexpected budget blocked domain outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingBudgetBlockNeverStartsStreamOrProvider(t *testing.T) {
+	chatCalls := 0
+	keyBuilder := &recordingExactKeyBuilder{key: "hmac-sha256:must-not-build"}
+	cacheStore := &recordingExactCacheStore{}
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := pipeline.New(budgetstage.NewStage(handlerBudgetChecker{decision: budget.Decision{
+		Allowed: false,
+		Outcome: budget.OutcomeBlocked,
+		Reason:  "monthly_limit_exceeded",
+	}}))
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		ExactCacheStore:       cacheStore,
+		ExactCacheKeyBuilder:  keyBuilder,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("short prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
+		t.Fatalf("budget block must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
+	}
+	if chatCalls != 0 || keyBuilder.calls != 0 || cacheStore.getCalls != 0 || cacheStore.setCalls != 0 {
+		t.Fatalf("budget block must stop before provider/cache, provider=%d key=%d get=%d set=%d", chatCalls, keyBuilder.calls, cacheStore.getCalls, cacheStore.setCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.DomainOutcomes.Budget.Outcome != budget.OutcomeBlocked ||
+		logged.DomainOutcomes.Streaming.Outcome != "not_streaming" ||
+		logged.DomainOutcomes.Provider.Outcome != "not_called" {
+		t.Fatalf("unexpected streaming budget block outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
 func TestChatCompletionsHandlerPreservesCacheMissAndCallsProvider(t *testing.T) {
 	chatCalls := 0
 	preflight := &fakeGatewayPipeline{
@@ -1879,6 +2221,278 @@ func TestChatCompletionsHandlerFailsOpenWhenCacheHitPayloadIsInvalid(t *testing.
 	}
 }
 
+func TestChatCompletionsHandlerDispatchesByCatalogAdapterTypeAndUsesModelName(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 {
+		t.Fatalf("expected primary provider call, got %d", primary.calls)
+	}
+	if primary.lastConfig.AdapterType != providercatalog.AdapterTypeOpenAICompatible {
+		t.Fatalf("expected openai-compatible dispatch, got %s", primary.lastConfig.AdapterType)
+	}
+	if primary.lastConfig.ProviderName != "openai-main" {
+		t.Fatalf("expected catalog providerName, got %s", primary.lastConfig.ProviderName)
+	}
+	if primary.lastConfig.Credential == nil {
+		t.Fatal("expected resolved credential")
+	}
+	if primary.lastRequest.Model != "provider-low" {
+		t.Fatalf("expected provider modelName provider-low, got %s", primary.lastRequest.Model)
+	}
+}
+
+func TestChatCompletionsHandlerUsesLiveRuntimeSnapshotAndProviderCatalog(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.CatalogID = "provider_catalog:" + testAppID + ":1"
+	catalog.ContentHash = "sha256:provider-catalog-live-handler-test"
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/v1/applications/" + testAppID + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayload(catalog.Reference()))
+		case "/admin/v1/provider-catalogs/" + catalog.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalog))
+		default:
+			t.Fatalf("unexpected control plane path: %s", r.URL.Path)
+		}
+	}))
+	defer controlPlane.Close()
+
+	runtimeSnapshotProvider := controlplaneruntimeconfig.NewProvider(controlPlane.URL, controlPlane.Client())
+	providerCatalogResolver := controlplaneprovidercatalog.NewResolver(controlPlane.URL, controlPlane.Client())
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: providerCatalogResolver,
+		CredentialResolver:      staticCredentialResolver{},
+		RuntimePolicyPipeline:   pipeline.New(runtimeconfigstage.NewStage(runtimeSnapshotProvider)),
+		DefaultProvider:         "mock",
+		DefaultModel:            "mock-balanced",
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBodyWithModel("auto", "safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 {
+		t.Fatalf("expected primary provider call, got %d", primary.calls)
+	}
+	if primary.lastConfig.AdapterType != providercatalog.AdapterTypeOpenAICompatible {
+		t.Fatalf("expected live catalog adapterType dispatch, got %s", primary.lastConfig.AdapterType)
+	}
+	if primary.lastConfig.ProviderName != "openai-main" {
+		t.Fatalf("expected live catalog providerName, got %s", primary.lastConfig.ProviderName)
+	}
+	if primary.lastRequest.Model != "provider-low" {
+		t.Fatalf("expected provider API modelName provider-low, got %s", primary.lastRequest.Model)
+	}
+}
+
+func TestChatCompletionsHandlerRejectsMismatchedProviderCatalogBeforeProviderCall(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	mismatched := testProviderCatalog()
+	mismatched.ContentHash = "sha256:different"
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(mismatched),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 0 || fallback.calls != 0 {
+		t.Fatalf("catalog mismatch must not call provider or fallback: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if !strings.Contains(rr.Body.String(), "provider_catalog_mismatch") {
+		t.Fatalf("expected provider_catalog_mismatch response, got %s", rr.Body.String())
+	}
+}
+
+func TestChatCompletionsHandlerRecordsFallbackSuccessAsDegradedSuccess(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		err:         provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected fallback success 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected one primary and one fallback call, got primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusSuccess {
+		t.Fatalf("expected terminal success, got %s", logged.Status)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != "timeout" || logged.DomainOutcomes.Fallback.Outcome != "success" {
+		t.Fatalf("unexpected fallback outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerAutoFallbackSkipsFailedPrimaryCandidate(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		err:         provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	catalog := testProviderCatalog()
+	catalog.Providers[0].FallbackEligible = true
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipelineWithoutExplicitFallback("openai-main", "model_low"),
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected fallback success 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected one primary and one fallback call, got primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if fallback.lastRequest.Model != "mock-fallback-model" {
+		t.Fatalf("expected fallback modelName mock-fallback-model, got %s", fallback.lastRequest.Model)
+	}
+}
+
+func TestChatCompletionsHandlerProviderCancellationDoesNotFallback(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		err:         context.Canceled,
+	}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 || fallback.calls != 0 {
+		t.Fatalf("expected primary call without fallback, got primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled || logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected cancelled terminal log, got status=%s http=%d", logged.Status, logged.HTTPStatus)
+	}
+	if logged.DomainOutcomes.Provider.Outcome != "not_called" || logged.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("cancelled request must not record provider/fallback failure outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerCredentialFailureDoesNotCallProviderOrFallback(t *testing.T) {
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		CredentialResolver:      failingCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("safe prompt")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 0 || fallback.calls != 0 {
+		t.Fatalf("credential failure must not call provider or fallback: primary=%d fallback=%d", primary.calls, fallback.calls)
+	}
+	if !strings.Contains(rr.Body.String(), provider.ErrorCodeProviderCredentialUnavailable) {
+		t.Fatalf("expected credential unavailable response, got %s", rr.Body.String())
+	}
+}
+
 func marshalChatCompletionPayload(t *testing.T, resp provider.ChatCompletionResponse) []byte {
 	t.Helper()
 
@@ -1891,15 +2505,15 @@ func marshalChatCompletionPayload(t *testing.T, resp provider.ChatCompletionResp
 
 type nilProviderAdapter struct{}
 
-func (nilProviderAdapter) Name() string {
+func (nilProviderAdapter) AdapterType() string {
 	return "nil-provider"
 }
 
-func (nilProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+func (nilProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
 	return &provider.ModelListResponse{}, nil
 }
 
-func (nilProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (nilProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	return nil, nil
 }
 
@@ -1907,15 +2521,15 @@ type countingProviderAdapter struct {
 	calls *int
 }
 
-func (a countingProviderAdapter) Name() string {
+func (a countingProviderAdapter) AdapterType() string {
 	return "mock"
 }
 
-func (a countingProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+func (a countingProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
 	return &provider.ModelListResponse{}, nil
 }
 
-func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	(*a.calls)++
 	return &provider.ChatCompletionResponse{}, nil
 }
@@ -1925,15 +2539,15 @@ type recordingProviderAdapter struct {
 	requests *[]provider.ChatCompletionRequest
 }
 
-func (a recordingProviderAdapter) Name() string {
+func (a recordingProviderAdapter) AdapterType() string {
 	return "mock"
 }
 
-func (a recordingProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+func (a recordingProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
 	return &provider.ModelListResponse{}, nil
 }
 
-func (a recordingProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (a recordingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	if a.calls != nil {
 		(*a.calls)++
 	}
@@ -1969,29 +2583,201 @@ type staticProviderAdapter struct {
 	response *provider.ChatCompletionResponse
 }
 
-func (a staticProviderAdapter) Name() string {
+func (a staticProviderAdapter) AdapterType() string {
 	return "mock"
 }
 
-func (a staticProviderAdapter) ListModels(ctx context.Context) (*provider.ModelListResponse, error) {
+func (a staticProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
 	return &provider.ModelListResponse{}, nil
 }
 
-func (a staticProviderAdapter) CreateChatCompletion(ctx context.Context, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (a staticProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	if a.calls != nil {
 		(*a.calls)++
 	}
 	return a.response, nil
 }
 
+type catalogRecordingProviderAdapter struct {
+	adapterType string
+	err         error
+	calls       int
+	lastConfig  provider.ExecutionConfig
+	lastRequest provider.ChatCompletionRequest
+}
+
+func (a *catalogRecordingProviderAdapter) AdapterType() string {
+	return a.adapterType
+}
+
+func (a *catalogRecordingProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a *catalogRecordingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	a.calls++
+	a.lastConfig = config
+	a.lastRequest = req
+	if a.err != nil {
+		return nil, a.err
+	}
+	return &provider.ChatCompletionResponse{
+		ID:      "chatcmpl_catalog_test",
+		Object:  "chat.completion",
+		Created: 1782108000,
+		Model:   req.Model,
+		Choices: []provider.ChatChoice{{
+			Index: 0,
+			Message: provider.ChatMessage{
+				Role:    "assistant",
+				Content: json.RawMessage(`"catalog response"`),
+			},
+			FinishReason: "stop",
+		}},
+		Usage: &provider.Usage{
+			PromptTokens:     2,
+			CompletionTokens: 2,
+			TotalTokens:      4,
+		},
+	}, nil
+}
+
+type staticCredentialResolver struct{}
+
+func (staticCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
+	return credentials.Resolved{Value: "test-provider-credential"}, nil
+}
+
+type failingCredentialResolver struct{}
+
+func (failingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
+	return credentials.Resolved{}, credentials.ErrUnavailable
+}
+
+func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatewayPipeline {
+	return &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.Snapshot = runtimeconfig.RuntimeSnapshotProvenance{
+				RuntimeSnapshotID:      "runtime_snapshot_test",
+				RuntimeSnapshotVersion: 1,
+				ContentHash:            "sha256:runtime-test",
+				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+				ProviderCatalogRef:     testProviderCatalog().Reference(),
+			}
+			gatewayCtx.Runtime.RoutingPolicy = runtimeconfig.RoutingPolicy{
+				FallbackProvider: "mock-fallback",
+				FallbackModel:    "model_mock_fallback",
+			}
+			gatewayCtx.Runtime.HasRoutingPolicy = true
+			gatewayCtx.Routing.SelectedProvider = providerName
+			gatewayCtx.Routing.SelectedModel = modelID
+			gatewayCtx.Routing.RoutingReason = "catalog_test"
+		},
+	}
+}
+
+func testProviderCatalogPipelineWithoutExplicitFallback(providerName string, modelID string) *fakeGatewayPipeline {
+	return &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.Snapshot = runtimeconfig.RuntimeSnapshotProvenance{
+				RuntimeSnapshotID:      "runtime_snapshot_test",
+				RuntimeSnapshotVersion: 1,
+				ContentHash:            "sha256:runtime-test",
+				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+				ProviderCatalogRef:     testProviderCatalog().Reference(),
+			}
+			gatewayCtx.Runtime.HasRoutingPolicy = true
+			gatewayCtx.Routing.SelectedProvider = providerName
+			gatewayCtx.Routing.SelectedModel = modelID
+			gatewayCtx.Routing.RoutingReason = "catalog_test"
+		},
+	}
+}
+
+func testProviderCatalog() providercatalog.Catalog {
+	return providercatalog.Catalog{
+		CatalogID:      "provider_catalog_test",
+		CatalogVersion: 1,
+		ContentHash:    "sha256:provider-catalog-test",
+		Providers: []providercatalog.Provider{
+			{
+				ProviderID:         "provider_primary",
+				ProviderName:       "openai-main",
+				AdapterType:        providercatalog.AdapterTypeOpenAICompatible,
+				Enabled:            true,
+				BaseURL:            "https://provider.example.test/v1",
+				TimeoutMs:          1000,
+				CredentialRequired: true,
+				CredentialRef: &credentials.Ref{
+					CredentialRefID:   "credential_ref_test",
+					CredentialVersion: 1,
+					CredentialState:   credentials.StateActive,
+				},
+				AdapterConfig: providercatalog.AdapterConfig{
+					RequestFormat: providercatalog.RequestFormatOpenAIChatCompletions,
+				},
+				Models: []providercatalog.Model{{
+					ModelID:     "model_low",
+					ModelName:   "provider-low",
+					DisplayName: "Provider Low",
+					Enabled:     true,
+					Capabilities: providercatalog.ModelCapabilities{
+						StreamingSupported: true,
+						SupportsJSONMode:   true,
+						MaxInputTokens:     8192,
+						MaxOutputTokens:    2048,
+					},
+					Routing: providercatalog.ModelRouting{
+						AutoRoutingEligible: true,
+						CostTier:            "low",
+						FallbackPriority:    0,
+					},
+				}},
+			},
+			{
+				ProviderID:         "provider_mock",
+				ProviderName:       "mock-fallback",
+				AdapterType:        providercatalog.AdapterTypeMock,
+				Enabled:            true,
+				BaseURL:            "http://mock-provider.test/v1",
+				TimeoutMs:          1000,
+				CredentialRequired: false,
+				AdapterConfig: providercatalog.AdapterConfig{
+					RequestFormat: providercatalog.RequestFormatMockChatCompletions,
+				},
+				FallbackEligible: true,
+				Models: []providercatalog.Model{{
+					ModelID:     "model_mock_fallback",
+					ModelName:   "mock-fallback-model",
+					DisplayName: "Mock Fallback",
+					Enabled:     true,
+					Capabilities: providercatalog.ModelCapabilities{
+						StreamingSupported: false,
+						SupportsJSONMode:   false,
+						MaxInputTokens:     4096,
+						MaxOutputTokens:    1024,
+					},
+					Routing: providercatalog.ModelRouting{
+						AutoRoutingEligible: false,
+						CostTier:            "low",
+						FallbackPriority:    10,
+					},
+				}},
+			},
+		},
+	}
+}
+
 type recordingExactKeyBuilder struct {
-	calls int
-	key   string
-	err   error
+	calls    int
+	key      string
+	err      error
+	material cachekey.KeyMaterial
 }
 
 func (b *recordingExactKeyBuilder) BuildExactKey(ctx context.Context, material cachekey.KeyMaterial) (string, error) {
 	b.calls++
+	b.material = material
 	if b.err != nil {
 		return "", b.err
 	}
@@ -2108,6 +2894,18 @@ func (p *fakeGatewayPipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 	return p.err
 }
 
+type handlerBudgetChecker struct {
+	decision budget.Decision
+	err      error
+}
+
+func (c handlerBudgetChecker) Check(_ context.Context, req budget.Request) (budget.Decision, error) {
+	decision := c.decision
+	decision.Scope = req.Scope
+	decision.Policy = req.Policy
+	return decision, c.err
+}
+
 func withTestAuth(handler *ChatCompletionsHandler) {
 	store := newTestCredentialStore()
 	handler.APIKeyAuthenticator = store
@@ -2141,9 +2939,39 @@ func setValidGatewayAuthHeaders(req *http.Request) {
 	req.Header.Set("X-GateLM-App-Token", testAppToken)
 }
 
+func writeTestJSON(t *testing.T, w http.ResponseWriter, status int, payload any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		t.Fatalf("encode test json: %v", err)
+	}
+}
+
 func chatCompletionBody(prompt string) string {
+	return chatCompletionBodyWithModel("mock-balanced", prompt)
+}
+
+func chatCompletionStreamBody(prompt string) string {
 	body, err := json.Marshal(provider.ChatCompletionRequest{
 		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral(prompt)),
+			},
+		},
+		Stream: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(body)
+}
+
+func chatCompletionBodyWithModel(model string, prompt string) string {
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: model,
 		Messages: []provider.ChatMessage{
 			{
 				Role:    "user",
@@ -2155,6 +2983,136 @@ func chatCompletionBody(prompt string) string {
 		panic(err)
 	}
 	return string(body)
+}
+
+func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
+	return map[string]any{
+		"runtimeSnapshotId":      "runtime_snapshot_live_handler_test",
+		"runtimeSnapshotVersion": 1,
+		"contentHash":            "hash_runtime_snapshot_live_handler",
+		"runtimeState":           runtimeconfig.RuntimeStateSnapshotActive,
+		"publishedAt":            "2026-06-30T00:00:00Z",
+		"publishedBy":            "control_plane_test",
+		"gatewayInstanceId":      "gateway_core_test",
+		"lookupKey": map[string]any{
+			"tenantId":      testTenantID,
+			"projectId":     testProjectID,
+			"applicationId": testAppID,
+		},
+		"budgetResolution": map[string]any{
+			"budgetScopeType":         "application",
+			"budgetScopeId":           testAppID,
+			"resolvedBy":              "default_application",
+			"warningThresholdPercent": 80,
+		},
+		"providerCatalogRef": map[string]any{
+			"catalogId":      ref.CatalogID,
+			"catalogVersion": ref.CatalogVersion,
+			"contentHash":    ref.ContentHash,
+		},
+		"policies": map[string]any{
+			"safety": map[string]any{
+				"enabled":             true,
+				"mode":                "enforce",
+				"requestSideRequired": true,
+				"policyHash":          "hash_security_policy_live_handler",
+			},
+			"routing": map[string]any{
+				"autoModelEnabled":      true,
+				"defaultRequestedModel": "auto",
+				"defaultProvider":       "openai-main",
+				"defaultModel":          "model_low",
+				"routingPolicyHash":     "hash_routing_policy_live_handler",
+			},
+			"cache": map[string]any{
+				"exactCacheEnabled": true,
+				"semanticCacheMode": "evidence_only",
+				"cachePolicyHash":   "hash_cache_policy_live_handler",
+			},
+			"rateLimit": map[string]any{
+				"enabled":       false,
+				"scope":         "application",
+				"windowSeconds": 60,
+				"limit":         60,
+			},
+			"budget": map[string]any{
+				"enabled":                 false,
+				"enforcementMode":         "disabled",
+				"warningThresholdPercent": 80,
+			},
+			"fallback": map[string]any{
+				"enabled":          true,
+				"fallbackProvider": "mock-fallback",
+				"fallbackModel":    "model_mock_fallback",
+			},
+			"streaming": map[string]any{
+				"enabled":       false,
+				"thinSliceOnly": true,
+			},
+		},
+		"legacyHashes": map[string]any{
+			"configHash":         "hash_runtime_snapshot_live_handler",
+			"securityPolicyHash": "hash_security_policy_live_handler",
+			"routingPolicyHash":  "hash_routing_policy_live_handler",
+		},
+	}
+}
+
+func liveProviderCatalogPayload(catalog providercatalog.Catalog) map[string]any {
+	providers := make([]map[string]any, 0, len(catalog.Providers))
+	for _, provider := range catalog.Providers {
+		models := make([]map[string]any, 0, len(provider.Models))
+		for _, model := range provider.Models {
+			models = append(models, map[string]any{
+				"modelId":     model.ModelID,
+				"modelName":   model.ModelName,
+				"displayName": model.DisplayName,
+				"enabled":     model.Enabled,
+				"capabilities": map[string]any{
+					"streamingSupported": model.Capabilities.StreamingSupported,
+					"supportsJsonMode":   model.Capabilities.SupportsJSONMode,
+					"maxInputTokens":     model.Capabilities.MaxInputTokens,
+					"maxOutputTokens":    model.Capabilities.MaxOutputTokens,
+				},
+				"routing": map[string]any{
+					"autoRoutingEligible": model.Routing.AutoRoutingEligible,
+					"costTier":            model.Routing.CostTier,
+					"fallbackPriority":    model.Routing.FallbackPriority,
+				},
+			})
+		}
+		var credentialRef any
+		if provider.CredentialRef != nil {
+			credentialRef = map[string]any{
+				"credentialRefId":   provider.CredentialRef.CredentialRefID,
+				"credentialVersion": provider.CredentialRef.CredentialVersion,
+				"credentialState":   provider.CredentialRef.CredentialState,
+			}
+		}
+		providers = append(providers, map[string]any{
+			"providerId":         provider.ProviderID,
+			"providerName":       provider.ProviderName,
+			"adapterType":        provider.AdapterType,
+			"enabled":            provider.Enabled,
+			"baseUrl":            provider.BaseURL,
+			"timeoutMs":          provider.TimeoutMs,
+			"credentialRequired": provider.CredentialRequired,
+			"credentialRef":      credentialRef,
+			"adapterConfig": map[string]any{
+				"requestFormat": provider.AdapterConfig.RequestFormat,
+				"apiVersion":    provider.AdapterConfig.APIVersion,
+			},
+			"fallbackEligible": provider.FallbackEligible,
+			"models":           models,
+		})
+	}
+	return map[string]any{
+		"catalogId":      catalog.CatalogID,
+		"catalogVersion": catalog.CatalogVersion,
+		"contentHash":    catalog.ContentHash,
+		"updatedAt":      "2026-06-30T00:00:00Z",
+		"providers":      providers,
+	}
 }
 
 func jsonStringLiteral(value string) string {
@@ -2186,6 +3144,33 @@ func decodeChatCompletionResponse(t *testing.T, rr *httptest.ResponseRecorder) p
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp
+}
+
+func streamedAssistantContent(t *testing.T, body string) string {
+	t.Helper()
+
+	var content strings.Builder
+	for _, line := range strings.Split(body, "\n") {
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok || data == "" || data == "[DONE]" {
+			continue
+		}
+
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			t.Fatalf("decode streaming chunk %q: %v", data, err)
+		}
+		for _, choice := range chunk.Choices {
+			content.WriteString(choice.Delta.Content)
+		}
+	}
+	return content.String()
 }
 
 func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder, resp provider.ChatCompletionResponse) {
@@ -2222,6 +3207,13 @@ func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.
 	if logged.PromptTokens != resp.Usage.PromptTokens || logged.CompletionTokens != resp.Usage.CompletionTokens || logged.TotalTokens != resp.Usage.TotalTokens {
 		t.Fatalf("usage mismatch: log=%+v response=%+v", logged, resp.Usage)
 	}
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func assertTerminalLogMatchesBlockedResponse(t *testing.T, logged invocationlog.TerminalLog, rr *httptest.ResponseRecorder) {

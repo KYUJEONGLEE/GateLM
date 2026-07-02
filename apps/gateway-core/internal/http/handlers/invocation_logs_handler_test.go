@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
@@ -88,6 +89,26 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("response must not include forbidden field %q: %s", forbidden, body)
 		}
+	}
+}
+
+func TestProjectLogsHandlerUsesTenantQueryOverride(t *testing.T) {
+	reader := &recordingProjectLogsReader{}
+	handler := ProjectLogsHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_live/logs?tenantId=tenant_live&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	req.SetPathValue("projectId", "project_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" {
+		t.Fatalf("expected query tenant and path project scope, got %+v", reader.filter)
 	}
 }
 
@@ -256,6 +277,20 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				MaskingDetectedCount:  1,
 				RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
 			},
+			RuntimeSnapshot: &runtimeconfig.RuntimeSnapshotProvenance{
+				RuntimeSnapshotID:      "runtime_snapshot_detail_test",
+				RuntimeSnapshotVersion: 2,
+				ContentHash:            "content_hash_detail_test",
+				RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+				PublishedAt:            completedAt.Add(-time.Second),
+				PublishedBy:            "runtime_config_compat",
+				GatewayInstanceID:      "gateway_detail_test",
+				LegacyHashes: runtimeconfig.LegacyHashes{
+					ConfigHash:         "config_hash_detail_test",
+					SecurityPolicyHash: "security_hash_detail_test",
+					RoutingPolicyHash:  "route_hash_detail_test",
+				},
+			},
 			Error:       invocationlog.ErrorFields{},
 			CreatedAt:   completedAt.Add(-132 * time.Millisecond),
 			CompletedAt: &completedAt,
@@ -293,6 +328,14 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)
 	}
+	if response.Data.RuntimeSnapshot == nil ||
+		response.Data.RuntimeSnapshot.RuntimeSnapshotID != "runtime_snapshot_detail_test" ||
+		response.Data.RuntimeSnapshot.RuntimeSnapshotVersion != 2 ||
+		response.Data.RuntimeSnapshot.RuntimeState != runtimeconfig.RuntimeStateSnapshotActive ||
+		response.Data.RuntimeSnapshot.LegacyHashes == nil ||
+		response.Data.RuntimeSnapshot.LegacyHashes.RoutingPolicyHash != "route_hash_detail_test" {
+		t.Fatalf("unexpected runtime snapshot response: %+v", response.Data.RuntimeSnapshot)
+	}
 
 	for _, forbidden := range []string{
 		"rawPrompt",
@@ -306,6 +349,36 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("response must not include forbidden field %q: %s", forbidden, body)
 		}
+	}
+}
+
+func TestRequestDetailHandlerUsesTenantProjectQueryOverride(t *testing.T) {
+	reader := &recordingRequestDetailReader{
+		detail: invocationlog.RequestDetail{
+			RequestID:  "request_live",
+			TenantID:   "tenant_live",
+			ProjectID:  "project_live",
+			Status:     invocationlog.StatusSuccess,
+			HTTPStatus: http.StatusOK,
+			Masking:    invocationlog.MaskingFields{MaskingAction: "none"},
+		},
+	}
+	handler := RequestDetailHandler{
+		Reader:    reader,
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/llm-requests/request_live?tenantId=tenant_live&projectId=project_live", nil)
+	req.SetPathValue("requestId", "request_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" || reader.filter.RequestID != "request_live" {
+		t.Fatalf("expected query tenant/project and path request scope, got %+v", reader.filter)
 	}
 }
 
@@ -372,17 +445,60 @@ func TestRequestDetailHandlerMapsUnexpectedReaderErrorToInternalError(t *testing
 func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t *testing.T) {
 	cacheHitRate := 0.25
 	averageLatency := 50.0
+	p95Latency := 100.0
+	lastLogCreatedAt := time.Date(2026, 6, 25, 0, 30, 0, 0, time.UTC)
+	generatedAt := time.Date(2026, 6, 25, 0, 31, 0, 0, time.UTC)
 	reader := &recordingDashboardOverviewReader{
 		overview: invocationlog.DashboardOverviewFields{
-			TotalRequests:         4,
+			TotalRequests:         6,
 			SuccessfulRequests:    2,
+			FailedRequests:        1,
 			BlockedRequests:       1,
+			RateLimitedRequests:   1,
 			CacheHitRequests:      1,
+			CacheEligibleRequests: 4,
 			CacheHitRate:          &cacheHitRate,
-			TotalTokens:           56,
-			TotalCostMicroUSD:     1,
-			TotalCostUSD:          "0.000001",
+			PromptTokens:          78,
+			CompletionTokens:      115,
+			TotalTokens:           193,
+			TotalCostMicroUSD:     256,
+			TotalCostUSD:          "0.000256",
+			SavedCostMicroUSD:     120,
+			SavedCostUSD:          "0.000120",
+			AverageLatencyMs:      &averageLatency,
+			P95LatencyMs:          &p95Latency,
 			AverageResponseTimeMs: &averageLatency,
+			MaskingActionCounts: map[string]int64{
+				"none":     4,
+				"redacted": 1,
+				"blocked":  1,
+			},
+			RoutingCountByModel: []invocationlog.RoutingCountByModel{{
+				SelectedProvider: "mock",
+				SelectedModel:    "mock-fast",
+				RoutingReason:    "short_prompt_low_cost",
+				RequestCount:     3,
+			}},
+			StatusCounts: map[string]int64{
+				invocationlog.StatusSuccess:     3,
+				invocationlog.StatusBlocked:     1,
+				invocationlog.StatusRateLimited: 1,
+				invocationlog.StatusFailed:      1,
+			},
+			CostByModel: []invocationlog.CostByModel{{
+				SelectedProvider: "mock",
+				SelectedModel:    "mock-fast",
+				RequestCount:     3,
+				TotalTokens:      193,
+				CostMicroUSD:     256,
+				CostUSD:          "0.000256",
+			}},
+			DataFreshness: invocationlog.DashboardDataFreshness{
+				Source:           "postgresql_request_log",
+				RecordCount:      6,
+				LastLogCreatedAt: &lastLogCreatedAt,
+				GeneratedAt:      generatedAt,
+			},
 		},
 	}
 	handler := DashboardOverviewHandler{
@@ -406,11 +522,32 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	if err := json.NewDecoder(strings.NewReader(body)).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Data.Totals.TotalRequests != 4 || response.Data.Totals.SuccessfulRequests != 2 || response.Data.Totals.BlockedRequests != 1 {
+	if response.Data.Totals.TotalRequests != 6 || response.Data.Totals.SuccessfulRequests != 2 || response.Data.Totals.FailedRequests != 1 || response.Data.Totals.BlockedRequests != 1 || response.Data.Totals.RateLimitedRequests != 1 {
 		t.Fatalf("unexpected dashboard totals: %+v", response.Data.Totals)
 	}
-	if response.Data.Totals.CacheHitRate == nil || *response.Data.Totals.CacheHitRate != 0.25 {
+	if response.Data.Totals.CacheEligibleRequests != 4 || response.Data.Totals.CacheHitRate == nil || *response.Data.Totals.CacheHitRate != 0.25 {
 		t.Fatalf("unexpected cache hit rate: %+v", response.Data.Totals.CacheHitRate)
+	}
+	if response.Data.Totals.PromptTokens != 78 || response.Data.Totals.CompletionTokens != 115 || response.Data.Totals.TotalTokens != 193 || response.Data.Totals.TotalCostUSD != "0.000256" || response.Data.Totals.SavedCostUSD != "0.000120" {
+		t.Fatalf("unexpected token/cost totals: %+v", response.Data.Totals)
+	}
+	if response.Data.Totals.AverageLatencyMs == nil || *response.Data.Totals.AverageLatencyMs != 50 || response.Data.Totals.P95LatencyMs == nil || *response.Data.Totals.P95LatencyMs != 100 {
+		t.Fatalf("unexpected latency totals: %+v", response.Data.Totals)
+	}
+	if response.Data.Totals.AverageResponseTimeMs == nil || *response.Data.Totals.AverageResponseTimeMs != 50 {
+		t.Fatalf("expected average response time compatibility field, got %+v", response.Data.Totals.AverageResponseTimeMs)
+	}
+	if response.Data.Totals.StatusCounts[invocationlog.StatusRateLimited] != 1 || response.Data.Totals.MaskingActionCounts["blocked"] != 1 {
+		t.Fatalf("unexpected rollup counts: status=%+v masking=%+v", response.Data.Totals.StatusCounts, response.Data.Totals.MaskingActionCounts)
+	}
+	if len(response.Data.Totals.RoutingCountByModel) != 1 || response.Data.Totals.RoutingCountByModel[0].SelectedModel != "mock-fast" {
+		t.Fatalf("unexpected routing count by model: %+v", response.Data.Totals.RoutingCountByModel)
+	}
+	if len(response.Data.Totals.CostByModel) != 1 || response.Data.Totals.CostByModel[0].CostUSD != "0.000256" {
+		t.Fatalf("unexpected cost by model: %+v", response.Data.Totals.CostByModel)
+	}
+	if response.Data.DataFreshness.Source != "postgresql_request_log" || response.Data.DataFreshness.RecordCount != 6 || response.Data.DataFreshness.LastLogCreatedAt == nil || !response.Data.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || !response.Data.DataFreshness.GeneratedAt.Equal(generatedAt) {
+		t.Fatalf("unexpected data freshness: %+v", response.Data.DataFreshness)
 	}
 	if response.Data.Filter.ProjectID == nil || *response.Data.Filter.ProjectID != "project_demo" {
 		t.Fatalf("unexpected dashboard filter: %+v", response.Data.Filter)
@@ -429,6 +566,25 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("response must not include forbidden field %q: %s", forbidden, body)
 		}
+	}
+}
+
+func TestDashboardOverviewHandlerUsesTenantQueryOverride(t *testing.T) {
+	reader := &recordingDashboardOverviewReader{}
+	handler := DashboardOverviewHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/overview?tenantId=tenant_live&projectId=project_live&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_live" || reader.filter.ProjectID != "project_live" {
+		t.Fatalf("expected query tenant/project dashboard scope, got %+v", reader.filter)
 	}
 }
 

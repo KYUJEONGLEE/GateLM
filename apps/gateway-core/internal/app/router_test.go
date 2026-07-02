@@ -15,6 +15,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
 
@@ -74,7 +75,7 @@ func TestNewRouterWiresAuthBeforeProviderCall(t *testing.T) {
 		t.Fatalf("expected one auth failure log, got %d", len(authFailureWriter.logs))
 	}
 	authFailureLog := authFailureWriter.logs[0]
-	if authFailureLog.RequestID == "" || authFailureLog.Status != invocationlog.StatusError || authFailureLog.HTTPStatus != http.StatusUnauthorized {
+	if authFailureLog.RequestID == "" || authFailureLog.Status != invocationlog.StatusBlocked || authFailureLog.HTTPStatus != http.StatusUnauthorized {
 		t.Fatalf("unexpected auth failure log: %+v", authFailureLog)
 	}
 	if authFailureLog.ErrorCode != invocationlog.ErrorCodeInvalidAPIKey || authFailureLog.ErrorStage != invocationlog.StageAuthenticateAPIKey {
@@ -268,7 +269,7 @@ func TestNewRouterPersistsInvalidAuthThroughPostgresWriter(t *testing.T) {
 	if len(logDB.args) != 36 {
 		t.Fatalf("expected 36 insert args, got %d", len(logDB.args))
 	}
-	if logDB.args[21] != invocationlog.StatusError || logDB.args[22] != http.StatusUnauthorized || logDB.args[23] != invocationlog.ErrorCodeInvalidAPIKey {
+	if logDB.args[21] != invocationlog.StatusBlocked || logDB.args[22] != http.StatusUnauthorized || logDB.args[23] != invocationlog.ErrorCodeInvalidAPIKey {
 		t.Fatalf("unexpected status/http/error args: %+v", logDB.args[21:24])
 	}
 	if logDB.args[26] != invocationlog.CacheStatusBypass || logDB.args[27] != invocationlog.CacheTypeNone {
@@ -460,6 +461,30 @@ func TestNewRouterWiresDashboardOverviewWithDemoTenantScope(t *testing.T) {
 	}
 	if strings.Contains(rr.Body.String(), "rawPrompt") || strings.Contains(rr.Body.String(), "redactedPromptPreview") {
 		t.Fatalf("dashboard response must not include request payload fields: %s", rr.Body.String())
+	}
+}
+
+func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
+	registry := metrics.NewRegistry()
+	registry.MaskingAction("none")
+	router := NewRouter(config.Config{
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithMetrics(registry))
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("Content-Type"); got != metrics.PrometheusTextContentType {
+		t.Fatalf("unexpected content type: %q", got)
+	}
+	if !strings.Contains(rr.Body.String(), `gatelm_masking_actions_total{masking_action="none"} 1`) {
+		t.Fatalf("expected router to expose injected registry metrics, got:\n%s", rr.Body.String())
 	}
 }
 

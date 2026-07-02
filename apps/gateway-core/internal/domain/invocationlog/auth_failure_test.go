@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestBuildAuthFailureLogUsesP0ErrorDefaults(t *testing.T) {
+func TestBuildAuthFailureLogUsesBlockedDefaults(t *testing.T) {
 	startedAt := time.Date(2026, 6, 25, 1, 2, 3, 0, time.UTC)
 	completedAt := startedAt.Add(24 * time.Millisecond)
 
@@ -21,8 +21,8 @@ func TestBuildAuthFailureLogUsesP0ErrorDefaults(t *testing.T) {
 	if log.RequestID != "request_auth_failure" || log.TraceID != "request_auth_failure" {
 		t.Fatalf("expected request/trace id defaults, got %q/%q", log.RequestID, log.TraceID)
 	}
-	if log.Status != StatusError || log.HTTPStatus != 401 {
-		t.Fatalf("expected error/401, got %s/%d", log.Status, log.HTTPStatus)
+	if log.Status != StatusBlocked || log.HTTPStatus != 401 {
+		t.Fatalf("expected blocked/401, got %s/%d", log.Status, log.HTTPStatus)
 	}
 	if log.ErrorStage != StageAuthenticateAPIKey {
 		t.Fatalf("expected auth stage %q, got %q", StageAuthenticateAPIKey, log.ErrorStage)
@@ -41,6 +41,11 @@ func TestBuildAuthFailureLogUsesP0ErrorDefaults(t *testing.T) {
 	}
 	if log.Source != SourceCustomerApp {
 		t.Fatalf("expected default source %q, got %q", SourceCustomerApp, log.Source)
+	}
+	if log.DomainOutcomes.Auth.Outcome != "invalid_api_key" ||
+		log.DomainOutcomes.Provider.Outcome != "not_called" ||
+		log.DomainOutcomes.Cache.Outcome != "bypassed" {
+		t.Fatalf("unexpected auth failure domain outcomes: %+v", log.DomainOutcomes)
 	}
 }
 

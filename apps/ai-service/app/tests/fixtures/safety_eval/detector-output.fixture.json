@@ -1,0 +1,515 @@
+{
+  "fixtureName": "v1-safety-eval-detector-output-pass",
+  "fixtureVersion": "2026-06-27.v1",
+  "mode": "detector_output",
+  "results": [
+    {
+      "caseId": "safe_none_basic",
+      "actualSafetyDecision": {
+        "action": "none",
+        "detectedTypes": [],
+        "detectedTypeCounts": {},
+        "detectedCount": 0,
+        "redactedPromptPreview": "Write a short refund reply for the demo customer.",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "email_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "email"
+        ],
+        "detectedTypeCounts": {
+          "email": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "repeated_email_redacts_count",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "email"
+        ],
+        "detectedTypeCounts": {
+          "email": 2
+        },
+        "detectedCount": 2,
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED] and cc [EMAIL_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "phone_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "phone_number"
+        ],
+        "detectedTypeCounts": {
+          "phone_number": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Draft a callback note for [PHONE_NUMBER_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "rrn_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "resident_registration_number"
+        ],
+        "detectedTypeCounts": {
+          "resident_registration_number": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Check this national registration number [RESIDENT_REGISTRATION_NUMBER_REDACTED] for the request.",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "api_key_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "api_key"
+        ],
+        "detectedTypeCounts": {
+          "api_key": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Debug this config line: api_key=[API_KEY_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "authorization_header_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "authorization_header"
+        ],
+        "detectedTypeCounts": {
+          "authorization_header": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Summarize the pasted header [AUTHORIZATION_HEADER_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "jwt_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "jwt"
+        ],
+        "detectedTypeCounts": {
+          "jwt": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Explain whether this token is safe to share: [JWT_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "private_key_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "private_key"
+        ],
+        "detectedTypeCounts": {
+          "private_key": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review this local key material: [SECRET_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "secret_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "secret"
+        ],
+        "detectedTypeCounts": {
+          "secret": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review secret-like value [SECRET_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "postal_address_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "postal_address"
+        ],
+        "detectedTypeCounts": {
+          "postal_address": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Prepare a delivery note for address [ADDRESS_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "date_of_birth_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "date_of_birth"
+        ],
+        "detectedTypeCounts": {
+          "date_of_birth": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Summarize the profile with date of birth [DATE_OF_BIRTH_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "private_date_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "private_date"
+        ],
+        "detectedTypeCounts": {
+          "private_date": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Summarize private date [PRIVATE_DATE_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "private_url_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "private_url"
+        ],
+        "detectedTypeCounts": {
+          "private_url": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review private URL [PRIVATE_URL_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "person_name_redacts_label_based",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "person_name"
+        ],
+        "detectedTypeCounts": {
+          "person_name": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Draft a reply for customer name [PERSON_NAME_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "customer_id_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "customer_id"
+        ],
+        "detectedTypeCounts": {
+          "customer_id": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Lookup support context for customer id [CUSTOMER_ID_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "employee_id_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "employee_id"
+        ],
+        "detectedTypeCounts": {
+          "employee_id": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Route the internal request for employee id [EMPLOYEE_ID_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "account_id_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "account_id"
+        ],
+        "detectedTypeCounts": {
+          "account_id": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Summarize account context for account id [ACCOUNT_ID_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "account_number_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "account_number"
+        ],
+        "detectedTypeCounts": {
+          "account_number": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review account number [ACCOUNT_NUMBER_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "ip_address_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": [
+          "ip_address"
+        ],
+        "detectedTypeCounts": {
+          "ip_address": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review the login event from IP [IP_ADDRESS_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "provider_api_key_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "provider_api_key"
+        ],
+        "detectedTypeCounts": {
+          "provider_api_key": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review the pasted provider key [PROVIDER_API_KEY_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "cloud_access_key_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "cloud_access_key"
+        ],
+        "detectedTypeCounts": {
+          "cloud_access_key": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review the cloud access key [CLOUD_ACCESS_KEY_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "github_token_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "github_token"
+        ],
+        "detectedTypeCounts": {
+          "github_token": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Check whether this GitHub token is safe to share: [GITHUB_TOKEN_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "slack_token_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "slack_token"
+        ],
+        "detectedTypeCounts": {
+          "slack_token": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Check whether this Slack token is safe to share: [SLACK_TOKEN_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "database_url_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "database_url"
+        ],
+        "detectedTypeCounts": {
+          "database_url": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review this database URL: [DATABASE_URL_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "webhook_url_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "webhook_url"
+        ],
+        "detectedTypeCounts": {
+          "webhook_url": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review this webhook URL: [WEBHOOK_URL_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "password_assignment_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "password_assignment"
+        ],
+        "detectedTypeCounts": {
+          "password_assignment": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Debug this password assignment: password=[PASSWORD_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "session_cookie_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "session_cookie"
+        ],
+        "detectedTypeCounts": {
+          "session_cookie": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review this session cookie header: [SESSION_COOKIE_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "credit_card_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "credit_card"
+        ],
+        "detectedTypeCounts": {
+          "credit_card": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Validate the payment note containing card [CREDIT_CARD_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "bank_account_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "bank_account"
+        ],
+        "detectedTypeCounts": {
+          "bank_account": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review the payout account number [BANK_ACCOUNT_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "passport_number_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "passport_number"
+        ],
+        "detectedTypeCounts": {
+          "passport_number": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review the passport number [PASSPORT_NUMBER_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "driver_license_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "blocked",
+        "detectedTypes": [
+          "driver_license"
+        ],
+        "detectedTypeCounts": {
+          "driver_license": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Review the driver license number [DRIVER_LICENSE_REDACTED].",
+        "blockReason": "sensitive_data_blocked",
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    }
+  ]
+}

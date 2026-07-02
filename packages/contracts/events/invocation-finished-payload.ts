@@ -2,9 +2,9 @@ export const INVOCATION_SCHEMA_VERSION = 1;
 
 export type InvocationStatus =
   | "success"
-  | "cache_hit"
   | "blocked"
-  | "error"
+  | "rate_limited"
+  | "failed"
   | "cancelled";
 
 export type InvocationEventType =
@@ -27,9 +27,9 @@ export const STATUS_TO_EVENT_TYPE: Record<
   InvocationEventType
 > = {
   success: "invocation.completed",
-  cache_hit: "invocation.completed",
   blocked: "invocation.blocked",
-  error: "invocation.failed",
+  rate_limited: "invocation.failed",
+  failed: "invocation.failed",
   cancelled: "invocation.cancelled",
 };
 

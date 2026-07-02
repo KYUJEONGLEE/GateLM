@@ -1,0 +1,11 @@
+{
+  "fixtureName": "v2-semantic-cache-evidence-only",
+  "fixtureVersion": "2026-06-30.v2",
+  "mode": "semantic_cache_evidence_v2",
+  "evidence": {
+    "evidenceOnly": true,
+    "normalizedRedactedPromptOnly": true,
+    "candidateCount": 4,
+    "wouldHaveMatchedCount": 1
+  }
+}

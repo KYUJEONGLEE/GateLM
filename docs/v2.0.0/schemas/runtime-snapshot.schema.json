@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/v2.0.0/runtime-snapshot.schema.json",
+  "title": "GateLM v2.0.0 RuntimeSnapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "runtimeSnapshotId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Immutable published RuntimeSnapshot identifier. This value is not a credential or secret."
+    },
+    "runtimeSnapshotVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic published RuntimeSnapshot version for the tenant/project/application lookup key."
+    },
+    "contentHash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Sanitized snapshot content fingerprint. It must not expose raw policy body, prompt, response, credential, or secret material."
+    },
+    "runtimeState": {
+      "type": "string",
+      "enum": [
+        "snapshot_active",
+        "last_known_safe_used",
+        "stale_snapshot_used"
+      ],
+      "description": "provenance value for the Gateway runtime state observed with this snapshot. last_known_safe_used and stale_snapshot_used are Gateway runtime states, not mutable snapshot statuses."
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the validated snapshot was published."
+    },
+    "publishedBy": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Sanitized operator or system actor identifier. It must not contain credentials, tokens, or personal data."
+    },
+    "gatewayInstanceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "request/detail provenance field for the Gateway instance that loaded or used the snapshot."
+    },
+    "lookupKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Active RuntimeSnapshot lookup key. budgetScopeType and budgetScopeId are intentionally not part of this key.",
+      "properties": {
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "applicationId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "tenantId",
+        "projectId",
+        "applicationId"
+      ]
+    },
+    "budgetResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Resolved budget scope consumed by Gateway. Client-provided budget scope must not be trusted.",
+      "properties": {
+        "budgetScopeType": {
+          "type": "string",
+          "enum": [
+            "application",
+            "project",
+            "team"
+          ]
+        },
+        "budgetScopeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope. default_application means the v2.0.0 application/applicationId default was applied."
+        },
+        "warningThresholdPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Admin/operator warning threshold. User-facing exposure is outside this schema."
+        }
+      },
+      "required": [
+        "budgetScopeType",
+        "budgetScopeId",
+        "resolvedBy",
+        "warningThresholdPercent"
+      ]
+    },
+    "providerCatalogRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reference to the Provider/Model catalog snapshot consumed by Gateway. It must not include provider keys or secret plaintext.",
+      "properties": {
+        "catalogId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "catalogVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "contentHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "catalogId",
+        "catalogVersion",
+        "contentHash"
+      ]
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Gateway-consumable runtime policy summary. This schema intentionally avoids raw prompt, response, credential, or secret material.",
+      "properties": {
+        "safety": {
+          "$ref": "#/$defs/safetyPolicy"
+        },
+        "routing": {
+          "$ref": "#/$defs/routingPolicy"
+        },
+        "cache": {
+          "$ref": "#/$defs/cachePolicy"
+        },
+        "rateLimit": {
+          "$ref": "#/$defs/rateLimitPolicy"
+        },
+        "budget": {
+          "$ref": "#/$defs/budgetPolicy"
+        },
+        "fallback": {
+          "$ref": "#/$defs/fallbackPolicy"
+        },
+        "streaming": {
+          "$ref": "#/$defs/streamingPolicy"
+        }
+      },
+      "required": [
+        "safety",
+        "routing",
+        "cache",
+        "rateLimit",
+        "budget",
+        "fallback",
+        "streaming"
+      ]
+    },
+    "legacyHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "v1 hash lineage kept for P0 legacy field cleanup alignment. Values are fingerprints only and must not reveal raw policy content.",
+      "properties": {
+        "configHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "securityPolicyHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "routingPolicyHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "configHash",
+        "securityPolicyHash",
+        "routingPolicyHash"
+      ]
+    }
+  },
+  "required": [
+    "runtimeSnapshotId",
+    "runtimeSnapshotVersion",
+    "contentHash",
+    "runtimeState",
+    "publishedAt",
+    "publishedBy",
+    "gatewayInstanceId",
+    "lookupKey",
+    "budgetResolution",
+    "providerCatalogRef",
+    "policies",
+    "legacyHashes"
+  ],
+  "$defs": {
+    "safetyPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "enforce",
+            "disabled"
+          ]
+        },
+        "requestSideRequired": {
+          "type": "boolean",
+          "description": "When true, request-side safety must finish before cache, routing, provider call, or streaming start."
+        },
+        "policyHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detectorSet": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "detectorType": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Sanitized detector category label. It must not contain raw detected values or prompt fragments."
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "redact",
+                  "block"
+                ]
+              }
+            },
+            "required": [
+              "detectorType",
+              "action"
+            ]
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "mode",
+        "requestSideRequired",
+        "policyHash"
+      ]
+    },
+    "routingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "autoModelEnabled": {
+          "type": "boolean"
+        },
+        "defaultRequestedModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Example: auto. Provider and model names must remain data, not enums."
+        },
+        "defaultProvider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "defaultModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "routingPolicyHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "autoModelEnabled",
+        "defaultRequestedModel",
+        "defaultProvider",
+        "defaultModel",
+        "routingPolicyHash"
+      ]
+    },
+    "cachePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exactCacheEnabled": {
+          "type": "boolean"
+        },
+        "semanticCacheMode": {
+          "type": "string",
+          "enum": [
+            "evidence_only",
+            "disabled"
+          ],
+          "description": "Semantic Cache is not a v2.0.0 live response path."
+        },
+        "cachePolicyHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "exactCacheEnabled",
+        "semanticCacheMode",
+        "cachePolicyHash"
+      ]
+    },
+    "rateLimitPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "application"
+          ],
+          "description": "v2.0.0 keeps the v1 application-scoped rate limit baseline."
+        },
+        "windowSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "enabled",
+        "scope"
+      ]
+    },
+    "budgetPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "enforcementMode": {
+          "type": "string",
+          "enum": [
+            "warn",
+            "block",
+            "disabled"
+          ]
+        },
+        "warningThresholdPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "enabled",
+        "enforcementMode",
+        "warningThresholdPercent"
+      ]
+    },
+    "fallbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "fallbackProvider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fallbackModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "provider_timeout",
+              "provider_error"
+            ]
+          }
+        }
+      },
+      "required": [
+        "enabled"
+      ]
+    },
+    "streamingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "thinSliceOnly": {
+          "type": "boolean",
+          "const": true,
+          "description": "v2.0.0 streaming is limited to a thin slice. Token-level logging and response-side safety scan are not core scope."
+        }
+      },
+      "required": [
+        "enabled",
+        "thinSliceOnly"
+      ]
+    }
+  }
+}

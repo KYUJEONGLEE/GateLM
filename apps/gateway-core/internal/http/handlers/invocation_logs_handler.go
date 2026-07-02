@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
@@ -70,9 +73,22 @@ type dashboardOverviewResponse struct {
 }
 
 type dashboardOverviewDataResponse struct {
-	Range  dashboardRangeResponse  `json:"range"`
-	Filter dashboardFilterResponse `json:"filters"`
-	Totals dashboardTotalsResponse `json:"totals"`
+	GeneratedAt   time.Time                      `json:"generatedAt"`
+	TimeRange     dashboardTimeRangeResponse     `json:"timeRange"`
+	Freshness     dashboardFreshnessResponse     `json:"freshness"`
+	QueryBudget   dashboardQueryBudgetResponse   `json:"queryBudget"`
+	Breakdowns    dashboardBreakdownsResponse    `json:"breakdowns"`
+	Performance   dashboardPerformanceResponse   `json:"performance"`
+	Range         dashboardRangeResponse         `json:"range"`
+	Filter        dashboardFilterResponse        `json:"filters"`
+	Totals        dashboardTotalsResponse        `json:"totals"`
+	DataFreshness dashboardDataFreshnessResponse `json:"dataFreshness"`
+}
+
+type dashboardTimeRangeResponse struct {
+	From        time.Time `json:"from"`
+	To          time.Time `json:"to"`
+	Granularity string    `json:"granularity"`
 }
 
 type dashboardRangeResponse struct {
@@ -81,49 +97,209 @@ type dashboardRangeResponse struct {
 }
 
 type dashboardFilterResponse struct {
-	TenantID  string  `json:"tenantId"`
-	ProjectID *string `json:"projectId"`
+	TenantID        string  `json:"tenantId"`
+	ProjectID       *string `json:"projectId"`
+	BudgetScopeType *string `json:"budgetScopeType"`
+	BudgetScopeID   *string `json:"budgetScopeId"`
+	ResolvedBy      *string `json:"resolvedBy"`
 }
 
 type dashboardTotalsResponse struct {
-	TotalRequests         int64    `json:"totalRequests"`
-	SuccessfulRequests    int64    `json:"successfulRequests"`
-	BlockedRequests       int64    `json:"blockedRequests"`
-	CacheHitRequests      int64    `json:"cacheHitRequests"`
-	CacheHitRate          *float64 `json:"cacheHitRate"`
-	TotalTokens           int64    `json:"totalTokens"`
-	TotalCostMicroUSD     int64    `json:"totalCostMicroUsd"`
-	TotalCostUSD          string   `json:"totalCostUsd"`
-	AverageResponseTimeMs *float64 `json:"averageResponseTimeMs"`
+	TotalRequests         int64                          `json:"totalRequests"`
+	SuccessfulRequests    int64                          `json:"successfulRequests"`
+	FailedRequests        int64                          `json:"failedRequests"`
+	BlockedRequests       int64                          `json:"blockedRequests"`
+	RateLimitedRequests   int64                          `json:"rateLimitedRequests"`
+	CancelledRequests     int64                          `json:"cancelledRequests"`
+	CacheHitRequests      int64                          `json:"cacheHitRequests"`
+	CacheEligibleRequests int64                          `json:"cacheEligibleRequests"`
+	CacheHitRate          *float64                       `json:"cacheHitRate"`
+	ExactCacheHitRate     *float64                       `json:"exactCacheHitRate"`
+	FallbackSuccessCount  int64                          `json:"fallbackSuccessCount"`
+	PromptTokens          int64                          `json:"promptTokens"`
+	CompletionTokens      int64                          `json:"completionTokens"`
+	TotalTokens           int64                          `json:"totalTokens"`
+	TotalCostMicroUSD     int64                          `json:"totalCostMicroUsd"`
+	TotalCostUSD          string                         `json:"totalCostUsd"`
+	SavedCostMicroUSD     int64                          `json:"savedCostMicroUsd"`
+	SavedCostUSD          string                         `json:"savedCostUsd"`
+	AverageLatencyMs      *float64                       `json:"averageLatencyMs"`
+	P95LatencyMs          *float64                       `json:"p95LatencyMs"`
+	AverageResponseTimeMs *float64                       `json:"averageResponseTimeMs"`
+	MaskingActionCounts   map[string]int64               `json:"maskingActionCounts"`
+	RoutingCountByModel   []routingCountByModelResponse  `json:"routingCountByModel"`
+	StatusCounts          map[string]int64               `json:"statusCounts"`
+	CostByModel           []costByModelResponse          `json:"costByModel"`
+	BudgetScopeBreakdown  []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
+}
+
+type dashboardDataFreshnessResponse struct {
+	Source           string     `json:"source"`
+	RecordCount      int64      `json:"recordCount"`
+	LastLogCreatedAt *time.Time `json:"lastLogCreatedAt"`
+	GeneratedAt      time.Time  `json:"generatedAt"`
+}
+
+type dashboardFreshnessResponse struct {
+	LastIngestedAt   time.Time `json:"lastIngestedAt"`
+	LastAggregatedAt time.Time `json:"lastAggregatedAt"`
+	Source           string    `json:"source"`
+	IsStale          bool      `json:"isStale"`
+}
+
+type dashboardQueryBudgetResponse struct {
+	Status            string  `json:"status"`
+	MaxRangeHours     int     `json:"maxRangeHours"`
+	MaxBreakdownItems int     `json:"maxBreakdownItems"`
+	Guidance          *string `json:"guidance"`
+}
+
+type dashboardPerformanceResponse struct {
+	P95GatewayInternalLatencyMs *float64 `json:"p95GatewayInternalLatencyMs"`
+	P99GatewayInternalLatencyMs *float64 `json:"p99GatewayInternalLatencyMs"`
+	P95ProviderLatencyMs        *float64 `json:"p95ProviderLatencyMs"`
+	P99ProviderLatencyMs        *float64 `json:"p99ProviderLatencyMs"`
+	SystemErrorRate             float64  `json:"systemErrorRate"`
+}
+
+type dashboardBreakdownsResponse struct {
+	ByApplication     []applicationBreakdownResponse   `json:"byApplication"`
+	ByBudgetScope     []budgetScopeBreakdownResponse   `json:"byBudgetScope"`
+	ByProviderModel   []providerModelBreakdownResponse `json:"byProviderModel"`
+	BySafetyOutcome   []outcomeBreakdownResponse       `json:"bySafetyOutcome"`
+	ByCacheOutcome    []outcomeBreakdownResponse       `json:"byCacheOutcome"`
+	ByFallbackOutcome []outcomeBreakdownResponse       `json:"byFallbackOutcome"`
+	ByTerminalStatus  []outcomeBreakdownResponse       `json:"byTerminalStatus"`
+}
+
+type applicationBreakdownResponse struct {
+	ApplicationID string `json:"applicationId"`
+	RequestCount  int64  `json:"requestCount"`
+	CostMicroUSD  int64  `json:"estimatedCostMicroUsd"`
+}
+
+type providerModelBreakdownResponse struct {
+	SelectedProvider     string  `json:"selectedProvider"`
+	SelectedModel        string  `json:"selectedModel"`
+	RequestCount         int64   `json:"requestCount"`
+	P95ProviderLatencyMs float64 `json:"p95ProviderLatencyMs"`
+}
+
+type outcomeBreakdownResponse struct {
+	Outcome      string `json:"outcome"`
+	RequestCount int64  `json:"requestCount"`
+}
+
+type routingCountByModelResponse struct {
+	SelectedProvider string `json:"selectedProvider"`
+	SelectedModel    string `json:"selectedModel"`
+	RoutingReason    string `json:"routingReason"`
+	RequestCount     int64  `json:"requestCount"`
+}
+
+type costByModelResponse struct {
+	SelectedProvider string `json:"selectedProvider"`
+	SelectedModel    string `json:"selectedModel"`
+	RequestCount     int64  `json:"requestCount"`
+	TotalTokens      int64  `json:"totalTokens"`
+	CostMicroUSD     int64  `json:"costMicroUsd"`
+	CostUSD          string `json:"costUsd"`
+}
+
+type budgetScopeResponse struct {
+	BudgetScopeType string `json:"budgetScopeType"`
+	BudgetScopeID   string `json:"budgetScopeId"`
+	ResolvedBy      string `json:"resolvedBy"`
+}
+
+type budgetScopeBreakdownResponse struct {
+	BudgetScopeType string `json:"budgetScopeType"`
+	BudgetScopeID   string `json:"budgetScopeId"`
+	ResolvedBy      string `json:"resolvedBy"`
+	RequestCount    int64  `json:"requestCount"`
+	CostMicroUSD    int64  `json:"costMicroUsd"`
+	CostUSD         string `json:"costUsd"`
+}
+
+type runtimeSnapshotProvenanceResponse struct {
+	RuntimeSnapshotID      string                       `json:"runtimeSnapshotId"`
+	RuntimeSnapshotVersion int                          `json:"runtimeSnapshotVersion"`
+	ContentHash            string                       `json:"contentHash"`
+	RuntimeState           string                       `json:"runtimeState"`
+	PublishedAt            time.Time                    `json:"publishedAt"`
+	PublishedBy            string                       `json:"publishedBy"`
+	GatewayInstanceID      string                       `json:"gatewayInstanceId"`
+	LegacyHashes           *legacyRuntimeHashesResponse `json:"legacyHashes,omitempty"`
+}
+
+type legacyRuntimeHashesResponse struct {
+	ConfigHash         string `json:"configHash"`
+	SecurityPolicyHash string `json:"securityPolicyHash"`
+	RoutingPolicyHash  string `json:"routingPolicyHash"`
 }
 
 type requestDetailDataResponse struct {
-	RequestID      string              `json:"requestId"`
-	TraceID        string              `json:"traceId"`
-	TenantID       string              `json:"tenantId"`
-	ProjectID      string              `json:"projectId"`
-	ApplicationID  *string             `json:"applicationId"`
-	Status         string              `json:"status"`
-	HTTPStatus     int                 `json:"httpStatus"`
-	Provider       string              `json:"provider"`
-	Model          string              `json:"model"`
-	RequestedModel string              `json:"requestedModel"`
-	SelectedModel  string              `json:"selectedModel"`
-	Usage          usageResponse       `json:"usage"`
-	Cost           costResponse        `json:"cost"`
-	Latency        latencyResponse     `json:"latency"`
-	Cache          cacheResponse       `json:"cache"`
-	Routing        routingResponse     `json:"routing"`
-	Masking        maskingResponse     `json:"masking"`
-	Error          detailErrorResponse `json:"error"`
-	CreatedAt      time.Time           `json:"createdAt"`
-	CompletedAt    *time.Time          `json:"completedAt"`
+	RequestID       string                             `json:"requestId"`
+	TraceID         string                             `json:"traceId"`
+	TenantID        string                             `json:"tenantId"`
+	ProjectID       string                             `json:"projectId"`
+	ApplicationID   *string                            `json:"applicationId"`
+	BudgetScope     budgetScopeResponse                `json:"budgetScope"`
+	RuntimeSnapshot *runtimeSnapshotProvenanceResponse `json:"runtimeSnapshot"`
+	Status          string                             `json:"status"`
+	TerminalStatus  string                             `json:"terminalStatus"`
+	HTTPStatus      int                                `json:"httpStatus"`
+	DomainOutcomes  domainOutcomesResponse             `json:"domainOutcomes"`
+	Provider        string                             `json:"provider"`
+	Model           string                             `json:"model"`
+	RequestedModel  string                             `json:"requestedModel"`
+	SelectedModel   string                             `json:"selectedModel"`
+	Usage           usageResponse                      `json:"usage"`
+	UsageSummary    usageSummaryResponse               `json:"usageSummary"`
+	Cost            costResponse                       `json:"cost"`
+	Latency         latencyResponse                    `json:"latency"`
+	LatencySummary  latencySummaryResponse             `json:"latencySummary"`
+	Cache           cacheResponse                      `json:"cache"`
+	Routing         routingResponse                    `json:"routing"`
+	Masking         maskingResponse                    `json:"masking"`
+	SafetySummary   safetySummaryResponse              `json:"safetySummary"`
+	Error           detailErrorResponse                `json:"error"`
+	CreatedAt       time.Time                          `json:"createdAt"`
+	CompletedAt     *time.Time                         `json:"completedAt"`
+}
+
+type outcomeResponse struct {
+	Outcome string  `json:"outcome"`
+	Reason  *string `json:"reason"`
+	Code    *string `json:"code"`
+}
+
+type domainOutcomesResponse struct {
+	Auth      outcomeResponse `json:"auth"`
+	Runtime   outcomeResponse `json:"runtime"`
+	RateLimit outcomeResponse `json:"rateLimit"`
+	Budget    outcomeResponse `json:"budget"`
+	Safety    outcomeResponse `json:"safety"`
+	Routing   outcomeResponse `json:"routing"`
+	Cache     outcomeResponse `json:"cache"`
+	Provider  outcomeResponse `json:"provider"`
+	Fallback  outcomeResponse `json:"fallback"`
+	Streaming outcomeResponse `json:"streaming"`
+	Logging   outcomeResponse `json:"logging"`
 }
 
 type usageResponse struct {
 	PromptTokens     int64 `json:"promptTokens"`
 	CompletionTokens int64 `json:"completionTokens"`
 	TotalTokens      int64 `json:"totalTokens"`
+}
+
+type usageSummaryResponse struct {
+	PromptTokens          int64 `json:"promptTokens"`
+	CompletionTokens      int64 `json:"completionTokens"`
+	TotalTokens           int64 `json:"totalTokens"`
+	EstimatedCostMicroUSD int64 `json:"estimatedCostMicroUsd"`
+	SavedCostMicroUSD     int64 `json:"savedCostMicroUsd"`
 }
 
 type costResponse struct {
@@ -135,6 +311,12 @@ type costResponse struct {
 type latencyResponse struct {
 	LatencyMs         int64  `json:"latencyMs"`
 	ProviderLatencyMs *int64 `json:"providerLatencyMs"`
+}
+
+type latencySummaryResponse struct {
+	GatewayInternalLatencyMs int64  `json:"gatewayInternalLatencyMs"`
+	ProviderLatencyMs        *int64 `json:"providerLatencyMs"`
+	TotalLatencyMs           int64  `json:"totalLatencyMs"`
 }
 
 type cacheResponse struct {
@@ -158,6 +340,13 @@ type maskingResponse struct {
 	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
 }
 
+type safetySummaryResponse struct {
+	Outcome            string   `json:"outcome"`
+	DetectedCount      int      `json:"detectedCount"`
+	DetectorCategories []string `json:"detectorCategories"`
+	MaskingAction      string   `json:"maskingAction"`
+}
+
 type detailErrorResponse struct {
 	ErrorCode    *string `json:"errorCode"`
 	ErrorMessage *string `json:"errorMessage"`
@@ -165,26 +354,29 @@ type detailErrorResponse struct {
 }
 
 type requestLogListItemResponse struct {
-	RequestID        string    `json:"requestId"`
-	ProjectID        string    `json:"projectId"`
-	ApplicationID    string    `json:"applicationId"`
-	Provider         string    `json:"provider"`
-	Model            string    `json:"model"`
-	RequestedModel   string    `json:"requestedModel"`
-	SelectedModel    string    `json:"selectedModel"`
-	Status           string    `json:"status"`
-	HTTPStatus       int       `json:"httpStatus"`
-	PromptTokens     int64     `json:"promptTokens"`
-	CompletionTokens int64     `json:"completionTokens"`
-	TotalTokens      int64     `json:"totalTokens"`
-	CostUSD          string    `json:"costUsd"`
-	CostMicroUSD     int64     `json:"costMicroUsd"`
-	LatencyMs        int64     `json:"latencyMs"`
-	CacheStatus      string    `json:"cacheStatus"`
-	CacheType        string    `json:"cacheType"`
-	RoutingReason    string    `json:"routingReason"`
-	MaskingAction    string    `json:"maskingAction"`
-	CreatedAt        time.Time `json:"createdAt"`
+	RequestID        string                 `json:"requestId"`
+	ProjectID        string                 `json:"projectId"`
+	ApplicationID    string                 `json:"applicationId"`
+	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
+	Provider         string                 `json:"provider"`
+	Model            string                 `json:"model"`
+	RequestedModel   string                 `json:"requestedModel"`
+	SelectedModel    string                 `json:"selectedModel"`
+	Status           string                 `json:"status"`
+	TerminalStatus   string                 `json:"terminalStatus"`
+	DomainOutcomes   domainOutcomesResponse `json:"domainOutcomes"`
+	HTTPStatus       int                    `json:"httpStatus"`
+	PromptTokens     int64                  `json:"promptTokens"`
+	CompletionTokens int64                  `json:"completionTokens"`
+	TotalTokens      int64                  `json:"totalTokens"`
+	CostUSD          string                 `json:"costUsd"`
+	CostMicroUSD     int64                  `json:"costMicroUsd"`
+	LatencyMs        int64                  `json:"latencyMs"`
+	CacheStatus      string                 `json:"cacheStatus"`
+	CacheType        string                 `json:"cacheType"`
+	RoutingReason    string                 `json:"routingReason"`
+	MaskingAction    string                 `json:"maskingAction"`
+	CreatedAt        time.Time              `json:"createdAt"`
 }
 
 type paginationResponse struct {
@@ -229,8 +421,8 @@ func (h RequestDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	filter := invocationlog.RequestDetailFilter{
-		TenantID:  h.TenantID,
-		ProjectID: h.ProjectID,
+		TenantID:  firstNonEmptyQueryValue(r.URL.Query().Get("tenantId"), h.TenantID),
+		ProjectID: firstNonEmptyQueryValue(r.URL.Query().Get("projectId"), h.ProjectID),
 		RequestID: r.PathValue("requestId"),
 	}
 	detail, err := h.Reader.GetRequestDetail(r.Context(), filter)
@@ -269,10 +461,11 @@ func (h DashboardOverviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 
 	filter := invocationlog.DashboardOverviewFilter{
-		TenantID:  h.TenantID,
-		ProjectID: r.URL.Query().Get("projectId"),
-		From:      from,
-		To:        to,
+		TenantID:    firstNonEmptyQueryValue(r.URL.Query().Get("tenantId"), h.TenantID),
+		ProjectID:   r.URL.Query().Get("projectId"),
+		BudgetScope: budgetScopeFromQuery(r.URL.Query()),
+		From:        from,
+		To:          to,
 	}
 	overview, err := h.Reader.GetDashboardOverview(r.Context(), filter)
 	if err != nil {
@@ -306,7 +499,7 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 
 	query := r.URL.Query()
 	return invocationlog.ProjectLogsFilter{
-		TenantID:      h.TenantID,
+		TenantID:      firstNonEmptyQueryValue(query.Get("tenantId"), h.TenantID),
 		ProjectID:     r.PathValue("projectId"),
 		From:          from,
 		To:            to,
@@ -315,52 +508,126 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 		Model:         query.Get("model"),
 		CacheStatus:   query.Get("cacheStatus"),
 		ApplicationID: query.Get("applicationId"),
+		BudgetScope:   budgetScopeFromQuery(query),
 		RequestID:     query.Get("requestId"),
 		Limit:         limit,
 	}, nil
 }
 
+func firstNonEmptyQueryValue(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overview invocationlog.DashboardOverviewFields) dashboardOverviewDataResponse {
 	return dashboardOverviewDataResponse{
+		GeneratedAt: overview.DataFreshness.GeneratedAt,
+		TimeRange: dashboardTimeRangeResponse{
+			From:        filter.From,
+			To:          filter.To,
+			Granularity: dashboardGranularity(filter.From, filter.To),
+		},
+		Freshness: dashboardFreshnessResponse{
+			LastIngestedAt:   dashboardLastIngestedAt(overview.DataFreshness),
+			LastAggregatedAt: dashboardLastAggregatedAt(overview.DataFreshness),
+			Source:           overview.DataFreshness.Source,
+			IsStale:          overview.DataFreshness.IsStale,
+		},
+		QueryBudget: dashboardQueryBudgetResponse{
+			Status:            overview.QueryBudget.Status,
+			MaxRangeHours:     overview.QueryBudget.MaxRangeHours,
+			MaxBreakdownItems: overview.QueryBudget.MaxBreakdownItems,
+			Guidance:          stringPointerOrNil(overview.QueryBudget.Guidance),
+		},
+		Breakdowns: dashboardBreakdowns(overview),
+		Performance: dashboardPerformanceResponse{
+			P95GatewayInternalLatencyMs: overview.Performance.P95GatewayInternalLatencyMs,
+			P99GatewayInternalLatencyMs: overview.Performance.P99GatewayInternalLatencyMs,
+			P95ProviderLatencyMs:        overview.Performance.P95ProviderLatencyMs,
+			P99ProviderLatencyMs:        overview.Performance.P99ProviderLatencyMs,
+			SystemErrorRate:             overview.Performance.SystemErrorRate,
+		},
 		Range: dashboardRangeResponse{
 			From: filter.From,
 			To:   filter.To,
 		},
 		Filter: dashboardFilterResponse{
-			TenantID:  filter.TenantID,
-			ProjectID: stringPointerOrNil(filter.ProjectID),
+			TenantID:        filter.TenantID,
+			ProjectID:       stringPointerOrNil(filter.ProjectID),
+			BudgetScopeType: stringPointerOrNil(filter.BudgetScope.Type),
+			BudgetScopeID:   stringPointerOrNil(filter.BudgetScope.ID),
+			ResolvedBy:      stringPointerOrNil(filter.BudgetScope.ResolvedBy),
 		},
 		Totals: dashboardTotalsResponse{
 			TotalRequests:         overview.TotalRequests,
 			SuccessfulRequests:    overview.SuccessfulRequests,
+			FailedRequests:        overview.FailedRequests,
 			BlockedRequests:       overview.BlockedRequests,
+			RateLimitedRequests:   overview.RateLimitedRequests,
+			CancelledRequests:     overview.CancelledRequests,
 			CacheHitRequests:      overview.CacheHitRequests,
+			CacheEligibleRequests: overview.CacheEligibleRequests,
 			CacheHitRate:          overview.CacheHitRate,
+			ExactCacheHitRate:     overview.CacheHitRate,
+			FallbackSuccessCount:  overview.FallbackSuccessCount,
+			PromptTokens:          overview.PromptTokens,
+			CompletionTokens:      overview.CompletionTokens,
 			TotalTokens:           overview.TotalTokens,
 			TotalCostMicroUSD:     overview.TotalCostMicroUSD,
 			TotalCostUSD:          overview.TotalCostUSD,
+			SavedCostMicroUSD:     overview.SavedCostMicroUSD,
+			SavedCostUSD:          overview.SavedCostUSD,
+			AverageLatencyMs:      overview.AverageLatencyMs,
+			P95LatencyMs:          overview.P95LatencyMs,
 			AverageResponseTimeMs: overview.AverageResponseTimeMs,
+			MaskingActionCounts:   copyInt64Map(overview.MaskingActionCounts),
+			RoutingCountByModel:   routingCountByModelResponses(overview.RoutingCountByModel),
+			StatusCounts:          copyInt64Map(overview.StatusCounts),
+			CostByModel:           costByModelResponses(overview.CostByModel),
+			BudgetScopeBreakdown:  budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+		},
+		DataFreshness: dashboardDataFreshnessResponse{
+			Source:           overview.DataFreshness.Source,
+			RecordCount:      overview.DataFreshness.RecordCount,
+			LastLogCreatedAt: overview.DataFreshness.LastLogCreatedAt,
+			GeneratedAt:      overview.DataFreshness.GeneratedAt,
 		},
 	}
 }
 
 func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResponse {
 	return requestDetailDataResponse{
-		RequestID:      detail.RequestID,
-		TraceID:        detail.TraceID,
-		TenantID:       detail.TenantID,
-		ProjectID:      detail.ProjectID,
-		ApplicationID:  stringPointerOrNil(detail.ApplicationID),
-		Status:         detail.Status,
-		HTTPStatus:     detail.HTTPStatus,
-		Provider:       detail.Provider,
-		Model:          detail.Model,
-		RequestedModel: detail.RequestedModel,
-		SelectedModel:  detail.SelectedModel,
+		RequestID:       detail.RequestID,
+		TraceID:         detail.TraceID,
+		TenantID:        detail.TenantID,
+		ProjectID:       detail.ProjectID,
+		ApplicationID:   stringPointerOrNil(detail.ApplicationID),
+		BudgetScope:     budgetScopeResponseFromScope(detail.BudgetScope, detail.ApplicationID),
+		RuntimeSnapshot: runtimeSnapshotResponse(detail.RuntimeSnapshot),
+		Status:          detail.Status,
+		TerminalStatus:  detail.TerminalStatus,
+		HTTPStatus:      detail.HTTPStatus,
+		DomainOutcomes:  domainOutcomesResponseFromDomain(detail.DomainOutcomes),
+		Provider:        detail.Provider,
+		Model:           detail.Model,
+		RequestedModel:  detail.RequestedModel,
+		SelectedModel:   detail.SelectedModel,
 		Usage: usageResponse{
 			PromptTokens:     detail.Usage.PromptTokens,
 			CompletionTokens: detail.Usage.CompletionTokens,
 			TotalTokens:      detail.Usage.TotalTokens,
+		},
+		UsageSummary: usageSummaryResponse{
+			PromptTokens:          detail.UsageSummary.PromptTokens,
+			CompletionTokens:      detail.UsageSummary.CompletionTokens,
+			TotalTokens:           detail.UsageSummary.TotalTokens,
+			EstimatedCostMicroUSD: detail.UsageSummary.EstimatedCostMicroUSD,
+			SavedCostMicroUSD:     detail.UsageSummary.SavedCostMicroUSD,
 		},
 		Cost: costResponse{
 			CostUSD:      detail.Cost.CostUSD,
@@ -370,6 +637,11 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		Latency: latencyResponse{
 			LatencyMs:         detail.Latency.LatencyMs,
 			ProviderLatencyMs: detail.Latency.ProviderLatencyMs,
+		},
+		LatencySummary: latencySummaryResponse{
+			GatewayInternalLatencyMs: detail.LatencySummary.GatewayInternalLatencyMs,
+			ProviderLatencyMs:        detail.LatencySummary.ProviderLatencyMs,
+			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
 		},
 		Cache: cacheResponse{
 			CacheStatus:       detail.Cache.CacheStatus,
@@ -389,6 +661,12 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			MaskingDetectedCount:  detail.Masking.MaskingDetectedCount,
 			RedactedPromptPreview: stringPointerOrNil(detail.Masking.RedactedPromptPreview),
 		},
+		SafetySummary: safetySummaryResponse{
+			Outcome:            detail.SafetySummary.Outcome,
+			DetectedCount:      detail.SafetySummary.DetectedCount,
+			DetectorCategories: append([]string(nil), detail.SafetySummary.DetectorCategories...),
+			MaskingAction:      detail.SafetySummary.MaskingAction,
+		},
 		Error: detailErrorResponse{
 			ErrorCode:    stringPointerOrNil(detail.Error.ErrorCode),
 			ErrorMessage: stringPointerOrNil(detail.Error.ErrorMessage),
@@ -406,11 +684,14 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			RequestID:        item.RequestID,
 			ProjectID:        item.ProjectID,
 			ApplicationID:    item.ApplicationID,
+			BudgetScope:      budgetScopeResponseFromScope(item.BudgetScope, item.ApplicationID),
 			Provider:         item.Provider,
 			Model:            item.Model,
 			RequestedModel:   item.RequestedModel,
 			SelectedModel:    item.SelectedModel,
 			Status:           item.Status,
+			TerminalStatus:   item.TerminalStatus,
+			DomainOutcomes:   domainOutcomesResponseFromDomain(item.DomainOutcomes),
 			HTTPStatus:       item.HTTPStatus,
 			PromptTokens:     item.PromptTokens,
 			CompletionTokens: item.CompletionTokens,
@@ -426,6 +707,227 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 		})
 	}
 	return responses
+}
+
+func domainOutcomesResponseFromDomain(outcomes invocationlog.DomainOutcomes) domainOutcomesResponse {
+	normalized := invocationlog.NormalizeDomainOutcomes(invocationlog.LlmInvocationLog{DomainOutcomes: outcomes})
+	return domainOutcomesResponse{
+		Auth:      outcomeResponseWithCode(normalized.Auth.Outcome, normalized.Auth.ErrorCode),
+		Runtime:   outcomeResponseFromOutcome(normalized.Runtime.Outcome),
+		RateLimit: outcomeResponseFromOutcome(normalized.RateLimit.Outcome),
+		Budget:    outcomeResponseFromOutcome(normalized.Budget.Outcome),
+		Safety:    outcomeResponseFromOutcome(normalized.Safety.Outcome),
+		Routing:   outcomeResponseFromOutcome(normalized.Routing.Outcome),
+		Cache:     outcomeResponseFromOutcome(normalized.Cache.Outcome),
+		Provider:  outcomeResponseWithCode(normalized.Provider.Outcome, normalized.Provider.SanitizedErrorCode),
+		Fallback:  outcomeResponseWithReason(normalized.Fallback.Outcome, normalized.Fallback.Reason),
+		Streaming: outcomeResponseFromOutcome(normalized.Streaming.Outcome),
+		Logging:   outcomeResponseWithCode(normalized.Logging.Outcome, normalized.Logging.SanitizedErrorCode),
+	}
+}
+
+func outcomeResponseFromOutcome(outcome string) outcomeResponse {
+	return outcomeResponse{
+		Outcome: outcome,
+	}
+}
+
+func outcomeResponseWithCode(outcome string, code *string) outcomeResponse {
+	return outcomeResponse{
+		Outcome: outcome,
+		Code:    code,
+	}
+}
+
+func outcomeResponseWithReason(outcome string, reason *string) outcomeResponse {
+	return outcomeResponse{
+		Outcome: outcome,
+		Reason:  reason,
+	}
+}
+
+func dashboardBreakdowns(overview invocationlog.DashboardOverviewFields) dashboardBreakdownsResponse {
+	return dashboardBreakdownsResponse{
+		ByApplication:     applicationBreakdownResponses(overview.ApplicationBreakdown),
+		ByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+		ByProviderModel:   providerModelBreakdownResponses(overview.CostByModel, overview.Performance.P95ProviderLatencyMs),
+		BySafetyOutcome:   outcomeBreakdownResponses(overview.SafetyOutcomeCounts),
+		ByCacheOutcome:    outcomeBreakdownResponses(overview.CacheOutcomeCounts),
+		ByFallbackOutcome: outcomeBreakdownResponses(overview.FallbackOutcomeCounts),
+		ByTerminalStatus:  outcomeBreakdownResponses(overview.StatusCounts),
+	}
+}
+
+func applicationBreakdownResponses(items []invocationlog.ApplicationBreakdown) []applicationBreakdownResponse {
+	responses := make([]applicationBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, applicationBreakdownResponse{
+			ApplicationID: item.ApplicationID,
+			RequestCount:  item.RequestCount,
+			CostMicroUSD:  item.CostMicroUSD,
+		})
+	}
+	return responses
+}
+
+func providerModelBreakdownResponses(items []invocationlog.CostByModel, p95ProviderLatencyMs *float64) []providerModelBreakdownResponse {
+	p95 := 0.0
+	if p95ProviderLatencyMs != nil {
+		p95 = *p95ProviderLatencyMs
+	}
+	responses := make([]providerModelBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, providerModelBreakdownResponse{
+			SelectedProvider:     item.SelectedProvider,
+			SelectedModel:        item.SelectedModel,
+			RequestCount:         item.RequestCount,
+			P95ProviderLatencyMs: p95,
+		})
+	}
+	return responses
+}
+
+func outcomeBreakdownResponses(counts map[string]int64) []outcomeBreakdownResponse {
+	responses := make([]outcomeBreakdownResponse, 0, len(counts))
+	for outcome, count := range counts {
+		responses = append(responses, outcomeBreakdownResponse{
+			Outcome:      outcome,
+			RequestCount: count,
+		})
+	}
+	sort.Slice(responses, func(i int, j int) bool {
+		return responses[i].Outcome < responses[j].Outcome
+	})
+	return responses
+}
+
+func dashboardLastIngestedAt(freshness invocationlog.DashboardDataFreshness) time.Time {
+	if freshness.LastLogCreatedAt != nil {
+		return *freshness.LastLogCreatedAt
+	}
+	return freshness.GeneratedAt
+}
+
+func dashboardLastAggregatedAt(freshness invocationlog.DashboardDataFreshness) time.Time {
+	if !freshness.LastAggregatedAt.IsZero() {
+		return freshness.LastAggregatedAt
+	}
+	return freshness.GeneratedAt
+}
+
+func dashboardGranularity(from time.Time, to time.Time) string {
+	if to.Sub(from) > 48*time.Hour {
+		return "day"
+	}
+	if to.Sub(from) > 6*time.Hour {
+		return "hour"
+	}
+	return "minute"
+}
+
+func budgetScopeFromQuery(query map[string][]string) budget.Scope {
+	values := func(name string) string {
+		if len(query[name]) == 0 {
+			return ""
+		}
+		return query[name][0]
+	}
+	return budget.Scope{
+		Type:       values("budgetScopeType"),
+		ID:         values("budgetScopeId"),
+		ResolvedBy: values("resolvedBy"),
+	}
+}
+
+func routingCountByModelResponses(items []invocationlog.RoutingCountByModel) []routingCountByModelResponse {
+	responses := make([]routingCountByModelResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, routingCountByModelResponse{
+			SelectedProvider: item.SelectedProvider,
+			SelectedModel:    item.SelectedModel,
+			RoutingReason:    item.RoutingReason,
+			RequestCount:     item.RequestCount,
+		})
+	}
+	return responses
+}
+
+func costByModelResponses(items []invocationlog.CostByModel) []costByModelResponse {
+	responses := make([]costByModelResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, costByModelResponse{
+			SelectedProvider: item.SelectedProvider,
+			SelectedModel:    item.SelectedModel,
+			RequestCount:     item.RequestCount,
+			TotalTokens:      item.TotalTokens,
+			CostMicroUSD:     item.CostMicroUSD,
+			CostUSD:          item.CostUSD,
+		})
+	}
+	return responses
+}
+
+func budgetScopeBreakdownResponses(items []invocationlog.BudgetScopeBreakdown) []budgetScopeBreakdownResponse {
+	responses := make([]budgetScopeBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		scope := budgetScopeResponseFromScope(item.BudgetScope, "")
+		if scope.BudgetScopeID == "" {
+			continue
+		}
+		responses = append(responses, budgetScopeBreakdownResponse{
+			BudgetScopeType: scope.BudgetScopeType,
+			BudgetScopeID:   scope.BudgetScopeID,
+			ResolvedBy:      scope.ResolvedBy,
+			RequestCount:    item.RequestCount,
+			CostMicroUSD:    item.CostMicroUSD,
+			CostUSD:         item.CostUSD,
+		})
+	}
+	return responses
+}
+
+func budgetScopeResponseFromScope(scope budget.Scope, applicationID string) budgetScopeResponse {
+	normalized := budget.NormalizeScope(scope, applicationID)
+	return budgetScopeResponse{
+		BudgetScopeType: normalized.Type,
+		BudgetScopeID:   normalized.ID,
+		ResolvedBy:      normalized.ResolvedBy,
+	}
+}
+
+func runtimeSnapshotResponse(snapshot *runtimeconfig.RuntimeSnapshotProvenance) *runtimeSnapshotProvenanceResponse {
+	if snapshot == nil || snapshot.IsZero() {
+		return nil
+	}
+	normalized := snapshot.Normalize(runtimeconfig.ActiveConfig{}, time.Time{}, runtimeconfig.DefaultGatewayInstanceIDCompat)
+	response := &runtimeSnapshotProvenanceResponse{
+		RuntimeSnapshotID:      normalized.RuntimeSnapshotID,
+		RuntimeSnapshotVersion: normalized.RuntimeSnapshotVersion,
+		ContentHash:            normalized.ContentHash,
+		RuntimeState:           normalized.RuntimeState,
+		PublishedAt:            normalized.PublishedAt,
+		PublishedBy:            normalized.PublishedBy,
+		GatewayInstanceID:      normalized.GatewayInstanceID,
+	}
+	if !normalized.LegacyHashes.IsZero() {
+		response.LegacyHashes = &legacyRuntimeHashesResponse{
+			ConfigHash:         normalized.LegacyHashes.ConfigHash,
+			SecurityPolicyHash: normalized.LegacyHashes.SecurityPolicyHash,
+			RoutingPolicyHash:  normalized.LegacyHashes.RoutingPolicyHash,
+		}
+	}
+	return response
+}
+
+func copyInt64Map(values map[string]int64) map[string]int64 {
+	if values == nil {
+		return map[string]int64{}
+	}
+	copied := make(map[string]int64, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
 }
 
 func stringPointerOrNil(value string) *string {

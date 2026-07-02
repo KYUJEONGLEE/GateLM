@@ -1,6 +1,13 @@
 package pipeline
 
-import "time"
+import (
+	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+)
 
 type RequestContext struct {
 	RequestID  string
@@ -14,10 +21,26 @@ type RequestContext struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
 	FeatureID     string
+
+	ConfigHash              string
+	SecurityPolicyHash      string
+	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
+	RuntimeRateLimit        ratelimit.Config
+	HasRuntimeRateLimit     bool
+	RuntimeBudgetPolicy     budget.Policy
+	HasRuntimeBudgetPolicy  bool
+	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy
+	HasRuntimeRoutingPolicy bool
+	RuntimeCachePolicy      runtimeconfig.CachePolicy
+	HasRuntimeCachePolicy   bool
+
+	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 
 	RequestedProvider string
 	RequestedModel    string
@@ -53,6 +76,8 @@ type RequestContext struct {
 	ErrorCode    string
 	ErrorMessage string
 	ErrorStage   string
+
+	DomainOutcomes invocationlog.DomainOutcomes
 }
 
 func NewRequestContext(input NewRequestContextInput) *RequestContext {

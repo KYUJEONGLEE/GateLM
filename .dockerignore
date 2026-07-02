@@ -4,10 +4,19 @@
 !.env.example
 
 node_modules
+**/node_modules
 dist
+**/dist
 build
+**/build
 .next
+**/.next
 coverage
+**/coverage
+__pycache__
+**/__pycache__
+.pytest_cache
+**/.pytest_cache
 
 *.pem
 *.key

@@ -1,0 +1,45 @@
+{
+  "contractVersion": "gatelm.gateway-request-context.v2.0.0",
+  "requestId": "req_v2_gateway_0001",
+  "traceId": "trace_v2_gateway_0001",
+  "receivedAt": "2026-06-29T06:00:00Z",
+  "http": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "clientSurface": "employee_chat"
+  },
+  "identity": {
+    "tenantId": "tenant_demo_001",
+    "projectId": "project_demo_001",
+    "applicationId": "app_employee_chat_001",
+    "teamId": "team_platform_demo"
+  },
+  "budgetScope": {
+    "budgetScopeType": "application",
+    "budgetScopeId": "app_employee_chat_001",
+    "resolvedBy": "default_application",
+    "warningThresholdPercent": 80
+  },
+  "runtimeSnapshot": {
+    "runtimeSnapshotId": "runtime_snapshot_demo_001",
+    "runtimeSnapshotVersion": 3,
+    "contentHash": "sha256:synthetic-runtime-snapshot-hash",
+    "runtimeState": "snapshot_active",
+    "publishedAt": "2026-06-29T05:55:00Z",
+    "publishedBy": "admin_demo_user",
+    "gatewayInstanceId": "gateway_instance_local_001",
+    "lookupKey": {
+      "tenantId": "tenant_demo_001",
+      "projectId": "project_demo_001",
+      "applicationId": "app_employee_chat_001"
+    },
+    "legacyHashes": {
+      "configHash": "sha256:synthetic-config-hash",
+      "securityPolicyHash": "sha256:synthetic-security-policy-hash",
+      "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
+    }
+  },
+  "requestedModel": "auto",
+  "requestBodyHash": "sha256:synthetic-request-body-hash",
+  "promptHash": "sha256:synthetic-redacted-prompt-hash"
+}

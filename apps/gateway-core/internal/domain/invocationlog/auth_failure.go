@@ -4,13 +4,15 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
 )
 
 const (
 	StatusSuccess     = "success"
-	StatusCacheHit    = "cache_hit"
 	StatusBlocked     = "blocked"
-	StatusError       = "error"
+	StatusRateLimited = "rate_limited"
+	StatusFailed      = "failed"
 	StatusCancelled   = "cancelled"
 	CacheStatusHit    = "hit"
 	CacheStatusMiss   = "miss"
@@ -36,6 +38,7 @@ type AuthFailureLog struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -63,6 +66,8 @@ type AuthFailureLog struct {
 	LatencyMs         int64
 	ProviderLatencyMs *int64
 
+	DomainOutcomes DomainOutcomes
+
 	CreatedAt   time.Time
 	CompletedAt time.Time
 }
@@ -73,6 +78,7 @@ type AuthFailureInput struct {
 	TenantID      string
 	ProjectID     string
 	ApplicationID string
+	BudgetScope   budget.Scope
 	APIKeyID      string
 	AppTokenID    string
 	EndUserID     string
@@ -147,12 +153,13 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		completedAt = input.StartedAt
 	}
 
-	return AuthFailureLog{
+	log := AuthFailureLog{
 		RequestID:     requestID,
 		TraceID:       traceID,
 		TenantID:      strings.TrimSpace(input.TenantID),
 		ProjectID:     strings.TrimSpace(input.ProjectID),
 		ApplicationID: strings.TrimSpace(input.ApplicationID),
+		BudgetScope:   budget.NormalizeScope(input.BudgetScope, input.ApplicationID),
 		APIKeyID:      strings.TrimSpace(input.APIKeyID),
 		AppTokenID:    strings.TrimSpace(input.AppTokenID),
 		EndUserID:     strings.TrimSpace(input.EndUserID),
@@ -164,7 +171,7 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		Stream:         input.Stream,
 		RequestedModel: strings.TrimSpace(input.RequestedModel),
 
-		Status:       StatusError,
+		Status:       StatusBlocked,
 		HTTPStatus:   input.HTTPStatus,
 		ErrorCode:    strings.TrimSpace(input.ErrorCode),
 		ErrorMessage: strings.TrimSpace(input.ErrorMessage),
@@ -182,6 +189,8 @@ func BuildAuthFailureLog(input AuthFailureInput) AuthFailureLog {
 		CreatedAt:   input.StartedAt.UTC(),
 		CompletedAt: completedAt.UTC(),
 	}
+	log.DomainOutcomes = BuildAuthFailureDomainOutcomes(log)
+	return log
 }
 
 func latencyMillis(startedAt time.Time, completedAt time.Time) int64 {

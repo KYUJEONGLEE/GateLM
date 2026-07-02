@@ -6,18 +6,29 @@ import (
 	"encoding/hex"
 	"strings"
 	"time"
+
+	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 type TerminalLog struct {
-	RequestID     string
-	TraceID       string
-	TenantID      string
-	ProjectID     string
-	ApplicationID string
-	APIKeyID      string
-	AppTokenID    string
-	EndUserID     string
-	FeatureID     string
+	RequestID          string
+	TraceID            string
+	TenantID           string
+	ProjectID          string
+	ApplicationID      string
+	BudgetScope        budget.Scope
+	APIKeyID           string
+	AppTokenID         string
+	EndUserID          string
+	FeatureID          string
+	ConfigHash         string
+	SecurityPolicyHash string
+	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
+
+	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 
 	Endpoint          string
 	Method            string
@@ -59,21 +70,29 @@ type TerminalLog struct {
 
 	RequestBodyHash string
 	PromptHash      string
+	DomainOutcomes  DomainOutcomes
 	Metadata        map[string]any
 	CreatedAt       time.Time
 	CompletedAt     time.Time
 }
 
 type TerminalLogInput struct {
-	RequestID     string
-	TraceID       string
-	TenantID      string
-	ProjectID     string
-	ApplicationID string
-	APIKeyID      string
-	AppTokenID    string
-	EndUserID     string
-	FeatureID     string
+	RequestID          string
+	TraceID            string
+	TenantID           string
+	ProjectID          string
+	ApplicationID      string
+	BudgetScope        budget.Scope
+	APIKeyID           string
+	AppTokenID         string
+	EndUserID          string
+	FeatureID          string
+	ConfigHash         string
+	SecurityPolicyHash string
+	RuntimeSnapshot    runtimeconfig.RuntimeSnapshotProvenance
+
+	RateLimitDecision *ratelimit.Decision
+	BudgetDecision    *budget.Decision
 
 	Endpoint          string
 	Method            string
@@ -115,6 +134,7 @@ type TerminalLogInput struct {
 
 	RequestBodyHashMaterial string
 	RedactedPromptForHash   string
+	DomainOutcomes          DomainOutcomes
 	StartedAt               time.Time
 	CompletedAt             time.Time
 }
@@ -170,20 +190,48 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if input.SecurityPolicyVersionID != "" {
 		metadata["securityPolicyVersionId"] = strings.TrimSpace(input.SecurityPolicyVersionID)
 	}
-	if input.RoutingPolicyHash != "" {
-		metadata["routingPolicyHash"] = strings.TrimSpace(input.RoutingPolicyHash)
+	if input.RateLimitDecision != nil {
+		metadata["rateLimitDecision"] = *input.RateLimitDecision
+	}
+	if input.BudgetDecision != nil {
+		metadata["budgetDecision"] = *input.BudgetDecision
+	}
+	resolvedBudgetScope := budget.NormalizeScope(input.BudgetScope, input.ApplicationID)
+	metadata["budgetScope"] = budget.ToMetadata(resolvedBudgetScope, input.ApplicationID)
+	runtimeSnapshot := input.RuntimeSnapshot.Normalize(runtimeconfig.ActiveConfig{
+		ConfigVersion: strings.TrimSpace(input.ConfigHash),
+		ConfigHash:    strings.TrimSpace(input.ConfigHash),
+		SafetyPolicy: runtimeconfig.SafetyPolicy{
+			SecurityPolicyHash: strings.TrimSpace(input.SecurityPolicyHash),
+		},
+		RoutingPolicy: runtimeconfig.RoutingPolicy{
+			RoutingPolicyHash: strings.TrimSpace(input.RoutingPolicyHash),
+		},
+	}, input.StartedAt, runtimeconfig.DefaultGatewayInstanceIDCompat)
+	if runtimeSnapshot.ContentHash != "" {
+		metadata["runtimeSnapshot"] = runtimeSnapshot.Metadata()
 	}
 
-	return TerminalLog{
-		RequestID:     requestID,
-		TraceID:       traceID,
-		TenantID:      strings.TrimSpace(input.TenantID),
-		ProjectID:     strings.TrimSpace(input.ProjectID),
-		ApplicationID: strings.TrimSpace(input.ApplicationID),
-		APIKeyID:      strings.TrimSpace(input.APIKeyID),
-		AppTokenID:    strings.TrimSpace(input.AppTokenID),
-		EndUserID:     strings.TrimSpace(input.EndUserID),
-		FeatureID:     strings.TrimSpace(input.FeatureID),
+	rateLimitDecision := input.RateLimitDecision.Clone()
+	budgetDecision := input.BudgetDecision.Clone()
+
+	log := TerminalLog{
+		RequestID:          requestID,
+		TraceID:            traceID,
+		TenantID:           strings.TrimSpace(input.TenantID),
+		ProjectID:          strings.TrimSpace(input.ProjectID),
+		ApplicationID:      strings.TrimSpace(input.ApplicationID),
+		BudgetScope:        resolvedBudgetScope,
+		APIKeyID:           strings.TrimSpace(input.APIKeyID),
+		AppTokenID:         strings.TrimSpace(input.AppTokenID),
+		EndUserID:          strings.TrimSpace(input.EndUserID),
+		FeatureID:          strings.TrimSpace(input.FeatureID),
+		ConfigHash:         strings.TrimSpace(input.ConfigHash),
+		SecurityPolicyHash: strings.TrimSpace(input.SecurityPolicyHash),
+		RuntimeSnapshot:    runtimeSnapshot,
+
+		RateLimitDecision: rateLimitDecision,
+		BudgetDecision:    budgetDecision,
 
 		Endpoint:          firstNonEmptyString(input.Endpoint, "/v1/chat/completions"),
 		Method:            firstNonEmptyString(input.Method, "POST"),
@@ -229,6 +277,18 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		CreatedAt:       input.StartedAt.UTC(),
 		CompletedAt:     completedAt.UTC(),
 	}
+	if !input.DomainOutcomes.IsZero() {
+		log.DomainOutcomes = input.DomainOutcomes
+		if log.DomainOutcomes.Logging.Outcome == "" {
+			log.DomainOutcomes.Logging = LoggingOutcome{Outcome: "written", RequestLogWritten: true}
+		}
+	} else {
+		log.DomainOutcomes = BuildDomainOutcomes(log)
+	}
+	log.Metadata["terminalStatus"] = canonicalTerminalStatus(log.Status)
+	log.Metadata["domainOutcomes"] = log.DomainOutcomes
+	log.Metadata["gatewayStageOutcomes"] = BuildGatewayStageOutcomes(log)
+	return log
 }
 
 func logHash(parts ...string) string {

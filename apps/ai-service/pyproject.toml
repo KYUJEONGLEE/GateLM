@@ -1,0 +1,39 @@
+[project]
+name = "gatelm-ai-service"
+version = "0.0.0"
+description = "GateLM AI Safety and Evaluation Lab"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<0.116",
+  "pydantic>=2.7,<2.11",
+  "uvicorn>=0.30,<0.31",
+]
+
+[project.scripts]
+gatelm-ai-service = "app.main:run"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["app.tests*"]
+
+[project.optional-dependencies]
+test = [
+  "httpx>=0.27,<0.29",
+]
+benchmark = [
+  "httpx>=0.27,<0.29",
+  "psutil>=5.9,<8",
+]
+ml = [
+  "torch>=2.3,<3",
+  "transformers>=4.41,<5",
+]
+
+[tool.unittest]
+start-directory = "app/tests"
+pattern = "test_*.py"

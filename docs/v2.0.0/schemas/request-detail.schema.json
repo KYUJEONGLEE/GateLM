@@ -1,0 +1,660 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/v2.0.0/request-detail.schema.json",
+  "title": "GateLM v2.0.0 Request Detail",
+  "description": "Schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes; it does not include raw prompts, raw responses, credentials, authorization headers, or provider raw error bodies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestId",
+    "traceId",
+    "tenantId",
+    "projectId",
+    "applicationId",
+    "budgetScope",
+    "terminalStatus",
+    "httpStatus",
+    "errorCode",
+    "domainOutcomes",
+    "runtimeSnapshot",
+    "routing",
+    "latencySummary",
+    "usageSummary",
+    "safetySummary",
+    "createdAt"
+  ],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque request identifier. field for Request Detail only; do not use as a metrics label."
+    },
+    "traceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque trace identifier. field for Request Detail only; do not use as a metrics label."
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Core Gateway identity field from the authenticated context."
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Core Gateway identity field from the authenticated context."
+    },
+    "applicationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Core Gateway identity field from the authenticated context."
+    },
+    "budgetScope": {
+      "$ref": "#/$defs/budgetScope"
+    },
+    "terminalStatus": {
+      "type": "string",
+      "enum": [
+        "success",
+        "blocked",
+        "rate_limited",
+        "failed",
+        "cancelled"
+      ],
+      "description": "User-facing final result, as defined in contracts.md."
+    },
+    "httpStatus": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599,
+      "description": "HTTP status returned to the caller."
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Sanitized error code such as invalid_api_key. Must not contain provider raw error bodies or sensitive details."
+    },
+    "domainOutcomes": {
+      "$ref": "#/$defs/domainOutcomes"
+    },
+    "runtimeSnapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/runtimeSnapshotProvenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "RuntimeSnapshot provenance used by this request. Null is allowed for no_snapshot/not_checked paths; full RuntimeSnapshot body is not copied here."
+    },
+    "routing": {
+      "$ref": "#/$defs/routingSummary"
+    },
+    "latencySummary": {
+      "$ref": "#/$defs/latencySummary"
+    },
+    "usageSummary": {
+      "$ref": "#/$defs/usageSummary"
+    },
+    "safetySummary": {
+      "$ref": "#/$defs/safetySummary"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "Completion timestamp. May be null while a streaming request is still in progress."
+    }
+  },
+  "$defs": {
+    "budgetScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "budgetScopeType",
+        "budgetScopeId",
+        "resolvedBy"
+      ],
+      "properties": {
+        "budgetScopeType": {
+          "type": "string",
+          "enum": [
+            "application",
+            "project",
+            "team"
+          ],
+          "description": "Resolved budget scope type. Client-provided budget scope is not trusted."
+        },
+        "budgetScopeId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resolved budget scope identifier from Control Plane/RuntimeSnapshot rules."
+        },
+        "resolvedBy": {
+          "type": "string",
+          "enum": [
+            "default_application",
+            "runtime_snapshot",
+            "control_plane_rule"
+          ],
+          "description": "Source of the resolved budget scope. Client-provided budget scope is not trusted."
+        }
+      }
+    },
+    "runtimeSnapshotProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeSnapshotId",
+        "runtimeSnapshotVersion",
+        "contentHash",
+        "runtimeState",
+        "publishedAt",
+        "publishedBy",
+        "gatewayInstanceId"
+      ],
+      "properties": {
+        "runtimeSnapshotId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSnapshotVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "contentHash": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Synthetic or hashed provenance value. This is not a metrics label."
+        },
+        "runtimeState": {
+          "type": "string",
+          "enum": [
+            "snapshot_active",
+            "last_known_safe_used",
+            "stale_snapshot_used"
+          ],
+          "description": "Actual RuntimeSnapshot provenance state. no_snapshot/not_checked are stage outcome or read-model states, not provenance values."
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "publishedBy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Sanitized actor identifier. Must not contain credentials or secrets."
+        },
+        "gatewayInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "legacyHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Compatibility/read-model bridge for v1 hash lineage. These hashes are not primary RuntimeSnapshot provenance and must not be used as metrics labels.",
+          "properties": {
+            "configHash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "securityPolicyHash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "routingPolicyHash": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "configHash",
+            "securityPolicyHash",
+            "routingPolicyHash"
+          ]
+        }
+      }
+    },
+    "routingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestedModel",
+        "selectedProvider",
+        "selectedModel",
+        "routingReason"
+      ],
+      "properties": {
+        "requestedModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Requested model value such as auto. Provider/model values are not enum-fixed."
+        },
+        "selectedProvider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Provider selected by routing. Null is allowed when provider was not called."
+        },
+        "selectedModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Model selected by routing. Null is allowed when provider was not called."
+        },
+        "routingReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sanitized routing reason. Must not contain raw prompt fragments."
+        }
+      }
+    },
+    "latencySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gatewayInternalLatencyMs",
+        "providerLatencyMs",
+        "totalLatencyMs"
+      ],
+      "properties": {
+        "gatewayInternalLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "providerLatencyMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Null when provider was not called."
+        },
+        "totalLatencyMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "usageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promptTokens",
+        "completionTokens",
+        "totalTokens",
+        "estimatedCostMicroUsd"
+      ],
+      "properties": {
+        "promptTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completionTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimatedCostMicroUsd": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "savedCostMicroUsd": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Exact Cache saved cost only. Semantic Cache evidence must not be mixed into this value."
+        }
+      }
+    },
+    "safetySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "detectedCount",
+        "detectorCategories",
+        "maskingAction"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "redacted",
+            "blocked",
+            "not_checked"
+          ]
+        },
+        "detectedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detectorCategories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Category-level summary only. Raw detected values, offsets, and prompt fragments are forbidden."
+        },
+        "maskingAction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "sanitized masking action such as none, redacted, or blocked."
+        }
+      }
+    },
+    "domainOutcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auth",
+        "runtime",
+        "rateLimit",
+        "budget",
+        "safety",
+        "routing",
+        "cache",
+        "provider",
+        "fallback",
+        "streaming",
+        "logging"
+      ],
+      "properties": {
+        "auth": {
+          "$ref": "#/$defs/authOutcome"
+        },
+        "runtime": {
+          "$ref": "#/$defs/runtimeOutcome"
+        },
+        "rateLimit": {
+          "$ref": "#/$defs/rateLimitOutcome"
+        },
+        "budget": {
+          "$ref": "#/$defs/budgetOutcome"
+        },
+        "safety": {
+          "$ref": "#/$defs/safetyOutcome"
+        },
+        "routing": {
+          "$ref": "#/$defs/routingOutcome"
+        },
+        "cache": {
+          "$ref": "#/$defs/cacheOutcome"
+        },
+        "provider": {
+          "$ref": "#/$defs/providerOutcome"
+        },
+        "fallback": {
+          "$ref": "#/$defs/fallbackOutcome"
+        },
+        "streaming": {
+          "$ref": "#/$defs/streamingOutcome"
+        },
+        "logging": {
+          "$ref": "#/$defs/loggingOutcome"
+        }
+      }
+    },
+    "outcomeBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sanitized reason. Must not include raw prompt fragments, raw provider error bodies, or secret material."
+        },
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sanitized code."
+        }
+      }
+    },
+    "authOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "passed",
+                "invalid_api_key",
+                "invalid_app_token",
+                "scope_mismatch",
+                "not_checked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtimeOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "snapshot_active",
+                "last_known_safe_used",
+                "stale_snapshot_used",
+                "no_snapshot",
+                "not_checked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "rateLimitOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "allowed",
+                "rate_limited",
+                "disabled",
+                "error",
+                "not_checked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "budgetOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "allowed",
+                "warned",
+                "blocked",
+                "not_used",
+                "not_checked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "safetyOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "passed",
+                "redacted",
+                "blocked",
+                "not_checked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "routingOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "selected",
+                "skipped",
+                "failed",
+                "not_checked"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "cacheOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "hit",
+                "miss",
+                "bypassed",
+                "error",
+                "not_used"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "providerOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "success",
+                "timeout",
+                "error",
+                "unauthorized",
+                "not_called"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "fallbackOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "not_needed",
+                "disabled",
+                "success",
+                "failed",
+                "not_called"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "streamingOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "not_streaming",
+                "started",
+                "completed",
+                "interrupted",
+                "cancelled"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "loggingOutcome": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/outcomeBase"
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "written",
+                "failed",
+                "deferred",
+                "not_called"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

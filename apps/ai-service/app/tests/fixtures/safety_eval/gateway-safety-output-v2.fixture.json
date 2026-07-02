@@ -1,0 +1,1221 @@
+{
+  "fixtureName": "v2-safety-eval-gateway-output-pass",
+  "fixtureVersion": "2026-06-30.v2",
+  "mode": "gateway_safety_output_v2",
+  "results": [
+    {
+      "caseId": "safe_none_basic",
+      "requestId": "request_safe_none_basic_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "passed",
+          "detectorSummary": {
+            "detectedCount": 0,
+            "detectorCategories": []
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "email_redacts_before_provider",
+      "requestId": "request_email_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "email"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "repeated_email_redacts_count",
+      "requestId": "request_repeated_email_redacts_count_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 2,
+            "detectorCategories": [
+              "email"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "phone_redacts_before_provider",
+      "requestId": "request_phone_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "phone_number"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "rrn_blocks_before_cache",
+      "requestId": "request_rrn_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "resident_registration_number"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "api_key_blocks_before_cache",
+      "requestId": "request_api_key_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "api_key"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "authorization_header_blocks_before_cache",
+      "requestId": "request_authorization_header_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "authorization_header"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "jwt_blocks_before_cache",
+      "requestId": "request_jwt_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "jwt"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "private_key_blocks_before_cache",
+      "requestId": "request_private_key_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "private_key"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "secret_blocks_before_cache",
+      "requestId": "request_secret_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "secret"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "postal_address_redacts_before_provider",
+      "requestId": "request_postal_address_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "postal_address"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "date_of_birth_redacts_before_provider",
+      "requestId": "request_date_of_birth_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "date_of_birth"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "private_date_redacts_before_provider",
+      "requestId": "request_private_date_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "private_date"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "private_url_redacts_before_provider",
+      "requestId": "request_private_url_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "private_url"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "person_name_redacts_label_based",
+      "requestId": "request_person_name_redacts_label_based_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "person_name"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "customer_id_redacts_before_provider",
+      "requestId": "request_customer_id_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "customer_id"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "employee_id_redacts_before_provider",
+      "requestId": "request_employee_id_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "employee_id"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "account_id_redacts_before_provider",
+      "requestId": "request_account_id_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "account_id"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "account_number_blocks_before_cache",
+      "requestId": "request_account_number_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "account_number"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "ip_address_redacts_before_provider",
+      "requestId": "request_ip_address_redacts_before_provider_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "redacted",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "ip_address"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "miss"
+        },
+        "provider": {
+          "outcome": "success"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": true,
+        "cacheLookup": true,
+        "cacheWrite": true,
+        "streamingStarted": false,
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null
+      }
+    },
+    {
+      "caseId": "provider_api_key_blocks_before_cache",
+      "requestId": "request_provider_api_key_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "provider_api_key"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "cloud_access_key_blocks_before_cache",
+      "requestId": "request_cloud_access_key_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "cloud_access_key"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "github_token_blocks_before_cache",
+      "requestId": "request_github_token_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "github_token"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "slack_token_blocks_before_cache",
+      "requestId": "request_slack_token_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "slack_token"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "database_url_blocks_before_cache",
+      "requestId": "request_database_url_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "database_url"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "webhook_url_blocks_before_cache",
+      "requestId": "request_webhook_url_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "webhook_url"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "password_assignment_blocks_before_cache",
+      "requestId": "request_password_assignment_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "password_assignment"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "session_cookie_blocks_before_cache",
+      "requestId": "request_session_cookie_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "session_cookie"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "credit_card_blocks_before_cache",
+      "requestId": "request_credit_card_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "credit_card"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "bank_account_blocks_before_cache",
+      "requestId": "request_bank_account_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "bank_account"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "passport_number_blocks_before_cache",
+      "requestId": "request_passport_number_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "passport_number"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    },
+    {
+      "caseId": "driver_license_blocks_before_cache",
+      "requestId": "request_driver_license_blocks_before_cache_v2",
+      "domainOutcomes": {
+        "safety": {
+          "outcome": "blocked",
+          "detectorSummary": {
+            "detectedCount": 1,
+            "detectorCategories": [
+              "driver_license"
+            ]
+          },
+          "policyBasis": {
+            "runtimeSnapshotId": "runtime_snapshot_safety_eval_001",
+            "runtimeSnapshotVersion": 1,
+            "securityPolicyHash": "sec_v1_safety_baseline"
+          }
+        },
+        "cache": {
+          "outcome": "bypassed"
+        },
+        "provider": {
+          "outcome": "not_called"
+        },
+        "streaming": {
+          "outcome": "not_streaming"
+        }
+      },
+      "gatewayEffects": {
+        "providerCalled": false,
+        "cacheLookup": false,
+        "cacheWrite": false,
+        "streamingStarted": false,
+        "terminalStatus": "blocked",
+        "httpStatus": 403,
+        "errorCode": "sensitive_data_blocked"
+      }
+    }
+  ]
+}

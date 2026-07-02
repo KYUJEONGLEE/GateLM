@@ -1,0 +1,302 @@
+import {
+  PrismaClient,
+  ResourceStatus,
+  RuntimeConfigPublishState,
+} from '@prisma/client';
+
+import {
+  buildDemoRuntimeConfigDocument,
+  canonicalJsonForDemo,
+  credentialHash,
+  DEMO_APPLICATION_ID,
+  DEMO_MOCK_PROVIDER_ID,
+  DEMO_OPENAI_PROVIDER_ID,
+  DEMO_RUNTIME_CONFIG_VERSION,
+  PROVIDER_PRESETS,
+  seedDemoData,
+} from './seed';
+
+describe('Control Plane demo seed baseline', () => {
+  it('builds a stable active Runtime Config for Gateway demo readiness', () => {
+    const first = buildDemoRuntimeConfigDocument('provider-demo-id');
+    const second = buildDemoRuntimeConfigDocument('provider-demo-id');
+
+    expect(first).toEqual(second);
+    expect(first.schemaVersion).toBe('gatelm.active-runtime-config.v1');
+    expect(first.configVersion).toBe(DEMO_RUNTIME_CONFIG_VERSION);
+    expect(first.publishState).toBe('active');
+    expect(first.applicationId).toBe(DEMO_APPLICATION_ID);
+    expect(first.configHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.safetyPolicy.securityPolicyHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.routingPolicy.routingPolicyHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.providers[0]?.models).toEqual([
+      'mock-fast',
+      'mock-balanced',
+    ]);
+    expect(first.rateLimit).toEqual({
+      enabled: true,
+      scope: 'application',
+      algorithm: 'fixed_window',
+      windowSeconds: 60,
+      limit: 60,
+    });
+  });
+
+  it('does not put raw credentials or hashes into the runtime config document', () => {
+    const runtimeConfig = buildDemoRuntimeConfigDocument('provider-demo-id');
+    const serialized = JSON.stringify(runtimeConfig);
+
+    expect(serialized).not.toContain('secretHash');
+    expect(serialized).not.toContain('plaintext');
+    expect(serialized).not.toContain('authorizationHeader');
+    expect(serialized).not.toContain('rawCredential');
+    expect(serialized).not.toContain('demo_only');
+  });
+
+  it('can build an actual-provider main path without storing raw provider keys', () => {
+    const runtimeConfig = buildDemoRuntimeConfigDocument(DEMO_MOCK_PROVIDER_ID, {
+      providerMode: 'actual',
+      mockProviderId: DEMO_MOCK_PROVIDER_ID,
+      openAIProviderId: DEMO_OPENAI_PROVIDER_ID,
+    });
+    const openAIProvider = runtimeConfig.providers.find(
+      (provider) => provider.provider === 'openai-main',
+    );
+    const mockProvider = runtimeConfig.providers.find(
+      (provider) => provider.provider === 'mock',
+    );
+    const serialized = JSON.stringify(runtimeConfig);
+
+    expect(runtimeConfig.defaultProvider).toBe('openai-main');
+    expect(runtimeConfig.lowCostProvider).toBe('openai-main');
+    expect(runtimeConfig.fallbackProvider).toBe('mock');
+    expect(openAIProvider).toMatchObject({
+      providerId: DEMO_OPENAI_PROVIDER_ID,
+      adapterType: 'openai_compatible',
+      credentialRequired: true,
+      credentialRef: {
+        credentialRefId: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
+        credentialVersion: 1,
+        credentialState: 'active',
+      },
+      resolver: 'environment',
+      adapterConfig: { requestFormat: 'openai_chat_completions' },
+    });
+    expect(mockProvider).toMatchObject({
+      providerId: DEMO_MOCK_PROVIDER_ID,
+      adapterType: 'mock',
+      failureMode: 'fail_open_to_fallback',
+    });
+    expect(serialized).not.toContain('OPENAI_API_KEY');
+    expect(serialized).not.toContain('Authorization');
+    expect(serialized).not.toContain('Bearer ');
+  });
+
+  it('hashes demo credentials after trimming surrounding whitespace', () => {
+    expect(credentialHash('  synthetic_demo_secret  ')).toBe(
+      credentialHash('synthetic_demo_secret'),
+    );
+  });
+
+  it('canonicalizes undefined like JSON for arrays while omitting object fields', () => {
+    expect(canonicalJsonForDemo({ a: 1, b: undefined })).toBe('{"a":1}');
+    expect(canonicalJsonForDemo(['a', undefined, 'c'])).toBe(
+      '["a",null,"c"]',
+    );
+  });
+
+  it('supersedes older active runtime configs and upserts the demo active config', async () => {
+    const tx = createMockTransaction();
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await seedDemoData(client as unknown as PrismaClient);
+
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.runtimeConfig.updateMany).toHaveBeenCalledWith({
+      where: {
+        applicationId: DEMO_APPLICATION_ID,
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        configVersion: { not: DEMO_RUNTIME_CONFIG_VERSION },
+      },
+      data: {
+        publishState: RuntimeConfigPublishState.SUPERSEDED,
+      },
+    });
+    expect(tx.runtimeConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          applicationId_configVersion: {
+            applicationId: DEMO_APPLICATION_ID,
+            configVersion: DEMO_RUNTIME_CONFIG_VERSION,
+          },
+        },
+        update: expect.objectContaining({
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          document: expect.objectContaining({
+            publishState: 'active',
+            configVersion: DEMO_RUNTIME_CONFIG_VERSION,
+          }),
+        }),
+        create: expect.objectContaining({
+          applicationId: DEMO_APPLICATION_ID,
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          document: expect.objectContaining({
+            publishState: 'active',
+            configVersion: DEMO_RUNTIME_CONFIG_VERSION,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('upserts global provider presets for common providers', async () => {
+    const tx = createMockTransaction();
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await seedDemoData(client as unknown as PrismaClient);
+
+    expect(tx.providerPreset.updateMany).toHaveBeenCalledWith({
+      where: {
+        providerKey: { notIn: ['openai', 'gemini', 'claude'] },
+        status: ResourceStatus.ACTIVE,
+      },
+      data: { status: ResourceStatus.ARCHIVED },
+    });
+    expect(tx.providerPreset.upsert).toHaveBeenCalledTimes(
+      PROVIDER_PRESETS.length,
+    );
+    expect(tx.providerPreset.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { providerKey: 'openai' },
+        create: expect.objectContaining({
+          adapterType: 'openai_compatible',
+          baseUrl: 'https://api.openai.com/v1',
+          credentialRequired: true,
+          defaultResolver: 'environment',
+          modelsEndpointPath: '/models',
+        }),
+      }),
+    );
+    expect(
+      tx.providerPreset.upsert.mock.calls.map(
+        ([args]) => args.create.providerKey,
+      ),
+    ).toEqual(['openai', 'gemini', 'claude']);
+    expect(tx.providerPreset.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { providerKey: 'claude' },
+        create: expect.objectContaining({
+          adapterType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          providerConfig: expect.objectContaining({
+            adapterType: 'anthropic',
+            requestFormat: 'anthropic_messages',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
+    const tx = createMockTransaction();
+    tx.providerConnection.upsert.mockImplementation(
+      (args: { create?: { id?: string } }) =>
+        Promise.resolve({ id: args.create?.id ?? 'provider-demo-id' }),
+    );
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await withEnv({ GATELM_DEMO_PROVIDER_MODE: 'actual' }, async () => {
+      await seedDemoData(client as unknown as PrismaClient);
+    });
+
+    expect(tx.providerConnection.upsert).toHaveBeenCalledTimes(2);
+    expect(tx.providerConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          id: DEMO_OPENAI_PROVIDER_ID,
+          provider: 'openai-main',
+          resolver: 'environment',
+          secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
+          providerConfig: expect.objectContaining({
+            adapterType: 'openai_compatible',
+            requestFormat: 'openai_chat_completions',
+            credentialRequired: true,
+          }),
+        }),
+      }),
+    );
+    expect(tx.runtimeConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          document: expect.objectContaining({
+            defaultProvider: 'openai-main',
+            fallbackProvider: 'mock',
+          }),
+        }),
+      }),
+    );
+  });
+});
+
+function createMockTransaction() {
+  return {
+    tenant: { upsert: jest.fn() },
+    project: { upsert: jest.fn() },
+    application: { upsert: jest.fn() },
+    providerPreset: { updateMany: jest.fn(), upsert: jest.fn() },
+    providerConnection: {
+      upsert: jest.fn().mockResolvedValue({ id: 'provider-demo-id' }),
+    },
+    gatewayApiKey: { upsert: jest.fn() },
+    appToken: { upsert: jest.fn() },
+    runtimeConfig: {
+      updateMany: jest.fn(),
+      upsert: jest.fn().mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000701',
+        configVersion: DEMO_RUNTIME_CONFIG_VERSION,
+        publishedAt: new Date('2026-06-27T02:00:00.000Z'),
+      }),
+    },
+    runtimeSnapshot: {
+      upsert: jest.fn().mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000701',
+      }),
+    },
+    activeRuntimeSnapshot: {
+      upsert: jest.fn(),
+    },
+  };
+}
+
+async function withEnv(
+  values: Record<string, string>,
+  callback: () => Promise<void>,
+): Promise<void> {
+  const previous = new Map(
+    Object.keys(values).map((key) => [key, process.env[key]]),
+  );
+  try {
+    Object.assign(process.env, values);
+    await callback();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}

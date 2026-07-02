@@ -26,10 +26,16 @@ func (s Stage) Name() string {
 }
 
 func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
-	decision, err := s.router.DecideRoute(ctx, routing.Request{
+	routeReq := routing.Request{
 		RequestedModel: gatewayCtx.Request.RequestedModel,
 		PromptText:     gatewayCtx.Request.PromptText,
-	})
+	}
+	if gatewayCtx.Runtime.HasRoutingPolicy {
+		config := gatewayCtx.Runtime.RoutingPolicy.SimpleRouterConfig()
+		routeReq.Config = &config
+	}
+
+	decision, err := s.router.DecideRoute(ctx, routeReq)
 	if err != nil {
 		return err
 	}

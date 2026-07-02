@@ -1,689 +1,171 @@
-# GateLM Agent Implementation Guide
+# GateLM Documentation Guide
 
-이 문서는 Codex, Claude Code 같은 구현 에이전트가 GateLM 작업을 시작할 때 가장 먼저 읽어야 하는 기준 문서다.
+이 문서는 팀원과 구현 에이전트가 GateLM 작업을 시작할 때 가장 먼저 읽는 문서다.
 
-GateLM은 기업의 승인된 LLM 사용 경로를 하나의 Gateway로 통합해 비용 절감, 사용량 통제, 민감정보 보호, 운영 가시성을 제공하는 B2B LLM Gateway 플랫폼이다.
+GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비용, 정책, 로그, 관측을 중앙에서 관리하게 해주는 B2B LLM Gateway다.
 
-GateLM은 단순 Chat UI가 아니다. 핵심은 LLM Gateway다.
+현재 구현 목표는 **v2.0.0 organization-based LLMOps Gateway MVP**다.
 
 ---
 
-## 0. 현재 구현 기준
+## 1. Reading Order And Source Of Truth
 
-현재 repository의 구현 목표는 **P0**다.
+작업을 시작할 때는 먼저 `docs/README.md`를 읽는다.
 
-문서에 `MVP` 또는 `1차 구현`이라는 표현이 있더라도, P0 범위 판단은 `docs/p0/*` 문서를 우선한다. P0와 충돌하는 장기 설계 내용은 P1/P2 후보 또는 참고 설계로 본다.
+문서끼리 충돌하면 아래 Source Of Truth 순서로 판단한다.
 
-용어 기준:
+1. `docs/v2.0.0/contracts.md`
+2. `docs/v2.0.0/schemas/*.schema.json`
+3. `docs/v2.0.0/fixtures/*.fixture.json`
+4. `docs/v2.0.0/implementation-plan.md`
+5. `docs/v2.0.0/implementation-tasks.md`
 
-| 용어 | 현재 의미 |
+`contracts.md`는 API, DB, Event, Metrics, Security-sensitive field 판단의 최우선 기준이다.
+
+`implementation-plan.md`는 200줄 안팎의 상위 구현 계획서다.
+
+`implementation-tasks.md`는 실제 PR별 작업 위치와 검증 기준을 담은 코딩용 계획서다.
+
+아래 3개 문서는 `implementation-tasks.md`를 실행 가능한 단위로 보강하는 실행 보조 문서다. 공식 계약이나 schema를 새로 확정하지 않으며, 충돌하면 Source Of Truth 순서를 따른다.
+
+- `docs/v2.0.0/implementation-pr-packets.md`: PR별 실행 패킷
+- `docs/v2.0.0/acceptance-test-matrix.md`: PR별 acceptance/evidence matrix
+- `docs/v2.0.0/db-migration-plan.md`: DB migration 호환성 계획
+
+Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
+
+- `docs/v2.0.0/p0-legacy-field-cleanup.md`: legacy field cleanup 참고 문서
+- `docs/v2.0.0/p0-contract-decisions.md`: 공식 계약이 아닌 팀 검토 목록
+
+위 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
+
+---
+
+## 2. Supporting References
+
+작업 범위에 따라 아래 문서를 추가로 확인한다.
+
+- 작업 범위에 해당하는 schema/fixture
+- 작업 범위에 해당하는 app/module 문서
+- `docs/architecture/*`
+- `docs/policies/*`
+- `docs/archive/*`
+
+역할별 토론 문서는 working draft다.
+
+최종 합의된 내용만 `contracts.md`, schema/fixture, implementation docs로 승격한다.
+
+---
+
+## 3. v2.0.0 Goal
+
+v2.0.0 목표는 v1.0.0 baseline을 깨지 않으면서 조직 기반 LLMOps Gateway MVP를 완성하는 것이다.
+
+핵심 흐름:
+
+```text
+Customer App / Employee Chat
+-> Gateway
+-> RuntimeSnapshot policy
+-> budget / safety / cache / routing
+-> Actual Provider or Mock fallback
+-> Request Log / Detail / Dashboard / Metrics / k6 evidence
+```
+
+v2.0.0에서 반드시 설명 가능해야 하는 것:
+
+- 어떤 tenant/project/application 요청인지
+- 어떤 RuntimeSnapshot이 실제 적용됐는지
+- 어떤 budget scope로 비용과 쿼터가 귀속됐는지
+- safety, budget, cache, routing, provider, fallback, streaming 결과가 무엇인지
+- Actual Provider가 성공했는지, Mock fallback이 사용됐는지
+- Request Detail, Dashboard, Metrics, k6가 같은 outcome을 보고 있는지
+
+---
+
+## 4. v2.0.0 Main Scope
+
+| Area | Main path |
 |---|---|
-| P0 | 지금 구현해야 하는 3~5일 데모 필수 Gateway vertical slice |
-| MVP | 제품 관점의 최소 출시 후보. 문서에 따라 P0보다 넓을 수 있음 |
-| 1차 구현 | 과거 표현 또는 장기 설계 문맥. 현재 P0 필수를 의미하지 않을 수 있음 |
-
-P0 판단이 애매하면 먼저 `docs/p0/p0-contract.md`로 요약 기준을 확인한다. 문서끼리 충돌하면 아래 문서 우선순위를 따른다.
-
-## 1. 작업 전 필수 읽기 순서
-
-작업을 시작하기 전에 아래 문서를 순서대로 확인한다.
-
-1. `docs/README.md`
-
-   * 문서 구조와 전체 읽는 순서를 확인한다.
-
-2. 이 문서의 프로젝트 목표와 P0 범위
-
-   * GateLM의 문제 정의, 타깃 사용자, 제품 방향을 확인한다.
-
-3. `docs/p0/implementation-cut.md`
-
-   * 지금 구현해야 하는 P0 범위와 제외 범위를 확인한다.
-
-4. `docs/p0/p0-contract.md`
-
-   * P0 endpoint, DB, event/status, cache, masking, 제외 범위를 하나의 계약표로 확인한다.
-
-5. `docs/p0/demo-acceptance.md`
-
-   * 최종 데모 합격 기준과 실패 기준을 확인한다.
-
-6. `docs/p0/p0-test-matrix.md`
-
-   * P0 기능별 기대 HTTP status, log field, Dashboard 검증 기준을 확인한다.
-
-7. `docs/p0/p0-review-and-ci-gate.md`
-
-   * PR merge 전 리뷰, 보안 검증, CI gate 기준을 확인한다.
-
-8. `docs/architecture/architecture.md`
-
-   * 시스템 경계, Gateway 중심 구조, Control Plane / Data Plane 분리를 확인한다.
-
-9. `docs/architecture/gateway-flow.md`
-
-   * 인증, App Token 검증, 정책 검사, 마스킹, 캐시, 라우팅, Provider 호출, 로깅 흐름을 확인한다.
-
-10. `docs/architecture/api-spec.md`
-
-   * Control Plane API와 Gateway API 계약을 확인한다.
-
-11. `docs/architecture/db-schema.md`
-
-   * 장기 DB 설계 기준을 확인한다.
-
-12. `docs/p0/p0-db-migration-plan.md`
-
-   * P0에서 실제로 만들 DB table 범위를 확인한다.
-
-13. `docs/architecture/llm-log-schema.md`
-
-    * 장기 요청 로그와 이벤트 스키마 기준을 확인한다.
-
-14. `docs/p0/p0-log-event-payload.md`
-
-    * P0에서 반드시 저장할 request log / event payload 필드를 확인한다.
-
-15. `docs/policies/pii-masking-policy.md`
-
-    * Provider 호출 전 민감정보 탐지, 마스킹, 차단 기준을 확인한다.
-
-16. `docs/policies/coding-convention.md`
-
-    * 코드 스타일과 계층별 책임을 확인한다.
-
-17. `docs/policies/ai-coding-rules.md`
-
-    * AI 에이전트가 코드 작성 전 반드시 지켜야 하는 작업 규칙을 확인한다.
-
-18. `docs/p0/local-dev.md`
-
-    * 로컬 실행 방식, seed 데이터, mock provider 기준을 확인한다.
-
-19. `docs/p0/mock-provider.md`
-
-    * mock provider 동작과 acceptance 기준을 확인한다.
-
-문서 경로가 다르면 추측하지 말고 현재 repository의 실제 파일 구조를 먼저 확인한다.
+| Control Plane | RuntimeConfig validation/publish, RuntimeSnapshot, Provider/Model catalog, `credentialRef`, budget policy source |
+| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, exact cache, routing, provider, fallback, streaming, logging outcomes |
+| Product Experience | Admin/Developer/Employee surfaces, Employee Chat through Application boundary, Request Detail, Dashboard, Demo Scenario Runner |
+| Safety | request-side safety outcome and sanitized evidence |
+| Observability | Gateway-produced outcomes, Request Log/Detail read model, Dashboard aggregate, metrics label guard, k6/query profile |
+| Provider | Actual Provider 1+ and model 2+ through Provider Adapter, with Mock fallback |
 
 ---
 
-## 2. 문서 우선순위
+## 5. Non-Goals For v2.0.0 Core
 
-문서끼리 충돌하면 아래 순서로 판단한다.
-
-1. `docs/p0/p0-contract.md`
-2. `docs/p0/implementation-cut.md`
-3. `docs/p0/demo-acceptance.md`
-4. `docs/p0/p0-test-matrix.md`
-5. `docs/p0/p0-review-and-ci-gate.md`
-6. `docs/architecture/gateway-flow.md`
-7. `docs/architecture/api-spec.md`
-8. `docs/p0/p0-db-migration-plan.md`
-9. `docs/p0/p0-log-event-payload.md`
-10. `docs/architecture/db-schema.md`
-11. `docs/architecture/llm-log-schema.md`
-12. `docs/policies/pii-masking-policy.md`
-13. `docs/policies/coding-convention.md`
-14. `docs/policies/ai-coding-rules.md`
-
-P0 구현 중에는 장기 설계보다 P0 acceptance 통과가 우선이다.
-단, 보안 기준은 단순화를 이유로 낮추지 않는다.
+- raw prompt/raw response storage opt-in
+- Semantic Cache live response path
+- token-level streaming logging
+- response-side safety scan main path
+- Employee Chat Provider direct call
+- Web Console user request Provider proxy
+- `department` budget scope
+- provider/model DB enum locking
+- mandatory ClickHouse/Redpanda adoption
 
 ---
 
-## 3. P0 구현 목표
+## 6. Team Ownership
 
-P0 목표는 완성형 LLM 운영 제품 전체가 아니라 Gateway vertical slice를 끝까지 동작시키는 것이다.
+| Owner | Bounded context | Main output |
+|---|---|---|
+| 김규민 | Product Experience & Demo | Employee Chat, Request Detail UI, Dashboard UX, Demo Scenario Runner |
+| 재혁님 | Control Plane & Runtime Policy | RuntimeSnapshot publish path, Provider/Model catalog, `credentialRef`, budget policy source |
+| 이지섭 | Gateway Data Plane & Governance | Gateway pipeline, outcomes, Provider Adapter boundary, Mock fallback |
+| 이윤지 | AI Safety & Evaluation Lab | request-side safety outcome, sanitized detector summary, Semantic Cache evidence |
+| 이규정 | Observability, Data Platform & Performance | Request Log/Detail read model, Dashboard aggregate, metrics guard, k6/query profile |
 
-P0 핵심 흐름은 다음이다.
+---
 
-```text
-Admin onboarding
--> Tenant / Project / Application / Provider Connection
--> API Key / App Token 발급
--> Gateway request
--> API Key / App Token 인증
--> Tenant / Project / Application 식별
--> Provider 호출 전 민감정보 마스킹 또는 차단
--> Exact Cache
--> model=auto Simple Routing
--> Provider Adapter 호출
--> Usage Log
--> Request Log / Detail
--> Dashboard Overview
+## 7. Security Rules
+
+아래 값은 DB, log, fixture, API response, metric label, UI에 평문으로 남기지 않는다.
+
+- raw prompt
+- raw response
+- raw detected value
+- raw prompt fragment
+- API Key
+- App Token
+- Provider Key
+- Authorization header
+- provider raw error body
+- actual secret
+
+실제 secret이나 개인정보처럼 보이는 값은 seed, test, snapshot, fixture에도 넣지 않는다.
+
+---
+
+## 8. Implementation Docs
+
+| Document | Purpose |
+|---|---|
+| `docs/v2.0.0/contracts.md` | 공식 계약 기준 |
+| `docs/v2.0.0/implementation-plan.md` | 상위 구현 계획 |
+| `docs/v2.0.0/implementation-tasks.md` | PR별 실제 작업 계획 |
+| `docs/v2.0.0/implementation-pr-packets.md` | PR별 실행 패킷 |
+| `docs/v2.0.0/acceptance-test-matrix.md` | PR별 acceptance/evidence matrix |
+| `docs/v2.0.0/db-migration-plan.md` | DB migration 호환성 계획 |
+| `docs/v2.0.0/schemas/` | JSON Schema |
+| `docs/v2.0.0/fixtures/` | 최소 fixture |
+| `docs/v2.0.0/p0-legacy-field-cleanup.md` | legacy field cleanup 기준 참고 문서 |
+| `docs/v2.0.0/p0-contract-decisions.md` | 공식 계약 전 팀 검토 목록 |
+| `docs/archive/` | 과거 P0/v1 기록 |
+
+과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.
+
+## 9. Required Verification
+
+v2 문서, schema, fixture, entry 문서, Node/pnpm 기준을 바꾸면 아래 검증을 먼저 실행한다.
+
+```powershell
+corepack pnpm run verify:v2-docs
+corepack pnpm run verify:v2-final
 ```
 
-P0는 기능 수가 아니라 end-to-end 흐름이 기준이다.
-현재 P0 시간 기준은 3~5일이다. 낮음/중간 우선순위 항목은 seed, mock, 단순 API, 축소 UI로 대체할 수 있다.
-
----
-
-## 4. P0 필수 범위
-
-아래 기능은 P0에서 빠지면 안 된다.
-
-* `/v1/chat/completions`
-* `/v1/models` mock catalog
-* API Key 인증
-* App Token 검증 또는 seed token 기반 단순 검증
-* Tenant / Project / Application 식별 또는 seed metadata 식별
-* mock provider 또는 provider adapter 호출
-* Provider 호출 전 민감정보 마스킹/차단
-* Exact Cache
-* `model=auto` Simple Routing
-* Usage Log 또는 P0 direct request log
-* Request Log 목록
-* Request Detail Drawer
-* Dashboard Overview 축소 카드
-* 최소 Web Console 또는 고객사 앱 연동 데모
-
----
-
-## 5. P0에서 구현하지 않을 것
-
-다음은 P0 필수가 아니다. 사용자가 명시적으로 지시하지 않으면 구현하지 않는다.
-
-* Semantic Cache 실제 embedding/vector store
-* AI Service routing score
-* SSE Streaming
-* 복잡한 Runtime Policy 엔진
-* CEL Policy editor/evaluator
-* Policy publish / rollback UI
-* Custom regex detector UI
-* AWS Secrets Manager + KMS 실제 연동
-* S3 Object Storage 실제 연동
-* Terraform / AWS / Kubernetes 배포
-* RAG
-* 파일 업로드
-* 이미지 입력
-* OCR
-* 복잡한 AgentOps Trace
-* 공식 ChatGPT / Gemini / Claude 웹사이트 트래픽 강제 우회
-
-P0에서는 JSON config 기반 정책, local secret resolver, mock provider를 허용한다.
-
----
-
-## 6. 확장성 원칙
-
-모든 코드는 P0 구현이라도 확장 가능하게 작성한다.
-
-확장 가능성이 필요한 지점은 다음이다.
-
-* Provider
-* Model
-* Policy
-* Gateway pipeline stage
-* Sensitive Data Detector
-* Cache backend
-* Routing strategy
-* Event payload
-* Log storage
-* Secret resolver
-
-반드시 지킬 것:
-
-* Provider와 Model을 enum으로 고정하지 않는다.
-* Provider별 로직은 Provider Adapter 안에 둔다.
-* Gateway handler에 provider별 조건문을 흩뿌리지 않는다.
-* Gateway pipeline은 stage 단위로 추가/교체 가능하게 둔다.
-* Sensitive Data Detector는 registry 구조로 추가 가능하게 둔다.
-* Cache는 interface를 두고 Redis 구현에 의존하게 한다.
-* Routing은 strategy 또는 service로 분리한다.
-* Secret 조회는 SecretResolver interface를 통해 처리한다.
-* 정책 판단은 하드코딩하지 않고 config/policy object를 통해 처리한다.
-* Event payload는 문서에 정의된 필드만 사용한다.
-
-금지 예시:
-
-```text
-if provider == "openai" { ... }
-if model == "gpt-4o-mini" { ... }
-if tenantId == "demo" { ... }
-store rawPrompt in database
-create API not defined in docs
-create DB table not defined in docs
-```
-
-허용 방향:
-
-```text
-ProviderRegistry -> ProviderAdapter
-Pipeline -> Stage
-DetectorRegistry -> Detector
-RoutingService -> RoutingStrategy
-CacheStore interface -> RedisCacheStore
-SecretResolver interface -> LocalSecretResolver
-```
-
-확장성을 이유로 P0 범위를 넘는 기능을 임의로 구현하지 않는다.
-확장성은 interface와 책임 분리로 확보하고, 과한 인프라를 추가하지 않는다.
-
----
-
-## 7. 작업 판단 기준
-
-* 문서에 정의된 API, DB, Event, Policy 구조를 우선한다.
-* 문서에 없는 API, DB table, Event payload, Gateway stage를 임의로 만들지 않는다.
-* P0 작업에서는 데모 시나리오를 끝까지 통과시키는 것이 최우선이다.
-* 비용 절감, 사용량 통제, 민감정보 보호, 운영 가시성 중 하나에도 연결되지 않는 기능은 우선순위를 낮춘다.
-* Provider 호출 전 인증, App Token 검증, 민감정보 처리, 로그 기록 흐름이 빠지면 안 된다.
-* 원문 Prompt/Response는 기본적으로 영속 저장하지 않는다.
-* API Key, App Token, Provider Key 원문은 로그, DB, 응답, 테스트 fixture에 저장하지 않는다.
-* Gateway 외부에서 LLM Provider를 직접 호출하지 않는다.
-* 화면부터 크게 만들지 않는다. Gateway vertical slice가 먼저다.
-
----
-
-## 8. Provider 호출 기준
-
-LLM Provider 호출은 Gateway Core의 Provider Adapter에서만 수행한다.
-
-금지:
-
-* Web Console에서 Provider 직접 호출
-* Chat UI에서 Provider 직접 호출
-* Control Plane API에서 사용자 LLM 요청을 Provider로 proxy
-* Worker에서 사용자 요청을 Provider로 재실행
-* Frontend에서 Provider SDK import
-* Gateway 외부 모듈에서 Provider별 request/response 변환
-
-P0에서는 mock provider가 필수다.
-실제 Provider는 시간이 남을 때 1개만 선택한다.
-
----
-
-## 9. 민감정보 처리 기준
-
-Provider 호출 전에 민감정보를 탐지하고 action을 결정한다.
-
-P0 기본 action:
-
-```text
-email                         -> redact
-phone_number                  -> redact
-resident_registration_number  -> block
-api_key                       -> block
-authorization_header          -> block
-jwt                           -> block
-private_key                   -> block
-```
-
-Redaction placeholder는 원문 일부를 남기지 않는다.
-
-허용:
-
-```text
-[EMAIL_REDACTED]
-[PHONE_NUMBER_REDACTED]
-[RESIDENT_REGISTRATION_NUMBER_REDACTED]
-[API_KEY_REDACTED]
-[AUTHORIZATION_HEADER_REDACTED]
-[JWT_REDACTED]
-[SECRET_REDACTED]
-```
-
-P0에서 `private_key` detector의 저장/preview redaction placeholder는 `[SECRET_REDACTED]`를 사용하며, 별도 private key 전용 placeholder를 만들지 않는다.
-
-금지:
-
-```text
-u***@company.com
-010-****-1234
-sk-...abcd
-900101-1******
-```
-
----
-
-## 10. 저장 금지 데이터
-
-아래 데이터는 DB, Redis, ClickHouse, S3, 로그, 테스트 snapshot, API response에 저장하거나 출력하지 않는다.
-
-* raw prompt
-* raw response
-* Provider API Key 원문
-* Gateway API Key 원문
-* App Token 원문
-* Authorization header 원문
-* Cookie 원문
-* raw provider error body
-* raw detected sensitive value
-* 실제 secret
-* 실제 개인정보
-
-저장 가능한 값:
-
-* redactedPromptPreview
-* responseSummary
-* promptHash
-* responseHash
-* token metadata
-* cost metadata
-* latency metadata
-* cache metadata
-* routing metadata
-* masking metadata
-* requestId
-* tenantId
-* projectId
-* applicationId
-* apiKeyId
-* appTokenId
-
----
-
-## 11. Gateway Pipeline 기준
-
-Gateway request는 기본적으로 아래 순서를 따른다.
-
-```text
-receive_request
--> assign_request_id
--> parse_openai_compatible_payload
--> authenticate_api_key
--> validate_app_token
--> resolve_tenant_project_user_application
--> load_active_config
--> check_rate_limit
--> check_quota_budget
--> validate_text_only_request
--> validate_requested_model_provider
--> apply_runtime_policy_precheck
--> detect_sensitive_data
--> mask_or_block
--> decide_model_route
--> normalize_prompt_for_cache
--> build_cache_key
--> exact_cache_lookup
--> semantic_cache_lookup
--> resolve_provider_credential
--> convert_provider_request
--> call_provider_with_timeout_retry_fallback
--> convert_provider_response
--> compute_usage_metadata
--> write_cache_if_eligible
--> build_client_response
--> return_response
--> publish_async_event
-```
-
-P0에서는 일부 stage를 no-op 또는 disabled로 둘 수 있다.
-하지만 민감정보 탐지와 마스킹은 cache lookup과 provider call보다 먼저 실행되어야 한다.
-P0에서는 cache key material에 selectedProvider/selectedModel을 포함해야 하므로 simple routing 결과를 cache key 생성 전에 확정한다.
-
----
-
-## 12. Cache 기준
-
-Exact Cache는 Redis 기반으로 구현한다.
-
-Cache key는 raw prompt가 아니라 redacted prompt 기준으로 만든다.
-
-Cache key material에는 최소 아래 정보를 포함한다.
-
-* tenantId
-* projectId
-* applicationId
-* selectedProvider
-* selectedModel
-* normalizedRedactedPrompt
-* securityPolicyHash 또는 configHash
-* routingPolicyHash 또는 configHash
-
-동일 safe request의 1회차는 cache miss, 2회차는 cache hit가 되어야 한다.
-
-Cache hit 시 Provider/mock 호출 count가 증가하면 안 된다.
-
-Block 요청은 cache lookup을 하지 않는다.
-
----
-
-## 13. Routing 기준
-
-P0에서는 simple routing만 구현한다.
-
-기본 기준:
-
-```text
-model=auto
--> 짧은 prompt는 low-cost model 선택
--> 기본 모델은 mock-balanced
--> low-cost 모델은 mock-fast
-```
-
-Request Detail에서는 반드시 아래를 구분해서 기록한다.
-
-* requestedModel
-* selectedModel
-* requestedProvider
-* selectedProvider
-* routingReason
-
-Provider와 Model은 DB enum으로 고정하지 않는다.
-문자열로 받고, allowlist/config/registry/policy로 검증한다.
-
----
-
-## 14. DB 기준
-
-P0 DB는 `docs/p0/p0-db-migration-plan.md`를 우선한다.
-
-P0 필수 저장소:
-
-```text
-PostgreSQL
-Redis
-```
-
-P1 권장 저장소:
-
-```text
-Redpanda
-ClickHouse
-```
-
-P0 canonical request log source는 PostgreSQL `p0_llm_invocation_logs`다.
-ClickHouse/Redpanda는 P1 또는 optional mirror이며, P0 direct writer는 코드와 주석에 `P0 shortcut`임을 명시한다.
-
-DB 원칙:
-
-* Provider/Model은 enum으로 고정하지 않는다.
-* 비용은 float가 아니라 micro USD integer로 저장한다.
-* Tenant-scoped table은 tenant_id를 포함한다.
-* API Key/App Token/Provider Key 원문은 저장하지 않는다.
-* raw prompt/raw response는 저장하지 않는다.
-* 삭제는 기본 soft delete 또는 revoke다.
-
----
-
-## 15. Event / Log 기준
-
-P0에서는 하나의 DTO로 처리할 수 있다.
-
-```text
-InvocationFinishedPayload
-```
-
-다만 외부 contract와 저장 payload의 eventType은 아래 값을 따른다.
-
-```text
-success    -> invocation.completed
-cache_hit  -> invocation.completed
-blocked    -> invocation.blocked
-error      -> invocation.failed
-cancelled  -> invocation.cancelled
-```
-
-모든 요청은 request log를 남긴다.
-
-* success 요청
-* cache hit 요청
-* blocked 요청
-* error 요청
-* cancelled 요청
-
-Blocked request도 반드시 기록한다.
-Blocked request의 costMicroUsd는 0이다.
-
----
-
-## 16. 코드 작성 전 계획 필수
-
-코드를 수정하기 전에는 먼저 아래 계획을 제시한다.
-
-```text
-목표:
-수정 예정 파일:
-새로 생성할 파일:
-참조 문서:
-API 변경 여부:
-DB 변경 여부:
-Event 변경 여부:
-Policy 변경 여부:
-보안 영향:
-테스트 계획:
-완료 기준:
-```
-
-계획 없이 바로 파일을 수정하지 않는다.
-
----
-
-## 17. 변경 단위
-
-한 번에 하나의 목적만 처리한다.
-
-좋은 작업 단위:
-
-```text
-- /v1/chat/completions handler 추가
-- API Key 검증 stage 추가
-- App Token 검증 stage 추가
-- masking detector 추가
-- exact cache stage 추가
-- p0 invocation log writer 추가
-- Request Detail API 추가
-```
-
-나쁜 작업 단위:
-
-```text
-- 인증, Gateway, DB, Dashboard, Worker를 한 번에 구현
-- 전체 폴더 구조 재정리
-- API/DB/Event 계약을 문서 없이 변경
-- 임의 공통 유틸 폴더 대량 생성
-```
-
----
-
-## 18. 보안 리뷰 대상
-
-다음 변경은 보안 리뷰 대상이다.
-
-* API Key 발급, 검증, 폐기
-* App Token 발급, 검증, 폐기
-* Provider Key 저장 또는 조회
-* SecretResolver
-* 민감정보 탐지, 마스킹, 차단
-* raw prompt/raw response 저장 정책
-* Authorization header 처리
-* Request Log / Detail 응답 필드
-* Tenant / Project scope 검증
-
-보안 관련 코드에서는 실제 secret처럼 보이는 값을 예시, seed, test, snapshot에 넣지 않는다.
-
----
-
-## 19. 테스트 기준
-
-기능 변경에는 테스트 또는 수동 검증이 따라야 한다.
-
-최소 검증:
-
-```text
-- healthz / readyz
-- safe request 성공
-- invalid API Key 차단
-- invalid App Token 차단
-- email redaction
-- phone redaction
-- credential-like token block
-- JWT block
-- RRN block
-- exact cache miss -> hit
-- model=auto simple routing
-- Request Log 기록
-- Request Detail 필드 확인
-- Dashboard Overview 숫자 확인
-```
-
-테스트 fixture에 실제 secret이나 개인정보를 넣지 않는다.
-
-허용:
-
-```text
-example.invalid
-test_secret_token_redacted_for_demo_only
-glm_api_test_redacted
-glm_app_token_test_redacted
-```
-
----
-
-## 20. 완료 기준
-
-작업이 완료되었다고 말하려면 다음을 함께 제시한다.
-
-* 변경 요약
-* 수정한 파일 목록
-* 새로 만든 파일 목록
-* API / DB / Event 변경 여부
-* 보안 영향 여부
-* 테스트 결과
-* 남은 리스크
-* 다음 작업 제안
-
----
-
-## 21. 절대 금지 사항
-
-아래는 명시적 승인 없이 절대 하지 않는다.
-
-* raw prompt 저장
-* raw response 저장
-* Provider Key 평문 저장
-* API Key/App Token 평문 저장
-* Authorization header 로그 출력
-* Cookie 로그 출력
-* Provider raw error body 전체 저장
-* Web Console에서 Provider 직접 호출
-* Control Plane에서 사용자 LLM 요청을 Provider로 proxy
-* Worker에서 Provider 요청 재실행
-* tenant/project scope 없는 request log 조회
-* 문서에 없는 API 생성
-* 문서에 없는 DB table/column 생성
-* 문서에 없는 Event field 추가
-* Provider/Model을 DB enum으로 고정
-* cache key에 raw prompt 사용
-* masking stage를 cache 뒤로 이동
-* block 요청의 로그 생략
-* 실제 secret을 seed/test/snapshot에 사용
-
----
-
-## 22. 구현 우선순위
-
-작업 우선순위는 아래 순서다.
-
-```text
-1. Mock Provider + Gateway 기본 요청 전달 + health/ready
-2. API Key 발급/인증 + 최소 Project/Application 식별
-3. 민감정보 masking/block + Exact Cache + Simple Routing
-4. Request Log 저장 + Request Detail API
-5. Dashboard 축소 요약 + 고객사 앱 연동 데모 + 통합 테스트
-```
-
-화면부터 만들지 않는다.
-Gateway vertical slice가 먼저다.
+이 검증은 `contracts.md` 우선순위, schema/fixture pairing, fixture validation, forbidden sensitive value shape, Provider/Model enum lock 방지, RuntimeSnapshot lookup key guardrail을 확인한다.

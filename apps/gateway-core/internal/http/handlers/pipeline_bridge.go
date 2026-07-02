@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -36,6 +37,25 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			AppTokenID:    reqCtx.AppTokenID,
 			EndUserID:     reqCtx.EndUserID,
 			FeatureID:     reqCtx.FeatureID,
+		},
+		Budget: budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID),
+		Runtime: request.RuntimeContext{
+			ConfigHash:         reqCtx.ConfigHash,
+			SecurityPolicyHash: reqCtx.SecurityPolicyHash,
+			RoutingPolicyHash:  reqCtx.RoutingPolicyHash,
+			Snapshot:           reqCtx.RuntimeSnapshot,
+			RateLimitConfig:    reqCtx.RuntimeRateLimit,
+			HasRateLimitConfig: reqCtx.HasRuntimeRateLimit,
+			BudgetPolicy:       reqCtx.RuntimeBudgetPolicy,
+			HasBudgetPolicy:    reqCtx.HasRuntimeBudgetPolicy,
+			RoutingPolicy:      reqCtx.RuntimeRoutingPolicy,
+			HasRoutingPolicy:   reqCtx.HasRuntimeRoutingPolicy,
+			CachePolicy:        reqCtx.RuntimeCachePolicy,
+			HasCachePolicy:     reqCtx.HasRuntimeCachePolicy,
+		},
+		Governance: request.GovernanceContext{
+			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
+			BudgetDecision:    reqCtx.BudgetDecision.Clone(),
 		},
 		Masking: request.MaskingContext{
 			Action:                  reqCtx.MaskingAction,
@@ -76,10 +96,47 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	reqCtx.TenantID = gatewayCtx.Identity.TenantID
 	reqCtx.ProjectID = gatewayCtx.Identity.ProjectID
 	reqCtx.ApplicationID = gatewayCtx.Identity.ApplicationID
+	reqCtx.BudgetScope = budget.NormalizeScope(gatewayCtx.Budget, reqCtx.ApplicationID)
 	reqCtx.APIKeyID = gatewayCtx.Identity.APIKeyID
 	reqCtx.AppTokenID = gatewayCtx.Identity.AppTokenID
 	reqCtx.EndUserID = gatewayCtx.Identity.EndUserID
 	reqCtx.FeatureID = gatewayCtx.Identity.FeatureID
+
+	if gatewayCtx.Runtime.ConfigHash != "" {
+		reqCtx.ConfigHash = gatewayCtx.Runtime.ConfigHash
+	}
+	if gatewayCtx.Runtime.SecurityPolicyHash != "" {
+		reqCtx.SecurityPolicyHash = gatewayCtx.Runtime.SecurityPolicyHash
+	}
+	if gatewayCtx.Runtime.RoutingPolicyHash != "" {
+		reqCtx.RoutingPolicyHash = gatewayCtx.Runtime.RoutingPolicyHash
+	}
+	if gatewayCtx.Runtime.Snapshot.RuntimeSnapshotID != "" {
+		reqCtx.RuntimeSnapshot = gatewayCtx.Runtime.Snapshot
+	}
+	if gatewayCtx.Runtime.HasRateLimitConfig {
+		reqCtx.RuntimeRateLimit = gatewayCtx.Runtime.RateLimitConfig
+		reqCtx.HasRuntimeRateLimit = true
+	}
+	if gatewayCtx.Runtime.HasBudgetPolicy {
+		reqCtx.RuntimeBudgetPolicy = gatewayCtx.Runtime.BudgetPolicy
+		reqCtx.HasRuntimeBudgetPolicy = true
+	}
+	if gatewayCtx.Runtime.HasRoutingPolicy {
+		reqCtx.RuntimeRoutingPolicy = gatewayCtx.Runtime.RoutingPolicy
+		reqCtx.HasRuntimeRoutingPolicy = true
+	}
+	if gatewayCtx.Runtime.HasCachePolicy {
+		reqCtx.RuntimeCachePolicy = gatewayCtx.Runtime.CachePolicy
+		reqCtx.HasRuntimeCachePolicy = true
+	}
+
+	if gatewayCtx.Governance.RateLimitDecision != nil {
+		reqCtx.RateLimitDecision = gatewayCtx.Governance.RateLimitDecision.Clone()
+	}
+	if gatewayCtx.Governance.BudgetDecision != nil {
+		reqCtx.BudgetDecision = gatewayCtx.Governance.BudgetDecision.Clone()
+	}
 
 	if gatewayCtx.Masking.Action != "" {
 		reqCtx.MaskingAction = gatewayCtx.Masking.Action

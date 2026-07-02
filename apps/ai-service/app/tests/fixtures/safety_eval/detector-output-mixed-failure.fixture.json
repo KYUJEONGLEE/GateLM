@@ -1,0 +1,61 @@
+{
+  "fixtureName": "v1-safety-eval-detector-output-mixed-failure",
+  "fixtureVersion": "2026-06-27.v1",
+  "mode": "detector_output",
+  "results": [
+    {
+      "caseId": "safe_none_basic",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": ["email"],
+        "detectedTypeCounts": {
+          "email": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Write a short refund reply for the demo customer.",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "email_redacts_before_provider",
+      "actualSafetyDecision": {
+        "action": "none",
+        "detectedTypes": [],
+        "detectedTypeCounts": {},
+        "detectedCount": 0,
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "repeated_email_redacts_count",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": ["email"],
+        "detectedTypeCounts": {
+          "email": 1
+        },
+        "detectedCount": 2,
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED] and cc [EMAIL_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    },
+    {
+      "caseId": "api_key_blocks_before_cache",
+      "actualSafetyDecision": {
+        "action": "redacted",
+        "detectedTypes": ["api_key"],
+        "detectedTypeCounts": {
+          "api_key": 1
+        },
+        "detectedCount": 1,
+        "redactedPromptPreview": "Debug this config line: api_key=[API_KEY_REDACTED].",
+        "blockReason": null,
+        "securityPolicyHash": "sec_v1_safety_baseline"
+      }
+    }
+  ]
+}

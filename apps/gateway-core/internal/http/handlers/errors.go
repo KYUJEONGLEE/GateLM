@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
@@ -42,13 +43,30 @@ func writeGatewayErrorWithContext(w http.ResponseWriter, reqCtx *pipeline.Reques
 		return
 	}
 
-	reqCtx.Status = "error"
+	reqCtx.Status = terminalStatusForGatewayError(status, code)
 	reqCtx.HTTPStatus = status
 	reqCtx.ErrorCode = code
 	reqCtx.ErrorMessage = message
 	reqCtx.ErrorStage = stage
 
 	writeGatewayErrorWithHeaders(w, status, gatewayHeaderValuesFromContext(reqCtx), code, message)
+}
+
+func terminalStatusForGatewayError(status int, code string) string {
+	switch code {
+	case "rate_limited":
+		return invocationlog.StatusRateLimited
+	case invocationlog.ErrorCodeInvalidAPIKey,
+		invocationlog.ErrorCodeInvalidAppToken,
+		"scope_mismatch",
+		"budget_blocked",
+		"sensitive_data_blocked":
+		return invocationlog.StatusBlocked
+	}
+	if status == gatewayerrors.StatusClientClosedRequest {
+		return invocationlog.StatusCancelled
+	}
+	return invocationlog.StatusFailed
 }
 
 func writeGatewayDomainError(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) bool {
