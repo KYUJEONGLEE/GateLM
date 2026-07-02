@@ -42,6 +42,20 @@ type LogWrite struct {
 	DurationSeconds float64
 }
 
+type StreamRelay struct {
+	SelectedProvider string
+	SelectedModel    string
+	Outcome          string
+	ErrorCode        string
+	DurationSeconds  float64
+}
+
+type StreamTimeToFirstToken struct {
+	SelectedProvider string
+	SelectedModel    string
+	DurationSeconds  float64
+}
+
 func (r *Registry) GatewayRequestStarted(endpoint string, method string) {
 	r.AddGauge(GatewayInflightRequests, []Label{
 		{Name: "endpoint", Value: endpoint},
@@ -111,6 +125,29 @@ func (r *Registry) LogWrite(write LogWrite) {
 	r.ObserveHistogram(LogWriteDurationSeconds, labels, write.DurationSeconds)
 }
 
+func (r *Registry) StreamStarted(selectedProvider string, selectedModel string) {
+	r.AddGauge(StreamsActive, streamBaseLabels(selectedProvider, selectedModel), 1)
+}
+
+func (r *Registry) StreamFinished(relay StreamRelay) {
+	baseLabels := streamBaseLabels(relay.SelectedProvider, relay.SelectedModel)
+	relayLabels := append(baseLabels,
+		Label{Name: "stream_outcome", Value: normalizeStreamOutcome(relay.Outcome)},
+		Label{Name: "error_code", Value: defaultLabelValue(relay.ErrorCode)},
+	)
+	r.AddGauge(StreamsActive, baseLabels, -1)
+	r.AddCounter(StreamRelayTotal, relayLabels, 1)
+	r.ObserveHistogram(StreamDurationSeconds, relayLabels, relay.DurationSeconds)
+}
+
+func (r *Registry) StreamTimeToFirstToken(ttft StreamTimeToFirstToken) {
+	r.ObserveHistogram(
+		StreamTimeToFirstTokenSeconds,
+		streamBaseLabels(ttft.SelectedProvider, ttft.SelectedModel),
+		ttft.DurationSeconds,
+	)
+}
+
 func httpStatusLabel(status int) string {
 	if status <= 0 {
 		return "0"
@@ -135,5 +172,21 @@ func normalizeStatus(status string) string {
 		return "failed"
 	default:
 		return "failed"
+	}
+}
+
+func streamBaseLabels(selectedProvider string, selectedModel string) []Label {
+	return []Label{
+		{Name: "selected_provider", Value: selectedProvider},
+		{Name: "selected_model", Value: selectedModel},
+	}
+}
+
+func normalizeStreamOutcome(outcome string) string {
+	switch strings.TrimSpace(outcome) {
+	case "completed", "interrupted", "cancelled":
+		return strings.TrimSpace(outcome)
+	default:
+		return "interrupted"
 	}
 }
