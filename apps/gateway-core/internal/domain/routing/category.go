@@ -23,11 +23,11 @@ var (
 	}
 	summarizationCategoryKeywords = []string{
 		"summarize", "summary", "tldr", "tl;dr", "key points", "meeting notes", "bullet points",
-		"요약", "회의록", "핵심", "정리",
+		"요약", "회의록", "핵심", "요약 정리", "핵심 정리",
 	}
 	extractionJSONCategoryKeywords = []string{
 		"as json", "to json", "return json", "json object", "json schema", "json_schema", "structured output",
-		"json으로", "json 형태", "json 형식", "json 포맷", "json 변환", "json 결과", "json 출력", "구조화", "추출",
+		"json으로", "json 형태", "json 형식", "json 포맷", "json 변환", "json 결과", "json 출력", "json 구조화", "json 추출",
 	}
 	reasoningCategoryKeywords = []string{
 		"compare", "tradeoff", "trade-off", "pros and cons", "best option", "recommend the safest sequence",
