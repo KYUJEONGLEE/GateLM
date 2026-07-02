@@ -22,6 +22,7 @@ var semanticCacheEnvKeys = []string{
 	"SEMANTIC_CACHE_OPENAI_BASE_URL",
 	"SEMANTIC_CACHE_ALLOW_CATEGORIES",
 	"SEMANTIC_CACHE_DENY_CATEGORIES",
+	"OPENAI_API_KEY",
 }
 
 func resetSemanticCacheEnv(t *testing.T) {
@@ -129,9 +130,61 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown embedding provider returns explicit error", func(t *testing.T) {
+	t.Run("pgvector store returns explicit error", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_STORE", "pgvector")
+
+		_, err := LoadSemanticCacheConfig()
+		if err == nil || !strings.Contains(err.Error(), "unsupported semantic cache store") {
+			t.Fatalf("pgvector store는 아직 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
+	t.Run("openai embedding provider is allowed while semantic cache is disabled", func(t *testing.T) {
 		resetSemanticCacheEnv(t)
 		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "openai")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("disabled 상태에서는 OPENAI_API_KEY 없이도 openai provider config를 로드해야 함: %v", err)
+		}
+		if cfg.EmbeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
+			t.Fatalf("embedding provider 불일치: got %q", cfg.EmbeddingProvider)
+		}
+		if cfg.OpenAIAPIKey != "" {
+			t.Fatalf("테스트 기본값에서는 OpenAI API key가 없어야 함")
+		}
+	})
+
+	t.Run("enabled openai embedding provider requires OPENAI_API_KEY", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "openai")
+
+		_, err := LoadSemanticCacheConfig()
+		if err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY is required") {
+			t.Fatalf("enabled openai provider는 OPENAI_API_KEY 누락 시 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
+	t.Run("enabled openai embedding provider accepts OPENAI_API_KEY", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "openai")
+		t.Setenv("OPENAI_API_KEY", "test_openai_api_key_redacted")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("OPENAI_API_KEY가 있으면 enabled openai provider config를 로드해야 함: %v", err)
+		}
+		if cfg.EmbeddingProvider != SemanticCacheEmbeddingProviderOpenAI || cfg.OpenAIAPIKey != "test_openai_api_key_redacted" {
+			t.Fatalf("openai provider config 불일치: provider=%q key_set=%t", cfg.EmbeddingProvider, cfg.OpenAIAPIKey != "")
+		}
+	})
+
+	t.Run("unknown embedding provider returns explicit error", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "unknown")
 
 		_, err := LoadSemanticCacheConfig()
 		if err == nil || !strings.Contains(err.Error(), "unsupported semantic cache embedding provider") {

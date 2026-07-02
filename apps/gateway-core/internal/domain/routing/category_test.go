@@ -1,6 +1,8 @@
 package routing
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -50,5 +52,37 @@ func TestCategoryScanPrefixKeepsUTF8Boundary(t *testing.T) {
 	}
 	if !utf8.ValidString(prefix) {
 		t.Fatalf("expected UTF-8 safe prefix, got %q", prefix)
+	}
+}
+
+func TestCategoryEvalCasesFromFixture(t *testing.T) {
+	payload, err := os.ReadFile("testdata/category_eval_cases.json")
+	if err != nil {
+		t.Fatalf("category 평가셋 fixture를 읽어야 함: %v", err)
+	}
+
+	var cases []struct {
+		ID               string  `json:"id"`
+		Prompt           *string `json:"prompt"`
+		ExpectedCategory string  `json:"expectedCategory"`
+	}
+	if err := json.Unmarshal(payload, &cases); err != nil {
+		t.Fatalf("category 평가셋 fixture JSON decode 실패: %v", err)
+	}
+	if len(cases) == 0 {
+		t.Fatalf("category 평가셋 fixture는 비어 있으면 안 됨")
+	}
+
+	classifier := NewRuleBasedCategoryClassifier()
+	for _, tc := range cases {
+		t.Run(tc.ID, func(t *testing.T) {
+			prompt := ""
+			if tc.Prompt != nil {
+				prompt = *tc.Prompt
+			}
+			if got := classifier.Classify(prompt); got != tc.ExpectedCategory {
+				t.Fatalf("category 평가셋 불일치: got=%q want=%q", got, tc.ExpectedCategory)
+			}
+		})
 	}
 }

@@ -183,7 +183,14 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	semanticCacheService := routerOptions.SemanticCacheService
 	if semanticCacheService == nil && cfg.SemanticCache.Enabled {
 		store, storeErr := cachekey.NewSemanticCacheStore(cfg.SemanticCache.Store, cfg.SemanticCache.MaxEntries)
-		embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProvider(cfg.SemanticCache.EmbeddingProvider, cfg.SemanticCache.EmbeddingModel)
+		embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProviderWithConfig(cachekey.SemanticCacheEmbeddingProviderConfig{
+			Provider:         cfg.SemanticCache.EmbeddingProvider,
+			ModelName:        cfg.SemanticCache.EmbeddingModel,
+			OpenAIAPIKey:     cfg.SemanticCache.OpenAIAPIKey,
+			OpenAIBaseURL:    cfg.SemanticCache.OpenAIBaseURL,
+			OpenAIDimensions: cfg.SemanticCache.EmbeddingDimensions,
+			Timeout:          cfg.SemanticCache.EmbeddingTimeout,
+		})
 		if storeErr == nil && providerErr == nil {
 			service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
 				Enabled:       cfg.SemanticCache.Enabled,

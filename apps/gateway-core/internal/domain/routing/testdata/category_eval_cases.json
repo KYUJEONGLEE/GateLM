@@ -1,0 +1,136 @@
+[
+  {
+    "id": "ko_general_password_reset",
+    "prompt": "비밀번호 재설정 방법 알려줘",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_general_api_key",
+    "prompt": "API Key 발급 방법 알려줘",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_general_usage",
+    "prompt": "사용량은 어디서 확인해?",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_general_account_settings",
+    "prompt": "계정 설정은 어디서 바꿔?",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_general_dashboard",
+    "prompt": "대시보드는 어디서 볼 수 있어?",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_support_refund_shipping_fee",
+    "prompt": "배송비도 환불되나요?",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_return_shipping",
+    "prompt": "반품하면 배송비도 돌려받나요?",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_cancel_order",
+    "prompt": "주문 취소하고 싶어요",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_payment_cancel",
+    "prompt": "결제 취소 가능한가요?",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_exchange",
+    "prompt": "교환이나 환불은 어디서 하나요?",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_policy",
+    "prompt": "환불 정책 알려줘",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_code_explain_code",
+    "prompt": "이 코드 설명해줘",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_function_error",
+    "prompt": "이 함수 왜 에러나?",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_compile_error",
+    "prompt": "컴파일 오류가 나요",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_runtime_bug",
+    "prompt": "실행하면 버그가 생겨요",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_sql_query",
+    "prompt": "아래 SQL 쿼리 설명해줘",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_block",
+    "prompt": "```go\nconst value = 1\n``` 코드 블록이 포함된 요청",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_translation_to_english",
+    "prompt": "이 문장을 영어로 번역해줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "ko_translation_to_korean",
+    "prompt": "이걸 한국어로 바꿔줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "ko_translation_to_japanese",
+    "prompt": "일본어로 번역해줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "ko_translation_to_chinese",
+    "prompt": "다음 문장을 중국어로 옮겨줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "ko_translation_english_style",
+    "prompt": "영문으로 바꿔줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "unknown_empty",
+    "prompt": "",
+    "expectedCategory": "unknown"
+  },
+  {
+    "id": "unknown_whitespace",
+    "prompt": "   ",
+    "expectedCategory": "unknown"
+  },
+  {
+    "id": "unknown_missing_user_message",
+    "expectedCategory": "unknown"
+  },
+  {
+    "id": "priority_refund_translation",
+    "prompt": "환불 정책을 영어로 번역해줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "priority_code_translation",
+    "prompt": "이 코드를 영어로 번역해줘",
+    "expectedCategory": "code"
+  }
+]
