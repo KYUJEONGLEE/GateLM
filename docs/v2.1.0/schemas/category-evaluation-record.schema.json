@@ -25,7 +25,7 @@
     "redactedPrompt": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 4096,
+      "maxLength": 65536,
       "description": "Safety-masked prompt text. Raw prompt, raw detected values, and secrets are forbidden."
     },
     "expectedCategory": {
