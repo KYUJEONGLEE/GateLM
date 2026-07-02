@@ -1167,7 +1167,7 @@ function buildMockModel(
     displayName,
     status: 'active',
     contextWindowTokens: 8192,
-    supportsStreaming: false,
+    supportsStreaming: true,
     supportsJsonMode: false,
   };
 }

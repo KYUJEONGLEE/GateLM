@@ -331,6 +331,80 @@ func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testi
 	}
 }
 
+func TestChatCompletionsHandlerRelaysLocalMockProviderStream(t *testing.T) {
+	upstreamStreamCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected mock provider path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("expected event-stream accept header, got %q", r.Header.Get("Accept"))
+		}
+		upstreamStreamCalls++
+
+		var req provider.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode mock provider request: %v", err)
+		}
+		if !req.Stream {
+			t.Fatal("expected Gateway to call mock provider with stream=true")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"로컬 mock streaming 응답입니다."},"finish_reason":null}]}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer mockServer.Close()
+
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("로컬 mock streaming을 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if upstreamStreamCalls != 1 {
+		t.Fatalf("expected one upstream mock streaming call, got %d", upstreamStreamCalls)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") ||
+		!strings.Contains(body, "로컬 mock streaming 응답입니다.") ||
+		!strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected relayed local mock SSE stream, headers=%v body=%q", rr.Header(), body)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.Status != invocationlog.StatusSuccess ||
+		logged.DomainOutcomes.Streaming.Outcome != "completed" ||
+		logged.DomainOutcomes.Provider.Outcome != "success" ||
+		logged.TotalTokens != 7 {
+		t.Fatalf("unexpected local mock streaming log: %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+	loggedJSON, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal terminal log: %v", err)
+	}
+	if strings.Contains(string(loggedJSON), "로컬 mock streaming 응답입니다.") {
+		t.Fatalf("terminal log must not store local mock streamed chunk content: %s", string(loggedJSON))
+	}
+}
+
 func TestChatCompletionsHandlerStreamingPreservesResponseWhitespace(t *testing.T) {
 	content := "첫 줄\n\n```go\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n```\n끝  두칸"
 	contentJSON, err := json.Marshal(content)

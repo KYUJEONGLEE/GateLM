@@ -79,7 +79,7 @@
           "displayName": "Mock Fallback Chat Model",
           "enabled": true,
           "capabilities": {
-            "streamingSupported": false,
+            "streamingSupported": true,
             "supportsJsonMode": false,
             "maxInputTokens": 4096,
             "maxOutputTokens": 1024
