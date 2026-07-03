@@ -52,7 +52,7 @@ type RoutingSignals struct {
 }
 
 func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
-	return RuleBasedCategoryClassifier{policy: defaultCategoryPolicy}
+	return RuleBasedCategoryClassifier{policy: cloneCategoryPolicy(defaultCategoryPolicy)}
 }
 
 func NewRuleBasedCategoryClassifierWithPolicy(policy CategoryPolicy) RuleBasedCategoryClassifier {
@@ -72,7 +72,6 @@ func ExtractRoutingSignals(prompt string) RoutingSignals {
 }
 
 func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals {
-	policy = normalizeCategoryPolicy(policy)
 	normalized := normalizeCategoryTextWithLimit(prompt, policy.MaxScanBytes)
 	signals := RoutingSignals{
 		PromptLength: utf8.RuneCountInString(prompt),
@@ -193,7 +192,6 @@ func scoreCategoryRule(text string, tokens []string, rule CategoryRule) category
 
 func containsAny(value string, needles []string) bool {
 	for _, needle := range needles {
-		needle = strings.ToLower(strings.TrimSpace(needle))
 		if needle == "" {
 			continue
 		}
@@ -207,7 +205,6 @@ func containsAny(value string, needles []string) bool {
 func countContains(value string, needles []string) int {
 	count := 0
 	for _, needle := range needles {
-		needle = strings.ToLower(strings.TrimSpace(needle))
 		if needle == "" {
 			continue
 		}
@@ -341,7 +338,36 @@ func normalizeCategoryPolicy(policy CategoryPolicy) CategoryPolicy {
 	if policy.Rules == nil {
 		policy.Rules = map[string]CategoryRule{}
 	}
+	for category, rule := range policy.Rules {
+		rule.Contains = normalizeCategoryNeedles(rule.Contains)
+		rule.StrongSignals = normalizeCategoryNeedles(rule.StrongSignals)
+		rule.SoftSignals = normalizeCategoryNeedles(rule.SoftSignals)
+		rule.NegativeSignals = normalizeCategoryNeedles(rule.NegativeSignals)
+		rule.Tokens = normalizeCategoryNeedles(rule.Tokens)
+		rule.RequiresToken = normalizeCategoryNeedle(rule.RequiresToken)
+		rule.RequiresAnyToken = normalizeCategoryNeedles(rule.RequiresAnyToken)
+		policy.Rules[category] = rule
+	}
 	return policy
+}
+
+func normalizeCategoryNeedles(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = normalizeCategoryNeedle(value)
+		if value == "" {
+			continue
+		}
+		normalized = append(normalized, value)
+	}
+	return normalized
+}
+
+func normalizeCategoryNeedle(value string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
 }
 
 func cloneCategoryPolicy(policy CategoryPolicy) CategoryPolicy {

@@ -503,11 +503,12 @@ func decideWithLatency(router *routing.SimpleRouter, prompt string, iterations i
 			RequestedModel: "auto",
 			PromptText:     prompt,
 		})
+		if err != nil {
+			exitWithError(fmt.Errorf("routing decision failed: %w", err))
+		}
 		elapsed := time.Since(start)
 		latencies = append(latencies, durationMicros(elapsed))
-		if err == nil {
-			decision = nextDecision
-		}
+		decision = nextDecision
 	}
 	return decision, latencies
 }
