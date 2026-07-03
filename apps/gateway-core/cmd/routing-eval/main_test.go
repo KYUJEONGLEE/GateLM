@@ -58,8 +58,17 @@ func TestEvaluateReportIncludesTierLatencyAndCostEvidence(t *testing.T) {
 	if report.TierAccuracy <= 0 {
 		t.Fatalf("expected positive tier accuracy, got %.4f", report.TierAccuracy)
 	}
+	if report.ErrorRate != 0 || report.TierErrorRate != 0 {
+		t.Fatalf("expected no errors for matching fixture, got category=%.4f tier=%.4f", report.ErrorRate, report.TierErrorRate)
+	}
+	if report.ByCategory["general"].Incorrect != 0 || report.ByCategory["general"].IncorrectRate != 0 {
+		t.Fatalf("expected category stats to include zero incorrect counts: %#v", report.ByCategory["general"])
+	}
 	if report.Latency.Samples != 6 {
 		t.Fatalf("expected latency samples per iteration, got %d", report.Latency.Samples)
+	}
+	if report.Latency.AvgMicros <= 0 {
+		t.Fatalf("expected latency average evidence, got %.4f", report.Latency.AvgMicros)
 	}
 	if report.Latency.P95Micros <= 0 {
 		t.Fatalf("expected latency p95 evidence, got %.4f", report.Latency.P95Micros)

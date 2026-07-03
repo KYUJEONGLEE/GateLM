@@ -15,8 +15,10 @@ v2.1 라우팅 고도화의 1차 목표는 외부 모델을 추가 호출하지 
 | 지표 | 의미 |
 |---|---|
 | category accuracy | 프롬프트 업무 유형을 맞혔는가 |
+| category error rate | 프롬프트 업무 유형을 틀린 비율은 얼마인가 |
 | tier accuracy | low_cost / balanced / high_quality 선택이 맞았는가 |
-| routing latency p50/p95 | 라우팅 판단이 충분히 빠른가 |
+| tier error rate | low_cost / balanced / high_quality 선택을 틀린 비율은 얼마인가 |
+| routing latency avg/p50/p95 | 라우팅 판단이 충분히 빠른가 |
 | estimated cost saving | 전부 high_quality로 보낸 baseline 대비 비용을 얼마나 줄였는가 |
 | failures | 어떤 sample이 왜 틀렸는가 |
 
@@ -28,7 +30,8 @@ v2.1 라우팅 고도화의 1차 목표는 외부 모델을 추가 호출하지 
 
 - synthetic 평가셋의 `expectedTier` label
 - category/tier 정확도 계산
-- routing latency p50/p95 계산
+- category/tier 오답률 계산
+- routing latency 평균/p50/p95/max 계산
 - high_quality baseline 대비 상대 비용 절감률 계산
 - prompt text를 노출하지 않는 failure report
 - 멘토 공유용 성능 테스트 시나리오 문서
@@ -44,7 +47,20 @@ v2.1 라우팅 고도화의 1차 목표는 외부 모델을 추가 호출하지 
 
 ## 실행 방법
 
-기본 평가셋을 사용한다.
+자동으로 평가셋을 돌리고 report 파일을 저장한다.
+
+```powershell
+corepack pnpm run v2.1:routing:test
+```
+
+위 명령은 아래 파일을 생성한다.
+
+```text
+reports/routing-eval/routing-eval-<yyyyMMdd-HHmmss>.json
+reports/routing-eval/latest.json
+```
+
+기본 평가셋을 터미널 출력으로 확인한다.
 
 ```powershell
 corepack pnpm run v2.1:routing:evaluate

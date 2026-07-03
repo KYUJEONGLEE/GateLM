@@ -10,6 +10,7 @@
     "verify:v2-docs": "node scripts/verify-v2-docs.mjs",
     "verify:v2.1-category-eval": "node scripts/verify-v2.1-category-eval.mjs",
     "v2.1:routing:evaluate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-routing-evaluate.ps1",
+    "v2.1:routing:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-routing-eval-report.ps1",
     "verify:v2-final": "node scripts/verify-v2-final.mjs",
     "v2:p0:bootstrap:describe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -DescribeOnly",
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",

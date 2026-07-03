@@ -26,6 +26,19 @@
 
 ## 실행 명령
 
+자동 report 저장:
+
+```powershell
+corepack pnpm run v2.1:routing:test
+```
+
+위 명령은 아래 파일을 생성한다.
+
+```text
+reports/routing-eval/routing-eval-<yyyyMMdd-HHmmss>.json
+reports/routing-eval/latest.json
+```
+
 기본 평가:
 
 ```powershell
@@ -55,7 +68,9 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
 | 지표 | 초안 기준 |
 |---|---:|
 | category accuracy | 0.80 이상 |
+| category error rate | 0.20 이하 |
 | tier accuracy | 0.80 이상 |
+| tier error rate | 0.20 이하 |
 | routing latency p95 | 5ms 이하 |
 | estimated cost saving | 0보다 커야 함 |
 | forbidden data in report | 없어야 함 |
@@ -69,9 +84,11 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
   "totalSamples": 8,
   "accuracy": 1,
   "tierAccuracy": 1,
+  "tierErrorRate": 0,
   "latency": {
     "iterations": 20,
     "samples": 160,
+    "avgMicros": 40.2,
     "p50Micros": 30.1,
     "p95Micros": 90.4
   },

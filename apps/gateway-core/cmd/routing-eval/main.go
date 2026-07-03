@@ -37,32 +37,39 @@ type datasetRecord struct {
 }
 
 type report struct {
-	DatasetPath        string                    `json:"datasetPath"`
-	ClassifierName     string                    `json:"classifierName"`
-	ClassifierVersion  string                    `json:"classifierVersion"`
-	TotalSamples       int                       `json:"totalSamples"`
-	CorrectSamples     int                       `json:"correctSamples"`
-	Accuracy           float64                   `json:"accuracy"`
-	TierLabeledSamples int                       `json:"tierLabeledSamples"`
-	TierCorrectSamples int                       `json:"tierCorrectSamples"`
-	TierAccuracy       float64                   `json:"tierAccuracy"`
-	ByCategory         map[string]categoryStats  `json:"byCategory"`
-	ByTier             map[string]categoryStats  `json:"byTier"`
-	ConfusionMatrix    map[string]map[string]int `json:"confusionMatrix"`
-	Latency            latencyStats              `json:"latency"`
-	CostEstimate       costEstimate              `json:"costEstimate"`
-	Failures           []evaluationFailure       `json:"failures"`
+	DatasetPath          string                    `json:"datasetPath"`
+	ClassifierName       string                    `json:"classifierName"`
+	ClassifierVersion    string                    `json:"classifierVersion"`
+	TotalSamples         int                       `json:"totalSamples"`
+	CorrectSamples       int                       `json:"correctSamples"`
+	IncorrectSamples     int                       `json:"incorrectSamples"`
+	Accuracy             float64                   `json:"accuracy"`
+	ErrorRate            float64                   `json:"errorRate"`
+	TierLabeledSamples   int                       `json:"tierLabeledSamples"`
+	TierCorrectSamples   int                       `json:"tierCorrectSamples"`
+	TierIncorrectSamples int                       `json:"tierIncorrectSamples"`
+	TierAccuracy         float64                   `json:"tierAccuracy"`
+	TierErrorRate        float64                   `json:"tierErrorRate"`
+	ByCategory           map[string]categoryStats  `json:"byCategory"`
+	ByTier               map[string]categoryStats  `json:"byTier"`
+	ConfusionMatrix      map[string]map[string]int `json:"confusionMatrix"`
+	Latency              latencyStats              `json:"latency"`
+	CostEstimate         costEstimate              `json:"costEstimate"`
+	Failures             []evaluationFailure       `json:"failures"`
 }
 
 type categoryStats struct {
-	Correct  int     `json:"correct"`
-	Total    int     `json:"total"`
-	Accuracy float64 `json:"accuracy"`
+	Correct       int     `json:"correct"`
+	Incorrect     int     `json:"incorrect"`
+	Total         int     `json:"total"`
+	Accuracy      float64 `json:"accuracy"`
+	IncorrectRate float64 `json:"incorrectRate"`
 }
 
 type latencyStats struct {
 	Iterations int     `json:"iterations"`
 	Samples    int     `json:"samples"`
+	AvgMicros  float64 `json:"avgMicros"`
 	P50Micros  float64 `json:"p50Micros"`
 	P95Micros  float64 `json:"p95Micros"`
 	MaxMicros  float64 `json:"maxMicros"`
@@ -233,7 +240,9 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 				ActualTier:       actualTier,
 			})
 		}
+		stats.Incorrect = stats.Total - stats.Correct
 		stats.Accuracy = ratio(stats.Correct, stats.Total)
+		stats.IncorrectRate = ratio(stats.Incorrect, stats.Total)
 		result.ByCategory[expected] = stats
 
 		if expectedTier != "" {
@@ -252,7 +261,9 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 					ActualTier:       actualTier,
 				})
 			}
+			tierStats.Incorrect = tierStats.Total - tierStats.Correct
 			tierStats.Accuracy = ratio(tierStats.Correct, tierStats.Total)
+			tierStats.IncorrectRate = ratio(tierStats.Incorrect, tierStats.Total)
 			result.ByTier[expectedTier] = tierStats
 		}
 
@@ -265,8 +276,12 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 		result.CostEstimate.ActualCostUnits += tierCostUnit(actualTier)
 	}
 
+	result.IncorrectSamples = result.TotalSamples - result.CorrectSamples
 	result.Accuracy = ratio(result.CorrectSamples, result.TotalSamples)
+	result.ErrorRate = ratio(result.IncorrectSamples, result.TotalSamples)
+	result.TierIncorrectSamples = result.TierLabeledSamples - result.TierCorrectSamples
 	result.TierAccuracy = ratio(result.TierCorrectSamples, result.TierLabeledSamples)
+	result.TierErrorRate = ratio(result.TierIncorrectSamples, result.TierLabeledSamples)
 	result.Latency = summarizeLatency(latencies, latencyIterations)
 	result.CostEstimate.BaselineCostUnits = round4(result.CostEstimate.BaselineCostUnits)
 	result.CostEstimate.ActualCostUnits = round4(result.CostEstimate.ActualCostUnits)
@@ -333,10 +348,15 @@ func summarizeLatency(latencies []float64, iterations int) latencyStats {
 	if len(latencies) == 0 {
 		return latencyStats{Iterations: iterations}
 	}
+	totalMicros := 0.0
+	for _, latency := range latencies {
+		totalMicros += latency
+	}
 	sort.Float64s(latencies)
 	return latencyStats{
 		Iterations: iterations,
 		Samples:    len(latencies),
+		AvgMicros:  round4(totalMicros / float64(len(latencies))),
 		P50Micros:  round4(percentile(latencies, 0.50)),
 		P95Micros:  round4(percentile(latencies, 0.95)),
 		MaxMicros:  round4(latencies[len(latencies)-1]),

@@ -123,11 +123,13 @@ GateLM은 고객 프롬프트를 자동 수집해서 라우팅 모델 학습에 
 |---|---|
 | `totalSamples` | 평가 sample 수 |
 | `accuracy` | category exact-match accuracy |
+| `errorRate` | category exact-match error rate |
 | `tierAccuracy` | tier exact-match accuracy |
-| `byCategory` | category별 correct/total/accuracy |
-| `byTier` | tier별 correct/total/accuracy |
+| `tierErrorRate` | tier exact-match error rate |
+| `byCategory` | category별 correct/incorrect/total/accuracy/incorrectRate |
+| `byTier` | tier별 correct/incorrect/total/accuracy/incorrectRate |
 | `confusionMatrix` | expected category와 actual category count |
-| `latency` | routing decision p50/p95/max microseconds |
+| `latency` | routing decision avg/p50/p95/max microseconds |
 | `costEstimate` | high_quality baseline 대비 상대 비용 절감 추정 |
 | `failures` | sampleId와 expected/actual label만 포함 |
 
@@ -140,6 +142,7 @@ Report는 prompt text를 출력하면 안 된다.
 ```powershell
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run v2.1:routing:evaluate
+corepack pnpm run v2.1:routing:test
 corepack pnpm run verify:v2-docs
 ```
 
@@ -150,7 +153,8 @@ corepack pnpm run verify:v2-docs
 - 평가셋 계약 보강
 - `expectedTier` fixture 추가
 - category/tier 정확도 계산
-- routing latency 측정
+- category/tier 오답률 계산
+- routing latency 평균/p50/p95/max 측정
 - 비용 절감 추정 report
 - 성능 테스트 시나리오 문서
 
