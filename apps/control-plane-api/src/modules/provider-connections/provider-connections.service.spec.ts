@@ -266,6 +266,127 @@ describe('ProviderConnectionsService', () => {
     expect(JSON.stringify(result)).not.toContain(providerCredential);
   });
 
+  it('discovers provider models from a host-only OpenAI-compatible base URL', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000914';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com',
+        provider: 'openai-main',
+        resolver: 'none',
+        secretRef: null,
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [{ id: 'gpt-4o-mini', object: 'model' }],
+      }),
+    } as unknown as Response);
+
+    await service.discoverProviderModels(projectId, 'openai-main');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('discovers Gemini models through the OpenAI-compatible models endpoint', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000913';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        provider: 'gemini',
+        resolver: 'none',
+        secretRef: null,
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+          requestFormat: 'openai_chat_completions',
+        },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'gemini-1.5-flash',
+            object: 'model',
+            owned_by: 'google',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'gemini');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/openai/models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(result).toMatchObject({
+      adapterType: 'openai_compatible',
+      credentialRequired: false,
+      modelCount: 1,
+      models: [
+        expect.objectContaining({
+          modelName: 'gemini-1.5-flash',
+          ownedBy: 'google',
+          provider: 'gemini',
+          providerId,
+        }),
+      ],
+      provider: 'gemini',
+      providerId,
+    });
+    expect(JSON.stringify(result)).not.toContain('Authorization');
+    expect(JSON.stringify(result)).not.toContain('Bearer ');
+  });
+
+  it('strips query and fragment material from provider model discovery endpoints', async () => {
+    const { service, prisma } = createService();
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection('00000000-0000-4000-8000-000000000916', {
+        baseUrl:
+          'https://generativelanguage.googleapis.com/v1beta/openai?region=us#models',
+        provider: 'gemini',
+        resolver: 'none',
+        secretRef: null,
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+          requestFormat: 'openai_chat_completions',
+        },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [{ id: 'gemini-1.5-flash', object: 'model' }],
+      }),
+    } as unknown as Response);
+
+    await service.discoverProviderModels(projectId, 'gemini');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/openai/models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('discovers provider models from a custom provider models endpoint path', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000911';

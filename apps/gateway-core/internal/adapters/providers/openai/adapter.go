@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -184,10 +185,28 @@ func contextWithTimeout(ctx context.Context, timeout time.Duration) (context.Con
 
 func providerEndpoint(baseURL string, path string) string {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	endpointPath := "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	if endpointPath == "/" {
+		endpointPath = ""
+	}
+
+	parsedURL, err := url.Parse(baseURL)
+	if err == nil && parsedURL.Scheme != "" && parsedURL.Host != "" {
+		basePath := strings.TrimRight(parsedURL.Path, "/")
+		if basePath == "" || basePath == "/" {
+			basePath = "/v1"
+		}
+		parsedURL.Path = basePath + endpointPath
+		parsedURL.RawPath = ""
+		parsedURL.RawQuery = ""
+		parsedURL.Fragment = ""
+		return parsedURL.String()
+	}
+
 	if !strings.HasSuffix(baseURL, "/v1") {
 		baseURL += "/v1"
 	}
-	return baseURL + path
+	return baseURL + endpointPath
 }
 
 func classifyTransportError(ctx context.Context, err error) error {

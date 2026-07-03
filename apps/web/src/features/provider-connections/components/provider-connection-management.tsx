@@ -105,7 +105,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "Display name",
     discoverModels: "Discover models",
-    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI providers first.",
+    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible providers.",
     empty: "No provider connections found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture provider connection.",
     management: "management",
@@ -139,7 +139,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "표시 이름",
     discoverModels: "모델 조회",
-    discoveryOpenAiOnly: "모델 조회는 우선 OpenAI Provider에서만 활성화합니다.",
+    discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 Provider에서 활성화됩니다.",
     empty: "Provider connection이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture Provider connection을 표시 중입니다.",
     management: "관리",
@@ -248,8 +248,9 @@ export function ProviderConnectionManagement({
     const normalizedProvider = provider.trim();
     const providerRecord = providers.find((item) => item.provider === normalizedProvider);
     const baseValues = providerRecord ? getProviderFormValues(providerRecord) : null;
+    const adapterType = baseValues?.adapterType ?? formValues.adapterType;
 
-    if (!isDiscoverSupportedProvider(normalizedProvider)) {
+    if (!isDiscoverSupportedProvider(adapterType)) {
       setSubmitState({
         message: text.discoveryOpenAiOnly,
         status: "error"
@@ -542,7 +543,7 @@ export function ProviderConnectionManagement({
               disabled={
                 pendingAction ||
                 discoveringProvider !== null ||
-                !isDiscoverSupportedProvider(formValues.provider) ||
+                !isDiscoverSupportedProvider(formValues.adapterType) ||
                 !isRegisteredProvider(providers, formValues.provider)
               }
               onClick={() => void discoverModels()}
@@ -648,7 +649,9 @@ export function ProviderConnectionManagement({
                           disabled={
                             pendingAction ||
                             discoveringProvider !== null ||
-                            !isDiscoverSupportedProvider(provider.provider)
+                            !isDiscoverSupportedProvider(
+                              getProviderFormValues(provider).adapterType
+                            )
                           }
                           onClick={() => {
                             editFromProvider(provider);
@@ -732,8 +735,8 @@ function getAvailableProviderModels(
   );
 }
 
-function isDiscoverSupportedProvider(provider: string) {
-  return provider.trim().startsWith("openai");
+function isDiscoverSupportedProvider(adapterType: string) {
+  return adapterType === "openai_compatible" || adapterType === "mock";
 }
 
 function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: string) {
@@ -790,6 +793,7 @@ function isChatCompletionModelName(modelName: string) {
     normalizedModelName.startsWith("o1") ||
     normalizedModelName.startsWith("o3") ||
     normalizedModelName.startsWith("o4") ||
+    normalizedModelName.startsWith("gemini-") ||
     normalizedModelName.startsWith("chat-")
   );
 }

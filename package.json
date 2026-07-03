@@ -17,6 +17,7 @@
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",
     "v2:p0:bootstrap:apps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -CheckApps -RequireActiveSnapshot",
     "v2:provider:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-provider-e2e-main-path.ps1",
+    "v2:gemini:smoke": "node scripts/dev/gemini-gateway-smoke.mjs",
     "v2:request-log:consistency": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-request-log-outcome-consistency.ps1",
     "v2:k6:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-k6-smoke.ps1",
     "v2:release:evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-release-evidence.ps1",
