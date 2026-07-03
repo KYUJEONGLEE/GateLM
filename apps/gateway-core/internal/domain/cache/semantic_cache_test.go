@@ -478,6 +478,211 @@ func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
 	}
 }
 
+func TestSemanticCacheServiceStoreEligibilityPolicy(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name              string
+		category          string
+		normalizedText    string
+		cachedResponse    []byte
+		cacheabilityClass string
+		providerOutcome   string
+		fallbackUsed      bool
+		stream            bool
+		wantReason        string
+		wantStored        bool
+		wantEmbeddingCall bool
+	}{
+		{
+			name:              "cacheable password reset FAQ stores",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"비밀번호 재설정 메뉴에서 재설정 메일을 요청할 수 있습니다."}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonStored,
+			wantStored:        true,
+			wantEmbeddingCall: true,
+		},
+		{
+			name:              "usage number response bypasses store",
+			category:          "general",
+			normalizedText:    "이번 달 사용량 통계를 보여줘",
+			cachedResponse:    []byte(`{"answer":"이번 달 사용량: 12345 tokens"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonDynamicUserState,
+		},
+		{
+			name:              "account status response bypasses store",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"계정 상태: 잠김"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonDynamicUserState,
+		},
+		{
+			name:              "refund status response bypasses store",
+			category:          "support_refund",
+			normalizedText:    "배송비도 환불되나요?",
+			cachedResponse:    []byte(`{"answer":"환불 상태: 처리 중"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityPolicySummary,
+			wantReason:        SemanticCacheReasonDynamicUserState,
+		},
+		{
+			name:              "credential marker response bypasses store",
+			category:          "account_access",
+			normalizedText:    "API Key 발급 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"api_key=test-secret"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonPayloadUnsafe,
+		},
+		{
+			name:              "authorization marker response bypasses store",
+			category:          "account_access",
+			normalizedText:    "App Token 생성은 어디서 해?",
+			cachedResponse:    []byte(`{"answer":"Authorization: Bearer token"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonPayloadUnsafe,
+		},
+		{
+			name:              "app token marker response bypasses store",
+			category:          "account_access",
+			normalizedText:    "App Token 생성은 어디서 해?",
+			cachedResponse:    []byte(`{"answer":"app_token=test-secret"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonPayloadUnsafe,
+		},
+		{
+			name:              "provider key marker response bypasses store",
+			category:          "account_access",
+			normalizedText:    "API Key 발급 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"provider_key=test-secret"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonPayloadUnsafe,
+		},
+		{
+			name:              "raw prompt marker response bypasses store",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"raw prompt must not be cached"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonPayloadUnsafe,
+		},
+		{
+			name:              "raw response marker response bypasses store",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"raw response must not be cached"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonPayloadUnsafe,
+		},
+		{
+			name:           "unknown cacheability response bypasses store",
+			category:       "account_access",
+			normalizedText: "비밀번호 재설정 방법 알려줘",
+			cachedResponse: []byte(`{"answer":"safe looking but unclassified response"}`),
+			wantReason:     SemanticCacheReasonResponseNotCacheable,
+		},
+		{
+			name:              "fallback response bypasses store",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"fallback safe response"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			fallbackUsed:      true,
+			wantReason:        SemanticCacheReasonFallbackResponse,
+		},
+		{
+			name:              "provider error response bypasses store",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"provider failed"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityProviderError,
+			providerOutcome:   SemanticCacheProviderOutcomeError,
+			wantReason:        SemanticCacheReasonProviderError,
+		},
+		{
+			name:              "stream response bypasses store",
+			category:          "account_access",
+			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			cachedResponse:    []byte(`{"answer":"stream response"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			stream:            true,
+			wantReason:        SemanticCacheReasonStreamingResponse,
+		},
+		{
+			name:              "code category bypasses store",
+			category:          "code",
+			normalizedText:    "이 코드 설명해줘",
+			cachedResponse:    []byte(`{"answer":"code response"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonCategoryDisabled,
+		},
+		{
+			name:              "translation category bypasses store",
+			category:          "translation",
+			normalizedText:    "이 문장을 영어로 번역해줘",
+			cachedResponse:    []byte(`{"answer":"translation response"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonCategoryDisabled,
+		},
+		{
+			name:              "unknown category bypasses store",
+			category:          "unknown",
+			normalizedText:    "분류하기 어려운 요청",
+			cachedResponse:    []byte(`{"answer":"unknown response"}`),
+			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
+			wantReason:        SemanticCacheReasonCategoryDisabled,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := NewInMemorySemanticCacheStore(10)
+			store.now = func() time.Time { return now }
+			provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
+			service := NewSemanticCacheService(store, provider, SemanticCacheServiceConfig{
+				Enabled:       true,
+				Threshold:     0.92,
+				TopK:          3,
+				TTL:           time.Hour,
+				PolicyVersion: "v1",
+				HitPolicy:     testSemanticHitPolicy(t),
+				StorePolicy:   testSemanticStorePolicy(),
+			})
+			boundary := testSemanticBoundary(t, func(b *SemanticCacheBoundary) {
+				b.PromptCategory = tc.category
+			})
+
+			decision, err := service.Upsert(ctx, SemanticCacheStoreRequest{
+				EntryID:                   "entry-" + tc.name,
+				RequestID:                 "request-" + tc.name,
+				Boundary:                  boundary,
+				NormalizedText:            tc.normalizedText,
+				CachedResponse:            tc.cachedResponse,
+				ResponseCacheabilityClass: tc.cacheabilityClass,
+				ProviderOutcome:           tc.providerOutcome,
+				FallbackUsed:              tc.fallbackUsed,
+				Stream:                    tc.stream,
+				Now:                       now,
+			})
+			if err != nil {
+				t.Fatalf("store eligibility bypass는 에러로 승격되면 안 됨: %v", err)
+			}
+			if decision.SemanticCacheDecisionReason != tc.wantReason {
+				t.Fatalf("store decision reason 불일치: got=%q want=%q decision=%+v", decision.SemanticCacheDecisionReason, tc.wantReason, decision)
+			}
+			if gotStored := len(store.entries) == 1; gotStored != tc.wantStored {
+				t.Fatalf("store 여부 불일치: got=%v want=%v entries=%d", gotStored, tc.wantStored, len(store.entries))
+			}
+			if gotEmbeddingCall := provider.calls > 0; gotEmbeddingCall != tc.wantEmbeddingCall {
+				t.Fatalf("embedding 호출 여부 불일치: got=%v calls=%d want=%v", gotEmbeddingCall, provider.calls, tc.wantEmbeddingCall)
+			}
+		})
+	}
+}
+
 func TestSemanticCacheServiceRejectsForbiddenInputAfterNormalization(t *testing.T) {
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)
@@ -602,6 +807,54 @@ func testSemanticEntry(entryID string, requestID string, boundary SemanticCacheB
 		CreatedAt:                  createdAt,
 		ExpiresAt:                  expiresAt,
 		SemanticCachePolicyVersion: "v1",
+	}
+}
+
+func testSemanticStorePolicy() *SemanticCacheStorePolicy {
+	return &SemanticCacheStorePolicy{
+		PolicyVersion: "store-v1",
+		DefaultMode:   SemanticCacheStoreModeDisabled,
+		Categories: map[string]SemanticCacheCategoryStorePolicy{
+			"account_access": {
+				Mode:                          SemanticCacheStoreModeStrictStore,
+				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityStaticGuidance},
+				RequiresIntent:                true,
+				RequiresRequiredSlots:         true,
+				RequiresForbiddenPayloadGuard: true,
+				RequiresProviderSuccess:       true,
+				DenyFallback:                  true,
+				DenyStream:                    true,
+			},
+			"general": {
+				Mode:                          SemanticCacheStoreModeStrictStore,
+				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityStaticGuidance},
+				RequiresIntent:                true,
+				RequiresRequiredSlots:         true,
+				RequiresForbiddenPayloadGuard: true,
+				RequiresProviderSuccess:       true,
+				DenyFallback:                  true,
+				DenyStream:                    true,
+			},
+			"support_refund": {
+				Mode:                          SemanticCacheStoreModeStrictStore,
+				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityPolicySummary},
+				RequiresIntent:                true,
+				RequiresRequiredSlots:         true,
+				RequiresForbiddenPayloadGuard: true,
+				RequiresProviderSuccess:       true,
+				DenyFallback:                  true,
+				DenyStream:                    true,
+			},
+			"code": {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			"translation": {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			"unknown": {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+		},
 	}
 }
 

@@ -7,7 +7,7 @@
     "general": {
       "enabled": true,
       "mode": "strict_hit",
-      "categoryThreshold": 0.92,
+      "categoryThreshold": 0.50,
       "requiresIntent": true,
       "requiresRequiredSlots": true,
       "requiresHardNegative": true
@@ -15,7 +15,7 @@
     "account_access": {
       "enabled": true,
       "mode": "strict_hit",
-      "categoryThreshold": 0.92,
+      "categoryThreshold": 0.50,
       "requiresIntent": true,
       "requiresRequiredSlots": true,
       "requiresHardNegative": true
@@ -23,7 +23,7 @@
     "support_refund": {
       "enabled": true,
       "mode": "strict_hit",
-      "categoryThreshold": 0.92,
+      "categoryThreshold": 0.70,
       "requiresIntent": true,
       "requiresRequiredSlots": true,
       "requiresHardNegative": true
@@ -43,16 +43,20 @@
   },
   "synonyms": {
     "ko": {
-      "password": ["비밀번호", "패스워드", "비번", "password"],
-      "password_reset": ["재설정", "초기화", "리셋", "reset"],
+      "password": ["비밀번호", "패스워드", "비번", "암호", "로그인 비번", "password"],
+      "password_reset": ["재설정", "초기화", "리셋", "다시 만들", "까먹", "잊어버", "분실", "reset"],
       "api_key": ["API Key", "API 키", "api key"],
-      "create": ["발급", "생성", "만들", "새로 만들"],
+      "app_token": ["App Token", "app token", "앱 토큰", "토큰"],
+      "account": ["계정", "account"],
+      "create": ["발급", "생성", "만들", "만드는", "새로 만들", "새로 만드는"],
+      "delete": ["삭제", "삭제하는", "탈퇴", "없애"],
       "usage": ["사용량", "이용량", "사용 통계", "사용량 통계"],
       "monthly": ["이번 달", "월간", "당월"],
       "refund": ["환불", "환급", "돌려받"],
+      "refund_request": ["환불 접수", "환불 신청"],
       "return": ["반품", "반송"],
       "cancel": ["취소"],
-      "order": ["주문"],
+      "order": ["주문", "결제"],
       "exchange": ["교환", "교환 신청"],
       "shipping_fee": ["배송비", "운송비", "반품 배송비"]
     }
@@ -74,6 +78,32 @@
         "credentialKind": "api_key"
       },
       "priority": 90
+    },
+    "account.app_token_create": {
+      "category": "account_access",
+      "matchAll": ["app_token", "create"],
+      "requiredSlots": {
+        "accountAction": "app_token_create",
+        "credentialKind": "app_token"
+      },
+      "priority": 85
+    },
+    "account.app_token_delete": {
+      "category": "account_access",
+      "matchAll": ["app_token", "delete"],
+      "requiredSlots": {
+        "accountAction": "app_token_delete",
+        "credentialKind": "app_token"
+      },
+      "priority": 85
+    },
+    "account.account_delete": {
+      "category": "account_access",
+      "matchAll": ["account", "delete"],
+      "requiredSlots": {
+        "accountAction": "account_delete"
+      },
+      "priority": 80
     },
     "usage.monthly_usage_check": {
       "category": "general",
@@ -111,6 +141,14 @@
       },
       "priority": 100
     },
+    "support_refund.refund_request": {
+      "category": "support_refund",
+      "matchAll": ["refund_request"],
+      "requiredSlots": {
+        "supportAction": "refund_request"
+      },
+      "priority": 90
+    },
     "support_refund.exchange_request": {
       "category": "support_refund",
       "matchAll": ["exchange"],
@@ -123,6 +161,24 @@
   },
   "forbiddenIntentPairs": [
     {
+      "category": "account_access",
+      "first": "account.app_token_create",
+      "second": "account.api_key_create",
+      "reason": "App Token creation and API Key creation are separate credential workflows"
+    },
+    {
+      "category": "account_access",
+      "first": "account.app_token_create",
+      "second": "account.app_token_delete",
+      "reason": "App Token creation and deletion are opposite credential workflows"
+    },
+    {
+      "category": "account_access",
+      "first": "account.password_reset",
+      "second": "account.account_delete",
+      "reason": "Password reset and account deletion are not answer-compatible"
+    },
+    {
       "category": "support_refund",
       "first": "support_refund.shipping_fee_refund",
       "second": "support_refund.order_cancel",
@@ -133,6 +189,12 @@
       "first": "support_refund.return_shipping_fee",
       "second": "support_refund.exchange_request",
       "reason": "return shipping fee and exchange request are not answer-compatible"
+    },
+    {
+      "category": "support_refund",
+      "first": "support_refund.refund_request",
+      "second": "support_refund.shipping_fee_refund",
+      "reason": "general refund request guidance and shipping-fee refund policy are not answer-compatible"
     }
   ]
 }

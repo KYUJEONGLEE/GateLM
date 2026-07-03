@@ -359,6 +359,12 @@ Semantic Cache production hit policy는 embedding score만 보는 평가셋이 �
 apps/gateway-core/internal/domain/cache/testdata/semantic_cache_intent_eval_cases.json
 ```
 
+Beta 확장 계획:
+
+```text
+docs/testing/semantic-cache-beta-eval-dataset-plan.md
+```
+
 이 평가셋은 OpenAI API 호출 결과가 아니다. `OPENAI_API_KEY` 없이 읽고 검증할 수 있는 static contract다.
 
 필수 field:
