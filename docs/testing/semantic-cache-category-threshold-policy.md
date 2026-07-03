@@ -52,6 +52,160 @@ category allow
 + similarity >= categoryThreshold
 ```
 
+## 2026-07-03 Beta Rollout 재검토 결론
+
+normalization과 reranker actual eval 이후 beta rollout 정책은 test policy material보다 더 좁게 잡는다.
+
+핵심 결론:
+
+- `general` static guidance만 limited enforce 후보로 둔다.
+- `account_access`는 shadow 유지가 맞다.
+- `support_refund`는 enforce 금지 또는 strict shadow 유지가 맞다.
+- `code`, `translation`, `unknown`은 deny 유지다.
+- `dynamic_user_state`는 embedding/reranker 전에 bypass 유지다.
+- `text-embedding-3-large`가 현재 한국어 beta 후보로 더 적합하다.
+- threshold는 단독 hit 조건이 아니며, `canonicalIntent`, `requiredSlots`, `dynamic_user_state`, `hardNegativeGuard`, `reranker` 이후의 마지막 numeric gate로만 사용한다.
+
+runtime rollout 정책과 test policy material은 아래처럼 구분한다.
+
+| category | test/eval material | beta rollout 권장 | 이유 |
+| --- | --- | --- | --- |
+| `general` | `strict_hit`, `categoryThreshold=0.50` | limited enforce 가능 | static guidance에 한정하면 actual eval에서 positive 유지 가능 |
+| `account_access` | `strict_hit`, `categoryThreshold=0.50` | shadow 유지 | credential/계정 workflow는 false positive 비용이 높고 hard negative가 더 필요 |
+| `support_refund` | `strict_hit`, `categoryThreshold=0.70` | enforce 금지, strict shadow 또는 candidate_only | 환불/취소/교환은 같은 category 안 false positive 비용이 큼 |
+| `code` | `disabled` | deny | 입력 코드와 에러 맥락이 응답을 결정함 |
+| `translation` | `disabled` | deny | 입력 문장 자체가 응답을 결정함 |
+| `unknown` | `disabled` | deny | intent/slot 신뢰 불가 |
+
+### `general` Static Guidance Enforce 가능 범위
+
+enforce 가능한 `general`은 아래 조건을 모두 만족하는 정적 안내성 요청으로 제한한다.
+
+- `canonicalIntent=usage.monthly_usage_check`처럼 low-cardinality intent가 있어야 함
+- `requiredSlots`가 `usageObject=api_usage`, `usageAnswerType=static_guidance`처럼 정적 안내임을 보여야 함
+- "내 이번 달 사용량", "오늘 토큰 사용량", "현재 프로젝트별 비용"처럼 사용자별 값이 필요한 요청은 `dynamic_user_state`로 bypass
+- cached response가 실제 사용량/비용/토큰 수 같은 사용자별 값을 포함하지 않아야 함
+- `semanticSimilarity >= categoryThreshold`
+- reranker가 켜진 경우 `reranker pass`
+
+현재 actual eval 기준으로는 `text-embedding-3-large` + `categoryThreshold=0.50`을 beta 후보로 볼 수 있다. `0.45`는 recall은 좋지만 raw dynamic negative도 같이 threshold를 넘는 구간이므로 shadow/canary 관찰용 후보로만 둔다.
+
+### `account_access` Shadow 유지
+
+`account_access`는 password reset, API Key 생성 안내처럼 재사용 가능한 FAQ가 있지만, credential 또는 계정 상태가 섞이면 위험하다.
+
+현실형 확장 OpenAI eval에서 아래 위험이 확인됐다.
+
+- `API Key 생성` vs `API Key 삭제`: `small=0.714895`, `large=0.769811`
+- `API Key 발급 메뉴` vs `내 API Key 값 다시 보여줘`: `small=0.484014`, `large=0.605155`
+- `App Token 생성` positive는 `large=0.498377`로 threshold `0.50` 근처에 걸친다.
+
+즉 `account_access`는 positive recall과 hard negative 위험이 같이 존재한다. threshold를 낮춰 enforce하는 방식은 맞지 않다.
+
+정책:
+
+- beta enforce 대상에서 제외
+- shadow에서 `categoryThreshold=0.50` 기준으로 측정
+- API Key, App Token, Provider Key, Authorization header, actual secret 모양 값이 감지되면 lookup/store 모두 금지
+- account hard negative 평가셋을 늘리기 전 enforce 금지
+
+### `support_refund` Enforce 금지
+
+`support_refund`는 `shipping_fee_refund`, `order_cancel`, `exchange_request`, `refund_request`가 같은 category 안에 있지만 답이 다르다.
+
+정책:
+
+- beta enforce 금지
+- 필요하면 strict shadow 또는 candidate_only만 허용
+- `categoryThreshold=0.70`은 shadow 측정 기준으로 유지
+- hard negative가 하나라도 pass하면 즉시 rollout 후보에서 제외
+- reranker가 pass해도 `canonicalIntent` mismatch, `requiredSlots` mismatch, `hardNegativeGuard`를 override하면 안 됨
+
+### Threshold 후보
+
+| category | beta 후보 | production 후보 | 설명 |
+| --- | ---: | ---: | --- |
+| `general` static guidance | 0.45 shadow, 0.50 limited enforce | 0.50부터 재검증 | `large` 기준 positive 3/3, dynamic negative는 guard 필수 |
+| `account_access` | 0.50 shadow | 미정 | hard negative/credential guard 확대 전 enforce 금지 |
+| `support_refund` | 0.70 strict shadow | 미정 | false positive 비용이 커서 enforce 금지 |
+| `code` / `translation` / `unknown` | 없음 | 없음 | threshold와 무관하게 deny |
+
+현실형 확장 eval 기준으로 `general` static guidance positive는 `large`에서 대체로 `0.55~0.60`대였다. 반면 `account_access` hard negative는 `0.76`대까지 올라갔다. 따라서 category를 넓히는 것이 아니라 `general` static guidance로 더 좁히는 쪽이 맞다.
+
+### Reranker Score 기준
+
+현재 최소 구현에서 `rerankerScore`는 safe observability field이며, production 보정된 독립 score가 아니다.
+
+beta 기준:
+
+- reranker off면 기존 policy guard + threshold 결과만 shadow/eval로 본다.
+- deterministic reranker는 `Passed=true/false`와 `rerankerDecisionReason`을 우선한다.
+- score 기반 reranker를 붙일 경우 `general` static guidance에서만 먼저 shadow 측정한다.
+- score 기반 enforce 후보는 최소 `rerankerScore >= 0.80`부터 검토하되, dataset false positive 0건이 먼저 필요하다.
+- `support_refund`는 `rerankerScore`가 높아도 enforce하지 않는다.
+
+### False Positive / False Negative Tradeoff
+
+현재 정책은 false negative를 감수하고 false positive를 줄이는 쪽이다.
+
+- false positive: 서로 다른 요청에 이전 답을 재사용하는 사고. production에서 더 위험하다.
+- false negative: 재사용 가능했지만 provider를 호출하는 비용 문제. beta에서는 감수 가능하다.
+
+따라서 애매한 경우는 hit가 아니라 miss/provider path가 맞다.
+
+### Latency / Cost 영향
+
+- normalization은 외부 호출이 없어서 latency/cost 영향이 작다.
+- OpenAI embedding은 semantic lookup/store 후보에서 외부 호출 비용이 발생한다.
+- deterministic reranker는 외부 API 호출이 없으므로 추가 OpenAI 비용이 없다.
+- external reranker 또는 LLM judge는 top-k 후보별 추가 latency/cost가 생기므로 beta 기본값으로 켜지 않는다.
+
+### Rollback 조건
+
+아래 중 하나라도 발생하면 enforce를 즉시 shadow 또는 disabled로 되돌린다.
+
+- `dynamic_user_state` 요청에서 hit 발생
+- `code`, `translation`, `unknown` category에서 hit 발생
+- `support_refund`에서 provider bypass hit 발생
+- `canonicalIntent` mismatch 또는 `requiredSlots` mismatch인데 hit 발생
+- `hardNegativeGuard` 대상 pair에서 hit 발생
+- `reranker_provider_failure`, `reranker_timeout`이 증가하면서 provider path 안정성에 영향
+- raw prompt, API Key, App Token, Provider Key, Authorization header가 log/detail/cache/test output에 남는 정황 발견
+
+### 모니터링 Safe Field
+
+log/detail/metric label에는 low-cardinality safe field만 남긴다.
+
+- `cacheType`
+- `semanticCacheHit`
+- `semanticCacheDecisionReason`
+- `semanticSimilarity` 또는 score bucket
+- `semanticCacheThreshold`
+- `semanticCachePolicyVersion`
+- `normalizationVersion`
+- `embeddingProvider`
+- `embeddingModel`
+- `category`
+- `canonicalIntent`
+- `requiredSlotsHash`
+- `rerankerApplied`
+- `rerankerPassed`
+- `rerankerScore` 또는 score bucket
+- `rerankerDecisionReason`
+- `providerCalled`
+- `cacheMode`
+
+금지:
+
+- raw prompt
+- raw response
+- API Key
+- App Token
+- Provider Key
+- Authorization header
+- provider raw error body
+- 주문번호, 이메일, 전화번호, 실제 secret 같은 raw identifier
+
 ## Evaluation Basis
 
 OpenAI eval 문서:
@@ -269,3 +423,13 @@ policy guard 적용 후:
 - `support_refund` positive/hard negative 확대
 - 실제 응답이 정적 FAQ인지 동적 사용자 데이터인지 구분하는 store policy 추가
 - `OPENAI_API_KEY`, App Token, Provider Key, Authorization header, raw prompt가 cache/log/test output에 남지 않는지 지속 검증
+
+normalization + reranker 이후 추가 조건:
+
+- `general` static guidance에서 최소 shadow 기간 동안 false positive 0건 확인
+- `dynamic_user_state`가 embedding/reranker 전에 bypass되는지 운영 로그에서 확인
+- `rerankerDecisionReason` 분포가 low-cardinality enum으로만 남는지 확인
+- `reranker_provider_failure`, `reranker_timeout` 시 provider path가 정상 동작하는지 확인
+- `account_access`는 credential-like input guard와 hard negative dataset 확대 전 enforce 금지
+- `support_refund`는 strict shadow에서도 hard negative hit 0건 전까지 enforce 금지
+- `semanticSimilarity`, `rerankerScore`는 metric label이 아니라 numeric value 또는 bucket으로 집계
