@@ -794,7 +794,7 @@ function buildDemoRuntimeSnapshot(
               highQualityModel: document.routingPolicy.highQualityModel,
             }
           : {}),
-        candidateStatuses: document.routingPolicy.candidateStatuses,
+        candidateStatuses: buildRuntimeSnapshotRoutingCandidateStatuses(document),
         routingPolicyHash: document.routingPolicy.routingPolicyHash,
       },
       cache: {
@@ -1002,6 +1002,80 @@ function toModelFallbackPriority(
   }
 
   return 5;
+}
+
+function buildRuntimeSnapshotRoutingCandidateStatuses(
+  document: ActiveRuntimeConfigResponseDto,
+): NonNullable<
+  RuntimeSnapshotResponseDto['policies']['routing']['candidateStatuses']
+> {
+  const candidates = [
+    {
+      provider: document.routingPolicy.defaultProvider,
+      model: document.routingPolicy.defaultModel,
+      tier: 'balanced' as const,
+      fallbackPriority: 10,
+    },
+    {
+      provider: document.routingPolicy.lowCostProvider,
+      model: document.routingPolicy.lowCostModel,
+      tier: 'low_cost' as const,
+      fallbackPriority: 20,
+    },
+    ...(document.routingPolicy.highQualityProvider &&
+    document.routingPolicy.highQualityModel
+      ? [
+          {
+            provider: document.routingPolicy.highQualityProvider,
+            model: document.routingPolicy.highQualityModel,
+            tier: 'high_quality' as const,
+            fallbackPriority: 30,
+          },
+        ]
+      : []),
+  ];
+  const seen = new Set<string>();
+
+  return candidates.flatMap((candidate) => {
+    const key = `${candidate.provider}:${candidate.model}`;
+    if (seen.has(key)) {
+      return [];
+    }
+    seen.add(key);
+    const provider = document.providers.find(
+      (entry) => entry.provider === candidate.provider,
+    );
+    const model = document.models.find(
+      (entry) =>
+        entry.provider === candidate.provider &&
+        entry.model === candidate.model,
+    );
+
+    return [
+      {
+        ...candidate,
+        status: toRuntimeSnapshotRoutingCandidateStatus(provider, model),
+      },
+    ];
+  });
+}
+
+function toRuntimeSnapshotRoutingCandidateStatus(
+  provider: ActiveRuntimeConfigResponseDto['providers'][number] | undefined,
+  model: ActiveRuntimeConfigResponseDto['models'][number] | undefined,
+): NonNullable<
+  RuntimeSnapshotResponseDto['policies']['routing']['candidateStatuses']
+>[number]['status'] {
+  if (!provider || !model || model.status === 'disabled') {
+    return 'unavailable';
+  }
+  if (provider.status === 'disabled') {
+    return 'unavailable';
+  }
+  if (provider.status === 'degraded') {
+    return 'degraded';
+  }
+  return 'available';
 }
 
 function toRuntimeSnapshotVersion(
@@ -1223,23 +1297,6 @@ function buildRoutingPolicy(
     shortPromptMaxChars: number;
   }> = {},
 ): ActiveRuntimeConfigResponseDto['routingPolicy'] {
-  const candidateStatuses: ActiveRuntimeConfigResponseDto['routingPolicy']['candidateStatuses'] =
-    [
-      {
-        provider: overrides.defaultProvider ?? DEMO_PROVIDER,
-        model: overrides.defaultModel ?? 'mock-balanced',
-        tier: 'balanced',
-        status: 'available',
-        fallbackPriority: 10,
-      },
-      {
-        provider: overrides.lowCostProvider ?? DEMO_PROVIDER,
-        model: overrides.lowCostModel ?? 'mock-fast',
-        tier: 'low_cost',
-        status: 'available',
-        fallbackPriority: 20,
-      },
-    ];
   const routingPolicyWithoutHash = {
     type: 'simple',
     autoModel: 'auto',
@@ -1250,7 +1307,6 @@ function buildRoutingPolicy(
     fallbackProvider: overrides.fallbackProvider ?? DEMO_PROVIDER,
     fallbackModel: overrides.fallbackModel ?? 'mock-balanced',
     shortPromptMaxChars: overrides.shortPromptMaxChars ?? 500,
-    candidateStatuses,
   } satisfies Omit<
     ActiveRuntimeConfigResponseDto['routingPolicy'],
     'routingPolicyHash'

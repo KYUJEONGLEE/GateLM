@@ -820,9 +820,15 @@ describe('RuntimeConfigsService', () => {
     });
     expect(result.policies.routing.defaultProvider).toBe('mock');
     expect(result.policies.routing.lowCostModel).toBe('mock-fast');
-    expect(result.policies.routing.candidateStatuses).toEqual(
-      activeDocument.routingPolicy.candidateStatuses,
-    );
+    expect(result.policies.routing.candidateStatuses).toEqual([
+      {
+        provider: 'mock',
+        model: 'mock-fast',
+        tier: 'balanced',
+        status: 'available',
+        fallbackPriority: 10,
+      },
+    ]);
     expect(result.policies.safety.requestSideRequired).toBe(true);
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
@@ -831,24 +837,6 @@ describe('RuntimeConfigsService', () => {
     });
     expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(result)).not.toContain('secretHash');
-  });
-
-  it('uses empty routing candidate statuses for legacy Runtime Config documents', async () => {
-    const { service, prisma } = createService();
-    mockRuntimeInputs(prisma);
-    const activeDocument = activeRuntimeConfigDocument();
-    delete (activeDocument.routingPolicy as { candidateStatuses?: unknown })
-      .candidateStatuses;
-    prisma.runtimeConfig.findFirst.mockResolvedValue(
-      runtimeConfigRecord(activeDocument, {
-        publishState: RuntimeConfigPublishState.ACTIVE,
-        publishedAt: now,
-      }),
-    );
-
-    const result = await service.getActiveRuntimeSnapshot(applicationId);
-
-    expect(result.policies.routing.candidateStatuses).toEqual([]);
   });
 
   it('returns the persisted active RuntimeSnapshot before falling back to Runtime Config', async () => {
@@ -1997,15 +1985,6 @@ describe('RuntimeConfigsService', () => {
         fallbackProvider: 'mock',
         fallbackModel: 'mock-fast',
         shortPromptMaxChars: 500,
-        candidateStatuses: [
-          {
-            provider: 'mock',
-            model: 'mock-fast',
-            tier: 'low_cost',
-            status: 'available',
-            fallbackPriority: 20,
-          },
-        ],
         routingPolicyHash: 'e'.repeat(64),
       },
       pricingRules: [

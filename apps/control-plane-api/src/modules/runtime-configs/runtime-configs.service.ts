@@ -41,10 +41,10 @@ import {
   RuntimeConfigPricingRuleResponseDto,
   RuntimeConfigProviderDto,
   RuntimeConfigRateLimitResponseDto,
-  RuntimeConfigRoutingCandidateStatusResponseDto,
   RuntimeConfigRoutingPolicyResponseDto,
   RuntimeConfigSafetyDetectorResponseDto,
   RuntimeConfigSafetyPolicyResponseDto,
+  RuntimeSnapshotRoutingCandidateStatusDto,
   RuntimeSnapshotResponseDto,
   UpsertRuntimeConfigDraftDto,
 } from './dto/runtime-config.dto';
@@ -705,7 +705,6 @@ export class RuntimeConfigsService {
     const safetyPolicy = this.resolveSafetyPolicy(args.dto.safetyPolicy);
     const routingPolicy = this.resolveRoutingPolicy({
       dto: args.dto,
-      providers,
       defaultModel,
       lowCostModel,
       highQualityModel,
@@ -1496,28 +1495,11 @@ export class RuntimeConfigsService {
 
   private resolveRoutingPolicy(args: {
     dto: UpsertRuntimeConfigDraftDto;
-    providers: ProviderConnection[];
     defaultModel: RuntimeConfigModelResponseDto;
     lowCostModel: RuntimeConfigModelResponseDto;
     highQualityModel?: RuntimeConfigModelResponseDto;
     fallbackModel: RuntimeConfigModelResponseDto;
   }): RuntimeConfigRoutingPolicyResponseDto {
-    const candidateStatuses = this.resolveRoutingCandidateStatuses({
-      providers: args.providers,
-      candidates: [
-        { model: args.defaultModel, tier: 'balanced', priority: 10 },
-        { model: args.lowCostModel, tier: 'low_cost', priority: 20 },
-        ...(args.highQualityModel
-          ? [
-              {
-                model: args.highQualityModel,
-                tier: 'high_quality' as const,
-                priority: 30,
-              },
-            ]
-          : []),
-      ],
-    });
     const routingPolicyWithoutHash = {
       type: 'simple',
       autoModel: 'auto',
@@ -1535,7 +1517,6 @@ export class RuntimeConfigsService {
       fallbackModel: args.fallbackModel.model,
       shortPromptMaxChars:
         args.dto.routingPolicy?.shortPromptMaxChars ?? 500,
-      candidateStatuses,
     } as const;
 
     return {
@@ -1546,37 +1527,56 @@ export class RuntimeConfigsService {
     };
   }
 
-  private resolveRoutingCandidateStatuses(args: {
-    providers: ProviderConnection[];
-    candidates: Array<{
-      model: RuntimeConfigModelResponseDto;
-      tier: RuntimeConfigRoutingCandidateStatusResponseDto['tier'];
-      priority: number;
-    }>;
-  }): RuntimeConfigRoutingCandidateStatusResponseDto[] {
-    const providersByName = new Map(
-      args.providers.map((provider) => [provider.provider, provider]),
-    );
+  private resolveRuntimeSnapshotRoutingCandidateStatuses(
+    document: ActiveRuntimeConfigResponseDto,
+  ): RuntimeSnapshotRoutingCandidateStatusDto[] {
     const seen = new Set<string>();
-    const statuses: RuntimeConfigRoutingCandidateStatusResponseDto[] = [];
+    const statuses: RuntimeSnapshotRoutingCandidateStatusDto[] = [];
+    const candidates = [
+      {
+        provider: document.routingPolicy.defaultProvider,
+        model: document.routingPolicy.defaultModel,
+        tier: 'balanced' as const,
+        priority: 10,
+      },
+      {
+        provider: document.routingPolicy.lowCostProvider,
+        model: document.routingPolicy.lowCostModel,
+        tier: 'low_cost' as const,
+        priority: 20,
+      },
+      ...(document.routingPolicy.highQualityProvider &&
+      document.routingPolicy.highQualityModel
+        ? [
+            {
+              provider: document.routingPolicy.highQualityProvider,
+              model: document.routingPolicy.highQualityModel,
+              tier: 'high_quality' as const,
+              priority: 30,
+            },
+          ]
+        : []),
+    ];
 
-    for (const candidate of args.candidates) {
-      const key = this.toModelKey(
-        candidate.model.provider,
-        candidate.model.model,
-      );
+    for (const candidate of candidates) {
+      const key = this.toModelKey(candidate.provider, candidate.model);
       if (seen.has(key)) {
         continue;
       }
       seen.add(key);
+      const provider = document.providers.find(
+        (entry) => entry.provider === candidate.provider,
+      );
+      const model = document.models.find(
+        (entry) =>
+          entry.provider === candidate.provider &&
+          entry.model === candidate.model,
+      );
       statuses.push({
-        provider: candidate.model.provider,
-        model: candidate.model.model,
+        provider: candidate.provider,
+        model: candidate.model,
         tier: candidate.tier,
-        status: this.toRoutingCandidateStatus(
-          providersByName.get(candidate.model.provider),
-          candidate.model,
-        ),
+        status: this.toRoutingCandidateStatus(provider, model),
         fallbackPriority: candidate.priority,
       });
     }
@@ -1585,17 +1585,16 @@ export class RuntimeConfigsService {
   }
 
   private toRoutingCandidateStatus(
-    provider: ProviderConnection | undefined,
-    model: RuntimeConfigModelResponseDto,
-  ): RuntimeConfigRoutingCandidateStatusResponseDto['status'] {
-    if (!provider || model.status === 'disabled') {
+    provider: RuntimeConfigProviderDto | undefined,
+    model: RuntimeConfigModelResponseDto | undefined,
+  ): RuntimeSnapshotRoutingCandidateStatusDto['status'] {
+    if (!provider || !model || model.status === 'disabled') {
       return 'unavailable';
     }
-    const providerStatus = this.toProviderStatus(provider.status);
-    if (providerStatus === 'disabled') {
+    if (provider.status === 'disabled') {
       return 'unavailable';
     }
-    if (providerStatus === 'degraded') {
+    if (provider.status === 'degraded') {
       return 'degraded';
     }
     return 'available';
@@ -1786,7 +1785,8 @@ export class RuntimeConfigsService {
                 highQualityModel: document.routingPolicy.highQualityModel,
               }
             : {}),
-          candidateStatuses: document.routingPolicy.candidateStatuses ?? [],
+          candidateStatuses:
+            this.resolveRuntimeSnapshotRoutingCandidateStatuses(document),
           routingPolicyHash: document.routingPolicy.routingPolicyHash,
         },
         cache: {
