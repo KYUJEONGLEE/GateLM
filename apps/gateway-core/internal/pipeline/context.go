@@ -75,6 +75,15 @@ type RequestContext struct {
 	FallbackOccurred    bool
 
 	SemanticCacheHit            bool
+	SemanticCacheEnabled        bool
+	SemanticCacheMode           string
+	SemanticCacheWouldHit       bool
+	SemanticCacheWouldMiss      bool
+	SemanticCacheCandidateFound bool
+	SemanticCacheCandidateHash  string
+	SemanticReturnedFromCache   bool
+	SemanticCanonicalIntent     string
+	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
 	SemanticMatchedRequestID    string
 	SemanticCacheThreshold      float64

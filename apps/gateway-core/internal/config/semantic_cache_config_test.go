@@ -8,7 +8,9 @@ import (
 
 var semanticCacheEnvKeys = []string{
 	"SEMANTIC_CACHE_ENABLED",
+	"SEMANTIC_CACHE_MODE",
 	"SEMANTIC_CACHE_THRESHOLD",
+	"SEMANTIC_CACHE_DEFAULT_THRESHOLD",
 	"SEMANTIC_CACHE_TOP_K",
 	"SEMANTIC_CACHE_TTL_SECONDS",
 	"SEMANTIC_CACHE_STORE",
@@ -23,6 +25,15 @@ var semanticCacheEnvKeys = []string{
 	"SEMANTIC_CACHE_OPENAI_BASE_URL",
 	"SEMANTIC_CACHE_ALLOW_CATEGORIES",
 	"SEMANTIC_CACHE_DENY_CATEGORIES",
+	"SEMANTIC_CACHE_ALLOWED_TENANT_IDS",
+	"SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS",
+	"SEMANTIC_CACHE_ALLOWED_CATEGORIES",
+	"SEMANTIC_CACHE_THRESHOLD_GENERAL",
+	"SEMANTIC_CACHE_THRESHOLD_ACCOUNT_ACCESS",
+	"SEMANTIC_CACHE_THRESHOLD_SUPPORT_REFUND",
+	"SEMANTIC_CACHE_THRESHOLD_CODE",
+	"SEMANTIC_CACHE_THRESHOLD_TRANSLATION",
+	"SEMANTIC_CACHE_THRESHOLD_UNKNOWN",
 	"OPENAI_API_KEY",
 }
 
@@ -44,6 +55,9 @@ func TestSemanticCacheConfigDefaults(t *testing.T) {
 
 	if cfg.Enabled {
 		t.Fatalf("Semantic Cache 기본값은 disabled여야 함")
+	}
+	if cfg.Mode != "enforce" {
+		t.Fatalf("Semantic Cache mode 기본값은 enforce여야 함: got %q", cfg.Mode)
 	}
 	if cfg.Threshold != 0.92 {
 		t.Fatalf("threshold 기본값 불일치: got %v", cfg.Threshold)
@@ -86,6 +100,12 @@ func TestSemanticCacheConfigDefaults(t *testing.T) {
 	}
 	if strings.Join(cfg.DenyCategories, ",") != "code,translation,summarization,extraction_json,reasoning,sensitive,tool_call,unknown" {
 		t.Fatalf("deny category 기본값 불일치: got %v", cfg.DenyCategories)
+	}
+	if len(cfg.AllowedTenantIDs) != 0 || len(cfg.AllowedApplicationIDs) != 0 || len(cfg.AllowedCategories) != 0 {
+		t.Fatalf("scoped rollout 기본값은 비어 있어 기존 동작을 유지해야 함: %+v", cfg)
+	}
+	if len(cfg.CategoryThresholds) != 0 {
+		t.Fatalf("category threshold override 기본값은 비어 있어야 함: %+v", cfg.CategoryThresholds)
 	}
 }
 
@@ -134,6 +154,16 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		}
 	})
 
+	t.Run("unknown mode returns explicit error", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_MODE", "observe")
+
+		_, err := LoadSemanticCacheConfig()
+		if err == nil || !strings.Contains(err.Error(), "unsupported semantic cache mode") {
+			t.Fatalf("unknown mode는 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
 	t.Run("pgvector store returns explicit error", func(t *testing.T) {
 		resetSemanticCacheEnv(t)
 		t.Setenv("SEMANTIC_CACHE_STORE", "pgvector")
@@ -168,6 +198,21 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		_, err := LoadSemanticCacheConfig()
 		if err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY is required") {
 			t.Fatalf("enabled openai provider는 OPENAI_API_KEY 누락 시 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
+	t.Run("mode off does not require OPENAI_API_KEY", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_MODE", "off")
+		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "openai")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("mode=off에서는 OpenAI key 없이 config를 로드해야 함: %v", err)
+		}
+		if cfg.Mode != "off" || cfg.EmbeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
+			t.Fatalf("mode off config 불일치: %+v", cfg)
 		}
 	})
 
@@ -216,6 +261,32 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		}
 		if cfg.IntentPolicyPath == "" {
 			t.Fatalf("intent policy path가 보존되어야 함")
+		}
+	})
+
+	t.Run("scoped rollout and category thresholds are parsed", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_ALLOWED_TENANT_IDS", "tenant-a, tenant-b")
+		t.Setenv("SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS", "app-a")
+		t.Setenv("SEMANTIC_CACHE_ALLOWED_CATEGORIES", "general,support_refund")
+		t.Setenv("SEMANTIC_CACHE_DEFAULT_THRESHOLD", "0.8")
+		t.Setenv("SEMANTIC_CACHE_THRESHOLD_GENERAL", "0.45")
+		t.Setenv("SEMANTIC_CACHE_THRESHOLD_SUPPORT_REFUND", "0.7")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("scoped rollout config는 로드되어야 함: %v", err)
+		}
+		if strings.Join(cfg.AllowedTenantIDs, ",") != "tenant-a,tenant-b" ||
+			strings.Join(cfg.AllowedApplicationIDs, ",") != "app-a" ||
+			strings.Join(cfg.AllowedCategories, ",") != "general,support_refund" {
+			t.Fatalf("scoped rollout parsing 불일치: %+v", cfg)
+		}
+		if cfg.Threshold != 0.8 {
+			t.Fatalf("default threshold override 불일치: %v", cfg.Threshold)
+		}
+		if cfg.CategoryThresholds["general"] != 0.45 || cfg.CategoryThresholds["support_refund"] != 0.7 {
+			t.Fatalf("category threshold parsing 불일치: %+v", cfg.CategoryThresholds)
 		}
 	})
 }

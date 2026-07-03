@@ -64,6 +64,11 @@ type GateLMMetadata struct {
 	CacheType                   string   `json:"cacheType,omitempty"`
 	ProviderCalled              bool     `json:"providerCalled"`
 	SemanticCacheHit            bool     `json:"semanticCacheHit,omitempty"`
+	SemanticCacheMode           string   `json:"semanticCacheMode,omitempty"`
+	SemanticCacheWouldHit       bool     `json:"semanticCacheWouldHit,omitempty"`
+	SemanticCacheWouldMiss      bool     `json:"semanticCacheWouldMiss,omitempty"`
+	SemanticCandidateFound      bool     `json:"semanticCandidateFound,omitempty"`
+	SemanticReturnedFromCache   bool     `json:"semanticReturnedFromCache,omitempty"`
 	SemanticSimilarity          *float64 `json:"semanticSimilarity,omitempty"`
 	SemanticMatchedRequestID    string   `json:"semanticMatchedRequestId,omitempty"`
 	SemanticCacheDecisionReason string   `json:"semanticCacheDecisionReason,omitempty"`

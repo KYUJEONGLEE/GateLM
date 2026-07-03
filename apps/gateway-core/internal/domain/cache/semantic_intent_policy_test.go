@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,21 +16,25 @@ type semanticIntentEvalDataset struct {
 }
 
 type semanticIntentEvalCase struct {
-	CaseID                string            `json:"caseId"`
-	PairType              string            `json:"pairType"`
-	Category              string            `json:"category"`
-	CanonicalIntent       string            `json:"canonicalIntent"`
-	First                 string            `json:"first"`
-	Second                string            `json:"second"`
-	FirstCanonicalIntent  string            `json:"firstCanonicalIntent"`
-	SecondCanonicalIntent string            `json:"secondCanonicalIntent"`
-	RequiredSlots         map[string]string `json:"requiredSlots"`
-	OptionalSlots         map[string]string `json:"optionalSlots"`
-	SameAnswerReusable    bool              `json:"sameAnswerReusable"`
-	HardNegative          bool              `json:"hardNegative"`
-	DenyCategory          bool              `json:"denyCategory"`
-	ExpectedDecision      string            `json:"expectedDecision"`
-	Reason                string            `json:"reason"`
+	CaseID                    string            `json:"caseId"`
+	PairType                  string            `json:"pairType"`
+	Category                  string            `json:"category"`
+	CanonicalIntent           string            `json:"canonicalIntent"`
+	First                     string            `json:"first"`
+	Second                    string            `json:"second"`
+	FirstCanonicalIntent      string            `json:"firstCanonicalIntent"`
+	SecondCanonicalIntent     string            `json:"secondCanonicalIntent"`
+	RequiredSlots             map[string]string `json:"requiredSlots"`
+	OptionalSlots             map[string]string `json:"optionalSlots"`
+	ExpectedSemanticHit       *bool             `json:"expectedSemanticHit"`
+	ExpectedCategory          string            `json:"expectedCategory"`
+	ExpectedCanonicalIntent   string            `json:"expectedCanonicalIntent"`
+	ExpectedRequiredSlotsHash string            `json:"expectedRequiredSlotsHash"`
+	SameAnswerReusable        bool              `json:"sameAnswerReusable"`
+	HardNegative              bool              `json:"hardNegative"`
+	DenyCategory              bool              `json:"denyCategory"`
+	ExpectedDecision          string            `json:"expectedDecision"`
+	Reason                    string            `json:"reason"`
 }
 
 func TestSemanticCacheHitPolicyMaterializesKoreanPasswordReset(t *testing.T) {
@@ -244,6 +249,71 @@ func TestSemanticCacheIntentEvalCasesDriveServiceHitAndMissWithoutOpenAI(t *test
 	}
 }
 
+func TestSemanticCacheIntentEvalCasesHaveShadowReportLabels(t *testing.T) {
+	dataset := loadSemanticIntentEvalDataset(t)
+	if len(dataset.Cases) < 90 || len(dataset.Cases) > 120 {
+		t.Fatalf("shadow rollout core dataset은 약 100 cases 수준이어야 함: got=%d", len(dataset.Cases))
+	}
+	for _, tc := range dataset.Cases {
+		t.Run(tc.CaseID, func(t *testing.T) {
+			if tc.ExpectedSemanticHit == nil {
+				t.Fatalf("expectedSemanticHit label이 필요함: %+v", tc)
+			}
+			if CanonicalSemanticCacheCategory(tc.ExpectedCategory) != CanonicalSemanticCacheCategory(tc.Category) {
+				t.Fatalf("expectedCategory는 category와 canonical하게 일치해야 함: category=%q expected=%q", tc.Category, tc.ExpectedCategory)
+			}
+			if tc.ExpectedCanonicalIntent == "" {
+				t.Fatalf("expectedCanonicalIntent label이 필요함: %+v", tc)
+			}
+			if *tc.ExpectedSemanticHit != semanticEvalCaseExpectedHitFromDecision(tc.ExpectedDecision) {
+				t.Fatalf("expectedSemanticHit과 expectedDecision이 불일치함: %+v", tc)
+			}
+		})
+	}
+}
+
+func TestSemanticCacheIntentEvalCasesBuildShadowReportWithoutOpenAI(t *testing.T) {
+	policy := testSemanticHitPolicy(t)
+	dataset := loadSemanticIntentEvalDataset(t)
+	reportCases := make([]SemanticCacheShadowEvalCase, 0, len(dataset.Cases))
+	for _, tc := range dataset.Cases {
+		reportCases = append(reportCases, semanticIntentEvalCaseToShadowReportCase(policy, tc))
+	}
+
+	report := BuildSemanticCacheShadowEvalReport(reportCases, []float64{0.85, 0.88, 0.90, 0.92, 0.95})
+	if report.TotalCases != len(dataset.Cases) {
+		t.Fatalf("report totalCases 불일치: got=%d want=%d", report.TotalCases, len(dataset.Cases))
+	}
+	if report.WouldHitCount == 0 || report.WouldMissCount == 0 {
+		t.Fatalf("report에는 wouldHit/wouldMiss 분포가 모두 있어야 함: %+v", report)
+	}
+	if report.ReturnedFromSemanticCacheCount != 0 {
+		t.Fatalf("shadow eval report에서는 semantic cached response 반환 count가 0이어야 함: %+v", report)
+	}
+	if len(report.ThresholdSensitivity) == 0 {
+		t.Fatalf("threshold sensitivity 결과가 필요함: %+v", report)
+	}
+	payload, err := MarshalSemanticCacheShadowEvalReport(report)
+	if err != nil {
+		t.Fatalf("shadow eval report marshal 실패: %v", err)
+	}
+	for _, forbidden := range []string{
+		"비밀번호 재설정 방법 알려줘",
+		"패스워드 초기화는 어떻게 해?",
+		"배송비도 환불되나요?",
+		"raw prompt",
+		"raw response",
+		"api_key=",
+		"app_token=",
+		"Authorization:",
+		"provider raw error",
+	} {
+		if strings.Contains(string(payload), forbidden) {
+			t.Fatalf("shadow eval report output에는 raw prompt/secrets가 없어야 함: marker=%q payload=%s", forbidden, payload)
+		}
+	}
+}
+
 func TestSemanticCacheHitPolicyDeniesDisabledCategories(t *testing.T) {
 	policy := testSemanticHitPolicy(t)
 	material := NewSemanticCacheIntentMaterial(
@@ -281,6 +351,123 @@ func TestSemanticCacheHitPolicyReportsSlotsUnavailableForIncompleteMaterial(t *t
 	decision := policy.Evaluate(request, cached, 0.99, 0.92)
 	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonSlotsUnavailable {
 		t.Fatalf("slot 없는 material은 intent unavailable이 아니라 slots_unavailable이어야 함: %+v", decision)
+	}
+}
+
+func TestSemanticCacheServiceGeneralPolicyGuardsBlockHitDespiteGeneralCategory(t *testing.T) {
+	tests := []struct {
+		name             string
+		firstText        string
+		secondText       string
+		cachedMaterial   SemanticCacheIntentMaterial
+		requestMaterial  SemanticCacheIntentMaterial
+		policy           SemanticCacheHitPolicy
+		wantReason       string
+		wantProviderName string
+	}{
+		{
+			name:       "required slots mismatch",
+			firstText:  "사용량은 어디서 확인해?",
+			secondText: "이번 달 사용량 통계를 보여줘",
+			cachedMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
+				"usageObject": "api_usage",
+				"usagePeriod": "monthly",
+			}),
+			requestMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
+				"usageObject": "api_usage",
+				"usagePeriod": "daily",
+			}),
+			policy:     testGeneralPolicyWithForbiddenPairs(nil),
+			wantReason: SemanticCacheReasonSlotsMismatch,
+		},
+		{
+			name:       "hard negative guard",
+			firstText:  "사용량은 어디서 확인해?",
+			secondText: "계정 삭제 위치 알려줘",
+			cachedMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
+				"usageObject": "api_usage",
+				"usagePeriod": "monthly",
+			}),
+			requestMaterial: testGeneralIntentMaterial("general.account_delete", map[string]string{
+				"accountAction": "account_delete",
+			}),
+			policy: testGeneralPolicyWithForbiddenPairs([]SemanticCacheIntentPair{
+				{
+					Category: SemanticCacheCategoryGeneral,
+					First:    "general.usage_check",
+					Second:   "general.account_delete",
+					Reason:   "usage check and account deletion are not answer-compatible",
+				},
+			}),
+			wantReason: SemanticCacheReasonHardNegative,
+		},
+		{
+			name:       "threshold miss",
+			firstText:  "사용량은 어디서 확인해?",
+			secondText: "비밀번호 재설정 방법 알려줘",
+			cachedMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
+				"usageObject": "api_usage",
+				"usagePeriod": "monthly",
+			}),
+			requestMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
+				"usageObject": "api_usage",
+				"usagePeriod": "monthly",
+			}),
+			policy:     testGeneralPolicyWithForbiddenPairs(nil),
+			wantReason: SemanticCacheReasonThresholdMiss,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := newEvalCaseEmbeddingProvider(tt.firstText, tt.secondText)
+			if tt.wantReason == SemanticCacheReasonThresholdMiss {
+				provider = evalCaseEmbeddingProvider{vectors: map[string][]float64{
+					normalizeSemanticText(tt.firstText):  {1, 0, 0, 0, 0, 0},
+					normalizeSemanticText(tt.secondText): {0, 1, 0, 0, 0, 0},
+				}}
+			}
+			service := NewSemanticCacheService(NewInMemorySemanticCacheStore(10), provider, SemanticCacheServiceConfig{
+				Enabled:       true,
+				Threshold:     0.92,
+				TopK:          3,
+				TTL:           time.Hour,
+				PolicyVersion: "v1",
+				HitPolicy:     &tt.policy,
+			})
+			boundary := testSemanticBoundary(t, nil)
+			now := time.Now().UTC()
+			storeDecision, err := service.Upsert(context.Background(), SemanticCacheStoreRequest{
+				EntryID:        "guard-entry",
+				RequestID:      "guard-request",
+				Boundary:       boundary,
+				NormalizedText: tt.firstText,
+				IntentMaterial: tt.cachedMaterial,
+				CachedResponse: []byte(`{"id":"semantic_guard","choices":[]}`),
+				Now:            now,
+			})
+			if err != nil {
+				t.Fatalf("guard seed 저장 실패: decision=%+v err=%v", storeDecision, err)
+			}
+			if storeDecision.SemanticCacheDecisionReason != SemanticCacheReasonStored {
+				t.Fatalf("guard seed는 저장되어야 함: %+v", storeDecision)
+			}
+
+			result, decision, err := service.Search(context.Background(), SemanticCacheLookupRequest{
+				Boundary:       boundary,
+				NormalizedText: tt.secondText,
+				IntentMaterial: tt.requestMaterial,
+			})
+			if err != nil {
+				t.Fatalf("guard search 실패: %v", err)
+			}
+			if result.Hit || decision.SemanticCacheHit || decision.Outcome != SemanticCacheOutcomeMiss {
+				t.Fatalf("general category라도 policy guard 실패 시 hit하면 안 됨: result=%+v decision=%+v", result, decision)
+			}
+			if decision.SemanticCacheDecisionReason != tt.wantReason || result.Reason != tt.wantReason {
+				t.Fatalf("policy guard reason 불일치: want=%s result=%+v decision=%+v", tt.wantReason, result, decision)
+			}
+		})
 	}
 }
 
@@ -369,6 +556,62 @@ func assertPolicyDecision(t *testing.T, decision SemanticCacheIntentDecision, wa
 	}
 }
 
+func testGeneralIntentMaterial(intent string, slots map[string]string) SemanticCacheIntentMaterial {
+	return NewSemanticCacheIntentMaterial(
+		SemanticCacheCategoryGeneral,
+		intent,
+		slots,
+		nil,
+		"ko-canon-v1",
+		"ko-synonym-v1",
+	)
+}
+
+func testGeneralPolicyWithForbiddenPairs(pairs []SemanticCacheIntentPair) SemanticCacheHitPolicy {
+	policy := SemanticCacheHitPolicy{
+		PolicyVersion:           "v1",
+		CanonicalizationVersion: "ko-canon-v1",
+		SynonymPolicyVersion:    "ko-synonym-v1",
+		DefaultThreshold:        0.92,
+		Categories: map[string]SemanticCacheCategoryMode{
+			SemanticCacheCategoryGeneral: {
+				Enabled:               true,
+				Mode:                  SemanticCachePolicyModeStrictHit,
+				CategoryThreshold:     0.92,
+				RequiresIntent:        true,
+				RequiresRequiredSlots: true,
+				RequiresHardNegative:  true,
+			},
+		},
+		Synonyms: map[string]map[string][]string{
+			"ko": {
+				"usage":  {"사용량"},
+				"delete": {"삭제"},
+			},
+		},
+		Intents: map[string]SemanticCacheIntentRule{
+			"general.usage_check": {
+				Category:      SemanticCacheCategoryGeneral,
+				MatchAll:      []string{"usage"},
+				RequiredSlots: map[string]string{"usageObject": "api_usage", "usagePeriod": "monthly"},
+				Priority:      10,
+			},
+			"general.account_delete": {
+				Category:      SemanticCacheCategoryGeneral,
+				MatchAll:      []string{"delete"},
+				RequiredSlots: map[string]string{"accountAction": "account_delete"},
+				Priority:      10,
+			},
+		},
+		ForbiddenIntentPairs: pairs,
+	}
+	normalized, err := policy.Normalize()
+	if err != nil {
+		panic(err)
+	}
+	return normalized
+}
+
 func evalCaseIntentMaterial(policy *SemanticCacheHitPolicy, tc semanticIntentEvalCase) SemanticCacheIntentMaterial {
 	return NewSemanticCacheIntentMaterial(
 		tc.Category,
@@ -378,6 +621,62 @@ func evalCaseIntentMaterial(policy *SemanticCacheHitPolicy, tc semanticIntentEva
 		policy.CanonicalizationVersion,
 		policy.SynonymPolicyVersion,
 	)
+}
+
+func semanticEvalCaseExpectedHitFromDecision(decision string) bool {
+	switch strings.TrimSpace(decision) {
+	case "hit_candidate", "strict_hit_candidate":
+		return true
+	default:
+		return false
+	}
+}
+
+func semanticIntentEvalCaseToShadowReportCase(policy *SemanticCacheHitPolicy, tc semanticIntentEvalCase) SemanticCacheShadowEvalCase {
+	expectedHit := false
+	if tc.ExpectedSemanticHit != nil {
+		expectedHit = *tc.ExpectedSemanticHit
+	}
+	reportCase := SemanticCacheShadowEvalCase{
+		Category:                   tc.Category,
+		ExpectedSemanticHit:        expectedHit,
+		HardNegative:               tc.HardNegative,
+		DenyCategory:               tc.DenyCategory,
+		SemanticCacheMode:          SemanticCacheModeShadow,
+		SemanticCacheEnabled:       true,
+		SemanticCachePolicyVersion: policy.PolicyVersion,
+		SemanticReturnedFromCache:  false,
+	}
+	if tc.ExpectedDecision == "bypass" {
+		material := evalCaseIntentMaterial(policy, tc)
+		decision := policy.Evaluate(material, material, 0.99, policy.DefaultThreshold)
+		reportCase.SemanticCacheWouldMiss = true
+		reportCase.SemanticDecisionReason = decision.Reason
+		reportCase.SemanticCacheThreshold = decision.CategoryThreshold
+		reportCase.SemanticCanonicalIntent = decision.CanonicalIntent
+		reportCase.SemanticRequiredSlotsHash = decision.RequiredSlotsHash
+		return reportCase
+	}
+	first, firstDecision := policy.Materialize(tc.Category, tc.First)
+	second, secondDecision := policy.Materialize(tc.Category, tc.Second)
+	if first.IsZero() || second.IsZero() || !firstDecision.Allowed || !secondDecision.Allowed {
+		reportCase.SemanticCacheWouldMiss = true
+		reportCase.SemanticDecisionReason = SemanticCacheReasonIntentUnavailable
+		return reportCase
+	}
+	decision := policy.Evaluate(second, first, 0.99, policy.DefaultThreshold)
+	reportCase.SemanticCandidateFound = true
+	reportCase.SemanticSimilarity = 0.99
+	reportCase.SemanticCacheThreshold = decision.CategoryThreshold
+	reportCase.SemanticCanonicalIntent = decision.CanonicalIntent
+	reportCase.SemanticRequiredSlotsHash = decision.RequiredSlotsHash
+	reportCase.SemanticDecisionReason = decision.Reason
+	if decision.ProviderBypassAllowed {
+		reportCase.SemanticCacheWouldHit = true
+	} else {
+		reportCase.SemanticCacheWouldMiss = true
+	}
+	return reportCase
 }
 
 type evalCaseEmbeddingProvider struct {

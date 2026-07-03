@@ -71,6 +71,15 @@ type TerminalLog struct {
 	ProviderCatalogContentHash string
 
 	SemanticCacheHit            bool
+	SemanticCacheEnabled        bool
+	SemanticCacheMode           string
+	SemanticCacheWouldHit       bool
+	SemanticCacheWouldMiss      bool
+	SemanticCacheCandidateFound bool
+	SemanticCacheCandidateHash  string
+	SemanticReturnedFromCache   bool
+	SemanticCanonicalIntent     string
+	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
 	SemanticMatchedRequestID    string
 	SemanticCacheThreshold      float64
@@ -153,6 +162,15 @@ type TerminalLogInput struct {
 	ProviderCatalogContentHash string
 
 	SemanticCacheHit            bool
+	SemanticCacheEnabled        bool
+	SemanticCacheMode           string
+	SemanticCacheWouldHit       bool
+	SemanticCacheWouldMiss      bool
+	SemanticCacheCandidateFound bool
+	SemanticCacheCandidateHash  string
+	SemanticReturnedFromCache   bool
+	SemanticCanonicalIntent     string
+	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
 	SemanticMatchedRequestID    string
 	SemanticCacheThreshold      float64
@@ -281,7 +299,24 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if strings.TrimSpace(input.PromptCategory) != "" {
 		metadata["promptCategory"] = strings.TrimSpace(input.PromptCategory)
 	}
+	metadata["semanticCacheEnabled"] = input.SemanticCacheEnabled
+	if strings.TrimSpace(input.SemanticCacheMode) != "" {
+		metadata["semanticCacheMode"] = strings.TrimSpace(input.SemanticCacheMode)
+	}
 	metadata["semanticCacheHit"] = input.SemanticCacheHit
+	metadata["semanticCacheWouldHit"] = input.SemanticCacheWouldHit
+	metadata["semanticCacheWouldMiss"] = input.SemanticCacheWouldMiss
+	metadata["semanticCandidateFound"] = input.SemanticCacheCandidateFound
+	metadata["semanticReturnedFromCache"] = input.SemanticReturnedFromCache
+	if strings.TrimSpace(input.SemanticCacheCandidateHash) != "" {
+		metadata["semanticCandidateHash"] = strings.TrimSpace(input.SemanticCacheCandidateHash)
+	}
+	if strings.TrimSpace(input.SemanticCanonicalIntent) != "" {
+		metadata["semanticCanonicalIntent"] = strings.TrimSpace(input.SemanticCanonicalIntent)
+	}
+	if strings.TrimSpace(input.SemanticRequiredSlotsHash) != "" {
+		metadata["semanticRequiredSlotsHash"] = strings.TrimSpace(input.SemanticRequiredSlotsHash)
+	}
 	if input.SemanticSimilarity > 0 {
 		metadata["semanticSimilarity"] = input.SemanticSimilarity
 	}
@@ -368,6 +403,15 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		ProviderCatalogContentHash: strings.TrimSpace(input.ProviderCatalogContentHash),
 
 		SemanticCacheHit:            input.SemanticCacheHit,
+		SemanticCacheEnabled:        input.SemanticCacheEnabled,
+		SemanticCacheMode:           strings.TrimSpace(input.SemanticCacheMode),
+		SemanticCacheWouldHit:       input.SemanticCacheWouldHit,
+		SemanticCacheWouldMiss:      input.SemanticCacheWouldMiss,
+		SemanticCacheCandidateFound: input.SemanticCacheCandidateFound,
+		SemanticCacheCandidateHash:  strings.TrimSpace(input.SemanticCacheCandidateHash),
+		SemanticReturnedFromCache:   input.SemanticReturnedFromCache,
+		SemanticCanonicalIntent:     strings.TrimSpace(input.SemanticCanonicalIntent),
+		SemanticRequiredSlotsHash:   strings.TrimSpace(input.SemanticRequiredSlotsHash),
 		SemanticSimilarity:          input.SemanticSimilarity,
 		SemanticMatchedRequestID:    strings.TrimSpace(input.SemanticMatchedRequestID),
 		SemanticCacheThreshold:      input.SemanticCacheThreshold,
