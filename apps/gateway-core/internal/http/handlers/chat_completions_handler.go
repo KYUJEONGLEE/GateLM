@@ -2705,9 +2705,6 @@ func (h *ChatCompletionsHandler) semanticCacheMode() string {
 }
 
 func (h *ChatCompletionsHandler) semanticCacheConfiguredEnabled() bool {
-	if h.SemanticCacheEnabled {
-		return true
-	}
 	return h.SemanticCacheService != nil && h.SemanticCacheService.Enabled()
 }
 

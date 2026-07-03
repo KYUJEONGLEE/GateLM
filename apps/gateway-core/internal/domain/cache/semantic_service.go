@@ -130,8 +130,12 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
 	normalizedText := embeddingInput.Text
+	if !s.intentPolicyConfigured() {
+		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
-	if s.intentPolicyConfigured() && !intentOK {
+	if !intentOK {
 		result.Reason = intentReason
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}

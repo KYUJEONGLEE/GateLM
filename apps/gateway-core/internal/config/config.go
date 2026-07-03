@@ -176,9 +176,10 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 	if embeddingProvider != SemanticCacheEmbeddingProviderFake && embeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
 		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache embedding provider %q", embeddingProvider)
 	}
+	intentPolicyPath := semanticEnvString("SEMANTIC_CACHE_INTENT_POLICY_PATH", "")
 	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	if enabled && mode != cachekey.SemanticCacheModeOff && embeddingProvider == SemanticCacheEmbeddingProviderOpenAI && openAIAPIKey == "" {
-		return SemanticCacheConfig{}, fmt.Errorf("OPENAI_API_KEY is required when SEMANTIC_CACHE_ENABLED=true, SEMANTIC_CACHE_MODE is not off, and SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai")
+	if enabled && mode != cachekey.SemanticCacheModeOff && embeddingProvider == SemanticCacheEmbeddingProviderOpenAI && strings.TrimSpace(intentPolicyPath) != "" && openAIAPIKey == "" {
+		return SemanticCacheConfig{}, fmt.Errorf("OPENAI_API_KEY is required when SEMANTIC_CACHE_ENABLED=true, SEMANTIC_CACHE_MODE is not off, SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai, and SEMANTIC_CACHE_INTENT_POLICY_PATH is set")
 	}
 	threshold := semanticEnvFloat("SEMANTIC_CACHE_THRESHOLD", 0.92, 0, 1)
 	threshold = semanticEnvFloat("SEMANTIC_CACHE_DEFAULT_THRESHOLD", threshold, 0, 1)
@@ -199,7 +200,7 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 		OpenAIAPIKey:          openAIAPIKey,
 		PolicyVersion:         semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
 		KeyVersion:            semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
-		IntentPolicyPath:      semanticEnvString("SEMANTIC_CACHE_INTENT_POLICY_PATH", ""),
+		IntentPolicyPath:      intentPolicyPath,
 		AllowCategories:       semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
 		DenyCategories:        semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
 		AllowedTenantIDs:      semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_TENANT_IDS", nil),

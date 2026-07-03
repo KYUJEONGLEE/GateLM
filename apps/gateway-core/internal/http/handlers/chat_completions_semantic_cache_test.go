@@ -38,6 +38,28 @@ func TestChatCompletionsSemanticCacheDisabledKeepsExistingFlow(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsSemanticCacheEnabledWithoutServiceNoOps(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+	harness.handler.SemanticCacheService = nil
+	harness.handler.SemanticCacheEnabled = true
+
+	rr := harness.exercise(t, "sc_policy_missing_noop", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("policy/service 없는 semantic cache는 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+		t.Fatalf("service가 없으면 semantic lookup/store가 없어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("semantic no-op이면 provider가 호출되어야 함: calls=%d", harness.provider.calls)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheEnabled {
+		t.Fatalf("service가 없으면 semantic cache evidence도 disabled로 남아야 함: %+v", logged)
+	}
+}
+
 func TestChatCompletionsSemanticCacheModeOffBypassesLookupStoreAndHit(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 	harness.handler.SemanticCacheMode = cachekey.SemanticCacheModeOff

@@ -183,36 +183,35 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	}
 	semanticCacheService := routerOptions.SemanticCacheService
 	if semanticCacheService == nil && cfg.SemanticCache.Enabled && cfg.SemanticCache.Mode != cachekey.SemanticCacheModeOff {
-		store, storeErr := cachekey.NewSemanticCacheStore(cfg.SemanticCache.Store, cfg.SemanticCache.MaxEntries)
-		embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProviderWithConfig(cachekey.SemanticCacheEmbeddingProviderConfig{
-			Provider:         cfg.SemanticCache.EmbeddingProvider,
-			ModelName:        cfg.SemanticCache.EmbeddingModel,
-			OpenAIAPIKey:     cfg.SemanticCache.OpenAIAPIKey,
-			OpenAIBaseURL:    cfg.SemanticCache.OpenAIBaseURL,
-			OpenAIDimensions: cfg.SemanticCache.EmbeddingDimensions,
-			Timeout:          cfg.SemanticCache.EmbeddingTimeout,
-		})
-		var hitPolicy *cachekey.SemanticCacheHitPolicy
-		if strings.TrimSpace(cfg.SemanticCache.IntentPolicyPath) != "" {
+		intentPolicyPath := strings.TrimSpace(cfg.SemanticCache.IntentPolicyPath)
+		if intentPolicyPath != "" {
+			store, storeErr := cachekey.NewSemanticCacheStore(cfg.SemanticCache.Store, cfg.SemanticCache.MaxEntries)
+			embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProviderWithConfig(cachekey.SemanticCacheEmbeddingProviderConfig{
+				Provider:         cfg.SemanticCache.EmbeddingProvider,
+				ModelName:        cfg.SemanticCache.EmbeddingModel,
+				OpenAIAPIKey:     cfg.SemanticCache.OpenAIAPIKey,
+				OpenAIBaseURL:    cfg.SemanticCache.OpenAIBaseURL,
+				OpenAIDimensions: cfg.SemanticCache.EmbeddingDimensions,
+				Timeout:          cfg.SemanticCache.EmbeddingTimeout,
+			})
 			policy, policyErr := cachekey.LoadSemanticCacheHitPolicyFile(cfg.SemanticCache.IntentPolicyPath)
 			if policyErr != nil {
 				panic("failed to load semantic cache intent policy: " + policyErr.Error())
 			}
 			policy = semanticCacheHitPolicyWithThresholdOverrides(policy, cfg.SemanticCache.Threshold, cfg.SemanticCache.CategoryThresholds)
-			hitPolicy = &policy
-		}
-		if storeErr == nil && providerErr == nil {
-			storePolicy := cachekey.DefaultSemanticCacheStorePolicy()
-			service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
-				Enabled:       cfg.SemanticCache.Enabled,
-				Threshold:     cfg.SemanticCache.Threshold,
-				TopK:          cfg.SemanticCache.TopK,
-				TTL:           cfg.SemanticCache.TTL,
-				PolicyVersion: cfg.SemanticCache.PolicyVersion,
-				HitPolicy:     hitPolicy,
-				StorePolicy:   &storePolicy,
-			})
-			semanticCacheService = service
+			if storeErr == nil && providerErr == nil {
+				storePolicy := cachekey.DefaultSemanticCacheStorePolicy()
+				service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
+					Enabled:       cfg.SemanticCache.Enabled,
+					Threshold:     cfg.SemanticCache.Threshold,
+					TopK:          cfg.SemanticCache.TopK,
+					TTL:           cfg.SemanticCache.TTL,
+					PolicyVersion: cfg.SemanticCache.PolicyVersion,
+					HitPolicy:     &policy,
+					StorePolicy:   &storePolicy,
+				})
+				semanticCacheService = service
+			}
 		}
 	}
 
