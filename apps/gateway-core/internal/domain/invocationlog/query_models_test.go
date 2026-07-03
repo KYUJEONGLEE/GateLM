@@ -31,7 +31,7 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 		CacheType:             CacheTypeExact,
 		RoutingReason:         "low_cost",
 		MaskingAction:         "redacted",
-		RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptPreview: "Send a reply to [EMAIL_1].",
 		MaskingDetectedTypes:  []string{"email"},
 		MaskingDetectedCount:  1,
 		CreatedAt:             createdAt,

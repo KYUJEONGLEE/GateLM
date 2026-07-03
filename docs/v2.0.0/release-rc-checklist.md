@@ -64,4 +64,3 @@ RC can be proposed only when:
 2. Evidence reports are sanitized.
 3. Known remaining gaps are explicitly listed in the release note.
 4. Team reviewers agree that remaining gaps are not demo blockers.
-

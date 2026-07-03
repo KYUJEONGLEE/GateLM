@@ -1,3 +1,9 @@
 {
-  "outcome": "redacted"
+  "outcome": "redacted",
+  "detectorSummary": {
+    "detectedCount": 1,
+    "detectorCategories": [
+      "organization_name"
+    ]
+  }
 }

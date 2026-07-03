@@ -52,10 +52,10 @@
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
     },
     "modelLabel": {
-      "description": "Raw model taxonomy label such as private_email. This is a sanitized label, not a detected value.",
+      "description": "Raw model taxonomy label such as private_email or ORG-B. This is a sanitized label, not a detected value.",
       "type": "string",
       "minLength": 1,
-      "pattern": "^[a-z][a-z0-9_]*$"
+      "pattern": "^[A-Za-z][A-Za-z0-9_\\-]*$"
     },
     "modelId": {
       "description": "Model id such as openai/privacy-filter.",

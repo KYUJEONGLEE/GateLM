@@ -10,6 +10,7 @@ ALLOWED_DETECTOR_TYPES = frozenset(
         "private_date",
         "private_url",
         "person_name",
+        "organization_name",
         "customer_id",
         "employee_id",
         "account_id",

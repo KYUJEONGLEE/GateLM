@@ -350,17 +350,21 @@ type routingResponse struct {
 }
 
 type maskingResponse struct {
-	MaskingAction         string   `json:"maskingAction"`
-	MaskingDetectedTypes  []string `json:"maskingDetectedTypes"`
-	MaskingDetectedCount  int      `json:"maskingDetectedCount"`
-	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
+	MaskingAction           string   `json:"maskingAction"`
+	MaskingDetectedTypes    []string `json:"maskingDetectedTypes"`
+	MaskingDetectedCount    int      `json:"maskingDetectedCount"`
+	PolicyAllowedTypes      []string `json:"policyAllowedTypes"`
+	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes"`
+	RedactedPromptPreview   *string  `json:"redactedPromptPreview"`
 }
 
 type safetySummaryResponse struct {
-	Outcome            string   `json:"outcome"`
-	DetectedCount      int      `json:"detectedCount"`
-	DetectorCategories []string `json:"detectorCategories"`
-	MaskingAction      string   `json:"maskingAction"`
+	Outcome                 string   `json:"outcome"`
+	DetectedCount           int      `json:"detectedCount"`
+	DetectorCategories      []string `json:"detectorCategories"`
+	PolicyAllowedTypes      []string `json:"policyAllowedTypes"`
+	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes"`
+	MaskingAction           string   `json:"maskingAction"`
 }
 
 type promptCaptureResponse struct {
@@ -696,16 +700,20 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			RoutingDecisionKeyHash: stringPointerOrNil(detail.Routing.RoutingDecisionKeyHash),
 		},
 		Masking: maskingResponse{
-			MaskingAction:         detail.Masking.MaskingAction,
-			MaskingDetectedTypes:  append([]string(nil), detail.Masking.MaskingDetectedTypes...),
-			MaskingDetectedCount:  detail.Masking.MaskingDetectedCount,
-			RedactedPromptPreview: stringPointerOrNil(detail.Masking.RedactedPromptPreview),
+			MaskingAction:           detail.Masking.MaskingAction,
+			MaskingDetectedTypes:    append([]string(nil), detail.Masking.MaskingDetectedTypes...),
+			MaskingDetectedCount:    detail.Masking.MaskingDetectedCount,
+			PolicyAllowedTypes:      append([]string(nil), detail.Masking.PolicyAllowedTypes...),
+			MandatoryProtectedTypes: append([]string(nil), detail.Masking.MandatoryProtectedTypes...),
+			RedactedPromptPreview:   stringPointerOrNil(detail.Masking.RedactedPromptPreview),
 		},
 		SafetySummary: safetySummaryResponse{
-			Outcome:            detail.SafetySummary.Outcome,
-			DetectedCount:      detail.SafetySummary.DetectedCount,
-			DetectorCategories: append([]string(nil), detail.SafetySummary.DetectorCategories...),
-			MaskingAction:      detail.SafetySummary.MaskingAction,
+			Outcome:                 detail.SafetySummary.Outcome,
+			DetectedCount:           detail.SafetySummary.DetectedCount,
+			DetectorCategories:      append([]string(nil), detail.SafetySummary.DetectorCategories...),
+			PolicyAllowedTypes:      append([]string(nil), detail.SafetySummary.PolicyAllowedTypes...),
+			MandatoryProtectedTypes: append([]string(nil), detail.SafetySummary.MandatoryProtectedTypes...),
+			MaskingAction:           detail.SafetySummary.MaskingAction,
 		},
 		PromptCapture: promptCaptureResponseFromDomain(detail.PromptCapture),
 		Error: detailErrorResponse{

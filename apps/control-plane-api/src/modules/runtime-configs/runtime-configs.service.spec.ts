@@ -147,6 +147,30 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('b'.repeat(64));
   });
 
+  it('rejects draft runtime configs that disable mandatory safety detectors', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        safetyPolicy: {
+          detectors: [
+            {
+              type: 'api_key',
+              enabled: false,
+              action: 'block',
+              placeholder: '[API_KEY_REDACTED]',
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow(
+      'Safety detector api_key is mandatory and cannot be disabled.',
+    );
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+    expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
+  });
+
   it('keeps optional high-quality routing model in the runtime policy', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma, {

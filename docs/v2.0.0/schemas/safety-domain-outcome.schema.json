@@ -32,7 +32,27 @@
           "minimum": 0
         },
         "detectorCategories": {
-          "description": "low-cardinality detector category summary. Category values are intentionally strings and not fixed provider/model-style enums, but they must be sanitized labels only.",
+          "description": "low-cardinality detector category summary. Category values are intentionally strings and not fixed provider/model-style enums, but they must be sanitized labels only. Example GateLM-normalized labels include email, person_name, postal_address, and organization_name.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        },
+        "policyAllowedTypes": {
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Type labels only; raw detected values, offsets, and prompt fragments are forbidden.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        },
+        "mandatoryProtectedTypes": {
+          "description": "High-risk detector types protected regardless of optional PII masking state. Type labels only.",
           "type": "array",
           "items": {
             "type": "string",

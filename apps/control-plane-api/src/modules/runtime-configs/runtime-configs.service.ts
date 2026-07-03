@@ -74,6 +74,13 @@ const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
   'appTokenSecret',
   'providerKey',
 ]);
+const MANDATORY_SAFETY_DETECTORS = new Set([
+  'resident_registration_number',
+  'api_key',
+  'authorization_header',
+  'jwt',
+  'private_key',
+]);
 
 type RuntimeApplicationContext = NonNullable<
   Awaited<ReturnType<PrismaService['application']['findUnique']>>
@@ -1018,6 +1025,7 @@ export class RuntimeConfigsService {
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
       );
     }
+    this.assertSafetyDetectorsExecutable(document.safetyPolicy.detectors);
   }
 
   private assertRuntimeConfigRequiredPolicyShape(
@@ -1071,6 +1079,18 @@ export class RuntimeConfigsService {
       throw new ConflictException(
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
       );
+    }
+  }
+
+  private assertSafetyDetectorsExecutable(
+    detectors: RuntimeConfigSafetyDetectorResponseDto[],
+  ): void {
+    for (const detector of detectors) {
+      if (MANDATORY_SAFETY_DETECTORS.has(detector.type) && !detector.enabled) {
+        throw new ConflictException(
+          `Safety detector ${detector.type} is mandatory and cannot be disabled.`,
+        );
+      }
     }
   }
 
@@ -1499,6 +1519,13 @@ export class RuntimeConfigsService {
     const detectors = dto?.detectors?.length
       ? dto.detectors
       : this.defaultSafetyDetectors();
+    for (const detector of detectors) {
+      if (MANDATORY_SAFETY_DETECTORS.has(detector.type) && !detector.enabled) {
+        throw new ConflictException(
+          `Safety detector ${detector.type} is mandatory and cannot be disabled.`,
+        );
+      }
+    }
     const mappedDetectors = detectors.map((detector) => ({
       type: detector.type,
       enabled: detector.enabled,

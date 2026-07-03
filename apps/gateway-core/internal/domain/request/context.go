@@ -46,6 +46,7 @@ type RuntimeContext struct {
 	SecurityPolicyHash string
 	RoutingPolicyHash  string
 	Snapshot           runtimeconfig.RuntimeSnapshotProvenance
+	SafetyPolicy       runtimeconfig.SafetyPolicy
 
 	RateLimitConfig    ratelimit.Config
 	HasRateLimitConfig bool
@@ -68,6 +69,8 @@ type MaskingContext struct {
 	Action                  string
 	DetectedTypes           []string
 	DetectedCount           int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPrompt          string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string

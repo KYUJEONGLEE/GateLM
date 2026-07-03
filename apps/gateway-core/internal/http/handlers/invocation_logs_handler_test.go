@@ -275,7 +275,7 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				MaskingAction:         "redacted",
 				MaskingDetectedTypes:  []string{"email"},
 				MaskingDetectedCount:  1,
-				RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
+				RedactedPromptPreview: "Send a reply to [EMAIL_1].",
 			},
 			PromptCapture: invocationlog.PromptCaptureFields{
 				Enabled:        true,
@@ -330,7 +330,7 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	if response.Data.RequestID != "request_001" || response.Data.Routing.SelectedModel == nil || *response.Data.Routing.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected detail response: %+v", response.Data)
 	}
-	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_REDACTED]." {
+	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_1]." {
 		t.Fatalf("expected redacted prompt preview, got %+v", response.Data.Masking)
 	}
 	if !response.Data.PromptCapture.Enabled ||

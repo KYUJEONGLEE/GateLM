@@ -164,6 +164,14 @@ export function RequestLogDetailPanel({
               record.maskingDetectedTypes?.join(", ") ||
               text.none
           ],
+          [
+            "Policy allowed types",
+            record.safetySummary?.policyAllowedTypes?.join(", ") || text.none
+          ],
+          [
+            "Mandatory protected types",
+            record.safetySummary?.mandatoryProtectedTypes?.join(", ") || text.none
+          ],
           ["Prompt preview", nullableText(record.redactedPromptPreview, text.emptyPreview)]
         ]}
       />

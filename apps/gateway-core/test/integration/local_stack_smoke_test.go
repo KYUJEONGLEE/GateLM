@@ -145,8 +145,8 @@ func TestGatewayLocalStackSmoke(t *testing.T) {
 	afterRedactedCalls := mockProviderTotalCalls(t, client, cfg)
 	requireEqual(t, afterRedactedCalls-afterCacheHitCalls, 1, "redacted provider call increment")
 	redactedCall := requireMockCall(t, client, cfg, ids["redacted"])
-	requireContains(t, redactedCall.RedactedPromptPreview, "[EMAIL_REDACTED]")
-	requireContains(t, redactedCall.RedactedPromptPreview, "[PHONE_NUMBER_REDACTED]")
+	requireContains(t, redactedCall.RedactedPromptPreview, "[EMAIL_1]")
+	requireContains(t, redactedCall.RedactedPromptPreview, "[PHONE_NUMBER_1]")
 	requireNotContains(t, redactedCall.RedactedPromptPreview, rawEmail)
 	requireNotContains(t, redactedCall.RedactedPromptPreview, rawPhone)
 

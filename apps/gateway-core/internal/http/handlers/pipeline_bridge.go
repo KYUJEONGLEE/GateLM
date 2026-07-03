@@ -44,6 +44,7 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SecurityPolicyHash: reqCtx.SecurityPolicyHash,
 			RoutingPolicyHash:  reqCtx.RoutingPolicyHash,
 			Snapshot:           reqCtx.RuntimeSnapshot,
+			SafetyPolicy:       reqCtx.RuntimeSafetyPolicy,
 			RateLimitConfig:    reqCtx.RuntimeRateLimit,
 			HasRateLimitConfig: reqCtx.HasRuntimeRateLimit,
 			BudgetPolicy:       reqCtx.RuntimeBudgetPolicy,
@@ -63,6 +64,8 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			Action:                  reqCtx.MaskingAction,
 			DetectedTypes:           reqCtx.MaskingDetectedTypes,
 			DetectedCount:           reqCtx.MaskingDetectedCount,
+			PolicyAllowedTypes:      reqCtx.PolicyAllowedTypes,
+			MandatoryProtectedTypes: reqCtx.MandatoryProtectedTypes,
 			RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
 			SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
 		},
@@ -119,6 +122,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Runtime.SecurityPolicyHash != "" {
 		reqCtx.SecurityPolicyHash = gatewayCtx.Runtime.SecurityPolicyHash
 	}
+	if gatewayCtx.Runtime.SafetyPolicy.SecurityPolicyHash != "" || len(gatewayCtx.Runtime.SafetyPolicy.DetectorSet) > 0 {
+		reqCtx.RuntimeSafetyPolicy = gatewayCtx.Runtime.SafetyPolicy
+	}
 	if gatewayCtx.Runtime.RoutingPolicyHash != "" {
 		reqCtx.RoutingPolicyHash = gatewayCtx.Runtime.RoutingPolicyHash
 	}
@@ -161,6 +167,12 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	}
 	if gatewayCtx.Masking.DetectedCount != 0 {
 		reqCtx.MaskingDetectedCount = gatewayCtx.Masking.DetectedCount
+	}
+	if gatewayCtx.Masking.PolicyAllowedTypes != nil {
+		reqCtx.PolicyAllowedTypes = gatewayCtx.Masking.PolicyAllowedTypes
+	}
+	if gatewayCtx.Masking.MandatoryProtectedTypes != nil {
+		reqCtx.MandatoryProtectedTypes = gatewayCtx.Masking.MandatoryProtectedTypes
 	}
 	if gatewayCtx.Masking.RedactedPromptPreview != "" {
 		reqCtx.RedactedPromptPreview = gatewayCtx.Masking.RedactedPromptPreview

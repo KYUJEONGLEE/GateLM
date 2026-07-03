@@ -92,7 +92,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 		t.Fatalf("redacted request should continue to provider once, got provider calls=%d", *demo.providerCalls)
 	}
 	providerPrompt := providerPromptAt(t, *demo.providerRequests, 1)
-	if !strings.Contains(providerPrompt, "[EMAIL_REDACTED]") || !strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]") {
+	if !strings.Contains(providerPrompt, "[EMAIL_1]") || !strings.Contains(providerPrompt, "[PHONE_NUMBER_1]") {
 		t.Fatalf("provider prompt must contain redaction placeholders, got %q", providerPrompt)
 	}
 	if strings.Contains(providerPrompt, rawEmail) || strings.Contains(providerPrompt, rawPhone) ||
@@ -148,8 +148,8 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	}))
 	t.Logf("\n[When #3 - 입력]\n%s", demoHTTPRequest(t, "Write a safe reply to <email> and ask them to call <phone_number>."))
 	t.Logf("\n[Then #3 - 출력]\n%s", demoSuccessHTTPOutput(t, redacted, redactedResp, map[string]any{
-		"providerPromptPreview":           "Write a safe reply to [EMAIL_REDACTED] and ask them to call [PHONE_NUMBER_REDACTED].",
-		"providerPromptContainsMask":      strings.Contains(providerPrompt, "[EMAIL_REDACTED]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]"),
+		"providerPromptPreview":           "Write a safe reply to [EMAIL_1] and ask them to call [PHONE_NUMBER_1].",
+		"providerPromptContainsMask":      strings.Contains(providerPrompt, "[EMAIL_1]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_1]"),
 		"rawSensitiveValueExposed":        false,
 		"actualRawValuesHiddenFromOutput": true,
 		"의미":                              "email/phone은 차단하지 않고 redaction 후 provider로 전달된다.",

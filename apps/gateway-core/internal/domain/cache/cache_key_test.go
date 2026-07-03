@@ -114,7 +114,7 @@ func TestBuildExactKeyChangesWhenMaterialChanges(t *testing.T) {
 func TestBuildExactKeyDoesNotExposePromptText(t *testing.T) {
 	secret := []byte("cache-key-secret-for-test-only")
 	originalPrompt := "Contact user@example.invalid about the refund."
-	redactedPrompt := "Contact [EMAIL_REDACTED] about the refund."
+	redactedPrompt := "Contact [EMAIL_1] about the refund."
 	material := validKeyMaterial()
 	material.NormalizedRedactedPrompt = redactedPrompt
 	material.NormalizedMaskedRequestBodyHash = "sha256:redacted-body-hash"

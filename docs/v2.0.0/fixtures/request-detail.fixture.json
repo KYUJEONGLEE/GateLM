@@ -105,6 +105,8 @@
     "outcome": "passed",
     "detectedCount": 0,
     "detectorCategories": [],
+    "policyAllowedTypes": [],
+    "mandatoryProtectedTypes": [],
     "maskingAction": "none"
   },
   "promptCapture": {

@@ -8,11 +8,22 @@ const (
 	ActionBlocked  Action = "blocked"
 )
 
+type PolicyAction string
+
+const (
+	PolicyActionAllow  PolicyAction = "allow"
+	PolicyActionRedact PolicyAction = "redact"
+	PolicyActionBlock  PolicyAction = "block"
+)
+
 type DetectorType string
 
 const (
 	DetectorEmail                      DetectorType = "email"
 	DetectorPhoneNumber                DetectorType = "phone_number"
+	DetectorPostalAddress              DetectorType = "postal_address"
+	DetectorPersonName                 DetectorType = "person_name"
+	DetectorOrganizationName           DetectorType = "organization_name"
 	DetectorResidentRegistrationNumber DetectorType = "resident_registration_number"
 	DetectorAPIKey                     DetectorType = "api_key"
 	DetectorAuthorizationHeader        DetectorType = "authorization_header"
@@ -23,6 +34,9 @@ const (
 const (
 	PlaceholderEmail                      = "[EMAIL_REDACTED]"
 	PlaceholderPhoneNumber                = "[PHONE_NUMBER_REDACTED]"
+	PlaceholderPostalAddress              = "[ADDRESS_REDACTED]"
+	PlaceholderPersonName                 = "[PERSON_NAME_REDACTED]"
+	PlaceholderOrganizationName           = "[ORGANIZATION_NAME_REDACTED]"
 	PlaceholderResidentRegistrationNumber = "[RESIDENT_REGISTRATION_NUMBER_REDACTED]"
 	PlaceholderAPIKey                     = "[API_KEY_REDACTED]"
 	PlaceholderAuthorizationHeader        = "[AUTHORIZATION_HEADER_REDACTED]"
@@ -34,19 +48,37 @@ type Result struct {
 	Action                  Action
 	DetectedTypes           []string
 	DetectedCount           int
+	PolicyAllowedTypes      []string
+	PolicyAllowedCount      int
+	MandatoryProtectedTypes []string
 	RedactedPrompt          string
+	LogSafePrompt           string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 }
 
+type DetectorPolicy struct {
+	DetectorType string
+	Action       PolicyAction
+}
+
 func P0ActionForDetector(detectorType string) (Action, bool) {
 	switch DetectorType(detectorType) {
-	case DetectorEmail, DetectorPhoneNumber:
+	case DetectorEmail, DetectorPhoneNumber, DetectorPostalAddress, DetectorPersonName, DetectorOrganizationName:
 		return ActionRedacted, true
 	case DetectorResidentRegistrationNumber, DetectorAPIKey, DetectorAuthorizationHeader, DetectorJWT, DetectorPrivateKey:
 		return ActionBlocked, true
 	default:
 		return ActionNone, false
+	}
+}
+
+func IsMandatoryDetector(detectorType string) bool {
+	switch DetectorType(detectorType) {
+	case DetectorResidentRegistrationNumber, DetectorAPIKey, DetectorAuthorizationHeader, DetectorJWT, DetectorPrivateKey:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -56,6 +88,12 @@ func PlaceholderForDetector(detectorType string) (string, bool) {
 		return PlaceholderEmail, true
 	case DetectorPhoneNumber:
 		return PlaceholderPhoneNumber, true
+	case DetectorPostalAddress:
+		return PlaceholderPostalAddress, true
+	case DetectorPersonName:
+		return PlaceholderPersonName, true
+	case DetectorOrganizationName:
+		return PlaceholderOrganizationName, true
 	case DetectorResidentRegistrationNumber:
 		return PlaceholderResidentRegistrationNumber, true
 	case DetectorAPIKey:

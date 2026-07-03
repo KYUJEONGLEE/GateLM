@@ -53,6 +53,8 @@ type GatewayRequestDetailResponse = {
       maskingAction?: "none" | "redacted" | "blocked";
       maskingDetectedCount?: number;
       maskingDetectedTypes?: string[];
+      policyAllowedTypes?: string[];
+      mandatoryProtectedTypes?: string[];
       redactedPromptPreview?: string | null;
     };
     model?: string;
@@ -95,6 +97,8 @@ type GatewayRequestDetailResponse = {
     safetySummary?: {
       detectedCount?: number;
       detectorCategories?: string[];
+      policyAllowedTypes?: string[];
+      mandatoryProtectedTypes?: string[];
       maskingAction?: string | null;
       outcome?: string;
     };
@@ -232,6 +236,9 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       outcome: data.safetySummary?.outcome ?? domainOutcomes.safety.outcome,
       detectedCount: data.safetySummary?.detectedCount ?? data.masking?.maskingDetectedCount ?? 0,
       detectorCategories: data.safetySummary?.detectorCategories ?? data.masking?.maskingDetectedTypes ?? [],
+      policyAllowedTypes: data.safetySummary?.policyAllowedTypes ?? data.masking?.policyAllowedTypes ?? [],
+      mandatoryProtectedTypes:
+        data.safetySummary?.mandatoryProtectedTypes ?? data.masking?.mandatoryProtectedTypes ?? [],
       maskingAction: data.safetySummary?.maskingAction ?? maskingAction
     },
     promptCapture: normalizePromptCapture(data.promptCapture),

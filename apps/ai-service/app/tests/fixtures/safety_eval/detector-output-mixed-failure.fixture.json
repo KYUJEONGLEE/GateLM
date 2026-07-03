@@ -24,7 +24,7 @@
         "detectedTypes": [],
         "detectedTypeCounts": {},
         "detectedCount": 0,
-        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED].",
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_1].",
         "blockReason": null,
         "securityPolicyHash": "sec_v1_safety_baseline"
       }
@@ -38,7 +38,7 @@
           "email": 1
         },
         "detectedCount": 2,
-        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED] and cc [EMAIL_REDACTED].",
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_1] and cc [EMAIL_1].",
         "blockReason": null,
         "securityPolicyHash": "sec_v1_safety_baseline"
       }

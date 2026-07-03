@@ -29,6 +29,7 @@ type RequestContext struct {
 
 	ConfigHash              string
 	SecurityPolicyHash      string
+	RuntimeSafetyPolicy     runtimeconfig.SafetyPolicy
 	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
 	RuntimeRateLimit        ratelimit.Config
 	HasRuntimeRateLimit     bool
@@ -60,6 +61,8 @@ type RequestContext struct {
 	MaskingAction           string
 	MaskingDetectedTypes    []string
 	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 

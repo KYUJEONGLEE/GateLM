@@ -116,6 +116,7 @@
           "minimum": 0
         },
         "detectorCategories": {
+          "description": "GateLM-normalized detector categories such as email, person_name, postal_address, or organization_name.",
           "type": "array",
           "items": {
             "type": "string",
@@ -171,10 +172,10 @@
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$"
         },
         "modelLabel": {
-          "description": "Raw model taxonomy label such as private_email. This is a sanitized label, not a detected value.",
+          "description": "Raw model taxonomy label such as private_email or ORG-B. This is a sanitized label, not a detected value.",
           "type": "string",
           "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_]*$"
+          "pattern": "^[A-Za-z][A-Za-z0-9_\\-]*$"
         },
         "modelId": {
           "type": "string",
