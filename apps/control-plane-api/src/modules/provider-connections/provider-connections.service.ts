@@ -352,6 +352,7 @@ export class ProviderConnectionsService {
       basePath = '/v1';
     }
     parsedUrl.pathname = `${basePath}${modelsEndpointPath}`;
+    parsedUrl.search = '';
     parsedUrl.hash = '';
 
     return parsedUrl.toString();

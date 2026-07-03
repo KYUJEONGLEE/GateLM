@@ -248,8 +248,9 @@ export function ProviderConnectionManagement({
     const normalizedProvider = provider.trim();
     const providerRecord = providers.find((item) => item.provider === normalizedProvider);
     const baseValues = providerRecord ? getProviderFormValues(providerRecord) : null;
+    const adapterType = baseValues?.adapterType ?? formValues.adapterType;
 
-    if (!isDiscoverSupportedProvider(normalizedProvider)) {
+    if (!isDiscoverSupportedProvider(adapterType)) {
       setSubmitState({
         message: text.discoveryOpenAiOnly,
         status: "error"
@@ -542,7 +543,7 @@ export function ProviderConnectionManagement({
               disabled={
                 pendingAction ||
                 discoveringProvider !== null ||
-                !isDiscoverSupportedProvider(formValues.provider) ||
+                !isDiscoverSupportedProvider(formValues.adapterType) ||
                 !isRegisteredProvider(providers, formValues.provider)
               }
               onClick={() => void discoverModels()}
@@ -648,7 +649,9 @@ export function ProviderConnectionManagement({
                           disabled={
                             pendingAction ||
                             discoveringProvider !== null ||
-                            !isDiscoverSupportedProvider(provider.provider)
+                            !isDiscoverSupportedProvider(
+                              getProviderFormValues(provider).adapterType
+                            )
                           }
                           onClick={() => {
                             editFromProvider(provider);
@@ -732,14 +735,8 @@ function getAvailableProviderModels(
   );
 }
 
-function isDiscoverSupportedProvider(provider: string) {
-  const normalizedProvider = provider.trim().toLowerCase();
-
-  return (
-    normalizedProvider.startsWith("openai") ||
-    normalizedProvider === "gemini" ||
-    normalizedProvider.startsWith("gemini-")
-  );
+function isDiscoverSupportedProvider(adapterType: string) {
+  return adapterType === "openai_compatible" || adapterType === "mock";
 }
 
 function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: string) {
