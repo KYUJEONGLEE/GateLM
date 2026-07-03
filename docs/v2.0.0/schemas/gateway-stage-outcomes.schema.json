@@ -324,6 +324,24 @@
           },
           "uniqueItems": true
         },
+        "policyAllowedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Raw detected values, offsets, and prompt fragments are forbidden."
+        },
+        "mandatoryProtectedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "High-risk detector types protected regardless of optional PII masking state."
+        },
         "detectedCount": {
           "type": "integer",
           "minimum": 0

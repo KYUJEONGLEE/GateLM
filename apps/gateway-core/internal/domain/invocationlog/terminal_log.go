@@ -81,6 +81,8 @@ type TerminalLog struct {
 	MaskingAction           string
 	MaskingDetectedTypes    []string
 	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 
@@ -161,6 +163,8 @@ type TerminalLogInput struct {
 	MaskingAction           string
 	MaskingDetectedTypes    []string
 	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 
@@ -358,6 +362,8 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		MaskingAction:           firstNonEmptyString(input.MaskingAction, "none"),
 		MaskingDetectedTypes:    append([]string{}, input.MaskingDetectedTypes...),
 		MaskingDetectedCount:    input.MaskingDetectedCount,
+		PolicyAllowedTypes:      append([]string{}, input.PolicyAllowedTypes...),
+		MandatoryProtectedTypes: append([]string{}, input.MandatoryProtectedTypes...),
 		RedactedPromptPreview:   strings.TrimSpace(input.RedactedPromptPreview),
 		SecurityPolicyVersionID: strings.TrimSpace(input.SecurityPolicyVersionID),
 

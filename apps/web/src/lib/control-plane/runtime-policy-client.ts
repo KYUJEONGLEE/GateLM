@@ -588,7 +588,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     safetyPolicy: {
       detectors: values.detectors.map((detector) => ({
         action: detector.action,
-        enabled: detector.enabled,
+        enabled: isMandatorySafetyDetector(detector.type) ? true : detector.enabled,
         placeholder: detector.placeholder,
         type: detector.type
       }))
@@ -610,6 +610,16 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
       provider: rule.provider.trim()
     }))
   };
+}
+
+function isMandatorySafetyDetector(detectorType: string) {
+  return (
+    detectorType === "resident_registration_number" ||
+    detectorType === "api_key" ||
+    detectorType === "authorization_header" ||
+    detectorType === "jwt" ||
+    detectorType === "private_key"
+  );
 }
 
 async function readControlPlaneResponse(response: Response): Promise<ControlPlaneRequestResult> {

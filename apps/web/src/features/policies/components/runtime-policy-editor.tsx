@@ -57,6 +57,8 @@ const policyText: Record<
     jsonMode: string;
     limit: string;
     lowCostRoute: string;
+    mandatoryProtection: string;
+    mandatoryProtectionHint: string;
     mode: string;
     model: string;
     models: string;
@@ -108,6 +110,9 @@ const policyText: Record<
     jsonMode: "JSON",
     limit: "Limit",
     lowCostRoute: "Low-cost route",
+    mandatoryProtection: "Mandatory sensitive data protection: always active",
+    mandatoryProtectionHint:
+      "API key, JWT, Authorization header, private key, and RRN stay protected regardless of PII masking settings.",
     mode: "Mode",
     model: "Model",
     models: "Models",
@@ -158,6 +163,9 @@ const policyText: Record<
     jsonMode: "JSON",
     limit: "한도",
     lowCostRoute: "Low-cost route",
+    mandatoryProtection: "중요 민감정보 보호: 항상 활성화",
+    mandatoryProtectionHint:
+      "API key, JWT, Authorization header, private key, 주민등록번호는 PII masking 설정과 관계없이 항상 보호됩니다.",
     mode: "모드",
     model: "Model",
     models: "Models",
@@ -454,6 +462,9 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           <div className="panel-heading">
             <h3>{text.detectors}</h3>
           </div>
+          <p className="project-muted">
+            <strong>{text.mandatoryProtection}</strong> {text.mandatoryProtectionHint}
+          </p>
           <div className="policy-detector-list">
             {draftValues.detectors.map((detector, index) => (
               <DetectorEditor
@@ -970,11 +981,14 @@ function DetectorEditor({
   labels: (typeof policyText)["en"];
   onChange: (detector: RuntimePolicyDetector) => void;
 }) {
+  const isMandatory = isMandatorySafetyDetector(detector.type);
+
   return (
     <div className="policy-detector-row">
       <label className="policy-toggle-row">
         <input
-          checked={detector.enabled}
+          checked={isMandatory || detector.enabled}
+          disabled={isMandatory}
           onChange={(event) =>
             onChange({
               ...detector,
@@ -1017,6 +1031,16 @@ function DetectorEditor({
         />
       </label>
     </div>
+  );
+}
+
+function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {
+  return (
+    detectorType === "resident_registration_number" ||
+    detectorType === "api_key" ||
+    detectorType === "authorization_header" ||
+    detectorType === "jwt" ||
+    detectorType === "private_key"
   );
 }
 
