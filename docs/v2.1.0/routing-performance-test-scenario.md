@@ -21,8 +21,15 @@
 - Docker, DB, Gateway 서버가 필요하지 않다.
 - 실제 OpenAI API Key가 필요하지 않다.
 - 고객 prompt를 자동 수집하지 않는다.
-- synthetic fixture만 사용한다.
+- 실제 업무에서 자주 나오는 표현을 흉내 낸 synthetic fixture만 사용한다.
+- 명확한 키워드 샘플뿐 아니라 애매한 표현, 혼합 의도, false positive 후보를 포함한다.
 - Gateway hot path를 실행하지 않고 routing domain logic만 실행한다.
+
+## 현재 평가셋 성격
+
+`docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl`은 쉬운 정답표가 아니라 룰 보완 지점을 찾기 위한 현실형 평가셋이다.
+
+따라서 정확도가 100%가 나오지 않는 것이 정상이며, 실패 샘플은 category policy와 tier mapping을 보완하기 위한 후보로 본다.
 
 ## 실행 명령
 
