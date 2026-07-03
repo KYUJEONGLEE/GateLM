@@ -67,6 +67,10 @@ type Config struct {
 	RateLimitEnabled         bool
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
+	AsyncLogEnabled          bool
+	AsyncLogQueueSize        int
+	AsyncLogWriteTimeout     time.Duration
+	AsyncLogShutdownTimeout  time.Duration
 	SemanticCache            SemanticCacheConfig
 }
 
@@ -152,6 +156,10 @@ func LoadWithError() (Config, error) {
 		RateLimitEnabled:         envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:      envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:           envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
+		AsyncLogEnabled:          envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
+		AsyncLogQueueSize:        envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
+		AsyncLogWriteTimeout:     envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
+		AsyncLogShutdownTimeout:  envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
 		SemanticCache:            semanticCache,
 	}
 	return cfg, err
