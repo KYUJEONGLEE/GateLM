@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, RefreshCw } from "lucide-react";
+import { Boxes, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ const catalogText: Record<
     clear: string;
     created: string;
     credential: string;
+    deleteModel: string;
     empty: string;
     execution: string;
     fallback: string;
@@ -39,6 +40,7 @@ const catalogText: Record<
     ownedBy: string;
     provider: string;
     refresh: string;
+    removeUnavailable: string;
     requestId: string;
     routing: string;
     route: string;
@@ -53,6 +55,7 @@ const catalogText: Record<
     clear: "Clear",
     created: "Created",
     credential: "Credential",
+    deleteModel: "Remove",
     empty: "No models returned from Gateway.",
     execution: "Execution",
     fallback: "Fallback",
@@ -69,6 +72,7 @@ const catalogText: Record<
     ownedBy: "Owned by",
     provider: "Provider",
     refresh: "Refresh",
+    removeUnavailable: "Only Control Plane provider models can be removed here.",
     requestId: "Request ID",
     routing: "Routing",
     route: "Route",
@@ -82,6 +86,7 @@ const catalogText: Record<
     clear: "초기화",
     created: "생성",
     credential: "Credential",
+    deleteModel: "삭제",
     empty: "Gateway에서 반환된 모델이 없습니다.",
     execution: "Execution",
     fallback: "Fallback",
@@ -98,6 +103,7 @@ const catalogText: Record<
     ownedBy: "Owned by",
     provider: "Provider",
     refresh: "새로고침",
+    removeUnavailable: "Control Plane Provider에 등록된 모델만 여기서 삭제할 수 있습니다.",
     requestId: "Request ID",
     routing: "Routing",
     route: "Route",
@@ -111,24 +117,88 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
   const text = catalogText[locale];
   const [providerFilter, setProviderFilter] = useState("all");
   const [capabilityFilter, setCapabilityFilter] = useState("all");
+  const [removedModelKeys, setRemovedModelKeys] = useState<Set<string>>(() => new Set());
+  const [deletingModelKey, setDeletingModelKey] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    status: "error" | "success";
+    text: string;
+  } | null>(null);
   const providerOptions = useMemo(() => getProviderOptions(model.models), [model.models]);
   const capabilityOptions = useMemo(() => getCapabilityOptions(model.models), [model.models]);
   const visibleModels = useMemo(
     () =>
       model.models.filter((item) => {
+        if (removedModelKeys.has(getCatalogModelKey(item))) {
+          return false;
+        }
+
         const providerMatches = providerFilter === "all" || getEffectiveProvider(item) === providerFilter;
         const capabilityMatches =
           capabilityFilter === "all" || item.capabilities.includes(capabilityFilter);
 
         return providerMatches && capabilityMatches;
       }),
-    [capabilityFilter, model.models, providerFilter]
+    [capabilityFilter, model.models, providerFilter, removedModelKeys]
   );
   const hasFilters = providerFilter !== "all" || capabilityFilter !== "all";
 
   function clearFilters() {
     setProviderFilter("all");
     setCapabilityFilter("all");
+  }
+
+  async function deleteModel(item: ModelCatalogItem) {
+    const provider = item.provider;
+    const modelKey = getCatalogModelKey(item);
+
+    if (!provider || item.source === "gateway") {
+      setActionMessage({
+        status: "error",
+        text: text.removeUnavailable
+      });
+      return;
+    }
+
+    setDeletingModelKey(modelKey);
+    setActionMessage(null);
+
+    const response = await fetch("/api/control-plane/provider-connections", {
+      body: JSON.stringify({
+        action: "remove-model",
+        values: {
+          modelName: item.id,
+          provider
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      status?: number;
+    };
+
+    if (!response.ok) {
+      setActionMessage({
+        status: "error",
+        text: payload.error ?? "Model removal failed."
+      });
+      setDeletingModelKey(null);
+      return;
+    }
+
+    setRemovedModelKeys((current) => new Set([...current, modelKey]));
+    setActionMessage({
+      status: "success",
+      text:
+        locale === "ko"
+          ? "Provider 등록 모델에서 삭제했습니다. 활성 Runtime Catalog에는 publish 전까지 남아 있을 수 있습니다."
+          : "Removed from provider registration. Active Runtime Catalog may keep it until the next publish."
+    });
+    setDeletingModelKey(null);
+    router.refresh();
   }
 
   return (
@@ -148,6 +218,11 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
       {model.controlPlaneLoadError ? (
         <p className="policy-alert" data-status="warning">
           Control Plane catalog: {model.controlPlaneLoadError}
+        </p>
+      ) : null}
+      {actionMessage ? (
+        <p className="policy-alert" data-status={actionMessage.status}>
+          {actionMessage.text}
         </p>
       ) : null}
 
@@ -228,6 +303,7 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                   <th>{text.allowed}</th>
                   <th>{text.source}</th>
                   <th>{text.created}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -267,6 +343,22 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                     </td>
                     <td>{item.source}</td>
                     <td>{item.createdAt ? formatDateTime(item.createdAt) : "-"}</td>
+                    <td>
+                      <Button
+                        disabled={
+                          deletingModelKey !== null ||
+                          !item.provider ||
+                          item.source === "gateway"
+                        }
+                        onClick={() => void deleteModel(item)}
+                        title={!item.provider || item.source === "gateway" ? text.removeUnavailable : undefined}
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 aria-hidden="true" />
+                        {deletingModelKey === getCatalogModelKey(item) ? "..." : text.deleteModel}
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -399,4 +491,8 @@ function getCapabilityOptions(models: ModelCatalogItem[]) {
 
 function getEffectiveProvider(model: ModelCatalogItem) {
   return model.provider ?? model.ownedBy;
+}
+
+function getCatalogModelKey(model: ModelCatalogItem) {
+  return `${getEffectiveProvider(model)}:${model.id}`;
 }

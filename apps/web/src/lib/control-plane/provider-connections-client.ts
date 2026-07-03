@@ -178,6 +178,76 @@ export async function discoverProviderModels(provider: string): Promise<Provider
   }
 }
 
+export async function removeProviderModel({
+  modelName,
+  provider
+}: {
+  modelName: string;
+  provider: string;
+}): Promise<ProviderRequestResult> {
+  const projectId = getControlPlaneProjectId();
+  const listResult = await listProviderConnections(projectId);
+
+  if (!listResult.ok) {
+    return listResult;
+  }
+
+  const providerConnection = listResult.data.find((item) => item.provider === provider);
+
+  if (!providerConnection) {
+    return {
+      error: "Provider connection not found.",
+      ok: false,
+      status: 404
+    };
+  }
+
+  const normalizedModelName = normalizeDiscoveredModelName(modelName);
+  const remainingModels = getProviderConfigModels(providerConnection.providerConfig).filter(
+    (item) => item !== normalizedModelName
+  );
+
+  if (remainingModels.length === getProviderConfigModels(providerConnection.providerConfig).length) {
+    return {
+      error: "Model is not registered on this provider connection.",
+      ok: false,
+      status: 404
+    };
+  }
+
+  return upsertProviderConnection({
+    adapterType: getProviderConfigString(
+      providerConnection.providerConfig,
+      "adapterType",
+      getDefaultProviderAdapterType(providerConnection)
+    ),
+    apiVersion: getProviderConfigString(providerConnection.providerConfig, "apiVersion", ""),
+    baseUrl: providerConnection.baseUrl,
+    credentialLast4: providerConnection.credentialPreview.last4 ?? "",
+    credentialPrefix: providerConnection.credentialPreview.prefix ?? "",
+    credentialRequired: getProviderConfigBoolean(
+      providerConnection.providerConfig,
+      "credentialRequired",
+      providerConnection.resolver !== "none"
+    ),
+    displayName: providerConnection.displayName,
+    failureMode: getProviderFailureMode(providerConnection.providerConfig),
+    isEdit: true,
+    models: remainingModels.join(", "),
+    modelsEndpointPath: getProviderConfigString(
+      providerConnection.providerConfig,
+      "modelsEndpointPath",
+      "/models"
+    ),
+    provider: providerConnection.provider,
+    requestFormat: getProviderRequestFormat(providerConnection),
+    resolver: providerConnection.resolver,
+    secretRef: "",
+    status: providerConnection.status,
+    timeoutMs: providerConnection.timeoutMs
+  });
+}
+
 export async function listProviderConnections(projectId: string): Promise<ProviderListResult> {
   try {
     const response = await fetch(
@@ -292,6 +362,88 @@ function splitProviderModels(value: string) {
         .filter(Boolean)
     )
   );
+}
+
+function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
+  const models = providerConfig?.models;
+
+  return Array.isArray(models)
+    ? models
+        .filter((model): model is string => typeof model === "string" && model.trim().length > 0)
+        .map((model) => normalizeDiscoveredModelName(model))
+    : [];
+}
+
+function normalizeDiscoveredModelName(modelName: string) {
+  const normalized = modelName.trim();
+
+  if (normalized.startsWith("models/gemini-")) {
+    return normalized.slice("models/".length);
+  }
+
+  return normalized;
+}
+
+function getProviderConfigString(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: string
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function getProviderConfigBoolean(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: boolean
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function getProviderFailureMode(
+  providerConfig: Record<string, unknown> | null
+): ProviderConnectionFormValues["failureMode"] {
+  return providerConfig?.failureMode === "fail_open_to_fallback"
+    ? "fail_open_to_fallback"
+    : "fail_closed";
+}
+
+function getProviderRequestFormat(
+  providerConnection: ProviderConnectionRecord
+): ProviderConnectionFormValues["requestFormat"] {
+  const requestFormat = providerConnection.providerConfig?.requestFormat;
+
+  if (
+    requestFormat === "openai_chat_completions" ||
+    requestFormat === "anthropic_messages" ||
+    requestFormat === "mock_chat_completions"
+  ) {
+    return requestFormat;
+  }
+
+  const adapterType = getProviderConfigString(
+    providerConnection.providerConfig,
+    "adapterType",
+    getDefaultProviderAdapterType(providerConnection)
+  );
+
+  if (adapterType === "anthropic") {
+    return "anthropic_messages";
+  }
+
+  return adapterType === "mock" ? "mock_chat_completions" : "openai_chat_completions";
+}
+
+function getDefaultProviderAdapterType(providerConnection: ProviderConnectionRecord) {
+  if (providerConnection.provider === "mock") {
+    return "mock";
+  }
+
+  return providerConnection.provider === "claude" ? "anthropic" : "openai_compatible";
 }
 
 async function readProviderResponse(response: Response): Promise<ProviderRequestResult> {

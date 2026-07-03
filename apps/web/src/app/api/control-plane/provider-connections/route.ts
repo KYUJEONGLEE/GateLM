@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   discoverProviderModels,
+  removeProviderModel,
   upsertProviderConnection
 } from "@/lib/control-plane/provider-connections-client";
 import type {
@@ -40,6 +41,31 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       discovery: result.data,
+      status: result.status
+    });
+  }
+
+  if (payload.action === "remove-model") {
+    const values = getRemoveModelValues(payload.values);
+
+    if (!values) {
+      return NextResponse.json({ error: "Invalid model removal payload." }, { status: 400 });
+    }
+
+    const result = await removeProviderModel(values);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: result.error,
+          status: result.status
+        },
+        { status: result.status > 0 ? result.status : 502 }
+      );
+    }
+
+    return NextResponse.json({
+      provider: result.data,
       status: result.status
     });
   }
@@ -117,6 +143,39 @@ function getProviderFromPayload(value: unknown) {
   }
 
   return provider;
+}
+
+function getRemoveModelValues(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const provider = record.provider;
+  const modelName = record.modelName;
+
+  if (
+    typeof provider !== "string" ||
+    !/^[a-z][a-z0-9_-]{1,63}$/.test(provider) ||
+    typeof modelName !== "string"
+  ) {
+    return null;
+  }
+
+  const normalizedModelName = modelName.trim();
+
+  if (
+    normalizedModelName.length === 0 ||
+    normalizedModelName.length > 200 ||
+    /[\r\n]/.test(normalizedModelName)
+  ) {
+    return null;
+  }
+
+  return {
+    modelName: normalizedModelName,
+    provider
+  };
 }
 
 function isProviderStatus(value: unknown): value is ProviderConnectionStatus {
