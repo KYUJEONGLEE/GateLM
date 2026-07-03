@@ -37,7 +37,7 @@ func TestSemanticFakeEmbeddingProviderDeterministic(t *testing.T) {
 		t.Fatalf("비밀번호 재설정 유사 문장은 threshold 이상이어야 함: got %f", similarity)
 	}
 
-	unrelated, err := provider.Embed(ctx, EmbeddingInput{NormalizedText: "이번 달 사용량 통계를 보여줘"})
+	unrelated, err := provider.Embed(ctx, EmbeddingInput{NormalizedText: "사용량 메뉴 위치 알려줘"})
 	if err != nil {
 		t.Fatalf("unrelated embedding 생성 실패: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestSemanticFakeEmbeddingProviderDeterministic(t *testing.T) {
 		t.Fatalf("unrelated cosine 계산 실패: %v", err)
 	}
 	if unrelatedSimilarity >= 0.92 {
-		t.Fatalf("사용량 통계 문장은 threshold 미만이어야 함: got %f", unrelatedSimilarity)
+		t.Fatalf("사용량 메뉴 위치 문장은 password reset threshold 미만이어야 함: got %f", unrelatedSimilarity)
 	}
 
 	refundFirst, err := provider.Embed(ctx, EmbeddingInput{NormalizedText: "배송비도 환불되나요?"})
@@ -145,7 +145,7 @@ func TestSemanticInMemoryStoreMissByThreshold(t *testing.T) {
 		t.Fatalf("semantic entry 저장 실패: %v", err)
 	}
 
-	result, err := store.Search(ctx, boundary, testSemanticVector(t, provider, "이번 달 사용량 통계를 보여줘"), 0.92, 3)
+	result, err := store.Search(ctx, boundary, testSemanticVector(t, provider, "사용량 메뉴 위치 알려줘"), 0.92, 3)
 	if err != nil {
 		t.Fatalf("semantic search 실패: %v", err)
 	}

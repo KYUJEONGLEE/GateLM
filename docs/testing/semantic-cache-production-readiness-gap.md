@@ -207,7 +207,7 @@ request.requiredSlots compatible cachedEntry.requiredSlots
 | category | requiredSlots 예시 |
 |---|---|
 | `account_access` | `accountAction`, `credentialKind` |
-| `general` | `usageObject`, `usagePeriod`, `surface` |
+| `general` | `usageObject`, `usageAnswerType`, `surface` |
 | `support_refund` | `supportAction`, `refundObject`, `cancelObject`, `exchangeObject` |
 | `translation` | deny category라 provider bypass hit 금지 |
 | `code` | deny category라 provider bypass hit 금지 |

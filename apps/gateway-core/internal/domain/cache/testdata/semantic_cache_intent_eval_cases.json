@@ -843,7 +843,7 @@
       "second": "사용량 통계 위치 알려줘",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {},
       "sameAnswerReusable": true,
@@ -865,7 +865,7 @@
       "second": "이번 달 사용량 확인 위치 알려줘",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {},
       "sameAnswerReusable": true,
@@ -887,7 +887,7 @@
       "second": "이번 달 사용량 메뉴 어디야?",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {},
       "sameAnswerReusable": true,
@@ -909,7 +909,7 @@
       "second": "월간 사용량 대시보드 위치 알려줘",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {},
       "sameAnswerReusable": true,
@@ -931,7 +931,7 @@
       "second": "API 사용 통계는 어디서 봐?",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {},
       "sameAnswerReusable": true,
@@ -953,7 +953,7 @@
       "second": "당월 이용량은 어디서 볼 수 있어?",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {
         "surface": "dashboard"
@@ -977,7 +977,7 @@
       "second": "이번 달 API 사용량 통계는 어디서 봐?",
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "optionalSlots": {
         "surface": "dashboard"

@@ -242,7 +242,7 @@ func TestOpenAIEmbeddingProviderSmokeKoreanSimilarity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("한국어 유사 pair 둘째 embedding 실패: %v", err)
 	}
-	usage, err := provider.Embed(context.Background(), EmbeddingInput{NormalizedText: "이번 달 사용량 통계를 보여줘"})
+	usage, err := provider.Embed(context.Background(), EmbeddingInput{NormalizedText: "사용량 메뉴 위치 알려줘"})
 	if err != nil {
 		t.Fatalf("한국어 비유사 pair embedding 실패: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestOpenAIEmbeddingProviderSmokeKoreanSimilarity(t *testing.T) {
 	}
 }
 
-func TestOpenAIEmbeddingProviderEvalKoreanSimilarityDistribution(t *testing.T) {
+func TestOpenAIEmbeddingProviderGeneralOnlyEvalKoreanSimilarityDistribution(t *testing.T) {
 	if os.Getenv("SEMANTIC_CACHE_OPENAI_EVAL") != "1" {
 		t.Skip("SEMANTIC_CACHE_OPENAI_EVAL=1일 때만 실제 OpenAI embedding eval을 실행한다")
 	}
@@ -302,18 +302,15 @@ func TestOpenAIEmbeddingProviderEvalKoreanSimilarityDistribution(t *testing.T) {
 	}
 
 	pairs := []openAIEmbeddingEvalPair{
-		{id: "positive_password_reset", kind: "positive", leftLabel: "p_password_reset_a", rightLabel: "p_password_reset_b", leftText: "비밀번호 재설정 방법 알려줘", rightText: "패스워드 초기화는 어떻게 해?", policyGuardAllowsHit: true},
-		{id: "positive_api_key_create", kind: "positive", leftLabel: "p_api_key_a", rightLabel: "p_api_key_b", leftText: "API Key 발급 방법 알려줘", rightText: "API Key 생성은 어디서 해?", policyGuardAllowsHit: true},
-		{id: "positive_usage_stats", kind: "positive", leftLabel: "p_usage_a", rightLabel: "p_usage_b", leftText: "사용량은 어디서 확인해?", rightText: "이번 달 사용량 통계를 보여줘", policyGuardAllowsHit: true},
-		{id: "positive_shipping_fee_refund", kind: "positive", leftLabel: "p_shipping_a", rightLabel: "p_shipping_b", leftText: "배송비도 환불되나요?", rightText: "반품하면 배송비도 돌려받나요?", policyGuardAllowsHit: true},
-		{id: "hard_negative_shipping_fee_vs_order_cancel", kind: "hard_negative", leftLabel: "h_shipping_a", rightLabel: "h_cancel_b", leftText: "배송비도 환불되나요?", rightText: "주문 취소하고 싶어요", policyGuardAllowsHit: false},
-		{id: "hard_negative_return_shipping_fee_vs_exchange", kind: "hard_negative", leftLabel: "h_return_shipping_a", rightLabel: "h_exchange_b", leftText: "반품하면 배송비도 돌려받나요?", rightText: "교환 신청은 어디서 하나요?", policyGuardAllowsHit: false},
-		{id: "unrelated_password_reset_vs_usage", kind: "unrelated", leftLabel: "u_password_a", rightLabel: "u_usage_b", leftText: "비밀번호 재설정 방법 알려줘", rightText: "이번 달 사용량 통계를 보여줘", policyGuardAllowsHit: false},
-		{id: "unrelated_api_key_vs_shipping_fee", kind: "unrelated", leftLabel: "u_api_key_a", rightLabel: "u_shipping_b", leftText: "API Key 발급 방법 알려줘", rightText: "배송비도 환불되나요?", policyGuardAllowsHit: false},
-		{id: "unrelated_usage_vs_order_cancel", kind: "unrelated", leftLabel: "u_usage_a", rightLabel: "u_cancel_b", leftText: "사용량은 어디서 확인해?", rightText: "주문 취소하고 싶어요", policyGuardAllowsHit: false},
+		{id: "positive_usage_menu_location", kind: "positive", leftLabel: "p_usage_menu_a", rightLabel: "p_usage_menu_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "API 사용량 확인 화면은 어디야?", policyGuardAllowsHit: true},
+		{id: "positive_usage_stats_screen_location", kind: "positive", leftLabel: "p_usage_stats_a", rightLabel: "p_usage_stats_b", leftText: "사용량 통계 화면 위치 알려줘", rightText: "월간 사용량 대시보드 메뉴 어디야?", policyGuardAllowsHit: true},
+		{id: "dynamic_usage_current_month", kind: "dynamic_negative", leftLabel: "d_usage_static_a", rightLabel: "d_usage_dynamic_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "내 이번 달 사용량 보여줘", policyGuardAllowsHit: false},
+		{id: "dynamic_usage_project_cost", kind: "dynamic_negative", leftLabel: "d_usage_screen_a", rightLabel: "d_cost_dynamic_b", leftText: "API 사용량 확인 화면은 어디야?", rightText: "현재 프로젝트별 비용 알려줘", policyGuardAllowsHit: false},
+		{id: "dynamic_usage_today_tokens", kind: "dynamic_negative", leftLabel: "d_usage_stats_a", rightLabel: "d_tokens_dynamic_b", leftText: "사용량 통계 화면 위치 알려줘", rightText: "오늘 토큰 사용량 몇이야?", policyGuardAllowsHit: false},
+		{id: "unrelated_usage_vs_account_setting", kind: "unrelated", leftLabel: "u_usage_menu_a", rightLabel: "u_account_setting_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "계정 설정은 어디서 바꿔?", policyGuardAllowsHit: false},
 	}
 
-	t.Logf("OpenAI embedding eval model=%s pair_count=%d", provider.ModelName(), len(pairs))
+	t.Logf("OpenAI embedding general-only eval model=%s pair_count=%d", provider.ModelName(), len(pairs))
 	for i := range pairs {
 		left := embed(pairs[i].leftLabel, pairs[i].leftText)
 		right := embed(pairs[i].rightLabel, pairs[i].rightText)
@@ -329,10 +326,12 @@ func TestOpenAIEmbeddingProviderEvalKoreanSimilarityDistribution(t *testing.T) {
 	for _, threshold := range thresholds {
 		summary := summarizeOpenAIEmbeddingEvalPairs(pairs, threshold)
 		t.Logf(
-			"threshold=%.2f positiveAbove=%d/%d hardNegativeAbove=%d/%d unrelatedAbove=%d/%d policyGuardHitPossible=%d/%d",
+			"threshold=%.2f positiveAbove=%d/%d dynamicNegativeAbove=%d/%d hardNegativeAbove=%d/%d unrelatedAbove=%d/%d policyGuardHitPossible=%d/%d",
 			threshold,
 			summary.positiveAbove,
 			summary.positiveTotal,
+			summary.dynamicNegativeAbove,
+			summary.dynamicNegativeTotal,
 			summary.hardNegativeAbove,
 			summary.hardNegativeTotal,
 			summary.unrelatedAbove,
@@ -357,6 +356,8 @@ type openAIEmbeddingEvalPair struct {
 type openAIEmbeddingEvalSummary struct {
 	positiveAbove          int
 	positiveTotal          int
+	dynamicNegativeAbove   int
+	dynamicNegativeTotal   int
 	hardNegativeAbove      int
 	hardNegativeTotal      int
 	unrelatedAbove         int
@@ -376,6 +377,11 @@ func summarizeOpenAIEmbeddingEvalPairs(pairs []openAIEmbeddingEvalPair, threshol
 			summary.positiveTotal++
 			if above {
 				summary.positiveAbove++
+			}
+		case "dynamic_negative":
+			summary.dynamicNegativeTotal++
+			if above {
+				summary.dynamicNegativeAbove++
 			}
 		case "hard_negative":
 			summary.hardNegativeTotal++

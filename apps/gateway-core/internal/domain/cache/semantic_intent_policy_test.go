@@ -101,10 +101,15 @@ func TestSemanticCacheHitPolicyAppliesCategoryThresholdAfterIntentGuards(t *test
 	assertPolicyDecision(t, policy.Evaluate(passwordInit, passwordReset, 0.49, policy.DefaultThreshold), false, SemanticCacheReasonThresholdMiss)
 	assertPolicyDecision(t, policy.Evaluate(passwordInit, passwordReset, 0.50, policy.DefaultThreshold), true, SemanticCacheReasonHit)
 
-	usageMenu := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "사용량은 어디서 확인해?")
-	usageStats := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "이번 달 사용량 통계를 보여줘")
+	usageMenu := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "사용량 메뉴 위치 알려줘")
+	usageStats := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "API 사용량 확인 화면은 어디야?")
 	assertPolicyDecision(t, policy.Evaluate(usageStats, usageMenu, 0.49, policy.DefaultThreshold), false, SemanticCacheReasonThresholdMiss)
 	assertPolicyDecision(t, policy.Evaluate(usageStats, usageMenu, 0.50, policy.DefaultThreshold), true, SemanticCacheReasonHit)
+
+	dynamicUsage, dynamicDecision := policy.Materialize(SemanticCacheCategoryGeneral, "내 이번 달 사용량 보여줘")
+	if !dynamicUsage.IsZero() || dynamicDecision.Allowed || dynamicDecision.Reason != SemanticCacheReasonIntentUnavailable {
+		t.Fatalf("사용자별 동적 사용량 조회는 general semantic cache material이 아니어야 함: material=%+v decision=%+v", dynamicUsage, dynamicDecision)
+	}
 
 	shippingRefund := mustMaterializeText(t, policy, SemanticCacheCategorySupportRefund, "배송비도 환불되나요?")
 	returnShippingRefund := mustMaterializeText(t, policy, SemanticCacheCategorySupportRefund, "반품하면 배송비도 돌려받나요?")
@@ -367,26 +372,26 @@ func TestSemanticCacheServiceGeneralPolicyGuardsBlockHitDespiteGeneralCategory(t
 	}{
 		{
 			name:       "required slots mismatch",
-			firstText:  "사용량은 어디서 확인해?",
-			secondText: "이번 달 사용량 통계를 보여줘",
+			firstText:  "사용량 메뉴 위치 알려줘",
+			secondText: "API 사용량 확인 화면은 어디야?",
 			cachedMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
-				"usageObject": "api_usage",
-				"usagePeriod": "monthly",
+				"usageObject":     "api_usage",
+				"usageAnswerType": "static_guidance",
 			}),
 			requestMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
-				"usageObject": "api_usage",
-				"usagePeriod": "daily",
+				"usageObject":     "api_usage",
+				"usageAnswerType": "dynamic_user_state",
 			}),
 			policy:     testGeneralPolicyWithForbiddenPairs(nil),
 			wantReason: SemanticCacheReasonSlotsMismatch,
 		},
 		{
 			name:       "hard negative guard",
-			firstText:  "사용량은 어디서 확인해?",
+			firstText:  "사용량 메뉴 위치 알려줘",
 			secondText: "계정 삭제 위치 알려줘",
 			cachedMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
-				"usageObject": "api_usage",
-				"usagePeriod": "monthly",
+				"usageObject":     "api_usage",
+				"usageAnswerType": "static_guidance",
 			}),
 			requestMaterial: testGeneralIntentMaterial("general.account_delete", map[string]string{
 				"accountAction": "account_delete",
@@ -403,15 +408,15 @@ func TestSemanticCacheServiceGeneralPolicyGuardsBlockHitDespiteGeneralCategory(t
 		},
 		{
 			name:       "threshold miss",
-			firstText:  "사용량은 어디서 확인해?",
+			firstText:  "사용량 메뉴 위치 알려줘",
 			secondText: "비밀번호 재설정 방법 알려줘",
 			cachedMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
-				"usageObject": "api_usage",
-				"usagePeriod": "monthly",
+				"usageObject":     "api_usage",
+				"usageAnswerType": "static_guidance",
 			}),
 			requestMaterial: testGeneralIntentMaterial("general.usage_check", map[string]string{
-				"usageObject": "api_usage",
-				"usagePeriod": "monthly",
+				"usageObject":     "api_usage",
+				"usageAnswerType": "static_guidance",
 			}),
 			policy:     testGeneralPolicyWithForbiddenPairs(nil),
 			wantReason: SemanticCacheReasonThresholdMiss,
@@ -593,7 +598,7 @@ func testGeneralPolicyWithForbiddenPairs(pairs []SemanticCacheIntentPair) Semant
 			"general.usage_check": {
 				Category:      SemanticCacheCategoryGeneral,
 				MatchAll:      []string{"usage"},
-				RequiredSlots: map[string]string{"usageObject": "api_usage", "usagePeriod": "monthly"},
+				RequiredSlots: map[string]string{"usageObject": "api_usage", "usageAnswerType": "static_guidance"},
 				Priority:      10,
 			},
 			"general.account_delete": {

@@ -2,9 +2,9 @@
 
 ## 목적
 
-이 문서는 Semantic Cache의 `canonicalIntent` / `requiredSlots` / `hardNegative` policy를 유지한 상태에서, 실제 OpenAI embedding similarity 분포를 확인한 결과다.
+이 문서는 Semantic Cache의 `general` category limited enforce 기준에서 실제 OpenAI embedding similarity 분포를 확인한 결과다.
 
-이번 평가는 threshold 조정 판단을 위한 근거 수집이며, production hit policy 자체를 변경하지 않는다.
+이번 평가는 threshold 조정 근거 수집이며, production hit policy 자체를 바꾸는 작업이 아니다. 특히 `usage` 계열은 “사용량 화면/메뉴 위치 안내”처럼 정적 안내성 답변만 hit 후보로 보고, “내 이번 달 사용량 보여줘”처럼 사용자별 동적 데이터가 필요한 요청은 hit 금지로 본다.
 
 ## 실행 조건
 
@@ -21,19 +21,16 @@
 
 ## 평가 Pair
 
-문서에는 raw prompt를 대량 저장하지 않고 pair label만 남긴다. 실제 테스트 입력은 `TestOpenAIEmbeddingProviderEvalKoreanSimilarityDistribution` 안에 있으며, 테스트 출력에는 pair ID와 score만 남긴다.
+문서에는 pair ID와 sanitized 한국어 예시만 남긴다. 실제 테스트 출력에는 pair ID와 score만 남기며 API Key, Authorization header, App Token, Provider Key는 남기지 않는다.
 
-| kind | pair ID | 의미 |
-| --- | --- | --- |
-| positive | `positive_password_reset` | password reset paraphrase |
-| positive | `positive_api_key_create` | API Key creation paraphrase |
-| positive | `positive_usage_stats` | usage stats paraphrase |
-| positive | `positive_shipping_fee_refund` | shipping fee refund paraphrase |
-| hard_negative | `hard_negative_shipping_fee_vs_order_cancel` | shipping fee refund vs order cancel |
-| hard_negative | `hard_negative_return_shipping_fee_vs_exchange` | return shipping fee vs exchange request |
-| unrelated | `unrelated_password_reset_vs_usage` | password reset vs usage stats |
-| unrelated | `unrelated_api_key_vs_shipping_fee` | API Key creation vs shipping fee refund |
-| unrelated | `unrelated_usage_vs_order_cancel` | usage stats vs order cancel |
+| kind | pair ID | 예시 | policy guard 후 hit 가능 |
+| --- | --- | --- | --- |
+| positive | `positive_usage_menu_location` | 사용량 메뉴 위치 / API 사용량 확인 화면 | 가능 |
+| positive | `positive_usage_stats_screen_location` | 사용량 통계 화면 위치 / 월간 사용량 대시보드 메뉴 | 가능 |
+| dynamic_negative | `dynamic_usage_current_month` | 사용량 메뉴 위치 / 내 이번 달 사용량 조회 | 불가 |
+| dynamic_negative | `dynamic_usage_project_cost` | API 사용량 확인 화면 / 현재 프로젝트별 비용 조회 | 불가 |
+| dynamic_negative | `dynamic_usage_today_tokens` | 사용량 통계 화면 위치 / 오늘 토큰 사용량 조회 | 불가 |
+| unrelated | `unrelated_usage_vs_account_setting` | 사용량 메뉴 위치 / 계정 설정 위치 | 불가 |
 
 ## Similarity 결과
 
@@ -41,81 +38,75 @@
 
 | pair ID | kind | similarity | policy guard 후 hit 가능 |
 | --- | --- | ---: | --- |
-| `positive_password_reset` | positive | 0.355520 | 가능 |
-| `positive_api_key_create` | positive | 0.776339 | 가능 |
-| `positive_usage_stats` | positive | 0.589263 | 가능 |
-| `positive_shipping_fee_refund` | positive | 0.571208 | 가능 |
-| `hard_negative_shipping_fee_vs_order_cancel` | hard_negative | 0.442448 | 불가 |
-| `hard_negative_return_shipping_fee_vs_exchange` | hard_negative | 0.345092 | 불가 |
-| `unrelated_password_reset_vs_usage` | unrelated | 0.246612 | 불가 |
-| `unrelated_api_key_vs_shipping_fee` | unrelated | 0.144123 | 불가 |
-| `unrelated_usage_vs_order_cancel` | unrelated | 0.222343 | 불가 |
+| `positive_usage_menu_location` | positive | 0.548428 | 가능 |
+| `positive_usage_stats_screen_location` | positive | 0.472178 | 가능 |
+| `dynamic_usage_current_month` | dynamic_negative | 0.478157 | 불가 |
+| `dynamic_usage_project_cost` | dynamic_negative | 0.277072 | 불가 |
+| `dynamic_usage_today_tokens` | dynamic_negative | 0.383808 | 불가 |
+| `unrelated_usage_vs_account_setting` | unrelated | 0.289212 | 불가 |
 
-| threshold | positive 이상 | hard negative 이상 | unrelated 이상 | policy guard 후 hit 가능 |
+| threshold | positive 이상 | dynamic negative 이상 | unrelated 이상 | policy guard 후 hit 가능 |
 | ---: | ---: | ---: | ---: | ---: |
-| 0.35 | 4/4 | 1/2 | 0/3 | 4/9 |
-| 0.45 | 3/4 | 0/2 | 0/3 | 3/9 |
-| 0.50 | 3/4 | 0/2 | 0/3 | 3/9 |
-| 0.60 | 1/4 | 0/2 | 0/3 | 1/9 |
-| 0.70 | 1/4 | 0/2 | 0/3 | 1/9 |
-| 0.80 | 0/4 | 0/2 | 0/3 | 0/9 |
-| 0.85 | 0/4 | 0/2 | 0/3 | 0/9 |
-| 0.90 | 0/4 | 0/2 | 0/3 | 0/9 |
-| 0.92 | 0/4 | 0/2 | 0/3 | 0/9 |
+| 0.35 | 2/2 | 2/3 | 0/1 | 2/6 |
+| 0.45 | 2/2 | 1/3 | 0/1 | 2/6 |
+| 0.50 | 1/2 | 0/3 | 0/1 | 1/6 |
+| 0.60 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.70 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.80 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.85 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.90 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.92 | 0/2 | 0/3 | 0/1 | 0/6 |
 
 ### `text-embedding-3-large`
 
 | pair ID | kind | similarity | policy guard 후 hit 가능 |
 | --- | --- | ---: | --- |
-| `positive_password_reset` | positive | 0.517135 | 가능 |
-| `positive_api_key_create` | positive | 0.743104 | 가능 |
-| `positive_usage_stats` | positive | 0.522061 | 가능 |
-| `positive_shipping_fee_refund` | positive | 0.776243 | 가능 |
-| `hard_negative_shipping_fee_vs_order_cancel` | hard_negative | 0.371424 | 불가 |
-| `hard_negative_return_shipping_fee_vs_exchange` | hard_negative | 0.438555 | 불가 |
-| `unrelated_password_reset_vs_usage` | unrelated | 0.296511 | 불가 |
-| `unrelated_api_key_vs_shipping_fee` | unrelated | 0.256464 | 불가 |
-| `unrelated_usage_vs_order_cancel` | unrelated | 0.193894 | 불가 |
+| `positive_usage_menu_location` | positive | 0.483341 | 가능 |
+| `positive_usage_stats_screen_location` | positive | 0.622603 | 가능 |
+| `dynamic_usage_current_month` | dynamic_negative | 0.531690 | 불가 |
+| `dynamic_usage_project_cost` | dynamic_negative | 0.319116 | 불가 |
+| `dynamic_usage_today_tokens` | dynamic_negative | 0.381619 | 불가 |
+| `unrelated_usage_vs_account_setting` | unrelated | 0.368893 | 불가 |
 
-| threshold | positive 이상 | hard negative 이상 | unrelated 이상 | policy guard 후 hit 가능 |
+| threshold | positive 이상 | dynamic negative 이상 | unrelated 이상 | policy guard 후 hit 가능 |
 | ---: | ---: | ---: | ---: | ---: |
-| 0.35 | 4/4 | 2/2 | 0/3 | 4/9 |
-| 0.45 | 4/4 | 0/2 | 0/3 | 4/9 |
-| 0.50 | 4/4 | 0/2 | 0/3 | 4/9 |
-| 0.60 | 2/4 | 0/2 | 0/3 | 2/9 |
-| 0.70 | 2/4 | 0/2 | 0/3 | 2/9 |
-| 0.80 | 0/4 | 0/2 | 0/3 | 0/9 |
-| 0.85 | 0/4 | 0/2 | 0/3 | 0/9 |
-| 0.90 | 0/4 | 0/2 | 0/3 | 0/9 |
-| 0.92 | 0/4 | 0/2 | 0/3 | 0/9 |
+| 0.35 | 2/2 | 2/3 | 1/1 | 2/6 |
+| 0.45 | 2/2 | 1/3 | 0/1 | 2/6 |
+| 0.50 | 1/2 | 1/3 | 0/1 | 1/6 |
+| 0.60 | 1/2 | 0/3 | 0/1 | 1/6 |
+| 0.70 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.80 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.85 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.90 | 0/2 | 0/3 | 0/1 | 0/6 |
+| 0.92 | 0/2 | 0/3 | 0/1 | 0/6 |
 
 ## 해석
 
-embedding similarity만 보면 threshold를 낮출수록 positive recall은 올라가지만 false positive 위험도 같이 커진다.
+embedding similarity만 보면 threshold를 낮출수록 정적 안내 positive recall은 올라간다. 하지만 사용자별 동적 데이터 요청도 같이 threshold를 넘을 수 있다.
 
 - `text-embedding-3-small`
-  - threshold `0.35`에서는 positive 4/4가 잡히지만 hard negative 1/2도 threshold 이상이다.
-  - threshold `0.45` 또는 `0.50`에서는 hard negative/unrelated는 0건이지만 positive가 3/4로 줄어든다.
-  - threshold `0.80` 이상은 이번 한국어 positive pair를 사실상 잡지 못한다.
+  - threshold `0.45`에서는 positive 2/2가 잡히지만 dynamic negative 1/3도 threshold 이상이다.
+  - threshold `0.50`에서는 dynamic negative는 0/3이지만 positive가 1/2로 줄어든다.
+  - threshold `0.80` 이상은 이번 한국어 `general` positive pair를 잡지 못한다.
 
 - `text-embedding-3-large`
-  - threshold `0.45` 또는 `0.50`에서 positive 4/4, hard negative 0/2, unrelated 0/3이었다.
-  - threshold `0.35`에서는 hard negative 2/2도 threshold 이상이라 similarity 단독 hit로는 위험하다.
-  - threshold `0.80` 이상은 이번 한국어 positive pair를 잡지 못한다.
+  - threshold `0.45`에서는 positive 2/2가 잡히지만 dynamic negative 1/3도 threshold 이상이다.
+  - threshold `0.50`에서도 dynamic negative 1/3이 threshold 이상이다.
+  - threshold `0.60`에서는 dynamic negative는 0/3이지만 positive가 1/2로 줄어든다.
 
 ## Policy Guard 적용 전/후
 
 raw similarity 단독 기준:
 
-- 낮은 threshold는 hard negative를 통과시킬 수 있다.
-- 특히 support/refund 계열은 문장 표면이 가까워 false positive 위험이 있다.
+- 낮은 threshold는 정적 안내 요청과 동적 데이터 조회 요청을 함께 통과시킬 수 있다.
+- “사용량 메뉴 위치”와 “내 이번 달 사용량”은 말은 비슷하지만 답변 재사용 가능성이 다르다.
 - threshold만 낮추는 방식은 production 기준으로 안전하지 않다.
 
-`canonicalIntent` / `requiredSlots` / `hardNegative` policy guard 적용 후:
+`canonicalIntent` / `requiredSlots` / `dynamic_user_state` guard 적용 후:
 
-- positive pair만 hit 후보가 된다.
-- hard negative pair는 similarity가 threshold 이상이어도 hit 불가다.
-- unrelated pair도 category/intent/slot 불일치로 hit 불가다.
+- `usage.monthly_usage_check`는 `usage + usage_help` material이 있어야만 hit 후보가 된다.
+- `requiredSlots`는 `usageObject=api_usage`, `usageAnswerType=static_guidance`로 제한한다.
+- “내 이번 달 사용량 보여줘”, “현재 프로젝트별 비용 알려줘”, “오늘 토큰 사용량 몇이야”는 `intent_unavailable`로 embedding 호출 전 제외된다.
 
 즉 production hit 여부는 embedding similarity 단독이 아니라 아래 조건을 모두 만족해야 한다.
 
@@ -123,27 +114,29 @@ raw similarity 단독 기준:
 category allow
 + canonicalIntent match
 + requiredSlots match
++ dynamic_user_state 아님
 + hardNegative miss
 + similarity >= category threshold
 ```
 
 ## Threshold 후보
 
-현재 측정 기준의 local/demo 후보:
+local/demo 후보:
 
-- `text-embedding-3-large`: `0.45` 또는 `0.50`
-- `text-embedding-3-small`: `0.45` 또는 `0.50`은 일부 positive를 놓치며, `0.35`는 hard negative raw risk가 있어 demo에서도 policy guard가 필수다.
+- `general` static guidance만 대상으로 할 때 `0.45`는 recall이 좋지만 policy guard가 필수다.
+- dynamic usage guard 없이 `0.45` 또는 `0.50`을 쓰면 사용자별 사용량/비용 조회가 잘못 hit될 수 있다.
 
 production 후보:
 
 - threshold만으로 production 적용 불가
-- 최소 조건은 policy guard 필수 적용
-- `text-embedding-3-large` 기준으로는 `0.50`부터 추가 평가셋을 확장해 검토할 수 있다.
-- `support_refund`는 별도 category threshold와 hard negative guard를 유지해야 한다.
+- 최소 조건은 `canonicalIntent`, `requiredSlots`, `dynamic_user_state` guard 필수 적용
+- `general`도 정적 FAQ/가이드와 사용자별 상태 조회를 분리해야 한다.
+- `support_refund`는 이 문서의 general-only 결과로 완화 판단하면 안 된다.
 
 ## 결론
 
-이번 결과만 보면 `text-embedding-3-large`가 한국어 Semantic Cache 후보 판별에 더 안정적이다.
+이번 general-only 재검증의 결론은 명확하다.
 
-다만 production-ready라고 판단하기에는 평가 pair가 아직 작다. 다음 단계는 실제 도메인별 expanded eval set을 늘리고, category별 threshold를 따로 측정하는 것이다.
+`general`이라고 해서 전부 캐시하면 안 된다. “사용량 메뉴 위치” 같은 정적 안내는 Semantic Cache hit 후보가 될 수 있지만, “내 이번 달 사용량” 같은 사용자별 데이터 조회는 embedding similarity가 높아도 hit 금지다.
 
+따라서 beta enforce는 `general` 안에서도 static guidance intent로 좁혀야 하며, threshold 조정은 policy guard 뒤에서만 의미가 있다.

@@ -67,7 +67,7 @@ safe cached response
 
 | category | canonicalIntent | requiredSlots | optionalSlots | hitAllowed |
 | --- | --- | --- | --- | --- |
-| `general` | `usage.monthly_usage_check` | `usageObject`, `usagePeriod` | `surface` | `true` |
+| `general` | `usage.monthly_usage_check` | `usageObject`, `usageAnswerType` | `surface` | `true` |
 | `general` | `dashboard.location_help` | `surface` | `role` | `true` |
 | `account_access` | `account.password_reset` | `accountAction` | `authFactor`, `surface` | `true` |
 | `account_access` | `account.api_key_create` | `accountAction`, `credentialKind` | `surface`, `role` | `true` |
@@ -89,7 +89,7 @@ safe cached response
 
 | canonicalIntent | requiredSlots | optionalSlots | hitAllowed | 설명 |
 | --- | --- | --- | --- | --- |
-| `usage.monthly_usage_check` | `usageObject=api_usage`, `usagePeriod=monthly` | `surface=dashboard` | `true` | 사용량 확인 방법 안내 |
+| `usage.monthly_usage_check` | `usageObject=api_usage`, `usageAnswerType=static_guidance` | `surface=dashboard` | `true` | 사용량 화면/메뉴 위치 안내 |
 | `dashboard.location_help` | `surface=dashboard` | `role=admin/developer` | `true` | 대시보드 위치 안내 |
 | `docs.how_to_find` | `docsObject` | `surface` | `true` | 문서 위치나 사용법 안내 |
 
@@ -98,7 +98,7 @@ safe cached response
 | canonical term | synonyms |
 | --- | --- |
 | `usage` | 사용량, 이용량, 사용 통계, 사용량 통계 |
-| `monthly` | 이번 달, 월간, 당월 |
+| `usage_help` | 어디서, 어디에서, 위치, 메뉴, 화면, 확인 방법, 보는 방법 |
 | `dashboard` | 대시보드, 콘솔, 관리자 화면 |
 | `where` | 어디서, 어디에서, 위치 |
 
@@ -106,13 +106,14 @@ safe cached response
 
 | first | second | canonicalIntent | requiredSlots | hitAllowed | 이유 |
 | --- | --- | --- | --- | --- | --- |
-| 사용량은 어디서 확인해? | 이번 달 API 사용량 보는 방법 알려줘 | `usage.monthly_usage_check` | `usageObject=api_usage`, `usagePeriod=monthly` | `true` | 같은 사용량 확인 안내 |
+| 사용량은 어디서 확인해? | API 사용량 확인 화면은 어디야? | `usage.monthly_usage_check` | `usageObject=api_usage`, `usageAnswerType=static_guidance` | `true` | 같은 사용량 화면 위치 안내 |
 | 대시보드는 어디서 볼 수 있어? | 관리자 콘솔 위치 알려줘 | `dashboard.location_help` | `surface=dashboard` | `true` | 같은 화면 위치 안내 |
 
 ### Hard Negative Pair
 
 | first | second | hitAllowed | hit 금지 이유 |
 | --- | --- | --- | --- |
+| 사용량 메뉴 위치 알려줘 | 내 이번 달 사용량 보여줘 | `false` | 정적 화면 안내와 사용자별 동적 사용량 조회는 같은 답을 재사용할 수 없음 |
 | 사용량은 어디서 확인해? | 계정 설정은 어디서 바꿔? | `false` | `canonicalIntent` 다름 |
 | 대시보드는 어디서 볼 수 있어? | 패스워드 초기화는 어떻게 해? | `false` | `dashboard.location_help`와 `account.password_reset` 혼동 |
 
