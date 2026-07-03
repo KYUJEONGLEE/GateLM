@@ -119,6 +119,7 @@ func main() {
 	if cfg.AsyncLogEnabled {
 		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
 			QueueSize:       cfg.AsyncLogQueueSize,
+			WorkerCount:     cfg.AsyncLogWorkerCount,
 			WriteTimeout:    cfg.AsyncLogWriteTimeout,
 			MetricsRegistry: metricsRegistry,
 		})

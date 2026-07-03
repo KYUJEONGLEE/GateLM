@@ -13,10 +13,12 @@ import (
 
 const (
 	defaultQueueSize    = 1024
+	defaultWorkerCount  = 2
 	defaultWriteTimeout = 2 * time.Second
 	operationTerminal   = "terminal"
 	statusSuccess       = "success"
 	statusError         = "error"
+	statusPanic         = "panic"
 	statusQueueFull     = "queue_full"
 	statusClosed        = "closed"
 )
@@ -28,6 +30,7 @@ var (
 
 type TerminalLogWriterConfig struct {
 	QueueSize       int
+	WorkerCount     int
 	WriteTimeout    time.Duration
 	MetricsRegistry *metrics.Registry
 }
@@ -35,9 +38,11 @@ type TerminalLogWriterConfig struct {
 type TerminalLogWriter struct {
 	delegate     invocationlog.TerminalLogWriter
 	queue        chan invocationlog.TerminalLog
+	workerCount  int
 	writeTimeout time.Duration
 	registry     *metrics.Registry
 	done         chan struct{}
+	wg           sync.WaitGroup
 	mu           sync.RWMutex
 	closed       bool
 	closeOnce    sync.Once
@@ -51,6 +56,10 @@ func NewTerminalLogWriter(delegate invocationlog.TerminalLogWriter, cfg Terminal
 	if queueSize <= 0 {
 		queueSize = defaultQueueSize
 	}
+	workerCount := cfg.WorkerCount
+	if workerCount <= 0 {
+		workerCount = defaultWorkerCount
+	}
 	writeTimeout := cfg.WriteTimeout
 	if writeTimeout <= 0 {
 		writeTimeout = defaultWriteTimeout
@@ -58,12 +67,21 @@ func NewTerminalLogWriter(delegate invocationlog.TerminalLogWriter, cfg Terminal
 	writer := &TerminalLogWriter{
 		delegate:     delegate,
 		queue:        make(chan invocationlog.TerminalLog, queueSize),
+		workerCount:  workerCount,
 		writeTimeout: writeTimeout,
 		registry:     cfg.MetricsRegistry,
 		done:         make(chan struct{}),
 	}
 	writer.recordQueueDepth()
-	go writer.run()
+	for i := 0; i < writer.workerCount; i++ {
+		writer.wg.Add(1)
+		go writer.runWorker(i + 1)
+	}
+	go func() {
+		writer.wg.Wait()
+		writer.recordQueueDepth()
+		close(writer.done)
+	}()
 	return writer
 }
 
@@ -110,24 +128,35 @@ func (w *TerminalLogWriter) Close(ctx context.Context) error {
 	}
 }
 
-func (w *TerminalLogWriter) run() {
-	defer close(w.done)
+func (w *TerminalLogWriter) runWorker(workerID int) {
+	defer w.wg.Done()
 	for entry := range w.queue {
 		w.recordQueueDepth()
-		startedAt := time.Now()
-		ctx := context.Background()
-		cancel := func() {}
-		if w.writeTimeout > 0 {
-			ctx, cancel = context.WithTimeout(ctx, w.writeTimeout)
-		}
-		err := w.delegate.WriteTerminalLog(ctx, entry)
-		cancel()
-		status := statusSuccess
-		if err != nil {
-			status = statusError
-			log.Printf("async terminal invocation log persist failed request_id=%s status=%s cause=%q", entry.RequestID, entry.Status, err.Error())
+		w.persist(workerID, entry)
+	}
+}
+
+func (w *TerminalLogWriter) persist(workerID int, entry invocationlog.TerminalLog) {
+	startedAt := time.Now()
+	status := statusSuccess
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			status = statusPanic
+			log.Printf("async terminal invocation log worker panicked worker_id=%d request_id=%s status=%s cause=%v", workerID, entry.RequestID, entry.Status, recovered)
 		}
 		w.recordPersist(status, time.Since(startedAt))
+	}()
+
+	ctx := context.Background()
+	cancel := func() {}
+	if w.writeTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, w.writeTimeout)
+	}
+	defer cancel()
+
+	if err := w.delegate.WriteTerminalLog(ctx, entry); err != nil {
+		status = statusError
+		log.Printf("async terminal invocation log persist failed worker_id=%d request_id=%s status=%s cause=%q", workerID, entry.RequestID, entry.Status, err.Error())
 	}
 }
 
