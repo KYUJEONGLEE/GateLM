@@ -190,14 +190,29 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		}
 	})
 
-	t.Run("enabled openai embedding provider requires OPENAI_API_KEY", func(t *testing.T) {
+	t.Run("enabled openai embedding provider without intent policy does not require OPENAI_API_KEY", func(t *testing.T) {
 		resetSemanticCacheEnv(t)
 		t.Setenv("SEMANTIC_CACHE_ENABLED", "true")
 		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "openai")
 
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("policy path가 없으면 OpenAI key 없이 no-op config를 로드해야 함: %v", err)
+		}
+		if cfg.IntentPolicyPath != "" || cfg.EmbeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
+			t.Fatalf("policy 없는 openai no-op config 불일치: %+v", cfg)
+		}
+	})
+
+	t.Run("enabled openai embedding provider requires OPENAI_API_KEY when intent policy is set", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER", "openai")
+		t.Setenv("SEMANTIC_CACHE_INTENT_POLICY_PATH", "apps/gateway-core/internal/domain/cache/testdata/semantic_cache_policy_ko_v1.json")
+
 		_, err := LoadSemanticCacheConfig()
 		if err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY is required") {
-			t.Fatalf("enabled openai provider는 OPENAI_API_KEY 누락 시 명시 에러를 반환해야 함: %v", err)
+			t.Fatalf("policy가 있는 enabled openai provider는 OPENAI_API_KEY 누락 시 명시 에러를 반환해야 함: %v", err)
 		}
 	})
 

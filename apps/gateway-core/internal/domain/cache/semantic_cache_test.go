@@ -428,6 +428,33 @@ func TestSemanticCacheServiceRequiresIntentMaterialForHit(t *testing.T) {
 	}
 }
 
+func TestSemanticCacheServiceWithoutIntentPolicyDoesNotCallEmbeddingProvider(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
+	service := NewSemanticCacheService(NewInMemorySemanticCacheStore(10), provider, SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+	})
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:       boundary,
+		NormalizedText: "비밀번호 재설정 방법 알려줘",
+	})
+	if err != nil {
+		t.Fatalf("policy 없는 semantic search는 에러가 아니라 no-op miss여야 함: %v", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("intent policy가 없으면 embedding provider를 호출하면 안 됨: calls=%d", provider.calls)
+	}
+	if result.Hit || decision.SemanticCacheHit || decision.SemanticCacheDecisionReason != SemanticCacheReasonIntentPolicyUnavailable {
+		t.Fatalf("policy 없는 semantic search decision 불일치: result=%+v decision=%+v", result, decision)
+	}
+}
+
 func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)

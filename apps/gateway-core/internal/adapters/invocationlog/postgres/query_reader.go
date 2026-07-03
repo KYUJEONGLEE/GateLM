@@ -395,7 +395,7 @@ select
   count(*) filter (where terminal_status = 'rate_limited')::bigint as rate_limited_requests,
   count(*) filter (where terminal_status = 'cancelled')::bigint as cancelled_requests,
   count(*) filter (where cache_outcome = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
-  count(*) filter (where cache_outcome in ('hit', 'miss', 'error'))::bigint as cache_eligible_requests,
+  count(*) filter (where cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_eligible_requests,
   count(*) filter (where fallback_outcome = 'success')::bigint as fallback_success_requests,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,

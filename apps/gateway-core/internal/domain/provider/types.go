@@ -51,31 +51,22 @@ type Usage struct {
 }
 
 type GateLMMetadata struct {
-	RequestID                   string   `json:"requestId"`
-	TenantID                    string   `json:"tenantId,omitempty"`
-	ProjectID                   string   `json:"projectId,omitempty"`
-	ApplicationID               string   `json:"applicationId,omitempty"`
-	RequestedModel              string   `json:"requestedModel"`
-	SelectedProvider            string   `json:"selectedProvider"`
-	SelectedModel               string   `json:"selectedModel"`
-	TerminalStatus              string   `json:"terminalStatus,omitempty"`
-	DomainOutcomes              any      `json:"domainOutcomes,omitempty"`
-	CacheStatus                 string   `json:"cacheStatus"`
-	CacheType                   string   `json:"cacheType,omitempty"`
-	ProviderCalled              bool     `json:"providerCalled"`
-	SemanticCacheHit            bool     `json:"semanticCacheHit,omitempty"`
-	SemanticCacheMode           string   `json:"semanticCacheMode,omitempty"`
-	SemanticCacheWouldHit       bool     `json:"semanticCacheWouldHit,omitempty"`
-	SemanticCacheWouldMiss      bool     `json:"semanticCacheWouldMiss,omitempty"`
-	SemanticCandidateFound      bool     `json:"semanticCandidateFound,omitempty"`
-	SemanticReturnedFromCache   bool     `json:"semanticReturnedFromCache,omitempty"`
-	SemanticSimilarity          *float64 `json:"semanticSimilarity,omitempty"`
-	SemanticMatchedRequestID    string   `json:"semanticMatchedRequestId,omitempty"`
-	SemanticCacheDecisionReason string   `json:"semanticCacheDecisionReason,omitempty"`
-	RoutingReason               string   `json:"routingReason,omitempty"`
-	MaskingAction               string   `json:"maskingAction"`
-	EstimatedCostUSD            string   `json:"estimatedCostUsd,omitempty"`
-	LatencyMs                   int64    `json:"latencyMs"`
+	RequestID        string `json:"requestId"`
+	TenantID         string `json:"tenantId,omitempty"`
+	ProjectID        string `json:"projectId,omitempty"`
+	ApplicationID    string `json:"applicationId,omitempty"`
+	RequestedModel   string `json:"requestedModel"`
+	SelectedProvider string `json:"selectedProvider"`
+	SelectedModel    string `json:"selectedModel"`
+	TerminalStatus   string `json:"terminalStatus,omitempty"`
+	DomainOutcomes   any    `json:"domainOutcomes,omitempty"`
+	CacheStatus      string `json:"cacheStatus"`
+	CacheType        string `json:"cacheType,omitempty"`
+	ProviderCalled   bool   `json:"providerCalled"`
+	RoutingReason    string `json:"routingReason,omitempty"`
+	MaskingAction    string `json:"maskingAction"`
+	EstimatedCostUSD string `json:"estimatedCostUsd,omitempty"`
+	LatencyMs        int64  `json:"latencyMs"`
 }
 
 type ExecutionConfig struct {

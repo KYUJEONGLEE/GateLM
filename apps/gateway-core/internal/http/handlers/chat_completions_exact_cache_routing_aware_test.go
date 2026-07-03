@@ -496,9 +496,10 @@ func (p routingAwarePipeline) Execute(_ context.Context, gatewayCtx *request.Gat
 }
 
 type routingAwareProviderAdapter struct {
-	adapterType string
-	err         error
-	calls       int
+	adapterType     string
+	err             error
+	responseContent string
+	calls           int
 }
 
 func (a *routingAwareProviderAdapter) AdapterType() string {
@@ -514,6 +515,8 @@ func (a *routingAwareProviderAdapter) CreateChatCompletion(_ context.Context, _ 
 	if a.err != nil {
 		return nil, a.err
 	}
+	responseContent := firstNonEmpty(a.responseContent, "routing aware response")
+	responseContentJSON, _ := json.Marshal(responseContent)
 	return &provider.ChatCompletionResponse{
 		ID:      "chatcmpl_routing_aware_test",
 		Object:  "chat.completion",
@@ -523,7 +526,7 @@ func (a *routingAwareProviderAdapter) CreateChatCompletion(_ context.Context, _ 
 			Index: 0,
 			Message: provider.ChatMessage{
 				Role:    "assistant",
-				Content: json.RawMessage(`"routing aware response"`),
+				Content: json.RawMessage(responseContentJSON),
 			},
 			FinishReason: "stop",
 		}},

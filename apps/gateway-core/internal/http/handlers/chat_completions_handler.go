@@ -1700,14 +1700,19 @@ func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx 
 	if h.semanticCacheMode() == cachekey.SemanticCacheModeShadow {
 		shadowReason = reqCtx.SemanticCacheDecisionReason
 	}
+	responseCacheabilityClass := semanticResponseCacheabilityClass(reqCtx, boundary, payload)
 	decision, err := h.SemanticCacheService.Upsert(ctx, cachekey.SemanticCacheStoreRequest{
-		EntryID:         reqCtx.RequestID,
-		RequestID:       reqCtx.RequestID,
-		Boundary:        boundary,
-		NormalizedText:  normalizedText,
-		EmbeddingVector: append([]float64(nil), embeddingVector...),
-		CachedResponse:  payload,
-		Now:             time.Now().UTC(),
+		EntryID:                   reqCtx.RequestID,
+		RequestID:                 reqCtx.RequestID,
+		Boundary:                  boundary,
+		NormalizedText:            normalizedText,
+		EmbeddingVector:           append([]float64(nil), embeddingVector...),
+		CachedResponse:            payload,
+		ResponseCacheabilityClass: responseCacheabilityClass,
+		ProviderOutcome:           cachekey.SemanticCacheProviderOutcomeSuccess,
+		FallbackUsed:              reqCtx.FallbackOccurred,
+		Stream:                    reqCtx.Stream,
+		Now:                       time.Now().UTC(),
 	})
 	h.applySemanticCacheDecision(reqCtx, decision)
 	if shadowReason == cachekey.SemanticCacheReasonShadowWouldMiss || shadowReason == cachekey.SemanticCacheReasonShadowWouldHit {
@@ -1724,6 +1729,166 @@ func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx 
 		return
 	}
 	h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeSemantic, "success")
+}
+
+func semanticResponseCacheabilityClass(reqCtx *pipeline.RequestContext, boundary cachekey.SemanticCacheBoundary, payload []byte) string {
+	if reqCtx == nil || len(payload) == 0 {
+		return cachekey.SemanticCacheResponseCacheabilityUnsafeOrUnknown
+	}
+	if reqCtx.FallbackOccurred {
+		return cachekey.SemanticCacheResponseCacheabilityProviderError
+	}
+	if reqCtx.Stream {
+		return cachekey.SemanticCacheResponseCacheabilityUnsafeOrUnknown
+	}
+	payloadText := strings.ToLower(string(payload))
+	if semanticResponseContainsCredentialMarker(payloadText) {
+		return cachekey.SemanticCacheResponseCacheabilityCredentialSecret
+	}
+	if semanticResponseContainsProviderErrorMarker(payloadText) {
+		return cachekey.SemanticCacheResponseCacheabilityProviderError
+	}
+	if semanticResponseContainsDynamicStateMarker(payloadText) {
+		return cachekey.SemanticCacheResponseCacheabilityDynamicUserState
+	}
+	return semanticResponseCacheabilityClassFromIntent(
+		cachekey.CanonicalSemanticCacheCategory(firstNonEmpty(reqCtx.PromptCategory, boundary.PromptCategory)),
+		reqCtx.SemanticCanonicalIntent,
+	)
+}
+
+func semanticResponseCacheabilityClassFromIntent(category string, canonicalIntent string) string {
+	canonicalIntent = strings.TrimSpace(canonicalIntent)
+	if canonicalIntent == "" {
+		return cachekey.SemanticCacheResponseCacheabilityUnsafeOrUnknown
+	}
+	switch {
+	case semanticStaticGuidanceIntent(canonicalIntent):
+		return cachekey.SemanticCacheResponseCacheabilityStaticGuidance
+	case semanticPolicySummaryIntent(canonicalIntent):
+		return cachekey.SemanticCacheResponseCacheabilityPolicySummary
+	}
+	switch cachekey.CanonicalSemanticCacheCategory(category) {
+	case cachekey.SemanticCacheCategoryGeneral, cachekey.SemanticCacheCategoryAccountAccess:
+		if strings.Contains(canonicalIntent, "_location") || strings.HasSuffix(canonicalIntent, "_check") {
+			return cachekey.SemanticCacheResponseCacheabilityStaticGuidance
+		}
+	case cachekey.SemanticCacheCategorySupportRefund:
+		if strings.HasPrefix(canonicalIntent, "support_refund.") && canonicalIntent != "support_refund.order_cancel" {
+			return cachekey.SemanticCacheResponseCacheabilityPolicySummary
+		}
+	}
+	return cachekey.SemanticCacheResponseCacheabilityUnsafeOrUnknown
+}
+
+func semanticStaticGuidanceIntent(canonicalIntent string) bool {
+	switch strings.TrimSpace(canonicalIntent) {
+	case "account.password_reset",
+		"account.api_key_create",
+		"account.app_token_create",
+		"account.app_token_delete",
+		"account.profile_settings_location",
+		"account.security_settings_location",
+		"usage.monthly_usage_check",
+		"performance.rps_definition",
+		"performance.tps_definition",
+		"performance.latency_definition",
+		"performance.throughput_definition",
+		"performance.error_rate_definition",
+		"performance.rps_tps_compare",
+		"product.help_center_location",
+		"billing.invoice_location",
+		"billing.payment_method_location",
+		"team.member_invite_location",
+		"project.settings_location",
+		"developer.api_docs_location",
+		"product.status_page_location",
+		"product.release_notes_location",
+		"product.notification_settings_location",
+		"team.role_permission_location",
+		"billing.plan_pricing_location",
+		"product.data_export_location":
+		return true
+	default:
+		return false
+	}
+}
+
+func semanticPolicySummaryIntent(canonicalIntent string) bool {
+	switch strings.TrimSpace(canonicalIntent) {
+	case "support_refund.shipping_fee_refund",
+		"support_refund.return_shipping_fee",
+		"support_refund.refund_request",
+		"support_refund.exchange_request":
+		return true
+	default:
+		return false
+	}
+}
+
+func semanticResponseContainsCredentialMarker(payloadText string) bool {
+	for _, marker := range []string{
+		"api_key=",
+		"app_token=",
+		"provider_key=",
+		"authorization:",
+		"bearer ",
+		"raw prompt",
+		"raw pii",
+		"raw response",
+		"raw detected value",
+		"raw prompt fragment",
+		"actual secret",
+	} {
+		if strings.Contains(payloadText, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func semanticResponseContainsProviderErrorMarker(payloadText string) bool {
+	for _, marker := range []string{
+		"provider raw error",
+		"provider error",
+		"provider failed",
+		"upstream error",
+		"fallback response",
+	} {
+		if strings.Contains(payloadText, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func semanticResponseContainsDynamicStateMarker(payloadText string) bool {
+	for _, marker := range []string{
+		"account status",
+		"billing amount",
+		"current usage",
+		"invoice status",
+		"monthly usage",
+		"order status",
+		"payment status",
+		"quota remaining",
+		"refund status",
+		"usage_count",
+		"계정 상태",
+		"결제 상태",
+		"남은 한도",
+		"사용량:",
+		"이번 달",
+		"이번 달 사용량",
+		"주문 상태",
+		"처리 상태",
+		"환불 상태",
+	} {
+		if strings.Contains(payloadText, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
@@ -2540,9 +2705,6 @@ func (h *ChatCompletionsHandler) semanticCacheMode() string {
 }
 
 func (h *ChatCompletionsHandler) semanticCacheConfiguredEnabled() bool {
-	if h.SemanticCacheEnabled {
-		return true
-	}
 	return h.SemanticCacheService != nil && h.SemanticCacheService.Enabled()
 }
 
@@ -2594,13 +2756,6 @@ func firstPositiveFloat(values ...float64) float64 {
 	return 0
 }
 
-func positiveFloatPointer(value float64) *float64 {
-	if value <= 0 {
-		return nil
-	}
-	return &value
-}
-
 func providerCalledFromRequestContext(reqCtx *pipeline.RequestContext) bool {
 	if reqCtx == nil {
 		return false
@@ -2630,31 +2785,22 @@ func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipelin
 	}
 
 	resp.GateLM = &provider.GateLMMetadata{
-		RequestID:                   reqCtx.RequestID,
-		TenantID:                    reqCtx.TenantID,
-		ProjectID:                   reqCtx.ProjectID,
-		ApplicationID:               reqCtx.ApplicationID,
-		RequestedModel:              reqCtx.RequestedModel,
-		SelectedProvider:            reqCtx.SelectedProvider,
-		SelectedModel:               reqCtx.SelectedModel,
-		TerminalStatus:              reqCtx.Status,
-		DomainOutcomes:              domainOutcomesFromRequestContext(reqCtx),
-		CacheStatus:                 reqCtx.CacheStatus,
-		CacheType:                   reqCtx.CacheType,
-		ProviderCalled:              providerCalledFromRequestContext(reqCtx),
-		SemanticCacheHit:            reqCtx.SemanticCacheHit,
-		SemanticCacheMode:           reqCtx.SemanticCacheMode,
-		SemanticCacheWouldHit:       reqCtx.SemanticCacheWouldHit,
-		SemanticCacheWouldMiss:      reqCtx.SemanticCacheWouldMiss,
-		SemanticCandidateFound:      reqCtx.SemanticCacheCandidateFound,
-		SemanticReturnedFromCache:   reqCtx.SemanticReturnedFromCache,
-		SemanticSimilarity:          positiveFloatPointer(reqCtx.SemanticSimilarity),
-		SemanticMatchedRequestID:    reqCtx.SemanticMatchedRequestID,
-		SemanticCacheDecisionReason: reqCtx.SemanticCacheDecisionReason,
-		RoutingReason:               reqCtx.RoutingReason,
-		MaskingAction:               reqCtx.MaskingAction,
-		EstimatedCostUSD:            formatCostMicroUSD(reqCtx.CostMicroUSD),
-		LatencyMs:                   reqCtx.LatencyMs,
+		RequestID:        reqCtx.RequestID,
+		TenantID:         reqCtx.TenantID,
+		ProjectID:        reqCtx.ProjectID,
+		ApplicationID:    reqCtx.ApplicationID,
+		RequestedModel:   reqCtx.RequestedModel,
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		TerminalStatus:   reqCtx.Status,
+		DomainOutcomes:   domainOutcomesFromRequestContext(reqCtx),
+		CacheStatus:      reqCtx.CacheStatus,
+		CacheType:        reqCtx.CacheType,
+		ProviderCalled:   providerCalledFromRequestContext(reqCtx),
+		RoutingReason:    reqCtx.RoutingReason,
+		MaskingAction:    reqCtx.MaskingAction,
+		EstimatedCostUSD: formatCostMicroUSD(reqCtx.CostMicroUSD),
+		LatencyMs:        reqCtx.LatencyMs,
 	}
 }
 
