@@ -105,7 +105,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "Display name",
     discoverModels: "Discover models",
-    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI providers first.",
+    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible providers.",
     empty: "No provider connections found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture provider connection.",
     management: "management",
@@ -139,7 +139,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "표시 이름",
     discoverModels: "모델 조회",
-    discoveryOpenAiOnly: "모델 조회는 우선 OpenAI Provider에서만 활성화합니다.",
+    discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 Provider에서 활성화됩니다.",
     empty: "Provider connection이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture Provider connection을 표시 중입니다.",
     management: "관리",
@@ -733,7 +733,13 @@ function getAvailableProviderModels(
 }
 
 function isDiscoverSupportedProvider(provider: string) {
-  return provider.trim().startsWith("openai");
+  const normalizedProvider = provider.trim().toLowerCase();
+
+  return (
+    normalizedProvider.startsWith("openai") ||
+    normalizedProvider === "gemini" ||
+    normalizedProvider.startsWith("gemini-")
+  );
 }
 
 function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: string) {
@@ -790,6 +796,7 @@ function isChatCompletionModelName(modelName: string) {
     normalizedModelName.startsWith("o1") ||
     normalizedModelName.startsWith("o3") ||
     normalizedModelName.startsWith("o4") ||
+    normalizedModelName.startsWith("gemini-") ||
     normalizedModelName.startsWith("chat-")
   );
 }

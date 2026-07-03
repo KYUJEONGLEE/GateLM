@@ -347,10 +347,11 @@ export class ProviderConnectionsService {
   private toModelsEndpoint(providerConnection: ProviderConnection): string {
     const parsedUrl = this.toSafeParsedBaseUrl(providerConnection.baseUrl);
     const modelsEndpointPath = this.toModelsEndpointPath(providerConnection);
-    parsedUrl.pathname = `${parsedUrl.pathname.replace(
-      /\/+$/,
-      '',
-    )}${modelsEndpointPath}`;
+    let basePath = parsedUrl.pathname.replace(/\/+$/, '');
+    if (basePath === '' || basePath === '/') {
+      basePath = '/v1';
+    }
+    parsedUrl.pathname = `${basePath}${modelsEndpointPath}`;
     parsedUrl.hash = '';
 
     return parsedUrl.toString();
