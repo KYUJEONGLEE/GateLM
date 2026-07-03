@@ -8,6 +8,7 @@ import {
   requestLogStatusFilters
 } from "@/features/request-logs/components/request-log-table";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import { getLiveGatewayRequestDetail } from "@/lib/gateway/live-request-detail";
 import {
   getLiveGatewayRequestLogs,
@@ -83,7 +84,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
               locale={locale}
               record={displaySelectedDetail}
               tenantId={tenantId}
-              timezone="UTC"
+              timezone={DEFAULT_DISPLAY_TIMEZONE}
             />
           ) : undefined
         }
@@ -98,7 +99,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         selectedRequestId={displaySelectedDetail?.requestId}
         sourceState={records ? "ready" : "unavailable"}
         tenantId={tenantId}
-        timezone="UTC"
+        timezone={DEFAULT_DISPLAY_TIMEZONE}
       />
     </ConsoleShell>
   );

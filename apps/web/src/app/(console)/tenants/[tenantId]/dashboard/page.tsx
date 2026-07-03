@@ -8,6 +8,7 @@ import {
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import {
   getDashboardLiveRange,
   getLiveDashboardOverview,
@@ -109,7 +110,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
               locale={locale}
               record={displayScopedSelectedDetail}
               tenantId={tenantId}
-              timezone="UTC"
+              timezone={DEFAULT_DISPLAY_TIMEZONE}
             />
           ) : undefined
         }
