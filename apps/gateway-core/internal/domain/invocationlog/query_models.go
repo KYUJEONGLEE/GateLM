@@ -770,7 +770,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		if domainOutcomes.Fallback.Outcome == "success" {
 			aggregate.FallbackSuccessCount++
 		}
-		if isCacheEligible(log.CacheStatus) {
+		if isExactCacheEligible(log.CacheStatus, log.CacheType) {
 			aggregate.CacheEligibleRequests++
 		}
 		if isExactCacheHit(log.CacheStatus, log.CacheType) {
@@ -985,8 +985,16 @@ func isLatencyEligibleStatus(status string) bool {
 	return status == StatusSuccess || status == StatusFailed
 }
 
-func isCacheEligible(cacheStatus string) bool {
-	return defaultString(cacheStatus, CacheStatusBypass) != CacheStatusBypass
+func isExactCacheEligible(cacheStatus string, cacheType string) bool {
+	if defaultString(cacheType, CacheTypeNone) != CacheTypeExact {
+		return false
+	}
+	switch defaultString(cacheStatus, CacheStatusBypass) {
+	case CacheStatusHit, CacheStatusMiss, CacheStatusError:
+		return true
+	default:
+		return false
+	}
 }
 
 func isExactCacheHit(cacheStatus string, cacheType string) bool {
