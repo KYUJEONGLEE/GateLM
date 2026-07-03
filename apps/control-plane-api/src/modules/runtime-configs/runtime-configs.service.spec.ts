@@ -1270,6 +1270,80 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
   });
 
+  it('preserves Anthropic adapter config in the Provider Catalog body', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const anthropicProviderId = '00000000-0000-4000-8000-000000000602';
+    const activeDocument = activeRuntimeConfigDocument();
+    const activeDocumentWithClaude = {
+      ...activeDocument,
+      providers: [
+        ...activeDocument.providers,
+        {
+          providerId: anthropicProviderId,
+          provider: 'claude',
+          displayName: 'Claude',
+          status: 'active' as const,
+          adapterType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          timeoutMs: 30000,
+          credentialRequired: true,
+          credentialRef: {
+            credentialRefId: `provider_credential:${anthropicProviderId}`,
+            credentialVersion: 1,
+            credentialState: 'active' as const,
+          },
+          secretRef: `provider_credential:${anthropicProviderId}`,
+          credentialPreview: { prefix: 'env_ref_', last4: '0000' },
+          resolver: 'environment' as const,
+          adapterConfig: {
+            apiVersion: '2023-06-01',
+            requestFormat: 'anthropic_messages' as const,
+          },
+          models: ['claude-synthetic-sonnet'],
+          failureMode: 'fail_closed' as const,
+        },
+      ],
+      models: [
+        ...activeDocument.models,
+        {
+          provider: 'claude',
+          model: 'claude-synthetic-sonnet',
+          displayName: 'Claude Synthetic Sonnet',
+          status: 'active' as const,
+          contextWindowTokens: 200000,
+          supportsStreaming: false,
+          supportsJsonMode: false,
+        },
+      ],
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocumentWithClaude, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const claudeProvider = catalog.providers.find(
+      (provider) => provider.providerName === 'claude',
+    );
+
+    expect(claudeProvider).toMatchObject({
+      providerId: anthropicProviderId,
+      adapterType: 'anthropic',
+      adapterConfig: {
+        apiVersion: '2023-06-01',
+        requestFormat: 'anthropic_messages',
+      },
+      models: [
+        expect.objectContaining({
+          modelName: 'claude-synthetic-sonnet',
+        }),
+      ],
+    });
+  });
+
   it('filters unselected providers that require missing credentials from the Provider Catalog body', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);

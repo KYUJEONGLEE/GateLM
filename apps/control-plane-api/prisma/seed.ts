@@ -960,6 +960,10 @@ function toRuntimeProviderAdapterType(
 function toRuntimeProviderAdapterConfig(
   adapterType: string,
 ): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+  if (adapterType === 'anthropic') {
+    return { requestFormat: 'anthropic_messages' };
+  }
+
   return adapterType === 'mock'
     ? { requestFormat: 'mock_chat_completions' }
     : { requestFormat: 'openai_chat_completions' };

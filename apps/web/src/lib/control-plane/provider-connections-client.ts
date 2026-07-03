@@ -570,6 +570,7 @@ function toProviderPresetRecord(value: unknown): ProviderPresetRecord | null {
     defaultTimeoutMs: record.defaultTimeoutMs,
     displayName: record.displayName,
     modelsEndpointPath: record.modelsEndpointPath,
+    providerConfig: toRecordOrNull(record.providerConfig),
     providerKey: record.providerKey
   };
 }
@@ -643,6 +644,11 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       defaultTimeoutMs: 30000,
       displayName: "OpenAI",
       modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "openai_compatible",
+        credentialRequired: true,
+        requestFormat: "openai_chat_completions"
+      },
       providerKey: "openai"
     },
     {
@@ -653,6 +659,11 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       defaultTimeoutMs: 30000,
       displayName: "Gemini",
       modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "openai_compatible",
+        credentialRequired: true,
+        requestFormat: "openai_chat_completions"
+      },
       providerKey: "gemini"
     },
     {
@@ -663,6 +674,12 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       defaultTimeoutMs: 30000,
       displayName: "Claude",
       modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "anthropic",
+        apiVersion: "2023-06-01",
+        credentialRequired: true,
+        requestFormat: "anthropic_messages"
+      },
       providerKey: "claude"
     }
   ];

@@ -588,7 +588,10 @@ export interface ProviderCatalogCredentialRefDto {
 }
 
 export interface ProviderCatalogAdapterConfigDto {
-  requestFormat: 'openai_chat_completions' | 'mock_chat_completions';
+  requestFormat:
+    | 'openai_chat_completions'
+    | 'anthropic_messages'
+    | 'mock_chat_completions';
   apiVersion?: string;
 }
 
