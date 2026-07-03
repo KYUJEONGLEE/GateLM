@@ -1567,11 +1567,12 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 		h.markSemanticCacheBypass(reqCtx, cachekey.SemanticCacheReasonCategoryDenied, boundary.PromptCategory)
 		return false, nil
 	}
-	normalizedText := semanticEmbeddingInput(redactedPrompt)
-	if normalizedText == "" {
-		h.markSemanticCacheBypass(reqCtx, "semantic_input_unavailable", boundary.PromptCategory)
+	embeddingInput, ok := semanticEmbeddingInput(chatReq.Messages)
+	if !ok {
+		h.markSemanticCacheBypass(reqCtx, firstNonEmpty(embeddingInput.BypassReason, cachekey.SemanticCacheReasonEmbeddingInputUnavailable), boundary.PromptCategory)
 		return false, nil
 	}
+	normalizedText := embeddingInput.Text
 
 	result, decision, err := h.SemanticCacheService.Search(ctx, cachekey.SemanticCacheLookupRequest{
 		Boundary:       boundary,
@@ -1679,11 +1680,12 @@ func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx 
 		h.markSemanticCacheBypass(reqCtx, cachekey.SemanticCacheReasonCategoryDenied, boundary.PromptCategory)
 		return
 	}
-	normalizedText := semanticEmbeddingInput(redactedPrompt)
-	if normalizedText == "" {
-		h.markSemanticCacheBypass(reqCtx, "semantic_input_unavailable", boundary.PromptCategory)
+	embeddingInput, ok := semanticEmbeddingInput(chatReq.Messages)
+	if !ok {
+		h.markSemanticCacheBypass(reqCtx, firstNonEmpty(embeddingInput.BypassReason, cachekey.SemanticCacheReasonEmbeddingInputUnavailable), boundary.PromptCategory)
 		return
 	}
+	normalizedText := embeddingInput.Text
 
 	cacheable := *providerResp
 	cacheable.GateLM = nil
@@ -2567,8 +2569,20 @@ func (h *ChatCompletionsHandler) semanticEmbeddingProviderName() string {
 	return h.SemanticCacheService.EmbeddingProviderName()
 }
 
-func semanticEmbeddingInput(redactedPrompt string) string {
-	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(redactedPrompt))), " ")
+func semanticEmbeddingInput(messages []provider.ChatMessage) (cachekey.NormalizedEmbeddingInput, bool) {
+	normalizer := cachekey.NewSemanticCacheEmbeddingInputNormalizer(cachekey.SemanticCacheEmbeddingInputNormalizationConfig{})
+	inputMessages := make([]cachekey.SemanticCacheEmbeddingInputMessage, 0, len(messages))
+	for _, message := range messages {
+		content, err := chatMessageText(message)
+		if err != nil {
+			return normalizer.NormalizeMessages(nil)
+		}
+		inputMessages = append(inputMessages, cachekey.SemanticCacheEmbeddingInputMessage{
+			Role:    message.Role,
+			Content: content,
+		})
+	}
+	return normalizer.NormalizeMessages(inputMessages)
 }
 
 func firstPositiveFloat(values ...float64) float64 {

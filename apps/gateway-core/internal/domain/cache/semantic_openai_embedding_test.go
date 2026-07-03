@@ -342,6 +342,99 @@ func TestOpenAIEmbeddingProviderGeneralOnlyEvalKoreanSimilarityDistribution(t *t
 	}
 }
 
+func TestOpenAIEmbeddingProviderNormalizationEvalKoreanSimilarityDistribution(t *testing.T) {
+	if os.Getenv("SEMANTIC_CACHE_OPENAI_EVAL") != "1" {
+		t.Skip("SEMANTIC_CACHE_OPENAI_EVAL=1일 때만 실제 OpenAI normalization eval을 실행한다")
+	}
+	if provider := strings.TrimSpace(os.Getenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER")); provider != "" && provider != SemanticCacheEmbeddingProviderOpenAI {
+		t.Skip("SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai 또는 빈 값일 때만 OpenAI normalization eval을 실행한다")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	if apiKey == "" {
+		t.Skip("OPENAI_API_KEY가 없어 실제 OpenAI normalization eval을 건너뛴다")
+	}
+
+	pairs := normalizationEvalPairs()
+	variants := normalizationEvalVariants()
+	thresholds := []float64{0.35, 0.45, 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.92}
+
+	for _, modelName := range testOpenAIEmbeddingEvalModels() {
+		provider, err := NewOpenAIEmbeddingProvider(OpenAIEmbeddingProviderConfig{
+			APIKey:     apiKey,
+			BaseURL:    os.Getenv("SEMANTIC_CACHE_OPENAI_BASE_URL"),
+			ModelName:  modelName,
+			Dimensions: testOpenAIEmbeddingDimensions(t),
+			Timeout:    20 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("OpenAIEmbeddingProvider 생성 실패: %v", err)
+		}
+
+		vectors := map[string][]float64{}
+		embed := func(label string, text string) []float64 {
+			t.Helper()
+			key := modelName + "\x00" + text
+			if vector, ok := vectors[key]; ok {
+				return vector
+			}
+			result, err := provider.embedRawForEval(context.Background(), text)
+			if err != nil {
+				t.Fatalf("%s embedding 생성 실패: %v", label, err)
+			}
+			if len(result.Vector) == 0 {
+				t.Fatalf("%s embedding vector가 비어 있으면 안 됨", label)
+			}
+			vectors[key] = result.Vector
+			return result.Vector
+		}
+
+		t.Logf("OpenAI embedding normalization eval model=%s pair_count=%d variant_count=%d", modelName, len(pairs), len(variants))
+		for _, variant := range variants {
+			evaluated := make([]openAIEmbeddingEvalPair, 0, len(pairs))
+			for _, pair := range pairs {
+				leftInput, ok := variant.input(pair.leftText)
+				if !ok {
+					t.Fatalf("model=%s variant=%s pair=%s left input 생성 실패", modelName, variant.id, pair.id)
+				}
+				rightInput, ok := variant.input(pair.rightText)
+				if !ok {
+					t.Fatalf("model=%s variant=%s pair=%s right input 생성 실패", modelName, variant.id, pair.id)
+				}
+
+				left := embed(pair.leftLabel, leftInput)
+				right := embed(pair.rightLabel, rightInput)
+				similarity, err := CosineSimilarity(left, right)
+				if err != nil {
+					t.Fatalf("%s cosine 계산 실패: %v", pair.id, err)
+				}
+				pair.similarity = similarity
+				evaluated = append(evaluated, pair)
+				t.Logf("model=%s variant=%s pair=%s kind=%s similarity=%.6f policyGuardAllowsHit=%t", modelName, variant.id, pair.id, pair.kind, pair.similarity, pair.policyGuardAllowsHit)
+			}
+
+			for _, threshold := range thresholds {
+				summary := summarizeOpenAIEmbeddingEvalPairs(evaluated, threshold)
+				t.Logf(
+					"model=%s variant=%s threshold=%.2f positiveAbove=%d/%d dynamicNegativeAbove=%d/%d hardNegativeAbove=%d/%d unrelatedAbove=%d/%d policyGuardHitPossible=%d/%d",
+					modelName,
+					variant.id,
+					threshold,
+					summary.positiveAbove,
+					summary.positiveTotal,
+					summary.dynamicNegativeAbove,
+					summary.dynamicNegativeTotal,
+					summary.hardNegativeAbove,
+					summary.hardNegativeTotal,
+					summary.unrelatedAbove,
+					summary.unrelatedTotal,
+					summary.policyGuardHitPossible,
+					len(evaluated),
+				)
+			}
+		}
+	}
+}
+
 type openAIEmbeddingEvalPair struct {
 	id                   string
 	kind                 string
@@ -351,6 +444,11 @@ type openAIEmbeddingEvalPair struct {
 	rightText            string
 	policyGuardAllowsHit bool
 	similarity           float64
+}
+
+type openAIEmbeddingNormalizationEvalVariant struct {
+	id    string
+	input func(string) (string, bool)
 }
 
 type openAIEmbeddingEvalSummary struct {
@@ -398,6 +496,163 @@ func summarizeOpenAIEmbeddingEvalPairs(pairs []openAIEmbeddingEvalPair, threshol
 		}
 	}
 	return summary
+}
+
+func normalizationEvalPairs() []openAIEmbeddingEvalPair {
+	return []openAIEmbeddingEvalPair{
+		{id: "positive_password_reset", kind: "positive", leftLabel: "p_password_reset_a", rightLabel: "p_password_reset_b", leftText: "비밀번호 재설정 방법 알려줘", rightText: "패스워드 초기화는 어떻게 해?", policyGuardAllowsHit: true},
+		{id: "positive_usage_menu_location", kind: "positive", leftLabel: "p_usage_menu_a", rightLabel: "p_usage_menu_b", leftText: "사용량은 어디서 확인해?", rightText: "API 사용량 확인 화면은 어디야?", policyGuardAllowsHit: true},
+		{id: "positive_usage_dashboard_location", kind: "positive", leftLabel: "p_usage_dashboard_a", rightLabel: "p_usage_dashboard_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "월간 사용량 대시보드 메뉴 어디야?", policyGuardAllowsHit: true},
+		{id: "dynamic_usage_current_month", kind: "dynamic_negative", leftLabel: "d_usage_static_a", rightLabel: "d_usage_dynamic_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "내 이번 달 사용량 보여줘", policyGuardAllowsHit: false},
+		{id: "dynamic_usage_project_cost", kind: "dynamic_negative", leftLabel: "d_usage_screen_a", rightLabel: "d_cost_dynamic_b", leftText: "API 사용량 확인 화면은 어디야?", rightText: "현재 프로젝트별 비용 알려줘", policyGuardAllowsHit: false},
+		{id: "dynamic_usage_today_tokens", kind: "dynamic_negative", leftLabel: "d_usage_stats_a", rightLabel: "d_tokens_dynamic_b", leftText: "사용량 통계 화면 위치 알려줘", rightText: "오늘 토큰 사용량 몇이야", policyGuardAllowsHit: false},
+		{id: "hard_negative_refund_vs_cancel", kind: "hard_negative", leftLabel: "h_refund_shipping_a", rightLabel: "h_order_cancel_b", leftText: "배송비도 환불되나요?", rightText: "주문 취소하고 싶어요", policyGuardAllowsHit: false},
+		{id: "hard_negative_return_shipping_vs_exchange", kind: "hard_negative", leftLabel: "h_return_shipping_a", rightLabel: "h_exchange_b", leftText: "반품하면 배송비도 돌려받나요?", rightText: "교환 신청은 어디서 하나요?", policyGuardAllowsHit: false},
+		{id: "unrelated_password_vs_refund", kind: "unrelated", leftLabel: "u_password_a", rightLabel: "u_refund_b", leftText: "비밀번호 재설정 방법 알려줘", rightText: "배송비도 환불되나요?", policyGuardAllowsHit: false},
+	}
+}
+
+func normalizationEvalVariants() []openAIEmbeddingNormalizationEvalVariant {
+	normalizer := NewSemanticCacheEmbeddingInputNormalizer(SemanticCacheEmbeddingInputNormalizationConfig{})
+	return []openAIEmbeddingNormalizationEvalVariant{
+		{
+			id: "raw_user_prompt",
+			input: func(text string) (string, bool) {
+				return strings.TrimSpace(text), strings.TrimSpace(text) != ""
+			},
+		},
+		{
+			id: "current_normalized_text",
+			input: func(text string) (string, bool) {
+				return normalizeSemanticText(normalizationEvalCurrentFullPrompt(text)), true
+			},
+		},
+		{
+			id: "new_normalized_embedding_input",
+			input: func(text string) (string, bool) {
+				input, ok := normalizer.NormalizeMessages(normalizationEvalMessages(text))
+				return input.Text, ok
+			},
+		},
+		{
+			id: "last_user_message_only",
+			input: func(text string) (string, bool) {
+				return normalizeSemanticText(text), normalizeSemanticText(text) != ""
+			},
+		},
+		{
+			id: "masked_normalized_embedding_input",
+			input: func(text string) (string, bool) {
+				input, ok := normalizer.NormalizeMessages(normalizationEvalMessages(maskOpenAIEmbeddingEvalText(text)))
+				return input.Text, ok
+			},
+		},
+	}
+}
+
+func normalizationEvalCurrentFullPrompt(lastUserText string) string {
+	return strings.Join([]string{
+		"이전 대화: 고객은 GateLM 콘솔 사용 방법을 묻고 있다.",
+		"assistant 응답: 관련 메뉴에서 확인할 수 있다고 안내했다.",
+		lastUserText,
+	}, "\n")
+}
+
+func normalizationEvalMessages(lastUserText string) []SemanticCacheEmbeddingInputMessage {
+	return []SemanticCacheEmbeddingInputMessage{
+		{Role: "system", Content: "GateLM 콘솔 사용을 돕는 assistant다."},
+		{Role: "developer", Content: "정책과 보안 경계를 지켜라."},
+		{Role: "assistant", Content: "이전 답변은 embedding input에서 제외되어야 한다."},
+		{Role: "user", Content: lastUserText},
+	}
+}
+
+func maskOpenAIEmbeddingEvalText(text string) string {
+	replacer := strings.NewReplacer(
+		"api_key=", "api_key=[redacted]",
+		"app_token=", "app_token=[redacted]",
+		"provider_key=", "provider_key=[redacted]",
+		"Authorization:", "Authorization: [redacted]",
+		"Bearer ", "Bearer [redacted] ",
+	)
+	return replacer.Replace(text)
+}
+
+func (p OpenAIEmbeddingProvider) embedRawForEval(ctx context.Context, text string) (EmbeddingResult, error) {
+	if strings.TrimSpace(text) == "" {
+		return EmbeddingResult{}, ErrOpenAIEmbeddingInputEmpty
+	}
+	body, err := json.Marshal(openAIEmbeddingRequest{
+		Input:      text,
+		Model:      p.modelName,
+		Dimensions: optionalPositiveInt(p.dimensions),
+	})
+	if err != nil {
+		return EmbeddingResult{}, fmt.Errorf("%w: encode request", ErrOpenAIEmbeddingRequestFailed)
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, openAIEmbeddingEndpoint(p.baseURL), strings.NewReader(string(body)))
+	if err != nil {
+		return EmbeddingResult{}, fmt.Errorf("%w: build request", ErrOpenAIEmbeddingRequestFailed)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) || errors.Is(reqCtx.Err(), context.Canceled) {
+			return EmbeddingResult{}, context.Canceled
+		}
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(reqCtx.Err(), context.DeadlineExceeded) {
+			return EmbeddingResult{}, context.DeadlineExceeded
+		}
+		return EmbeddingResult{}, fmt.Errorf("%w: transport", ErrOpenAIEmbeddingRequestFailed)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		drainOpenAIEmbeddingBody(resp.Body)
+		return EmbeddingResult{}, fmt.Errorf("%w: status %d", ErrOpenAIEmbeddingRequestFailed, resp.StatusCode)
+	}
+
+	var decoded openAIEmbeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return EmbeddingResult{}, fmt.Errorf("%w: decode", ErrOpenAIEmbeddingInvalidReply)
+	}
+	if len(decoded.Data) == 0 || len(decoded.Data[0].Embedding) == 0 {
+		return EmbeddingResult{}, ErrOpenAIEmbeddingEmptyVector
+	}
+	return EmbeddingResult{
+		Vector: append([]float64(nil), decoded.Data[0].Embedding...),
+		Model:  p.modelName,
+	}, nil
+}
+
+func testOpenAIEmbeddingEvalModels() []string {
+	rawModels := strings.TrimSpace(os.Getenv("SEMANTIC_CACHE_OPENAI_EVAL_MODELS"))
+	if rawModels == "" {
+		return []string{"text-embedding-3-small", "text-embedding-3-large"}
+	}
+	seen := map[string]struct{}{}
+	models := []string{}
+	for _, value := range strings.Split(rawModels, ",") {
+		model := strings.TrimSpace(value)
+		if model == "" {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
+	if len(models) == 0 {
+		return []string{"text-embedding-3-small", "text-embedding-3-large"}
+	}
+	return models
 }
 
 func testOpenAIEmbeddingDimensions(t *testing.T) int {
