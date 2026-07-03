@@ -18,6 +18,7 @@ import (
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
+	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
@@ -56,7 +57,8 @@ func main() {
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
-	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter)
+	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
+	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter, anthropicAdapter)
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
 	credentialResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
 
