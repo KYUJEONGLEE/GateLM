@@ -9,6 +9,7 @@ import {
 import {
   listProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
+import { getRuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type {
   RuntimePolicyConfig,
@@ -327,6 +328,72 @@ export async function getRuntimePolicyConfigForApplication(
   return activeConfig.ok ? activeConfig.data : null;
 }
 
+export async function publishRuntimePolicyModelSelectionForApplication(
+  applicationId: string,
+  selectedModelKey: string
+): Promise<{ error?: string; ok: boolean }> {
+  const selected = parseRuntimePolicyModelKey(selectedModelKey);
+
+  if (!selected) {
+    return {
+      error: "Selected model is invalid.",
+      ok: false
+    };
+  }
+
+  const activeConfig = await fetchActiveRuntimeConfig(getControlPlaneApplicationId());
+
+  if (!activeConfig.ok) {
+    return {
+      error: activeConfig.error,
+      ok: false
+    };
+  }
+
+  const selectedModel = activeConfig.data.models.find(
+    (model) => model.provider === selected.provider && model.model === selected.model
+  );
+
+  if (!selectedModel) {
+    return {
+      error: "Selected model is not available in Runtime Policy.",
+      ok: false
+    };
+  }
+
+  const draftValues = getRuntimePolicyDraftValues(activeConfig.data);
+  const nextValues: RuntimePolicyDraftValues = {
+    ...draftValues,
+    routingDefaultModel: selectedModel.model,
+    routingDefaultProvider: selectedModel.provider
+  };
+  const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
+  const draft = await writeRuntimeConfig("draft", nextValues, {
+    applicationId,
+    draftConfigVersion
+  });
+
+  if (!draft.ok) {
+    return {
+      error: draft.error,
+      ok: false
+    };
+  }
+
+  const published = await writeRuntimeConfig("publish", nextValues, {
+    applicationId,
+    draftConfigVersion,
+    publishedConfigVersion: createPublishedRuntimeConfigVersion()
+  });
+
+  return published.ok
+    ? { ok: true }
+    : {
+        error: published.error,
+        ok: false
+      };
+}
+
 export async function saveRuntimePolicyDraft(
   values: RuntimePolicyDraftValues
 ): Promise<ControlPlaneRequestResult> {
@@ -517,11 +584,12 @@ async function writeRuntimeConfig(
   mode: "draft" | "publish",
   values: RuntimePolicyDraftValues,
   options: {
+    applicationId?: string;
     draftConfigVersion?: string;
     publishedConfigVersion?: string;
   } = {}
 ): Promise<ControlPlaneRequestResult> {
-  const applicationId = getControlPlaneApplicationId();
+  const applicationId = options.applicationId ?? getControlPlaneApplicationId();
   const endpoint = mode === "draft" ? "draft" : "publish";
   const body =
     mode === "draft"
@@ -557,6 +625,24 @@ async function writeRuntimeConfig(
 
 function createPublishedRuntimeConfigVersion() {
   return `runtime_config_${Date.now()}`;
+}
+
+function createApplicationRuntimeDraftVersion(applicationId: string) {
+  return `draft_${applicationId.replaceAll("-", "_")}_${Date.now()}`;
+}
+
+function parseRuntimePolicyModelKey(value: string) {
+  const [provider, ...modelParts] = value.split("::");
+  const model = modelParts.join("::");
+
+  if (!provider?.trim() || !model.trim()) {
+    return null;
+  }
+
+  return {
+    model: model.trim(),
+    provider: provider.trim()
+  };
 }
 
 function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string) {

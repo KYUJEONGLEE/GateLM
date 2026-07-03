@@ -11,6 +11,7 @@ import type {
   ApplicationsModel,
   ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
+import { publishRuntimePolicyModelSelectionForApplication } from "@/lib/control-plane/runtime-policy-client";
 
 type RuntimeConfigFixture = {
   runtimeConfig: {
@@ -26,6 +27,7 @@ type ApplicationRequestResult =
   | {
       data: ApplicationRecord;
       ok: true;
+      policyError?: string;
       status: number;
     }
   | {
@@ -93,7 +95,23 @@ export async function createApplication(
       }
     );
 
-    return readApplicationResponse(response);
+    const result = await readApplicationResponse(response);
+
+    if (!result.ok || !values.selectedModelKey?.trim()) {
+      return result;
+    }
+
+    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+      result.data.id,
+      values.selectedModelKey
+    );
+
+    return runtimePolicy.ok
+      ? result
+      : {
+          ...result,
+          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+        };
   } catch {
     return {
       error: "Control Plane unavailable.",

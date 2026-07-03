@@ -16,10 +16,12 @@ import type {
 import type { OneTimeAppTokenResponse } from "@/lib/control-plane/app-tokens-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import type { RuntimePolicyModelConfig } from "@/lib/control-plane/runtime-policy-types";
 
 type ApplicationManagementProps = {
   locale: Locale;
   model: ApplicationsModel;
+  modelOptions?: RuntimePolicyModelConfig[];
   projectBudgetUsd?: number;
 };
 
@@ -31,6 +33,7 @@ type SubmitState = {
 type ApplicationResponsePayload = {
   application?: ApplicationRecord;
   error?: string;
+  policyError?: string;
 };
 
 type AppTokenResponsePayload = {
@@ -44,14 +47,6 @@ type OneTimeAppTokenState = {
 };
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
-
-const emptyApplicationForm: ApplicationFormValues = {
-  budgetLimitMode: "FIXED",
-  budgetLimitPercent: 0,
-  budgetLimitUsd: 0,
-  description: "",
-  name: ""
-};
 
 const applicationText: Record<
   Locale,
@@ -72,7 +67,10 @@ const applicationText: Record<
     empty: string;
     fixtureFallback: string;
     management: string;
+    model: string;
+    modelUnavailable: string;
     name: string;
+    policyWarning: string;
     save: string;
     source: string;
     status: string;
@@ -98,7 +96,10 @@ const applicationText: Record<
     empty: "No applications found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture application.",
     management: "management",
+    model: "Model",
+    modelUnavailable: "No runtime models are available.",
     name: "Name",
+    policyWarning: "Application was created, but the selected model policy was not applied.",
     save: "Save",
     source: "Source",
     status: "Status",
@@ -123,7 +124,10 @@ const applicationText: Record<
     empty: "애플리케이션이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 애플리케이션을 표시 중입니다.",
     management: "관리",
+    model: "모델",
+    modelUnavailable: "사용 가능한 Runtime 모델이 없습니다.",
     name: "이름",
+    policyWarning: "애플리케이션은 생성되었지만 선택한 모델 정책은 적용되지 않았습니다.",
     save: "저장",
     source: "출처",
     status: "상태",
@@ -136,13 +140,15 @@ const applicationText: Record<
 export function ApplicationManagement({
   locale,
   model,
+  modelOptions = [],
   projectBudgetUsd = 100
 }: ApplicationManagementProps) {
   const router = useRouter();
   const text = applicationText[locale];
+  const selectableModels = getSelectableModelOptions(modelOptions);
   const [applications, setApplications] = useState<ApplicationRecord[]>(model.applications);
   const [createValues, setCreateValues] =
-    useState<ApplicationFormValues>(emptyApplicationForm);
+    useState<ApplicationFormValues>(() => getEmptyApplicationForm(selectableModels));
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [oneTimeAppToken, setOneTimeAppToken] = useState<OneTimeAppTokenState | null>(null);
   const [editingRows, setEditingRows] = useState<Record<string, ApplicationUpdateValues>>(() =>
@@ -164,14 +170,14 @@ export function ApplicationManagement({
   const remainingBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd);
 
   function openCreateModal() {
-    setCreateValues(emptyApplicationForm);
+    setCreateValues(getEmptyApplicationForm(selectableModels));
     setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(true);
   }
 
   function closeCreateModal() {
-    setCreateValues(emptyApplicationForm);
+    setCreateValues(getEmptyApplicationForm(selectableModels));
     setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(false);
@@ -230,16 +236,18 @@ export function ApplicationManagement({
       ...current,
       [createdApplication.id]: getApplicationUpdateValues(createdApplication)
     }));
-    setCreateValues(emptyApplicationForm);
+    setCreateValues(getEmptyApplicationForm(selectableModels));
     setSubmitState({
       message: appToken
-        ? locale === "ko"
-          ? "애플리케이션이 생성되고 App Token이 발급되었습니다."
-          : "Application created and App Token issued."
+        ? payload.policyError
+          ? `${text.policyWarning} ${payload.policyError}`
+          : locale === "ko"
+            ? "애플리케이션이 생성되고 App Token이 발급되었습니다."
+            : "Application created and App Token issued."
         : locale === "ko"
           ? "애플리케이션은 생성되었지만 App Token 발급에 실패했습니다."
           : "Application created, but App Token issue failed.",
-      status: "success"
+      status: payload.policyError ? "error" : "success"
     });
     setPendingAction(null);
     router.refresh();
@@ -589,6 +597,28 @@ export function ApplicationManagement({
                     }))
                   }
                 />
+                <label className="policy-field">
+                  <span>{text.model}</span>
+                  {selectableModels.length > 0 ? (
+                    <select
+                      onChange={(event) =>
+                        setCreateValues((current) => ({
+                          ...current,
+                          selectedModelKey: event.target.value
+                        }))
+                      }
+                      value={createValues.selectedModelKey}
+                    >
+                      {selectableModels.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input disabled type="text" value={text.modelUnavailable} />
+                  )}
+                </label>
               </div>
             )}
 
@@ -638,6 +668,19 @@ function getApplicationUpdateValues(application: ApplicationRecord): Application
     description: nullableText(application.description, ""),
     name: application.name,
     status: application.status
+  };
+}
+
+function getEmptyApplicationForm(
+  modelOptions: Array<{ label: string; value: string }>
+): ApplicationFormValues {
+  return {
+    budgetLimitMode: "FIXED",
+    budgetLimitPercent: 0,
+    budgetLimitUsd: 0,
+    description: "",
+    name: "",
+    selectedModelKey: modelOptions[0]?.value ?? ""
   };
 }
 
@@ -737,4 +780,13 @@ function formatBudgetUsd(value: number) {
     maximumFractionDigits: 2,
     minimumFractionDigits: 0
   })}`;
+}
+
+function getSelectableModelOptions(models: RuntimePolicyModelConfig[]) {
+  return models
+    .filter((model) => model.status === "active")
+    .map((model) => ({
+      label: `${model.displayName || model.model} (${model.provider})`,
+      value: `${model.provider}::${model.model}`
+    }));
 }

@@ -61,6 +61,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       <ApplicationManagement
         locale={locale}
         model={applicationsModel}
+        modelOptions={runtimeConfig?.models ?? []}
         projectBudgetUsd={project.totalBudgetUsd}
       />
     </ConsoleShell>
