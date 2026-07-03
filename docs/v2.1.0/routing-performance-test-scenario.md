@@ -81,23 +81,23 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
 
 ```json
 {
-  "totalSamples": 8,
+  "totalSamples": 1000,
   "accuracy": 1,
   "tierAccuracy": 1,
   "tierErrorRate": 0,
   "latency": {
     "iterations": 20,
-    "samples": 160,
+    "samples": 100000,
     "avgMicros": 40.2,
     "p50Micros": 30.1,
     "p95Micros": 90.4
   },
   "costEstimate": {
     "baselineTier": "high_quality",
-    "baselineCostUnits": 80,
-    "actualCostUnits": 32,
-    "savedCostUnits": 48,
-    "savingRate": 0.6
+    "baselineCostUnits": 10000,
+    "actualCostUnits": 4250,
+    "savedCostUnits": 5750,
+    "savingRate": 0.575
   }
 }
 ```
