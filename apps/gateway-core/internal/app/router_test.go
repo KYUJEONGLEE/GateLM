@@ -489,6 +489,31 @@ func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
 	}
 }
 
+func TestNewRouterPanicsWhenSemanticIntentPolicyPathInvalid(t *testing.T) {
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatalf("Semantic Cache intent policy path가 잘못되면 startup에서 실패해야 함")
+		}
+		if !strings.Contains(fmt.Sprint(recovered), "missing-semantic-cache-policy.json") {
+			t.Fatalf("panic에는 잘못된 policy path가 포함되어야 함: %v", recovered)
+		}
+	}()
+
+	_ = NewRouter(config.Config{
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+		SemanticCache: config.SemanticCacheConfig{
+			Enabled:           true,
+			Store:             config.SemanticCacheStoreInMemory,
+			MaxEntries:        10,
+			EmbeddingProvider: config.SemanticCacheEmbeddingProviderFake,
+			EmbeddingModel:    "fake-test",
+			IntentPolicyPath:  "missing-semantic-cache-policy.json",
+		},
+	}, provider.NewRegistry("mock"), nil)
+}
+
 func writeRouterTestJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

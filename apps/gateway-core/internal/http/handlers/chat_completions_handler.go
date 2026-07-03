@@ -243,7 +243,8 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, startedAt) {
 		return
 	}
-	if h.writeSemanticCachedChatCompletionIfHit(r.Context(), w, reqCtx, chatReq, promptText, startedAt) {
+	semanticCacheHit, semanticCacheLookupVector := h.writeSemanticCachedChatCompletionIfHit(r.Context(), w, reqCtx, chatReq, promptText, startedAt)
+	if semanticCacheHit {
 		return
 	}
 
@@ -326,7 +327,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	h.writeExactCache(r.Context(), reqCtx, providerResp)
-	h.writeSemanticCache(r.Context(), reqCtx, chatReq, promptText, providerResp)
+	h.writeSemanticCache(r.Context(), reqCtx, chatReq, promptText, semanticCacheLookupVector, providerResp)
 	h.writeChatCompletionResponse(r.Context(), w, reqCtx, providerResp)
 }
 
@@ -1502,42 +1503,42 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 	h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeExact, "success")
 }
 
-func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string, startedAt time.Time) bool {
+func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string, startedAt time.Time) (bool, []float64) {
 	if reqCtx == nil || h.SemanticCacheService == nil || !h.SemanticCacheService.Enabled() {
-		return false
+		return false, nil
 	}
 	promptCategory := h.semanticPromptCategory(reqCtx)
 	if reqCtx.Stream {
 		h.markSemanticCacheBypass(reqCtx, "streaming_request", promptCategory)
-		return false
+		return false, nil
 	}
 	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) {
 		h.markSemanticCacheBypass(reqCtx, "safety_blocked", promptCategory)
-		return false
+		return false, nil
 	}
 	if reqCtx.CacheStatus == cachestage.CacheStatusHit {
 		h.markSemanticCacheBypass(reqCtx, "exact_cache_hit", promptCategory)
-		return false
+		return false, nil
 	}
 	if reqCtx.RoutingDecisionKeyHash == "" {
 		if err := h.populateRoutingAwareCacheIdentity(ctx, reqCtx, chatReq.Model); err != nil {
 			h.markSemanticCacheBypass(reqCtx, "semantic_boundary_unavailable", promptCategory)
-			return false
+			return false, nil
 		}
 	}
 	boundary, ok := h.semanticCacheBoundary(reqCtx, chatReq)
 	if !ok {
 		h.markSemanticCacheBypass(reqCtx, "semantic_boundary_unavailable", promptCategory)
-		return false
+		return false, nil
 	}
 	if !h.semanticCategoryAllowed(boundary.PromptCategory) {
 		h.markSemanticCacheBypass(reqCtx, "semantic_category_disabled", boundary.PromptCategory)
-		return false
+		return false, nil
 	}
 	normalizedText := semanticEmbeddingInput(redactedPrompt)
 	if normalizedText == "" {
 		h.markSemanticCacheBypass(reqCtx, "semantic_input_unavailable", boundary.PromptCategory)
-		return false
+		return false, nil
 	}
 
 	result, decision, err := h.SemanticCacheService.Search(ctx, cachekey.SemanticCacheLookupRequest{
@@ -1548,7 +1549,7 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 	if err != nil {
 		reqCtx.SemanticCacheStoreCandidate = false
 		h.recordCacheOperation("lookup", cachestage.CacheStatusError, cachestage.CacheTypeSemantic, "error")
-		return false
+		return false, nil
 	}
 	if !result.Hit || result.MatchedEntry == nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
@@ -1556,7 +1557,7 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 		reqCtx.CacheDecisionReason = firstNonEmpty(decision.SemanticCacheDecisionReason, cachekey.SemanticCacheReasonThresholdMiss)
 		reqCtx.SemanticCacheStoreCandidate = true
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
-		return false
+		return false, append([]float64(nil), result.QueryVector...)
 	}
 
 	reqCtx.CacheStatus = cachestage.CacheStatusHit
@@ -1575,10 +1576,10 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 	gatewayCtx.Cache.CacheHitRequestID = reqCtx.CacheHitRequestID
 	gatewayCtx.Cache.CacheDecisionReason = reqCtx.CacheDecisionReason
 	gatewayCtx.Cache.Payload = append([]byte(nil), result.MatchedEntry.CachedResponse...)
-	return h.writeCachedChatCompletionIfHit(ctx, w, reqCtx, gatewayCtx, startedAt)
+	return h.writeCachedChatCompletionIfHit(ctx, w, reqCtx, gatewayCtx, startedAt), nil
 }
 
-func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string, providerResp *provider.ChatCompletionResponse) {
+func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string, embeddingVector []float64, providerResp *provider.ChatCompletionResponse) {
 	if reqCtx == nil || h.SemanticCacheService == nil || !h.SemanticCacheService.Enabled() || !reqCtx.SemanticCacheStoreCandidate {
 		return
 	}
@@ -1620,12 +1621,13 @@ func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx 
 		return
 	}
 	decision, err := h.SemanticCacheService.Upsert(ctx, cachekey.SemanticCacheStoreRequest{
-		EntryID:        reqCtx.RequestID,
-		RequestID:      reqCtx.RequestID,
-		Boundary:       boundary,
-		NormalizedText: normalizedText,
-		CachedResponse: payload,
-		Now:            time.Now().UTC(),
+		EntryID:         reqCtx.RequestID,
+		RequestID:       reqCtx.RequestID,
+		Boundary:        boundary,
+		NormalizedText:  normalizedText,
+		EmbeddingVector: append([]float64(nil), embeddingVector...),
+		CachedResponse:  payload,
+		Now:             time.Now().UTC(),
 	})
 	h.applySemanticCacheDecision(reqCtx, decision)
 	if err != nil {

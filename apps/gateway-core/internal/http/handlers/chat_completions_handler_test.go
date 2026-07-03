@@ -2823,7 +2823,7 @@ func TestChatCompletionsHandlerAppliesRuntimeSnapshotDetectorSetToMasking(t *tes
 		t.Fatalf("expected one provider call, got %d", primary.calls)
 	}
 	providerPrompt := recordedProviderPrompt(t, []provider.ChatCompletionRequest{primary.lastRequest})
-	if !strings.Contains(providerPrompt, "[EMAIL_REDACTED]") {
+	if !strings.Contains(providerPrompt, "[EMAIL_1]") {
 		t.Fatalf("expected provider prompt to redact email, got %q", providerPrompt)
 	}
 	if strings.Contains(providerPrompt, "user@example.invalid") {

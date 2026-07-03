@@ -15,6 +15,7 @@ var semanticCacheEnvKeys = []string{
 	"SEMANTIC_CACHE_MAX_ENTRIES",
 	"SEMANTIC_CACHE_POLICY_VERSION",
 	"SEMANTIC_CACHE_KEY_VERSION",
+	"SEMANTIC_CACHE_INTENT_POLICY_PATH",
 	"SEMANTIC_CACHE_EMBEDDING_PROVIDER",
 	"SEMANTIC_CACHE_EMBEDDING_MODEL",
 	"SEMANTIC_CACHE_EMBEDDING_DIMENSIONS",
@@ -76,6 +77,9 @@ func TestSemanticCacheConfigDefaults(t *testing.T) {
 	}
 	if cfg.PolicyVersion != "v1" || cfg.KeyVersion != "v1" {
 		t.Fatalf("policy/key version 기본값 불일치: policy=%q key=%q", cfg.PolicyVersion, cfg.KeyVersion)
+	}
+	if cfg.IntentPolicyPath != "" {
+		t.Fatalf("intent policy path 기본값은 비어 있어야 함: got %q", cfg.IntentPolicyPath)
 	}
 	if strings.Join(cfg.AllowCategories, ",") != "general,support_refund" {
 		t.Fatalf("allow category 기본값 불일치: got %v", cfg.AllowCategories)
@@ -199,6 +203,19 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		_, err := LoadSemanticCacheConfig()
 		if err == nil || !strings.Contains(err.Error(), "must be a boolean") {
 			t.Fatalf("invalid bool은 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
+	t.Run("intent policy path is optional config material", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_INTENT_POLICY_PATH", "apps/gateway-core/internal/domain/cache/testdata/semantic_cache_policy_ko_v1.json")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("intent policy path는 config material로 로드되어야 함: %v", err)
+		}
+		if cfg.IntentPolicyPath == "" {
+			t.Fatalf("intent policy path가 보존되어야 함")
 		}
 	})
 }

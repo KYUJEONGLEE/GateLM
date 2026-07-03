@@ -64,7 +64,7 @@ func TestP0EngineRedactsConservativeLabeledNameOrganizationAndAddress(t *testing
 	engine := NewP0Engine()
 
 	result, err := engine.Apply(context.Background(), ApplyRequest{
-		Prompt: "customer_name=Alex Kim, organization=Acme Corp, address=100 Example Street",
+		Prompt: "name=Alex Kim, organization=Acme Corp, address=100 Example Street",
 	})
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)

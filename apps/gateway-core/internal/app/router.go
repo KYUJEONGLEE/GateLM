@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"strings"
 
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
@@ -191,6 +192,14 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 			OpenAIDimensions: cfg.SemanticCache.EmbeddingDimensions,
 			Timeout:          cfg.SemanticCache.EmbeddingTimeout,
 		})
+		var hitPolicy *cachekey.SemanticCacheHitPolicy
+		if strings.TrimSpace(cfg.SemanticCache.IntentPolicyPath) != "" {
+			policy, policyErr := cachekey.LoadSemanticCacheHitPolicyFile(cfg.SemanticCache.IntentPolicyPath)
+			if policyErr != nil {
+				panic("failed to load semantic cache intent policy: " + policyErr.Error())
+			}
+			hitPolicy = &policy
+		}
 		if storeErr == nil && providerErr == nil {
 			service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
 				Enabled:       cfg.SemanticCache.Enabled,
@@ -198,6 +207,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 				TopK:          cfg.SemanticCache.TopK,
 				TTL:           cfg.SemanticCache.TTL,
 				PolicyVersion: cfg.SemanticCache.PolicyVersion,
+				HitPolicy:     hitPolicy,
 			})
 			semanticCacheService = service
 		}

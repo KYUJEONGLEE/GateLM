@@ -3,16 +3,17 @@ package cache
 import "strings"
 
 const (
-	SemanticCacheCategoryGeneral         = "general"
-	SemanticCacheCategorySupportRefund   = "support_refund"
-	SemanticCacheCategoryCode            = "code"
-	SemanticCacheCategoryTranslation     = "translation"
-	SemanticCacheCategorySummarization   = "summarization"
-	SemanticCacheCategoryExtractionJSON  = "extraction_json"
-	SemanticCacheCategoryReasoning       = "reasoning"
-	SemanticCacheCategorySensitive       = "sensitive"
-	SemanticCacheCategoryToolCall        = "tool_call"
-	SemanticCacheCategoryUnknown         = "unknown"
+	SemanticCacheCategoryGeneral        = "general"
+	SemanticCacheCategoryAccountAccess  = "account_access"
+	SemanticCacheCategorySupportRefund  = "support_refund"
+	SemanticCacheCategoryCode           = "code"
+	SemanticCacheCategoryTranslation    = "translation"
+	SemanticCacheCategorySummarization  = "summarization"
+	SemanticCacheCategoryExtractionJSON = "extraction_json"
+	SemanticCacheCategoryReasoning      = "reasoning"
+	SemanticCacheCategorySensitive      = "sensitive"
+	SemanticCacheCategoryToolCall       = "tool_call"
+	SemanticCacheCategoryUnknown        = "unknown"
 )
 
 type SemanticCacheCategoryPolicy struct {
@@ -42,6 +43,8 @@ func CanonicalSemanticCacheCategory(category string) string {
 	switch strings.TrimSpace(strings.ToLower(category)) {
 	case SemanticCacheCategoryGeneral:
 		return SemanticCacheCategoryGeneral
+	case SemanticCacheCategoryAccountAccess:
+		return SemanticCacheCategoryAccountAccess
 	case SemanticCacheCategorySupportRefund:
 		return SemanticCacheCategorySupportRefund
 	case SemanticCacheCategoryCode:

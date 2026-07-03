@@ -83,6 +83,7 @@ type SemanticCacheConfig struct {
 	OpenAIAPIKey        string
 	PolicyVersion       string
 	KeyVersion          string
+	IntentPolicyPath    string
 	AllowCategories     []string
 	DenyCategories      []string
 }
@@ -182,6 +183,7 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 		OpenAIAPIKey:        openAIAPIKey,
 		PolicyVersion:       semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
 		KeyVersion:          semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
+		IntentPolicyPath:    semanticEnvString("SEMANTIC_CACHE_INTENT_POLICY_PATH", ""),
 		AllowCategories:     semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
 		DenyCategories:      semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
 	}, nil

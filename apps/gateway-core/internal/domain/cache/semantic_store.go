@@ -139,6 +139,9 @@ func (s *InMemorySemanticCacheStore) Upsert(ctx context.Context, entry SemanticC
 	if containsForbiddenSemanticCachePayload(entry.CachedResponse) {
 		return ErrSemanticCachePayloadUnsafe
 	}
+	if !entry.IntentMaterial.IsZero() && entry.IntentMaterial.ContainsForbiddenMaterial() {
+		return ErrSemanticCachePayloadUnsafe
+	}
 
 	now := s.currentTime()
 	if entry.CreatedAt.IsZero() {

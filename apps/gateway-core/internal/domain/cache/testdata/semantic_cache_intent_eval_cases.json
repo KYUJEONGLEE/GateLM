@@ -1,0 +1,204 @@
+{
+  "datasetId": "semantic-cache-intent-eval-ko-v1",
+  "description": "Korean intent/slot evaluation cases for production Semantic Cache hit policy. This dataset is a hit-policy contract, not an OpenAI embedding score fixture.",
+  "language": "ko",
+  "policyVersion": "semantic-cache-policy-ko-v1",
+  "canonicalizationVersion": "ko-canon-v1",
+  "fields": [
+    "caseId",
+    "category",
+    "canonicalIntent",
+    "requiredSlots",
+    "optionalSlots",
+    "sameAnswerReusable",
+    "hardNegative",
+    "denyCategory",
+    "expectedDecision",
+    "reason"
+  ],
+  "cases": [
+    {
+      "caseId": "account_password_reset_positive_ko",
+      "pairType": "positive",
+      "category": "account_access",
+      "canonicalIntent": "account.password_reset",
+      "first": "비밀번호 재설정 방법 알려줘",
+      "second": "패스워드 초기화는 어떻게 해?",
+      "requiredSlots": {
+        "accountAction": "password_reset"
+      },
+      "optionalSlots": {
+        "authFactor": "unknown",
+        "surface": "unknown"
+      },
+      "sameAnswerReusable": true,
+      "hardNegative": false,
+      "denyCategory": false,
+      "expectedDecision": "hit_candidate",
+      "reason": "same canonicalIntent and requiredSlots after Korean synonym normalization"
+    },
+    {
+      "caseId": "account_api_key_create_positive_ko",
+      "pairType": "positive",
+      "category": "account_access",
+      "canonicalIntent": "account.api_key_create",
+      "first": "API Key 발급 방법 알려줘",
+      "second": "새 API 키는 어디서 만들 수 있어?",
+      "requiredSlots": {
+        "accountAction": "api_key_create",
+        "credentialKind": "api_key"
+      },
+      "optionalSlots": {
+        "surface": "developer_console",
+        "role": "unknown"
+      },
+      "sameAnswerReusable": true,
+      "hardNegative": false,
+      "denyCategory": false,
+      "expectedDecision": "hit_candidate",
+      "reason": "same credential creation help intent; no actual API key value is present"
+    },
+    {
+      "caseId": "general_usage_stats_positive_ko",
+      "pairType": "positive",
+      "category": "general",
+      "canonicalIntent": "usage.monthly_usage_check",
+      "first": "사용량은 어디서 확인해?",
+      "second": "이번 달 API 사용량 통계는 어디서 봐?",
+      "requiredSlots": {
+        "usageObject": "api_usage",
+        "usagePeriod": "monthly"
+      },
+      "optionalSlots": {
+        "surface": "dashboard"
+      },
+      "sameAnswerReusable": true,
+      "hardNegative": false,
+      "denyCategory": false,
+      "expectedDecision": "hit_candidate",
+      "reason": "same usage lookup answer can be reused"
+    },
+    {
+      "caseId": "support_refund_shipping_fee_positive_ko",
+      "pairType": "positive_strict",
+      "category": "support_refund",
+      "canonicalIntent": "support_refund.shipping_fee_refund",
+      "first": "배송비도 환불되나요?",
+      "second": "반품하면 배송비도 돌려받나요?",
+      "requiredSlots": {
+        "supportAction": "refund",
+        "refundObject": "shipping_fee"
+      },
+      "optionalSlots": {
+        "shippingDirection": "unknown",
+        "orderState": "unknown"
+      },
+      "sameAnswerReusable": true,
+      "hardNegative": false,
+      "denyCategory": false,
+      "expectedDecision": "strict_hit_candidate",
+      "reason": "same shipping fee refund intent, but support_refund requires strict policy and hard negative guard"
+    },
+    {
+      "caseId": "support_refund_shipping_fee_vs_order_cancel_hard_negative_ko",
+      "pairType": "hard_negative",
+      "category": "support_refund",
+      "canonicalIntent": "mixed",
+      "first": "배송비도 환불되나요?",
+      "second": "주문 취소하고 싶어요",
+      "firstCanonicalIntent": "support_refund.shipping_fee_refund",
+      "secondCanonicalIntent": "support_refund.order_cancel",
+      "requiredSlots": {
+        "first.supportAction": "refund",
+        "first.refundObject": "shipping_fee",
+        "second.supportAction": "cancel",
+        "second.cancelObject": "order"
+      },
+      "optionalSlots": {
+        "first.shippingDirection": "unknown",
+        "second.orderState": "unknown"
+      },
+      "sameAnswerReusable": false,
+      "hardNegative": true,
+      "denyCategory": false,
+      "expectedDecision": "miss",
+      "reason": "same support_refund category but different canonicalIntent and requiredSlots"
+    },
+    {
+      "caseId": "support_refund_return_shipping_fee_vs_exchange_hard_negative_ko",
+      "pairType": "hard_negative",
+      "category": "support_refund",
+      "canonicalIntent": "mixed",
+      "first": "반품하면 배송비도 돌려받나요?",
+      "second": "교환 신청은 어디서 하나요?",
+      "firstCanonicalIntent": "support_refund.return_shipping_fee",
+      "secondCanonicalIntent": "support_refund.exchange_request",
+      "requiredSlots": {
+        "first.supportAction": "return",
+        "first.refundObject": "shipping_fee",
+        "second.supportAction": "exchange",
+        "second.exchangeObject": "item"
+      },
+      "optionalSlots": {
+        "first.shippingDirection": "return",
+        "second.surface": "unknown"
+      },
+      "sameAnswerReusable": false,
+      "hardNegative": true,
+      "denyCategory": false,
+      "expectedDecision": "miss",
+      "reason": "same support_refund category but requiredSlots are incompatible"
+    },
+    {
+      "caseId": "translation_deny_ko",
+      "pairType": "deny_category",
+      "category": "translation",
+      "canonicalIntent": "translation.translate_text",
+      "first": "이 문장을 영어로 번역해줘",
+      "second": "다음 문장을 영문으로 바꿔줘",
+      "requiredSlots": {},
+      "optionalSlots": {
+        "sourceLanguage": "unknown",
+        "targetLanguage": "english"
+      },
+      "sameAnswerReusable": false,
+      "hardNegative": false,
+      "denyCategory": true,
+      "expectedDecision": "bypass",
+      "reason": "translation output depends on source text; production Semantic Cache hit is denied"
+    },
+    {
+      "caseId": "code_deny_ko",
+      "pairType": "deny_category",
+      "category": "code",
+      "canonicalIntent": "code.debug_error",
+      "first": "이 코드 설명해줘",
+      "second": "이 함수 왜 에러나?",
+      "requiredSlots": {},
+      "optionalSlots": {
+        "language": "unknown",
+        "errorType": "unknown"
+      },
+      "sameAnswerReusable": false,
+      "hardNegative": false,
+      "denyCategory": true,
+      "expectedDecision": "bypass",
+      "reason": "code output depends on raw code and execution context; production Semantic Cache hit is denied"
+    },
+    {
+      "caseId": "unknown_deny_empty_ko",
+      "pairType": "deny_category",
+      "category": "unknown",
+      "canonicalIntent": "unknown.empty_input",
+      "first": "",
+      "second": "   ",
+      "requiredSlots": {},
+      "optionalSlots": {},
+      "sameAnswerReusable": false,
+      "hardNegative": false,
+      "denyCategory": true,
+      "expectedDecision": "bypass",
+      "reason": "unknown or empty input cannot produce a safe canonicalIntent"
+    }
+  ]
+}
