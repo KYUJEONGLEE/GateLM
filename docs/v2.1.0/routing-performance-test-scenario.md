@@ -4,17 +4,17 @@
 
 멘토 공유용 라우팅 성능 테스트 시나리오다.
 
-이번 테스트는 외부 LLM 호출 성능이 아니라, Gateway 내부 룰 기반 라우팅 판단이 충분히 빠르고 비용 절감 방향으로 동작하는지 확인한다.
+이번 테스트는 외부 LLM 호출 성능이 아니라 Gateway 내부 룰 기반 라우팅 판단이 충분히 빠르고, 비용 절감 방향으로 동작하는지 확인한다.
 
 ## 테스트 질문
 
 | 질문 | 확인 지표 |
 |---|---|
-| 룰 기반 분류가 맞는가 | category accuracy |
+| 한국어 룰 기반 분류가 맞는가 | category accuracy |
 | 모델 tier 선택이 맞는가 | tier accuracy |
 | 판단 시간이 짧은가 | routing latency p50/p95 |
 | 비용 절감 방향인가 | high_quality baseline 대비 estimated cost saving |
-| 어떤 케이스가 틀렸는가 | failures sampleId |
+| 어떤 케이스가 틀리는가 | failures sampleId |
 
 ## 실행 전제
 
@@ -87,7 +87,7 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
   "tierErrorRate": 0,
   "latency": {
     "iterations": 20,
-    "samples": 100000,
+    "samples": 20000,
     "avgMicros": 40.2,
     "p50Micros": 30.1,
     "p95Micros": 90.4
@@ -102,17 +102,17 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
 }
 ```
 
-숫자는 예시이며 실제 결과는 실행 환경에 따라 달라질 수 있다.
+숫자는 예시이며 실제 결과는 실행 환경과 룰 변경에 따라 달라질 수 있다.
 
 ## 실패 케이스 처리
 
-실패 리포트에는 prompt text를 남기지 않는다.
+실패 리포트에는 prompt text를 넣지 않는다.
 
 개발자는 `sampleId`를 보고 평가셋 파일에서 synthetic prompt를 확인한 뒤 아래 중 하나를 수행한다.
 
 | 상황 | 처리 |
 |---|---|
-| label이 틀림 | 평가셋 label 수정 |
+| label이 잘못됨 | 평가셋 label 수정 |
 | 룰이 부족함 | category policy rule 보강 |
 | tier 기대값이 애매함 | tier 기준 문서 보강 |
 | 샘플이 너무 모호함 | unknown 또는 제거 검토 |
