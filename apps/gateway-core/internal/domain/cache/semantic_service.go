@@ -19,6 +19,7 @@ type SemanticCacheServiceConfig struct {
 	TTL           time.Duration
 	PolicyVersion string
 	HitPolicy     *SemanticCacheHitPolicy
+	StorePolicy   *SemanticCacheStorePolicy
 }
 
 type SemanticCacheLookupRequest struct {
@@ -28,14 +29,18 @@ type SemanticCacheLookupRequest struct {
 }
 
 type SemanticCacheStoreRequest struct {
-	EntryID         string
-	RequestID       string
-	Boundary        SemanticCacheBoundary
-	NormalizedText  string
-	IntentMaterial  SemanticCacheIntentMaterial
-	EmbeddingVector []float64
-	CachedResponse  []byte
-	Now             time.Time
+	EntryID                   string
+	RequestID                 string
+	Boundary                  SemanticCacheBoundary
+	NormalizedText            string
+	IntentMaterial            SemanticCacheIntentMaterial
+	EmbeddingVector           []float64
+	CachedResponse            []byte
+	ResponseCacheabilityClass string
+	ProviderOutcome           string
+	FallbackUsed              bool
+	Stream                    bool
+	Now                       time.Time
 }
 
 type SemanticCacheService struct {
@@ -65,6 +70,10 @@ func NewSemanticCacheService(store SemanticCacheStore, embeddingProvider Embeddi
 		} else {
 			config.HitPolicy = nil
 		}
+	}
+	if config.StorePolicy != nil {
+		normalizedPolicy := config.StorePolicy.Normalize()
+		config.StorePolicy = &normalizedPolicy
 	}
 	return SemanticCacheService{
 		store:             store,
@@ -162,6 +171,10 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 		result.Reason = SemanticCacheReasonPayloadUnsafe
 		return result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
+	if decision, bypass := s.preIntentStoreDecision(request); bypass {
+		result.Reason = decision.Reason
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
 	if s.intentPolicyConfigured() && !intentOK {
 		result.Reason = intentReason
@@ -169,6 +182,10 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 	}
 	if !s.intentPolicyConfigured() {
 		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
+	if decision, bypass := s.storeDecision(request, intentMaterial); bypass {
+		result.Reason = decision.Reason
 		return result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
 
@@ -210,6 +227,28 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 
 func (s SemanticCacheService) intentPolicyConfigured() bool {
 	return s.config.HitPolicy != nil && s.config.HitPolicy.Configured()
+}
+
+func (s SemanticCacheService) storePolicyConfigured() bool {
+	return s.config.StorePolicy != nil && s.config.StorePolicy.Configured()
+}
+
+func (s SemanticCacheService) preIntentStoreDecision(request SemanticCacheStoreRequest) (SemanticCacheStoreDecision, bool) {
+	if !s.storePolicyConfigured() {
+		return SemanticCacheStoreDecision{}, false
+	}
+	material := semanticCacheStoreMaterialFromRequest(request, SemanticCacheIntentMaterial{})
+	decision := s.config.StorePolicy.EvaluatePreIntent(material)
+	return decision, !decision.Allowed
+}
+
+func (s SemanticCacheService) storeDecision(request SemanticCacheStoreRequest, intentMaterial SemanticCacheIntentMaterial) (SemanticCacheStoreDecision, bool) {
+	if !s.storePolicyConfigured() {
+		return SemanticCacheStoreDecision{}, false
+	}
+	material := semanticCacheStoreMaterialFromRequest(request, intentMaterial)
+	decision := s.config.StorePolicy.Evaluate(material)
+	return decision, !decision.Allowed
 }
 
 func (s SemanticCacheService) intentMaterial(category string, normalizedText string, provided SemanticCacheIntentMaterial) (SemanticCacheIntentMaterial, string, bool) {
