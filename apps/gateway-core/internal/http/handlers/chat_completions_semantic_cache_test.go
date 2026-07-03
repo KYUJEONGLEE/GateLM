@@ -164,6 +164,62 @@ func TestChatCompletionsSemanticCacheFirstRequestMissThenStores(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsSemanticCacheStoreRequestCarriesStaticCacheabilityClass(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+
+	rr := harness.exercise(t, "sc_store_cacheability_static", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("정적 안내 응답은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.semantic.upsertCalls != 1 || len(harness.semantic.storeRequests) != 1 {
+		t.Fatalf("정적 안내 응답은 semantic store 후보로 전달되어야 함: upsert=%d requests=%d", harness.semantic.upsertCalls, len(harness.semantic.storeRequests))
+	}
+	storeRequest := harness.semantic.storeRequests[0]
+	if storeRequest.ResponseCacheabilityClass != cachekey.SemanticCacheResponseCacheabilityStaticGuidance {
+		t.Fatalf("정적 안내 응답 cacheability class 불일치: %q", storeRequest.ResponseCacheabilityClass)
+	}
+	if storeRequest.ProviderOutcome != cachekey.SemanticCacheProviderOutcomeSuccess || storeRequest.FallbackUsed || storeRequest.Stream {
+		t.Fatalf("store eligibility material 불일치: %+v", storeRequest)
+	}
+}
+
+func TestChatCompletionsSemanticCacheDynamicUserStateResponseDoesNotStoreOrHit(t *testing.T) {
+	semantic := newCountingSemanticCacheService(t, true)
+	adapter := &routingAwareProviderAdapter{
+		adapterType:     providercatalog.AdapterTypeMock,
+		responseContent: "이번 달 사용량: 12345 tokens",
+	}
+	harness := newSemanticCacheHarnessWithService(t, semantic, adapter)
+	harness.routes["sc_dynamic_usage_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+	harness.routes["sc_dynamic_usage_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+	first := harness.exercise(t, "sc_dynamic_usage_first", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("동적 사용량 응답도 사용자에게는 성공으로 반환되어야 함: status=%d body=%s", first.Code, first.Body.String())
+	}
+	if len(semantic.storeRequests) != 1 {
+		t.Fatalf("동적 응답도 store eligibility 평가 material은 전달되어야 함: requests=%d", len(semantic.storeRequests))
+	}
+	if semantic.storeRequests[0].ResponseCacheabilityClass != cachekey.SemanticCacheResponseCacheabilityDynamicUserState {
+		t.Fatalf("동적 응답 cacheability class 불일치: %q", semantic.storeRequests[0].ResponseCacheabilityClass)
+	}
+	if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonDynamicUserState {
+		t.Fatalf("동적 응답은 semantic store에서 bypass되어야 함: reason=%q", logged.SemanticCacheDecisionReason)
+	}
+
+	second := harness.exercise(t, "sc_dynamic_usage_second", routingAwareChatBody("auto", "API 사용량 확인 화면은 어디야?"))
+	if second.Code != http.StatusOK {
+		t.Fatalf("유사한 두 번째 동적 요청도 provider flow로 성공해야 함: status=%d body=%s", second.Code, second.Body.String())
+	}
+	if adapter.calls != 2 {
+		t.Fatalf("동적 응답이 저장되면 두 번째 요청이 semantic hit가 되므로 provider는 다시 호출되어야 함: calls=%d", adapter.calls)
+	}
+	if logged := harness.latestLog(t); logged.SemanticCacheHit || logged.SemanticReturnedFromCache {
+		t.Fatalf("동적 응답은 이후 semantic hit로 재사용되면 안 됨: %+v", logged)
+	}
+}
+
 func TestChatCompletionsSemanticCacheMissReusesLookupEmbeddingForStore(t *testing.T) {
 	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
 	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
@@ -1272,6 +1328,7 @@ func newCountingSemanticCacheService(t *testing.T, enabled bool) *countingSemant
 func newCountingSemanticCacheServiceWithEmbeddingProvider(t *testing.T, enabled bool, embeddingProvider cachekey.EmbeddingProvider) *countingSemanticCacheService {
 	t.Helper()
 	store := cachekey.NewInMemorySemanticCacheStore(100)
+	storePolicy := cachekey.DefaultSemanticCacheStorePolicy()
 	service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
 		Enabled:       enabled,
 		Threshold:     0.92,
@@ -1279,6 +1336,7 @@ func newCountingSemanticCacheServiceWithEmbeddingProvider(t *testing.T, enabled 
 		TTL:           time.Hour,
 		PolicyVersion: "v1",
 		HitPolicy:     testHandlerSemanticHitPolicy(t),
+		StorePolicy:   &storePolicy,
 	})
 	return &countingSemanticCacheService{service: service}
 }

@@ -202,6 +202,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 			hitPolicy = &policy
 		}
 		if storeErr == nil && providerErr == nil {
+			storePolicy := cachekey.DefaultSemanticCacheStorePolicy()
 			service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
 				Enabled:       cfg.SemanticCache.Enabled,
 				Threshold:     cfg.SemanticCache.Threshold,
@@ -209,6 +210,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 				TTL:           cfg.SemanticCache.TTL,
 				PolicyVersion: cfg.SemanticCache.PolicyVersion,
 				HitPolicy:     hitPolicy,
+				StorePolicy:   &storePolicy,
 			})
 			semanticCacheService = service
 		}
