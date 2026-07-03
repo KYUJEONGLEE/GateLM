@@ -19,7 +19,6 @@ function trimString(value: unknown): unknown {
 }
 
 export type ApplicationBudgetLimitModeDto = 'FIXED' | 'PERCENT';
-export type LocalApplicationKeyDto = 'chat';
 
 export class CreateApplicationDto {
   @Transform(({ value }) => trimString(value))
@@ -33,10 +32,6 @@ export class CreateApplicationDto {
   @IsString()
   @MaxLength(500)
   description?: string;
-
-  @IsOptional()
-  @IsIn(['chat'])
-  localApplicationKey?: LocalApplicationKeyDto;
 
   @IsOptional()
   @IsIn(['FIXED', 'PERCENT'])
@@ -114,7 +109,6 @@ export interface ApplicationResponseDto {
   name: string;
   description: string | null;
   status: ResourceStatus;
-  localApplicationKey: LocalApplicationKeyDto;
   budgetLimitMode: ApplicationBudgetLimitModeDto;
   budgetLimitUsd: number | null;
   budgetLimitPercent: number | null;

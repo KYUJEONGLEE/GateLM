@@ -1,6 +1,5 @@
 export type ApplicationStatus = "ACTIVE" | "ARCHIVED" | "DISABLED";
 export type ApplicationBudgetLimitMode = "FIXED" | "PERCENT";
-export type LocalApplicationKey = "chat";
 
 export type ApplicationRecord = {
   budgetLimitMode: ApplicationBudgetLimitMode;
@@ -10,7 +9,6 @@ export type ApplicationRecord = {
   description: string | null;
   effectiveBudgetLimitUsd: number;
   id: string;
-  localApplicationKey: LocalApplicationKey;
   name: string;
   projectId: string;
   status: ApplicationStatus;
@@ -23,7 +21,6 @@ export type ApplicationFormValues = {
   budgetLimitPercent: number;
   budgetLimitUsd: number;
   description: string;
-  localApplicationKey: LocalApplicationKey;
   name: string;
   projectId?: string;
 };

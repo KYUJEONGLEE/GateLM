@@ -161,7 +161,6 @@ function toApplicationPayload(values: ApplicationFormValues) {
     budgetLimitPercent: values.budgetLimitPercent,
     budgetLimitUsd: values.budgetLimitUsd,
     description: values.description.trim() || undefined,
-    localApplicationKey: values.localApplicationKey,
     name: values.name.trim()
   };
 }
@@ -282,7 +281,6 @@ function getFixtureApplication(): ApplicationRecord {
     description: "Customer-facing chat application from the v1 runtime config fixture.",
     effectiveBudgetLimitUsd: 0,
     id: runtimeConfig.applicationId,
-    localApplicationKey: "chat",
     name: "Customer Demo App",
     projectId: runtimeConfig.projectId,
     status: runtimeConfig.applicationStatus === "active" ? "ACTIVE" : "DISABLED",
@@ -319,7 +317,6 @@ function toApplicationRecord(value: unknown): ApplicationRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     effectiveBudgetLimitUsd: normalizeNumber(record.effectiveBudgetLimitUsd, 0),
     id: record.id,
-    localApplicationKey: normalizeLocalApplicationKey(record.localApplicationKey),
     name: record.name,
     projectId: record.projectId,
     status,
@@ -330,10 +327,6 @@ function toApplicationRecord(value: unknown): ApplicationRecord | null {
 
 function normalizeBudgetLimitMode(value: unknown): ApplicationRecord["budgetLimitMode"] {
   return value === "PERCENT" ? "PERCENT" : "FIXED";
-}
-
-function normalizeLocalApplicationKey(value: unknown): ApplicationRecord["localApplicationKey"] {
-  return value === "chat" ? "chat" : "chat";
 }
 
 function normalizeNullableNumber(value: unknown) {

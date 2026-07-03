@@ -44,20 +44,12 @@ type OneTimeAppTokenState = {
 };
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
-const localApplicationOptions = [
-  {
-    description: "/application/chat",
-    key: "chat",
-    label: "Chat"
-  }
-] as const;
 
 const emptyApplicationForm: ApplicationFormValues = {
   budgetLimitMode: "FIXED",
   budgetLimitPercent: 0,
   budgetLimitUsd: 0,
   description: "",
-  localApplicationKey: "chat",
   name: ""
 };
 
@@ -79,7 +71,6 @@ const applicationText: Record<
     description: string;
     empty: string;
     fixtureFallback: string;
-    localApplication: string;
     management: string;
     name: string;
     save: string;
@@ -106,7 +97,6 @@ const applicationText: Record<
     description: "Description",
     empty: "No applications found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture application.",
-    localApplication: "Local application",
     management: "management",
     name: "Name",
     save: "Save",
@@ -132,7 +122,6 @@ const applicationText: Record<
     description: "설명",
     empty: "애플리케이션이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 애플리케이션을 표시 중입니다.",
-    localApplication: "로컬 애플리케이션",
     management: "관리",
     name: "이름",
     save: "저장",
@@ -404,7 +393,6 @@ export function ApplicationManagement({
               <thead>
                 <tr>
                   <th>{text.name}</th>
-                  <th>{text.localApplication}</th>
                   <th>{text.description}</th>
                   <th>{text.budget}</th>
                   <th>{text.status}</th>
@@ -432,9 +420,6 @@ export function ApplicationManagement({
                             value={rowValues.name}
                           />
                         </label>
-                      </td>
-                      <td>
-                        <ReadonlyLocalApplication value={application.localApplicationKey} />
                       </td>
                       <td>
                         <label className="policy-field project-table-field">
@@ -579,25 +564,6 @@ export function ApplicationManagement({
                   />
                 </label>
                 <label className="policy-field">
-                  <span>{text.localApplication}</span>
-                  <select
-                    onChange={(event) =>
-                      setCreateValues((current) => ({
-                        ...current,
-                        localApplicationKey: event.target.value as ApplicationFormValues["localApplicationKey"]
-                      }))
-                    }
-                    required
-                    value={createValues.localApplicationKey}
-                  >
-                    {localApplicationOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label} ({option.description})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="policy-field">
                   <span>{text.description}</span>
                   <input
                     maxLength={500}
@@ -670,7 +636,6 @@ function getApplicationUpdateValues(application: ApplicationRecord): Application
     budgetLimitPercent: application.budgetLimitPercent ?? 0,
     budgetLimitUsd: application.budgetLimitUsd ?? 0,
     description: nullableText(application.description, ""),
-    localApplicationKey: application.localApplicationKey,
     name: application.name,
     status: application.status
   };
@@ -678,17 +643,6 @@ function getApplicationUpdateValues(application: ApplicationRecord): Application
 
 function formatApplicationStatus(status: ApplicationStatus) {
   return status.toLowerCase();
-}
-
-function ReadonlyLocalApplication({ value }: { value: ApplicationRecord["localApplicationKey"] }) {
-  const option = localApplicationOptions.find((item) => item.key === value) ?? localApplicationOptions[0];
-
-  return (
-    <div className="local-application-pill">
-      <strong>{option.label}</strong>
-      <small>{option.description}</small>
-    </div>
-  );
 }
 
 function isValidApplicationBudgetValues(values: ApplicationFormValues) {

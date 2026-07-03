@@ -48,7 +48,6 @@ describe('ApplicationsService', () => {
       name: `Application ${id}`,
       description: null,
       status: ResourceStatus.ACTIVE,
-      localApplicationKey: 'chat',
       budgetLimitMode: 'FIXED',
       budgetLimitPercent: null,
       budgetLimitUsd: null,

@@ -13,7 +13,6 @@ import {
 } from './dto/application.dto';
 
 const DEFAULT_PROJECT_BUDGET_USD = 100;
-const DEFAULT_LOCAL_APPLICATION_KEY = 'chat';
 
 @Injectable()
 export class ApplicationsService {
@@ -40,7 +39,6 @@ export class ApplicationsService {
         projectId: project.id,
         name: dto.name,
         description: this.toNullableDescription(dto.description),
-        localApplicationKey: dto.localApplicationKey ?? DEFAULT_LOCAL_APPLICATION_KEY,
         budgetLimitMode: budgetValues.budgetLimitMode,
         budgetLimitUsd: budgetValues.budgetLimitUsd,
         budgetLimitPercent: budgetValues.budgetLimitPercent,
@@ -368,9 +366,6 @@ export class ApplicationsService {
       name: application.name,
       description: application.description,
       status: application.status,
-      localApplicationKey: this.normalizeLocalApplicationKey(
-        application.localApplicationKey,
-      ),
       budgetLimitMode: this.normalizeBudgetLimitMode(
         application.budgetLimitMode,
       ),
@@ -389,7 +384,4 @@ export class ApplicationsService {
     };
   }
 
-  private normalizeLocalApplicationKey(value: string): 'chat' {
-    return value === 'chat' ? 'chat' : DEFAULT_LOCAL_APPLICATION_KEY;
-  }
 }

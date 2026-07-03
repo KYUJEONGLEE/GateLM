@@ -7,8 +7,7 @@ import type {
   ApplicationBudgetLimitMode,
   ApplicationFormValues,
   ApplicationStatus,
-  ApplicationUpdateValues,
-  LocalApplicationKey
+  ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
 
 type RequestPayload = {
@@ -62,7 +61,6 @@ function isApplicationFormValues(value: unknown): value is ApplicationFormValues
   return (
     typeof record.name === "string"
     && typeof record.description === "string"
-    && isLocalApplicationKey(record.localApplicationKey)
     && isApplicationBudgetLimitMode(record.budgetLimitMode)
     && isBudgetNumber(record.budgetLimitUsd, 100000000)
     && isBudgetNumber(record.budgetLimitPercent, 100)
@@ -88,10 +86,6 @@ function isApplicationBudgetLimitMode(
   value: unknown
 ): value is ApplicationBudgetLimitMode {
   return value === "FIXED" || value === "PERCENT";
-}
-
-function isLocalApplicationKey(value: unknown): value is LocalApplicationKey {
-  return value === "chat";
 }
 
 function isBudgetNumber(value: unknown, max: number) {

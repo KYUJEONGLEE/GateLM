@@ -122,7 +122,6 @@ model Application {
   name        String
   description String?
   status      ResourceStatus @default(ACTIVE)
-  localApplicationKey String @default("chat")
   budgetLimitUsd Decimal? @db.Decimal(12, 2)
   budgetLimitMode String @default("FIXED")
   budgetLimitPercent Decimal? @db.Decimal(5, 2)
