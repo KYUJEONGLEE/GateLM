@@ -423,7 +423,7 @@ export function ProviderConnectionManagement({
         </p>
       ) : null}
 
-      <section className="console-panel">
+      <section className="console-panel provider-line-panel">
         <div className="panel-heading">
           <h3>{text.register}</h3>
         </div>
@@ -574,7 +574,7 @@ export function ProviderConnectionManagement({
         </div>
       </section>
 
-      <section className="console-panel">
+      <section className="console-panel provider-line-panel">
         <div className="panel-heading">
           <h3>{text.title}</h3>
         </div>

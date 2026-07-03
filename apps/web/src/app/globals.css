@@ -2138,13 +2138,40 @@ select {
 
 .provider-form-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  align-items: end;
+  gap: 0;
 }
 
 .provider-wide-field {
-  grid-column: span 2;
+  grid-column: auto;
+}
+
+.provider-line-panel {
+  padding: 18px 22px;
+  box-shadow: none;
+}
+
+.provider-line-panel .panel-heading {
+  margin-bottom: 6px;
+}
+
+.provider-form-grid > .policy-field {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.provider-form-grid > .policy-field > span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.provider-form-grid > .policy-field > input,
+.provider-form-grid > .policy-field > select {
+  min-height: 38px;
 }
 
 .provider-readonly-summary {
@@ -2175,9 +2202,9 @@ select {
   gap: 10px;
   min-height: 74px;
   padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .provider-model-selection-toolbar {
@@ -2256,6 +2283,7 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  padding-top: 16px;
 }
 
 .provider-table {
@@ -4962,7 +4990,7 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   }
 
   .provider-form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .team-attach-controls {
@@ -4993,7 +5021,7 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   }
 
   .provider-wide-field {
-    grid-column: span 2;
+    grid-column: auto;
   }
 
   .policy-detector-row {
@@ -5305,6 +5333,11 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
 
   .provider-wide-field {
     grid-column: auto;
+  }
+
+  .provider-form-grid > .policy-field {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .provider-form-actions,
