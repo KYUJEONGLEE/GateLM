@@ -73,6 +73,73 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(fake_vllm.requests[0]["body"]["temperature"], 0)
         self.assertEqual(fake_vllm.requests[0]["body"]["max_tokens"], 192)
 
+    def test_detect_projects_fake_vllm_response_to_sidecar_contract(self) -> None:
+        prompt = "This internal policy memo is not public yet."
+        with FakeVllmServer(
+            {
+                "detections": [
+                    {
+                        "detectorType": "confidential_business_context",
+                        "action": "block",
+                        "confidence": 0.81,
+                        "reasonCode": "confidential_business_context",
+                    }
+                ]
+            }
+        ) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                    temperature=0,
+                    max_tokens=192,
+                ),
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(
+            set(body),
+            {
+                "contractVersion",
+                "model",
+                "outcome",
+                "mode",
+                "redactedPrompt",
+                "redactedPromptPreview",
+                "detectorSummary",
+                "detections",
+                "latencyMs",
+            },
+        )
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 1)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["confidential_business_context"])
+        self.assertEqual(
+            body["detections"],
+            [
+                {
+                    "detectorType": "confidential_business_context",
+                    "source": "llm_classifier",
+                    "confidence": 0.81,
+                    "action": "block",
+                    "mode": "shadow",
+                }
+            ],
+        )
+        self.assertEqual(len(fake_vllm.requests), 1)
+        self.assertNotIn("reasonCode", body_text)
+        self.assertNotIn("candidateWindow", body_text)
+        self.assertNotIn("explanation", body_text)
+
     def test_detect_discards_invalid_llm_classifier_json(self) -> None:
         prompt = "\ubcf8\uc0ac \uc8fc\uc18c\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c 123\uc785\ub2c8\ub2e4."
         with FakeVllmServer({}, raw_content="not json") as fake_vllm:
