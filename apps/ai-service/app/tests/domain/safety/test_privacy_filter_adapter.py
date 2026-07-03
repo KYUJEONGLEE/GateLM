@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
+import sys
+import types
 import unittest
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +17,7 @@ from app.adapters.safety.privacy_filter_adapter import (
     aggregation_strategy_for_model,
     normalize_label,
     public_model_id_for_model,
+    runtime_for_value,
     source_for_model,
 )
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
@@ -159,6 +162,64 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
             list(executor.map(adapter.detect, ["safe prompt"] * 8))
 
         self.assertEqual(load_count, 1)
+
+    def test_adapter_loads_onnx_token_classification_pipeline_when_runtime_is_onnx(self) -> None:
+        calls: dict[str, object] = {}
+
+        class FakeORTModelForTokenClassification:
+            @classmethod
+            def from_pretrained(cls, model_name: str) -> object:
+                calls["model_name"] = model_name
+                return "fake_onnx_model"
+
+        class FakeAutoTokenizer:
+            @classmethod
+            def from_pretrained(cls, model_name: str) -> object:
+                calls["tokenizer_name"] = model_name
+                return "fake_tokenizer"
+
+        def fake_pipeline(**kwargs: object) -> Callable[[str], object]:
+            calls["pipeline_kwargs"] = kwargs
+            return lambda _text: []
+
+        optimum_module = types.ModuleType("optimum")
+        onnxruntime_module = types.ModuleType("optimum.onnxruntime")
+        onnxruntime_module.ORTModelForTokenClassification = FakeORTModelForTokenClassification
+        transformers_module = types.ModuleType("transformers")
+        transformers_module.AutoTokenizer = FakeAutoTokenizer
+        transformers_module.pipeline = fake_pipeline
+
+        with unittest.mock.patch.dict(
+            sys.modules,
+            {
+                "optimum": optimum_module,
+                "optimum.onnxruntime": onnxruntime_module,
+                "transformers": transformers_module,
+            },
+        ):
+            adapter = PrivacyFilterAdapter(
+                model_name="C:/models/onnx-openai--privacy-filter",
+                runtime="onnx",
+            )
+            classifier = adapter._load_classifier()
+
+        self.assertEqual(calls["model_name"], "C:/models/onnx-openai--privacy-filter")
+        self.assertEqual(calls["tokenizer_name"], "C:/models/onnx-openai--privacy-filter")
+        self.assertIsNotNone(classifier)
+        self.assertEqual(
+            calls["pipeline_kwargs"],
+            {
+                "task": "token-classification",
+                "model": "fake_onnx_model",
+                "tokenizer": "fake_tokenizer",
+                "aggregation_strategy": "simple",
+            },
+        )
+
+    def test_runtime_for_value_defaults_to_transformers_for_unknown_values(self) -> None:
+        self.assertEqual(runtime_for_value("onnx"), "onnx")
+        self.assertEqual(runtime_for_value("TRANSFORMERS"), "transformers")
+        self.assertEqual(runtime_for_value("bad-runtime"), "transformers")
 
 
 def remote_context() -> RemoteSafetyContext:

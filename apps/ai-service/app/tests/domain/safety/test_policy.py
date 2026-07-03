@@ -723,6 +723,24 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertNotIn(full_name, redacted)
         self.assertNotIn(given_name, redacted)
 
+    def test_redact_prompt_reuses_placeholder_for_contiguous_korean_business_role_suffix(self) -> None:
+        name = "\ud64d\uae38\ub3d9"
+        spaced = f"{name} \ud300\uc7a5"
+        contiguous = f"{name}\ud300\uc7a5"
+        prompt = f"{spaced}\uc740 {contiguous}\uc774 \uc2b9\uc778\ud588\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", spaced, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", contiguous, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(redacted, "[PERSON_1]\uc740 [PERSON_1]\uc774 \uc2b9\uc778\ud588\ub2e4.")
+        self.assertEqual(redacted.count("[PERSON_1]"), 2)
+        self.assertNotIn(name, redacted)
+
     def test_redact_prompt_does_not_link_ambiguous_korean_person_alias(self) -> None:
         first_name = "\uc774\uc724\uc9c0"
         second_name = "\ubc15\uc724\uc9c0"

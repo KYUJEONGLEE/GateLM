@@ -763,7 +763,9 @@ def _strip_person_business_role_suffix(value: str) -> str:
             continue
         before_role_with_space = trimmed[: -len(role)]
         before_role = before_role_with_space.rstrip()
-        if before_role == "" or len(before_role) == len(before_role_with_space):
+        if before_role == "":
+            continue
+        if len(before_role) == len(before_role_with_space) and not _is_korean_person_stem(before_role):
             continue
         return before_role
     return trimmed

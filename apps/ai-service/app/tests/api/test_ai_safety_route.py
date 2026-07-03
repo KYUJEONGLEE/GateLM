@@ -580,6 +580,139 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_detect_redacts_deterministic_pii_without_calling_ml_classifier(self) -> None:
+        email = "latency-fast@example.test"
+        phone = "010-1234-5678"
+        bearer_token = "syntheticBearerToken1234567890"
+        prompt = f"Contact {email} or {phone}. Authorization: Bearer {bearer_token}"
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return []
+
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(classifier)
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(body["outcome"], "blocked")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "Contact [EMAIL_1] or [PHONE_NUMBER_1]. [AUTHORIZATION_HEADER_REDACTED]",
+        )
+        self.assertEqual(
+            body["detectorSummary"]["detectorCategories"],
+            ["authorization_header", "email", "phone_number"],
+        )
+        self.assertNotIn(email, body_text)
+        self.assertNotIn(phone, body_text)
+        self.assertNotIn(bearer_token, body_text)
+
+    def test_detect_skips_ml_classifier_for_long_safe_prompt_without_pii_candidates(self) -> None:
+        prompt = (
+            "This synthetic operations note covers rollout checklists, service readiness, "
+            "documentation review, and routine release coordination. "
+        ) * 16
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return []
+
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(classifier)
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], [])
+
+    def test_detect_calls_ml_classifier_for_person_candidate_context(self) -> None:
+        raw_name = "Alex Benchmark"
+        prompt = f"Please review {raw_name} before the support handoff."
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return [
+                {
+                    "entity_group": "person_name",
+                    "score": 0.98,
+                    "start": prompt.index(raw_name),
+                    "end": prompt.index(raw_name) + len(raw_name),
+                    "word": raw_name,
+                }
+            ]
+
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(classifier)
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(classifier_calls, 1)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "Please review [PERSON_1] before the support handoff.",
+        )
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
+        self.assertNotIn(raw_name, body_text)
+
+    def test_detect_sends_only_candidate_windows_to_ml_for_long_prompt(self) -> None:
+        raw_name = "Alex Benchmark"
+        prefix = "Routine release coordination and service readiness notes. " * 18
+        suffix = " Documentation review and rollout checklist follow-up. " * 18
+        prompt = f"{prefix}Applicant {raw_name} needs review before handoff.{suffix}"
+        classifier_inputs: list[str] = []
+
+        def classifier(text: str) -> list[object]:
+            classifier_inputs.append(text)
+            local_start = text.index(raw_name)
+            return [
+                {
+                    "entity_group": "person_name",
+                    "score": 0.98,
+                    "start": local_start,
+                    "end": local_start + len(raw_name),
+                    "word": raw_name,
+                }
+            ]
+
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(classifier)
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(len(classifier_inputs), 1)
+        self.assertLess(len(classifier_inputs[0]), len(prompt))
+        self.assertIn(raw_name, classifier_inputs[0])
+        self.assertNotEqual(classifier_inputs[0], prompt)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertIn("[APPLICANT_1] needs review before handoff.", body["redactedPrompt"])
+        self.assertNotIn(raw_name, body_text)
+
     def test_validation_error_does_not_echo_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL}."
         client = TestClient(create_app())

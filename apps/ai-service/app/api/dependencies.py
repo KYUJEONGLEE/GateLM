@@ -33,6 +33,7 @@ def get_ai_safety_detector_service(request: Request) -> AiSafetyDetectorService:
     service = AiSafetyDetectorService(
         model_id=settings.ai_safety_detector_model_id,
         additional_model_ids=settings.ai_safety_additional_detector_model_ids,
+        detector_runtime=settings.ai_safety_detector_runtime,
     )
     request.app.state.ai_safety_detector_service = service
     return service

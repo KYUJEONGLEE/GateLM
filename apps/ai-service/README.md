@@ -98,8 +98,20 @@ Run locally with ML dependencies installed:
 cd apps/ai-service
 python -m pip install -e ".[ml,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=transformers \
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/huggingface/models/openai--privacy-filter \
 AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/huggingface/models/amoeba04--koelectra-small-v3-privacy-ner \
+python -m app.main
+```
+
+Use ONNX Runtime for an exported token-classification model by installing the optional ONNX dependencies and pointing the model id at the exported model directory:
+
+```bash
+cd apps/ai-service
+python -m pip install -e ".[onnx,test]"
+AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
 python -m app.main
 ```
 

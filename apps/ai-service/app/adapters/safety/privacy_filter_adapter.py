@@ -14,6 +14,12 @@ DEFAULT_PRIVACY_FILTER_SOURCE = "openai_privacy_filter"
 KOELECTRA_PRIVACY_NER_MODEL = "amoeba04/koelectra-small-v3-privacy-ner"
 KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME = "amoeba04--koelectra-small-v3-privacy-ner"
 KOELECTRA_PRIVACY_NER_SOURCE = "koelectra_privacy_ner"
+PRIVACY_FILTER_RUNTIME_TRANSFORMERS = "transformers"
+PRIVACY_FILTER_RUNTIME_ONNX = "onnx"
+PRIVACY_FILTER_RUNTIMES = {
+    PRIVACY_FILTER_RUNTIME_TRANSFORMERS,
+    PRIVACY_FILTER_RUNTIME_ONNX,
+}
 
 DEFAULT_LABEL_MAP: Mapping[str, str] = {
     "acc": "account_number",
@@ -86,6 +92,7 @@ class PrivacyFilterAdapter:
         label_map: Mapping[str, str] | None = None,
         min_confidence: float = DEFAULT_ML_MIN_CONFIDENCE,
         aggregation_strategy: str | None = None,
+        runtime: str = PRIVACY_FILTER_RUNTIME_TRANSFORMERS,
     ) -> None:
         self._lock = threading.Lock()
         self._classifier = classifier
@@ -94,6 +101,7 @@ class PrivacyFilterAdapter:
         self.label_map = label_map or DEFAULT_LABEL_MAP
         self.min_confidence = min_confidence
         self.aggregation_strategy = aggregation_strategy or aggregation_strategy_for_model(model_name)
+        self.runtime = runtime_for_value(runtime)
 
     def detect(self, text: str) -> list[Detection]:
         if text == "":
@@ -121,6 +129,14 @@ class PrivacyFilterAdapter:
         return [item for item in result if isinstance(item, Mapping)]
 
     def _load_classifier(self) -> Callable[[str], object]:
+        if self.runtime == PRIVACY_FILTER_RUNTIME_ONNX:
+            try:
+                return self._load_onnx_classifier()
+            except ImportError:
+                return self._load_transformers_classifier()
+        return self._load_transformers_classifier()
+
+    def _load_transformers_classifier(self) -> Callable[[str], object]:
         try:
             from transformers import pipeline
         except ImportError as exc:
@@ -131,6 +147,22 @@ class PrivacyFilterAdapter:
         return pipeline(
             task="token-classification",
             model=self.model_name,
+            aggregation_strategy=self.aggregation_strategy,
+        )
+
+    def _load_onnx_classifier(self) -> Callable[[str], object]:
+        try:
+            from optimum.onnxruntime import ORTModelForTokenClassification
+            from transformers import AutoTokenizer, pipeline
+        except ImportError:
+            raise
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        model = ORTModelForTokenClassification.from_pretrained(self.model_name)
+        return pipeline(
+            task="token-classification",
+            model=model,
+            tokenizer=tokenizer,
             aggregation_strategy=self.aggregation_strategy,
         )
 
@@ -169,6 +201,13 @@ def normalize_label(raw_label: str, label_map: Mapping[str, str] | None = None) 
     if mapped is None:
         return None
     return mapped.strip() or None
+
+
+def runtime_for_value(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in PRIVACY_FILTER_RUNTIMES:
+        return normalized
+    return PRIVACY_FILTER_RUNTIME_TRANSFORMERS
 
 
 def source_for_model(model_name: str) -> str:

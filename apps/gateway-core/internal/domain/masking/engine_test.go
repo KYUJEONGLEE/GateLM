@@ -239,6 +239,28 @@ func TestEngineLinksKoreanPersonAliasesToUniqueFullNameAnchor(t *testing.T) {
 	}
 }
 
+func TestEntityScopeNormalizesKoreanPersonNamesWithContiguousBusinessRoleSuffix(t *testing.T) {
+	scope := NewEntityScope()
+
+	spaced := scope.PlaceholderFor(string(DetectorPersonName), "\ud64d\uae38\ub3d9 \ud300\uc7a5", PlaceholderPersonName)
+	contiguous := scope.PlaceholderFor(string(DetectorPersonName), "\ud64d\uae38\ub3d9\ud300\uc7a5", PlaceholderPersonName)
+	plain := scope.PlaceholderFor(string(DetectorPersonName), "\ud64d\uae38\ub3d9", PlaceholderPersonName)
+	unrelated := scope.PlaceholderFor(string(DetectorPersonName), "AlexManager", PlaceholderPersonName)
+
+	if spaced != "[PERSON_1]" {
+		t.Fatalf("expected first placeholder [PERSON_1], got %q", spaced)
+	}
+	if contiguous != spaced {
+		t.Fatalf("expected contiguous business role suffix to reuse %q, got %q", spaced, contiguous)
+	}
+	if plain != spaced {
+		t.Fatalf("expected plain name to reuse %q, got %q", spaced, plain)
+	}
+	if unrelated == spaced {
+		t.Fatalf("expected non-Korean contiguous role-like suffix to keep a separate placeholder, got %q", unrelated)
+	}
+}
+
 func TestEngineDoesNotLinkAmbiguousKoreanPersonAlias(t *testing.T) {
 	firstName := "\uc774\uc724\uc9c0"
 	secondName := "\ubc15\uc724\uc9c0"

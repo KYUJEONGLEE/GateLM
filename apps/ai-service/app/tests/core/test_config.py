@@ -5,7 +5,11 @@ import unittest
 from unittest.mock import patch
 
 from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
-from app.core.config import DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID, load_settings
+from app.core.config import (
+    DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID,
+    DEFAULT_AI_SAFETY_DETECTOR_RUNTIME,
+    load_settings,
+)
 from app.main import run
 
 
@@ -42,6 +46,18 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             settings.ai_safety_additional_detector_model_ids,
             (KOELECTRA_PRIVACY_NER_MODEL, "custom/example-token-classifier"),
         )
+
+    def test_settings_loads_ai_safety_detector_runtime(self) -> None:
+        with patch.dict(os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx"}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_runtime, "onnx")
+
+    def test_settings_rejects_unknown_ai_safety_detector_runtime(self) -> None:
+        with patch.dict(os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "bad"}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_runtime, DEFAULT_AI_SAFETY_DETECTOR_RUNTIME)
 
     def test_launcher_passes_access_log_setting_to_uvicorn(self) -> None:
         env = {

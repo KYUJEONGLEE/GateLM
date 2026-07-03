@@ -235,7 +235,10 @@ func stripPersonBusinessRoleSuffix(value string) string {
 
 		beforeRoleWithSpace := trimmed[:len(trimmed)-len(role)]
 		beforeRole := strings.TrimRightFunc(beforeRoleWithSpace, unicode.IsSpace)
-		if beforeRole == "" || len(beforeRole) == len(beforeRoleWithSpace) {
+		if beforeRole == "" {
+			continue
+		}
+		if len(beforeRole) == len(beforeRoleWithSpace) && !isKoreanPersonStem(beforeRole) {
 			continue
 		}
 		return beforeRole
