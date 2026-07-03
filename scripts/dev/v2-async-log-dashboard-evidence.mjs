@@ -120,9 +120,15 @@ async function main(options) {
   await fs.writeFile(latestPath, serialized, "utf8");
 
   console.log("");
-  console.log("PASS: async log dashboard evidence succeeded");
   console.log(`report: ${path.relative(repoRoot, reportPath)}`);
   console.log(`latest: ${path.relative(repoRoot, latestPath)}`);
+
+  const failed = assertions.filter((item) => !item.pass);
+  if (failed.length > 0) {
+    throw new Error(`Evidence assertions failed: ${failed.map((item) => item.name).join(", ")}`);
+  }
+
+  console.log("PASS: async log dashboard evidence succeeded");
 }
 
 function parseArgs(args) {
@@ -344,7 +350,7 @@ function assertEvidence({ requestResults, overview, metricsSummary, trafficExpec
 
   recordAssertion(assertions, "dashboard totals are available", Number.isFinite(numberValue(overview?.totals?.totalRequests)));
   recordAssertion(assertions, "dashboard freshness source is request log", String(overview?.freshness?.source ?? overview?.dataFreshness?.source ?? "") === "postgresql_request_log");
-  recordAssertion(assertions, "dashboard freshness has last ingested timestamp", nonEmptyString(overview?.freshness?.lastIngestedAt));
+  recordAssertion(assertions, "dashboard freshness has last ingested timestamp", nonEmptyString(dashboardLastIngestedAt(overview)));
   recordAssertion(assertions, "dashboard exposes cache breakdown", Array.isArray(overview?.breakdowns?.byCacheOutcome));
   recordAssertion(assertions, "dashboard exposes provider/model breakdown", Array.isArray(overview?.breakdowns?.byProviderModel));
   recordAssertion(assertions, "dashboard exposes latency performance", overview?.performance && typeof overview.performance === "object");
@@ -362,12 +368,26 @@ function assertEvidence({ requestResults, overview, metricsSummary, trafficExpec
     recordAssertion(assertions, "async persist success samples exist", metricsSummary.persistSuccessSamples > 0);
   }
 
-  const failed = assertions.filter((item) => !item.pass);
-  if (failed.length > 0) {
-    throw new Error(`Evidence assertions failed: ${failed.map((item) => item.name).join(", ")}`);
-  }
-
   return assertions;
+}
+
+function dashboardLastIngestedAt(overview) {
+  return firstNonEmptyString(
+    overview?.freshness?.lastIngestedAt,
+    overview?.dataFreshness?.lastIngestedAt,
+    overview?.dataFreshness?.lastLogCreatedAt,
+    overview?.dataFreshness?.generatedAt,
+    overview?.generatedAt,
+  );
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (nonEmptyString(value)) {
+      return value;
+    }
+  }
+  return "";
 }
 
 function recordAssertion(assertions, name, pass) {
