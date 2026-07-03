@@ -5,6 +5,7 @@ param(
     [string]$EndUserId = "",
     [string]$ReportDir = "reports/routing-gateway-e2e",
     [int]$MaxTokens = 96,
+    [switch]$CacheBust,
     [switch]$DescribeOnly
 )
 
@@ -49,6 +50,10 @@ function Get-HeaderValue {
 function Get-Property {
     param($Value, [string]$Name)
     if ($null -eq $Value) { return $null }
+    if ($Value -is [System.Collections.IDictionary]) {
+        if ($Value.Contains($Name)) { return $Value[$Name] }
+        return $null
+    }
     $property = $Value.PSObject.Properties[$Name]
     if ($null -eq $property) { return $null }
     return $property.Value
@@ -139,9 +144,13 @@ $successCount = 0
 
 foreach ($case in $cases) {
     $requestId = "$($case.sampleId)-$timestamp"
+    $requestPrompt = [string]$case.prompt
+    if ($CacheBust) {
+        $requestPrompt = "$requestPrompt Evaluation run marker: $timestamp-$($case.sampleId)."
+    }
     $body = [ordered]@{
         model = "auto"
-        messages = @([ordered]@{ role = "user"; content = $case.prompt })
+        messages = @([ordered]@{ role = "user"; content = $requestPrompt })
         temperature = 0.1
         max_tokens = $MaxTokens
         stream = $false
@@ -203,7 +212,7 @@ foreach ($case in $cases) {
     $row = [ordered]@{
         sampleId = $case.sampleId
         requestId = $requestId
-        syntheticPrompt = $case.prompt
+        syntheticPrompt = $requestPrompt
         expectedCategory = $case.expectedCategory
         statusCode = $statusCode
         ok = $ok
@@ -240,6 +249,7 @@ $report = [ordered]@{
     purpose = "Live Gateway path evidence for routing, provider execution, cache/provider outcomes, and observed latency."
     generatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     gatewayBaseUrl = $GatewayBaseUrl
+    cacheBust = [bool]$CacheBust
     totalSamples = $rows.Count
     successSamples = $successCount
     failedSamples = $rows.Count - $successCount
