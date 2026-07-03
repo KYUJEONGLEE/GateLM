@@ -35,6 +35,8 @@ type SubmitState =
 
 type PolicySection = "general" | "cache";
 
+const hiddenPolicySectionStyle = { display: "none" } as const;
+
 const policyText: Record<
   Locale,
   {
@@ -249,6 +251,10 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
       : model.activeConfig;
+  const generalSectionStyle =
+    activePolicySection === "general" ? undefined : hiddenPolicySectionStyle;
+  const cacheSectionStyle =
+    activePolicySection === "cache" ? undefined : hiddenPolicySectionStyle;
   const providerOptions = model.activeConfig.providers;
   const modelOptionsByProvider = useMemo(
     () => groupModelsByProvider(draftValues.models),
@@ -425,7 +431,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
       <section className="policy-layout policy-settings-list">
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.budget}</h3>
@@ -484,7 +490,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.rateLimit}</h3>
@@ -518,7 +524,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel wide-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.detectors}</h3>
@@ -547,7 +553,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.promptCapture}</h3>
@@ -582,7 +588,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.routing}</h3>
@@ -620,7 +626,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.routingAdvanced}</h3>
@@ -641,7 +647,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "cache"}
+          style={cacheSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.cache}</h3>
@@ -675,7 +681,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "cache"}
+          style={cacheSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.semanticCache}</h3>
@@ -703,7 +709,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
         <article
           className="console-panel policy-editor-panel"
-          hidden={activePolicySection !== "general"}
+          style={generalSectionStyle}
         >
           <div className="panel-heading">
             <h3>{text.activeConfig}</h3>

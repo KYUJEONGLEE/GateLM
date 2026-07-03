@@ -310,7 +310,13 @@ function normalizeNumber(value: unknown, fallback: number) {
   }
 
   if (typeof value === "string") {
-    const parsed = Number(value);
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return fallback;
+    }
+
+    const parsed = Number(trimmed);
 
     if (Number.isFinite(parsed)) {
       return parsed;

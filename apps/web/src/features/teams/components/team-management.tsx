@@ -453,7 +453,7 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
   const assignableTeams = model.availableTeams.filter(
     (team) => team.status === "ACTIVE" && !attachedTeamIds.has(team.id)
   );
-  const [selectedTeamId, setSelectedTeamId] = useState(assignableTeams[0]?.id ?? "");
+  const [selectedTeamId, setSelectedTeamId] = useState("");
 
   async function submitAttachTeam() {
     if (!selectedTeamId) {

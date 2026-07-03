@@ -69,6 +69,7 @@ export type LiveGatewayRequestLogFilters = {
 };
 
 const LIVE_RANGE_HOURS = 24;
+const MAX_LOG_PROJECT_FETCH_CONCURRENCY = 4;
 
 export async function getLiveGatewayRequestLogs(
   filters: LiveGatewayRequestLogFilters = {}
@@ -93,9 +94,7 @@ export async function getLiveGatewayRequestLogs(
   appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const projectIds = await getLogProjectIds(filters.projectId, filters.tenantId, config.projectId);
-  const records = await Promise.all(
-    projectIds.map((projectId) => fetchProjectLogs(config.baseUrl, projectId, query))
-  );
+  const records = await fetchProjectLogsWithConcurrency(config.baseUrl, projectIds, query);
   const flattenedRecords = records.flatMap((projectRecords) => projectRecords ?? []);
 
   if (flattenedRecords.length === 0 && records.some((projectRecords) => projectRecords === undefined)) {
@@ -105,6 +104,24 @@ export async function getLiveGatewayRequestLogs(
   return flattenedRecords
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, filters.limit ?? 50);
+}
+
+async function fetchProjectLogsWithConcurrency(
+  baseUrl: string,
+  projectIds: string[],
+  query: URLSearchParams
+): Promise<Array<InvocationLogRecord[] | undefined>> {
+  const records: Array<InvocationLogRecord[] | undefined> = [];
+
+  for (let index = 0; index < projectIds.length; index += MAX_LOG_PROJECT_FETCH_CONCURRENCY) {
+    const batch = projectIds.slice(index, index + MAX_LOG_PROJECT_FETCH_CONCURRENCY);
+    const batchRecords = await Promise.all(
+      batch.map((projectId) => fetchProjectLogs(baseUrl, projectId, query))
+    );
+    records.push(...batchRecords);
+  }
+
+  return records;
 }
 
 async function fetchProjectLogs(
