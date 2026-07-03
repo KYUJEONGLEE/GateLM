@@ -152,6 +152,23 @@ func TestRoutingPolicySimpleRouterConfigFallsBackHighQualityToDefaultModel(t *te
 	}
 }
 
+func TestRoutingPolicySimpleRouterConfigInitializesEmptyCandidateStatuses(t *testing.T) {
+	policy := RoutingPolicy{
+		DefaultProvider:   "mock",
+		DefaultModel:      "mock-balanced",
+		RoutingPolicyHash: "hash_routing_policy_test",
+	}
+
+	config := policy.SimpleRouterConfig()
+
+	if config.CandidateStatuses == nil {
+		t.Fatal("expected empty candidate statuses slice, got nil")
+	}
+	if len(config.CandidateStatuses) != 0 {
+		t.Fatalf("expected no candidate statuses, got %#v", config.CandidateStatuses)
+	}
+}
+
 func testActiveConfig() ActiveConfig {
 	return ActiveConfig{
 		ConfigVersion:     "runtime_config_test",

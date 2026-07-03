@@ -260,7 +260,7 @@ func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
 		HighQualityModel:    highQualityModel,
 		PolicyHash:          p.RoutingPolicyHash,
 		ShortPromptMaxChars: p.ShortPromptMaxChars,
-		CandidateStatuses:   append([]routing.RouteCandidateStatus(nil), p.CandidateStatuses...),
+		CandidateStatuses:   append([]routing.RouteCandidateStatus{}, p.CandidateStatuses...),
 	}
 }
 
