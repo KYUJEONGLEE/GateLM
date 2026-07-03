@@ -28,6 +28,7 @@ type RequestLogsPageProps = {
     cacheStatus?: string;
     created?: string;
     model?: string;
+    page?: string;
     provider?: string;
     requestId?: string;
     resolvedBy?: string;
@@ -127,6 +128,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
   const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
   const requestId = normalizeOptionalText(searchParams?.searchRequestId);
+  const page = normalizePage(searchParams?.page);
   const { from, to } = createdRange(created);
 
   return {
@@ -137,6 +139,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       cacheStatus,
       created,
       model,
+      page,
       provider,
       requestId,
       resolvedBy,
@@ -148,7 +151,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       budgetScopeType: budgetScopeType || undefined,
       cacheStatus: cacheStatus || undefined,
       from,
-      limit: 50,
+      limit: 100,
       model: model || undefined,
       provider: provider || undefined,
       requestId: requestId || undefined,
@@ -157,6 +160,12 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       to
     }
   };
+}
+
+function normalizePage(value: string | undefined) {
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
 function normalizeCreatedFilter(value: string | undefined): RequestLogCreatedFilter {

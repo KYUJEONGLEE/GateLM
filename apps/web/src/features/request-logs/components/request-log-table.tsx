@@ -47,6 +47,7 @@ export type RequestLogFilterState = {
   cacheStatus: "" | (typeof requestLogCacheStatusFilters)[number];
   created: RequestLogCreatedFilter;
   model: string;
+  page: number;
   provider: string;
   requestId: string;
   resolvedBy: string;
@@ -74,6 +75,9 @@ const requestLogText: Record<
     filterLabel: string;
     kicker: string;
     modelLabel: string;
+    nextPage: string;
+    pageSummary: string;
+    previousPage: string;
     providerLabel: string;
     searchLabel: string;
     searchPlaceholder: string;
@@ -106,6 +110,9 @@ const requestLogText: Record<
     filterLabel: "Log filters",
     kicker: "analytics",
     modelLabel: "Model",
+    nextPage: "Next",
+    pageSummary: "Showing {start}-{end} of {total}",
+    previousPage: "Previous",
     providerLabel: "Provider",
     searchLabel: "Search logs",
     searchPlaceholder: "Search by requestId",
@@ -137,6 +144,9 @@ const requestLogText: Record<
     filterLabel: "로그 필터",
     kicker: "분석",
     modelLabel: "모델",
+    nextPage: "다음",
+    pageSummary: "{total}개 중 {start}-{end}개 표시",
+    previousPage: "이전",
     providerLabel: "Provider",
     searchLabel: "로그 검색",
     searchPlaceholder: "requestId 검색",
@@ -162,6 +172,18 @@ export function RequestLogTable({
   timezone
 }: RequestLogTableProps) {
   const text = requestLogText[locale];
+  const pageSize = 20;
+  const totalRecords = records.length;
+  const pageCount = Math.max(1, Math.ceil(totalRecords / pageSize));
+  const currentPage = Math.min(Math.max(filters.page, 1), pageCount);
+  const pageStartIndex = (currentPage - 1) * pageSize;
+  const pageRecords = records.slice(pageStartIndex, pageStartIndex + pageSize);
+  const displayStart = totalRecords === 0 ? 0 : pageStartIndex + 1;
+  const displayEnd = Math.min(pageStartIndex + pageSize, totalRecords);
+  const pageSummary = text.pageSummary
+    .replace("{start}", String(displayStart))
+    .replace("{end}", String(displayEnd))
+    .replace("{total}", String(totalRecords));
 
   return (
     <main className="console-content">
@@ -175,7 +197,70 @@ export function RequestLogTable({
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={detailPanel ? "open" : "closed"}>
           <div className="console-panel request-log-list-panel">
-            <form action={`/tenants/${tenantId}/request-logs`} className="request-log-filter-bar">
+            <div className="table-wrap">
+              <table className="data-table request-table">
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Status</th>
+                    <th>Model</th>
+                    <th>Safety</th>
+                    <th>Cache</th>
+                    <th>Latency</th>
+                    <th>Tokens</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceState === "unavailable" ? (
+                    <tr>
+                      <td colSpan={8}>Live Gateway request logs are not available right now.</td>
+                    </tr>
+                  ) : null}
+                  {sourceState === "ready" && records.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>No Gateway request logs found for the current range.</td>
+                    </tr>
+                  ) : null}
+                  {pageRecords.map((record) => {
+                    const isSelected = selectedRequestId === record.requestId;
+
+                    return (
+                      <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
+                        <td>
+                          <Link
+                            className="request-link"
+                            data-request-log-anchor
+                            href={requestLogDetailHref(tenantId, record.requestId, filters)}
+                            scroll={false}
+                          >
+                            {formatDisplayIdentifier(record.requestId)}
+                          </Link>
+                          <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
+                        </td>
+                        <td>
+                          <StatusBadge status={record.status} />
+                        </td>
+                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
+                        <td>{record.domainOutcomes?.safety?.outcome ?? record.maskingAction}</td>
+                        <td>
+                          {record.cacheType}:{record.domainOutcomes?.cache?.outcome ?? record.cacheStatus}
+                        </td>
+                        <td>{formatLatency(record.latencyMs)}</td>
+                        <td>{formatInteger(record.totalTokens)}</td>
+                        <td>{formatDateTime(record.createdAt, timezone)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <form
+              action={`/tenants/${tenantId}/request-logs`}
+              className="request-log-search-panel"
+            >
+              <input name="page" type="hidden" value="1" />
               <div className="request-log-search-shell">
                 <input
                   aria-label={text.searchLabel}
@@ -297,66 +382,29 @@ export function RequestLogTable({
                   </select>
                 </label>
               </div>
+
+              <div className="request-log-pagination">
+                <span>{pageSummary}</span>
+                <div>
+                  <Link
+                    aria-disabled={currentPage <= 1}
+                    className="request-log-page-link"
+                    data-disabled={currentPage <= 1}
+                    href={requestLogPageHref(tenantId, filters, currentPage - 1)}
+                  >
+                    {text.previousPage}
+                  </Link>
+                  <Link
+                    aria-disabled={currentPage >= pageCount}
+                    className="request-log-page-link"
+                    data-disabled={currentPage >= pageCount}
+                    href={requestLogPageHref(tenantId, filters, currentPage + 1)}
+                  >
+                    {text.nextPage}
+                  </Link>
+                </div>
+              </div>
             </form>
-
-            <div className="table-wrap">
-              <table className="data-table request-table">
-                <thead>
-                  <tr>
-                    <th>Request</th>
-                    <th>Status</th>
-                    <th>Model</th>
-                    <th>Safety</th>
-                    <th>Cache</th>
-                    <th>Latency</th>
-                    <th>Tokens</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sourceState === "unavailable" ? (
-                    <tr>
-                      <td colSpan={8}>Live Gateway request logs are not available right now.</td>
-                    </tr>
-                  ) : null}
-                  {sourceState === "ready" && records.length === 0 ? (
-                    <tr>
-                      <td colSpan={8}>No Gateway request logs found for the current range.</td>
-                    </tr>
-                  ) : null}
-                  {records.map((record) => {
-                    const isSelected = selectedRequestId === record.requestId;
-
-                    return (
-                      <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
-                        <td>
-                          <Link
-                            className="request-link"
-                            data-request-log-anchor
-                            href={requestLogDetailHref(tenantId, record.requestId, filters)}
-                            scroll={false}
-                          >
-                            {formatDisplayIdentifier(record.requestId)}
-                          </Link>
-                          <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
-                        </td>
-                        <td>
-                          <StatusBadge status={record.status} />
-                        </td>
-                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
-                        <td>{record.domainOutcomes?.safety?.outcome ?? record.maskingAction}</td>
-                        <td>
-                          {record.cacheType}:{record.domainOutcomes?.cache?.outcome ?? record.cacheStatus}
-                        </td>
-                        <td>{formatLatency(record.latencyMs)}</td>
-                        <td>{formatInteger(record.totalTokens)}</td>
-                        <td>{formatDateTime(record.createdAt, timezone)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </div>
           {detailPanel}
         </section>
@@ -378,12 +426,40 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
   if (filters.model) {
     query.set("model", filters.model);
   }
+  if (filters.page > 1) {
+    query.set("page", String(filters.page));
+  }
   appendRequestLogQuery(query, "provider", filters.provider);
   appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
   }
   query.set("requestId", requestId);
+
+  return `/tenants/${tenantId}/request-logs?${query.toString()}`;
+}
+
+function requestLogPageHref(
+  tenantId: string,
+  filters: RequestLogFilterState,
+  page: number
+) {
+  const query = new URLSearchParams();
+  appendRequestLogQuery(query, "applicationId", filters.applicationId);
+  appendRequestLogQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendRequestLogQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
+  appendRequestLogQuery(query, "model", filters.model);
+  appendRequestLogQuery(query, "provider", filters.provider);
+  appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
+  appendRequestLogQuery(query, "searchRequestId", filters.requestId);
+  appendRequestLogQuery(query, "status", filters.status);
+  if (filters.created !== "24h") {
+    query.set("created", filters.created);
+  }
+  if (page > 1) {
+    query.set("page", String(page));
+  }
 
   return `/tenants/${tenantId}/request-logs?${query.toString()}`;
 }
