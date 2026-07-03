@@ -87,6 +87,13 @@ try {
         "  - $Label [$($Tier.Name)]: $($Tier.Value.total)개, 비율 $($Tier.Value.rate)"
     }
     ""
+    "샘플 판단 예시(최대 10개):"
+    foreach ($Sample in ($Report.samples | Select-Object -First 10)) {
+        "  - $($Sample.sampleId): $($Sample.redactedPrompt)"
+        "    판단: $($Sample.categoryKo) [$($Sample.category)] / $($Sample.tierKo) [$($Sample.tier)]"
+        "    이유: $($Sample.routingReasonKo) [$($Sample.routingReason)]"
+    }
+    ""
     "리포트 파일:          $ReportPath"
     "최신 리포트:          $LatestPath"
 }

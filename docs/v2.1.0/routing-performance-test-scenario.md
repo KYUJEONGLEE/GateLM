@@ -53,6 +53,8 @@ corepack pnpm run v2.1:routing:evaluate -- -output reports/routing-eval/report.j
 
 저장되는 JSON 리포트는 기존 기계용 필드를 유지하면서, 사람이 바로 읽을 수 있는 `한글요약` 블록도 함께 포함한다.
 
+각 샘플에는 synthetic/redacted 입력인 `redactedPrompt`를 포함한다. 이 필드는 룰 보정용 평가 문맥이며, 실제 고객 raw prompt를 저장한다는 의미가 아니다.
+
 정확도 gate 포함:
 
 ```powershell
@@ -108,7 +110,7 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
 
 ## 실패 케이스 처리
 
-실패 리포트에는 prompt text를 넣지 않는다.
+리포트에는 synthetic/redacted prompt text만 넣는다.
 
 개발자는 `sampleId`를 보고 평가셋 파일에서 synthetic prompt를 확인한 뒤 아래 중 하나를 수행한다.
 

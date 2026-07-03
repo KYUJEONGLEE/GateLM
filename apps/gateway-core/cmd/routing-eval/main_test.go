@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-func TestEvaluateReportDoesNotIncludePromptText(t *testing.T) {
+func TestEvaluateReportIncludesSyntheticPromptText(t *testing.T) {
 	records := []datasetRecord{
 		{
 			SampleID:         "sample_report_redaction",
-			Prompt:           stringPtr("private synthetic prompt text for report redaction"),
+			Prompt:           stringPtr("safe synthetic prompt text for report review"),
 			ExpectedCategory: "code",
 		},
 	}
@@ -23,8 +23,11 @@ func TestEvaluateReportDoesNotIncludePromptText(t *testing.T) {
 	}
 
 	output := string(payload)
-	if strings.Contains(output, "private synthetic prompt text") {
-		t.Fatalf("report must not include prompt text: %s", output)
+	if !strings.Contains(output, `"redactedPrompt"`) || !strings.Contains(output, "safe synthetic prompt text for report review") {
+		t.Fatalf("report should include synthetic redacted prompt text for review: %s", output)
+	}
+	if strings.Contains(output, `"rawPrompt"`) {
+		t.Fatalf("report must not use rawPrompt field name: %s", output)
 	}
 	if !strings.Contains(output, `"한글요약"`) || !strings.Contains(output, "라우팅 정답 평가 리포트") {
 		t.Fatalf("report should include Korean summary for operators: %s", output)
@@ -34,6 +37,9 @@ func TestEvaluateReportDoesNotIncludePromptText(t *testing.T) {
 	}
 	if !strings.Contains(output, `"actualCategory"`) {
 		t.Fatalf("report should include actual category for investigation: %s", output)
+	}
+	if len(report.Samples) != 1 || report.Samples[0].RedactedPrompt != "safe synthetic prompt text for report review" {
+		t.Fatalf("report should include per-sample prompt context: %#v", report.Samples)
 	}
 }
 
@@ -109,11 +115,11 @@ func TestLoadDatasetHandlesUTF8BOMJSONFile(t *testing.T) {
 	}
 }
 
-func TestProbeReportClassifiesUnlabeledRecordsWithoutPromptText(t *testing.T) {
+func TestProbeReportClassifiesUnlabeledRecordsWithPromptText(t *testing.T) {
 	records := []datasetRecord{
 		{
 			SampleID:       "probe_neutral",
-			RedactedPrompt: stringPtr("Please describe a quiet workspace reminder."),
+			RedactedPrompt: stringPtr("Please describe a safe synthetic workspace reminder."),
 		},
 		{
 			SampleID:       "probe_blank",
@@ -128,8 +134,11 @@ func TestProbeReportClassifiesUnlabeledRecordsWithoutPromptText(t *testing.T) {
 	}
 
 	output := string(payload)
-	if strings.Contains(output, "quiet workspace reminder") {
-		t.Fatalf("probe report must not include prompt text: %s", output)
+	if !strings.Contains(output, `"redactedPrompt"`) || !strings.Contains(output, "safe synthetic workspace reminder") {
+		t.Fatalf("probe report should include synthetic redacted prompt text for review: %s", output)
+	}
+	if strings.Contains(output, `"rawPrompt"`) {
+		t.Fatalf("probe report must not use rawPrompt field name: %s", output)
 	}
 	if !strings.Contains(output, `"한글요약"`) || !strings.Contains(output, "라우팅 분포 관찰 리포트") {
 		t.Fatalf("probe report should include Korean summary for operators: %s", output)

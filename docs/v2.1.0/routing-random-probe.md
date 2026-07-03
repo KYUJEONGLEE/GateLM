@@ -29,6 +29,8 @@ reports/routing-probe/latest.json
 
 저장되는 JSON 리포트는 기존 기계용 필드를 유지하면서, 사람이 바로 읽을 수 있는 `한글요약` 블록도 함께 포함한다.
 
+각 샘플에는 synthetic/redacted 입력인 `redactedPrompt`를 포함한다. 이 필드는 사람이 라우팅 판단을 빠르게 검토하기 위한 평가 문맥이며, 실제 고객 raw prompt를 저장한다는 의미가 아니다.
+
 ## 해석
 
 | 항목 | 의미 |
@@ -38,7 +40,7 @@ reports/routing-probe/latest.json
 | `routingReasons` | 라우팅 사유별 분포 |
 | `latency` | 룰 기반 라우팅 판단 시간 |
 | `costEstimate` | 모든 요청을 high quality로 보내는 경우 대비 예상 비용 절감 |
-| `samples` | sampleId별 category/tier/routingReason. prompt text는 포함하지 않음 |
+| `samples` | sampleId별 redactedPrompt/category/tier/routingReason |
 
 ## 현재 한국어 random probe 특징
 

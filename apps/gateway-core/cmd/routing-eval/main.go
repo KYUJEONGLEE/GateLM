@@ -61,6 +61,7 @@ type report struct {
 	Latency              latencyStats              `json:"latency"`
 	CostEstimate         costEstimate              `json:"costEstimate"`
 	Failures             []evaluationFailure       `json:"failures"`
+	Samples              []evaluationSample        `json:"samples"`
 }
 
 type categoryStats struct {
@@ -92,10 +93,27 @@ type costEstimate struct {
 
 type evaluationFailure struct {
 	SampleID         string `json:"sampleId"`
+	RedactedPrompt   string `json:"redactedPrompt,omitempty"`
 	ExpectedCategory string `json:"expectedCategory"`
 	ActualCategory   string `json:"actualCategory"`
 	ExpectedTier     string `json:"expectedTier,omitempty"`
 	ActualTier       string `json:"actualTier,omitempty"`
+}
+
+type evaluationSample struct {
+	SampleID           string `json:"sampleId"`
+	RedactedPrompt     string `json:"redactedPrompt"`
+	ExpectedCategory   string `json:"expectedCategory"`
+	ExpectedCategoryKo string `json:"expectedCategoryKo"`
+	ActualCategory     string `json:"actualCategory"`
+	ActualCategoryKo   string `json:"actualCategoryKo"`
+	ExpectedTier       string `json:"expectedTier,omitempty"`
+	ExpectedTierKo     string `json:"expectedTierKo,omitempty"`
+	ActualTier         string `json:"actualTier"`
+	ActualTierKo       string `json:"actualTierKo"`
+	RoutingReason      string `json:"routingReason"`
+	RoutingReasonKo    string `json:"routingReasonKo"`
+	Matched            bool   `json:"matched"`
 }
 
 type probeReport struct {
@@ -120,10 +138,14 @@ type probeStat struct {
 }
 
 type probeSample struct {
-	SampleID      string `json:"sampleId"`
-	Category      string `json:"category"`
-	Tier          string `json:"tier"`
-	RoutingReason string `json:"routingReason"`
+	SampleID        string `json:"sampleId"`
+	RedactedPrompt  string `json:"redactedPrompt"`
+	Category        string `json:"category"`
+	CategoryKo      string `json:"categoryKo"`
+	Tier            string `json:"tier"`
+	TierKo          string `json:"tierKo"`
+	RoutingReason   string `json:"routingReason"`
+	RoutingReasonKo string `json:"routingReasonKo"`
 }
 
 type evaluationSummaryKo struct {
@@ -321,6 +343,21 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 		actual := decision.RoutingDecisionMaterial.Category
 		actualTier := decision.RoutingDecisionMaterial.Tier
 		latencies = append(latencies, sampleLatencies...)
+		result.Samples = append(result.Samples, evaluationSample{
+			SampleID:           record.expectedID(),
+			RedactedPrompt:     record.promptText(),
+			ExpectedCategory:   expected,
+			ExpectedCategoryKo: categoryLabelKo(expected),
+			ActualCategory:     actual,
+			ActualCategoryKo:   categoryLabelKo(actual),
+			ExpectedTier:       expectedTier,
+			ExpectedTierKo:     tierLabelKo(expectedTier),
+			ActualTier:         actualTier,
+			ActualTierKo:       tierLabelKo(actualTier),
+			RoutingReason:      decision.RoutingReason,
+			RoutingReasonKo:    routingReasonLabelKo(decision.RoutingReason),
+			Matched:            actual == expected && (expectedTier == "" || actualTier == expectedTier),
+		})
 
 		stats := result.ByCategory[expected]
 		stats.LabelKo = categoryLabelKo(expected)
@@ -331,6 +368,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 		} else {
 			result.Failures = append(result.Failures, evaluationFailure{
 				SampleID:         record.expectedID(),
+				RedactedPrompt:   record.promptText(),
 				ExpectedCategory: expected,
 				ActualCategory:   actual,
 				ExpectedTier:     expectedTier,
@@ -353,6 +391,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 			} else if actual == expected {
 				result.Failures = append(result.Failures, evaluationFailure{
 					SampleID:         record.expectedID(),
+					RedactedPrompt:   record.promptText(),
 					ExpectedCategory: expected,
 					ActualCategory:   actual,
 					ExpectedTier:     expectedTier,
@@ -432,10 +471,14 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 		result.CostEstimate.BaselineCostUnits += tierCostUnit(routing.TierHighQuality)
 		result.CostEstimate.ActualCostUnits += tierCostUnit(tier)
 		result.Samples = append(result.Samples, probeSample{
-			SampleID:      record.expectedID(),
-			Category:      category,
-			Tier:          tier,
-			RoutingReason: decision.RoutingReason,
+			SampleID:        record.expectedID(),
+			RedactedPrompt:  record.promptText(),
+			Category:        category,
+			CategoryKo:      categoryLabelKo(category),
+			Tier:            tier,
+			TierKo:          tierLabelKo(tier),
+			RoutingReason:   decision.RoutingReason,
+			RoutingReasonKo: routingReasonLabelKo(decision.RoutingReason),
 		})
 	}
 
@@ -697,6 +740,33 @@ func tierLabelKo(tier string) string {
 		return "고품질"
 	default:
 		return tier
+	}
+}
+
+func routingReasonLabelKo(reason string) string {
+	switch reason {
+	case routing.ReasonShortPromptLowCost:
+		return "짧은 일반 요청이라 저비용 티어 선택"
+	case routing.ReasonCodeHighQuality:
+		return "코드/개발 요청이라 고품질 티어 선택"
+	case routing.ReasonTranslationBalanced:
+		return "번역 요청이라 균형 티어 선택"
+	case routing.ReasonSummarizationBalanced:
+		return "요약 요청이라 균형 티어 선택"
+	case routing.ReasonExtractionJSONBalanced:
+		return "정보 추출/JSON 요청이라 균형 티어 선택"
+	case routing.ReasonSupportRefundLowCost:
+		return "환불/결제/고객지원 요청이라 저비용 티어 선택"
+	case routing.ReasonReasoningHighQuality:
+		return "비교/판단/추론 요청이라 고품질 티어 선택"
+	case routing.ReasonDefaultBalanced:
+		return "기본 라우팅 규칙으로 균형 티어 선택"
+	case routing.ReasonPinned:
+		return "사용자가 명시한 모델 선택"
+	case routing.ReasonProviderHealthFallback:
+		return "기존 후보 상태를 보고 대체 후보 선택"
+	default:
+		return reason
 	}
 }
 

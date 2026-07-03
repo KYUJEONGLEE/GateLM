@@ -96,6 +96,14 @@ try {
         "  - $Label [$($Tier.Name)]: 전체 $($Tier.Value.total), 정답 $($Tier.Value.correct), 오답 $($Tier.Value.incorrect), 정확도 $($Tier.Value.accuracy)"
     }
     ""
+    "샘플 판단 예시(최대 10개):"
+    foreach ($Sample in ($Report.samples | Select-Object -First 10)) {
+        "  - $($Sample.sampleId): $($Sample.redactedPrompt)"
+        "    예상: $($Sample.expectedCategoryKo) [$($Sample.expectedCategory)] / $($Sample.expectedTierKo) [$($Sample.expectedTier)]"
+        "    실제: $($Sample.actualCategoryKo) [$($Sample.actualCategory)] / $($Sample.actualTierKo) [$($Sample.actualTier)]"
+        "    이유: $($Sample.routingReasonKo) [$($Sample.routingReason)]"
+    }
+    ""
     "리포트 파일:          $ReportPath"
     "최신 리포트:          $LatestPath"
 }
