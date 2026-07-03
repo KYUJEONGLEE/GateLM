@@ -2594,13 +2594,6 @@ func firstPositiveFloat(values ...float64) float64 {
 	return 0
 }
 
-func positiveFloatPointer(value float64) *float64 {
-	if value <= 0 {
-		return nil
-	}
-	return &value
-}
-
 func providerCalledFromRequestContext(reqCtx *pipeline.RequestContext) bool {
 	if reqCtx == nil {
 		return false
@@ -2630,31 +2623,22 @@ func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipelin
 	}
 
 	resp.GateLM = &provider.GateLMMetadata{
-		RequestID:                   reqCtx.RequestID,
-		TenantID:                    reqCtx.TenantID,
-		ProjectID:                   reqCtx.ProjectID,
-		ApplicationID:               reqCtx.ApplicationID,
-		RequestedModel:              reqCtx.RequestedModel,
-		SelectedProvider:            reqCtx.SelectedProvider,
-		SelectedModel:               reqCtx.SelectedModel,
-		TerminalStatus:              reqCtx.Status,
-		DomainOutcomes:              domainOutcomesFromRequestContext(reqCtx),
-		CacheStatus:                 reqCtx.CacheStatus,
-		CacheType:                   reqCtx.CacheType,
-		ProviderCalled:              providerCalledFromRequestContext(reqCtx),
-		SemanticCacheHit:            reqCtx.SemanticCacheHit,
-		SemanticCacheMode:           reqCtx.SemanticCacheMode,
-		SemanticCacheWouldHit:       reqCtx.SemanticCacheWouldHit,
-		SemanticCacheWouldMiss:      reqCtx.SemanticCacheWouldMiss,
-		SemanticCandidateFound:      reqCtx.SemanticCacheCandidateFound,
-		SemanticReturnedFromCache:   reqCtx.SemanticReturnedFromCache,
-		SemanticSimilarity:          positiveFloatPointer(reqCtx.SemanticSimilarity),
-		SemanticMatchedRequestID:    reqCtx.SemanticMatchedRequestID,
-		SemanticCacheDecisionReason: reqCtx.SemanticCacheDecisionReason,
-		RoutingReason:               reqCtx.RoutingReason,
-		MaskingAction:               reqCtx.MaskingAction,
-		EstimatedCostUSD:            formatCostMicroUSD(reqCtx.CostMicroUSD),
-		LatencyMs:                   reqCtx.LatencyMs,
+		RequestID:        reqCtx.RequestID,
+		TenantID:         reqCtx.TenantID,
+		ProjectID:        reqCtx.ProjectID,
+		ApplicationID:    reqCtx.ApplicationID,
+		RequestedModel:   reqCtx.RequestedModel,
+		SelectedProvider: reqCtx.SelectedProvider,
+		SelectedModel:    reqCtx.SelectedModel,
+		TerminalStatus:   reqCtx.Status,
+		DomainOutcomes:   domainOutcomesFromRequestContext(reqCtx),
+		CacheStatus:      reqCtx.CacheStatus,
+		CacheType:        reqCtx.CacheType,
+		ProviderCalled:   providerCalledFromRequestContext(reqCtx),
+		RoutingReason:    reqCtx.RoutingReason,
+		MaskingAction:    reqCtx.MaskingAction,
+		EstimatedCostUSD: formatCostMicroUSD(reqCtx.CostMicroUSD),
+		LatencyMs:        reqCtx.LatencyMs,
 	}
 }
 
