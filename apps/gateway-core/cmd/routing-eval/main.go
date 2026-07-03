@@ -21,6 +21,10 @@ const (
 	defaultClassifierVersion = "rule_based_category_classifier_v1"
 	defaultDatasetPath       = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
 	defaultLatencyIterations = 20
+
+	tierCostLowCost     = 1
+	tierCostBalanced    = 3
+	tierCostHighQuality = 10
 )
 
 type datasetRecord struct {
@@ -369,17 +373,23 @@ func percentile(sortedValues []float64, p float64) float64 {
 
 func tierCostUnits() map[string]float64 {
 	return map[string]float64{
-		routing.TierLowCost:     1,
-		routing.TierBalanced:    3,
-		routing.TierHighQuality: 10,
+		routing.TierLowCost:     tierCostLowCost,
+		routing.TierBalanced:    tierCostBalanced,
+		routing.TierHighQuality: tierCostHighQuality,
 	}
 }
 
 func tierCostUnit(tier string) float64 {
-	if value, ok := tierCostUnits()[tier]; ok {
-		return value
+	switch tier {
+	case routing.TierLowCost:
+		return tierCostLowCost
+	case routing.TierBalanced:
+		return tierCostBalanced
+	case routing.TierHighQuality:
+		return tierCostHighQuality
+	default:
+		return tierCostBalanced
 	}
-	return tierCostUnits()[routing.TierBalanced]
 }
 
 func marshalReport(report report, pretty bool) ([]byte, error) {
