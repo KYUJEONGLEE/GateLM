@@ -105,7 +105,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "Display name",
     discoverModels: "Discover models",
-    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible providers such as OpenAI and Gemini.",
+    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible and Anthropic providers.",
     empty: "No provider connections found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture provider connection.",
     management: "management",
@@ -139,7 +139,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "표시 이름",
     discoverModels: "모델 조회",
-    discoveryOpenAiOnly: "모델 조회는 OpenAI, Gemini 같은 OpenAI 호환 Provider에서 활성화됩니다.",
+    discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 및 Anthropic Provider에서 활성화됩니다.",
     empty: "Provider connection이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture Provider connection을 표시 중입니다.",
     management: "관리",
@@ -362,11 +362,14 @@ export function ProviderConnectionManagement({
     setFormValues({
       ...emptyProviderForm,
       adapterType: preset.adapterType,
+      apiVersion: getProviderConfigString(preset.providerConfig, "apiVersion", ""),
       baseUrl: preset.baseUrl,
       credentialRequired: preset.credentialRequired,
       displayName: preset.displayName,
+      models: getProviderConfigModels(preset.providerConfig).join(", "),
       modelsEndpointPath: preset.modelsEndpointPath,
       provider: preset.providerKey,
+      requestFormat: getPresetRequestFormat(preset),
       resolver: preset.defaultResolver,
       timeoutMs: preset.defaultTimeoutMs
     });
@@ -738,7 +741,7 @@ function getAvailableProviderModels(
 }
 
 function isDiscoverSupportedProvider(adapterType: string) {
-  return adapterType === "openai_compatible" || adapterType === "mock";
+  return adapterType === "openai_compatible" || adapterType === "anthropic" || adapterType === "mock";
 }
 
 function getProviderDiscoveryErrorMessage(
@@ -824,6 +827,7 @@ function isChatCompletionModelName(modelName: string) {
     normalizedModelName.startsWith("o1") ||
     normalizedModelName.startsWith("o3") ||
     normalizedModelName.startsWith("o4") ||
+    normalizedModelName.startsWith("claude-") ||
     normalizedModelName.startsWith("gemini-") ||
     normalizedModelName.startsWith("chat-")
   );
@@ -897,17 +901,49 @@ function getProviderConfigRequestFormat(
     return "mock_chat_completions";
   }
 
+  if (requestFormat === "anthropic_messages") {
+    return "anthropic_messages";
+  }
+
   if (requestFormat === "openai_chat_completions") {
     return "openai_chat_completions";
   }
 
-  return provider.provider === "mock"
-    ? "mock_chat_completions"
+  if (provider.provider === "mock") {
+    return "mock_chat_completions";
+  }
+
+  return getDefaultAdapterType(provider) === "anthropic"
+    ? "anthropic_messages"
     : "openai_chat_completions";
 }
 
 function getDefaultAdapterType(provider: ProviderConnectionRecord) {
-  return provider.provider === "mock" ? "mock" : "openai_compatible";
+  if (provider.provider === "mock") {
+    return "mock";
+  }
+
+  return provider.provider === "claude" ? "anthropic" : "openai_compatible";
+}
+
+function getPresetRequestFormat(
+  preset: ProviderPresetRecord
+): ProviderConnectionFormValues["requestFormat"] {
+  const requestFormat = preset.providerConfig?.requestFormat;
+
+  if (
+    requestFormat === "openai_chat_completions" ||
+    requestFormat === "anthropic_messages" ||
+    requestFormat === "mock_chat_completions"
+  ) {
+    return requestFormat;
+  }
+
+  if (preset.adapterType === "anthropic") {
+    return "anthropic_messages";
+  }
+
+  return preset.adapterType === "mock" ? "mock_chat_completions" : "openai_chat_completions";
 }
 
 function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {

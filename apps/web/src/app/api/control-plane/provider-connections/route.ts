@@ -89,6 +89,7 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     (record.failureMode === "fail_closed" ||
       record.failureMode === "fail_open_to_fallback") &&
     (record.requestFormat === "openai_chat_completions" ||
+      record.requestFormat === "anthropic_messages" ||
       record.requestFormat === "mock_chat_completions") &&
     typeof timeoutMs === "number" &&
     Number.isInteger(timeoutMs) &&

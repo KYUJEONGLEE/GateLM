@@ -21,6 +21,7 @@ type SemanticCacheServiceConfig struct {
 	HitPolicy                *SemanticCacheHitPolicy
 	StorePolicy              *SemanticCacheStorePolicy
 	EmbeddingInputNormalizer SemanticCacheEmbeddingInputNormalizer
+	Reranker                 SemanticCacheReranker
 }
 
 type SemanticCacheLookupRequest struct {
@@ -147,6 +148,7 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 	result.IntentMaterial = intentMaterial
 	result.EmbeddingInput = embeddingInput
 	result = s.applyHitPolicy(result, intentMaterial, threshold)
+	result = s.applyReranker(ctx, result, intentMaterial, threshold)
 	return result, result.Decision(true, providerName, s.config.PolicyVersion), err
 }
 
@@ -317,9 +319,109 @@ func (s SemanticCacheService) applyHitPolicy(result SemanticCacheSearchResult, r
 	return result
 }
 
+func (s SemanticCacheService) applyReranker(ctx context.Context, result SemanticCacheSearchResult, requestMaterial SemanticCacheIntentMaterial, threshold float64) SemanticCacheSearchResult {
+	if !result.Hit || len(result.Matches) == 0 || s.config.Reranker == nil {
+		return result
+	}
+
+	bestRejectedReason := ""
+	bestRejectedScore := 0.0
+	bestRejectedThreshold := threshold
+	bestRejectedSimilarity := 0.0
+	bestRejectedApplied := false
+	for rank, match := range result.Matches {
+		rerankResult, err := s.config.Reranker.Rerank(ctx, SemanticCacheRerankRequest{
+			Category:                   requestMaterial.Category,
+			RequestIntentMaterial:      requestMaterial.Clone(),
+			CandidateIntentMaterial:    match.Entry.IntentMaterial.Clone(),
+			SemanticSimilarity:         match.Similarity,
+			Threshold:                  threshold,
+			SemanticCachePolicyVersion: s.config.PolicyVersion,
+			NormalizationVersion:       result.EmbeddingInput.NormalizationVersion,
+			EmbeddingProvider:          s.EmbeddingProviderName(),
+			CandidateRank:              rank + 1,
+		})
+		if err != nil {
+			result.Hit = false
+			result.MatchedEntry = nil
+			result.Matches = nil
+			result.Reason = semanticCacheRerankerFailureReason(err)
+			result.RerankerApplied = true
+			result.RerankerPassed = false
+			result.RerankerScore = 0
+			result.RerankerThreshold = threshold
+			result.RerankerDecisionReason = result.Reason
+			return result
+		}
+		rerankResult = normalizeSemanticCacheRerankResult(rerankResult, match.Similarity, threshold)
+		if !rerankResult.Applied || (rerankResult.Passed && rerankResult.ProviderBypassAllowed) {
+			best := match.Entry.Clone()
+			result.Hit = true
+			result.MatchedEntry = &best
+			result.Similarity = match.Similarity
+			result.Reason = SemanticCacheReasonHit
+			result.Matches = []SemanticCacheMatch{match}
+			result.RerankerApplied = rerankResult.Applied
+			result.RerankerPassed = true
+			result.RerankerScore = rerankResult.Score
+			result.RerankerThreshold = rerankResult.Threshold
+			result.RerankerDecisionReason = rerankResult.DecisionReason
+			return result
+		}
+		if bestRejectedReason == "" {
+			bestRejectedReason = firstSemanticReason(rerankResult.DecisionReason, SemanticCacheReasonRerankerScoreMiss)
+			bestRejectedScore = rerankResult.Score
+			bestRejectedThreshold = rerankResult.Threshold
+			bestRejectedSimilarity = match.Similarity
+			bestRejectedApplied = rerankResult.Applied
+		}
+	}
+
+	result.Hit = false
+	result.MatchedEntry = nil
+	result.Matches = nil
+	result.Similarity = bestRejectedSimilarity
+	result.Reason = firstSemanticReason(bestRejectedReason, SemanticCacheReasonRerankerScoreMiss)
+	result.RerankerApplied = bestRejectedApplied
+	result.RerankerPassed = false
+	result.RerankerScore = bestRejectedScore
+	result.RerankerThreshold = bestRejectedThreshold
+	result.RerankerDecisionReason = result.Reason
+	return result
+}
+
 func (s SemanticCacheService) normalizeEmbeddingInput(text string) (NormalizedEmbeddingInput, bool) {
 	normalizer := s.config.EmbeddingInputNormalizer
 	return normalizer.NormalizeText(text)
+}
+
+func normalizeSemanticCacheRerankResult(result SemanticCacheRerankResult, similarity float64, threshold float64) SemanticCacheRerankResult {
+	if result.Threshold <= 0 || result.Threshold > 1 {
+		result.Threshold = threshold
+	}
+	if result.Score < 0 || result.Score > 1 {
+		result.Score = similarity
+	}
+	if !result.Applied {
+		result.Passed = true
+		result.ProviderBypassAllowed = true
+		result.DecisionReason = firstSemanticReason(result.DecisionReason, SemanticCacheReasonRerankerDisabled)
+		return result
+	}
+	if result.Passed {
+		result.ProviderBypassAllowed = true
+		result.DecisionReason = firstSemanticReason(result.DecisionReason, SemanticCacheReasonRerankerPass)
+		return result
+	}
+	result.DecisionReason = firstSemanticReason(result.DecisionReason, SemanticCacheReasonRerankerScoreMiss)
+	return result
+}
+
+func semanticCacheRerankerFailureReason(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return SemanticCacheReasonRerankerTimeout
+	}
+	return SemanticCacheReasonRerankerProviderFailure
 }
 
 func firstSemanticReason(values ...string) string {

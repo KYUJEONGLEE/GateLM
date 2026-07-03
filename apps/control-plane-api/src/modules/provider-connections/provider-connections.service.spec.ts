@@ -354,6 +354,72 @@ describe('ProviderConnectionsService', () => {
     expect(JSON.stringify(result)).not.toContain('Bearer ');
   });
 
+  it('discovers Claude models through Anthropic model discovery headers', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000917';
+    const providerCredential = 'synthetic-provider-credential';
+    process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP = `provider_credential:${providerId}=CLAUDE_PROVIDER_CREDENTIAL`;
+    process.env.CLAUDE_PROVIDER_CREDENTIAL = providerCredential;
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.anthropic.com/v1',
+        provider: 'claude',
+        resolver: 'environment',
+        secretRef: `provider_credential:${providerId}`,
+        providerConfig: {
+          adapterType: 'anthropic',
+          apiVersion: '2023-06-01',
+          requestFormat: 'anthropic_messages',
+        },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'claude-synthetic-sonnet',
+            type: 'model',
+            display_name: 'Claude Synthetic Sonnet',
+            created_at: '2026-07-02T00:00:00.000Z',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'claude');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.anthropic.com/v1/models',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'anthropic-version': '2023-06-01',
+          'x-api-key': providerCredential,
+        }),
+        method: 'GET',
+      }),
+    );
+    expect(result).toMatchObject({
+      adapterType: 'anthropic',
+      credentialRequired: true,
+      modelCount: 1,
+      models: [
+        expect.objectContaining({
+          displayName: 'Claude Synthetic Sonnet',
+          modelName: 'claude-synthetic-sonnet',
+          object: 'model',
+          provider: 'claude',
+          providerId,
+        }),
+      ],
+      provider: 'claude',
+      providerId,
+    });
+    expect(JSON.stringify(result)).not.toContain(providerCredential);
+  });
+
   it('strips query and fragment material from provider model discovery endpoints', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });

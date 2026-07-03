@@ -435,6 +435,101 @@ func TestOpenAIEmbeddingProviderNormalizationEvalKoreanSimilarityDistribution(t 
 	}
 }
 
+func TestSemanticCacheRerankerOpenAIEvalKoreanSimilarityDistribution(t *testing.T) {
+	if os.Getenv("SEMANTIC_CACHE_OPENAI_EVAL") != "1" {
+		t.Skip("SEMANTIC_CACHE_OPENAI_EVAL=1일 때만 실제 OpenAI reranker eval을 실행한다")
+	}
+	if provider := strings.TrimSpace(os.Getenv("SEMANTIC_CACHE_EMBEDDING_PROVIDER")); provider != "" && provider != SemanticCacheEmbeddingProviderOpenAI {
+		t.Skip("SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai 또는 빈 값일 때만 OpenAI reranker eval을 실행한다")
+	}
+	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	if apiKey == "" {
+		t.Skip("OPENAI_API_KEY가 없어 실제 OpenAI reranker eval을 건너뛴다")
+	}
+
+	pairs := normalizationEvalPairs()
+	normalizer := NewSemanticCacheEmbeddingInputNormalizer(SemanticCacheEmbeddingInputNormalizationConfig{})
+	thresholds := []float64{0.35, 0.45, 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.92}
+
+	for _, modelName := range testOpenAIEmbeddingEvalModels() {
+		provider, err := NewOpenAIEmbeddingProvider(OpenAIEmbeddingProviderConfig{
+			APIKey:     apiKey,
+			BaseURL:    os.Getenv("SEMANTIC_CACHE_OPENAI_BASE_URL"),
+			ModelName:  modelName,
+			Dimensions: testOpenAIEmbeddingDimensions(t),
+			Timeout:    20 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("OpenAIEmbeddingProvider 생성 실패: %v", err)
+		}
+
+		vectors := map[string][]float64{}
+		embed := func(label string, text string) []float64 {
+			t.Helper()
+			key := modelName + "\x00" + text
+			if vector, ok := vectors[key]; ok {
+				return vector
+			}
+			result, err := provider.embedRawForEval(context.Background(), text)
+			if err != nil {
+				t.Fatalf("%s embedding 생성 실패: %v", label, err)
+			}
+			if len(result.Vector) == 0 {
+				t.Fatalf("%s embedding vector가 비어 있으면 안 됨", label)
+			}
+			vectors[key] = result.Vector
+			return result.Vector
+		}
+
+		evaluated := make([]openAIEmbeddingEvalPair, 0, len(pairs))
+		t.Logf("OpenAI semantic cache reranker eval model=%s pair_count=%d", modelName, len(pairs))
+		for _, pair := range pairs {
+			leftInput, leftOK := normalizer.NormalizeMessages(normalizationEvalMessages(maskOpenAIEmbeddingEvalText(pair.leftText)))
+			rightInput, rightOK := normalizer.NormalizeMessages(normalizationEvalMessages(maskOpenAIEmbeddingEvalText(pair.rightText)))
+			if !leftOK || !rightOK {
+				t.Fatalf("model=%s pair=%s normalized embedding input 생성 실패", modelName, pair.id)
+			}
+
+			left := embed(pair.leftLabel, leftInput.Text)
+			right := embed(pair.rightLabel, rightInput.Text)
+			similarity, err := CosineSimilarity(left, right)
+			if err != nil {
+				t.Fatalf("%s cosine 계산 실패: %v", pair.id, err)
+			}
+			pair.similarity = similarity
+			evaluated = append(evaluated, pair)
+			t.Logf("model=%s pair=%s kind=%s similarity=%.6f policyGuardAllowsHit=%t", modelName, pair.id, pair.kind, pair.similarity, pair.policyGuardAllowsHit)
+		}
+
+		for _, threshold := range thresholds {
+			summary := summarizeOpenAIEmbeddingRerankerEvalPairs(evaluated, threshold)
+			t.Logf(
+				"model=%s threshold=%.2f rawPositiveAbove=%d/%d rawDynamicNegativeAbove=%d/%d rawHardNegativeAbove=%d/%d rawUnrelatedAbove=%d/%d rerankerPositivePass=%d/%d rerankerDynamicNegativePass=%d/%d rerankerHardNegativePass=%d/%d rerankerUnrelatedPass=%d/%d guardedBeforeReranker=%d/%d",
+				modelName,
+				threshold,
+				summary.rawPositiveAbove,
+				summary.positiveTotal,
+				summary.rawDynamicNegativeAbove,
+				summary.dynamicNegativeTotal,
+				summary.rawHardNegativeAbove,
+				summary.hardNegativeTotal,
+				summary.rawUnrelatedAbove,
+				summary.unrelatedTotal,
+				summary.rerankerPositivePass,
+				summary.positiveTotal,
+				summary.rerankerDynamicNegativePass,
+				summary.dynamicNegativeTotal,
+				summary.rerankerHardNegativePass,
+				summary.hardNegativeTotal,
+				summary.rerankerUnrelatedPass,
+				summary.unrelatedTotal,
+				summary.guardedBeforeReranker,
+				len(evaluated),
+			)
+		}
+	}
+}
+
 type openAIEmbeddingEvalPair struct {
 	id                   string
 	kind                 string
@@ -461,6 +556,22 @@ type openAIEmbeddingEvalSummary struct {
 	unrelatedAbove         int
 	unrelatedTotal         int
 	policyGuardHitPossible int
+}
+
+type openAIEmbeddingRerankerEvalSummary struct {
+	positiveTotal               int
+	dynamicNegativeTotal        int
+	hardNegativeTotal           int
+	unrelatedTotal              int
+	rawPositiveAbove            int
+	rawDynamicNegativeAbove     int
+	rawHardNegativeAbove        int
+	rawUnrelatedAbove           int
+	rerankerPositivePass        int
+	rerankerDynamicNegativePass int
+	rerankerHardNegativePass    int
+	rerankerUnrelatedPass       int
+	guardedBeforeReranker       int
 }
 
 func summarizeOpenAIEmbeddingEvalPairs(pairs []openAIEmbeddingEvalPair, threshold float64) openAIEmbeddingEvalSummary {
@@ -498,17 +609,79 @@ func summarizeOpenAIEmbeddingEvalPairs(pairs []openAIEmbeddingEvalPair, threshol
 	return summary
 }
 
+func summarizeOpenAIEmbeddingRerankerEvalPairs(pairs []openAIEmbeddingEvalPair, threshold float64) openAIEmbeddingRerankerEvalSummary {
+	var summary openAIEmbeddingRerankerEvalSummary
+	for _, pair := range pairs {
+		above := pair.similarity >= threshold
+		rerankerPass := above && pair.policyGuardAllowsHit && pair.kind == "positive"
+		if above && !pair.policyGuardAllowsHit {
+			summary.guardedBeforeReranker++
+		}
+
+		switch pair.kind {
+		case "positive":
+			summary.positiveTotal++
+			if above {
+				summary.rawPositiveAbove++
+			}
+			if rerankerPass {
+				summary.rerankerPositivePass++
+			}
+		case "dynamic_negative":
+			summary.dynamicNegativeTotal++
+			if above {
+				summary.rawDynamicNegativeAbove++
+			}
+			if rerankerPass {
+				summary.rerankerDynamicNegativePass++
+			}
+		case "hard_negative":
+			summary.hardNegativeTotal++
+			if above {
+				summary.rawHardNegativeAbove++
+			}
+			if rerankerPass {
+				summary.rerankerHardNegativePass++
+			}
+		case "unrelated":
+			summary.unrelatedTotal++
+			if above {
+				summary.rawUnrelatedAbove++
+			}
+			if rerankerPass {
+				summary.rerankerUnrelatedPass++
+			}
+		default:
+			panic(fmt.Sprintf("unknown OpenAI reranker eval pair kind: %s", pair.kind))
+		}
+	}
+	return summary
+}
+
 func normalizationEvalPairs() []openAIEmbeddingEvalPair {
 	return []openAIEmbeddingEvalPair{
 		{id: "positive_password_reset", kind: "positive", leftLabel: "p_password_reset_a", rightLabel: "p_password_reset_b", leftText: "비밀번호 재설정 방법 알려줘", rightText: "패스워드 초기화는 어떻게 해?", policyGuardAllowsHit: true},
 		{id: "positive_usage_menu_location", kind: "positive", leftLabel: "p_usage_menu_a", rightLabel: "p_usage_menu_b", leftText: "사용량은 어디서 확인해?", rightText: "API 사용량 확인 화면은 어디야?", policyGuardAllowsHit: true},
 		{id: "positive_usage_dashboard_location", kind: "positive", leftLabel: "p_usage_dashboard_a", rightLabel: "p_usage_dashboard_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "월간 사용량 대시보드 메뉴 어디야?", policyGuardAllowsHit: true},
+		{id: "positive_usage_token_dashboard_location_realistic", kind: "positive", leftLabel: "p_usage_token_dashboard_a", rightLabel: "p_usage_token_dashboard_b", leftText: "이번 달 API 사용량 확인하는 화면이 어디에 있어?", rightText: "관리 콘솔에서 월간 토큰 사용량 보는 메뉴 알려줘", policyGuardAllowsHit: true},
+		{id: "positive_usage_cost_report_location_realistic", kind: "positive", leftLabel: "p_usage_cost_report_a", rightLabel: "p_usage_cost_report_b", leftText: "비용 리포트 메뉴 위치 알려줘", rightText: "프로젝트별 비용 통계 화면 어디서 봐?", policyGuardAllowsHit: true},
+		{id: "positive_account_password_reset_realistic", kind: "positive", leftLabel: "p_account_password_reset_a", rightLabel: "p_account_password_reset_b", leftText: "로그인 비밀번호를 잊어버렸어요 어디서 다시 설정하나요?", rightText: "비번 까먹었는데 재설정 링크 받는 법 알려줘", policyGuardAllowsHit: true},
+		{id: "positive_account_app_token_create_realistic", kind: "positive", leftLabel: "p_account_app_token_a", rightLabel: "p_account_app_token_b", leftText: "서버에서 쓸 App Token 발급 위치 알려줘", rightText: "애플리케이션 토큰 새로 만드는 메뉴가 어디야?", policyGuardAllowsHit: true},
 		{id: "dynamic_usage_current_month", kind: "dynamic_negative", leftLabel: "d_usage_static_a", rightLabel: "d_usage_dynamic_b", leftText: "사용량 메뉴 위치 알려줘", rightText: "내 이번 달 사용량 보여줘", policyGuardAllowsHit: false},
 		{id: "dynamic_usage_project_cost", kind: "dynamic_negative", leftLabel: "d_usage_screen_a", rightLabel: "d_cost_dynamic_b", leftText: "API 사용량 확인 화면은 어디야?", rightText: "현재 프로젝트별 비용 알려줘", policyGuardAllowsHit: false},
 		{id: "dynamic_usage_today_tokens", kind: "dynamic_negative", leftLabel: "d_usage_stats_a", rightLabel: "d_tokens_dynamic_b", leftText: "사용량 통계 화면 위치 알려줘", rightText: "오늘 토큰 사용량 몇이야", policyGuardAllowsHit: false},
+		{id: "dynamic_usage_dashboard_vs_actual_project_tokens_realistic", kind: "dynamic_negative", leftLabel: "d_usage_dashboard_static_a", rightLabel: "d_project_tokens_dynamic_b", leftText: "월간 사용량 대시보드 메뉴 어디야?", rightText: "이번 달 우리 프로젝트 토큰 얼마나 썼어?", policyGuardAllowsHit: false},
+		{id: "dynamic_usage_cost_report_vs_actual_bill_realistic", kind: "dynamic_negative", leftLabel: "d_cost_report_static_a", rightLabel: "d_actual_bill_dynamic_b", leftText: "비용 리포트 메뉴 위치 알려줘", rightText: "이번 달 OpenAI 비용 얼마 나왔어?", policyGuardAllowsHit: false},
+		{id: "dynamic_account_api_key_create_vs_show_secret_realistic", kind: "dynamic_negative", leftLabel: "d_api_key_create_static_a", rightLabel: "d_api_key_show_secret_b", leftText: "API Key 발급 메뉴 어디야?", rightText: "내 API Key 값 다시 보여줘", policyGuardAllowsHit: false},
 		{id: "hard_negative_refund_vs_cancel", kind: "hard_negative", leftLabel: "h_refund_shipping_a", rightLabel: "h_order_cancel_b", leftText: "배송비도 환불되나요?", rightText: "주문 취소하고 싶어요", policyGuardAllowsHit: false},
 		{id: "hard_negative_return_shipping_vs_exchange", kind: "hard_negative", leftLabel: "h_return_shipping_a", rightLabel: "h_exchange_b", leftText: "반품하면 배송비도 돌려받나요?", rightText: "교환 신청은 어디서 하나요?", policyGuardAllowsHit: false},
+		{id: "hard_negative_api_key_create_vs_delete_realistic", kind: "hard_negative", leftLabel: "h_api_key_create_a", rightLabel: "h_api_key_delete_b", leftText: "API Key 새로 발급하는 방법 알려줘", rightText: "API Key 삭제하거나 폐기하는 방법 알려줘", policyGuardAllowsHit: false},
+		{id: "hard_negative_password_reset_vs_account_delete_realistic", kind: "hard_negative", leftLabel: "h_password_reset_a", rightLabel: "h_account_delete_b", leftText: "비밀번호 다시 설정하고 싶어요", rightText: "계정 삭제 신청은 어디서 해?", policyGuardAllowsHit: false},
+		{id: "hard_negative_refund_policy_vs_order_cancel_realistic", kind: "hard_negative", leftLabel: "h_refund_policy_a", rightLabel: "h_order_cancel_policy_b", leftText: "배송비 환불 기준 알려줘", rightText: "주문 취소는 언제까지 가능해?", policyGuardAllowsHit: false},
+		{id: "hard_negative_refund_request_vs_exchange_menu_realistic", kind: "hard_negative", leftLabel: "h_refund_request_a", rightLabel: "h_exchange_menu_b", leftText: "환불 접수 어디서 해?", rightText: "교환 신청 메뉴가 어디야?", policyGuardAllowsHit: false},
 		{id: "unrelated_password_vs_refund", kind: "unrelated", leftLabel: "u_password_a", rightLabel: "u_refund_b", leftText: "비밀번호 재설정 방법 알려줘", rightText: "배송비도 환불되나요?", policyGuardAllowsHit: false},
+		{id: "unrelated_usage_dashboard_vs_password_reset_realistic", kind: "unrelated", leftLabel: "u_usage_dashboard_a", rightLabel: "u_password_reset_b", leftText: "사용량 대시보드 메뉴 어디야?", rightText: "비밀번호 재설정 링크가 안 와요", policyGuardAllowsHit: false},
+		{id: "unrelated_app_token_vs_refund_realistic", kind: "unrelated", leftLabel: "u_app_token_a", rightLabel: "u_refund_request_b", leftText: "App Token 만드는 화면 알려줘", rightText: "환불 접수 진행 상태는 어디서 확인해?", policyGuardAllowsHit: false},
 	}
 }
 

@@ -52,6 +52,26 @@
       "delete": ["삭제", "삭제하는", "탈퇴", "없애"],
       "usage": ["사용량", "이용량", "사용 통계", "사용량 통계"],
       "usage_help": ["어디서", "어디야", "위치", "메뉴", "화면", "확인 방법", "확인하는 방법", "보는 방법"],
+      "rps_definition": ["RPS 뜻", "RPS 의미", "RPS란", "RPS가 무슨 의미", "RPS가 정확히 무슨 의미", "What does RPS mean", "Explain RPS", "What does RPS stand for", "Define RPS", "Define RPS in server performance", "What is requests per second", "Explain requests per second", "What is the meaning of requests per second", "requests per second 설명", "초당 요청 수가 뭐야", "초당 요청수가 뭐야"],
+      "tps_definition": ["TPS 뜻", "TPS 의미", "TPS란", "What does TPS mean", "Explain TPS", "What does TPS stand for", "Define TPS", "What is transactions per second", "Explain transactions per second", "transactions per second 설명", "초당 트랜잭션이 뭐야"],
+      "latency_definition": ["latency 뜻", "latency 의미", "latency란", "레이턴시 뜻", "레이턴시 의미", "레이턴시란", "지연 시간이 뭐야", "What does latency mean", "Explain latency", "Define latency"],
+      "throughput_definition": ["throughput 뜻", "throughput 의미", "throughput이 뭐야", "처리량 뜻", "처리량이 뭐야", "What does throughput mean", "Explain throughput", "Define throughput"],
+      "error_rate_definition": ["error rate 뜻", "error rate 의미", "에러율 뜻", "오류율 뜻", "실패율 뜻", "What does error rate mean", "Explain error rate", "Define error rate"],
+      "rps_tps_compare": ["RPS TPS 차이", "RPS와 TPS 차이", "RPS랑 TPS 차이", "difference between RPS and TPS", "RPS and TPS difference", "RPS vs TPS", "RPS versus TPS"],
+      "help_center_location": ["도움말 어디", "도움말 센터", "헬프센터", "고객센터 어디", "문의하기 어디", "지원 문의 어디", "help center", "contact support", "support page"],
+      "billing_invoice_location": ["청구서 어디", "청구서 메뉴", "인보이스 어디", "인보이스 메뉴", "영수증 어디", "결제 내역 어디", "invoice", "billing invoice", "receipt"],
+      "billing_payment_method_location": ["결제수단 어디", "결제 수단 어디", "카드 변경 어디", "카드 등록 어디", "payment method", "billing card", "change card"],
+      "team_member_invite_location": ["팀원 초대", "멤버 초대", "사용자 초대", "동료 초대", "invite member", "invite teammate", "team invite"],
+      "project_settings_location": ["프로젝트 설정", "프로젝트 세팅", "project settings", "project configuration", "프로젝트 이름 변경", "프로젝트 정보 수정"],
+      "api_docs_location": ["API 문서", "API docs", "developer docs", "개발자 문서", "문서 어디", "API reference", "API 레퍼런스"],
+      "status_page_location": ["상태 페이지", "서비스 상태", "장애 공지", "장애 현황", "status page", "service status", "system status"],
+      "release_notes_location": ["릴리즈 노트", "업데이트 내역", "변경사항", "배포 노트", "changelog", "release notes", "what's new"],
+      "profile_settings_location": ["프로필 설정", "내 프로필", "이름 변경", "이메일 변경", "profile settings", "my profile", "change profile"],
+      "security_settings_location": ["보안 설정", "2단계 인증", "이중 인증", "MFA 설정", "2FA 설정", "security settings", "two factor", "multi factor"],
+      "notification_settings_location": ["알림 설정", "이메일 알림", "알림 끄기", "notification settings", "email notification", "turn off notifications"],
+      "team_role_permission_location": ["권한 설정", "역할 변경", "관리자 권한", "멤버 권한", "role permissions", "permission settings", "change role"],
+      "billing_plan_location": ["요금제 어디", "요금제 확인", "가격표 어디", "플랜 확인", "pricing page", "plan page", "billing plan"],
+      "data_export_location": ["데이터 내보내기", "데이터 export", "내보내기 메뉴", "export data", "data export", "download data"],
       "monthly": ["이번 달", "월간", "당월"],
       "refund": ["환불", "환급", "돌려받"],
       "refund_request": ["환불 접수", "환불 신청"],
@@ -114,6 +134,186 @@
         "usageAnswerType": "static_guidance"
       },
       "priority": 80
+    },
+    "performance.rps_definition": {
+      "category": "general",
+      "matchAll": ["rps_definition"],
+      "requiredSlots": {
+        "performanceConcept": "rps",
+        "performanceAnswerType": "definition"
+      },
+      "priority": 75
+    },
+    "performance.tps_definition": {
+      "category": "general",
+      "matchAll": ["tps_definition"],
+      "requiredSlots": {
+        "performanceConcept": "tps",
+        "performanceAnswerType": "definition"
+      },
+      "priority": 75
+    },
+    "performance.latency_definition": {
+      "category": "general",
+      "matchAll": ["latency_definition"],
+      "requiredSlots": {
+        "performanceConcept": "latency",
+        "performanceAnswerType": "definition"
+      },
+      "priority": 75
+    },
+    "performance.throughput_definition": {
+      "category": "general",
+      "matchAll": ["throughput_definition"],
+      "requiredSlots": {
+        "performanceConcept": "throughput",
+        "performanceAnswerType": "definition"
+      },
+      "priority": 75
+    },
+    "performance.error_rate_definition": {
+      "category": "general",
+      "matchAll": ["error_rate_definition"],
+      "requiredSlots": {
+        "performanceConcept": "error_rate",
+        "performanceAnswerType": "definition"
+      },
+      "priority": 75
+    },
+    "performance.rps_tps_compare": {
+      "category": "general",
+      "matchAll": ["rps_tps_compare"],
+      "requiredSlots": {
+        "performanceConceptPair": "rps_tps",
+        "performanceAnswerType": "comparison"
+      },
+      "priority": 95
+    },
+    "product.help_center_location": {
+      "category": "general",
+      "matchAll": ["help_center_location"],
+      "requiredSlots": {
+        "guideObject": "help_center",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "billing.invoice_location": {
+      "category": "general",
+      "matchAll": ["billing_invoice_location"],
+      "requiredSlots": {
+        "guideObject": "billing_invoice",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "billing.payment_method_location": {
+      "category": "general",
+      "matchAll": ["billing_payment_method_location"],
+      "requiredSlots": {
+        "guideObject": "billing_payment_method",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "team.member_invite_location": {
+      "category": "general",
+      "matchAll": ["team_member_invite_location"],
+      "requiredSlots": {
+        "guideObject": "team_member_invite",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "project.settings_location": {
+      "category": "general",
+      "matchAll": ["project_settings_location"],
+      "requiredSlots": {
+        "guideObject": "project_settings",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "developer.api_docs_location": {
+      "category": "general",
+      "matchAll": ["api_docs_location"],
+      "requiredSlots": {
+        "guideObject": "api_docs",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "product.status_page_location": {
+      "category": "general",
+      "matchAll": ["status_page_location"],
+      "requiredSlots": {
+        "guideObject": "status_page",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "product.release_notes_location": {
+      "category": "general",
+      "matchAll": ["release_notes_location"],
+      "requiredSlots": {
+        "guideObject": "release_notes",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "account.profile_settings_location": {
+      "category": "account_access",
+      "matchAll": ["profile_settings_location"],
+      "requiredSlots": {
+        "accountAction": "profile_settings_location",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "account.security_settings_location": {
+      "category": "account_access",
+      "matchAll": ["security_settings_location"],
+      "requiredSlots": {
+        "accountAction": "security_settings_location",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "product.notification_settings_location": {
+      "category": "general",
+      "matchAll": ["notification_settings_location"],
+      "requiredSlots": {
+        "guideObject": "notification_settings",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "team.role_permission_location": {
+      "category": "general",
+      "matchAll": ["team_role_permission_location"],
+      "requiredSlots": {
+        "guideObject": "team_role_permission",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "billing.plan_pricing_location": {
+      "category": "general",
+      "matchAll": ["billing_plan_location"],
+      "requiredSlots": {
+        "guideObject": "billing_plan",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
+    },
+    "product.data_export_location": {
+      "category": "general",
+      "matchAll": ["data_export_location"],
+      "requiredSlots": {
+        "guideObject": "data_export",
+        "guideAnswerType": "static_guidance"
+      },
+      "priority": 70
     },
     "support_refund.shipping_fee_refund": {
       "category": "support_refund",
@@ -178,6 +378,18 @@
       "first": "account.password_reset",
       "second": "account.account_delete",
       "reason": "Password reset and account deletion are not answer-compatible"
+    },
+    {
+      "category": "general",
+      "first": "performance.rps_definition",
+      "second": "performance.tps_definition",
+      "reason": "RPS definition and TPS definition are separate performance glossary entries"
+    },
+    {
+      "category": "general",
+      "first": "performance.rps_definition",
+      "second": "performance.rps_tps_compare",
+      "reason": "RPS definition and RPS/TPS comparison require different answers"
     },
     {
       "category": "support_refund",

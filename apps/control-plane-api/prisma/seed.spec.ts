@@ -165,7 +165,7 @@ describe('Control Plane demo seed baseline', () => {
 
     expect(tx.providerPreset.updateMany).toHaveBeenCalledWith({
       where: {
-        providerKey: { notIn: ['openai', 'gemini', 'claude'] },
+        providerKey: { notIn: ['openai', 'gemini'] },
         status: ResourceStatus.ACTIVE,
       },
       data: { status: ResourceStatus.ARCHIVED },
@@ -182,6 +182,7 @@ describe('Control Plane demo seed baseline', () => {
           credentialRequired: true,
           defaultResolver: 'environment',
           modelsEndpointPath: '/models',
+          status: ResourceStatus.ACTIVE,
         }),
       }),
     );
@@ -196,6 +197,7 @@ describe('Control Plane demo seed baseline', () => {
         create: expect.objectContaining({
           adapterType: 'anthropic',
           baseUrl: 'https://api.anthropic.com/v1',
+          status: ResourceStatus.DISABLED,
           providerConfig: expect.objectContaining({
             adapterType: 'anthropic',
             requestFormat: 'anthropic_messages',
