@@ -1977,6 +1977,158 @@ select {
   height: 38px;
 }
 
+.team-section {
+  display: grid;
+  gap: 16px;
+  padding: 22px 0;
+  border-top: 1px solid var(--border);
+}
+
+.team-section:first-of-type {
+  border-top: 0;
+}
+
+.team-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.team-section-header h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.team-section-header p {
+  max-width: 620px;
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.team-section-header > span {
+  min-width: 42px;
+  color: var(--foreground);
+  font-size: 20px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.team-section-header-with-actions {
+  align-items: center;
+}
+
+.team-create-line {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.6fr) minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.team-create-line .primary-button {
+  min-height: 42px;
+  gap: 8px;
+}
+
+.team-list {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.team-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, auto) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.team-row-main {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.5fr) minmax(220px, 1fr) minmax(130px, 0.35fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.team-row-main .policy-field {
+  gap: 5px;
+}
+
+.team-row-main input,
+.team-row-main select,
+.team-row-main textarea,
+.team-create-line input {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.team-description-field textarea {
+  min-height: 38px;
+  resize: vertical;
+}
+
+.team-row-meta {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.team-row-meta strong,
+.team-row-assigned strong {
+  color: var(--foreground);
+}
+
+.team-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.team-row-actions button,
+.team-row-attached button {
+  min-height: 36px;
+  gap: 7px;
+}
+
+.team-list-compact {
+  gap: 0;
+}
+
+.team-row-attached {
+  grid-template-columns: minmax(0, 1fr) auto minmax(180px, auto) auto;
+}
+
+.team-row-attached strong {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.team-row-attached p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.team-row-assigned {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
 .project-empty {
   margin: 0;
   color: var(--text-muted);
@@ -4817,6 +4969,29 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
     justify-content: flex-start;
   }
 
+  .team-create-line,
+  .team-row,
+  .team-row-attached {
+    grid-template-columns: 1fr;
+  }
+
+  .team-row-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-description-field {
+    grid-column: span 2;
+  }
+
+  .team-row-meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .team-row-actions {
+    justify-content: flex-start;
+  }
+
   .provider-wide-field {
     grid-column: span 2;
   }
@@ -5137,6 +5312,7 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .api-key-row-actions,
   .project-detail-actions,
   .applications-panel-heading,
+  .team-section-header,
   .team-attach-controls,
   .modal-actions,
   .model-catalog-actions {
@@ -5149,10 +5325,30 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .team-attach-controls,
   .team-attach-controls select,
   .team-attach-controls .primary-button,
+  .team-create-line .primary-button,
+  .team-row-actions,
+  .team-row-actions button,
+  .team-row-attached button,
   .modal-actions button,
   .project-detail-actions .primary-button,
   .model-catalog-actions button {
     width: 100%;
+  }
+
+  .team-section {
+    padding: 18px 0;
+  }
+
+  .team-row-main {
+    grid-template-columns: 1fr;
+  }
+
+  .team-description-field {
+    grid-column: auto;
+  }
+
+  .team-row-actions {
+    flex-direction: column;
   }
 
   .dashboard-hero-actions {
