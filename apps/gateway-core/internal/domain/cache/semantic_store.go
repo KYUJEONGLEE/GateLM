@@ -10,16 +10,28 @@ import (
 )
 
 const (
-	SemanticCacheReasonHit              = "hit"
-	SemanticCacheReasonDisabled         = "disabled"
-	SemanticCacheReasonInvalidBoundary  = "invalid_boundary"
-	SemanticCacheReasonInvalidVector    = "invalid_vector"
-	SemanticCacheReasonNoBoundaryMatch  = "boundary_miss"
-	SemanticCacheReasonThresholdMiss    = "threshold_miss"
-	SemanticCacheReasonStoreSkipped     = "store_skipped"
-	SemanticCacheReasonStored           = "stored"
-	SemanticCacheReasonPayloadUnsafe    = "payload_unsafe"
-	SemanticCacheReasonEmbeddingFailure = "embedding_failure"
+	SemanticCacheModeOff     = "off"
+	SemanticCacheModeShadow  = "shadow"
+	SemanticCacheModeEnforce = "enforce"
+
+	SemanticCacheReasonHit               = "hit"
+	SemanticCacheReasonDisabled          = "disabled"
+	SemanticCacheReasonInvalidBoundary   = "invalid_boundary"
+	SemanticCacheReasonInvalidVector     = "invalid_vector"
+	SemanticCacheReasonNoBoundaryMatch   = "boundary_miss"
+	SemanticCacheReasonThresholdMiss     = "threshold_miss"
+	SemanticCacheReasonStoreSkipped      = "store_skipped"
+	SemanticCacheReasonStored            = "stored"
+	SemanticCacheReasonPayloadUnsafe     = "payload_unsafe"
+	SemanticCacheReasonEmbeddingFailure  = "embedding_failure"
+	SemanticCacheReasonModeOff           = "semantic_cache_mode_off"
+	SemanticCacheReasonModeShadow        = "semantic_cache_mode_shadow"
+	SemanticCacheReasonShadowWouldHit    = "shadow_would_hit"
+	SemanticCacheReasonShadowWouldMiss   = "shadow_would_miss"
+	SemanticCacheReasonScopeDenied       = "rollout_scope_denied"
+	SemanticCacheReasonTenantDenied      = "tenant_scope_denied"
+	SemanticCacheReasonApplicationDenied = "application_scope_denied"
+	SemanticCacheReasonCategoryDenied    = "category_scope_denied"
 )
 
 var ErrSemanticCacheStoreUnavailable = errors.New("semantic cache store is unavailable")

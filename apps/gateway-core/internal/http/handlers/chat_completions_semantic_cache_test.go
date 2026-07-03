@@ -38,6 +38,103 @@ func TestChatCompletionsSemanticCacheDisabledKeepsExistingFlow(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsSemanticCacheModeOffBypassesLookupStoreAndHit(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+	harness.handler.SemanticCacheMode = cachekey.SemanticCacheModeOff
+
+	rr := harness.exercise(t, "sc_mode_off", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("mode=off 요청은 기존 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+		t.Fatalf("mode=off에서는 semantic lookup/store가 없어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("mode=off에서는 provider가 호출되어야 함: calls=%d", harness.provider.calls)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonModeOff {
+		t.Fatalf("mode=off reason 불일치: %q", logged.SemanticCacheDecisionReason)
+	}
+	if logged.Metadata["semanticCacheMode"] != cachekey.SemanticCacheModeOff || logged.Metadata["semanticReturnedFromCache"] != false {
+		t.Fatalf("mode=off safe metadata 불일치: %+v", logged.Metadata)
+	}
+}
+
+func TestChatCompletionsSemanticCacheDefaultModeEnforceKeepsHitPath(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+	harness.handler.SemanticCacheMode = ""
+
+	harness.exercise(t, "sc_default_enforce_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+	second := harness.exercise(t, "sc_default_enforce_second", routingAwareChatBody("auto", "패스워드 초기화는 어떻게 해?"))
+
+	if second.Code != http.StatusOK {
+		t.Fatalf("기본 mode=enforce hit 요청은 성공해야 함: status=%d body=%s", second.Code, second.Body.String())
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("기본 mode=enforce는 기존 semantic hit path를 유지해야 함: calls=%d", harness.provider.calls)
+	}
+	resp := decodeSemanticChatResponse(t, second)
+	if resp.GateLM == nil || !resp.GateLM.SemanticCacheHit || !resp.GateLM.SemanticReturnedFromCache {
+		t.Fatalf("기본 enforce semantic hit metadata 불일치: %+v", resp.GateLM)
+	}
+}
+
+func TestChatCompletionsSemanticCacheShadowWouldHitDoesNotReturnCachedResponse(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+
+	first := harness.exercise(t, "sc_shadow_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("shadow 준비용 첫 요청은 성공해야 함: status=%d body=%s", first.Code, first.Body.String())
+	}
+	harness.semantic.resetCounts()
+	harness.handler.SemanticCacheMode = cachekey.SemanticCacheModeShadow
+
+	second := harness.exercise(t, "sc_shadow_second", routingAwareChatBody("auto", "패스워드 초기화는 어떻게 해?"))
+
+	if second.Code != http.StatusOK {
+		t.Fatalf("shadow would hit 요청은 provider flow로 성공해야 함: status=%d body=%s", second.Code, second.Body.String())
+	}
+	if harness.semantic.searchCalls != 1 || harness.semantic.upsertCalls != 0 {
+		t.Fatalf("shadow wouldHit은 lookup만 하고 store/hit 반환은 없어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+	}
+	if harness.provider.calls != 2 {
+		t.Fatalf("shadow wouldHit이어도 provider가 호출되어야 함: calls=%d", harness.provider.calls)
+	}
+	resp := decodeSemanticChatResponse(t, second)
+	if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || !resp.GateLM.ProviderCalled || resp.GateLM.SemanticReturnedFromCache {
+		t.Fatalf("shadow response metadata 불일치: %+v", resp.GateLM)
+	}
+	if !resp.GateLM.SemanticCacheWouldHit || resp.GateLM.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonShadowWouldHit {
+		t.Fatalf("shadow wouldHit metadata 불일치: %+v", resp.GateLM)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheHit || !logged.SemanticCacheWouldHit || logged.SemanticReturnedFromCache {
+		t.Fatalf("shadow terminal log semantic flags 불일치: %+v", logged)
+	}
+	if logged.SemanticMatchedRequestID != "" {
+		t.Fatalf("shadow mode에서는 candidate id 원문을 노출하지 않아야 함: %q", logged.SemanticMatchedRequestID)
+	}
+	if logged.Metadata["semanticCacheMode"] != cachekey.SemanticCacheModeShadow ||
+		logged.Metadata["semanticCacheWouldHit"] != true ||
+		logged.Metadata["semanticReturnedFromCache"] != false ||
+		logged.Metadata["semanticCandidateHash"] == "" ||
+		logged.Metadata["semanticCanonicalIntent"] == "" ||
+		logged.Metadata["semanticRequiredSlotsHash"] == "" {
+		t.Fatalf("shadow safe metadata 불일치: %+v", logged.Metadata)
+	}
+	logPayload, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("shadow terminal log marshal 실패: %v", err)
+	}
+	for _, forbidden := range []string{"비밀번호 재설정 방법 알려줘", "패스워드 초기화는 어떻게 해?", testAPIKey, testAppToken, "Authorization:", "provider raw error"} {
+		if strings.Contains(string(logPayload), forbidden) {
+			t.Fatalf("shadow log에 forbidden marker가 남으면 안 됨: marker=%q log=%s", forbidden, logPayload)
+		}
+	}
+}
+
 func TestChatCompletionsSemanticCacheFirstRequestMissThenStores(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 
@@ -191,6 +288,291 @@ func TestChatCompletionsSemanticCacheCategoryDenylistBypasses(t *testing.T) {
 			if logged.CacheType == invocationlog.CacheTypeSemantic {
 				t.Fatalf("deny category는 semantic cache type으로 기록되면 안 됨: %+v", logged)
 			}
+		})
+	}
+}
+
+func TestChatCompletionsSemanticCacheRolloutScopeBypasses(t *testing.T) {
+	t.Run("tenant scope denied", func(t *testing.T) {
+		semantic := newCountingSemanticCacheService(t, true)
+		harness := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant-a", "project-a", "app-a")
+		harness.handler.SemanticCacheAllowedTenantIDs = []string{"tenant-b"}
+
+		rr := harness.exercise(t, "sc_scope_tenant", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("tenant scope 밖 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+			t.Fatalf("tenant scope 밖에서는 semantic lookup/store 금지: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+		}
+		if harness.provider.calls != 1 {
+			t.Fatalf("tenant scope 밖 provider 호출 불일치: calls=%d", harness.provider.calls)
+		}
+		logged := harness.latestLog(t)
+		if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonTenantDenied {
+			t.Fatalf("tenant scope denied reason 불일치: %q", logged.SemanticCacheDecisionReason)
+		}
+	})
+
+	t.Run("application scope denied", func(t *testing.T) {
+		semantic := newCountingSemanticCacheService(t, true)
+		harness := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant-a", "project-a", "app-a")
+		harness.handler.SemanticCacheAllowedApplicationIDs = []string{"app-b"}
+
+		rr := harness.exercise(t, "sc_scope_application", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("application scope 밖 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+			t.Fatalf("application scope 밖에서는 semantic lookup/store 금지: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+		}
+		if harness.provider.calls != 1 {
+			t.Fatalf("application scope 밖 provider 호출 불일치: calls=%d", harness.provider.calls)
+		}
+		logged := harness.latestLog(t)
+		if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonApplicationDenied {
+			t.Fatalf("application scope denied reason 불일치: %q", logged.SemanticCacheDecisionReason)
+		}
+	})
+
+	t.Run("category scope denied", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.handler.SemanticCacheAllowedCategories = []string{cachekey.SemanticCacheCategorySupportRefund}
+		harness.routes["sc_scope_category"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+		rr := harness.exercise(t, "sc_scope_category", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("category scope 밖 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+			t.Fatalf("category scope 밖에서는 semantic lookup/store 금지: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		}
+		if harness.provider.calls != 1 {
+			t.Fatalf("category scope 밖 provider 호출 불일치: calls=%d", harness.provider.calls)
+		}
+		logged := harness.latestLog(t)
+		if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonCategoryDenied {
+			t.Fatalf("category scope denied reason 불일치: %q", logged.SemanticCacheDecisionReason)
+		}
+		if logged.Metadata["semanticCacheMode"] != cachekey.SemanticCacheModeEnforce || logged.Metadata["semanticCacheEnabled"] != true {
+			t.Fatalf("scope denied safe metadata 불일치: %+v", logged.Metadata)
+		}
+	})
+}
+
+func TestChatCompletionsSemanticCacheGeneralOnlyCanaryRuntimeReturnsOnlyEligibleGeneralHit(t *testing.T) {
+	semantic := newCountingSemanticCacheService(t, true)
+	harness := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant_demo", "project_demo", "app_demo")
+	configureGeneralOnlySemanticCanary(harness)
+	harness.routes["sc_canary_general_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+	harness.routes["sc_canary_general_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+	first := harness.exercise(t, "sc_canary_general_first", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
+	second := harness.exercise(t, "sc_canary_general_second", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("general-only canary 요청은 모두 성공해야 함: first=%d second=%d body=%s", first.Code, second.Code, second.Body.String())
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("eligible general canary hit는 provider 재호출이 없어야 함: calls=%d", harness.provider.calls)
+	}
+	resp := decodeSemanticChatResponse(t, second)
+	if resp.GateLM == nil ||
+		resp.GateLM.CacheType != invocationlog.CacheTypeSemantic ||
+		!resp.GateLM.SemanticCacheHit ||
+		!resp.GateLM.SemanticReturnedFromCache ||
+		resp.GateLM.ProviderCalled ||
+		resp.GateLM.SemanticCacheMode != cachekey.SemanticCacheModeEnforce {
+		t.Fatalf("general-only canary semantic hit metadata 불일치: %+v", resp.GateLM)
+	}
+	logged := harness.latestLog(t)
+	if logged.PromptCategory != routingdomain.CategoryGeneral ||
+		logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonHit ||
+		!logged.SemanticReturnedFromCache ||
+		logged.Metadata["semanticReturnedFromCache"] != true ||
+		logged.Metadata["semanticCacheMode"] != cachekey.SemanticCacheModeEnforce ||
+		logged.Metadata["semanticCandidateFound"] != true ||
+		logged.Metadata["semanticCandidateHash"] == "" ||
+		logged.Metadata["semanticCanonicalIntent"] == "" ||
+		logged.Metadata["semanticRequiredSlotsHash"] == "" {
+		t.Fatalf("general-only canary safe metadata 불일치: %+v", logged)
+	}
+	assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t, second, logged,
+		"사용량은 어디서 확인해?",
+		"이번 달 사용량 통계를 보여줘",
+	)
+}
+
+func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksNonGeneralRuntimeReturns(t *testing.T) {
+	tests := []struct {
+		name          string
+		category      string
+		firstPrompt   string
+		secondPrompt  string
+		baseAllow     []string
+		wantReason    string
+		seedCandidate bool
+	}{
+		{
+			name:          "account_access",
+			category:      cachekey.SemanticCacheCategoryAccountAccess,
+			firstPrompt:   "API Key 발급 방법 알려줘",
+			secondPrompt:  "API Key 생성은 어디서 해?",
+			baseAllow:     []string{cachekey.SemanticCacheCategoryGeneral, cachekey.SemanticCacheCategoryAccountAccess},
+			wantReason:    cachekey.SemanticCacheReasonCategoryDenied,
+			seedCandidate: true,
+		},
+		{
+			name:          "support_refund",
+			category:      routingdomain.CategorySupportRefund,
+			firstPrompt:   "배송비도 환불되나요?",
+			secondPrompt:  "반품하면 배송비도 돌려받나요?",
+			baseAllow:     []string{cachekey.SemanticCacheCategoryGeneral, cachekey.SemanticCacheCategorySupportRefund},
+			wantReason:    cachekey.SemanticCacheReasonCategoryDenied,
+			seedCandidate: true,
+		},
+		{
+			name:         "code",
+			category:     routingdomain.CategoryCode,
+			secondPrompt: "```ts\nconst value = 1\n``` 이 코드 설명해줘",
+			wantReason:   "semantic_category_disabled",
+		},
+		{
+			name:         "translation",
+			category:     routingdomain.CategoryTranslation,
+			secondPrompt: "이 문장을 영어로 번역해줘",
+			wantReason:   "semantic_category_disabled",
+		},
+		{
+			name:         "unknown",
+			category:     routingdomain.CategoryUnknown,
+			secondPrompt: "분류 불가능한 요청",
+			wantReason:   "semantic_category_disabled",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			semantic := newCountingSemanticCacheService(t, true)
+			harness := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant_demo", "project_demo", "app_demo")
+			if len(tc.baseAllow) > 0 {
+				harness.handler.SemanticCacheAllowCategories = tc.baseAllow
+			}
+			if tc.seedCandidate {
+				harness.routes["sc_canary_seed_"+tc.name] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: tc.category}
+				seed := harness.exercise(t, "sc_canary_seed_"+tc.name, routingAwareChatBody("auto", tc.firstPrompt))
+				if seed.Code != http.StatusOK {
+					t.Fatalf("non-general candidate seed 요청은 성공해야 함: status=%d body=%s", seed.Code, seed.Body.String())
+				}
+				if semantic.upsertCalls != 1 {
+					t.Fatalf("seed 요청은 candidate entry를 저장해야 함: upsert=%d", semantic.upsertCalls)
+				}
+				semantic.resetCounts()
+			}
+			configureGeneralOnlySemanticCanary(harness)
+			harness.routes["sc_canary_block_"+tc.name] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: tc.category}
+			providerCallsBefore := harness.provider.calls
+
+			rr := harness.exercise(t, "sc_canary_block_"+tc.name, routingAwareChatBody("auto", tc.secondPrompt))
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("non-general canary 차단 후 provider flow는 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if harness.provider.calls != providerCallsBefore+1 {
+				t.Fatalf("non-general canary 차단 요청은 provider path를 사용해야 함: before=%d after=%d", providerCallsBefore, harness.provider.calls)
+			}
+			if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+				t.Fatalf("non-general canary 차단은 lookup/store 전에 일어나야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+			}
+			resp := decodeSemanticChatResponse(t, rr)
+			if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || resp.GateLM.SemanticReturnedFromCache || !resp.GateLM.ProviderCalled {
+				t.Fatalf("non-general canary 차단 metadata 불일치: %+v", resp.GateLM)
+			}
+			logged := harness.latestLog(t)
+			if logged.PromptCategory != cachekey.CanonicalSemanticCacheCategory(tc.category) ||
+				logged.SemanticCacheDecisionReason != tc.wantReason ||
+				logged.SemanticReturnedFromCache ||
+				logged.Metadata["semanticReturnedFromCache"] != false {
+				t.Fatalf("non-general canary 차단 log 불일치: wantReason=%s log=%+v", tc.wantReason, logged)
+			}
+			assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t, rr, logged, tc.firstPrompt, tc.secondPrompt)
+		})
+	}
+}
+
+func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksTenantAndApplicationOutsideScope(t *testing.T) {
+	tests := []struct {
+		name              string
+		tenantID          string
+		projectID         string
+		applicationID     string
+		allowedTenants    []string
+		allowedApps       []string
+		wantReason        string
+		wantPromptContext []string
+	}{
+		{
+			name:           "tenant outside canary",
+			tenantID:       "tenant_other",
+			projectID:      "project_demo",
+			applicationID:  "app_demo",
+			allowedTenants: []string{"tenant_demo"},
+			allowedApps:    []string{"app_demo"},
+			wantReason:     cachekey.SemanticCacheReasonTenantDenied,
+		},
+		{
+			name:           "application outside canary",
+			tenantID:       "tenant_demo",
+			projectID:      "project_demo",
+			applicationID:  "app_other",
+			allowedTenants: []string{"tenant_demo"},
+			allowedApps:    []string{"app_demo"},
+			wantReason:     cachekey.SemanticCacheReasonApplicationDenied,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			semantic := newCountingSemanticCacheService(t, true)
+			allowed := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant_demo", "project_demo", "app_demo")
+			configureGeneralOnlySemanticCanary(allowed)
+			allowed.exercise(t, "sc_canary_scope_seed", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
+			semantic.resetCounts()
+			outside := newSemanticCacheHarnessWithIdentity(t, semantic, tc.tenantID, tc.projectID, tc.applicationID)
+			configureGeneralOnlySemanticCanary(outside)
+			outside.handler.SemanticCacheAllowedTenantIDs = tc.allowedTenants
+			outside.handler.SemanticCacheAllowedApplicationIDs = tc.allowedApps
+			outside.routes["sc_canary_scope_outside"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+			rr := outside.exercise(t, "sc_canary_scope_outside", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("scope 밖 general 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if outside.provider.calls != 1 {
+				t.Fatalf("scope 밖 general 요청은 provider path를 사용해야 함: calls=%d", outside.provider.calls)
+			}
+			if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+				t.Fatalf("scope 밖 요청은 semantic lookup/store 전에 차단되어야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+			}
+			resp := decodeSemanticChatResponse(t, rr)
+			if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || resp.GateLM.SemanticReturnedFromCache || !resp.GateLM.ProviderCalled {
+				t.Fatalf("scope 밖 response metadata 불일치: %+v", resp.GateLM)
+			}
+			logged := outside.latestLog(t)
+			if logged.SemanticCacheDecisionReason != tc.wantReason ||
+				logged.SemanticReturnedFromCache ||
+				logged.Metadata["semanticReturnedFromCache"] != false ||
+				logged.Metadata["semanticCacheMode"] != cachekey.SemanticCacheModeEnforce {
+				t.Fatalf("scope 밖 safe metadata 불일치: %+v", logged)
+			}
+			assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t, rr, logged,
+				"사용량은 어디서 확인해?",
+				"이번 달 사용량 통계를 보여줘",
+			)
 		})
 	}
 }
@@ -660,6 +1042,8 @@ func newSemanticCacheHarnessWithService(t *testing.T, semantic *countingSemantic
 		CachePolicyHash:              "cache_policy_semantic_test",
 		TerminalLogWriter:            logWriter,
 		SemanticCacheService:         semantic,
+		SemanticCacheEnabled:         semantic.Enabled(),
+		SemanticCacheMode:            cachekey.SemanticCacheModeEnforce,
 		SemanticCacheAllowCategories: []string{cachekey.SemanticCacheCategoryGeneral, cachekey.SemanticCacheCategorySupportRefund},
 		SemanticCacheDenyCategories: []string{
 			cachekey.SemanticCacheCategoryCode,
@@ -689,6 +1073,42 @@ func (h *semanticCacheHarness) latestLog(t *testing.T) invocationlog.TerminalLog
 		t.Fatalf("terminal log가 남아야 함")
 	}
 	return h.logWriter.logs[len(h.logWriter.logs)-1]
+}
+
+func configureGeneralOnlySemanticCanary(h *semanticCacheHarness) {
+	h.handler.SemanticCacheEnabled = true
+	h.handler.SemanticCacheMode = cachekey.SemanticCacheModeEnforce
+	h.handler.SemanticCacheAllowedTenantIDs = []string{"tenant_demo"}
+	h.handler.SemanticCacheAllowedApplicationIDs = []string{"app_demo"}
+	h.handler.SemanticCacheAllowedCategories = []string{cachekey.SemanticCacheCategoryGeneral}
+}
+
+func assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t *testing.T, rr *httptest.ResponseRecorder, logged invocationlog.TerminalLog, prompts ...string) {
+	t.Helper()
+	logPayload, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("terminal log marshal 실패: %v", err)
+	}
+	payloads := []string{rr.Body.String(), string(logPayload)}
+	for _, marker := range append([]string{
+		testAPIKey,
+		testAppToken,
+		"api_key=",
+		"app_token=",
+		"provider_key=",
+		"Authorization:",
+		"provider raw error",
+		"actual secret",
+	}, prompts...) {
+		if strings.TrimSpace(marker) == "" {
+			continue
+		}
+		for _, payload := range payloads {
+			if strings.Contains(payload, marker) {
+				t.Fatalf("semantic cache runtime output에 forbidden marker가 남으면 안 됨: marker=%q payload=%s", marker, payload)
+			}
+		}
+	}
 }
 
 type countingSemanticCacheService struct {

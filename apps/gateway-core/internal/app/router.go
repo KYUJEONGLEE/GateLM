@@ -182,7 +182,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		metricsRegistry = metrics.NewRegistry()
 	}
 	semanticCacheService := routerOptions.SemanticCacheService
-	if semanticCacheService == nil && cfg.SemanticCache.Enabled {
+	if semanticCacheService == nil && cfg.SemanticCache.Enabled && cfg.SemanticCache.Mode != cachekey.SemanticCacheModeOff {
 		store, storeErr := cachekey.NewSemanticCacheStore(cfg.SemanticCache.Store, cfg.SemanticCache.MaxEntries)
 		embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProviderWithConfig(cachekey.SemanticCacheEmbeddingProviderConfig{
 			Provider:         cfg.SemanticCache.EmbeddingProvider,
@@ -198,6 +198,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 			if policyErr != nil {
 				panic("failed to load semantic cache intent policy: " + policyErr.Error())
 			}
+			policy = semanticCacheHitPolicyWithThresholdOverrides(policy, cfg.SemanticCache.Threshold, cfg.SemanticCache.CategoryThresholds)
 			hitPolicy = &policy
 		}
 		if storeErr == nil && providerErr == nil {
@@ -238,37 +239,64 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	})
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
-		Providers:                    providers,
-		ProviderCatalogResolver:      routerOptions.ProviderCatalogs,
-		CredentialResolver:           routerOptions.Credentials,
-		DefaultModel:                 cfg.DefaultModel,
-		DefaultProvider:              cfg.DefaultProvider,
-		MaxRequestBodyBytes:          cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator:          apiKeyAuthenticator,
-		AppTokenValidator:            appTokenValidator,
-		ExpectedTenantID:             cfg.ExpectedTenantID,
-		ExpectedProjectID:            cfg.ExpectedProjectID,
-		ExpectedAppID:                cfg.ExpectedApplicationID,
-		RuntimePolicyPipeline:        firstNonNilPipeline(routerOptions.RuntimePolicyPipeline, routerOptions.RateLimitPipeline),
-		RateLimitPipeline:            routerOptions.RateLimitPipeline,
-		PreProviderPipeline:          preProviderPipeline,
-		AuthFailureLogWriter:         authFailureLogWriter,
-		TerminalLogWriter:            terminalLogWriter,
-		MaskingEngine:                maskdomain.NewP0Engine(),
-		MetricsRegistry:              metricsRegistry,
-		ExactCacheStore:              routerOptions.ExactCacheStore,
-		ExactCacheKeyBuilder:         exactCacheKeyBuilder,
-		ExactCacheTTL:                cfg.ExactCacheTTL,
-		CachePolicyHash:              cfg.CachePolicyHash,
-		SecurityPolicyVersionID:      cfg.SecurityPolicyHash,
-		SemanticCacheService:         semanticCacheService,
-		SemanticCacheAllowCategories: cfg.SemanticCache.AllowCategories,
-		SemanticCacheDenyCategories:  cfg.SemanticCache.DenyCategories,
-		SemanticCachePolicyVersion:   cfg.SemanticCache.PolicyVersion,
-		SemanticCacheKeyVersion:      cfg.SemanticCache.KeyVersion,
+		Providers:                          providers,
+		ProviderCatalogResolver:            routerOptions.ProviderCatalogs,
+		CredentialResolver:                 routerOptions.Credentials,
+		DefaultModel:                       cfg.DefaultModel,
+		DefaultProvider:                    cfg.DefaultProvider,
+		MaxRequestBodyBytes:                cfg.MaxRequestBodyBytes,
+		APIKeyAuthenticator:                apiKeyAuthenticator,
+		AppTokenValidator:                  appTokenValidator,
+		ExpectedTenantID:                   cfg.ExpectedTenantID,
+		ExpectedProjectID:                  cfg.ExpectedProjectID,
+		ExpectedAppID:                      cfg.ExpectedApplicationID,
+		RuntimePolicyPipeline:              firstNonNilPipeline(routerOptions.RuntimePolicyPipeline, routerOptions.RateLimitPipeline),
+		RateLimitPipeline:                  routerOptions.RateLimitPipeline,
+		PreProviderPipeline:                preProviderPipeline,
+		AuthFailureLogWriter:               authFailureLogWriter,
+		TerminalLogWriter:                  terminalLogWriter,
+		MaskingEngine:                      maskdomain.NewP0Engine(),
+		MetricsRegistry:                    metricsRegistry,
+		ExactCacheStore:                    routerOptions.ExactCacheStore,
+		ExactCacheKeyBuilder:               exactCacheKeyBuilder,
+		ExactCacheTTL:                      cfg.ExactCacheTTL,
+		CachePolicyHash:                    cfg.CachePolicyHash,
+		SecurityPolicyVersionID:            cfg.SecurityPolicyHash,
+		SemanticCacheService:               semanticCacheService,
+		SemanticCacheEnabled:               cfg.SemanticCache.Enabled,
+		SemanticCacheMode:                  cfg.SemanticCache.Mode,
+		SemanticCacheAllowCategories:       cfg.SemanticCache.AllowCategories,
+		SemanticCacheDenyCategories:        cfg.SemanticCache.DenyCategories,
+		SemanticCacheAllowedTenantIDs:      cfg.SemanticCache.AllowedTenantIDs,
+		SemanticCacheAllowedApplicationIDs: cfg.SemanticCache.AllowedApplicationIDs,
+		SemanticCacheAllowedCategories:     cfg.SemanticCache.AllowedCategories,
+		SemanticCachePolicyVersion:         cfg.SemanticCache.PolicyVersion,
+		SemanticCacheKeyVersion:            cfg.SemanticCache.KeyVersion,
 	}))
 
 	return mux
+}
+
+func semanticCacheHitPolicyWithThresholdOverrides(policy cachekey.SemanticCacheHitPolicy, defaultThreshold float64, categoryThresholds map[string]float64) cachekey.SemanticCacheHitPolicy {
+	if defaultThreshold > 0 && defaultThreshold <= 1 {
+		policy.DefaultThreshold = defaultThreshold
+	}
+	if len(categoryThresholds) == 0 || len(policy.Categories) == 0 {
+		return policy
+	}
+	for category, threshold := range categoryThresholds {
+		category = strings.TrimSpace(strings.ToLower(category))
+		if threshold <= 0 || threshold > 1 || category == "" {
+			continue
+		}
+		mode, ok := policy.Categories[category]
+		if !ok {
+			continue
+		}
+		mode.CategoryThreshold = threshold
+		policy.Categories[category] = mode
+	}
+	return policy
 }
 
 func firstNonNilPipeline(pipelines ...handlers.GatewayPipeline) handlers.GatewayPipeline {
