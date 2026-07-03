@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from time import perf_counter
 from typing import Any, Protocol
 
@@ -105,10 +106,16 @@ class InProcessBenchmarkTarget:
 
     @classmethod
     def create(cls, *, model_id: str = MODEL_ID) -> InProcessBenchmarkTarget:
+        from app.core.config import load_settings
         from app.services.ai_safety_detector import AiSafetyDetectorService
 
+        settings = load_settings()
         return cls(
-            service=AiSafetyDetectorService(model_id=model_id),
+            service=AiSafetyDetectorService(
+                model_id=model_id,
+                additional_model_ids=settings.ai_safety_additional_detector_model_ids,
+                detector_runtime=settings.ai_safety_detector_runtime,
+            ),
             model_id=model_id,
         )
 
@@ -142,6 +149,89 @@ class InProcessBenchmarkTarget:
         return result_from_response_body(body, full_latency_ms=full_latency_ms, timeout_ms=timeout_ms)
 
 
+@dataclass
+class GatewayHttpBenchmarkTarget:
+    endpoint_url: str
+    model: str = "auto"
+    api_key: str | None = None
+    app_token: str | None = None
+
+    def detect(self, prompt_text: str, *, locale: str | None, timeout_ms: int) -> TargetResult:
+        try:
+            import httpx  # type: ignore[import-not-found]
+        except Exception as exc:
+            raise BenchmarkError("gateway target requires the benchmark or test extra with httpx installed") from exc
+
+        started = perf_counter()
+        try:
+            response = httpx.post(
+                self.endpoint_url,
+                json=build_gateway_chat_payload(prompt_text, model=self.model),
+                headers=self._headers(locale=locale),
+                timeout=timeout_ms / 1000,
+            )
+            full_latency_ms = elapsed_ms(started)
+        except httpx.TimeoutException:
+            return TargetResult(
+                sidecar_latency_ms=None,
+                full_safety_latency_ms=elapsed_ms(started),
+                sidecar_outcome="timeout",
+                fallback_mode="regex_only",
+                sanitized_error_code="timeout",
+            )
+        except httpx.HTTPError:
+            return TargetResult(
+                sidecar_latency_ms=None,
+                full_safety_latency_ms=elapsed_ms(started),
+                sidecar_outcome="error",
+                fallback_mode="regex_only",
+                sanitized_error_code="http_error",
+            )
+
+        if response.status_code not in {200, 403}:
+            return TargetResult(
+                sidecar_latency_ms=None,
+                full_safety_latency_ms=full_latency_ms,
+                sidecar_outcome="error",
+                fallback_mode="regex_only",
+                sanitized_error_code=f"http_{response.status_code}",
+            )
+
+        reported_latency_ms = gateway_reported_latency_ms(response, fallback_latency_ms=full_latency_ms)
+        if full_latency_ms > timeout_ms:
+            return TargetResult(
+                sidecar_latency_ms=None,
+                full_safety_latency_ms=full_latency_ms,
+                sidecar_outcome="timeout",
+                fallback_mode="regex_only",
+                sanitized_error_code="timeout",
+            )
+        return TargetResult(
+            sidecar_latency_ms=reported_latency_ms,
+            full_safety_latency_ms=full_latency_ms,
+            sidecar_outcome="success",
+            fallback_mode="none",
+        )
+
+    def _headers(self, *, locale: str | None) -> dict[str, str]:
+        api_key = self.api_key or env_first("GATELM_DEMO_API_KEY", "GATELM_API_KEY") or "glm_api_test_redacted"
+        app_token = (
+            self.app_token
+            or env_first("GATELM_DEMO_APP_TOKEN", "GATELM_APP_TOKEN")
+            or "glm_app_token_test_redacted"
+        )
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-GateLM-App-Token": app_token,
+            "X-GateLM-End-User-Id": "ai_safety_benchmark_user",
+            "X-GateLM-Feature-Id": "ai_safety_benchmark",
+        }
+        if locale:
+            headers["X-GateLM-Locale"] = locale
+        return headers
+
+
 def build_request_payload(
     prompt_text: str,
     *,
@@ -164,6 +254,35 @@ def build_request_payload(
             "returnConfidence": True,
         },
     }
+
+
+def build_gateway_chat_payload(prompt_text: str, *, model: str = "auto") -> dict[str, object]:
+    return {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt_text,
+            }
+        ],
+        "stream": False,
+    }
+
+
+def gateway_reported_latency_ms(response: Any, *, fallback_latency_ms: int) -> int:
+    try:
+        body = response.json()
+    except ValueError:
+        return fallback_latency_ms
+    if not isinstance(body, dict):
+        return fallback_latency_ms
+    gate_lm = body.get("gate_lm")
+    if not isinstance(gate_lm, dict):
+        return fallback_latency_ms
+    latency_ms = gate_lm.get("latencyMs")
+    if isinstance(latency_ms, int) and latency_ms >= 0:
+        return latency_ms
+    return fallback_latency_ms
 
 
 def result_from_response_body(body: Any, *, full_latency_ms: int, timeout_ms: int) -> TargetResult:
@@ -228,3 +347,11 @@ def first_forbidden_response_field(value: Any) -> str | None:
 
 def elapsed_ms(started: float) -> int:
     return max(0, round((perf_counter() - started) * 1000))
+
+
+def env_first(*keys: str) -> str | None:
+    for key in keys:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return None

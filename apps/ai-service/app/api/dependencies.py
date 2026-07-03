@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from app.adapters.safety.llm_classifier import LocalVllmLLMClassifier
 from app.core.config import Settings, load_settings
 from app.services.ai_safety_detector import AiSafetyDetectorService
 from app.services.safety_evaluator import RemoteSafetyEvaluationService
@@ -31,23 +30,10 @@ def get_ai_safety_detector_service(request: Request) -> AiSafetyDetectorService:
     if isinstance(service, AiSafetyDetectorService):
         return service
     settings = get_settings(request)
-    llm_classifier = None
-    if settings.llm_classifier_enabled:
-        llm_classifier = LocalVllmLLMClassifier(
-            base_url=settings.llm_classifier_base_url,
-            model=settings.llm_classifier_model,
-            timeout_ms=settings.llm_classifier_timeout_ms,
-            temperature=settings.llm_classifier_temperature,
-            max_tokens=settings.llm_classifier_max_tokens,
-        )
     service = AiSafetyDetectorService(
         model_id=settings.ai_safety_detector_model_id,
         additional_model_ids=settings.ai_safety_additional_detector_model_ids,
         detector_runtime=settings.ai_safety_detector_runtime,
-        llm_classifier=llm_classifier,
-        llm_window_max_chars=settings.llm_classifier_window_max_chars,
-        llm_window_max_count=settings.llm_classifier_window_max_count,
-        llm_total_timeout_ms=settings.llm_classifier_total_timeout_ms,
     )
     request.app.state.ai_safety_detector_service = service
     return service

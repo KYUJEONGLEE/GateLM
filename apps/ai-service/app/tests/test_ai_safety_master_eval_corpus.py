@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from typing import Any
 
 from app.domain.ai_safety_eval.master_corpus import (
-    ALLOWED_LLM_REASON_CODES,
     MasterEvalError,
     load_master_eval_corpus,
     parse_master_eval_case,
@@ -20,36 +20,20 @@ class AiSafetyMasterEvalCorpusTests(unittest.TestCase):
     def test_master_corpus_has_target_specific_expectations(self) -> None:
         cases = load_master_eval_corpus(CORPUS_PATH)
 
-        self.assertGreaterEqual(len(cases), 18)
+        self.assertGreaterEqual(len(cases), 100)
         for case in cases:
             self.assertIsNotNone(case.expectations.gateway)
             self.assertIsNotNone(case.expectations.detector)
-            self.assertIsNotNone(case.expectations.llm_classifier)
 
-    def test_master_corpus_covers_llm_classifier_reason_codes(self) -> None:
+    def test_master_corpus_has_shadow_eval_distribution(self) -> None:
         cases = load_master_eval_corpus(CORPUS_PATH)
-        reason_codes = {
-            detection.reason_code
-            for case in cases
-            for detection in case.expectations.llm_classifier.expected_detections
-        }
 
-        self.assertEqual(reason_codes, ALLOWED_LLM_REASON_CODES)
-
-    def test_master_corpus_marks_regex_sufficient_cases_as_llm_skip(self) -> None:
-        cases = load_master_eval_corpus(CORPUS_PATH)
-        skip_cases = [
-            case
-            for case in cases
-            if "llm-skip" in case.tags
-        ]
-
-        self.assertGreaterEqual(len(skip_cases), 3)
-        for case in skip_cases:
-            expectation = case.expectations.llm_classifier
-            self.assertFalse(expectation.should_run)
-            self.assertEqual(expectation.expected_window_count, 0)
-            self.assertEqual(expectation.expected_detections, ())
+        self.assertGreaterEqual(count_tagged(cases, "person-name"), 20)
+        self.assertGreaterEqual(count_tagged(cases, "address"), 15)
+        self.assertGreaterEqual(count_tagged(cases, "account-number", "account-id"), 10)
+        self.assertGreaterEqual(count_tagged(cases, "secret", "private-url", "provider-api-key"), 15)
+        self.assertGreaterEqual(count_tagged(cases, "private-date", "resident-registration-number"), 10)
+        self.assertGreaterEqual(count_tagged(cases, "health", "confidential-business"), 10)
 
     def test_placeholder_binding_mismatch_fails(self) -> None:
         raw_case = json.loads(CORPUS_PATH.read_text(encoding="utf-8").splitlines()[0])
@@ -64,6 +48,11 @@ class AiSafetyMasterEvalCorpusTests(unittest.TestCase):
 
         with self.assertRaisesRegex(MasterEvalError, "expectations fields mismatch"):
             parse_master_eval_case(raw_case, 1)
+
+
+def count_tagged(cases: list[Any], *tags: str) -> int:
+    wanted = set(tags)
+    return sum(1 for case in cases if wanted.intersection(case.tags))
 
 
 if __name__ == "__main__":

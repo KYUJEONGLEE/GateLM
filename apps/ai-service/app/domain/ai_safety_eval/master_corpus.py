@@ -7,16 +7,16 @@ from pathlib import Path
 from string import Formatter
 from typing import Any
 
-from app.adapters.safety.llm_classifier import (
-    ALLOWED_LLM_CLASSIFIER_ACTIONS,
-    ALLOWED_LLM_CLASSIFIER_DETECTOR_TYPES,
-    ALLOWED_LLM_CLASSIFIER_REASON_CODES,
-)
 from app.schemas.safety_eval import DETECTOR_TYPES
 
 
-ALLOWED_LLM_REASON_CODES = ALLOWED_LLM_CLASSIFIER_REASON_CODES
-ALLOWED_DETECTOR_TYPES = DETECTOR_TYPES | ALLOWED_LLM_CLASSIFIER_DETECTOR_TYPES
+MASTER_CORPUS_EXTRA_DETECTOR_TYPES = frozenset(
+    {
+        "confidential_business_context",
+        "sensitive_health_context",
+    }
+)
+ALLOWED_DETECTOR_TYPES = DETECTOR_TYPES | MASTER_CORPUS_EXTRA_DETECTOR_TYPES
 TOP_LEVEL_FIELDS = frozenset(
     {
         "caseId",
@@ -27,7 +27,7 @@ TOP_LEVEL_FIELDS = frozenset(
         "tags",
     }
 )
-EXPECTATION_FIELDS = frozenset({"gateway", "detector", "llmClassifier"})
+EXPECTATION_FIELDS = frozenset({"gateway", "detector"})
 GATEWAY_FIELDS = frozenset(
     {
         "safetyOutcome",
@@ -40,8 +40,6 @@ GATEWAY_FIELDS = frozenset(
     }
 )
 DETECTOR_FIELDS = frozenset({"outcome", "mode", "detectedTypes", "detectedCount", "blockReason"})
-LLM_CLASSIFIER_FIELDS = frozenset({"shouldRun", "expectedWindowCount", "expectedDetections"})
-LLM_DETECTION_FIELDS = frozenset({"detectorType", "action", "reasonCode", "minConfidence"})
 SAFETY_OUTCOMES = frozenset({"passed", "redacted", "blocked"})
 TERMINAL_STATUSES = frozenset({"success", "blocked", "rate_limited", "failed", "cancelled"})
 MODES = frozenset({"shadow", "enforce"})
@@ -76,25 +74,9 @@ class DetectorExpectation:
 
 
 @dataclass(frozen=True)
-class ExpectedLlmDetection:
-    detector_type: str
-    action: str
-    reason_code: str
-    min_confidence: float
-
-
-@dataclass(frozen=True)
-class LlmClassifierExpectation:
-    should_run: bool
-    expected_window_count: int
-    expected_detections: tuple[ExpectedLlmDetection, ...]
-
-
-@dataclass(frozen=True)
 class TargetExpectations:
     gateway: GatewayExpectation
     detector: DetectorExpectation
-    llm_classifier: LlmClassifierExpectation
 
 
 @dataclass(frozen=True)
@@ -125,6 +107,17 @@ def load_master_eval_corpus(corpus_path: Path) -> list[MasterEvalCase]:
 
     validate_master_eval_coverage(cases)
     return cases
+
+
+def render_master_eval_prompt(case: MasterEvalCase) -> str:
+    values = {
+        placeholder: _synthetic_value_for_detector_type(detector_type)
+        for placeholder, detector_type in case.placeholder_bindings.items()
+    }
+    try:
+        return case.input_template.format(**values)
+    except KeyError as exc:
+        raise MasterEvalError(f"{case.case_id}: missing synthetic placeholder value {exc}") from exc
 
 
 def parse_master_eval_case(raw_case: dict[str, Any], line_number: int) -> MasterEvalCase:
@@ -182,25 +175,10 @@ def validate_master_eval_coverage(cases: list[MasterEvalCase]) -> None:
         raise MasterEvalError("master corpus is empty")
 
     seen_case_ids: set[str] = set()
-    reason_codes: set[str] = set()
-    skip_case_count = 0
     for case in cases:
         if case.case_id in seen_case_ids:
             raise MasterEvalError(f"duplicate master corpus caseId {case.case_id}")
         seen_case_ids.add(case.case_id)
-        if not case.expectations.llm_classifier.should_run:
-            skip_case_count += 1
-        reason_codes.update(
-            detection.reason_code
-            for detection in case.expectations.llm_classifier.expected_detections
-        )
-
-    if reason_codes != ALLOWED_LLM_REASON_CODES:
-        missing = sorted(ALLOWED_LLM_REASON_CODES - reason_codes)
-        extra = sorted(reason_codes - ALLOWED_LLM_REASON_CODES)
-        raise MasterEvalError(f"LLM reasonCode coverage mismatch: missing={missing}, extra={extra}")
-    if skip_case_count < 3:
-        raise MasterEvalError("master corpus must include at least 3 LLM skip cases")
 
 
 def _parse_placeholder_bindings(value: dict[str, Any], label: str) -> dict[str, str]:
@@ -222,7 +200,6 @@ def _parse_expectations(value: Any, label: str) -> TargetExpectations:
     return TargetExpectations(
         gateway=_parse_gateway_expectation(value["gateway"], label),
         detector=_parse_detector_expectation(value["detector"], label),
-        llm_classifier=_parse_llm_classifier_expectation(value["llmClassifier"], label),
     )
 
 
@@ -304,65 +281,22 @@ def _parse_detector_expectation(value: Any, label: str) -> DetectorExpectation:
     )
 
 
-def _parse_llm_classifier_expectation(value: Any, label: str) -> LlmClassifierExpectation:
-    if not isinstance(value, dict):
-        raise MasterEvalError(f"{label}: llmClassifier expectation must be an object")
-    if set(value) != LLM_CLASSIFIER_FIELDS:
-        raise MasterEvalError(f"{label}: llmClassifier expectation fields mismatch")
-    should_run = value["shouldRun"]
-    expected_window_count = value["expectedWindowCount"]
-    raw_detections = value["expectedDetections"]
-    if not isinstance(should_run, bool):
-        raise MasterEvalError(f"{label}: llmClassifier shouldRun must be boolean")
-    if not isinstance(expected_window_count, int) or expected_window_count < 0:
-        raise MasterEvalError(f"{label}: llmClassifier expectedWindowCount must be a non-negative integer")
-    if expected_window_count > 3:
-        raise MasterEvalError(f"{label}: llmClassifier expectedWindowCount must be 3 or less")
-    if not isinstance(raw_detections, list):
-        raise MasterEvalError(f"{label}: llmClassifier expectedDetections must be an array")
-    if len(raw_detections) > 8:
-        raise MasterEvalError(f"{label}: llmClassifier expectedDetections must contain 8 items or fewer")
-    detections = tuple(
-        _parse_expected_llm_detection(item, label)
-        for item in raw_detections
-    )
-    if not should_run and (expected_window_count != 0 or detections):
-        raise MasterEvalError(f"{label}: skipped llmClassifier case must not expect windows or detections")
-    if should_run and expected_window_count == 0:
-        raise MasterEvalError(f"{label}: running llmClassifier case must expect at least one window")
-    return LlmClassifierExpectation(
-        should_run=should_run,
-        expected_window_count=expected_window_count,
-        expected_detections=detections,
-    )
-
-
-def _parse_expected_llm_detection(value: Any, label: str) -> ExpectedLlmDetection:
-    if not isinstance(value, dict):
-        raise MasterEvalError(f"{label}: expected LLM detection must be an object")
-    if set(value) != LLM_DETECTION_FIELDS:
-        raise MasterEvalError(f"{label}: expected LLM detection fields mismatch")
-    detector_type = value["detectorType"]
-    action = value["action"]
-    reason_code = value["reasonCode"]
-    min_confidence = value["minConfidence"]
-    if detector_type not in ALLOWED_LLM_CLASSIFIER_DETECTOR_TYPES:
-        raise MasterEvalError(f"{label}: invalid LLM detectorType {detector_type!r}")
-    if action not in ALLOWED_LLM_CLASSIFIER_ACTIONS:
-        raise MasterEvalError(f"{label}: invalid LLM action {action!r}")
-    if reason_code not in ALLOWED_LLM_REASON_CODES:
-        raise MasterEvalError(f"{label}: invalid LLM reasonCode {reason_code!r}")
-    if isinstance(min_confidence, bool) or not isinstance(min_confidence, (int, float)):
-        raise MasterEvalError(f"{label}: minConfidence must be a JSON number")
-    parsed_confidence = float(min_confidence)
-    if parsed_confidence < 0 or parsed_confidence > 1:
-        raise MasterEvalError(f"{label}: minConfidence must be between 0 and 1")
-    return ExpectedLlmDetection(
-        detector_type=detector_type,
-        action=action,
-        reason_code=reason_code,
-        min_confidence=parsed_confidence,
-    )
+def _synthetic_value_for_detector_type(detector_type: str) -> str:
+    values = {
+        "account_id": "SYNTHETIC-ORDER-0001",
+        "account_number": "SYNTHETIC-ACCOUNT-0001",
+        "confidential_business_context": "SYNTHETIC_CONFIDENTIAL_METRIC_VALUE",
+        "person_name": "Synthetic Person",
+        "phone_number": "010-0000-0000",
+        "postal_address": "Synthetic District 123",
+        "private_date": "1999-03-02",
+        "private_url": "https://example.test/reset?token=SYNTHETIC_TOKEN",
+        "provider_api_key": "SYNTHETIC_PROVIDER_KEY_VALUE",
+        "resident_registration_number": "900101-0000000",
+        "secret": "synthetic-secret-value",
+        "sensitive_health_context": "SYNTHETIC_HEALTH_CONTEXT",
+    }
+    return values.get(detector_type, f"SYNTHETIC_{detector_type.upper()}_VALUE")
 
 
 def _label(raw_case: dict[str, Any], line_number: int) -> str:

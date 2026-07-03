@@ -65,26 +65,6 @@ Both models are loaded through local Transformers pipelines and their detections
 
 KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`.
 
-## Optional Local LLM Shadow Classifier
-
-The sidecar can add local LLM classifier evidence in `shadow` mode. This path is disabled by default and does not change `outcome` or `redactedPrompt`; rule/ONNX detector results remain the enforcement source.
-
-Run Kanana through a local OpenAI-compatible vLLM endpoint, not through hosted Hugging Face inference:
-
-```bash
-AI_SERVICE_LLM_CLASSIFIER_ENABLED=true
-AI_SERVICE_LLM_CLASSIFIER_BASE_URL=http://127.0.0.1:8002/v1
-AI_SERVICE_LLM_CLASSIFIER_MODEL=kakaocorp/kanana-1.5-8b-instruct-2505
-AI_SERVICE_LLM_CLASSIFIER_TIMEOUT_MS=1000
-AI_SERVICE_LLM_CLASSIFIER_TOTAL_TIMEOUT_MS=2000
-AI_SERVICE_LLM_CLASSIFIER_WINDOW_MAX_CHARS=1000
-AI_SERVICE_LLM_CLASSIFIER_WINDOW_MAX_COUNT=3
-AI_SERVICE_LLM_CLASSIFIER_TEMPERATURE=0
-AI_SERVICE_LLM_CLASSIFIER_MAX_TOKENS=192
-```
-
-The classifier receives only candidate windows selected by the sidecar, capped by the configured window size and count. Candidate extraction prefers sentence or line boundaries, then selects up to the configured count by risk priority and original order. Windows whose LLM triggers are all covered by sufficient rule/regex evidence or by ML/ONNX evidence with confidence >= 0.90 are skipped; windows with any uncovered ambiguous trigger are still sent. Keep the default capped path for Gateway-adjacent shadow use; a future "send all candidate windows" mode should be debug/eval-only, not a hot-path default. Its raw JSON output must match `docs/ai-safety-lab/schemas/llm-classifier-output.schema.json`: a single object with a `detections` array, exact detection keys, enum detector/action/reason codes, and numeric confidence. If no allowed `detectorType` fits, the classifier must return an empty `detections` array instead of an unknown fallback. The sidecar discards invalid JSON, extra fields, unsupported detector/action/reason codes, timeouts, and local vLLM errors. It stores or returns only sanitized detector labels such as `source=llm_classifier`, `detectorType`, `action`, `mode`, and optional confidence.
-
 ## AI Safety Detector Sidecar
 
 The local detector sidecar endpoint is available at:
