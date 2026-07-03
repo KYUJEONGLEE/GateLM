@@ -33,10 +33,13 @@ type ProviderModelsPayload = {
 
 type ProviderModelRecord = {
   created?: unknown;
+  created_at?: unknown;
+  display_name?: unknown;
   id?: unknown;
   object?: unknown;
   owned_by?: unknown;
   ownedBy?: unknown;
+  type?: unknown;
 };
 
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/;
@@ -196,8 +199,10 @@ export class ProviderConnectionsService {
       : null;
     const endpoint = this.toModelsEndpoint(providerConnection);
     const payload = await this.fetchProviderModels({
+      adapterType,
       credential,
       endpoint,
+      providerConfig: this.toRecordOrNull(providerConnection.providerConfig),
       timeoutMs: providerConnection.timeoutMs,
     });
     const models = this.toDiscoveryModels(providerConnection, payload);
@@ -413,12 +418,16 @@ export class ProviderConnectionsService {
   }
 
   private async fetchProviderModels({
+    adapterType,
     credential,
     endpoint,
+    providerConfig,
     timeoutMs,
   }: {
+    adapterType: string;
     credential: string | null;
     endpoint: string;
+    providerConfig: Record<string, unknown> | null;
     timeoutMs: number;
   }): Promise<ProviderModelsPayload> {
     const controller = new AbortController();
@@ -430,7 +439,13 @@ export class ProviderConnectionsService {
       };
 
       if (credential) {
-        headers.Authorization = `Bearer ${credential}`;
+        if (adapterType === 'anthropic') {
+          headers['x-api-key'] = credential;
+          headers['anthropic-version'] =
+            this.toProviderApiVersion(providerConfig) ?? '2023-06-01';
+        } else {
+          headers.Authorization = `Bearer ${credential}`;
+        }
       }
 
       const response = await fetch(endpoint, {
@@ -515,10 +530,18 @@ export class ProviderConnectionsService {
     const modelName = record.id.trim();
 
     return {
-      createdAt: this.toUnixTimestampIsoString(record.created),
-      displayName: modelName,
+      createdAt: this.toUnixTimestampIsoString(record.created_at ?? record.created),
+      displayName:
+        typeof record.display_name === 'string' && record.display_name.trim()
+          ? record.display_name.trim()
+          : modelName,
       modelName,
-      object: typeof record.object === 'string' ? record.object : null,
+      object:
+        typeof record.object === 'string'
+          ? record.object
+          : typeof record.type === 'string'
+            ? record.type
+            : null,
       ownedBy:
         typeof record.owned_by === 'string'
           ? record.owned_by
@@ -647,6 +670,21 @@ export class ProviderConnectionsService {
       createdAt: providerPreset.createdAt.toISOString(),
       updatedAt: providerPreset.updatedAt.toISOString(),
     };
+  }
+
+  private toProviderApiVersion(
+    providerConfig: Record<string, unknown> | null,
+  ): string | null {
+    const apiVersion = providerConfig?.apiVersion;
+
+    if (
+      typeof apiVersion === 'string' &&
+      /^[A-Za-z0-9._-]{1,80}$/.test(apiVersion.trim())
+    ) {
+      return apiVersion.trim();
+    }
+
+    return null;
   }
 
   private toRecordOrNull(value: Prisma.JsonValue): Record<string, unknown> | null {

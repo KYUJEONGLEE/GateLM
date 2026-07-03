@@ -15,9 +15,11 @@ import (
 	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
+	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
+	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
@@ -27,6 +29,8 @@ import (
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
@@ -56,9 +60,11 @@ func main() {
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
-	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter)
+	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
+	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter, anthropicAdapter)
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
 	credentialResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
+	metricsRegistry := metrics.NewRegistry()
 
 	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
 	if err != nil {
@@ -105,16 +111,28 @@ func main() {
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
-	terminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
+	postgresTerminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
 		TenantID:      cfg.DemoTenantID,
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
+	var terminalLogWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
+	var asyncTerminalLogWriter *asyncinvocationlog.TerminalLogWriter
+	if cfg.AsyncLogEnabled {
+		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
+			QueueSize:       cfg.AsyncLogQueueSize,
+			WorkerCount:     cfg.AsyncLogWorkerCount,
+			WriteTimeout:    cfg.AsyncLogWriteTimeout,
+			MetricsRegistry: metricsRegistry,
+		})
+		terminalLogWriter = asyncTerminalLogWriter
+	}
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
 		app.WithInvocationLogReader(invocationLogReader),
+		app.WithMetrics(metricsRegistry),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
@@ -165,6 +183,13 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("gateway-core shutdown failed: %v", err)
+	}
+	if asyncTerminalLogWriter != nil {
+		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)
+		defer logCloseCancel()
+		if err := asyncTerminalLogWriter.Close(logCloseCtx); err != nil {
+			log.Printf("gateway-core async terminal log flush failed: %v", err)
+		}
 	}
 }
 

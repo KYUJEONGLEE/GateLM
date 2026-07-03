@@ -436,10 +436,11 @@ Provider entry rules:
 - `adapterType`은 Gateway가 Provider Adapter를 선택할 때 사용하는 adapter kind다.
 - Gateway dispatch는 `providerName`이 아니라 `adapterType` 기준으로 수행한다.
 - `adapterType` 값은 catalog/config data이며 DB enum 또는 code enum으로 고정하지 않는다.
-- v2.0.0 fixture는 `openai_compatible`과 `mock` adapter type을 포함한다.
+- v2.0.0 fixture는 `openai_compatible`, `anthropic`, `mock` adapter type을 포함한다.
 - `baseUrl`과 `timeoutMs`는 provider 호출 execution config다.
 - `adapterConfig`는 자유 JSON이 아니라 schema allowlist field만 허용한다.
-- `adapterConfig.apiVersion`은 Azure-style OpenAI-compatible endpoints 같은 versioned provider APIs를 위한 allowlisted string field다.
+- `adapterConfig.requestFormat`은 `openai_chat_completions`, `anthropic_messages`, `mock_chat_completions` 같은 Provider Adapter wire format을 나타낸다.
+- `adapterConfig.apiVersion`은 Azure-style OpenAI-compatible endpoints 또는 Anthropic API version 같은 versioned provider APIs를 위한 allowlisted string field다.
 - `adapterConfig`는 v2.0.0 core에서 arbitrary headers나 free-form query parameters를 허용하지 않는다.
 - Provider Catalog에는 raw Provider Key, Authorization header, secret plaintext, provider raw error body를 넣지 않는다.
 
