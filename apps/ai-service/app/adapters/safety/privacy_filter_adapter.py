@@ -13,6 +13,7 @@ DEFAULT_PRIVACY_FILTER_LOCAL_DIR_NAME = "openai--privacy-filter"
 DEFAULT_PRIVACY_FILTER_SOURCE = "openai_privacy_filter"
 KOELECTRA_PRIVACY_NER_MODEL = "amoeba04/koelectra-small-v3-privacy-ner"
 KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME = "amoeba04--koelectra-small-v3-privacy-ner"
+KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME = f"{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}-quantized"
 KOELECTRA_PRIVACY_NER_SOURCE = "koelectra_privacy_ner"
 PRIVACY_FILTER_RUNTIME_TRANSFORMERS = "transformers"
 PRIVACY_FILTER_RUNTIME_ONNX = "onnx"
@@ -241,8 +242,10 @@ def _is_default_privacy_filter_model(model_name: str) -> bool:
 
 def _is_koelectra_privacy_ner_model(model_name: str) -> bool:
     normalized = model_name.replace("\\", "/").rstrip("/")
-    return normalized == KOELECTRA_PRIVACY_NER_MODEL or normalized.endswith(
-        f"/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}"
+    return (
+        normalized == KOELECTRA_PRIVACY_NER_MODEL
+        or normalized.endswith(f"/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}")
+        or normalized.endswith(f"/{KOELECTRA_PRIVACY_NER_QUANTIZED_LOCAL_DIR_NAME}")
     )
 
 

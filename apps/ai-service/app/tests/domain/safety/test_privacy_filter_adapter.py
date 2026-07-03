@@ -131,6 +131,13 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         )
         self.assertEqual(source_for_model("custom/example-token-classifier"), "huggingface_token_classifier")
 
+    def test_quantized_koelectra_onnx_path_keeps_public_detector_identity(self) -> None:
+        local_path = f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}-quantized"
+
+        self.assertEqual(source_for_model(local_path), KOELECTRA_PRIVACY_NER_SOURCE)
+        self.assertEqual(public_model_id_for_model(local_path), KOELECTRA_PRIVACY_NER_MODEL)
+        self.assertEqual(aggregation_strategy_for_model(local_path), "none")
+
     def test_local_openai_privacy_filter_keeps_public_model_identity(self) -> None:
         local_path = "C:/models/openai--privacy-filter"
 
