@@ -592,7 +592,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     },
     safetyPolicy: {
       detectors: values.detectors.map((detector) => ({
-        action: detector.action,
+        action: isMandatorySafetyDetector(detector.type) ? "block" : detector.action,
         enabled: isMandatorySafetyDetector(detector.type) ? true : detector.enabled,
         placeholder: detector.placeholder,
         type: detector.type

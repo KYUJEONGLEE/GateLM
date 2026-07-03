@@ -9,7 +9,8 @@ export type RuntimePolicyDetector = {
     | "api_key"
     | "authorization_header"
     | "jwt"
-    | "private_key";
+    | "private_key"
+    | "organization_name";
 };
 
 export type RuntimePolicyProvider = {

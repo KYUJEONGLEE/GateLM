@@ -48,6 +48,8 @@ model Tenant {
   runtimeConfigs      RuntimeConfig[]
   runtimeSnapshots    RuntimeSnapshot[]
   activeSnapshots     ActiveRuntimeSnapshot[]
+  teams               Team[]
+  projectTeamAssignments ProjectTeamAssignment[]
 
   @@map("tenants")
 }
@@ -58,6 +60,7 @@ model Project {
   name        String
   description String?
   status      ResourceStatus @default(ACTIVE)
+  totalBudgetUsd Decimal? @default(100) @db.Decimal(12, 2)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -69,9 +72,47 @@ model Project {
   runtimeConfigs      RuntimeConfig[]
   runtimeSnapshots    RuntimeSnapshot[]
   activeSnapshots     ActiveRuntimeSnapshot[]
+  projectTeamAssignments ProjectTeamAssignment[]
 
   @@index([tenantId])
   @@map("projects")
+}
+
+model Team {
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @db.Uuid
+  name        String
+  description String?
+  status      ResourceStatus @default(ACTIVE)
+  monthlyBudgetUsd Decimal? @db.Decimal(12, 2)
+  budgetWarningThresholdPercent Int @default(80)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id])
+  projectTeamAssignments ProjectTeamAssignment[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("teams")
+}
+
+model ProjectTeamAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  projectId  String   @db.Uuid
+  teamId     String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([teamId])
+  @@unique([projectId, teamId])
+  @@map("project_team_assignments")
 }
 
 model Application {
@@ -81,6 +122,9 @@ model Application {
   name        String
   description String?
   status      ResourceStatus @default(ACTIVE)
+  budgetLimitUsd Decimal? @db.Decimal(12, 2)
+  budgetLimitMode String @default("FIXED")
+  budgetLimitPercent Decimal? @db.Decimal(5, 2)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 

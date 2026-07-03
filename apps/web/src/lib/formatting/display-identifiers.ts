@@ -13,6 +13,21 @@ export function formatDisplayIdentifier(value: string) {
   );
 }
 
+export function formatModelDisplayName(value: string | null | undefined, fallback = "not routed") {
+  if (!value) {
+    return fallback;
+  }
+
+  const formattedValue = formatDisplayIdentifier(value);
+  const separatorIndex = formattedValue.lastIndexOf(":");
+
+  if (separatorIndex >= 0 && separatorIndex < formattedValue.length - 1) {
+    return formattedValue.slice(separatorIndex + 1);
+  }
+
+  return formattedValue;
+}
+
 export function formatTenantDisplayName(tenantId: string) {
   return tenantId === "tenant_demo_acme" ? "Acme Corp" : formatDisplayIdentifier(tenantId);
 }

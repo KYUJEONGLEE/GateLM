@@ -1,11 +1,16 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import {
+  type DashboardRange,
   type DashboardFilterState,
   DashboardOverviewView
 } from "@/features/dashboard/components/dashboard-overview";
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
+import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import {
+  getDashboardLiveRange,
   getLiveDashboardOverview,
   type LiveDashboardOverviewFilters
 } from "@/lib/gateway/live-dashboard-overview";
@@ -23,6 +28,7 @@ type DashboardPageProps = {
     motion?: string;
     projectId?: string;
     requestId?: string;
+    range?: string;
     resolvedBy?: string;
     tab?: string;
     view?: string;
@@ -35,6 +41,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const requestedTab = resolvedSearchParams?.tab ?? (resolvedSearchParams?.view === "cache" ? "cache" : undefined);
   const selectedRequestId = resolvedSearchParams?.requestId;
   const { dashboardFilters, liveFilters } = buildDashboardFilters(resolvedSearchParams);
+  const liveRange = getDashboardLiveRange(dashboardFilters.range);
   const activeTab =
     requestedTab === "requests" ||
     requestedTab === "traffic"
@@ -46,15 +53,32 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         ? requestedTab
         : "overview";
   const suppressContentMotion = activeTab === "overview" && resolvedSearchParams?.motion === "none";
-  const [locale, overview, recentRecords, rateLimitedRecords, selectedDetail] = await Promise.all([
+  const [locale, overview, recentRecords, rateLimitedRecords] = await Promise.all([
     getRequestLocale(),
     getLiveDashboardOverview(tenantId, liveFilters),
-    getLiveGatewayRequestLogs(),
-    getLiveGatewayRequestLogs({ limit: 5, status: "rate_limited" }),
-    selectedRequestId ? getLiveGatewayRequestDetail(selectedRequestId) : Promise.resolve(null)
+    getLiveGatewayRequestLogs({ from: liveRange.from, limit: 50, tenantId, to: liveRange.to }),
+    getLiveGatewayRequestLogs({
+      from: liveRange.from,
+      limit: 5,
+      status: "rate_limited",
+      tenantId,
+      to: liveRange.to
+    })
   ]);
+  const selectedRecord = selectedRequestId
+    ? recentRecords?.find((record) => record.requestId === selectedRequestId)
+    : undefined;
+  const selectedDetail = selectedRequestId
+    ? await getLiveGatewayRequestDetail(selectedRequestId, {
+        projectId: selectedRecord?.projectId,
+        tenantId
+      })
+    : null;
   const scopedSelectedDetail =
     selectedDetail ?? recentRecords?.find((record) => record.requestId === selectedRequestId);
+  const displayScopedSelectedDetail = scopedSelectedDetail
+    ? toDisplayModelRecord(scopedSelectedDetail)
+    : undefined;
 
   if (!overview) {
     return (
@@ -81,24 +105,32 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       <DashboardOverviewView
         activeTab={activeTab}
         detailPanel={
-          scopedSelectedDetail ? (
+          displayScopedSelectedDetail ? (
             <RequestLogDetailAside
               locale={locale}
-              record={scopedSelectedDetail}
+              record={displayScopedSelectedDetail}
               tenantId={tenantId}
-              timezone="UTC"
+              timezone={DEFAULT_DISPLAY_TIMEZONE}
             />
           ) : undefined
         }
         locale={locale}
         filters={dashboardFilters}
         overview={overview}
-        rateLimitedRecords={rateLimitedRecords ?? []}
-        recentRecords={recentRecords?.slice(0, 5) ?? []}
+        rateLimitedRecords={(rateLimitedRecords ?? []).map(toDisplayModelRecord)}
+        recentRecords={(recentRecords ?? []).slice(0, 5).map(toDisplayModelRecord)}
         suppressContentMotion={suppressContentMotion}
       />
     </ConsoleShell>
   );
+}
+
+function toDisplayModelRecord(record: InvocationLogRecord): InvocationLogRecord {
+  return {
+    ...record,
+    requestedModel: record.requestedModel ? formatModelDisplayName(record.requestedModel) : record.requestedModel,
+    selectedModel: record.selectedModel ? formatModelDisplayName(record.selectedModel) : record.selectedModel
+  };
 }
 
 function buildDashboardFilters(searchParams: Awaited<DashboardPageProps["searchParams"]>): {
@@ -108,6 +140,7 @@ function buildDashboardFilters(searchParams: Awaited<DashboardPageProps["searchP
   const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
   const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
   const projectId = normalizeOptionalText(searchParams?.projectId);
+  const range = normalizeDashboardRange(searchParams?.range);
   const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
 
   return {
@@ -115,15 +148,25 @@ function buildDashboardFilters(searchParams: Awaited<DashboardPageProps["searchP
       budgetScopeId,
       budgetScopeType,
       projectId,
+      range,
       resolvedBy
     },
     liveFilters: {
       budgetScopeId: budgetScopeId || undefined,
       budgetScopeType: budgetScopeType || undefined,
       projectId: projectId || undefined,
+      range,
       resolvedBy: resolvedBy || undefined
     }
   };
+}
+
+function normalizeDashboardRange(value: string | undefined): DashboardRange {
+  if (value === "1h" || value === "1d" || value === "1w") {
+    return value;
+  }
+
+  return "15m";
 }
 
 function normalizeBudgetScopeTypeFilter(value: string | undefined): DashboardFilterState["budgetScopeType"] {

@@ -2,9 +2,11 @@ import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { ApplicationManagement } from "@/features/applications/components/application-management";
 import { ProjectDetailManagement } from "@/features/projects/components/project-management";
+import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
+import { getProjectTeamsModel } from "@/lib/control-plane/teams-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ProjectDetailPageProps = {
@@ -25,6 +27,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   const applicationsModel = await getApplicationsModel(tenantId, project.id);
+  const projectTeamsModel = await getProjectTeamsModel(tenantId, project.id);
   const activeApplication = applicationsModel.applications.find(
     (application) => application.status === "ACTIVE"
   );
@@ -54,7 +57,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             : null
         }
       />
-      <ApplicationManagement locale={locale} model={applicationsModel} />
+      <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />
+      <ApplicationManagement
+        locale={locale}
+        model={applicationsModel}
+        projectBudgetUsd={project.totalBudgetUsd}
+      />
     </ConsoleShell>
   );
 }

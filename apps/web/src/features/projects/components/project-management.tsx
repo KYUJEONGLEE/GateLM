@@ -65,6 +65,7 @@ const projectText: Record<
     runtimeSettings: string;
     save: string;
     delete: string;
+    totalBudget: string;
     deleted: string;
     source: string;
     status: string;
@@ -91,6 +92,7 @@ const projectText: Record<
     runtimeSettings: "Runtime settings",
     save: "Save",
     delete: "Delete",
+    totalBudget: "Project budget",
     deleted: "Project deleted.",
     source: "Source",
     status: "Status",
@@ -116,6 +118,7 @@ const projectText: Record<
     runtimeSettings: "Runtime 설정",
     save: "저장",
     delete: "삭제",
+    totalBudget: "프로젝트 예산",
     deleted: "Project가 삭제되었습니다.",
     source: "출처",
     status: "상태",
@@ -163,6 +166,7 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
                 <tr>
                   <th>{text.name}</th>
                   <th>{text.description}</th>
+                  <th>{text.totalBudget}</th>
                   <th>{text.status}</th>
                   <th>{text.updated}</th>
                   <th />
@@ -175,6 +179,7 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
                       <strong className="provider-name">{project.name}</strong>
                     </td>
                     <td>{nullableText(project.description, "-")}</td>
+                    <td>{formatBudgetUsd(project.totalBudgetUsd)}</td>
                     <td>
                       <Badge
                         className="project-status-badge"
@@ -229,6 +234,15 @@ export function ProjectDetailManagement({
     if (!values.name.trim()) {
       setSubmitState({
         message: locale === "ko" ? "프로젝트 이름을 입력하세요." : "Project name is required.",
+        status: "error"
+      });
+      return;
+    }
+
+    if (!Number.isFinite(values.totalBudgetUsd) || values.totalBudgetUsd < 0) {
+      setSubmitState({
+        message:
+          locale === "ko" ? "프로젝트 예산을 0 이상으로 입력하세요." : "Project budget must be 0 or more.",
         status: "error"
       });
       return;
@@ -353,6 +367,21 @@ export function ProjectDetailManagement({
               />
             </label>
             <label className="policy-field">
+              <span>{text.totalBudget}</span>
+              <input
+                min={0}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    totalBudgetUsd: Number(event.target.value)
+                  }))
+                }
+                step="0.01"
+                type="number"
+                value={values.totalBudgetUsd}
+              />
+            </label>
+            <label className="policy-field">
               <span>{text.status}</span>
               <select
                 onChange={(event) =>
@@ -433,10 +462,18 @@ function getProjectUpdateValues(project: ProjectRecord): ProjectUpdateValues {
     description: nullableText(project.description, ""),
     name: project.name,
     projectId: project.id,
-    status: project.status
+    status: project.status,
+    totalBudgetUsd: project.totalBudgetUsd
   };
 }
 
 function formatProjectStatus(status: ProjectStatus) {
   return status.toLowerCase();
+}
+
+function formatBudgetUsd(value: number) {
+  return `$${value.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0
+  })}`;
 }

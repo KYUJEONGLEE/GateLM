@@ -1,8 +1,15 @@
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import {
+  DashboardLineEChart,
+  DashboardPieEChart
+} from "@/features/dashboard/components/dashboard-echarts";
 import type { DashboardOverview, InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
+import {
+  formatDisplayIdentifier,
+  formatModelDisplayName
+} from "@/lib/formatting/display-identifiers";
 import {
   formatInteger,
   formatLatency,
@@ -24,16 +31,18 @@ type DashboardOverviewProps = {
 
 type DashboardTab = "overview" | "requests" | "cache" | "routing" | "safety" | "limits";
 type DashboardVisibleTab = Exclude<DashboardTab, "overview">;
+export type DashboardRange = "15m" | "1h" | "1d" | "1w";
 export type DashboardFilterState = {
   budgetScopeId: string;
   budgetScopeType: "" | "application" | "project" | "team";
   projectId: string;
+  range: DashboardRange;
   resolvedBy: string;
 };
 
 const dashboardTabs: DashboardVisibleTab[] = ["requests", "cache", "routing", "safety", "limits"];
+const dashboardRanges: DashboardRange[] = ["15m", "1h", "1d", "1w"];
 const statusOrder = ["success", "blocked", "rate_limited", "failed", "cancelled"];
-const trendLabels = ["T-14m", "T-12m", "T-10m", "T-8m", "T-6m", "T-4m", "T-2m", "Now"];
 const chartColors = ["#3b82f6", "#ef4444", "#10a37f", "#f59e0b", "#8b5cf6"];
 
 const dashboardText: Record<
@@ -224,17 +233,20 @@ export function DashboardOverviewView({
   suppressContentMotion = false
 }: DashboardOverviewProps) {
   const text = dashboardText[locale];
+  const trendLabels = buildTrendLabels(filters.range);
   const requestTrend = buildTrendSeries(
     overview.totalRequests,
     overview.successfulRequests,
     [0.48, 0.62, 0.81, 0.77, 0.92, 0.71, 0.84, 1],
-    [0.42, 0.55, 0.72, 0.88, 0.75, 0.67, 0.79, 0.87]
+    [0.42, 0.55, 0.72, 0.88, 0.75, 0.67, 0.79, 0.87],
+    trendLabels.length
   );
   const cacheTrend = buildTrendSeries(
     overview.cacheEligibleRequests,
     overview.cacheHitRequests,
     [0.36, 0.42, 0.51, 0.49, 0.67, 0.72, 0.86, 1],
-    [0.12, 0.18, 0.23, 0.28, 0.35, 0.42, 0.58, 0.64]
+    [0.12, 0.18, 0.23, 0.28, 0.35, 0.42, 0.58, 0.64],
+    trendLabels.length
   );
   const modelShareRows = getTopModelShareRows(overview);
   const cacheShareRows = getCacheShareRows(overview);
@@ -254,7 +266,12 @@ export function DashboardOverviewView({
         </Link>
       </section>
 
-      <DashboardTabs activeTab={activeTab} filters={filters} overview={overview} text={text} />
+      <DashboardTabs
+        activeTab={activeTab}
+        filters={filters}
+        overview={overview}
+        text={text}
+      />
 
       {activeTab === "overview" ? (
         <>
@@ -291,7 +308,7 @@ export function DashboardOverviewView({
           <div className="panel-heading dashboard-chart-heading">
             <h3>{text.charts.modelShare}</h3>
           </div>
-          <PieShareChart rows={modelShareRows} />
+          <PieShareChart ariaLabel={text.charts.modelShare} rows={modelShareRows} />
         </Link>
       </section>
 
@@ -309,12 +326,14 @@ export function DashboardOverviewView({
           activeTab={activeTab}
           cacheShareRows={cacheShareRows}
           cacheTrend={cacheTrend}
+          filters={filters}
           modelShareRows={modelShareRows}
           overview={overview}
           rateLimitedRecords={rateLimitedRecords}
           recentRecords={recentRecords}
           requestTrend={requestTrend}
           text={text}
+          trendLabels={trendLabels}
         />
       )}
       {detailPanel}
@@ -361,7 +380,19 @@ function DashboardTabs({
           );
         })}
       </div>
-      <DashboardFilterBar activeTab={activeTab} filters={filters} overview={overview} text={text} />
+      {activeTab === "overview" ? (
+        <RequestTrendRangeToggle
+          activeTab={activeTab}
+          filters={filters}
+          tenantId={overview.filters.tenantId}
+        />
+      ) : null}
+      <DashboardFilterBar
+        activeTab={activeTab}
+        filters={filters}
+        overview={overview}
+        text={text}
+      />
     </section>
   );
 }
@@ -383,6 +414,7 @@ function DashboardFilterBar({
       className="dashboard-filter-bar"
     >
       {activeTab !== "overview" ? <input name="tab" type="hidden" value={activeTab} /> : null}
+      <input name="range" type="hidden" value={filters.range} />
       <label className="request-log-filter-control">
         <input
           aria-label={text.filter.projectId}
@@ -445,6 +477,7 @@ function dashboardHref(
   appendDashboardQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendDashboardQuery(query, "budgetScopeId", filters.budgetScopeId);
   appendDashboardQuery(query, "resolvedBy", filters.resolvedBy);
+  appendDashboardQuery(query, "range", filters.range);
   appendDashboardQuery(query, "motion", extra?.motion ?? "");
   appendDashboardQuery(query, "requestId", extra?.requestId ?? "");
 
@@ -462,22 +495,26 @@ function DashboardTabPanel({
   activeTab,
   cacheShareRows,
   cacheTrend,
+  filters,
   modelShareRows,
   overview,
   rateLimitedRecords,
   recentRecords,
   requestTrend,
-  text
+  text,
+  trendLabels
 }: {
   activeTab: Exclude<DashboardTab, "overview">;
   cacheShareRows: Array<{ color: string; label: string; value: number }>;
   cacheTrend: { primary: number[]; secondary: number[] };
+  filters: DashboardFilterState;
   modelShareRows: Array<{ color: string; label: string; value: number }>;
   overview: DashboardOverview;
   rateLimitedRecords: InvocationLogRecord[];
   recentRecords: InvocationLogRecord[];
   requestTrend: { primary: number[]; secondary: number[] };
   text: DashboardCopy;
+  trendLabels: string[];
 }) {
   if (activeTab === "requests") {
     return (
@@ -493,7 +530,11 @@ function DashboardTabPanel({
                 </div>
               </div>
             </div>
-            <RequestTrendRangeToggle />
+            <RequestTrendRangeToggle
+              activeTab={activeTab}
+              filters={filters}
+              tenantId={overview.filters.tenantId}
+            />
             <LineTrendChart
               labels={trendLabels}
               primaryColor="#3b82f6"
@@ -543,7 +584,7 @@ function DashboardTabPanel({
               <div className="panel-heading dashboard-chart-heading">
                 <h3>{text.charts.modelShare}</h3>
               </div>
-              <PieShareChart rows={modelShareRows} />
+              <PieShareChart ariaLabel={text.charts.modelShare} rows={modelShareRows} />
             </article>
 
             <FallbackPanel overview={overview} text={text} />
@@ -568,6 +609,11 @@ function DashboardTabPanel({
                 <span data-color="blue">{text.charts.cacheRequests}</span>
                 <span data-color="red">{text.charts.cacheHits}</span>
               </div>
+              <RequestTrendRangeToggle
+                activeTab={activeTab}
+                filters={filters}
+                tenantId={overview.filters.tenantId}
+              />
             </div>
             <LineTrendChart
               labels={trendLabels}
@@ -584,7 +630,7 @@ function DashboardTabPanel({
             <div className="panel-heading dashboard-chart-heading">
               <h3>{text.charts.cacheShare}</h3>
             </div>
-            <PieShareChart rows={cacheShareRows} />
+            <PieShareChart ariaLabel={text.charts.cacheShare} rows={cacheShareRows} />
           </article>
         </div>
 
@@ -758,7 +804,8 @@ function RecentRequestList({
               {formatDisplayIdentifier(record.requestId)}
             </Link>
             <small>
-              {record.status} / {record.cacheStatus} / {record.selectedModel ?? record.requestedModel ?? "not routed"}
+              {record.status} / {record.cacheStatus} /{" "}
+              {formatModelDisplayName(record.selectedModel ?? record.requestedModel)}
             </small>
           </span>
           <strong>{formatLatency(record.latencyMs)}</strong>
@@ -801,7 +848,7 @@ function ProviderP95Panel({ overview }: { overview: DashboardOverview }) {
       <div className="compact-list">
         {rows.map((row) => (
           <div className="compact-row" key={`${row.selectedProvider}-${row.selectedModel}`}>
-            <span>{row.selectedProvider}/{row.selectedModel}</span>
+            <span>{row.selectedProvider}/{formatModelDisplayName(row.selectedModel)}</span>
             <strong>{formatLatency(row.p95ProviderLatencyMs)}</strong>
           </div>
         ))}
@@ -856,7 +903,7 @@ function RoutingTable({ overview, text }: { overview: DashboardOverview; text: D
             {overview.routingCountByModel.map((row) => (
               <tr key={`${row.selectedProvider}-${row.selectedModel}-${row.routingReason}`}>
                 <td>{row.selectedProvider}</td>
-                <td>{row.selectedModel}</td>
+                <td>{formatModelDisplayName(row.selectedModel)}</td>
                 <td>{row.routingReason}</td>
                 <td>{formatInteger(row.requestCount)}</td>
               </tr>
@@ -889,7 +936,7 @@ function CostByModelTable({ overview, text }: { overview: DashboardOverview; tex
             {overview.costByModel.map((row) => (
               <tr key={`${row.selectedProvider}-${row.selectedModel}`}>
                 <td>{row.selectedProvider}</td>
-                <td>{row.selectedModel}</td>
+                <td>{formatModelDisplayName(row.selectedModel)}</td>
                 <td>{formatInteger(row.requestCount)}</td>
                 <td>{formatInteger(row.totalTokens)}</td>
                 <td>{formatUsd(row.costUsd)}</td>
@@ -1018,13 +1065,33 @@ function FocusStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RequestTrendRangeToggle() {
+function RequestTrendRangeToggle({
+  activeTab,
+  filters,
+  tenantId
+}: {
+  activeTab: DashboardTab;
+  filters: DashboardFilterState;
+  tenantId: string;
+}) {
   return (
     <div className="dashboard-range-toggle" aria-label="Request trend range">
-      {["15m", "1h", "1d", "1w"].map((range) => (
-        <button data-active={range === "15m"} key={range} type="button">
+      {dashboardRanges.map((range) => (
+        <Link
+          data-active={range === filters.range}
+          href={dashboardHref(
+            tenantId,
+            {
+              ...filters,
+              range
+            },
+            activeTab === "overview" ? undefined : activeTab
+          )}
+          key={range}
+          scroll={false}
+        >
           {range}
-        </button>
+        </Link>
       ))}
     </div>
   );
@@ -1062,53 +1129,31 @@ function LineTrendChart({
   secondaryLabel: string;
   secondaryValues: number[];
 }) {
-  const width = 720;
-  const height = 260;
-  const points = [...primaryValues, ...secondaryValues];
-  const maxValue = Math.max(...points, 1);
-  const primaryPath = toPolylinePoints(primaryValues, maxValue, width, height);
-  const secondaryPath = toPolylinePoints(secondaryValues, maxValue, width, height);
-  const gridLines = [0, 1, 2, 3].map((index) => {
-    const y = 24 + index * ((height - 56) / 3);
-
-    return y;
-  });
-
   return (
-    <div className="dashboard-line-chart" role="img" aria-label={`${primaryLabel} and ${secondaryLabel}`}>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        {gridLines.map((y) => (
-          <line className="dashboard-chart-gridline" key={y} x1="34" x2={width - 24} y1={y} y2={y} />
-        ))}
-        <polyline fill="none" points={primaryPath} stroke={primaryColor} strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" />
-        <polyline fill="none" points={secondaryPath} stroke={secondaryColor} strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" />
-        {primaryValues.map((value, index) => {
-          const [x, y] = toPoint(value, index, primaryValues.length, maxValue, width, height);
-
-          return <circle fill={primaryColor} key={`primary-${labels[index]}`} r="4.5" cx={x} cy={y} />;
-        })}
-        {secondaryValues.map((value, index) => {
-          const [x, y] = toPoint(value, index, secondaryValues.length, maxValue, width, height);
-
-          return <circle fill={secondaryColor} key={`secondary-${labels[index]}`} r="4.5" cx={x} cy={y} />;
-        })}
-        {labels.map((label, index) => {
-          const [x] = toPoint(0, index, labels.length, maxValue, width, height);
-
-          return (
-            <text className="dashboard-chart-label" key={label} textAnchor="middle" x={x} y={height - 8}>
-              {label}
-            </text>
-          );
-        })}
-      </svg>
-    </div>
+    <DashboardLineEChart
+      ariaLabel={`${primaryLabel} and ${secondaryLabel}`}
+      labels={labels}
+      series={[
+        {
+          color: primaryColor,
+          data: primaryValues,
+          name: primaryLabel
+        },
+        {
+          color: secondaryColor,
+          data: secondaryValues,
+          name: secondaryLabel
+        }
+      ]}
+    />
   );
 }
 
 function PieShareChart({
+  ariaLabel,
   rows
 }: {
+  ariaLabel: string;
   rows: Array<{
     color: string;
     label: string;
@@ -1116,16 +1161,10 @@ function PieShareChart({
   }>;
 }) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
-  const gradient = toConicGradient(rows, total);
 
   return (
     <div className="dashboard-pie-layout">
-      <div className="dashboard-pie" style={{ background: gradient }}>
-        <div>
-          <strong>{formatInteger(total)}</strong>
-          <span>requests</span>
-        </div>
-      </div>
+      <DashboardPieEChart ariaLabel={ariaLabel} rows={rows} />
       <div className="dashboard-pie-list">
         {rows.map((row) => {
           const percent = total > 0 ? row.value / total : 0;
@@ -1147,37 +1186,67 @@ function buildTrendSeries(
   primaryTotal: number,
   secondaryTotal: number,
   primaryShape: number[],
-  secondaryShape: number[]
+  secondaryShape: number[],
+  pointCount: number
 ) {
-  const primaryBase = Math.max(1, Math.round(primaryTotal / Math.max(primaryShape.length * 2, 1)));
-  const secondaryBase = Math.max(1, Math.round(secondaryTotal / Math.max(secondaryShape.length * 2, 1)));
-  const primary = primaryShape.map((ratio, index) =>
-    Math.max(0, Math.round(primaryBase * ratio + index * Math.max(1, primaryBase * 0.08)))
-  );
-  const secondary = secondaryShape.map((ratio, index) =>
-    Math.max(0, Math.min(primary[index] ?? 0, Math.round(secondaryBase * ratio + index * Math.max(1, secondaryBase * 0.06))))
+  const primaryShapeExpanded = expandShape(primaryShape, pointCount);
+  const secondaryShapeExpanded = expandShape(secondaryShape, pointCount);
+  const primaryShapeTotal = primaryShapeExpanded.reduce((sum, ratio) => sum + ratio, 0) || 1;
+  const secondaryShapeTotal = secondaryShapeExpanded.reduce((sum, ratio) => sum + ratio, 0) || 1;
+  const primary = distributeTotal(primaryTotal, primaryShapeExpanded, primaryShapeTotal);
+  const secondary = distributeTotal(secondaryTotal, secondaryShapeExpanded, secondaryShapeTotal).map(
+    (value, index) => Math.min(value, primary[index] ?? value)
   );
 
   return { primary, secondary };
 }
 
-function toPolylinePoints(values: number[], maxValue: number, width: number, height: number) {
-  return values
-    .map((value, index) => {
-      const [x, y] = toPoint(value, index, values.length, maxValue, width, height);
+function buildTrendLabels(range: DashboardRange) {
+  if (range === "15m") {
+    return ["-14m", "-12m", "-10m", "-8m", "-6m", "-4m", "-2m", "now"];
+  }
 
-      return `${x},${y}`;
-    })
-    .join(" ");
+  if (range === "1h") {
+    return ["-60m", "-50m", "-40m", "-30m", "-20m", "-10m", "now"];
+  }
+
+  if (range === "1d") {
+    return ["-24h", "-20h", "-16h", "-12h", "-8h", "-4h", "now"];
+  }
+
+  return ["-7d", "-6d", "-5d", "-4d", "-3d", "-2d", "-1d", "now"];
 }
 
-function toPoint(value: number, index: number, length: number, maxValue: number, width: number, height: number) {
-  const xPadding = 42;
-  const yPadding = 34;
-  const x = xPadding + index * ((width - xPadding * 2) / Math.max(length - 1, 1));
-  const y = height - yPadding - (value / maxValue) * (height - yPadding * 2);
+function expandShape(shape: number[], pointCount: number) {
+  return Array.from({ length: pointCount }, (_, index) => {
+    const cursor = (index / Math.max(pointCount - 1, 1)) * Math.max(shape.length - 1, 0);
+    const leftIndex = Math.floor(cursor);
+    const rightIndex = Math.min(leftIndex + 1, shape.length - 1);
+    const ratio = cursor - leftIndex;
+    const left = shape[leftIndex] ?? 0;
+    const right = shape[rightIndex] ?? left;
 
-  return [Number(x.toFixed(2)), Number(y.toFixed(2))] as const;
+    return left + (right - left) * ratio;
+  });
+}
+
+function distributeTotal(total: number, shape: number[], shapeTotal: number) {
+  if (total <= 0) {
+    return shape.map(() => 0);
+  }
+
+  let remaining = total;
+  const values = shape.map((ratio, index) => {
+    if (index === shape.length - 1) {
+      return remaining;
+    }
+
+    const value = Math.min(remaining, Math.max(0, Math.round((total * ratio) / shapeTotal)));
+    remaining -= value;
+    return value;
+  });
+
+  return values.map((value) => Math.max(0, value));
 }
 
 function getTopModelShareRows(overview: DashboardOverview) {
@@ -1247,23 +1316,6 @@ function getCacheShareRows(overview: DashboardOverview) {
       ];
 }
 
-function toConicGradient(rows: Array<{ color: string; value: number }>, total: number) {
-  if (total <= 0) {
-    return "conic-gradient(#3b82f6 0deg 360deg)";
-  }
-
-  let cursor = 0;
-  const stops = rows.map((row) => {
-    const start = cursor;
-    const degrees = (row.value / total) * 360;
-    cursor += degrees;
-
-    return `${row.color} ${start.toFixed(2)}deg ${cursor.toFixed(2)}deg`;
-  });
-
-  return `conic-gradient(${stops.join(", ")})`;
-}
-
 function sumRecordMatches(record: Record<string, number> | null | undefined, needles: string[]) {
   if (!record) {
     return 0;
@@ -1277,5 +1329,5 @@ function sumRecordMatches(record: Record<string, number> | null | undefined, nee
 }
 
 function compactModelLabel(model: string) {
-  return model.replace(/^mock-/, "").replace(/^openai-/, "");
+  return formatModelDisplayName(model).replace(/^mock-/, "").replace(/^openai-/, "");
 }
