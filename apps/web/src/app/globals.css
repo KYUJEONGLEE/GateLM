@@ -2427,9 +2427,35 @@ select {
 
 .api-key-issue-form {
   display: grid;
-  grid-template-columns: minmax(180px, 0.75fr) minmax(240px, 1fr) minmax(200px, 0.8fr) auto;
-  gap: 12px;
-  align-items: end;
+  gap: 0;
+}
+
+.credential-line-panel {
+  padding: 18px 22px;
+  box-shadow: none;
+}
+
+.credential-line-panel .panel-heading {
+  margin-bottom: 6px;
+}
+
+.api-key-issue-form > .policy-field {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.api-key-issue-form > .policy-field > span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.api-key-issue-form > .policy-field > input {
+  min-height: 38px;
 }
 
 .api-key-form-actions,
@@ -2442,6 +2468,10 @@ select {
 .api-key-form-actions,
 .api-key-row-actions {
   justify-content: flex-end;
+}
+
+.api-key-form-actions {
+  padding-top: 16px;
 }
 
 .api-key-secret-actions {
@@ -4979,13 +5009,15 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .project-create-form,
-  .api-key-issue-form {
+  .project-create-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .project-create-form button,
-  .api-key-form-actions {
+  .api-key-issue-form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-create-form button {
     grid-column: span 2;
   }
 
@@ -5336,6 +5368,11 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   }
 
   .provider-form-grid > .policy-field {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .api-key-issue-form > .policy-field {
     grid-template-columns: 1fr;
     gap: 8px;
   }

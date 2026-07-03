@@ -362,7 +362,7 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
         </section>
       ) : null}
 
-      <section className="console-panel">
+      <section className="console-panel credential-line-panel">
         <div className="panel-heading">
           <h3>{text.issue}</h3>
         </div>
@@ -421,7 +421,7 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
         </div>
       </section>
 
-      <section className="console-panel">
+      <section className="console-panel credential-line-panel">
         <div className="panel-heading">
           <h3>{text.title}</h3>
           <p>{text.activeOnly}</p>
