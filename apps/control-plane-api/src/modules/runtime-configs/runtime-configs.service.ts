@@ -2073,6 +2073,10 @@ export class RuntimeConfigsService {
   private toRuntimeProviderAdapterConfig(
     adapterType: string,
   ): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+    if (adapterType === 'anthropic') {
+      return { requestFormat: 'anthropic_messages' };
+    }
+
     return {
       requestFormat:
         adapterType === 'mock'
@@ -2084,12 +2088,20 @@ export class RuntimeConfigsService {
   private toAdapterRequestFormat(
     value: unknown,
     adapterType: string,
-  ): 'openai_chat_completions' | 'mock_chat_completions' {
+  ):
+    | 'openai_chat_completions'
+    | 'anthropic_messages'
+    | 'mock_chat_completions' {
     if (
       value === 'openai_chat_completions' ||
+      value === 'anthropic_messages' ||
       value === 'mock_chat_completions'
     ) {
       return value;
+    }
+
+    if (adapterType === 'anthropic') {
+      return 'anthropic_messages';
     }
 
     return adapterType === 'mock'

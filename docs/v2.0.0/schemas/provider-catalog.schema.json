@@ -122,6 +122,7 @@
           "type": "string",
           "enum": [
             "openai_chat_completions",
+            "anthropic_messages",
             "mock_chat_completions"
           ],
           "description": "Wire request format used by the Provider Adapter."

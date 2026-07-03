@@ -29,6 +29,7 @@ export type ProviderPresetRecord = {
   defaultTimeoutMs: number;
   displayName: string;
   modelsEndpointPath: string;
+  providerConfig: Record<string, unknown> | null;
   providerKey: string;
 };
 
@@ -66,7 +67,10 @@ export type ProviderConnectionFormValues = {
   models: string;
   modelsEndpointPath: string;
   provider: string;
-  requestFormat: "openai_chat_completions" | "mock_chat_completions";
+  requestFormat:
+    | "openai_chat_completions"
+    | "anthropic_messages"
+    | "mock_chat_completions";
   resolver: string;
   secretRef: string;
   status: ProviderConnectionStatus;
