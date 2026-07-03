@@ -3,6 +3,7 @@ import "server-only";
 import type { IncomingHttpHeaders } from "node:http";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { getControlPlaneBaseUrl } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 import type {
   GatewayDependencyStatus,
@@ -26,21 +27,39 @@ type ParsedHealthPayload = {
 export async function getGatewayHealthModel(routeTenantId: string): Promise<GatewayHealthModel> {
   const checkedAt = new Date().toISOString();
   const gatewayConfig = getLiveGatewayConfig();
-  const [healthz, readyz] = await Promise.all([
+  const controlPlaneBaseUrl = getControlPlaneBaseUrl();
+  const [healthz, readyz, controlPlaneHealthz, controlPlaneReadyz] = await Promise.all([
     getGatewayHealthEndpoint(gatewayConfig.baseUrl, "/healthz", checkedAt),
-    getGatewayHealthEndpoint(gatewayConfig.baseUrl, "/readyz", checkedAt)
+    getGatewayHealthEndpoint(gatewayConfig.baseUrl, "/readyz", checkedAt),
+    getServiceHealthEndpoint(controlPlaneBaseUrl, "/healthz", checkedAt, "Control Plane"),
+    getServiceHealthEndpoint(controlPlaneBaseUrl, "/readyz", checkedAt, "Control Plane")
   ]);
   const dependencies = readyz.dependencies;
   const failingDependencyCount = dependencies.filter((dependency) => dependency.status !== "ok").length;
+  const controlPlaneDependencies = controlPlaneReadyz.dependencies;
+  const failingControlPlaneDependencyCount = controlPlaneDependencies.filter(
+    (dependency) => dependency.status !== "ok"
+  ).length;
 
   return {
     checkedAt,
+    controlPlane: {
+      baseUrl: controlPlaneBaseUrl,
+      healthz: controlPlaneHealthz,
+      readyz: controlPlaneReadyz
+    },
     healthz,
     readyz,
     routeTenantId,
     summary: {
       dependencyCount: dependencies.length,
       failingDependencyCount,
+      isControlPlaneAlive:
+        controlPlaneHealthz.httpStatus === 200 && controlPlaneHealthz.status === "ok",
+      isControlPlaneReady:
+        controlPlaneReadyz.httpStatus === 200 &&
+        controlPlaneReadyz.status === "ok" &&
+        failingControlPlaneDependencyCount === 0,
       isAlive: healthz.httpStatus === 200 && healthz.status === "ok",
       isReady: readyz.httpStatus === 200 && readyz.status === "ready" && failingDependencyCount === 0,
       requiredDependencyCount: dependencies.filter((dependency) => dependency.required).length
@@ -52,6 +71,15 @@ async function getGatewayHealthEndpoint(
   baseUrl: string,
   path: "/healthz" | "/readyz",
   checkedAt: string
+): Promise<GatewayHealthModel["readyz"]> {
+  return getServiceHealthEndpoint(baseUrl, path, checkedAt, "Gateway");
+}
+
+async function getServiceHealthEndpoint(
+  baseUrl: string,
+  path: "/healthz" | "/readyz",
+  checkedAt: string,
+  serviceLabel: string
 ): Promise<GatewayHealthModel["readyz"]> {
   try {
     const response = await requestGatewayHealth(baseUrl, path);
@@ -65,7 +93,7 @@ async function getGatewayHealthEndpoint(
       loadError:
         response.status >= 200 && response.status < 300
           ? null
-          : `Gateway ${path} failed with HTTP ${response.status}.`,
+          : `${serviceLabel} ${path} failed with HTTP ${response.status}.`,
       service: typeof payload.service === "string" ? payload.service : null,
       status,
       time: typeof payload.time === "string" ? payload.time : null
@@ -75,7 +103,7 @@ async function getGatewayHealthEndpoint(
       checkedAt,
       dependencies: [],
       httpStatus: null,
-      loadError: "Gateway unavailable.",
+      loadError: `${serviceLabel} unavailable.`,
       service: null,
       status: "error",
       time: null

@@ -33,7 +33,7 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(decision.detected_types, ("api_key", "email"))
         self.assertEqual(decision.detected_count, 2)
         self.assertEqual(decision.block_reason, "sensitive_data_blocked")
-        self.assertIn("[EMAIL_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertIn("[EMAIL_1]", decision.redacted_prompt_preview or "")
         self.assertIn("[API_KEY_REDACTED]", decision.redacted_prompt_preview or "")
         self.assertNotIn("1234567890abcdef", decision.redacted_prompt_preview or "")
 
@@ -494,8 +494,452 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
         self.assertEqual(prompt[signals[0].start : signals[0].end], "alex@example.test")
         self.assertEqual(
             redact_prompt(prompt, signals),
-            "Contact ( [EMAIL_REDACTED] ) for the synthetic demo.",
+            "Contact ( [EMAIL_1] ) for the synthetic demo.",
         )
+
+    def test_redact_prompt_uses_entity_consistent_placeholders_for_supported_pii(self) -> None:
+        prompt = (
+            "Contact Alex Kim at alex@example.test. "
+            "Alex Kim can use alex@example.test or 010-0000-0000 and 010 0000 0000."
+        )
+
+        signals = [
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "email", "alex@example.test", "[EMAIL_REDACTED]"),
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]", occurrence=2),
+            signal(prompt, "email", "alex@example.test", "[EMAIL_REDACTED]", occurrence=2),
+            signal(prompt, "phone_number", "010-0000-0000", "[PHONE_NUMBER_REDACTED]"),
+            signal(prompt, "phone_number", "010 0000 0000", "[PHONE_NUMBER_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "Contact [PERSON_1] at [EMAIL_1]. "
+                "[PERSON_1] can use [EMAIL_1] or [PHONE_NUMBER_1] and [PHONE_NUMBER_1]."
+            ),
+        )
+
+    def test_redact_prompt_uses_role_aware_placeholders_for_explicit_person_roles(self) -> None:
+        prompt = (
+            "customer Alex Kim asked agent Jamie Park. "
+            "patient Alex Kim later called doctor Pat Lee. "
+            "name Taylor Lee"
+        )
+
+        signals = [
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", "Jamie Park", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]", occurrence=2),
+            signal(prompt, "person_name", "Pat Lee", "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", "Taylor Lee", "[PERSON_NAME_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "[CUSTOMER_1] asked [AGENT_1]. "
+                "[CUSTOMER_1] later called [DOCTOR_1]. "
+                "name [PERSON_1]"
+            ),
+        )
+
+    def test_redact_prompt_uses_semantic_placeholders_for_recruiting_person_roles(self) -> None:
+        applicant_name = "Alex Kim"
+        interviewer_name = "Jamie Park"
+        korean_applicant_name = "\uc774\uc724\uc9c0"
+        korean_interviewer_name = "\uae40\ubbfc\uc218"
+        prompt = (
+            f"applicant {applicant_name} sent a resume to interviewer {interviewer_name}. "
+            f"\uc9c0\uc6d0\uc790 {korean_applicant_name}\uac00 "
+            f"\uba74\uc811\uad00 {korean_interviewer_name}\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
+        )
+
+        signals = [
+            signal(prompt, "person_name", applicant_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", interviewer_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", korean_applicant_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", korean_interviewer_name, "[PERSON_NAME_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "[APPLICANT_1] sent a resume to [INTERVIEWER_1]. "
+                "[APPLICANT_2]\uac00 [INTERVIEWER_2]\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
+            ),
+        )
+
+    def test_redact_prompt_uses_role_aware_placeholders_for_korean_person_roles(self) -> None:
+        customer_name = "\uc774\uc724\uc9c0"
+        agent_name = "\uae40\ubbfc\uc218"
+        doctor_name = "\ubc15\uc9c0\ud6c8"
+        patient_name = "\ucd5c\uc11c\uc5f0"
+        prompt = (
+            f"\uace0\uac1d {customer_name}\uac00 "
+            f"\uc0c1\ub2f4\uc6d0 {agent_name}\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. "
+            f"\ub2f4\ub2f9 \uc758\uc0ac {doctor_name}\uc774 "
+            f"\ud658\uc790 {patient_name}\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
+        )
+
+        signals = [
+            signal(prompt, "person_name", customer_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", agent_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", doctor_name, "[PERSON_NAME_REDACTED]"),
+            signal(prompt, "person_name", patient_name, "[PERSON_NAME_REDACTED]"),
+        ]
+
+        self.assertEqual(
+            redact_prompt(prompt, signals),
+            (
+                "[CUSTOMER_1]\uac00 "
+                "[AGENT_1]\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. "
+                "[DOCTOR_1]\uc774 "
+                "[PATIENT_1]\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
+            ),
+        )
+
+    def test_redact_prompt_preserves_business_role_relationship(self) -> None:
+        owner_name = "\uae40\ubbfc\uc218"
+        approver_name = "\uc774\uc724\uc9c0"
+        prompt = f"{owner_name}\uc758 \ud300\uc7a5 {approver_name}\uac00 \uc2b9\uc778\ud588\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", owner_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", approver_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\uc758 [ROLE:\ud300\uc7a5] [PERSON_2]\uac00 \uc2b9\uc778\ud588\ub2e4.",
+        )
+        self.assertNotIn(owner_name, redacted)
+        self.assertNotIn(approver_name, redacted)
+
+    def test_redact_prompt_preserves_all_allowed_business_roles(self) -> None:
+        roles = [
+            "\ud300\uc7a5",
+            "\ub9e4\ub2c8\uc800",
+            "\uc0c1\uc0ac",
+            "\ubd80\ud558",
+            "\ub2f4\ub2f9\uc790",
+            "\uc2b9\uc778\uc790",
+            "\uac80\ud1a0\uc790",
+            "\uc694\uccad\uc790",
+            "\uacb0\uc7ac\uc790",
+            "\uae30\uc548\uc790",
+            "\ucc98\ub9ac\uc790",
+            "\uc811\uc218\uc790",
+            "\ucc38\uc870\uc790",
+            "\uad00\ub9ac\uc790",
+            "\ub9ac\ub354",
+            "\ud30c\ud2b8\uc7a5",
+            "\uc2e4\uc7a5",
+            "\ubcf8\ubd80\uc7a5",
+            "\ucc45\uc784\uc790",
+            "\uc6b4\uc601\uc790",
+            "\uad00\ub9ac\ucc45\uc784\uc790",
+            "\uc2e4\ubb34\uc790",
+            "\uc791\uc131\uc790",
+            "\uc218\uc2e0\uc790",
+            "\ubc1c\uc2e0\uc790",
+            "\ubcf4\uace0\uc790",
+            "\ud53c\ubcf4\uace0\uc790",
+            "\ud611\uc5c5\uc790",
+            "\uac80\uc218\uc790",
+            "\ubc30\uc815\uc790",
+            "\ubc30\uc815\ub300\uc0c1\uc790",
+            "\uc0c1\ub2f4\uc6d0",
+            "\uc0c1\ub2f4\uc0ac",
+            "\uc288\ud37c\ubc14\uc774\uc800",
+            "\uc5d0\uc2a4\uceec\ub808\uc774\uc158 \ub2f4\ub2f9\uc790",
+            "PM",
+            "PO",
+            "PL",
+            "\ud504\ub85c\uc81d\ud2b8 \ub9e4\ub2c8\uc800",
+            "\uac1c\ubc1c\uc790",
+            "\ub514\uc790\uc774\ub108",
+            "QA",
+            "\uc601\uc5c5\ub2f4\ub2f9\uc790",
+            "\uacc4\uc815\ub2f4\ub2f9\uc790",
+            "AM",
+            "AE",
+            "CSM",
+            "\uc9c0\uc6d0\uc790",
+            "\uba74\uc811\uad00",
+            "\ud3c9\uac00\uc790",
+            "\ucc44\uc6a9\ub2f4\ub2f9\uc790",
+            "\ubc95\ubb34\ub2f4\ub2f9\uc790",
+            "\uacc4\uc57d\ub2f4\ub2f9\uc790",
+            "\ud68c\uacc4\ub2f4\ub2f9\uc790",
+            "\uc815\uc0b0\ub2f4\ub2f9\uc790",
+        ]
+
+        for role in roles:
+            with self.subTest(role=role):
+                prompt = f"\uae40\ubbfc\uc218\uc758 {role} \uc774\uc724\uc9c0\uac00 \ucc98\ub9ac\ud588\ub2e4."
+                redacted = redact_prompt(
+                    prompt,
+                    [
+                        signal(prompt, "person_name", "\uae40\ubbfc\uc218", "[PERSON_NAME_REDACTED]"),
+                        signal(prompt, "person_name", "\uc774\uc724\uc9c0", "[PERSON_NAME_REDACTED]"),
+                    ],
+                )
+                self.assertIn(f"[ROLE:{role}]", redacted)
+                self.assertNotIn("\uae40\ubbfc\uc218", redacted)
+                self.assertNotIn("\uc774\uc724\uc9c0", redacted)
+
+    def test_redact_prompt_links_korean_person_aliases_to_unique_full_name_anchor(self) -> None:
+        full_name = "\uc774\uc724\uc9c0"
+        given_name = "\uc724\uc9c0"
+        family_name = "\uc774"
+        prompt = (
+            f"{full_name}\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
+            f"{given_name}\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4. "
+            f"{family_name} \ud300\uc7a5\uc740 \uc2b9\uc778\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", full_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", given_name, "[PERSON_NAME_REDACTED]", occurrence=2),
+                signal_at(prompt, "person_name", f"{family_name} \ud300\uc7a5", family_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            (
+                "[PERSON_1]\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
+                "[PERSON_1]\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4. "
+                "[PERSON_1] [ROLE:\ud300\uc7a5]\uc740 \uc2b9\uc778\ud588\ub2e4."
+            ),
+        )
+        self.assertEqual(redacted.count("[PERSON_1]"), 3)
+        self.assertNotIn(full_name, redacted)
+        self.assertNotIn(given_name, redacted)
+
+    def test_redact_prompt_reuses_placeholder_for_contiguous_korean_business_role_suffix(self) -> None:
+        name = "\ud64d\uae38\ub3d9"
+        spaced = f"{name} \ud300\uc7a5"
+        contiguous = f"{name}\ud300\uc7a5"
+        prompt = f"{spaced}\uc740 {contiguous}\uc774 \uc2b9\uc778\ud588\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", spaced, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", contiguous, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(redacted, "[PERSON_1]\uc740 [PERSON_1]\uc774 \uc2b9\uc778\ud588\ub2e4.")
+        self.assertEqual(redacted.count("[PERSON_1]"), 2)
+        self.assertNotIn(name, redacted)
+
+    def test_redact_prompt_does_not_link_ambiguous_korean_person_alias(self) -> None:
+        first_name = "\uc774\uc724\uc9c0"
+        second_name = "\ubc15\uc724\uc9c0"
+        alias = "\uc724\uc9c0"
+        prompt = (
+            f"{first_name}\uc640 {second_name}\uac00 \ucc38\uc11d\ud588\ub2e4. "
+            f"{alias}\ub2d8\uc774 \ubc1c\ud45c\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", first_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", second_name, "[PERSON_NAME_REDACTED]"),
+                signal_at(prompt, "person_name", f"{alias}\ub2d8", alias, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\uc640 [PERSON_2]\uac00 \ucc38\uc11d\ud588\ub2e4. [PERSON_3]\ub2d8\uc774 \ubc1c\ud45c\ud588\ub2e4.",
+        )
+        self.assertNotIn(first_name, redacted)
+        self.assertNotIn(second_name, redacted)
+        self.assertNotIn(f"{alias}\ub2d8", redacted)
+
+    def test_redact_prompt_preserves_coreference_for_previous_unique_subject(self) -> None:
+        sender_name = "\uc774\uc724\uc9c0"
+        recipient_name = "\uae40\ubbfc\uc218"
+        prompt = (
+            f"{sender_name}\uac00 {recipient_name}\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
+            "\uadf8\ub140\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", sender_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", recipient_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            (
+                "[PERSON_1]\uac00 [PERSON_2]\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
+                "[PERSON_1]\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+            ),
+        )
+        self.assertNotIn(sender_name, redacted)
+        self.assertNotIn(recipient_name, redacted)
+        self.assertNotIn("\uadf8\ub140", redacted)
+
+    def test_redact_prompt_leaves_coreference_when_previous_subject_is_ambiguous(self) -> None:
+        first_name = "\uc774\uc724\uc9c0"
+        second_name = "\uae40\ubbfc\uc218"
+        prompt = (
+            f"{first_name}\uc640 {second_name}\uac00 \ucc38\uc11d\ud588\ub2e4. "
+            "\uadf8\ub140\ub294 \ubc1c\ud45c\ub97c \uc900\ube44\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", first_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", second_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\uc640 [PERSON_2]\uac00 \ucc38\uc11d\ud588\ub2e4. "
+            "\uadf8\ub140\ub294 \ubc1c\ud45c\ub97c \uc900\ube44\ud588\ub2e4.",
+        )
+
+    def test_redact_prompt_preserves_english_coreference_for_previous_unique_subject(self) -> None:
+        sender_name = "Alex Kim"
+        recipient_name = "Jamie Park"
+        prompt = f"{sender_name} emailed {recipient_name}. She waited for a reply."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", sender_name, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", recipient_name, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1] emailed [PERSON_2]. [PERSON_1] waited for a reply.",
+        )
+
+    def test_redact_prompt_preserves_structure_around_overextended_pii_spans(self) -> None:
+        name_with_honorific = "\uc774\uc724\uc9c0\ub2d8"
+        email_with_copula = "yoonji@example.com\uc785\ub2c8\ub2e4"
+        prompt = f"{name_with_honorific}\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 {email_with_copula}."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", name_with_honorific, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "email", email_with_copula, "[EMAIL_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\ub2d8\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 [EMAIL_1]\uc785\ub2c8\ub2e4.",
+        )
+        self.assertNotIn("\uc774\uc724\uc9c0", redacted)
+        self.assertNotIn("yoonji@example.com", redacted)
+
+    def test_redact_prompt_preserves_korean_particles_around_person_names(self) -> None:
+        person_name = "\uc774\uc724\uc9c0"
+        raw_spans = [
+            f"{person_name}\ub294",
+            f"{person_name}\uac00",
+            f"{person_name}\ub97c",
+            f"{person_name}\uc5d0\uac8c",
+            f"{person_name}\uc640",
+            f"{person_name}\uc758",
+        ]
+        prompt = " ".join(raw_spans) + " \uae30\ub85d\uc744 \ud655\uc778\ud588\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [signal(prompt, "person_name", raw_span, "[PERSON_NAME_REDACTED]") for raw_span in raw_spans],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\ub294 [PERSON_1]\uac00 [PERSON_1]\ub97c [PERSON_1]\uc5d0\uac8c "
+            "[PERSON_1]\uc640 [PERSON_1]\uc758 \uae30\ub85d\uc744 \ud655\uc778\ud588\ub2e4.",
+        )
+        self.assertNotIn(person_name, redacted)
+
+    def test_redact_prompt_preserves_honorific_and_role_markers_around_person_names(self) -> None:
+        raw_spans = [
+            "\uc774\uc724\uc9c0\ub2d8",
+            "\uae40\ubbfc\uc218 \ud300\uc7a5\ub2d8\uaed8",
+            "\ubc15\uc9c0\ud6c8 \uc120\uc0dd\ub2d8\uc774",
+            "\ucd5c\uc11c\uc5f0 \ub300\ud45c\ub2d8\uc5d0\uac8c",
+        ]
+        prompt = (
+            f"{raw_spans[0]}\uc774 {raw_spans[1]} \uc5f0\ub77d\ud588\ub2e4. "
+            f"{raw_spans[2]} {raw_spans[3]} \uc548\ub0b4\ud588\ub2e4."
+        )
+
+        redacted = redact_prompt(
+            prompt,
+            [signal(prompt, "person_name", raw_span, "[PERSON_NAME_REDACTED]") for raw_span in raw_spans],
+        )
+
+        self.assertEqual(
+            redacted,
+            (
+                "[PERSON_1]\ub2d8\uc774 [PERSON_2] \ud300\uc7a5\ub2d8\uaed8 \uc5f0\ub77d\ud588\ub2e4. "
+                "[PERSON_3] \uc120\uc0dd\ub2d8\uc774 [PERSON_4] \ub300\ud45c\ub2d8\uc5d0\uac8c \uc548\ub0b4\ud588\ub2e4."
+            ),
+        )
+        for raw_name in ["\uc774\uc724\uc9c0", "\uae40\ubbfc\uc218", "\ubc15\uc9c0\ud6c8", "\ucd5c\uc11c\uc5f0"]:
+            self.assertNotIn(raw_name, redacted)
+
+    def test_redact_prompt_preserves_boundaries_after_overextended_korean_person_names(self) -> None:
+        first_span = "\uc774\uc724\uc9c0\ub2d8\uaed8\uc11c\ub294"
+        second_span = "\uae40\ubbfc\uc218\ud300\uc7a5\ub2d8"
+        prompt = f"{first_span} \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. {second_span}\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "person_name", first_span, "[PERSON_NAME_REDACTED]"),
+                signal(prompt, "person_name", second_span, "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(
+            redacted,
+            "[PERSON_1]\ub2d8\uaed8\uc11c\ub294 \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. "
+            "[PERSON_2]\ud300\uc7a5\ub2d8\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4.",
+        )
+        self.assertNotIn("\uc774\uc724\uc9c0", redacted)
+        self.assertNotIn("\uae40\ubbfc\uc218", redacted)
+
+    def test_redact_prompt_keeps_block_placeholders_type_level(self) -> None:
+        raw_secret = "syntheticSecretValue1234567890abcdef"
+        prompt = f"Review secret {raw_secret} for Alex Kim."
+
+        redacted = redact_prompt(
+            prompt,
+            [
+                signal(prompt, "secret", raw_secret, "[SECRET_REDACTED]", action="block"),
+                signal(prompt, "person_name", "Alex Kim", "[PERSON_NAME_REDACTED]"),
+            ],
+        )
+
+        self.assertEqual(redacted, "Review secret [SECRET_REDACTED] for [PERSON_1].")
+        self.assertNotIn(raw_secret, redacted)
 
     def test_noop_evaluator_returns_none_without_preview(self) -> None:
         decision = NoopSafetyEvaluator().evaluate(
@@ -571,7 +1015,7 @@ def assert_redacted_detector(
     test_case.assertEqual(decision.action, "redacted")
     test_case.assertEqual(decision.detected_types, (detector_type,))
     test_case.assertEqual(decision.detected_count, 1)
-    test_case.assertIn(placeholder, decision.redacted_prompt_preview or "")
+    test_case.assertIn(expected_placeholder(detector_type, placeholder), decision.redacted_prompt_preview or "")
     test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
 
 
@@ -605,6 +1049,64 @@ def detector(
         action=action,
         placeholder=placeholder,
     )
+
+
+def expected_placeholder(detector_type: str, fallback: str) -> str:
+    return {
+        "person_name": "[PERSON_1]",
+        "organization_name": "[ORGANIZATION_1]",
+        "postal_address": "[ADDRESS_1]",
+        "email": "[EMAIL_1]",
+        "phone_number": "[PHONE_NUMBER_1]",
+    }.get(detector_type, fallback)
+
+
+def signal(
+    prompt: str,
+    detector_type: str,
+    raw_value: str,
+    placeholder: str,
+    *,
+    action: str = "redact",
+    occurrence: int = 1,
+) -> SafetySignal:
+    start = nth_index(prompt, raw_value, occurrence)
+    return SafetySignal(
+        detector_type=detector_type,
+        start=start,
+        end=start + len(raw_value),
+        action=action,
+        placeholder=placeholder,
+        priority=10,
+    )
+
+
+def signal_at(
+    prompt: str,
+    detector_type: str,
+    marker: str,
+    raw_value: str,
+    placeholder: str,
+    *,
+    action: str = "redact",
+) -> SafetySignal:
+    marker_start = prompt.index(marker)
+    start = prompt.index(raw_value, marker_start)
+    return SafetySignal(
+        detector_type=detector_type,
+        start=start,
+        end=start + len(raw_value),
+        action=action,
+        placeholder=placeholder,
+        priority=10,
+    )
+
+
+def nth_index(text: str, value: str, occurrence: int) -> int:
+    start = -1
+    for _ in range(occurrence):
+        start = text.index(value, start + 1)
+    return start
 
 
 if __name__ == "__main__":

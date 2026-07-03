@@ -180,7 +180,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
-	maskingResult, redactedMessages, redactedPrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID))
+	maskingResult, redactedMessages, redactedPrompt, logSafePrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID), reqCtx.RuntimeSafetyPolicy)
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway masking failed.", "mask_or_block")
 		return
@@ -188,13 +188,15 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.MaskingAction = string(maskingResult.Action)
 	reqCtx.MaskingDetectedTypes = maskingResult.DetectedTypes
 	reqCtx.MaskingDetectedCount = maskingResult.DetectedCount
-	if maskingResult.Action == maskdomain.ActionNone {
+	reqCtx.PolicyAllowedTypes = maskingResult.PolicyAllowedTypes
+	reqCtx.MandatoryProtectedTypes = maskingResult.MandatoryProtectedTypes
+	if maskingResult.Action == maskdomain.ActionNone && len(maskingResult.PolicyAllowedTypes) == 0 {
 		reqCtx.RedactedPromptPreview = ""
 	} else {
 		reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
 	}
 	reqCtx.SecurityPolicyVersionID = maskingResult.SecurityPolicyVersionID
-	terminalLogPrompt = redactedPrompt
+	terminalLogPrompt = firstNonEmpty(logSafePrompt, redactedPrompt)
 
 	if maskingResult.Action == maskdomain.ActionBlocked {
 		reqCtx.Status = "blocked"
@@ -229,10 +231,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
-	if reqCtx.Stream {
-		bypassExactCache(reqCtx, "streaming_request")
-		gatewayCtx = newGatewayContext(reqCtx, promptText)
-	} else if shouldLookupExactCache(gatewayCtx) {
+	if shouldLookupExactCache(gatewayCtx) {
 		if err := h.populateRoutingAwareCacheIdentity(r.Context(), reqCtx, chatReq.Model); err != nil {
 			h.writeProviderResolutionFailure(w, reqCtx, err)
 			return
@@ -260,8 +259,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	providerReq := chatReq
-	providerReq.RequestID = requestID
+	providerReq := providerRequestForTarget(chatReq, requestID)
 	reqCtx.SelectedProvider = target.ProviderName
 	reqCtx.SelectedProviderID = target.ProviderID
 	reqCtx.SelectedProviderCatalogKey = firstNonEmpty(reqCtx.SelectedProviderCatalogKey, target.ProviderName)
@@ -336,9 +334,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 func shouldLookupExactCache(gatewayCtx *request.GatewayContext) bool {
 	if gatewayCtx == nil {
 		return true
-	}
-	if gatewayCtx.Request.Stream {
-		return false
 	}
 	if !gatewayExactCachePolicyAllowsLookup(gatewayCtx) {
 		return false
@@ -777,7 +772,7 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 		return
 	}
 
-	fallbackReq := chatReq
+	fallbackReq := providerRequestForTarget(chatReq, reqCtx.RequestID)
 	fallbackReq.Model = fallbackTarget.ModelName
 	fallbackStartedAt := time.Now()
 	fallbackResp, fallbackCallErr := fallbackTarget.Adapter.CreateChatCompletion(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
@@ -849,7 +844,8 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		return
 	}
 
-	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream)
+	streamMetrics := h.startStreamMetrics(reqCtx.SelectedProvider, reqCtx.SelectedModel, providerStartedAt)
+	started, usage, cacheableResp, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	providerDuration := time.Since(providerStartedAt)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
@@ -860,6 +856,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	}
 
 	if streamErr == nil {
+		streamMetrics.finish("completed", "none", time.Now())
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: reqCtx.SelectedProvider,
 			SelectedModel:    reqCtx.SelectedModel,
@@ -875,6 +872,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		reqCtx.ErrorStage = ""
 		reqCtx.SavedCostMicroUSD = 0
 		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
+		h.writeExactCache(context.WithoutCancel(r.Context()), reqCtx, cacheableResp)
 		return
 	}
 
@@ -890,6 +888,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		outcome = "cancelled"
 		terminalStatus = invocationlog.StatusCancelled
 	}
+	streamMetrics.finish(outcome, code, time.Now())
 
 	h.recordProviderRequest(metrics.ProviderRequest{
 		SelectedProvider: reqCtx.SelectedProvider,
@@ -986,7 +985,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		return
 	}
 
-	fallbackReq := chatReq
+	fallbackReq := providerRequestForTarget(chatReq, reqCtx.RequestID)
 	fallbackReq.Model = fallbackTarget.ModelName
 	fallbackReq.Stream = true
 	fallbackStartedAt := time.Now()
@@ -1031,7 +1030,8 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	reqCtx.Provider = fallbackTarget.ProviderName
 	reqCtx.Model = fallbackTarget.ModelID
 
-	started, usage, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream)
+	streamMetrics := h.startStreamMetrics(fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackStartedAt)
+	started, usage, _, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	fallbackDuration := time.Since(fallbackStartedAt)
 	if usage != nil {
 		reqCtx.PromptTokens = usage.PromptTokens
@@ -1039,6 +1039,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		reqCtx.TotalTokens = usage.TotalTokens
 	}
 	if streamErr == nil {
+		streamMetrics.finish("completed", "none", time.Now())
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: fallbackTarget.ProviderName,
 			SelectedModel:    fallbackTarget.ModelID,
@@ -1072,6 +1073,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		outcome = "cancelled"
 		terminalStatus = invocationlog.StatusCancelled
 	}
+	streamMetrics.finish(outcome, streamCode, time.Now())
 	h.recordProviderRequest(metrics.ProviderRequest{
 		SelectedProvider: fallbackTarget.ProviderName,
 		SelectedModel:    fallbackTarget.ModelID,
@@ -1261,47 +1263,57 @@ func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
 	}
 }
 
-func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []provider.ChatMessage, securityPolicyVersionID string) (maskdomain.Result, []provider.ChatMessage, string, error) {
+func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []provider.ChatMessage, securityPolicyVersionID string, safetyPolicy runtimeconfig.SafetyPolicy) (maskdomain.Result, []provider.ChatMessage, string, string, error) {
 	redactedMessages := make([]provider.ChatMessage, len(messages))
 	results := make([]maskdomain.Result, 0, len(messages))
 	redactedPromptParts := make([]string, 0, len(messages))
+	entityScope := maskdomain.NewEntityScope()
+	logSafePromptParts := make([]string, 0, len(messages))
 	if strings.TrimSpace(securityPolicyVersionID) == "" {
 		securityPolicyVersionID = h.SecurityPolicyVersionID
 	}
+	detectorPolicies := maskingDetectorPolicies(safetyPolicy)
 
 	for index, message := range messages {
 		content, err := chatMessageText(message)
 		if err != nil {
-			return maskdomain.Result{}, nil, "", err
+			return maskdomain.Result{}, nil, "", "", err
 		}
 
 		result, err := h.MaskingEngine.Apply(ctx, maskdomain.ApplyRequest{
 			Prompt:                  content,
 			SecurityPolicyVersionID: securityPolicyVersionID,
+			EntityScope:             entityScope,
+			DetectorPolicies:        detectorPolicies,
 		})
 		if err != nil {
-			return maskdomain.Result{}, nil, "", err
+			return maskdomain.Result{}, nil, "", "", err
 		}
 
 		redactedMessages[index] = message
 		encodedContent, err := json.Marshal(result.RedactedPrompt)
 		if err != nil {
-			return maskdomain.Result{}, nil, "", err
+			return maskdomain.Result{}, nil, "", "", err
 		}
 		redactedMessages[index].Content = encodedContent
 		results = append(results, result)
 		redactedPromptParts = append(redactedPromptParts, result.RedactedPrompt)
+		logSafePromptParts = append(logSafePromptParts, firstNonEmpty(result.LogSafePrompt, result.RedactedPrompt))
 	}
 
 	combinedPrompt := strings.Join(redactedPromptParts, "\n")
-	combined := combineMaskingResults(results, combinedPrompt, securityPolicyVersionID)
-	return combined, redactedMessages, combinedPrompt, nil
+	combinedLogSafePrompt := strings.Join(logSafePromptParts, "\n")
+	combined := combineMaskingResults(results, combinedPrompt, combinedLogSafePrompt, securityPolicyVersionID)
+	return combined, redactedMessages, combinedPrompt, combinedLogSafePrompt, nil
 }
 
-func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, fallbackPolicyVersion string) maskdomain.Result {
+func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, logSafePrompt string, fallbackPolicyVersion string) maskdomain.Result {
 	action := maskdomain.ActionNone
 	detectedTypeSet := map[string]struct{}{}
+	policyAllowedTypeSet := map[string]struct{}{}
+	mandatoryProtectedTypeSet := map[string]struct{}{}
 	detectedCount := 0
+	policyAllowedCount := 0
 	securityPolicyVersionID := strings.TrimSpace(fallbackPolicyVersion)
 
 	for _, result := range results {
@@ -1313,7 +1325,14 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 		for _, detectorType := range result.DetectedTypes {
 			detectedTypeSet[detectorType] = struct{}{}
 		}
+		for _, detectorType := range result.PolicyAllowedTypes {
+			policyAllowedTypeSet[detectorType] = struct{}{}
+		}
+		for _, detectorType := range result.MandatoryProtectedTypes {
+			mandatoryProtectedTypeSet[detectorType] = struct{}{}
+		}
 		detectedCount += result.DetectedCount
+		policyAllowedCount += result.PolicyAllowedCount
 		if result.SecurityPolicyVersionID != "" {
 			securityPolicyVersionID = result.SecurityPolicyVersionID
 		}
@@ -1327,15 +1346,51 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 		detectedTypes = append(detectedTypes, detectorType)
 	}
 	sort.Strings(detectedTypes)
+	policyAllowedTypes := sortedKeys(policyAllowedTypeSet)
+	mandatoryProtectedTypes := sortedKeys(mandatoryProtectedTypeSet)
+	if strings.TrimSpace(logSafePrompt) == "" {
+		logSafePrompt = redactedPrompt
+	}
 
 	return maskdomain.Result{
 		Action:                  action,
 		DetectedTypes:           detectedTypes,
 		DetectedCount:           detectedCount,
+		PolicyAllowedTypes:      policyAllowedTypes,
+		PolicyAllowedCount:      policyAllowedCount,
+		MandatoryProtectedTypes: mandatoryProtectedTypes,
 		RedactedPrompt:          redactedPrompt,
-		RedactedPromptPreview:   maskdomain.PreviewRedactedPrompt(redactedPrompt),
+		LogSafePrompt:           logSafePrompt,
+		RedactedPromptPreview:   maskdomain.PreviewRedactedPrompt(logSafePrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}
+}
+
+func maskingDetectorPolicies(policy runtimeconfig.SafetyPolicy) []maskdomain.DetectorPolicy {
+	policy = policy.Normalize()
+	if len(policy.DetectorSet) == 0 {
+		return nil
+	}
+	policies := make([]maskdomain.DetectorPolicy, 0, len(policy.DetectorSet))
+	for _, detector := range policy.DetectorSet {
+		policies = append(policies, maskdomain.DetectorPolicy{
+			DetectorType: detector.DetectorType,
+			Action:       maskdomain.PolicyAction(detector.Action),
+		})
+	}
+	return policies
+}
+
+func sortedKeys(set map[string]struct{}) []string {
+	if len(set) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(set))
+	for value := range set {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return values
 }
 
 func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
@@ -1419,7 +1474,7 @@ func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx 
 }
 
 func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, providerResp *provider.ChatCompletionResponse) {
-	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil || reqCtx.Stream || reqCtx.FallbackOccurred {
+	if h.ExactCacheStore == nil || reqCtx.CacheStatus != cachestage.CacheStatusMiss || reqCtx.CacheKeyHash == "" || providerResp == nil || reqCtx.FallbackOccurred {
 		return
 	}
 
@@ -1687,18 +1742,106 @@ func writeStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, re
 	return true, nil
 }
 
-func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWriter, reqCtx *pipeline.RequestContext, stream provider.ChatCompletionStreamReader) (bool, *provider.Usage, error) {
+type streamRelayMetricsRecorder struct {
+	registry         *metrics.Registry
+	selectedProvider string
+	selectedModel    string
+	startedAt        time.Time
+	ttftRecorded     bool
+	finished         bool
+}
+
+func (h *ChatCompletionsHandler) startStreamMetrics(selectedProvider string, selectedModel string, startedAt time.Time) *streamRelayMetricsRecorder {
+	if h == nil || h.MetricsRegistry == nil {
+		return nil
+	}
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+	h.MetricsRegistry.StreamStarted(selectedProvider, selectedModel)
+	return &streamRelayMetricsRecorder{
+		registry:         h.MetricsRegistry,
+		selectedProvider: selectedProvider,
+		selectedModel:    selectedModel,
+		startedAt:        startedAt,
+	}
+}
+
+func (r *streamRelayMetricsRecorder) recordTTFTIfContent(payload json.RawMessage, observedAt time.Time) {
+	if r == nil || r.registry == nil || r.ttftRecorded || !streamEventHasContentDelta(payload) {
+		return
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now()
+	}
+	r.ttftRecorded = true
+	r.registry.StreamTimeToFirstToken(metrics.StreamTimeToFirstToken{
+		SelectedProvider: r.selectedProvider,
+		SelectedModel:    r.selectedModel,
+		DurationSeconds:  observedAt.Sub(r.startedAt).Seconds(),
+	})
+}
+
+func (r *streamRelayMetricsRecorder) finish(outcome string, errorCode string, completedAt time.Time) {
+	if r == nil || r.registry == nil || r.finished {
+		return
+	}
+	if completedAt.IsZero() {
+		completedAt = time.Now()
+	}
+	r.finished = true
+	r.registry.StreamFinished(metrics.StreamRelay{
+		SelectedProvider: r.selectedProvider,
+		SelectedModel:    r.selectedModel,
+		Outcome:          outcome,
+		ErrorCode:        errorCode,
+		DurationSeconds:  completedAt.Sub(r.startedAt).Seconds(),
+	})
+}
+
+func streamEventHasContentDelta(payload json.RawMessage) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	if !bytes.Contains(payload, []byte(`"content"`)) {
+		return false
+	}
+	var chunk struct {
+		Choices []struct {
+			Delta struct {
+				Content *string `json:"content"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(payload, &chunk); err != nil {
+		return false
+	}
+	for _, choice := range chunk.Choices {
+		if choice.Delta.Content != nil && *choice.Delta.Content != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func writeProviderStreamingChatCompletion(
+	ctx context.Context,
+	w http.ResponseWriter,
+	reqCtx *pipeline.RequestContext,
+	stream provider.ChatCompletionStreamReader,
+	streamMetrics *streamRelayMetricsRecorder,
+) (bool, *provider.Usage, *provider.ChatCompletionResponse, error) {
 	if err := ctx.Err(); err != nil {
-		return false, nil, err
+		return false, nil, nil, err
 	}
 	if stream == nil {
-		return false, nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("provider stream is not initialized"))
+		return false, nil, nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("provider stream is not initialized"))
 	}
 	defer stream.Close()
 
 	firstEvent, err := stream.Next()
 	if err != nil && !errors.Is(err, io.EOF) {
-		return false, nil, err
+		return false, nil, nil, err
 	}
 
 	setGatewayHeaders(w, reqCtx)
@@ -1709,44 +1852,175 @@ func writeProviderStreamingChatCompletion(ctx context.Context, w http.ResponseWr
 	w.WriteHeader(http.StatusOK)
 	flushResponse(w)
 
+	accumulator := newStreamingCacheAccumulator(reqCtx)
 	var usage *provider.Usage
 	if err == nil {
 		if firstEvent.Usage != nil {
 			usage = firstEvent.Usage
 		}
+		accumulator.add(firstEvent)
 		if err := writeSSEDataRaw(w, firstEvent.Data); err != nil {
-			return true, usage, err
+			return true, usage, nil, err
 		}
 		flushResponse(w)
+		streamMetrics.recordTTFTIfContent(firstEvent.Data, time.Now())
 	}
 
 	for err == nil {
 		if err := ctx.Err(); err != nil {
-			return true, usage, err
+			return true, usage, nil, err
 		}
 		event, nextErr := stream.Next()
 		if errors.Is(nextErr, io.EOF) {
 			break
 		}
 		if nextErr != nil {
-			return true, usage, nextErr
+			return true, usage, nil, nextErr
 		}
 		if event.Usage != nil {
 			usage = event.Usage
 		}
+		accumulator.add(event)
 		if err := writeSSEDataRaw(w, event.Data); err != nil {
-			return true, usage, err
+			return true, usage, nil, err
 		}
 		flushResponse(w)
+		streamMetrics.recordTTFTIfContent(event.Data, time.Now())
 	}
 	if err := ctx.Err(); err != nil {
-		return true, usage, err
+		return true, usage, nil, err
 	}
 	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
-		return true, usage, err
+		return true, usage, nil, err
 	}
 	flushResponse(w)
-	return true, usage, nil
+	return true, usage, accumulator.response(usage), nil
+}
+
+type streamingCacheAccumulator struct {
+	id      string
+	created int64
+	model   string
+	choices map[int]*streamingCacheChoice
+	order   []int
+}
+
+type streamingCacheChoice struct {
+	index        int
+	role         string
+	content      strings.Builder
+	finishReason string
+}
+
+func newStreamingCacheAccumulator(reqCtx *pipeline.RequestContext) *streamingCacheAccumulator {
+	model := ""
+	if reqCtx != nil {
+		model = firstNonEmpty(reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
+	}
+
+	return &streamingCacheAccumulator{
+		model:   model,
+		choices: map[int]*streamingCacheChoice{},
+	}
+}
+
+func (a *streamingCacheAccumulator) add(event provider.ChatCompletionStreamEvent) {
+	if a == nil || len(event.Data) == 0 {
+		return
+	}
+
+	var chunk streamingChatCompletionChunk
+	if err := json.Unmarshal(event.Data, &chunk); err != nil {
+		return
+	}
+
+	if strings.TrimSpace(chunk.ID) != "" && a.id == "" {
+		a.id = chunk.ID
+	}
+	if chunk.Created != 0 && a.created == 0 {
+		a.created = chunk.Created
+	}
+	if strings.TrimSpace(chunk.Model) != "" {
+		a.model = chunk.Model
+	}
+
+	for _, choice := range chunk.Choices {
+		cachedChoice := a.choice(choice.Index)
+		if strings.TrimSpace(choice.Delta.Role) != "" {
+			cachedChoice.role = choice.Delta.Role
+		}
+		if choice.Delta.Content != "" {
+			cachedChoice.content.WriteString(choice.Delta.Content)
+		}
+		if choice.FinishReason != nil {
+			cachedChoice.finishReason = *choice.FinishReason
+		}
+	}
+}
+
+func (a *streamingCacheAccumulator) choice(index int) *streamingCacheChoice {
+	if existing, ok := a.choices[index]; ok {
+		return existing
+	}
+
+	choice := &streamingCacheChoice{
+		index: index,
+		role:  "assistant",
+	}
+	a.choices[index] = choice
+	a.order = append(a.order, index)
+	return choice
+}
+
+func (a *streamingCacheAccumulator) response(usage *provider.Usage) *provider.ChatCompletionResponse {
+	if a == nil || len(a.order) == 0 {
+		return nil
+	}
+
+	choices := make([]provider.ChatChoice, 0, len(a.order))
+	for _, index := range a.order {
+		choice := a.choices[index]
+		if choice == nil {
+			continue
+		}
+
+		finishReason := choice.finishReason
+		if strings.TrimSpace(finishReason) == "" {
+			finishReason = "stop"
+		}
+
+		content, err := json.Marshal(choice.content.String())
+		if err != nil {
+			continue
+		}
+
+		choices = append(choices, provider.ChatChoice{
+			Index: choice.index,
+			Message: provider.ChatMessage{
+				Role:    firstNonEmpty(choice.role, "assistant"),
+				Content: json.RawMessage(content),
+			},
+			FinishReason: finishReason,
+		})
+	}
+
+	if len(choices) == 0 {
+		return nil
+	}
+
+	created := a.created
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+
+	return &provider.ChatCompletionResponse{
+		ID:      firstNonEmpty(a.id, "chatcmpl_"+middleware.NewRequestID()),
+		Object:  "chat.completion",
+		Created: created,
+		Model:   a.model,
+		Choices: choices,
+		Usage:   usage,
+	}
 }
 
 func writeSSEData(w http.ResponseWriter, payload any) error {
@@ -2185,6 +2459,14 @@ func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipelin
 	}
 }
 
+func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID string) provider.ChatCompletionRequest {
+	req := chatReq
+	req.RequestID = strings.TrimSpace(requestID)
+	req.Metadata = nil
+	req.GateLM = nil
+	return req
+}
+
 func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {
 	if reqCtx == nil {
 		return invocationlog.DomainOutcomes{}
@@ -2198,38 +2480,40 @@ func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocatio
 func buildDomainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {
 	providerLatencyMs := providerLatencyForLog(reqCtx)
 	return invocationlog.BuildDomainOutcomes(invocationlog.TerminalLog{
-		RequestID:             reqCtx.RequestID,
-		TraceID:               reqCtx.TraceID,
-		ApplicationID:         reqCtx.ApplicationID,
-		BudgetScope:           reqCtx.BudgetScope,
-		ConfigHash:            reqCtx.ConfigHash,
-		SecurityPolicyHash:    reqCtx.SecurityPolicyHash,
-		RuntimeSnapshot:       reqCtx.RuntimeSnapshot,
-		RateLimitDecision:     reqCtx.RateLimitDecision,
-		BudgetDecision:        reqCtx.BudgetDecision,
-		Stream:                reqCtx.Stream,
-		RequestedModel:        reqCtx.RequestedModel,
-		Provider:              reqCtx.Provider,
-		Model:                 reqCtx.Model,
-		SelectedProvider:      reqCtx.SelectedProvider,
-		SelectedModel:         reqCtx.SelectedModel,
-		RoutingReason:         reqCtx.RoutingReason,
-		RoutingPolicyHash:     reqCtx.RoutingPolicyHash,
-		LatencyMs:             reqCtx.LatencyMs,
-		ProviderLatencyMs:     providerLatencyMs,
-		Status:                reqCtx.Status,
-		HTTPStatus:            reqCtx.HTTPStatus,
-		ErrorCode:             reqCtx.ErrorCode,
-		ErrorStage:            reqCtx.ErrorStage,
-		CacheStatus:           reqCtx.CacheStatus,
-		CacheType:             reqCtx.CacheType,
-		CacheHitRequestID:     reqCtx.CacheHitRequestID,
-		MaskingAction:         reqCtx.MaskingAction,
-		MaskingDetectedTypes:  reqCtx.MaskingDetectedTypes,
-		MaskingDetectedCount:  reqCtx.MaskingDetectedCount,
-		RedactedPromptPreview: reqCtx.RedactedPromptPreview,
-		CreatedAt:             reqCtx.StartedAt.UTC(),
-		CompletedAt:           time.Now().UTC(),
+		RequestID:               reqCtx.RequestID,
+		TraceID:                 reqCtx.TraceID,
+		ApplicationID:           reqCtx.ApplicationID,
+		BudgetScope:             reqCtx.BudgetScope,
+		ConfigHash:              reqCtx.ConfigHash,
+		SecurityPolicyHash:      reqCtx.SecurityPolicyHash,
+		RuntimeSnapshot:         reqCtx.RuntimeSnapshot,
+		RateLimitDecision:       reqCtx.RateLimitDecision,
+		BudgetDecision:          reqCtx.BudgetDecision,
+		Stream:                  reqCtx.Stream,
+		RequestedModel:          reqCtx.RequestedModel,
+		Provider:                reqCtx.Provider,
+		Model:                   reqCtx.Model,
+		SelectedProvider:        reqCtx.SelectedProvider,
+		SelectedModel:           reqCtx.SelectedModel,
+		RoutingReason:           reqCtx.RoutingReason,
+		RoutingPolicyHash:       reqCtx.RoutingPolicyHash,
+		LatencyMs:               reqCtx.LatencyMs,
+		ProviderLatencyMs:       providerLatencyMs,
+		Status:                  reqCtx.Status,
+		HTTPStatus:              reqCtx.HTTPStatus,
+		ErrorCode:               reqCtx.ErrorCode,
+		ErrorStage:              reqCtx.ErrorStage,
+		CacheStatus:             reqCtx.CacheStatus,
+		CacheType:               reqCtx.CacheType,
+		CacheHitRequestID:       reqCtx.CacheHitRequestID,
+		MaskingAction:           reqCtx.MaskingAction,
+		MaskingDetectedTypes:    reqCtx.MaskingDetectedTypes,
+		MaskingDetectedCount:    reqCtx.MaskingDetectedCount,
+		PolicyAllowedTypes:      reqCtx.PolicyAllowedTypes,
+		MandatoryProtectedTypes: reqCtx.MandatoryProtectedTypes,
+		RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
+		CreatedAt:               reqCtx.StartedAt.UTC(),
+		CompletedAt:             time.Now().UTC(),
 	})
 }
 
@@ -2237,11 +2521,9 @@ func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
 	payload, _ := json.Marshal(struct {
 		Temperature *float64 `json:"temperature,omitempty"`
 		MaxTokens   *int     `json:"max_tokens,omitempty"`
-		Stream      bool     `json:"stream"`
 	}{
 		Temperature: chatReq.Temperature,
 		MaxTokens:   chatReq.MaxTokens,
-		Stream:      chatReq.Stream,
 	})
 	sum := sha256.Sum256(payload)
 	return "sha256:" + hex.EncodeToString(sum[:])
@@ -2413,10 +2695,14 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		MaskingAction:               reqCtx.MaskingAction,
 		MaskingDetectedTypes:        reqCtx.MaskingDetectedTypes,
 		MaskingDetectedCount:        reqCtx.MaskingDetectedCount,
+		PolicyAllowedTypes:          reqCtx.PolicyAllowedTypes,
+		MandatoryProtectedTypes:     reqCtx.MandatoryProtectedTypes,
 		RedactedPromptPreview:       reqCtx.RedactedPromptPreview,
 		SecurityPolicyVersionID:     reqCtx.SecurityPolicyVersionID,
 		DomainOutcomes:              reqCtx.DomainOutcomes,
 		RedactedPromptForHash:       redactedPrompt,
+		PromptCapturePolicy:         promptCapturePolicyForLog(reqCtx),
+		CapturedPrompt:              redactedPrompt,
 		StartedAt:                   startedAt,
 		CompletedAt:                 completedAt,
 	}))
@@ -2428,6 +2714,13 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 			sanitizeLogValue(err.Error()),
 		)
 	}
+}
+
+func promptCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.PromptCapturePolicy {
+	if reqCtx == nil || !reqCtx.HasRuntimePromptCapture {
+		return runtimeconfig.DefaultPromptCapturePolicy()
+	}
+	return reqCtx.RuntimePromptCapture
 }
 
 func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {

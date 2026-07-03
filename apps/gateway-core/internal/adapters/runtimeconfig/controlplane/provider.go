@@ -152,16 +152,23 @@ type runtimeSnapshotBudget struct {
 }
 
 type runtimeSnapshotPolicies struct {
-	Safety    runtimeSnapshotSafetyPolicy    `json:"safety"`
-	Routing   runtimeSnapshotRoutingPolicy   `json:"routing"`
-	Cache     runtimeSnapshotCachePolicy     `json:"cache"`
-	RateLimit runtimeSnapshotRateLimitPolicy `json:"rateLimit"`
-	Budget    runtimeSnapshotBudgetPolicy    `json:"budget"`
-	Fallback  runtimeSnapshotFallbackPolicy  `json:"fallback"`
+	Safety        runtimeSnapshotSafetyPolicy        `json:"safety"`
+	Routing       runtimeSnapshotRoutingPolicy       `json:"routing"`
+	Cache         runtimeSnapshotCachePolicy         `json:"cache"`
+	RateLimit     runtimeSnapshotRateLimitPolicy     `json:"rateLimit"`
+	Budget        runtimeSnapshotBudgetPolicy        `json:"budget"`
+	Fallback      runtimeSnapshotFallbackPolicy      `json:"fallback"`
+	PromptCapture runtimeSnapshotPromptCapturePolicy `json:"promptCapture"`
 }
 
 type runtimeSnapshotSafetyPolicy struct {
-	PolicyHash string `json:"policyHash"`
+	PolicyHash  string                          `json:"policyHash"`
+	DetectorSet []runtimeSnapshotDetectorPolicy `json:"detectorSet"`
+}
+
+type runtimeSnapshotDetectorPolicy struct {
+	DetectorType string `json:"detectorType"`
+	Action       string `json:"action"`
 }
 
 type runtimeSnapshotRoutingPolicy struct {
@@ -197,6 +204,12 @@ type runtimeSnapshotFallbackPolicy struct {
 	FallbackModel    string `json:"fallbackModel"`
 }
 
+type runtimeSnapshotPromptCapturePolicy struct {
+	Enabled  bool   `json:"enabled"`
+	Mode     string `json:"mode"`
+	MaxChars int    `json:"maxChars"`
+}
+
 func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimeconfig.ExecutionSnapshot, error) {
 	actual := newLookupKey(r.LookupKey.TenantID, r.LookupKey.ProjectID, r.LookupKey.ApplicationID)
 	if actual != expected {
@@ -219,6 +232,14 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 	highQualityModel := firstNonEmpty(r.Policies.Routing.HighQualityModel, defaultModel)
 	fallbackProvider := firstNonEmpty(r.Policies.Fallback.FallbackProvider, defaultProvider)
 	fallbackModel := firstNonEmpty(r.Policies.Fallback.FallbackModel, defaultModel)
+
+	detectorSet := make([]runtimeconfig.DetectorPolicy, 0, len(r.Policies.Safety.DetectorSet))
+	for _, detector := range r.Policies.Safety.DetectorSet {
+		detectorSet = append(detectorSet, runtimeconfig.DetectorPolicy{
+			DetectorType: detector.DetectorType,
+			Action:       detector.Action,
+		})
+	}
 
 	return runtimeconfig.ExecutionSnapshot{
 		ConfigHash:    configHash,
@@ -255,6 +276,7 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: securityPolicyHash,
+			DetectorSet:        detectorSet,
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
 			DefaultProvider:     defaultProvider,
@@ -272,6 +294,11 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Type:            cacheType,
 			CachePolicyHash: r.Policies.Cache.CachePolicyHash,
 		},
+		PromptCapture: runtimeconfig.NormalizePromptCapturePolicy(runtimeconfig.PromptCapturePolicy{
+			Enabled:  r.Policies.PromptCapture.Enabled,
+			Mode:     r.Policies.PromptCapture.Mode,
+			MaxChars: r.Policies.PromptCapture.MaxChars,
+		}),
 	}, nil
 }
 

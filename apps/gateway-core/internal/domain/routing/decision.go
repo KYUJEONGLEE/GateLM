@@ -39,22 +39,28 @@ const (
 	RoutingModeAuto   = "auto"
 	RoutingModePinned = "pinned"
 
-	CategoryUnknown       = "unknown"
-	CategoryGeneral       = "general"
-	CategoryCode          = "code"
-	CategoryTranslation   = "translation"
-	CategorySupportRefund = "support_refund"
+	CategoryUnknown        = "unknown"
+	CategoryGeneral        = "general"
+	CategoryCode           = "code"
+	CategoryTranslation    = "translation"
+	CategorySummarization  = "summarization"
+	CategoryExtractionJSON = "extraction_json"
+	CategorySupportRefund  = "support_refund"
+	CategoryReasoning      = "reasoning"
 
 	TierLowCost     = "low_cost"
 	TierBalanced    = "balanced"
 	TierHighQuality = "high_quality"
 
-	CapabilityChat        = "chat"
-	CapabilityReasoning   = "reasoning"
-	CapabilityCode        = "code"
-	CapabilityTranslation = "translation"
+	CapabilityChat          = "chat"
+	CapabilityReasoning     = "reasoning"
+	CapabilityCode          = "code"
+	CapabilityTranslation   = "translation"
+	CapabilitySummarization = "summarization"
+	CapabilityJSON          = "json"
 
-	PolicyVariantDefault = "default"
+	PolicyVariantDefault                = "default"
+	PolicyVariantProviderHealthFallback = "provider_health_fallback"
 )
 
 func CanonicalDecisionMaterial(material DecisionMaterial) DecisionMaterial {
@@ -90,7 +96,7 @@ func canonicalRoutingMode(value string) string {
 func canonicalCategory(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySupportRefund, CategoryUnknown:
+	case CategoryGeneral, CategoryCode, CategoryTranslation, CategorySummarization, CategoryExtractionJSON, CategorySupportRefund, CategoryReasoning, CategoryUnknown:
 		return value
 	default:
 		return CategoryUnknown
@@ -110,7 +116,7 @@ func canonicalTier(value string) string {
 func canonicalCapability(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation:
+	case CapabilityChat, CapabilityReasoning, CapabilityCode, CapabilityTranslation, CapabilitySummarization, CapabilityJSON:
 		return value
 	default:
 		return CapabilityChat
@@ -120,7 +126,7 @@ func canonicalCapability(value string) string {
 func canonicalPolicyVariant(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case PolicyVariantDefault:
+	case PolicyVariantDefault, PolicyVariantProviderHealthFallback:
 		return value
 	default:
 		return PolicyVariantDefault

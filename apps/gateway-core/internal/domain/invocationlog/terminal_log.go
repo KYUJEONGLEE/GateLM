@@ -81,6 +81,8 @@ type TerminalLog struct {
 	MaskingAction           string
 	MaskingDetectedTypes    []string
 	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 
@@ -161,14 +163,29 @@ type TerminalLogInput struct {
 	MaskingAction           string
 	MaskingDetectedTypes    []string
 	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 
 	RequestBodyHashMaterial string
 	RedactedPromptForHash   string
+	PromptCapturePolicy     runtimeconfig.PromptCapturePolicy
+	CapturedPrompt          string
 	DomainOutcomes          DomainOutcomes
 	StartedAt               time.Time
 	CompletedAt             time.Time
+}
+
+const PromptCaptureVisibilityAdminRequestDetail = "admin_request_detail"
+
+type PromptCaptureFields struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	Visibility     string `json:"visibility"`
+	CapturedPrompt string `json:"capturedPrompt"`
+	Truncated      bool   `json:"truncated"`
+	MaxChars       int    `json:"maxChars"`
 }
 
 type TerminalLogWriter interface {
@@ -283,6 +300,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if strings.TrimSpace(input.EmbeddingProvider) != "" {
 		metadata["embeddingProvider"] = strings.TrimSpace(input.EmbeddingProvider)
 	}
+	if promptCapture, ok := BuildPromptCaptureFields(input.PromptCapturePolicy, input.CapturedPrompt); ok {
+		metadata["promptCapture"] = promptCapture
+	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
 	metadata["providerCalled"] = terminalProviderCalled(input)
 
@@ -358,6 +378,8 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		MaskingAction:           firstNonEmptyString(input.MaskingAction, "none"),
 		MaskingDetectedTypes:    append([]string{}, input.MaskingDetectedTypes...),
 		MaskingDetectedCount:    input.MaskingDetectedCount,
+		PolicyAllowedTypes:      append([]string{}, input.PolicyAllowedTypes...),
+		MandatoryProtectedTypes: append([]string{}, input.MandatoryProtectedTypes...),
 		RedactedPromptPreview:   strings.TrimSpace(input.RedactedPromptPreview),
 		SecurityPolicyVersionID: strings.TrimSpace(input.SecurityPolicyVersionID),
 
@@ -379,6 +401,27 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	log.Metadata["domainOutcomes"] = log.DomainOutcomes
 	log.Metadata["gatewayStageOutcomes"] = BuildGatewayStageOutcomes(log)
 	return log
+}
+
+func BuildPromptCaptureFields(policy runtimeconfig.PromptCapturePolicy, logSafePrompt string) (PromptCaptureFields, bool) {
+	policy = runtimeconfig.NormalizePromptCapturePolicy(policy)
+	if !runtimeconfig.PromptCaptureAllowsLogSafeCapture(policy) {
+		return PromptCaptureFields{}, false
+	}
+	logSafePrompt = strings.TrimSpace(logSafePrompt)
+	if logSafePrompt == "" {
+		return PromptCaptureFields{}, false
+	}
+
+	truncatedPrompt, truncated := truncateRunes(logSafePrompt, policy.MaxChars)
+	return PromptCaptureFields{
+		Enabled:        true,
+		Mode:           policy.Mode,
+		Visibility:     PromptCaptureVisibilityAdminRequestDetail,
+		CapturedPrompt: truncatedPrompt,
+		Truncated:      truncated,
+		MaxChars:       policy.MaxChars,
+	}, true
 }
 
 func logHash(parts ...string) string {
@@ -406,4 +449,18 @@ func terminalProviderCalled(input TerminalLogInput) bool {
 		return true
 	}
 	return strings.TrimSpace(input.Provider) != "" || strings.TrimSpace(input.SelectedProvider) != ""
+}
+
+func truncateRunes(value string, maxRunes int) (string, bool) {
+	if maxRunes <= 0 {
+		return "", value != ""
+	}
+	count := 0
+	for i := range value {
+		if count == maxRunes {
+			return value[:i], true
+		}
+		count++
+	}
+	return value, false
 }

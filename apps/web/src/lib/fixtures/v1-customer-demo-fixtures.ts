@@ -292,7 +292,7 @@ function buildExchange({
     providerCall: record.providerLatencyMs == null ? "skipped" : "called",
     request,
     requestId: record.requestId,
-    requestLogHref: `/tenants/${record.tenantId}/request-logs/${record.requestId}`,
+    requestLogHref: `/tenants/${record.tenantId}/request-logs?requestId=${encodeURIComponent(record.requestId)}`,
     response: {
       body: buildResponseBody(config, record),
       headers: buildResponseHeaders(record),
@@ -300,6 +300,12 @@ function buildExchange({
     },
     scenarioId: config.scenarioId,
     status: record.status,
+    streaming: {
+      completed: record.stream ? true : null,
+      contentType: record.stream ? "text/event-stream" : null,
+      chunkCount: record.stream ? 0 : null,
+      requested: record.stream
+    },
     title: config.title
   };
 }
@@ -327,6 +333,7 @@ export function getCustomerDemoModel(): CustomerDemoModel {
         record
       });
     }),
+    surface: "demo",
     tenantId: runtime.runtimeConfig.tenantId
   };
 }

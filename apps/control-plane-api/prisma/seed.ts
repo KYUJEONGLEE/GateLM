@@ -273,6 +273,11 @@ export function buildDemoRuntimeConfigDocument(
       type: 'exact',
       ttlSeconds: 3600,
     },
+    promptCapturePolicy: {
+      enabled: false,
+      mode: 'disabled',
+      maxChars: 8000,
+    },
     routingPolicy,
     pricingRules,
     hashing: {
@@ -288,6 +293,7 @@ export function buildDemoRuntimeConfigDocument(
         'budgetPolicy',
         'safetyPolicy',
         'cachePolicy',
+        'promptCapturePolicy',
         'routingPolicy',
         'pricingRules',
       ],
@@ -802,6 +808,11 @@ function buildDemoRuntimeSnapshot(
           ? 'evidence_only'
           : 'disabled',
         cachePolicyHash: sha256(canonicalJson(document.cachePolicy)),
+      },
+      promptCapture: {
+        enabled: document.promptCapturePolicy.enabled,
+        mode: document.promptCapturePolicy.mode,
+        maxChars: document.promptCapturePolicy.maxChars,
       },
       rateLimit: {
         enabled: document.rateLimit.enabled,

@@ -281,8 +281,8 @@ export class ProviderConnectionsService {
 
     const credentialRefs = this.toCredentialRefCandidates(providerConnection);
     const bindings = this.parseCredentialEnvMap(
-      process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP ??
-        process.env.GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP ??
+      process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP?.trim() ||
+        process.env.GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP?.trim() ||
         '',
     );
 

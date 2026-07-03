@@ -317,12 +317,31 @@
           ]
         },
         "detectedTypes": {
+          "description": "GateLM-normalized detector type labels only. Values such as organization_name are sanitized categories and must not contain raw detected values, prompt fragments, offsets, or provider/model raw output.",
           "type": "array",
           "items": {
             "type": "string",
             "minLength": 1
           },
           "uniqueItems": true
+        },
+        "policyAllowedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Raw detected values, offsets, and prompt fragments are forbidden."
+        },
+        "mandatoryProtectedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "High-risk detector types protected regardless of optional PII masking state."
         },
         "detectedCount": {
           "type": "integer",

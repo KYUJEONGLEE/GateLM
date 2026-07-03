@@ -92,8 +92,8 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 		t.Fatalf("expected redacted success response, got status=%d gate_lm=%#v body=%s", redacted.Code, redactedResp.GateLM, redacted.Body.String())
 	}
 	redactedProviderPrompt := readinessProviderPromptAt(t, harness.provider.chatRequestSnapshot(), 1)
-	if !strings.Contains(redactedProviderPrompt, "[EMAIL_REDACTED]") ||
-		!strings.Contains(redactedProviderPrompt, "[PHONE_NUMBER_REDACTED]") ||
+	if !strings.Contains(redactedProviderPrompt, "[EMAIL_1]") ||
+		!strings.Contains(redactedProviderPrompt, "[PHONE_NUMBER_1]") ||
 		strings.Contains(redactedProviderPrompt, rawEmail) ||
 		strings.Contains(redactedProviderPrompt, rawPhone) {
 		t.Fatalf("provider prompt must use placeholders only, got %q", redactedProviderPrompt)

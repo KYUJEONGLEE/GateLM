@@ -799,6 +799,16 @@ type invocationMetadataJSON struct {
 	SemanticCachePolicyVersion  string                            `json:"semanticCachePolicyVersion"`
 	SemanticCacheDecisionReason string                            `json:"semanticCacheDecisionReason"`
 	EmbeddingProvider           string                            `json:"embeddingProvider"`
+	PromptCapture               *promptCaptureMetadataJSON        `json:"promptCapture"`
+}
+
+type promptCaptureMetadataJSON struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	Visibility     string `json:"visibility"`
+	CapturedPrompt string `json:"capturedPrompt"`
+	Truncated      bool   `json:"truncated"`
+	MaxChars       int    `json:"maxChars"`
 }
 
 type runtimeMetadataJSON struct {
@@ -872,6 +882,16 @@ func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []by
 	}
 	if strings.TrimSpace(metadata.EmbeddingProvider) != "" {
 		log.EmbeddingProvider = strings.TrimSpace(metadata.EmbeddingProvider)
+	}
+	if metadata.PromptCapture != nil {
+		log.PromptCapture = invocationlog.PromptCaptureFields{
+			Enabled:        metadata.PromptCapture.Enabled,
+			Mode:           strings.TrimSpace(metadata.PromptCapture.Mode),
+			Visibility:     strings.TrimSpace(metadata.PromptCapture.Visibility),
+			CapturedPrompt: strings.TrimSpace(metadata.PromptCapture.CapturedPrompt),
+			Truncated:      metadata.PromptCapture.Truncated,
+			MaxChars:       metadata.PromptCapture.MaxChars,
+		}
 	}
 }
 

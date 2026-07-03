@@ -4,7 +4,22 @@
 
 이 문서는 GateLM v2 릴리즈 전 Semantic Cache foundation 단계의 구현 범위와 검증 기준을 정리한다.
 
-현재 단계의 목표는 Semantic Cache의 config, domain contract, embedding provider contract, in-memory store, cosine similarity, 단위 테스트를 준비하는 것이다. `/v1/chat/completions` 실행 경로에는 아직 연결하지 않는다.
+현재 단계의 목표는 Semantic Cache의 config, domain contract, embedding provider contract, in-memory store, cosine similarity, 단위 테스트를 준비하는 것이다. Gateway flow 연결 결과는 `docs/testing/semantic-cache-flow-integration.md`에서 별도로 검증한다.
+
+## dev merge 후 재검증 메모
+
+2026-07-02 dev 기준으로 Semantic Cache foundation, Routing category classifier, Semantic Cache flow integration이 모두 merge된 상태에서 재검증했다. 이 문서는 foundation 단계의 계약과 검증 범위를 설명한다. 현재 Gateway flow 연결 결과는 `docs/testing/semantic-cache-flow-integration.md`를 기준으로 함께 확인한다.
+
+재검증에서 확인한 foundation 기준은 아래와 같다.
+
+- `SEMANTIC_CACHE_ENABLED=false` 기본값 유지
+- `SEMANTIC_CACHE_STORE=in_memory`만 지원
+- `SEMANTIC_CACHE_EMBEDDING_PROVIDER=fake`가 기본값이다.
+- `SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai`는 opt-in으로 지원한다.
+- `SEMANTIC_CACHE_ENABLED=true`와 `SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai`를 함께 쓰면 `OPENAI_API_KEY`가 필요하다.
+- `SEMANTIC_CACHE_STORE=pgvector`, `SEMANTIC_CACHE_STORE=redis_vector`는 명시 error 처리
+- allow category는 `general`, `support_refund`
+- deny category는 `code`, `translation`, `reasoning`, `sensitive`, `tool_call`, `unknown`
 
 ## 범위
 
@@ -15,6 +30,7 @@
 - `SemanticCacheStore` interface
 - `EmbeddingProvider` interface
 - `FakeEmbeddingProvider`
+- `OpenAIEmbeddingProvider`
 - `CosineSimilarity`
 - `InMemorySemanticCacheStore`
 - `SemanticCacheService`
@@ -22,11 +38,6 @@
 
 제외 범위:
 
-- `/v1/chat/completions` handler 연결
-- provider bypass 구현
-- fallback 응답의 semantic cache store/bypass 연결
-- `OpenAIEmbeddingProvider`
-- OpenAI API 호출
 - vector DB, pgvector, Redis vector, Qdrant, Pinecone
 - frontend 변경
 
@@ -58,10 +69,18 @@ SEMANTIC_CACHE_DENY_CATEGORIES=code,translation,reasoning,sensitive,tool_call,un
 
 - `SEMANTIC_CACHE_STORE=in_memory`
 - `SEMANTIC_CACHE_EMBEDDING_PROVIDER=fake`
+- `SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai`
 
 다른 값은 명시 에러로 처리한다.
 
-`SEMANTIC_CACHE_OPENAI_BASE_URL`과 `SEMANTIC_CACHE_EMBEDDING_MODEL`은 향후 OpenAI embedding provider 연결을 위한 설정 자리만 마련한 것이다. 현재 구현은 `FakeEmbeddingProvider`만 사용하며 OpenAI API를 호출하지 않는다.
+현재 명시적으로 거부해야 하는 값:
+
+- `SEMANTIC_CACHE_STORE=pgvector`
+- `SEMANTIC_CACHE_STORE=redis_vector`
+
+`SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai`를 실제로 사용하려면 `SEMANTIC_CACHE_ENABLED=true`와 `OPENAI_API_KEY`가 필요하다. Semantic Cache가 disabled이면 `openai` provider로 설정되어 있어도 missing key 때문에 config 로딩을 실패시키지 않는다.
+
+기본값은 계속 `fake`다. 따라서 일반 테스트와 로컬 부팅은 `OPENAI_API_KEY` 없이 통과해야 한다. 실제 OpenAI API 호출은 opt-in smoke test에서만 수행한다.
 
 ## Routing Category 정렬
 
@@ -143,11 +162,11 @@ raw prompt, prompt fragment, detected value, secret, provider raw error는 bound
 
 ## 설계
 
-### Gateway flow에 아직 연결하지 않은 이유
+### Foundation 단계의 원래 분리 이유
 
-이번 단계는 Semantic Cache 부품의 안전성과 확장성을 먼저 검증하는 foundation 단계다. `/v1/chat/completions`에 바로 연결하면 exact cache miss 이후 semantic lookup, provider 호출 생략, provider 성공 응답 store, request log/detail decision 기록까지 한 번에 변경되어 검증 범위가 커진다.
+Foundation 단계는 Semantic Cache 부품의 안전성과 확장성을 먼저 검증하기 위해 Gateway flow 연결과 분리했다. `/v1/chat/completions`에 바로 연결하면 exact cache miss 이후 semantic lookup, provider 호출 생략, provider 성공 응답 store, request log/detail decision 기록까지 한 번에 변경되어 검증 범위가 커진다.
 
-따라서 현재 PR에서는 Gateway 실행 경로를 바꾸지 않고, 다음 단계에서 연결할 수 있는 domain contract와 테스트 가능한 store/provider만 준비한다.
+현재 dev 기준으로 Gateway 실행 경로 연결은 완료되어 `docs/testing/semantic-cache-flow-integration.md`에서 검증한다.
 
 ### `EmbeddingProvider` interface
 
@@ -162,8 +181,9 @@ raw prompt, prompt fragment, detected value, secret, provider raw error는 bound
 주의:
 
 - raw prompt, raw PII, API Key, App Token, Provider Key는 input으로 받지 않는다.
-- 실제 provider 호출은 이번 단계에서 하지 않는다.
-- `FakeEmbeddingProvider`만 구현한다.
+- `FakeEmbeddingProvider`는 기본값이며 네트워크 호출이 없다.
+- `OpenAIEmbeddingProvider`는 opt-in일 때만 OpenAI Embeddings API를 호출한다.
+- `OPENAI_API_KEY`는 Authorization header에만 사용하고 log/error/cache material에 남기지 않는다.
 
 ### `FakeEmbeddingProvider`
 
@@ -173,6 +193,7 @@ raw prompt, prompt fragment, detected value, secret, provider raw error는 bound
 - API Key가 필요 없다.
 - 같은 입력은 항상 같은 vector를 반환한다.
 - `"비밀번호 재설정 방법 알려줘"`와 `"패스워드 초기화는 어떻게 해?"`는 threshold 이상 유사도가 나오도록 고정한다.
+- `"배송비도 환불되나요?"`와 `"반품하면 배송비도 돌려받나요?"`는 threshold 이상 유사도가 나오도록 고정한다.
 - `"이번 달 사용량 통계를 보여줘"`는 위 password reset pair와 threshold 미만이 나오도록 고정한다.
 
 이 fake vector는 실제 OpenAI embedding 결과가 아니다. 실제 OpenAI embedding은 고차원 float vector이며, provider/model별 출력 특성과 차원이 다르다. 이 구현은 Semantic Cache hit/miss/threshold 로직을 deterministic하게 테스트하기 위한 테스트 대역이다.
@@ -192,7 +213,7 @@ Redis, Postgres, pgvector, Qdrant 같은 구현체 이름은 interface 메서드
 
 현재 store factory는 `in_memory`만 생성한다. 향후 pgvector store를 추가할 때는 `SemanticCacheStore` interface를 유지하고, factory 선택지만 확장한다.
 
-현재 embedding provider factory는 `fake`만 생성한다. 향후 OpenAI embedding provider를 추가할 때는 `EmbeddingProvider` interface를 구현하고, normalized input만 받도록 유지한다.
+현재 embedding provider factory는 `fake`와 `openai`를 생성한다. `openai`는 `OPENAI_API_KEY`, `SEMANTIC_CACHE_OPENAI_BASE_URL`, `SEMANTIC_CACHE_EMBEDDING_MODEL`, `SEMANTIC_CACHE_EMBEDDING_DIMENSIONS`, `SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS`를 사용한다.
 
 ## InMemory Store 한계
 
@@ -249,6 +270,11 @@ pgvector store를 붙일 때 예상 변경 범위:
 | SC-FOUNDATION-001 | config 기본값과 disabled default | `TestSemanticCacheConfigDefaults` |
 | SC-FOUNDATION-002 | config invalid value 처리 | `TestSemanticCacheConfigInvalidValues` |
 | SC-FOUNDATION-003 | fake embedding deterministic | `TestSemanticFakeEmbeddingProviderDeterministic` |
+| SC-FOUNDATION-003A | fake embedding의 한국어 `support_refund` 유사 pair hit 가능성 | `TestSemanticFakeEmbeddingProviderDeterministic` |
+| SC-FOUNDATION-003B | OpenAI embedding request shape와 Authorization header 사용 | `TestOpenAIEmbeddingProviderSendsExpectedRequest` |
+| SC-FOUNDATION-003C | OpenAI raw error body/API key 미노출 | `TestOpenAIEmbeddingProviderDoesNotLeakSecretsOrRawErrorBody` |
+| SC-FOUNDATION-003D | OpenAI embedding provider factory 생성과 API key 누락 error | `TestOpenAIEmbeddingProviderFactoryCreatesOpenAIProvider` |
+| SC-FOUNDATION-003E | 실제 OpenAI 한국어 pair smoke는 opt-in skip | `TestOpenAIEmbeddingProviderSmokeKoreanSimilarity` |
 | SC-FOUNDATION-004 | cosine similarity 안전 처리 | `TestSemanticCosineSimilarity` |
 | SC-FOUNDATION-005 | in-memory semantic hit | `TestSemanticInMemoryStoreHit` |
 | SC-FOUNDATION-006 | threshold miss | `TestSemanticInMemoryStoreMissByThreshold` |
@@ -269,11 +295,13 @@ pgvector store를 붙일 때 예상 변경 범위:
 | RT-CATEGORY-006 | 위험 category가 allow category보다 우선됨 | `TestSimpleRouterClassifiesRoutingCategory` |
 | RT-CATEGORY-007 | category가 바뀌면 `routingDecisionKeyHash`도 바뀜 | `TestRoutingDecisionKeyHashChangesWhenCategoryChanges` |
 | RT-CATEGORY-008 | routing stage와 기존 exact cache routing-aware 테스트 유지 | `TestStageWritesRoutingCategoryMaterial`, `TestChatCompletionsExactCacheRoutingAware*` |
+| RT-CATEGORY-009 | category 평가셋 fixture 계약 고정 | `TestCategoryEvalCasesFromFixture`, `apps/gateway-core/internal/domain/routing/testdata/category_eval_cases.json` |
 
 ## 검증 명령
 
 ```powershell
 go test -v ./apps/gateway-core/internal/domain/cache -run 'Test.*Semantic.*' -count=1
+go test -v ./apps/gateway-core/internal/domain/cache -run 'Test.*OpenAI.*' -count=1
 go test -v ./apps/gateway-core/internal/config -run 'Test.*Semantic.*' -count=1
 go test ./apps/gateway-core/... -count=1
 ```
@@ -285,12 +313,15 @@ corepack pnpm run verify:v2-docs
 corepack pnpm run verify:v2-final
 ```
 
-## 다음 단계
+## 현재 완료된 후속 단계
 
-다음 단계에서는 Gateway 실행 경로에 Semantic Cache를 연결한다.
+dev merge 기준으로 Gateway 실행 경로 연결은 완료되어 `docs/testing/semantic-cache-flow-integration.md`에서 검증한다.
 
 - `/v1/chat/completions` flow에서 exact cache miss 이후 semantic cache lookup 연결
 - semantic cache hit 시 provider 호출 생략
 - provider 성공 응답 semantic cache store
 - request log/detail에 semantic cache decision 추가
-- 이후 `OpenAIEmbeddingProvider` optional smoke test 추가
+
+## 다음 단계
+
+- production vector DB 또는 pgvector store 검토

@@ -1,20 +1,49 @@
 import { NextResponse } from "next/server";
 import {
   publishRuntimePolicy,
+  rollbackRuntimePolicy,
   saveRuntimePolicyDraft
 } from "@/lib/control-plane/runtime-policy-client";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
 type RequestPayload = {
   action?: unknown;
+  targetConfigVersion?: unknown;
   values?: unknown;
 };
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
 
-  if (payload.action !== "save-draft" && payload.action !== "publish") {
+  if (
+    payload.action !== "save-draft" &&
+    payload.action !== "publish" &&
+    payload.action !== "rollback"
+  ) {
     return NextResponse.json({ error: "Unknown runtime policy action." }, { status: 400 });
+  }
+
+  if (payload.action === "rollback") {
+    if (typeof payload.targetConfigVersion !== "string" || !payload.targetConfigVersion.trim()) {
+      return NextResponse.json({ error: "Invalid rollback target." }, { status: 400 });
+    }
+
+    const result = await rollbackRuntimePolicy(payload.targetConfigVersion);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: result.error,
+          status: result.status
+        },
+        { status: result.status > 0 ? result.status : 502 }
+      );
+    }
+
+    return NextResponse.json({
+      runtimeConfig: result.data,
+      status: result.status
+    });
   }
 
   if (!isRuntimePolicyDraftValues(payload.values)) {
@@ -50,12 +79,22 @@ function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraft
   const record = value as Partial<RuntimePolicyDraftValues>;
 
   return (
+    typeof record.budgetEnabled === "boolean" &&
+    (record.budgetEnforcementMode === "warn" ||
+      record.budgetEnforcementMode === "block" ||
+      record.budgetEnforcementMode === "disabled") &&
+    Number.isInteger(record.budgetWarningThresholdPercent) &&
     typeof record.cacheEnabled === "boolean" &&
     Number.isInteger(record.cacheTtlSeconds) &&
     typeof record.configVersion === "string" &&
     Array.isArray(record.detectors) &&
     Array.isArray(record.models) &&
     Array.isArray(record.pricingRules) &&
+    typeof record.promptCaptureEnabled === "boolean" &&
+    typeof record.promptCaptureMaxChars === "number" &&
+    Number.isInteger(record.promptCaptureMaxChars) &&
+    record.promptCaptureMaxChars >= 1 &&
+    record.promptCaptureMaxChars <= 20000 &&
     typeof record.rateLimitEnabled === "boolean" &&
     Number.isInteger(record.rateLimitLimit) &&
     typeof record.routingDefaultModel === "string" &&

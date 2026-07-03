@@ -8,6 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
 from app.domain.ai_safety_benchmark.corpus import load_benchmark_corpus, render_case_prompt
 from app.domain.ai_safety_benchmark.report import (
     build_report,
@@ -114,6 +115,8 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
                         "benchmark-test-run",
                         "--git-sha",
                         "testsha",
+                        "--model-id",
+                        KOELECTRA_PRIVACY_NER_MODEL,
                     ],
                     target_factory=lambda _args: fake_target,
                     generated_at=datetime(2026, 7, 1, 0, 0, tzinfo=timezone.utc),
@@ -127,6 +130,7 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             self.assertTrue(markdown_path.exists())
             report = json.loads(json_path.read_text(encoding="utf-8"))
             self.assertEqual(report["metadata"]["runId"], "benchmark-test-run")
+            self.assertEqual(report["metadata"]["modelId"], KOELECTRA_PRIVACY_NER_MODEL)
             self.assertEqual(selected_runtime(report)["requests"], 100)
             self.assertEqual(
                 [runtime["status"] for runtime in report["runtimeResults"]],

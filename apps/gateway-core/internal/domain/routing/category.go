@@ -1,6 +1,8 @@
 package routing
 
 import (
+	_ "embed"
+	"encoding/json"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -8,58 +10,113 @@ import (
 
 const maxCategoryScanBytes = 2048
 
-var (
-	translationCategoryKeywords = []string{
-		"translate", "translation", "in english", "into korean", "into english", "to english",
-		"번역", "영어로", "한국어로", "일본어로", "중국어로",
-	}
-	codeCategoryKeywords = []string{
-		"code", "coding", "function", "stack trace", "exception", "refactor", "typescript", "javascript",
-		"python", "golang", "compile", "컴파일", "코드", "에러", "오류", "버그", "리팩토링", "함수",
-	}
-	supportRefundCategoryKeywords = []string{
-		"refund", "payment", "billing", "chargeback", "cancel order", "return item",
-		"return", "cancel", "cancellation", "exchange", "환불", "결제", "취소", "반품", "교환", "고객문의",
-	}
-)
+//go:embed category_policy.json
+var defaultCategoryPolicyJSON []byte
 
-type RuleBasedCategoryClassifier struct{}
+var defaultCategoryPolicy = mustLoadCategoryPolicy(defaultCategoryPolicyJSON)
 
-func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
-	return RuleBasedCategoryClassifier{}
+type CategoryPolicy struct {
+	SchemaVersion    string                  `json:"schemaVersion"`
+	PolicyVersion    string                  `json:"policyVersion"`
+	MaxScanBytes     int                     `json:"maxScanBytes"`
+	CategoryPriority []string                `json:"categoryPriority"`
+	Rules            map[string]CategoryRule `json:"rules"`
 }
 
-func (RuleBasedCategoryClassifier) Classify(prompt string) string {
-	normalized := normalizeCategoryText(prompt)
+type CategoryRule struct {
+	Contains         []string `json:"contains"`
+	Tokens           []string `json:"tokens"`
+	RequiresToken    string   `json:"requiresToken"`
+	RequiresAnyToken []string `json:"requiresAnyToken"`
+	EnableCodeFence  bool     `json:"enableCodeFence"`
+	EnableSQLPattern bool     `json:"enableSQLPattern"`
+}
+
+type RuleBasedCategoryClassifier struct {
+	policy CategoryPolicy
+}
+
+type RoutingSignals struct {
+	PromptLength           int
+	HasCodeSignal          bool
+	WantsTranslation       bool
+	WantsSummarization     bool
+	WantsStructuredOutput  bool
+	NeedsReasoning         bool
+	HasSupportRefundSignal bool
+	Category               string
+}
+
+func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
+	return RuleBasedCategoryClassifier{policy: defaultCategoryPolicy}
+}
+
+func NewRuleBasedCategoryClassifierWithPolicy(policy CategoryPolicy) RuleBasedCategoryClassifier {
+	return RuleBasedCategoryClassifier{policy: normalizeCategoryPolicy(cloneCategoryPolicy(policy))}
+}
+
+func DefaultCategoryPolicy() CategoryPolicy {
+	return cloneCategoryPolicy(defaultCategoryPolicy)
+}
+
+func (c RuleBasedCategoryClassifier) Classify(prompt string) string {
+	return extractRoutingSignals(prompt, c.policy).Category
+}
+
+func ExtractRoutingSignals(prompt string) RoutingSignals {
+	return extractRoutingSignals(prompt, defaultCategoryPolicy)
+}
+
+func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals {
+	policy = normalizeCategoryPolicy(policy)
+	normalized := normalizeCategoryTextWithLimit(prompt, policy.MaxScanBytes)
+	signals := RoutingSignals{
+		PromptLength: utf8.RuneCountInString(prompt),
+		Category:     CategoryUnknown,
+	}
 	if normalized == "" {
-		return CategoryUnknown
+		return signals
 	}
 
-	if containsCodeSignal(normalized) {
-		return CategoryCode
+	tokens := categoryTokens(normalized)
+	signals.HasCodeSignal = matchesCategoryRule(normalized, tokens, policy.Rules[CategoryCode])
+	signals.WantsTranslation = matchesCategoryRule(normalized, tokens, policy.Rules[CategoryTranslation])
+	signals.WantsSummarization = matchesCategoryRule(normalized, tokens, policy.Rules[CategorySummarization])
+	signals.WantsStructuredOutput = matchesCategoryRule(normalized, tokens, policy.Rules[CategoryExtractionJSON])
+	signals.NeedsReasoning = matchesCategoryRule(normalized, tokens, policy.Rules[CategoryReasoning])
+	signals.HasSupportRefundSignal = matchesCategoryRule(normalized, tokens, policy.Rules[CategorySupportRefund])
+
+	for _, category := range policy.CategoryPriority {
+		if signalMatched(category, signals) {
+			signals.Category = category
+			return signals
+		}
 	}
 
-	if containsAny(normalized, translationCategoryKeywords) {
-		return CategoryTranslation
-	}
-
-	if containsAny(normalized, supportRefundCategoryKeywords) {
-		return CategorySupportRefund
-	}
-
-	return CategoryGeneral
+	signals.Category = CategoryGeneral
+	return signals
 }
 
 func normalizeCategoryText(prompt string) string {
-	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(categoryScanPrefix(prompt)))), " ")
+	return normalizeCategoryTextWithLimit(prompt, maxCategoryScanBytes)
+}
+
+func normalizeCategoryTextWithLimit(prompt string, limit int) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(categoryScanPrefixWithLimit(prompt, limit)))), " ")
 }
 
 func categoryScanPrefix(prompt string) string {
-	if len(prompt) <= maxCategoryScanBytes {
+	return categoryScanPrefixWithLimit(prompt, maxCategoryScanBytes)
+}
+
+func categoryScanPrefixWithLimit(prompt string, limit int) string {
+	if limit <= 0 {
+		limit = maxCategoryScanBytes
+	}
+	if len(prompt) <= limit {
 		return prompt
 	}
 
-	limit := maxCategoryScanBytes
 	for limit > 0 && !utf8.RuneStart(prompt[limit]) {
 		limit--
 	}
@@ -69,21 +126,50 @@ func categoryScanPrefix(prompt string) string {
 	return prompt[:limit]
 }
 
-func containsCodeSignal(text string) bool {
-	if strings.Contains(text, "```") {
+func matchesCategoryRule(text string, tokens []string, rule CategoryRule) bool {
+	if rule.EnableCodeFence && strings.Contains(text, "```") {
 		return true
 	}
-	if containsAny(text, codeCategoryKeywords) {
+	if containsAny(text, rule.Contains) {
 		return true
 	}
-	tokens := categoryTokens(text)
-	for _, token := range tokens {
-		switch token {
-		case "function", "class", "const", "func", "sql":
-			return true
-		}
+	if hasAnyToken(tokens, rule.Tokens) {
+		return true
 	}
-	return containsSQLCodePattern(text, tokens)
+	if rule.EnableSQLPattern && containsSQLCodePattern(text, tokens) {
+		return true
+	}
+	hasRequiredToken := rule.RequiresToken != ""
+	hasAnyTokenRequirement := len(rule.RequiresAnyToken) > 0
+	if !hasRequiredToken && !hasAnyTokenRequirement {
+		return false
+	}
+	if hasRequiredToken && !hasToken(tokens, rule.RequiresToken) {
+		return false
+	}
+	if hasAnyTokenRequirement && !hasAnyToken(tokens, rule.RequiresAnyToken) {
+		return false
+	}
+	return true
+}
+
+func signalMatched(category string, signals RoutingSignals) bool {
+	switch canonicalCategory(category) {
+	case CategoryCode:
+		return signals.HasCodeSignal
+	case CategoryTranslation:
+		return signals.WantsTranslation
+	case CategoryExtractionJSON:
+		return signals.WantsStructuredOutput
+	case CategorySummarization:
+		return signals.WantsSummarization
+	case CategoryReasoning:
+		return signals.NeedsReasoning
+	case CategorySupportRefund:
+		return signals.HasSupportRefundSignal
+	default:
+		return false
+	}
 }
 
 func containsAny(value string, needles []string) bool {
@@ -141,13 +227,73 @@ func hasToken(tokens []string, target string) bool {
 	return false
 }
 
+func hasAnyToken(tokens []string, targets []string) bool {
+	for _, target := range targets {
+		if hasToken(tokens, target) {
+			return true
+		}
+	}
+	return false
+}
+
 func capabilityForCategory(category string) string {
 	switch canonicalCategory(category) {
 	case CategoryCode:
 		return CapabilityCode
 	case CategoryTranslation:
 		return CapabilityTranslation
+	case CategorySummarization:
+		return CapabilitySummarization
+	case CategoryExtractionJSON:
+		return CapabilityJSON
+	case CategoryReasoning:
+		return CapabilityReasoning
 	default:
 		return CapabilityChat
 	}
+}
+
+func mustLoadCategoryPolicy(payload []byte) CategoryPolicy {
+	var policy CategoryPolicy
+	if err := json.Unmarshal(payload, &policy); err != nil {
+		panic(err)
+	}
+	return normalizeCategoryPolicy(policy)
+}
+
+func normalizeCategoryPolicy(policy CategoryPolicy) CategoryPolicy {
+	if policy.MaxScanBytes <= 0 {
+		policy.MaxScanBytes = maxCategoryScanBytes
+	}
+	if len(policy.CategoryPriority) == 0 {
+		policy.CategoryPriority = []string{
+			CategoryCode,
+			CategoryTranslation,
+			CategoryExtractionJSON,
+			CategorySummarization,
+			CategoryReasoning,
+			CategorySupportRefund,
+		}
+	}
+	if policy.Rules == nil {
+		policy.Rules = map[string]CategoryRule{}
+	}
+	return policy
+}
+
+func cloneCategoryPolicy(policy CategoryPolicy) CategoryPolicy {
+	clone := policy
+	clone.CategoryPriority = append([]string(nil), policy.CategoryPriority...)
+	clone.Rules = make(map[string]CategoryRule, len(policy.Rules))
+	for category, rule := range policy.Rules {
+		clone.Rules[category] = CategoryRule{
+			Contains:         append([]string(nil), rule.Contains...),
+			Tokens:           append([]string(nil), rule.Tokens...),
+			RequiresToken:    rule.RequiresToken,
+			RequiresAnyToken: append([]string(nil), rule.RequiresAnyToken...),
+			EnableCodeFence:  rule.EnableCodeFence,
+			EnableSQLPattern: rule.EnableSQLPattern,
+		}
+	}
+	return clone
 }

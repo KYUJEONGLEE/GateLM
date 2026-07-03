@@ -275,7 +275,15 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				MaskingAction:         "redacted",
 				MaskingDetectedTypes:  []string{"email"},
 				MaskingDetectedCount:  1,
-				RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
+				RedactedPromptPreview: "Send a reply to [EMAIL_1].",
+			},
+			PromptCapture: invocationlog.PromptCaptureFields{
+				Enabled:        true,
+				Mode:           runtimeconfig.PromptCaptureModeLogSafeFull,
+				Visibility:     invocationlog.PromptCaptureVisibilityAdminRequestDetail,
+				CapturedPrompt: "Send a reply to [EMAIL_REDACTED].",
+				Truncated:      false,
+				MaxChars:       8000,
 			},
 			RuntimeSnapshot: &runtimeconfig.RuntimeSnapshotProvenance{
 				RuntimeSnapshotID:      "runtime_snapshot_detail_test",
@@ -322,8 +330,14 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	if response.Data.RequestID != "request_001" || response.Data.Routing.SelectedModel == nil || *response.Data.Routing.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected detail response: %+v", response.Data)
 	}
-	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_REDACTED]." {
+	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_1]." {
 		t.Fatalf("expected redacted prompt preview, got %+v", response.Data.Masking)
+	}
+	if !response.Data.PromptCapture.Enabled ||
+		response.Data.PromptCapture.CapturedPrompt == nil ||
+		*response.Data.PromptCapture.CapturedPrompt != "Send a reply to [EMAIL_REDACTED]." ||
+		response.Data.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail {
+		t.Fatalf("unexpected prompt capture response: %+v", response.Data.PromptCapture)
 	}
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)

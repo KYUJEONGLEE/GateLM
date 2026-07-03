@@ -79,6 +79,23 @@ export class RuntimeConfigCachePolicyDto {
   ttlSeconds?: number;
 }
 
+export class RuntimeConfigPromptCapturePolicyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(['disabled', 'log_safe_full'])
+  mode?: 'disabled' | 'log_safe_full';
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20000)
+  maxChars?: number;
+}
+
 export class RuntimeConfigRoutingPolicyDto {
   @IsOptional()
   @IsString()
@@ -276,6 +293,11 @@ export class UpsertRuntimeConfigDraftDto {
 
   @IsOptional()
   @ValidateNested()
+  @Type(() => RuntimeConfigPromptCapturePolicyDto)
+  promptCapturePolicy?: RuntimeConfigPromptCapturePolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
   @Type(() => RuntimeConfigRoutingPolicyDto)
   routingPolicy?: RuntimeConfigRoutingPolicyDto;
 
@@ -447,6 +469,12 @@ export interface RuntimeConfigCachePolicyResponseDto {
   ttlSeconds: number;
 }
 
+export interface RuntimeConfigPromptCapturePolicyResponseDto {
+  enabled: boolean;
+  mode: 'disabled' | 'log_safe_full';
+  maxChars: number;
+}
+
 export interface RuntimeConfigRoutingPolicyResponseDto {
   type: 'simple';
   autoModel: 'auto';
@@ -527,6 +555,7 @@ export interface ActiveRuntimeConfigResponseDto {
   budgetPolicy: RuntimeConfigBudgetPolicyResponseDto;
   safetyPolicy: RuntimeConfigSafetyPolicyResponseDto;
   cachePolicy: RuntimeConfigCachePolicyResponseDto;
+  promptCapturePolicy: RuntimeConfigPromptCapturePolicyResponseDto;
   routingPolicy: RuntimeConfigRoutingPolicyResponseDto;
   pricingRules: RuntimeConfigPricingRuleResponseDto[];
   hashing: RuntimeConfigHashingDto;
@@ -636,6 +665,12 @@ export interface RuntimeSnapshotCachePolicyDto {
   cachePolicyHash: string;
 }
 
+export interface RuntimeSnapshotPromptCapturePolicyDto {
+  enabled: boolean;
+  mode: 'disabled' | 'log_safe_full';
+  maxChars: number;
+}
+
 export interface RuntimeSnapshotRateLimitPolicyDto {
   enabled: boolean;
   scope: 'application';
@@ -665,6 +700,7 @@ export interface RuntimeSnapshotPoliciesDto {
   safety: RuntimeSnapshotSafetyPolicyDto;
   routing: RuntimeSnapshotRoutingPolicyDto;
   cache: RuntimeSnapshotCachePolicyDto;
+  promptCapture: RuntimeSnapshotPromptCapturePolicyDto;
   rateLimit: RuntimeSnapshotRateLimitPolicyDto;
   budget: RuntimeSnapshotBudgetPolicyDto;
   fallback: RuntimeSnapshotFallbackPolicyDto;

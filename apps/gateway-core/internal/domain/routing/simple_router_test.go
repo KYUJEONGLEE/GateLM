@@ -116,6 +116,40 @@ func TestSimpleRouterUsesRequestRuntimeConfigWithoutChangingDecisionSemantics(t 
 	}))
 }
 
+func TestSimpleRouterRequestConfigPreservesBaseCandidateStatuses(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_base",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock", Model: "mock-fast", Status: RouteCandidateUnavailable},
+			{Provider: "mock", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 1},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "brief status update",
+		Config: &SimpleRouterConfig{
+			PolicyHash:          "hash_runtime_routing_policy",
+			ShortPromptMaxChars: 300,
+		},
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", ReasonProviderHealthFallback, "hash_runtime_routing_policy", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryGeneral,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
 func TestSimpleRouterRoutingDecisionHashChangesByCategory(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",
@@ -234,6 +268,222 @@ func TestSimpleRouterRoutesLongSupportRefundCategoryToLowCostModel(t *testing.T)
 	}))
 }
 
+func TestSimpleRouterRoutesReasoningCategoryToHighQualityModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Compare these rollout options and explain the tradeoff.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-premium", "mock-smart", ReasonReasoningHighQuality, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryReasoning,
+		Tier:          TierHighQuality,
+		Capability:    CapabilityReasoning,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
+func TestSimpleRouterFallsBackWhenSelectedCandidateUnavailable(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateUnavailable},
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 10, LatencyP95Ms: 180},
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateAvailable, FallbackPriority: 20, LatencyP95Ms: 90},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Compare these rollout options and explain the tradeoff.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-default", "mock-balanced", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryReasoning,
+		Tier:          TierBalanced,
+		Capability:    CapabilityReasoning,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
+func TestSimpleRouterHealthFallbackDoesNotEscalateLowCostToHighQuality(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateUnavailable},
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 10, LatencyP95Ms: 200},
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateAvailable, FallbackPriority: 10, LatencyP95Ms: 120},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Write a short refund response.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-default", "mock-balanced", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategorySupportRefund,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
+func TestSimpleRouterHealthFallbackPrefersAvailableOverDegraded(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateUnavailable},
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateDegraded, FallbackPriority: 1, LatencyP95Ms: 20},
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateAvailable, FallbackPriority: 20, LatencyP95Ms: 300},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "Compare these rollout options and explain the tradeoff.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-cheap", "mock-fast", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryReasoning,
+		Tier:          TierLowCost,
+		Capability:    CapabilityReasoning,
+		PolicyVariant: PolicyVariantProviderHealthFallback,
+	}))
+}
+
+func TestSimpleRouterDoesNotHealthFallbackPinnedModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+		LowCostModel:    "mock-fast",
+		PolicyHash:      "route_p0_v1",
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock", Model: "mock-smart", Status: RouteCandidateUnavailable},
+			{Provider: "mock", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 1},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "mock-smart",
+		PromptText:     "Use this exact model.",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("mock-smart", "mock", "mock-smart", ReasonPinned, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModePinned,
+		Category:      CategoryGeneral,
+		Tier:          TierBalanced,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
+func TestSimpleRouterRoutesStructuredCategoriesToBalancedModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	cases := []struct {
+		name       string
+		prompt     string
+		category   string
+		capability string
+		reason     string
+	}{
+		{
+			name:       "summarization",
+			prompt:     "Summarize the attached meeting notes into decisions and blockers.",
+			category:   CategorySummarization,
+			capability: CapabilitySummarization,
+			reason:     ReasonSummarizationBalanced,
+		},
+		{
+			name:       "extraction_json",
+			prompt:     "Extract the order id and status as JSON.",
+			category:   CategoryExtractionJSON,
+			capability: CapabilityJSON,
+			reason:     ReasonExtractionJSONBalanced,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision, err := router.DecideRoute(context.Background(), Request{
+				RequestedModel: "auto",
+				PromptText:     tc.prompt,
+			})
+			if err != nil {
+				t.Fatalf("DecideRoute returned error: %v", err)
+			}
+
+			assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", tc.reason, "route_p0_v1", DecisionMaterial{
+				RoutingMode:   RoutingModeAuto,
+				Category:      tc.category,
+				Tier:          TierBalanced,
+				Capability:    tc.capability,
+				PolicyVariant: PolicyVariantDefault,
+			}))
+		})
+	}
+}
+
 func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",
@@ -255,6 +505,9 @@ func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 		{name: "RT-CATEGORY-005 empty", prompt: "", category: CategoryUnknown},
 		{name: "RT-CATEGORY-006 translation priority", prompt: "환불 정책을 영어로 번역해줘", category: CategoryTranslation},
 		{name: "RT-CATEGORY-006 code priority", prompt: "이 코드를 영어로 번역해줘", category: CategoryCode},
+		{name: "RT-CATEGORY-007 summarization", prompt: "Summarize the meeting notes into key points", category: CategorySummarization},
+		{name: "RT-CATEGORY-008 extraction json", prompt: "Extract the order id and status as JSON", category: CategoryExtractionJSON},
+		{name: "RT-CATEGORY-009 reasoning", prompt: "Compare these options and explain the tradeoff", category: CategoryReasoning},
 		{name: "RT-CATEGORY-008 ambiguous go let words stay general", prompt: "Let me know if we can go ahead with the weekly update", category: CategoryGeneral},
 		{name: "RT-CATEGORY-009 select update delete words stay general", prompt: "Please select a plan, update my profile, and delete the old address", category: CategoryGeneral},
 		{name: "RT-CATEGORY-010 bug without code context stays general", prompt: "I found a bug in my order status page", category: CategoryGeneral},

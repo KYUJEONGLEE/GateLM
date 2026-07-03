@@ -182,6 +182,51 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerStoresLogSafePromptCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.PromptCapture = runtimeconfig.PromptCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasPromptCapture = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Send a reply to user@example.invalid.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	capture, ok := logWriter.logs[0].Metadata["promptCapture"].(invocationlog.PromptCaptureFields)
+	if !ok {
+		t.Fatalf("expected prompt capture metadata, got %+v", logWriter.logs[0].Metadata["promptCapture"])
+	}
+	if !capture.Enabled ||
+		capture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
+		capture.CapturedPrompt != "Send a reply to [EMAIL_1]." ||
+		strings.Contains(capture.CapturedPrompt, "user@example.invalid") {
+		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+}
+
 func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
@@ -1454,13 +1499,13 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 			name:        "email",
 			prompt:      "Write a safe reply to user@example.invalid about the refund.",
 			rawValue:    "user@example.invalid",
-			placeholder: "[EMAIL_REDACTED]",
+			placeholder: "[EMAIL_1]",
 		},
 		{
 			name:        "phone",
 			prompt:      "Write a safe reply asking them to call 010-0000-0000 tomorrow.",
 			rawValue:    "010-0000-0000",
-			placeholder: "[PHONE_NUMBER_REDACTED]",
+			placeholder: "[PHONE_NUMBER_1]",
 		},
 	}
 
@@ -1529,6 +1574,128 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 				t.Fatalf("redacted prompt preview must not include raw sensitive value %q: %q", tt.rawValue, logged.RedactedPromptPreview)
 			}
 		})
+	}
+}
+
+func TestChatCompletionsHandlerKeepsEntityScopeAcrossRequestMessages(t *testing.T) {
+	chatCalls := 0
+	var providerRequests []provider.ChatCompletionRequest
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls:    &chatCalls,
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "system",
+				Content: json.RawMessage(jsonStringLiteral("Primary contact is first@example.invalid.")),
+			},
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral("Email second@example.invalid, then first@example.invalid.")),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
+	}
+
+	providerPrompt := recordedProviderPrompt(t, providerRequests)
+	expected := "Primary contact is [EMAIL_1].\nEmail [EMAIL_2], then [EMAIL_1]."
+	if providerPrompt != expected {
+		t.Fatalf("expected request-scoped redacted prompt %q, got %q", expected, providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "first@example.invalid") || strings.Contains(providerPrompt, "second@example.invalid") {
+		t.Fatalf("provider prompt must not include raw emails: %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].RedactedPromptPreview != expected {
+		t.Fatalf("expected request-scoped log preview %q, got %q", expected, logWriter.logs[0].RedactedPromptPreview)
+	}
+}
+
+func TestChatCompletionsHandlerKeepsFirstPersonRoleAcrossRequestMessages(t *testing.T) {
+	chatCalls := 0
+	var providerRequests []provider.ChatCompletionRequest
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls:    &chatCalls,
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "system",
+				Content: json.RawMessage(jsonStringLiteral("customer_name=Alex Kim")),
+			},
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral("patient_name=Alex Kim")),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
+	}
+
+	providerPrompt := recordedProviderPrompt(t, providerRequests)
+	expected := "customer_name=[CUSTOMER_1]\npatient_name=[CUSTOMER_1]"
+	if providerPrompt != expected {
+		t.Fatalf("expected request-scoped role-aware prompt %q, got %q", expected, providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "Alex Kim") || strings.Contains(providerPrompt, "[PATIENT_1]") {
+		t.Fatalf("provider prompt must keep first role without raw person name: %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].RedactedPromptPreview != expected {
+		t.Fatalf("expected role-aware log preview %q, got %q", expected, logWriter.logs[0].RedactedPromptPreview)
 	}
 }
 
@@ -1744,7 +1911,7 @@ func TestCombineMaskingResultsBoundsRedactedPromptPreview(t *testing.T) {
 			RedactedPromptPreview:   redactedPrompt,
 			SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
 		},
-	}, redactedPrompt, maskdomain.DefaultSecurityPolicyVersionID)
+	}, redactedPrompt, redactedPrompt, maskdomain.DefaultSecurityPolicyVersionID)
 
 	if result.RedactedPrompt != redactedPrompt {
 		t.Fatalf("expected full redacted prompt to remain available in memory, got %q", result.RedactedPrompt)
@@ -2602,6 +2769,87 @@ func TestChatCompletionsHandlerUsesLiveRuntimeSnapshotAndProviderCatalog(t *test
 	}
 	if primary.lastRequest.Model != "provider-low" {
 		t.Fatalf("expected provider API modelName provider-low, got %s", primary.lastRequest.Model)
+	}
+}
+
+func TestChatCompletionsHandlerAppliesRuntimeSnapshotDetectorSetToMasking(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.CatalogID = "provider_catalog:" + testAppID + ":1"
+	catalog.ContentHash = "sha256:provider-catalog-detector-policy-test"
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+	logWriter := &recordingTerminalLogWriter{}
+	detectorSet := []map[string]string{
+		{"detectorType": "email", "action": "redact"},
+		{"detectorType": "phone_number", "action": "allow"},
+		{"detectorType": "api_key", "action": "block"},
+	}
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/v1/applications/" + testAppID + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayloadWithDetectorSet(catalog.Reference(), detectorSet))
+		case "/admin/v1/provider-catalogs/" + catalog.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalog))
+		default:
+			t.Fatalf("unexpected control plane path: %s", r.URL.Path)
+		}
+	}))
+	defer controlPlane.Close()
+
+	runtimeSnapshotProvider := controlplaneruntimeconfig.NewProvider(controlPlane.URL, controlPlane.Client())
+	providerCatalogResolver := controlplaneprovidercatalog.NewResolver(controlPlane.URL, controlPlane.Client())
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: providerCatalogResolver,
+		CredentialResolver:      staticCredentialResolver{},
+		RuntimePolicyPipeline:   pipeline.New(runtimeconfigstage.NewStage(runtimeSnapshotProvider)),
+		DefaultProvider:         "mock",
+		DefaultModel:            "mock-balanced",
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	prompt := "Contact user@example.invalid or 010-0000-0000."
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBodyWithModel("auto", prompt)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 {
+		t.Fatalf("expected one provider call, got %d", primary.calls)
+	}
+	providerPrompt := recordedProviderPrompt(t, []provider.ChatCompletionRequest{primary.lastRequest})
+	if !strings.Contains(providerPrompt, "[EMAIL_1]") {
+		t.Fatalf("expected provider prompt to redact email, got %q", providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "user@example.invalid") {
+		t.Fatalf("provider prompt must not include raw email: %q", providerPrompt)
+	}
+	if !strings.Contains(providerPrompt, "010-0000-0000") {
+		t.Fatalf("provider prompt should keep policy-allowed phone value, got %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if strings.Join(logged.MaskingDetectedTypes, ",") != "email" {
+		t.Fatalf("expected only email in protected detector types, got %#v", logged.MaskingDetectedTypes)
+	}
+	if strings.Join(logged.PolicyAllowedTypes, ",") != "phone_number" {
+		t.Fatalf("expected phone_number policy allowed type, got %#v", logged.PolicyAllowedTypes)
+	}
+	if strings.Contains(logged.RedactedPromptPreview, "010-0000-0000") || strings.Contains(logged.RedactedPromptPreview, "user@example.invalid") {
+		t.Fatalf("log-safe preview must not include raw policy-allowed or redacted values: %q", logged.RedactedPromptPreview)
+	}
+	if !strings.Contains(logged.RedactedPromptPreview, "[PHONE_NUMBER_REDACTED]") {
+		t.Fatalf("expected log-safe preview to mask policy-allowed phone, got %q", logged.RedactedPromptPreview)
+	}
+	if strings.Join(logged.DomainOutcomes.Safety.PolicyAllowedTypes, ",") != "phone_number" {
+		t.Fatalf("expected safety domain outcome to carry policy allowed type, got %#v", logged.DomainOutcomes)
 	}
 }
 
@@ -3471,6 +3719,11 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 				"semanticCacheMode": "evidence_only",
 				"cachePolicyHash":   "hash_cache_policy_live_handler",
 			},
+			"promptCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.PromptCaptureModeDisabled,
+				"maxChars": runtimeconfig.PromptCaptureDefaultMaxChars,
+			},
 			"rateLimit": map[string]any{
 				"enabled":       false,
 				"scope":         "application",
@@ -3498,6 +3751,14 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 			"routingPolicyHash":  "hash_routing_policy_live_handler",
 		},
 	}
+}
+
+func liveRuntimeSnapshotPayloadWithDetectorSet(ref providercatalog.Reference, detectorSet []map[string]string) map[string]any {
+	payload := liveRuntimeSnapshotPayload(ref)
+	policies := payload["policies"].(map[string]any)
+	safety := policies["safety"].(map[string]any)
+	safety["detectorSet"] = detectorSet
+	return payload
 }
 
 func liveProviderCatalogPayload(catalog providercatalog.Catalog) map[string]any {

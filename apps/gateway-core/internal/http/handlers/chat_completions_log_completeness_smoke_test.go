@@ -186,7 +186,7 @@ func TestChatCompletionsLogCompletenessSmoke(t *testing.T) {
 		"사용자 입력에 email과 phone_number가 있지만 block 대상은 아니다.",
 		demoHTTPRequest(t, "Write a safe reply to <email> and ask them to call <phone_number>."),
 		demoSuccessHTTPOutput(t, redacted, redactedResp, map[string]any{
-			"providerPromptContainsPlaceholders": strings.Contains(providerPrompt, "[EMAIL_REDACTED]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]"),
+			"providerPromptContainsPlaceholders": strings.Contains(providerPrompt, "[EMAIL_1]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_1]"),
 			"rawSensitiveValueExposed":           false,
 			"rawPromptShown":                     false,
 			"rawResponseShown":                   false,

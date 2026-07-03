@@ -31,7 +31,7 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 		CacheType:             CacheTypeExact,
 		RoutingReason:         "low_cost",
 		MaskingAction:         "redacted",
-		RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptPreview: "Send a reply to [EMAIL_1].",
 		MaskingDetectedTypes:  []string{"email"},
 		MaskingDetectedCount:  1,
 		CreatedAt:             createdAt,
@@ -82,6 +82,14 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 		MaskingAction:         "none",
 		MaskingDetectedTypes:  []string{},
 		RedactedPromptPreview: "Write a short refund response.",
+		PromptCapture: PromptCaptureFields{
+			Enabled:        true,
+			Mode:           runtimeconfig.PromptCaptureModeLogSafeFull,
+			Visibility:     PromptCaptureVisibilityAdminRequestDetail,
+			CapturedPrompt: "Write a short refund response.",
+			Truncated:      false,
+			MaxChars:       8000,
+		},
 		RuntimeSnapshot: runtimeconfig.RuntimeSnapshotProvenance{
 			RuntimeSnapshotID:      "runtime_snapshot_query_test",
 			RuntimeSnapshotVersion: 2,
@@ -110,6 +118,9 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	}
 	if detail.Masking.RedactedPromptPreview != "Write a short refund response." {
 		t.Fatalf("unexpected redacted prompt preview: %+v", detail.Masking)
+	}
+	if !detail.PromptCapture.Enabled || detail.PromptCapture.CapturedPrompt != "Write a short refund response." {
+		t.Fatalf("unexpected prompt capture detail: %+v", detail.PromptCapture)
 	}
 	if detail.Latency.ProviderLatencyMs == nil || *detail.Latency.ProviderLatencyMs != 86 {
 		t.Fatalf("unexpected provider latency: %+v", detail.Latency)

@@ -168,13 +168,13 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			"redacted",
 			[]byte(`["email"]`),
 			1,
-			sql.NullString{String: "Send a reply to [EMAIL_REDACTED].", Valid: true},
+			sql.NullString{String: "Send a reply to [EMAIL_1].", Valid: true},
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
-			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_REDACTED]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_1]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
 		}},
 	}
 
@@ -233,6 +233,20 @@ func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testin
 	}
 	if len(outcomes.Safety.DetectedTypes) != 0 {
 		t.Fatalf("expected empty detected types, got %#v", outcomes.Safety.DetectedTypes)
+	}
+}
+
+func TestApplyInvocationMetadataFieldsMapsPromptCapture(t *testing.T) {
+	log := invocationlog.LlmInvocationLog{}
+	applyInvocationMetadataFields(&log, []byte(`{"promptCapture":{"enabled":true,"mode":"log_safe_full","visibility":"admin_request_detail","capturedPrompt":"문의: [EMAIL_REDACTED]","truncated":false,"maxChars":8000}}`))
+
+	if !log.PromptCapture.Enabled ||
+		log.PromptCapture.Mode != "log_safe_full" ||
+		log.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail ||
+		log.PromptCapture.CapturedPrompt != "문의: [EMAIL_REDACTED]" ||
+		log.PromptCapture.Truncated ||
+		log.PromptCapture.MaxChars != 8000 {
+		t.Fatalf("unexpected prompt capture fields: %+v", log.PromptCapture)
 	}
 }
 

@@ -63,6 +63,8 @@ func deterministicFakeVector(text string) []float64 {
 	switch fakeSemanticCluster(text) {
 	case "password_reset":
 		return []float64{1, 0.03, 0, 0, 0, 0}
+	case "support_refund":
+		return []float64{0.03, 0, 1, 0.03, 0, 0}
 	case "usage_stats":
 		return []float64{0, 1, 0.03, 0, 0, 0}
 	default:
@@ -73,6 +75,9 @@ func deterministicFakeVector(text string) []float64 {
 func fakeSemanticCluster(text string) string {
 	if containsAny(text, "비밀번호", "패스워드", "초기화", "재설정", "password", "reset") {
 		return "password_reset"
+	}
+	if containsAny(text, "배송비", "환불", "반품", "돌려받", "주문 취소", "결제 취소", "교환", "refund", "return", "cancel", "exchange") {
+		return "support_refund"
 	}
 	if containsAny(text, "사용량", "통계", "usage", "stats") {
 		return "usage_stats"

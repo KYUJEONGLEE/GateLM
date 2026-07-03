@@ -39,6 +39,7 @@ class BenchmarkTarget(Protocol):
 @dataclass
 class HttpBenchmarkTarget:
     endpoint_url: str
+    model_id: str = MODEL_ID
 
     def detect(self, prompt_text: str, *, locale: str | None, timeout_ms: int) -> TargetResult:
         try:
@@ -50,7 +51,11 @@ class HttpBenchmarkTarget:
         try:
             response = httpx.post(
                 self.endpoint_url,
-                json=build_request_payload(prompt_text, locale=locale),
+                json=build_request_payload(
+                    prompt_text,
+                    locale=locale,
+                    model_id=self.model_id,
+                ),
                 timeout=timeout_ms / 1000,
             )
             full_latency_ms = elapsed_ms(started)
@@ -96,19 +101,25 @@ class HttpBenchmarkTarget:
 @dataclass
 class InProcessBenchmarkTarget:
     service: object
+    model_id: str = MODEL_ID
 
     @classmethod
-    def create(cls) -> InProcessBenchmarkTarget:
+    def create(cls, *, model_id: str = MODEL_ID) -> InProcessBenchmarkTarget:
         from app.services.ai_safety_detector import AiSafetyDetectorService
 
-        return cls(service=AiSafetyDetectorService())
+        return cls(
+            service=AiSafetyDetectorService(model_id=model_id),
+            model_id=model_id,
+        )
 
     def detect(self, prompt_text: str, *, locale: str | None, timeout_ms: int) -> TargetResult:
         from app.schemas.safety import AiSafetyDetectRequest
 
         started = perf_counter()
         try:
-            request = AiSafetyDetectRequest.model_validate(build_request_payload(prompt_text, locale=locale))
+            request = AiSafetyDetectRequest.model_validate(
+                build_request_payload(prompt_text, locale=locale, model_id=self.model_id)
+            )
             response = self.service.detect(request)
         except Exception:
             return TargetResult(
@@ -131,12 +142,17 @@ class InProcessBenchmarkTarget:
         return result_from_response_body(body, full_latency_ms=full_latency_ms, timeout_ms=timeout_ms)
 
 
-def build_request_payload(prompt_text: str, *, locale: str | None) -> dict[str, object]:
+def build_request_payload(
+    prompt_text: str,
+    *,
+    locale: str | None,
+    model_id: str = MODEL_ID,
+) -> dict[str, object]:
     return {
         "contractVersion": CONTRACT_VERSION,
         "mode": "shadow",
         "model": {
-            "modelId": MODEL_ID,
+            "modelId": model_id,
             "runtime": "cpu_only",
         },
         "input": {

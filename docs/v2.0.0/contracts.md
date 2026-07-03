@@ -25,7 +25,7 @@ v2.0.0은 v1.0.0 baseline을 깨지 않고 다음을 확장한다.
 - Provider별 호출 로직은 Provider Adapter 안에 둔다.
 - Gateway는 editable RuntimeConfig를 직접 소비하지 않고 published RuntimeSnapshot만 소비한다.
 - Observability는 Gateway가 생산한 outcome을 저장/집계한다. Observability가 stage outcome을 새로 추측하지 않는다.
-- Request Log, Request Detail, Dashboard, Metrics는 raw prompt/raw response/raw credential을 저장하거나 출력하지 않는다.
+- Request Log, Request Detail, Dashboard, Metrics는 raw prompt/raw response/raw credential을 저장하거나 출력하지 않는다. 단, Request Detail은 RuntimeSnapshot의 opt-in 정책이 켜진 경우 masking 이후 log-safe captured prompt만 표시할 수 있다.
 - Client request body에서 넘어온 budget scope는 신뢰하지 않는다.
 
 ### 2.2 MUST NOT
@@ -138,7 +138,7 @@ Employee Browser
 | Surface | Show | Hide |
 |---|---|---|
 | Employee UI | response, requestId, simple status | raw token, detector detail, raw prompt/response, policy internals |
-| Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance | raw secret, raw prompt/response, provider raw error body |
+| Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance, opt-in log-safe captured prompt | raw secret, raw prompt/response, provider raw error body |
 
 ## 5. RuntimeConfig And RuntimeSnapshot
 
@@ -524,6 +524,8 @@ Redaction 이후 cache/evidence 입력으로 사용할 수 있는 값은 raw pro
 
 Safety result는 raw value, raw offset, raw prompt fragment를 포함하지 않는다.
 
+Prompt Capture는 RuntimeSnapshot `policies.promptCapture.enabled=true`이고 `mode=log_safe_full`일 때만 Request Detail metadata에 저장할 수 있다. 저장 대상은 request-side masking이 끝난 후의 log-safe prompt이며, raw prompt, raw detected value, raw response, provider raw error body, streaming chunk, Authorization, API/App/Provider key, actual secret은 저장하지 않는다.
+
 `promptHash`, `requestBodyHash`, `cacheKeyHash`는 raw 값은 아니지만 high-cardinality correlation material이다. Internal Gateway context나 evidence storage 후보로만 허용하며, metrics label, Dashboard aggregate label, Employee UI에는 노출하지 않는다. Admin Request Detail 표시 여부는 v2.0.0 freeze 범위 밖의 P1 결정으로 둔다.
 
 ### 8.3 Exact Cache
@@ -562,11 +564,11 @@ Routing decision canonical material:
   "category": "general | code | translation | support_refund | unknown",
   "tier": "low_cost | balanced | high_quality",
   "capability": "chat | reasoning | code | translation",
-  "policyVariant": "default"
+  "policyVariant": "default | provider_health_fallback"
 }
 ```
 
-Canonical JSON은 정해진 key 순서를 사용하고, 비어 있는 값은 `unknown` 또는 `default`로 고정한다. Canonical material은 log/detail에 사람이 볼 수 있는 형태로 남길 수 있지만, cache key에는 `routingDecisionKeyHash`를 사용한다.
+Canonical JSON은 정해진 key 순서를 사용하고, 비어 있는 값은 `unknown` 또는 `default`로 고정한다. Canonical material은 log/detail에 사람이 볼 수 있는 형태로 남길 수 있지만, cache key에는 `routingDecisionKeyHash`를 사용한다. `provider_health_fallback`은 provider/model 후보 상태가 응답 경로를 바꾼 경우에만 사용하는 low-cardinality variant다. 이 variant는 비용 통제를 깨지 않도록 `high_quality` tier로 승격하지 않고, `balanced` 또는 더 낮은 tier 후보만 선택한다.
 
 `stream=true` 요청은 별도 streaming cache contract가 생기기 전까지 Exact Cache lookup/store를 bypass한다.
 
@@ -601,6 +603,8 @@ Semantic Cache experiment도 raw prompt를 사용하지 않는다. redaction 이
 `safety.outcome`이 canonical safety 결과다.
 
 `maskingAction`, `detectedTypes`, `redactedPromptPreview`는 sanitized summary/display 후보이며 raw detected value, raw offset, raw prompt fragment를 포함하지 않는다. Employee UI는 detector detail과 policy internals를 숨긴다. Admin/Developer UI는 계약된 sanitized summary만 볼 수 있다.
+
+`detectedTypes`와 `detectorSummary.detectorCategories`의 값은 GateLM-normalized detector type label이다. `organization_name`은 조직명/기관명 탐지를 표현하는 v2 safety detector type이며 기본 action 후보는 `redact`다. 이 값은 조직명 원문이나 prompt fragment가 아니라 낮은 cardinality의 sanitized category label만 담는다.
 
 ## 9. Streaming Thin Slice
 
@@ -652,9 +656,10 @@ streaming outcome
 latency summary
 cost/usage summary
 safety summary
+promptCapture
 ```
 
-Request Detail은 full RuntimeSnapshot, raw prompt, raw response, raw provider error body를 포함하지 않는다.
+Request Detail은 full RuntimeSnapshot, raw prompt, raw response, raw provider error body를 포함하지 않는다. `promptCapture.capturedPrompt`는 opt-in 정책이 켜진 경우의 masking 이후 log-safe prompt 예외이며 Request Log list, Dashboard, Metrics에는 표시하거나 집계하지 않는다.
 
 Request Detail 기본 계약은 credential plaintext, API Key/App Token/Provider Key, Authorization header, actual secret을 포함하지 않는다. `apiKeyId`, `appTokenId` 같은 credential ID의 Admin-only 표시 여부는 v2.0.0 freeze 범위 밖의 P1 결정이다.
 
@@ -743,6 +748,34 @@ Tenant/project/application/budgetScope 단위 분석은 기본적으로 Dashboar
 Status 계열 metrics label은 canonical `terminalStatus` 허용 값만 사용한다. Cache hit, provider error, fallback success는 terminal status label로 합치지 않고 domain outcome 또는 Dashboard read model에서 표현한다.
 
 Provider/model metrics label은 controlled low-cardinality catalog label만 허용한다. 실제 provider/model 도입 후 cardinality가 높아지는 값은 Metrics label이 아니라 Dashboard read model로 보낸다.
+
+Streaming relay metrics는 아래 low-cardinality label만 사용한다.
+
+```text
+selected_provider
+selected_model
+stream_outcome
+error_code
+```
+
+`stream_outcome` 허용 값:
+
+```text
+completed
+interrupted
+cancelled
+```
+
+Streaming metric family:
+
+```text
+gatelm_streams_active
+gatelm_stream_relay_total
+gatelm_stream_duration_seconds
+gatelm_stream_time_to_first_token_seconds
+```
+
+`gatelm_stream_time_to_first_token_seconds`는 첫 SSE event/chunk가 아니라 Gateway가 첫 non-empty `choices[].delta.content`를 client로 flush하기까지의 시간이다. Role-only chunk, usage-only chunk, empty content chunk는 TTFT로 기록하지 않는다.
 
 ### 11.2 Performance Interpretation
 
@@ -845,7 +878,7 @@ safety-domain-outcome.fixture.json
 
 v2.0.0 core 범위에 넣지 않는다.
 
-- raw prompt/raw response 저장 opt-in
+- raw prompt/raw response 저장 opt-in. masking 이후 log-safe captured prompt opt-in은 Request Detail 예외로 허용한다.
 - Semantic Cache를 live response path에 자동 적용
 - ClickHouse 필수화
 - Redpanda event pipeline 필수화

@@ -53,6 +53,8 @@ export type DomainOutcome = {
   outcome: string;
   reason?: string | null;
   code?: string | null;
+  policyAllowedTypes?: string[];
+  mandatoryProtectedTypes?: string[];
 };
 
 export type DomainOutcomes = {
@@ -67,6 +69,15 @@ export type DomainOutcomes = {
   fallback: DomainOutcome;
   streaming: DomainOutcome;
   logging: DomainOutcome;
+};
+
+export type PromptCapture = {
+  capturedPrompt: string | null;
+  enabled: boolean;
+  maxChars: number;
+  mode: "disabled" | "log_safe_full";
+  truncated: boolean;
+  visibility: "admin_request_detail";
 };
 
 export type InvocationLogRecord = {
@@ -94,12 +105,22 @@ export type InvocationLogRecord = {
   routingReason: string | null;
   cacheStatus: string;
   cacheType: string;
+  cacheDecisionReason?: string | null;
   cacheKeyHash: string | null;
   cacheHitRequestId: string | null;
+  embeddingProvider?: string | null;
   maskingAction: "none" | "redacted" | "blocked";
   maskingDetectedTypes: string[];
   maskingDetectedCount: number;
+  promptCategory?: string | null;
+  providerCalled?: boolean;
   rateLimitDecision: RateLimitDecision;
+  semanticCacheDecisionReason?: string | null;
+  semanticCacheHit?: boolean;
+  semanticCachePolicyVersion?: string | null;
+  semanticCacheThreshold?: number | null;
+  semanticMatchedRequestId?: string | null;
+  semanticSimilarity?: number | null;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
@@ -126,8 +147,11 @@ export type InvocationLogRecord = {
     outcome: string;
     detectedCount: number;
     detectorCategories: string[];
+    policyAllowedTypes?: string[];
+    mandatoryProtectedTypes?: string[];
     maskingAction: string | null;
   };
+  promptCapture?: PromptCapture;
   httpStatus: number;
   errorCode: string | null;
   errorMessage: string | null;

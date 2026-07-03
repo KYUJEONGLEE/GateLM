@@ -49,6 +49,12 @@ Initial `openai/privacy-filter` label mapping:
 | `private_url` | `private_url` | `redact` |
 | `secret` | `secret` | `block` |
 
+Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+
+| Model Label | GateLM Detector Type | Default Action Candidate |
+|---|---|---|
+| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+
 ## 3. Directory Map
 
 | Path | Purpose |

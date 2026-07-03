@@ -56,7 +56,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           </div>
           <h1 id="init-title">{text.title}</h1>
           <div className="init-actions">
-            <Link className="primary-link" href={`/tenants/${defaultTenantId}/chat`}>
+            <Link className="primary-link" href="/application">
               {text.actions.chat}
             </Link>
             <Link className="primary-link" href={`/tenants/${defaultTenantId}/onboarding`}>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import subprocess
 import sys
@@ -24,6 +25,7 @@ from app.domain.ai_safety_benchmark.types import (
     DEFAULT_RUNTIME_PROFILE,
     DEFAULT_TIMEOUT_MS,
     DEFAULT_WARMUP_REQUESTS,
+    MODEL_ID,
     RUNTIME_PROFILES,
     BenchmarkError,
 )
@@ -110,6 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional model revision metadata.",
     )
     parser.add_argument(
+        "--model-id",
+        default=default_model_id(),
+        help="Model id represented by this benchmark run.",
+    )
+    parser.add_argument(
         "--git-sha",
         default=None,
         help="Optional git sha override for reproducible tests.",
@@ -163,6 +170,7 @@ def run(
             run_id=args.run_id or default_run_id(),
             git_sha=args.git_sha or git_sha(),
             model_revision=args.model_revision,
+            model_id=args.model_id,
             generated_at=generated_at,
             hardware=platform.machine(),
             os_name=platform.platform(),
@@ -212,10 +220,17 @@ def validate_args(args: argparse.Namespace) -> None:
 
 def build_target(args: argparse.Namespace) -> BenchmarkTarget:
     if args.target == "http":
-        return HttpBenchmarkTarget(endpoint_url=args.endpoint_url)
+        return HttpBenchmarkTarget(endpoint_url=args.endpoint_url, model_id=args.model_id)
     if args.target == "in_process":
-        return InProcessBenchmarkTarget.create()
+        return InProcessBenchmarkTarget.create(model_id=args.model_id)
     raise BenchmarkError(f"unsupported target {args.target!r}")
+
+
+def default_model_id() -> str:
+    value = os.environ.get("AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID", "").strip()
+    if value == "" or any(char.isspace() for char in value):
+        return MODEL_ID
+    return value
 
 
 def default_run_id() -> str:

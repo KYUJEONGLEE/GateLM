@@ -184,7 +184,14 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	semanticCacheService := routerOptions.SemanticCacheService
 	if semanticCacheService == nil && cfg.SemanticCache.Enabled {
 		store, storeErr := cachekey.NewSemanticCacheStore(cfg.SemanticCache.Store, cfg.SemanticCache.MaxEntries)
-		embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProvider(cfg.SemanticCache.EmbeddingProvider, cfg.SemanticCache.EmbeddingModel)
+		embeddingProvider, providerErr := cachekey.NewSemanticCacheEmbeddingProviderWithConfig(cachekey.SemanticCacheEmbeddingProviderConfig{
+			Provider:         cfg.SemanticCache.EmbeddingProvider,
+			ModelName:        cfg.SemanticCache.EmbeddingModel,
+			OpenAIAPIKey:     cfg.SemanticCache.OpenAIAPIKey,
+			OpenAIBaseURL:    cfg.SemanticCache.OpenAIBaseURL,
+			OpenAIDimensions: cfg.SemanticCache.EmbeddingDimensions,
+			Timeout:          cfg.SemanticCache.EmbeddingTimeout,
+		})
 		var hitPolicy *cachekey.SemanticCacheHitPolicy
 		if strings.TrimSpace(cfg.SemanticCache.IntentPolicyPath) != "" {
 			policy, policyErr := cachekey.LoadSemanticCacheHitPolicyFile(cfg.SemanticCache.IntentPolicyPath)

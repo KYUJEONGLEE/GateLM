@@ -112,7 +112,10 @@ type LlmInvocationLog struct {
 	MaskingAction               string
 	MaskingDetectedTypes        []string
 	MaskingDetectedCount        int
+	PolicyAllowedTypes          []string
+	MandatoryProtectedTypes     []string
 	RedactedPromptPreview       string
+	PromptCapture               PromptCaptureFields
 	RuntimeSnapshot             runtimeconfig.RuntimeSnapshotProvenance
 	CreatedAt                   time.Time
 	CompletedAt                 *time.Time
@@ -169,6 +172,7 @@ type RequestDetail struct {
 	Routing         RoutingFields
 	Masking         MaskingFields
 	SafetySummary   SafetySummaryFields
+	PromptCapture   PromptCaptureFields
 	RuntimeSnapshot *runtimeconfig.RuntimeSnapshotProvenance
 	Error           ErrorFields
 	CreatedAt       time.Time
@@ -221,10 +225,12 @@ type RoutingFields struct {
 }
 
 type MaskingFields struct {
-	MaskingAction         string
-	MaskingDetectedTypes  []string
-	MaskingDetectedCount  int
-	RedactedPromptPreview string
+	MaskingAction           string
+	MaskingDetectedTypes    []string
+	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
+	RedactedPromptPreview   string
 }
 
 type ErrorFields struct {
@@ -248,10 +254,12 @@ type UsageSummaryFields struct {
 }
 
 type SafetySummaryFields struct {
-	Outcome            string
-	DetectedCount      int
-	DetectorCategories []string
-	MaskingAction      string
+	Outcome                 string
+	DetectedCount           int
+	DetectorCategories      []string
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
+	MaskingAction           string
 }
 
 type RoutingCountByModel struct {
@@ -495,10 +503,12 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 	domainOutcomes := NormalizeDomainOutcomes(log)
 	latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs)
 	safetySummary := SafetySummaryFields{
-		Outcome:            domainOutcomes.Safety.Outcome,
-		DetectedCount:      log.MaskingDetectedCount,
-		DetectorCategories: append([]string(nil), log.MaskingDetectedTypes...),
-		MaskingAction:      defaultString(log.MaskingAction, "none"),
+		Outcome:                 domainOutcomes.Safety.Outcome,
+		DetectedCount:           log.MaskingDetectedCount,
+		DetectorCategories:      append([]string(nil), log.MaskingDetectedTypes...),
+		PolicyAllowedTypes:      append([]string(nil), domainOutcomes.Safety.PolicyAllowedTypes...),
+		MandatoryProtectedTypes: append([]string(nil), domainOutcomes.Safety.MandatoryProtectedTypes...),
+		MaskingAction:           defaultString(log.MaskingAction, "none"),
 	}
 	return RequestDetail{
 		RequestID:      log.RequestID,
@@ -565,12 +575,15 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 			RoutingDecisionKeyHash: log.RoutingDecisionKeyHash,
 		},
 		Masking: MaskingFields{
-			MaskingAction:         defaultString(log.MaskingAction, "none"),
-			MaskingDetectedTypes:  append([]string(nil), log.MaskingDetectedTypes...),
-			MaskingDetectedCount:  log.MaskingDetectedCount,
-			RedactedPromptPreview: log.RedactedPromptPreview,
+			MaskingAction:           defaultString(log.MaskingAction, "none"),
+			MaskingDetectedTypes:    append([]string(nil), log.MaskingDetectedTypes...),
+			MaskingDetectedCount:    log.MaskingDetectedCount,
+			PolicyAllowedTypes:      append([]string(nil), domainOutcomes.Safety.PolicyAllowedTypes...),
+			MandatoryProtectedTypes: append([]string(nil), domainOutcomes.Safety.MandatoryProtectedTypes...),
+			RedactedPromptPreview:   log.RedactedPromptPreview,
 		},
 		SafetySummary:   safetySummary,
+		PromptCapture:   normalizePromptCaptureFields(log.PromptCapture),
 		RuntimeSnapshot: runtimeSnapshotPointer(log.RuntimeSnapshot, log.CreatedAt),
 		Error: ErrorFields{
 			ErrorCode:    log.ErrorCode,
@@ -580,6 +593,25 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		CreatedAt:   log.CreatedAt,
 		CompletedAt: log.CompletedAt,
 	}
+}
+
+func normalizePromptCaptureFields(fields PromptCaptureFields) PromptCaptureFields {
+	fields.Mode = strings.TrimSpace(fields.Mode)
+	fields.Visibility = strings.TrimSpace(fields.Visibility)
+	fields.CapturedPrompt = strings.TrimSpace(fields.CapturedPrompt)
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	if !fields.Enabled {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+		fields.CapturedPrompt = ""
+		fields.Truncated = false
+	}
+	if fields.Visibility == "" {
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+	}
+	return fields
 }
 
 func requestDetailProviderCalled(log LlmInvocationLog) bool {
@@ -644,6 +676,12 @@ func normalizeDomainOutcomeDefaults(outcomes DomainOutcomes) DomainOutcomes {
 	outcomes.Safety.Outcome = defaultString(outcomes.Safety.Outcome, "not_checked")
 	if outcomes.Safety.DetectedTypes == nil {
 		outcomes.Safety.DetectedTypes = []string{}
+	}
+	if outcomes.Safety.PolicyAllowedTypes == nil {
+		outcomes.Safety.PolicyAllowedTypes = []string{}
+	}
+	if outcomes.Safety.MandatoryProtectedTypes == nil {
+		outcomes.Safety.MandatoryProtectedTypes = []string{}
 	}
 	outcomes.Routing.Outcome = defaultString(outcomes.Routing.Outcome, "not_checked")
 	outcomes.Cache.Outcome = defaultString(outcomes.Cache.Outcome, "not_used")

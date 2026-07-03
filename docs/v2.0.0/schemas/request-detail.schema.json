@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gatelm.local/schemas/v2.0.0/request-detail.schema.json",
   "title": "GateLM v2.0.0 Request Detail",
-  "description": "Schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes; it does not include raw prompts, raw responses, credentials, authorization headers, or provider raw error bodies.",
+  "description": "Schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes; it does not include raw prompts, raw responses, credentials, authorization headers, or provider raw error bodies. The only prompt text exception is opt-in post-masking log-safe prompt capture for Admin Request Detail.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,6 +21,7 @@
     "latencySummary",
     "usageSummary",
     "safetySummary",
+    "promptCapture",
     "createdAt"
   ],
   "properties": {
@@ -101,6 +102,9 @@
     },
     "safetySummary": {
       "$ref": "#/$defs/safetySummary"
+    },
+    "promptCapture": {
+      "$ref": "#/$defs/promptCapture"
     },
     "createdAt": {
       "type": "string",
@@ -352,12 +356,70 @@
           },
           "description": "Category-level summary only. Raw detected values, offsets, and prompt fragments are forbidden."
         },
+        "policyAllowedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Type labels only; raw values, offsets, and prompt fragments are forbidden."
+        },
+        "mandatoryProtectedTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "High-risk detector types protected even when optional PII masking is disabled. Type labels only."
+        },
         "maskingAction": {
           "type": [
             "string",
             "null"
           ],
           "description": "sanitized masking action such as none, redacted, or blocked."
+        }
+      }
+    },
+    "promptCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Admin Request Detail only. capturedPrompt is the post-masking log-safe prompt and must never contain raw detected values, credentials, secrets, provider responses, SSE chunks, or provider raw error bodies.",
+      "required": [
+        "enabled",
+        "mode",
+        "visibility",
+        "capturedPrompt",
+        "truncated",
+        "maxChars"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "log_safe_full"
+          ]
+        },
+        "visibility": {
+          "type": "string",
+          "const": "admin_request_detail"
+        },
+        "capturedPrompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Post-masking log-safe prompt. Null when disabled, unavailable, or not captured."
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
         }
       }
     },
