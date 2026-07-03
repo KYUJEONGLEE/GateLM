@@ -1,7 +1,9 @@
 package anthropic
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -134,6 +136,31 @@ func TestCreateChatCompletionRejectsWrongRequestFormat(t *testing.T) {
 	}
 }
 
+func TestToAnthropicRequestRejectsNullOrMissingContent(t *testing.T) {
+	tests := []struct {
+		name    string
+		content json.RawMessage
+	}{
+		{name: "missing content", content: nil},
+		{name: "null content", content: json.RawMessage("null")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := toAnthropicRequest(provider.ChatCompletionRequest{
+				Model:    "claude-synthetic-sonnet",
+				Messages: []provider.ChatMessage{{Role: "user", Content: tt.content}},
+			})
+			if err == nil {
+				t.Fatal("expected unsupported content error")
+			}
+			if provider.ErrorKindOf(err) != provider.ErrorKindError {
+				t.Fatalf("unexpected error kind: %s", provider.ErrorKindOf(err))
+			}
+		})
+	}
+}
+
 func TestListModelsNormalizesAnthropicModels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" {
@@ -158,6 +185,36 @@ func TestListModelsNormalizesAnthropicModels(t *testing.T) {
 	}
 	if models.Data[0].ID != "claude-synthetic-haiku" || models.Data[0].OwnedBy != "anthropic" {
 		t.Fatalf("unexpected first model: %#v", models.Data[0])
+	}
+}
+
+func TestNormalizeConfigStripsQueryAndFragment(t *testing.T) {
+	config := executionConfig("https://api.anthropic.com/v1?region=us#models")
+	normalized := normalizeConfig(config)
+
+	if normalized.BaseURL != "https://api.anthropic.com/v1" {
+		t.Fatalf("expected BaseURL to be stripped of query and fragment, got: %s", normalized.BaseURL)
+	}
+}
+
+func TestClassifyTransportErrorChecksReturnedError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want provider.ErrorKind
+	}{
+		{name: "returned context canceled", err: context.Canceled, want: provider.ErrorKindError},
+		{name: "returned deadline exceeded", err: context.DeadlineExceeded, want: provider.ErrorKindTimeout},
+		{name: "generic transport error", err: errors.New("transport unavailable"), want: provider.ErrorKindError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := classifyTransportError(context.Background(), tt.err)
+			if provider.ErrorKindOf(err) != tt.want {
+				t.Fatalf("expected %s, got %s", tt.want, provider.ErrorKindOf(err))
+			}
+		})
 	}
 }
 

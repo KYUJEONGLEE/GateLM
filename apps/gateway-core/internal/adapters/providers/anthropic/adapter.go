@@ -212,7 +212,7 @@ func toAnthropicRequest(req provider.ChatCompletionRequest) (anthropicRequest, e
 
 func textContent(raw json.RawMessage) (string, error) {
 	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return "", nil
+		return "", provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("invalid_request_error: null or missing message content is not supported"))
 	}
 
 	var text string
@@ -333,7 +333,13 @@ func normalizeConfig(config provider.ExecutionConfig) provider.ExecutionConfig {
 	config.ProviderID = strings.TrimSpace(config.ProviderID)
 	config.ProviderName = strings.TrimSpace(config.ProviderName)
 	config.AdapterType = strings.TrimSpace(config.AdapterType)
-	config.BaseURL = strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
+	baseURL := strings.TrimSpace(config.BaseURL)
+	if parsedURL, err := url.Parse(baseURL); err == nil {
+		parsedURL.RawQuery = ""
+		parsedURL.Fragment = ""
+		baseURL = parsedURL.String()
+	}
+	config.BaseURL = strings.TrimRight(baseURL, "/")
 	config.AdapterConfig.RequestFormat = strings.TrimSpace(config.AdapterConfig.RequestFormat)
 	config.AdapterConfig.APIVersion = strings.TrimSpace(config.AdapterConfig.APIVersion)
 	return config
@@ -401,11 +407,11 @@ func setAnthropicHeaders(req *http.Request, config provider.ExecutionConfig, jso
 }
 
 func classifyTransportError(ctx context.Context, err error) error {
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.Canceled) {
-			return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, ctxErr)
-		}
-		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, ctxErr)
+	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, context.Canceled)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, context.DeadlineExceeded)
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
