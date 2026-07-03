@@ -48,6 +48,7 @@ export const PROVIDER_PRESETS = [
     baseUrl: 'https://api.openai.com/v1',
     requestFormat: 'openai_chat_completions',
     modelDiscoveryType: 'openai_compatible_models',
+    status: ResourceStatus.ACTIVE,
     sortOrder: 10,
   },
   {
@@ -57,6 +58,7 @@ export const PROVIDER_PRESETS = [
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     requestFormat: 'openai_chat_completions',
     modelDiscoveryType: 'openai_compatible_models',
+    status: ResourceStatus.ACTIVE,
     sortOrder: 20,
   },
   {
@@ -66,6 +68,7 @@ export const PROVIDER_PRESETS = [
     baseUrl: 'https://api.anthropic.com/v1',
     requestFormat: 'anthropic_messages',
     modelDiscoveryType: 'anthropic_models',
+    status: ResourceStatus.DISABLED,
     sortOrder: 30,
   },
 ] as const;
@@ -672,9 +675,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
 async function seedProviderPresets(
   tx: Prisma.TransactionClient,
 ): Promise<void> {
-  const activeProviderPresetKeys = PROVIDER_PRESETS.map(
-    (preset) => preset.providerKey,
-  );
+  const activeProviderPresetKeys = PROVIDER_PRESETS.filter(
+    (preset) => preset.status === ResourceStatus.ACTIVE,
+  ).map((preset) => preset.providerKey);
 
   await tx.providerPreset.updateMany({
     where: {
@@ -695,7 +698,7 @@ async function seedProviderPresets(
         credentialRequired: true,
         defaultResolver: 'environment',
         defaultTimeoutMs: 30000,
-        status: ResourceStatus.ACTIVE,
+        status: preset.status,
         sortOrder: preset.sortOrder,
         providerConfig: providerPresetConfig(preset),
       },
@@ -708,7 +711,7 @@ async function seedProviderPresets(
         credentialRequired: true,
         defaultResolver: 'environment',
         defaultTimeoutMs: 30000,
-        status: ResourceStatus.ACTIVE,
+        status: preset.status,
         sortOrder: preset.sortOrder,
         providerConfig: providerPresetConfig(preset),
       },

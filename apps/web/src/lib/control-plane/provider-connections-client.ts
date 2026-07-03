@@ -665,22 +665,6 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
         requestFormat: "openai_chat_completions"
       },
       providerKey: "gemini"
-    },
-    {
-      adapterType: "anthropic",
-      baseUrl: "https://api.anthropic.com/v1",
-      credentialRequired: true,
-      defaultResolver: "environment",
-      defaultTimeoutMs: 30000,
-      displayName: "Claude",
-      modelsEndpointPath: "/models",
-      providerConfig: {
-        adapterType: "anthropic",
-        apiVersion: "2023-06-01",
-        credentialRequired: true,
-        requestFormat: "anthropic_messages"
-      },
-      providerKey: "claude"
     }
   ];
 }
