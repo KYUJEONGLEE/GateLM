@@ -766,6 +766,54 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 	})
 }
 
+func TestChatCompletionsSemanticCacheEmbeddingInputNormalization(t *testing.T) {
+	t.Run("uses last user message after masking", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+
+		rr := harness.exercise(t, "sc_embedding_input_last_user", routingAwareChatBodyWithMessages("auto", []provider.ChatMessage{
+			{Role: "system", Content: json.RawMessage(jsonStringLiteral("system 지시는 embedding input에 섞이면 안 됨"))},
+			{Role: "user", Content: json.RawMessage(jsonStringLiteral("사용량은 어디서 확인해?"))},
+			{Role: "assistant", Content: json.RawMessage(jsonStringLiteral("assistant 응답도 제외되어야 함"))},
+			{Role: "developer", Content: json.RawMessage(jsonStringLiteral("developer 지시도 제외되어야 함"))},
+			{Role: "user", Content: json.RawMessage(jsonStringLiteral("패스워드 초기화는 어떻게 해?"))},
+		}))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("multi-turn 요청은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.semantic.searchCalls != 1 || len(harness.semantic.lookupRequests) != 1 {
+			t.Fatalf("semantic lookup이 1번 실행되어야 함: search=%d requests=%+v", harness.semantic.searchCalls, harness.semantic.lookupRequests)
+		}
+		embeddingText := harness.semantic.lookupRequests[0].NormalizedText
+		if embeddingText != "패스워드 초기화는 어떻게 해?" {
+			t.Fatalf("embedding input은 마지막 user message만 사용해야 함: %q", embeddingText)
+		}
+		for _, excluded := range []string{"system 지시", "사용량은 어디서 확인해?", "assistant 응답", "developer 지시"} {
+			if strings.Contains(embeddingText, excluded) {
+				t.Fatalf("embedding input에 제외 대상 message가 섞이면 안 됨: marker=%q input=%q", excluded, embeddingText)
+			}
+		}
+	})
+
+	t.Run("code block like input bypasses semantic lookup even when category is general", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.routes["sc_embedding_input_code_block"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+		rr := harness.exercise(t, "sc_embedding_input_code_block", routingAwareChatBody("auto", "다음 내용을 확인해줘\n```ts\nconst value = 1\n```"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("code block 포함 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+			t.Fatalf("code block like input은 semantic lookup/store 전에 제외되어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		}
+		logged := harness.latestLog(t)
+		if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonEmbeddingInputCodeLike {
+			t.Fatalf("code block semantic bypass reason 불일치: %q", logged.SemanticCacheDecisionReason)
+		}
+	})
+}
+
 func TestChatCompletionsSemanticCacheTenantProjectApplicationIsolation(t *testing.T) {
 	semantic := newCountingSemanticCacheService(t, true)
 	first := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant-a", "project-a", "app-a")
@@ -1123,6 +1171,14 @@ func (h *semanticCacheHarness) latestLog(t *testing.T) invocationlog.TerminalLog
 		t.Fatalf("terminal log가 남아야 함")
 	}
 	return h.logWriter.logs[len(h.logWriter.logs)-1]
+}
+
+func routingAwareChatBodyWithMessages(model string, messages []provider.ChatMessage) string {
+	body, _ := json.Marshal(provider.ChatCompletionRequest{
+		Model:    model,
+		Messages: messages,
+	})
+	return string(body)
 }
 
 func configureGeneralOnlySemanticCanary(h *semanticCacheHarness) {

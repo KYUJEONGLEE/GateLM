@@ -32,6 +32,11 @@ const (
 	SemanticCacheReasonTenantDenied      = "tenant_scope_denied"
 	SemanticCacheReasonApplicationDenied = "application_scope_denied"
 	SemanticCacheReasonCategoryDenied    = "category_scope_denied"
+
+	SemanticCacheReasonEmbeddingInputUnavailable = "semantic_input_unavailable"
+	SemanticCacheReasonEmbeddingInputUnsafe      = "semantic_input_unsafe"
+	SemanticCacheReasonEmbeddingInputTooLong     = "semantic_input_too_long"
+	SemanticCacheReasonEmbeddingInputCodeLike    = "semantic_input_code_like"
 )
 
 var ErrSemanticCacheStoreUnavailable = errors.New("semantic cache store is unavailable")

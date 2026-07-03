@@ -13,13 +13,14 @@ var (
 )
 
 type SemanticCacheServiceConfig struct {
-	Enabled       bool
-	Threshold     float64
-	TopK          int
-	TTL           time.Duration
-	PolicyVersion string
-	HitPolicy     *SemanticCacheHitPolicy
-	StorePolicy   *SemanticCacheStorePolicy
+	Enabled                  bool
+	Threshold                float64
+	TopK                     int
+	TTL                      time.Duration
+	PolicyVersion            string
+	HitPolicy                *SemanticCacheHitPolicy
+	StorePolicy              *SemanticCacheStorePolicy
+	EmbeddingInputNormalizer SemanticCacheEmbeddingInputNormalizer
 }
 
 type SemanticCacheLookupRequest struct {
@@ -121,11 +122,13 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheEmbeddingProviderUnavailable
 	}
-	normalizedText, ok := safeSemanticCacheText(request.NormalizedText)
+	embeddingInput, ok := s.normalizeEmbeddingInput(request.NormalizedText)
+	result.EmbeddingInput = embeddingInput
 	if !ok {
-		result.Reason = SemanticCacheReasonInvalidVector
+		result.Reason = firstSemanticReason(embeddingInput.BypassReason, SemanticCacheReasonInvalidVector)
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
+	normalizedText := embeddingInput.Text
 	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
 	if s.intentPolicyConfigured() && !intentOK {
 		result.Reason = intentReason
@@ -142,6 +145,7 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 	result, err = s.store.Search(ctx, request.Boundary, queryVector, threshold, s.config.TopK)
 	result.QueryVector = queryVector
 	result.IntentMaterial = intentMaterial
+	result.EmbeddingInput = embeddingInput
 	result = s.applyHitPolicy(result, intentMaterial, threshold)
 	return result, result.Decision(true, providerName, s.config.PolicyVersion), err
 }
@@ -166,11 +170,13 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 		result.Reason = SemanticCacheReasonEmbeddingFailure
 		return result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheEmbeddingProviderUnavailable
 	}
-	normalizedText, ok := safeSemanticCacheText(request.NormalizedText)
+	embeddingInput, ok := s.normalizeEmbeddingInput(request.NormalizedText)
+	result.EmbeddingInput = embeddingInput
 	if !ok {
-		result.Reason = SemanticCacheReasonPayloadUnsafe
+		result.Reason = firstSemanticReason(embeddingInput.BypassReason, SemanticCacheReasonPayloadUnsafe)
 		return result.Decision(true, providerName, s.config.PolicyVersion), ErrSemanticCacheInputUnsafe
 	}
+	normalizedText := embeddingInput.Text
 	if decision, bypass := s.preIntentStoreDecision(request); bypass {
 		result.Reason = decision.Reason
 		return result.Decision(true, providerName, s.config.PolicyVersion), nil
@@ -311,12 +317,9 @@ func (s SemanticCacheService) applyHitPolicy(result SemanticCacheSearchResult, r
 	return result
 }
 
-func safeSemanticCacheText(text string) (string, bool) {
-	normalized := normalizeSemanticText(text)
-	if normalized == "" {
-		return "", false
-	}
-	return normalized, !containsForbiddenSemanticCachePayload([]byte(normalized))
+func (s SemanticCacheService) normalizeEmbeddingInput(text string) (NormalizedEmbeddingInput, bool) {
+	normalizer := s.config.EmbeddingInputNormalizer
+	return normalizer.NormalizeText(text)
 }
 
 func firstSemanticReason(values ...string) string {

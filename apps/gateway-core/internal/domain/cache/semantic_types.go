@@ -65,6 +65,7 @@ type SemanticCacheSearchResult struct {
 	Matches        []SemanticCacheMatch
 	QueryVector    []float64
 	IntentMaterial SemanticCacheIntentMaterial
+	EmbeddingInput NormalizedEmbeddingInput
 }
 
 type SemanticCacheDecision struct {
@@ -78,6 +79,7 @@ type SemanticCacheDecision struct {
 	SemanticCachePolicyVersion  string
 	SemanticCacheDecisionReason string
 	EmbeddingProvider           string
+	NormalizationVersion        string
 }
 
 func (b SemanticCacheBoundary) Normalize() SemanticCacheBoundary {
@@ -157,5 +159,6 @@ func (r SemanticCacheSearchResult) Decision(enabled bool, embeddingProvider stri
 		SemanticCachePolicyVersion:  strings.TrimSpace(policyVersion),
 		SemanticCacheDecisionReason: strings.TrimSpace(r.Reason),
 		EmbeddingProvider:           strings.TrimSpace(embeddingProvider),
+		NormalizationVersion:        strings.TrimSpace(r.EmbeddingInput.NormalizationVersion),
 	}
 }
