@@ -57,15 +57,20 @@ type SemanticCacheMatch struct {
 }
 
 type SemanticCacheSearchResult struct {
-	Hit            bool
-	MatchedEntry   *SemanticCacheEntry
-	Similarity     float64
-	Threshold      float64
-	Reason         string
-	Matches        []SemanticCacheMatch
-	QueryVector    []float64
-	IntentMaterial SemanticCacheIntentMaterial
-	EmbeddingInput NormalizedEmbeddingInput
+	Hit                    bool
+	MatchedEntry           *SemanticCacheEntry
+	Similarity             float64
+	Threshold              float64
+	Reason                 string
+	Matches                []SemanticCacheMatch
+	QueryVector            []float64
+	IntentMaterial         SemanticCacheIntentMaterial
+	EmbeddingInput         NormalizedEmbeddingInput
+	RerankerApplied        bool
+	RerankerPassed         bool
+	RerankerScore          float64
+	RerankerThreshold      float64
+	RerankerDecisionReason string
 }
 
 type SemanticCacheDecision struct {
@@ -80,6 +85,11 @@ type SemanticCacheDecision struct {
 	SemanticCacheDecisionReason string
 	EmbeddingProvider           string
 	NormalizationVersion        string
+	RerankerApplied             bool
+	RerankerPassed              bool
+	RerankerScore               float64
+	RerankerThreshold           float64
+	RerankerDecisionReason      string
 }
 
 func (b SemanticCacheBoundary) Normalize() SemanticCacheBoundary {
@@ -160,5 +170,10 @@ func (r SemanticCacheSearchResult) Decision(enabled bool, embeddingProvider stri
 		SemanticCacheDecisionReason: strings.TrimSpace(r.Reason),
 		EmbeddingProvider:           strings.TrimSpace(embeddingProvider),
 		NormalizationVersion:        strings.TrimSpace(r.EmbeddingInput.NormalizationVersion),
+		RerankerApplied:             r.RerankerApplied,
+		RerankerPassed:              r.RerankerPassed,
+		RerankerScore:               r.RerankerScore,
+		RerankerThreshold:           r.RerankerThreshold,
+		RerankerDecisionReason:      strings.TrimSpace(r.RerankerDecisionReason),
 	}
 }

@@ -53,6 +53,273 @@ func TestSemanticCacheHitPolicyMaterializesKoreanPasswordReset(t *testing.T) {
 	}
 }
 
+func TestSemanticCacheHitPolicyMaterializesCommonStaticGuidanceIntents(t *testing.T) {
+	policy := testSemanticHitPolicy(t)
+
+	cases := []struct {
+		name       string
+		text       string
+		wantIntent string
+		wantSlots  map[string]string
+	}{
+		{
+			name:       "RPS definition Korean",
+			text:       "RPS 뜻 알려줘",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition English full name",
+			text:       "What is requests per second?",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "TPS definition",
+			text:       "Explain TPS",
+			wantIntent: "performance.tps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "tps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "latency definition",
+			text:       "레이턴시란 뭐야?",
+			wantIntent: "performance.latency_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "latency",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "throughput definition",
+			text:       "throughput 뜻 알려줘",
+			wantIntent: "performance.throughput_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "throughput",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "error rate definition",
+			text:       "error rate 의미 알려줘",
+			wantIntent: "performance.error_rate_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "error_rate",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS TPS comparison",
+			text:       "What is the difference between RPS and TPS?",
+			wantIntent: "performance.rps_tps_compare",
+			wantSlots: map[string]string{
+				"performanceConceptPair": "rps_tps",
+				"performanceAnswerType":  "comparison",
+			},
+		},
+		{
+			name:       "help center location",
+			text:       "도움말 센터 어디서 봐?",
+			wantIntent: "product.help_center_location",
+			wantSlots: map[string]string{
+				"guideObject":     "help_center",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "billing invoice location",
+			text:       "청구서 메뉴 어디야?",
+			wantIntent: "billing.invoice_location",
+			wantSlots: map[string]string{
+				"guideObject":     "billing_invoice",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "payment method location",
+			text:       "결제수단 어디서 변경해?",
+			wantIntent: "billing.payment_method_location",
+			wantSlots: map[string]string{
+				"guideObject":     "billing_payment_method",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "team invite location",
+			text:       "팀원 초대 메뉴 알려줘",
+			wantIntent: "team.member_invite_location",
+			wantSlots: map[string]string{
+				"guideObject":     "team_member_invite",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "project settings location",
+			text:       "프로젝트 설정 어디서 바꿔?",
+			wantIntent: "project.settings_location",
+			wantSlots: map[string]string{
+				"guideObject":     "project_settings",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "API docs location",
+			text:       "API 문서 어디서 확인해?",
+			wantIntent: "developer.api_docs_location",
+			wantSlots: map[string]string{
+				"guideObject":     "api_docs",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "status page location",
+			text:       "서비스 상태 페이지 어디야?",
+			wantIntent: "product.status_page_location",
+			wantSlots: map[string]string{
+				"guideObject":     "status_page",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "release notes location",
+			text:       "업데이트 내역은 어디서 봐?",
+			wantIntent: "product.release_notes_location",
+			wantSlots: map[string]string{
+				"guideObject":     "release_notes",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "profile settings location",
+			text:       "내 프로필 설정 어디야?",
+			wantIntent: "account.profile_settings_location",
+			wantSlots: map[string]string{
+				"accountAction":   "profile_settings_location",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "security settings location",
+			text:       "2단계 인증 설정 어디서 해?",
+			wantIntent: "account.security_settings_location",
+			wantSlots: map[string]string{
+				"accountAction":   "security_settings_location",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "notification settings location",
+			text:       "알림 설정 어디야?",
+			wantIntent: "product.notification_settings_location",
+			wantSlots: map[string]string{
+				"guideObject":     "notification_settings",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "team role permission location",
+			text:       "멤버 권한 설정 어디서 해?",
+			wantIntent: "team.role_permission_location",
+			wantSlots: map[string]string{
+				"guideObject":     "team_role_permission",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "billing plan location",
+			text:       "가격표 어디서 봐?",
+			wantIntent: "billing.plan_pricing_location",
+			wantSlots: map[string]string{
+				"guideObject":     "billing_plan",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "data export location",
+			text:       "데이터 내보내기 메뉴 어디야?",
+			wantIntent: "product.data_export_location",
+			wantSlots: map[string]string{
+				"guideObject":     "data_export",
+				"guideAnswerType": "static_guidance",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			material := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, tc.text)
+			if material.CanonicalIntent != tc.wantIntent {
+				t.Fatalf("canonicalIntent 불일치: got=%s want=%s material=%+v", material.CanonicalIntent, tc.wantIntent, material)
+			}
+			for key, want := range tc.wantSlots {
+				if got := material.RequiredSlots[key]; got != want {
+					t.Fatalf("requiredSlots.%s 불일치: got=%s want=%s material=%+v", key, got, want, material)
+				}
+			}
+		})
+	}
+}
+
+func TestSemanticCacheHitPolicyKeepsOperationalRPSQuestionsOutOfDefinitionIntent(t *testing.T) {
+	policy := testSemanticHitPolicy(t)
+
+	cases := []string{
+		"How can I increase RPS?",
+		"Why is my RPS low?",
+		"How do I measure RPS?",
+		"What is a good RPS for my service?",
+		"Which tool should I use to test RPS?",
+	}
+	for _, text := range cases {
+		t.Run(text, func(t *testing.T) {
+			material, decision := policy.Materialize(SemanticCacheCategoryGeneral, text)
+			if !material.IsZero() || decision.Allowed || decision.Reason != SemanticCacheReasonIntentUnavailable {
+				t.Fatalf("운영성 RPS 질문은 definition intent로 넓게 잡히면 안 됨: text=%q material=%+v decision=%+v", text, material, decision)
+			}
+		})
+	}
+}
+
+func TestSemanticCacheHitPolicySeparatesCommonStaticGuidanceIntents(t *testing.T) {
+	policy := testSemanticHitPolicy(t)
+
+	rpsDefinition := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "What does RPS mean?")
+	rpsTPSCompare := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "What is the difference between RPS and TPS?")
+	decision := policy.Evaluate(rpsTPSCompare, rpsDefinition, 0.99, policy.DefaultThreshold)
+	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonHardNegative {
+		t.Fatalf("RPS definition과 RPS/TPS comparison은 similarity가 높아도 hit 금지여야 함: %+v", decision)
+	}
+
+	invoice := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "청구서 메뉴 어디야?")
+	paymentMethod := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "결제수단 어디서 변경해?")
+	decision = policy.Evaluate(paymentMethod, invoice, 0.99, policy.DefaultThreshold)
+	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonIntentMismatch {
+		t.Fatalf("청구서 위치와 결제수단 위치는 별도 static guidance여야 함: %+v", decision)
+	}
+
+	statusPage := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "서비스 상태 페이지 어디야?")
+	releaseNotes := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "릴리즈 노트 어디서 봐?")
+	decision = policy.Evaluate(releaseNotes, statusPage, 0.99, policy.DefaultThreshold)
+	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonIntentMismatch {
+		t.Fatalf("상태 페이지와 릴리즈 노트 위치는 별도 static guidance여야 함: %+v", decision)
+	}
+
+	profileSettings := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "내 프로필 설정 어디야?")
+	securitySettings := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "2단계 인증 설정 어디서 해?")
+	decision = policy.Evaluate(securitySettings, profileSettings, 0.99, policy.DefaultThreshold)
+	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonIntentMismatch {
+		t.Fatalf("프로필 설정과 보안 설정은 별도 static guidance여야 함: %+v", decision)
+	}
+}
+
 func TestSemanticCacheHitPolicyRejectsSupportRefundHardNegative(t *testing.T) {
 	policy := testSemanticHitPolicy(t)
 	refund, decision := policy.Materialize(SemanticCacheCategorySupportRefund, "배송비도 환불되나요?")
