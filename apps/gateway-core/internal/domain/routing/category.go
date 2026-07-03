@@ -236,7 +236,7 @@ func isUnclassifiablePrompt(text string, tokens []string) bool {
 		return true
 	}
 	switch strings.TrimSpace(text) {
-	case "[redacted]", "[masked]", "[전부 마스킹됨]":
+	case "[redacted]", "[masked]", "[전부 마스킹됨]", "내용 없음", "내용없음", "n/a", "na":
 		return true
 	}
 
