@@ -78,7 +78,7 @@ func TestRuleBasedCategoryClassifierUsesPolicyPriority(t *testing.T) {
 	policy.CategoryPriority = []string{CategorySupportRefund, CategoryTranslation}
 
 	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
-	actual := classifier.Classify("환불 정책을 영어로 번역해줘")
+	actual := classifier.Classify("refund policy to english")
 
 	if actual != CategorySupportRefund {
 		t.Fatalf("expected policy priority to choose support_refund, got %s", actual)
