@@ -382,11 +382,9 @@ func (m SemanticCacheIntentMaterial) Normalize() SemanticCacheIntentMaterial {
 }
 
 func (m SemanticCacheIntentMaterial) IsZero() bool {
-	m = m.Normalize()
-	return m.Category == "" ||
-		m.CanonicalIntent == "" ||
-		m.RequiredSlotsHash == "" ||
-		m.CanonicalizationVersion == ""
+	return strings.TrimSpace(m.Category) == "" ||
+		strings.TrimSpace(m.CanonicalIntent) == "" ||
+		strings.TrimSpace(m.CanonicalizationVersion) == ""
 }
 
 func (m SemanticCacheIntentMaterial) Clone() SemanticCacheIntentMaterial {
@@ -442,7 +440,11 @@ func normalizeSynonymPolicy(synonyms map[string]map[string][]string) map[string]
 				}
 				normalized[language][term] = append(normalized[language][term], value)
 			}
-			sort.Strings(normalized[language][term])
+			if normalized[language][term] == nil {
+				normalized[language][term] = []string{}
+			} else {
+				sort.Strings(normalized[language][term])
+			}
 		}
 	}
 	return normalized

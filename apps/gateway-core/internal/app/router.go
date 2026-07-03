@@ -188,9 +188,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		var hitPolicy *cachekey.SemanticCacheHitPolicy
 		if strings.TrimSpace(cfg.SemanticCache.IntentPolicyPath) != "" {
 			policy, policyErr := cachekey.LoadSemanticCacheHitPolicyFile(cfg.SemanticCache.IntentPolicyPath)
-			if policyErr == nil {
-				hitPolicy = &policy
+			if policyErr != nil {
+				panic("failed to load semantic cache intent policy: " + policyErr.Error())
 			}
+			hitPolicy = &policy
 		}
 		if storeErr == nil && providerErr == nil {
 			service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{

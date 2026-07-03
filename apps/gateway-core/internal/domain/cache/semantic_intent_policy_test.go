@@ -55,6 +55,64 @@ func TestSemanticCacheHitPolicyDeniesDisabledCategories(t *testing.T) {
 	}
 }
 
+func TestSemanticCacheHitPolicyReportsSlotsUnavailableForIncompleteMaterial(t *testing.T) {
+	policy := testSemanticHitPolicy(t)
+	request := SemanticCacheIntentMaterial{
+		Category:                SemanticCacheCategoryGeneral,
+		CanonicalIntent:         "account.password_reset",
+		CanonicalizationVersion: policy.CanonicalizationVersion,
+		SynonymPolicyVersion:    policy.SynonymPolicyVersion,
+	}
+	cached := NewSemanticCacheIntentMaterial(
+		SemanticCacheCategoryGeneral,
+		"account.password_reset",
+		map[string]string{"accountAction": "password_reset"},
+		nil,
+		policy.CanonicalizationVersion,
+		policy.SynonymPolicyVersion,
+	)
+
+	decision := policy.Evaluate(request, cached, 0.99, 0.92)
+	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonSlotsUnavailable {
+		t.Fatalf("slot 없는 material은 intent unavailable이 아니라 slots_unavailable이어야 함: %+v", decision)
+	}
+}
+
+func TestSemanticCacheHitPolicyNormalizesNilSynonymValuesToEmptySlice(t *testing.T) {
+	policy := SemanticCacheHitPolicy{
+		PolicyVersion:           "v1",
+		CanonicalizationVersion: "ko-canon-v1",
+		SynonymPolicyVersion:    "ko-synonym-v1",
+		Synonyms: map[string]map[string][]string{
+			"ko": {
+				"password": nil,
+			},
+		},
+		Intents: map[string]SemanticCacheIntentRule{
+			"account.password_reset": {
+				Category:      SemanticCacheCategoryGeneral,
+				MatchAll:      []string{"password"},
+				RequiredSlots: map[string]string{"accountAction": "password_reset"},
+			},
+		},
+	}
+
+	normalized, err := policy.Normalize()
+	if err != nil {
+		t.Fatalf("nil synonym value가 있어도 policy normalize는 성공해야 함: %v", err)
+	}
+	values, ok := normalized.Synonyms["ko"]["password"]
+	if !ok {
+		t.Fatalf("synonym term은 normalize 후에도 남아야 함: %+v", normalized.Synonyms)
+	}
+	if values == nil {
+		t.Fatalf("nil synonym value는 빈 slice로 정규화되어야 함")
+	}
+	if len(values) != 0 {
+		t.Fatalf("nil synonym value는 빈 slice여야 함: %+v", values)
+	}
+}
+
 func testSemanticHitPolicy(t *testing.T) *SemanticCacheHitPolicy {
 	t.Helper()
 	policy, err := LoadSemanticCacheHitPolicyFile(filepath.Join("testdata", "semantic_cache_policy_ko_v1.json"))
