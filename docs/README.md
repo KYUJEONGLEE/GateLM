@@ -42,6 +42,7 @@ v2.1.0 고도화/evidence 계약은 v2.0.0 계약을 대체하지 않는 보조 
 
 - `docs/v2.1.0/category-evaluation-dataset-contract.md`: Advanced Routing 카테고리 평가셋 evidence 계약
 - `docs/v2.1.0/routing-performance-test-scenario.md`: Advanced Routing 정확도/레이턴시/비용 절감 evidence 시나리오
+- `docs/v2.1.0/routing-random-probe.md`: Advanced Routing 임의 입력 분류 분포 관찰 시나리오
 
 위 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
 
@@ -163,6 +164,7 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | `docs/v2.0.0/p0-contract-decisions.md` | 공식 계약 전 팀 검토 목록 |
 | `docs/v2.1.0/category-evaluation-dataset-contract.md` | Advanced Routing 카테고리 평가셋 evidence 계약 |
 | `docs/v2.1.0/routing-performance-test-scenario.md` | Advanced Routing 정확도/레이턴시/비용 절감 evidence 시나리오 |
+| `docs/v2.1.0/routing-random-probe.md` | Advanced Routing 임의 입력 분류 분포 관찰 시나리오 |
 | `docs/archive/` | 과거 P0/v1 기록 |
 
 과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.

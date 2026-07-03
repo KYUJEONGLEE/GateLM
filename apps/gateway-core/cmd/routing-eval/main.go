@@ -20,11 +20,15 @@ const (
 	defaultClassifierName    = "rule_based_category_classifier"
 	defaultClassifierVersion = "rule_based_category_classifier_v1"
 	defaultDatasetPath       = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
+	defaultProbeDatasetPath  = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
 	defaultLatencyIterations = 20
 
 	tierCostLowCost     = 1
 	tierCostBalanced    = 3
 	tierCostHighQuality = 10
+
+	modeEvaluate = "evaluate"
+	modeProbe    = "probe"
 )
 
 type datasetRecord struct {
@@ -92,8 +96,35 @@ type evaluationFailure struct {
 	ActualTier       string `json:"actualTier,omitempty"`
 }
 
+type probeReport struct {
+	Mode              string               `json:"mode"`
+	DatasetPath       string               `json:"datasetPath"`
+	ClassifierName    string               `json:"classifierName"`
+	ClassifierVersion string               `json:"classifierVersion"`
+	TotalSamples      int                  `json:"totalSamples"`
+	ByCategory        map[string]probeStat `json:"byCategory"`
+	ByTier            map[string]probeStat `json:"byTier"`
+	RoutingReasons    map[string]int       `json:"routingReasons"`
+	Latency           latencyStats         `json:"latency"`
+	CostEstimate      costEstimate         `json:"costEstimate"`
+	Samples           []probeSample        `json:"samples"`
+}
+
+type probeStat struct {
+	Total int     `json:"total"`
+	Rate  float64 `json:"rate"`
+}
+
+type probeSample struct {
+	SampleID      string `json:"sampleId"`
+	Category      string `json:"category"`
+	Tier          string `json:"tier"`
+	RoutingReason string `json:"routingReason"`
+}
+
 func main() {
 	datasetPath := flag.String("dataset", defaultDatasetPath, "category evaluation dataset path (.jsonl or .json)")
+	mode := flag.String("mode", modeEvaluate, "routing report mode: evaluate or probe")
 	outputPath := flag.String("output", "", "optional report output path")
 	classifierVersion := flag.String("classifier-version", defaultClassifierVersion, "classifier version label for the report")
 	minAccuracy := flag.Float64("min-accuracy", 0, "optional minimum exact-match accuracy, from 0 to 1")
@@ -102,15 +133,42 @@ func main() {
 	pretty := flag.Bool("pretty", true, "pretty-print JSON report")
 	flag.Parse()
 
-	records, err := loadDataset(*datasetPath)
+	reportMode := strings.TrimSpace(*mode)
+	if reportMode == "" {
+		reportMode = modeEvaluate
+	}
+	if *datasetPath == defaultDatasetPath && reportMode == modeProbe {
+		*datasetPath = defaultProbeDatasetPath
+	}
+
+	requireExpectedLabels := reportMode != modeProbe
+	records, err := loadDataset(*datasetPath, requireExpectedLabels)
 	if err != nil {
 		exitWithError(err)
 	}
 
-	evalReport := evaluate(*datasetPath, *classifierVersion, records, *latencyIterations)
-	payload, err := marshalReport(evalReport, *pretty)
-	if err != nil {
-		exitWithError(err)
+	var payload []byte
+	switch reportMode {
+	case modeEvaluate:
+		evalReport := evaluate(*datasetPath, *classifierVersion, records, *latencyIterations)
+		payload, err = marshalReport(evalReport, *pretty)
+		if err != nil {
+			exitWithError(err)
+		}
+		if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
+			exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
+		}
+		if *minTierAccuracy > 0 && evalReport.TierLabeledSamples > 0 && evalReport.TierAccuracy < *minTierAccuracy {
+			exitWithError(fmt.Errorf("tier accuracy %.4f is below minimum %.4f", evalReport.TierAccuracy, *minTierAccuracy))
+		}
+	case modeProbe:
+		probeReport := probe(*datasetPath, *classifierVersion, records, *latencyIterations)
+		payload, err = marshalProbeReport(probeReport, *pretty)
+		if err != nil {
+			exitWithError(err)
+		}
+	default:
+		exitWithError(fmt.Errorf("unsupported mode %q; expected %q or %q", reportMode, modeEvaluate, modeProbe))
 	}
 
 	if *outputPath != "" {
@@ -123,16 +181,9 @@ func main() {
 	} else {
 		fmt.Println(string(payload))
 	}
-
-	if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
-		exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
-	}
-	if *minTierAccuracy > 0 && evalReport.TierLabeledSamples > 0 && evalReport.TierAccuracy < *minTierAccuracy {
-		exitWithError(fmt.Errorf("tier accuracy %.4f is below minimum %.4f", evalReport.TierAccuracy, *minTierAccuracy))
-	}
 }
 
-func loadDataset(datasetPath string) ([]datasetRecord, error) {
+func loadDataset(datasetPath string, requireExpectedLabels bool) ([]datasetRecord, error) {
 	payload, err := os.ReadFile(datasetPath)
 	if err != nil {
 		return nil, fmt.Errorf("read dataset %q: %w", datasetPath, err)
@@ -148,13 +199,13 @@ func loadDataset(datasetPath string) ([]datasetRecord, error) {
 		if err := json.Unmarshal([]byte(trimmed), &records); err != nil {
 			return nil, fmt.Errorf("decode JSON dataset %q: %w", datasetPath, err)
 		}
-		return validateRecords(records)
+		return validateRecords(records, requireExpectedLabels)
 	}
 
-	return loadJSONLDataset(datasetPath, trimmed)
+	return loadJSONLDataset(datasetPath, trimmed, requireExpectedLabels)
 }
 
-func loadJSONLDataset(datasetPath string, payload string) ([]datasetRecord, error) {
+func loadJSONLDataset(datasetPath string, payload string, requireExpectedLabels bool) ([]datasetRecord, error) {
 	scanner := bufio.NewScanner(strings.NewReader(payload))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
@@ -177,10 +228,10 @@ func loadJSONLDataset(datasetPath string, payload string) ([]datasetRecord, erro
 		return nil, fmt.Errorf("read JSONL dataset %q: %w", datasetPath, err)
 	}
 
-	return validateRecords(records)
+	return validateRecords(records, requireExpectedLabels)
 }
 
-func validateRecords(records []datasetRecord) ([]datasetRecord, error) {
+func validateRecords(records []datasetRecord, requireExpectedLabels bool) ([]datasetRecord, error) {
 	if len(records) == 0 {
 		return nil, fmt.Errorf("dataset has no records")
 	}
@@ -189,7 +240,7 @@ func validateRecords(records []datasetRecord) ([]datasetRecord, error) {
 		if strings.TrimSpace(record.expectedID()) == "" {
 			return nil, fmt.Errorf("record %d: sampleId or id is required", index+1)
 		}
-		if strings.TrimSpace(record.ExpectedCategory) == "" {
+		if requireExpectedLabels && strings.TrimSpace(record.ExpectedCategory) == "" {
 			return nil, fmt.Errorf("record %d: expectedCategory is required", index+1)
 		}
 	}
@@ -288,6 +339,64 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
 	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
 	sortFailures(result.Failures)
+	return result
+}
+
+func probe(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) probeReport {
+	if latencyIterations <= 0 {
+		latencyIterations = 1
+	}
+	router := routing.NewSimpleRouter(routing.SimpleRouterConfig{})
+	result := probeReport{
+		Mode:              modeProbe,
+		DatasetPath:       datasetPath,
+		ClassifierName:    defaultClassifierName,
+		ClassifierVersion: classifierVersion,
+		TotalSamples:      len(records),
+		ByCategory:        map[string]probeStat{},
+		ByTier:            map[string]probeStat{},
+		RoutingReasons:    map[string]int{},
+		Samples:           []probeSample{},
+		CostEstimate: costEstimate{
+			BaselineTier: routing.TierHighQuality,
+			UnitRates:    tierCostUnits(),
+		},
+	}
+
+	latencies := []float64{}
+	for _, record := range records {
+		decision, sampleLatencies := decideWithLatency(router, record.promptText(), latencyIterations)
+		category := decision.RoutingDecisionMaterial.Category
+		tier := decision.RoutingDecisionMaterial.Tier
+		latencies = append(latencies, sampleLatencies...)
+
+		categoryStat := result.ByCategory[category]
+		categoryStat.Total++
+		result.ByCategory[category] = categoryStat
+
+		tierStat := result.ByTier[tier]
+		tierStat.Total++
+		result.ByTier[tier] = tierStat
+
+		result.RoutingReasons[decision.RoutingReason]++
+		result.CostEstimate.BaselineCostUnits += tierCostUnit(routing.TierHighQuality)
+		result.CostEstimate.ActualCostUnits += tierCostUnit(tier)
+		result.Samples = append(result.Samples, probeSample{
+			SampleID:      record.expectedID(),
+			Category:      category,
+			Tier:          tier,
+			RoutingReason: decision.RoutingReason,
+		})
+	}
+
+	result.ByCategory = finalizeProbeStats(result.ByCategory, result.TotalSamples)
+	result.ByTier = finalizeProbeStats(result.ByTier, result.TotalSamples)
+	result.Latency = summarizeLatency(latencies, latencyIterations)
+	result.CostEstimate.BaselineCostUnits = round4(result.CostEstimate.BaselineCostUnits)
+	result.CostEstimate.ActualCostUnits = round4(result.CostEstimate.ActualCostUnits)
+	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
+	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
+	sortProbeSamples(result.Samples)
 	return result
 }
 
@@ -419,9 +528,30 @@ func marshalReport(report report, pretty bool) ([]byte, error) {
 	return json.Marshal(report)
 }
 
+func marshalProbeReport(report probeReport, pretty bool) ([]byte, error) {
+	if pretty {
+		return json.MarshalIndent(report, "", "  ")
+	}
+	return json.Marshal(report)
+}
+
 func sortFailures(failures []evaluationFailure) {
 	sort.Slice(failures, func(i int, j int) bool {
 		return failures[i].SampleID < failures[j].SampleID
+	})
+}
+
+func finalizeProbeStats(stats map[string]probeStat, total int) map[string]probeStat {
+	for key, stat := range stats {
+		stat.Rate = ratio(stat.Total, total)
+		stats[key] = stat
+	}
+	return stats
+}
+
+func sortProbeSamples(samples []probeSample) {
+	sort.Slice(samples, func(i int, j int) bool {
+		return samples[i].SampleID < samples[j].SampleID
 	})
 }
 

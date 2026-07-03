@@ -94,7 +94,7 @@ func TestLoadDatasetHandlesUTF8BOMJSONFile(t *testing.T) {
 		t.Fatalf("write dataset fixture: %v", err)
 	}
 
-	records, err := loadDataset(datasetPath)
+	records, err := loadDataset(datasetPath, true)
 	if err != nil {
 		t.Fatalf("loadDataset returned error: %v", err)
 	}
@@ -103,6 +103,58 @@ func TestLoadDatasetHandlesUTF8BOMJSONFile(t *testing.T) {
 	}
 	if records[0].expectedID() != "sample_bom_json" {
 		t.Fatalf("unexpected sample id: %q", records[0].expectedID())
+	}
+}
+
+func TestProbeReportClassifiesUnlabeledRecordsWithoutPromptText(t *testing.T) {
+	records := []datasetRecord{
+		{
+			SampleID:       "probe_neutral",
+			RedactedPrompt: stringPtr("Please describe a quiet workspace reminder."),
+		},
+		{
+			SampleID:       "probe_blank",
+			RedactedPrompt: stringPtr(""),
+		},
+	}
+
+	report := probe("probe.jsonl", defaultClassifierVersion, records, 1)
+	payload, err := marshalProbeReport(report, true)
+	if err != nil {
+		t.Fatalf("marshalProbeReport returned error: %v", err)
+	}
+
+	output := string(payload)
+	if strings.Contains(output, "quiet workspace reminder") {
+		t.Fatalf("probe report must not include prompt text: %s", output)
+	}
+	if report.TotalSamples != 2 {
+		t.Fatalf("expected 2 samples, got %d", report.TotalSamples)
+	}
+	if report.ByCategory["general"].Total != 1 || report.ByCategory["unknown"].Total != 1 {
+		t.Fatalf("unexpected category distribution: %#v", report.ByCategory)
+	}
+	if len(report.Samples) != 2 {
+		t.Fatalf("expected sample classifications, got %d", len(report.Samples))
+	}
+}
+
+func TestLoadDatasetAllowsUnlabeledProbeRecords(t *testing.T) {
+	datasetPath := filepath.Join(t.TempDir(), "probe.jsonl")
+	payload := `{"sampleId":"probe_001","redactedPrompt":"Please describe a neutral workspace note."}` + "\n"
+	if err := os.WriteFile(datasetPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write probe fixture: %v", err)
+	}
+
+	records, err := loadDataset(datasetPath, false)
+	if err != nil {
+		t.Fatalf("loadDataset returned error: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].ExpectedCategory != "" {
+		t.Fatalf("probe record should not require expected category")
 	}
 }
 
