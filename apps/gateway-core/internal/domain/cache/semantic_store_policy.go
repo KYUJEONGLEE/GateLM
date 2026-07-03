@@ -65,6 +65,63 @@ type SemanticCacheStoreDecision struct {
 	StorePolicyVersion        string
 }
 
+func DefaultSemanticCacheStorePolicy() SemanticCacheStorePolicy {
+	return SemanticCacheStorePolicy{
+		PolicyVersion: "store-v1",
+		DefaultMode:   SemanticCacheStoreModeDisabled,
+		Categories: map[string]SemanticCacheCategoryStorePolicy{
+			SemanticCacheCategoryGeneral: {
+				Mode:                          SemanticCacheStoreModeStrictStore,
+				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityStaticGuidance},
+				RequiresIntent:                true,
+				RequiresRequiredSlots:         true,
+				RequiresForbiddenPayloadGuard: true,
+				RequiresProviderSuccess:       true,
+				DenyFallback:                  true,
+				DenyStream:                    true,
+			},
+			SemanticCacheCategoryAccountAccess: {
+				Mode:                          SemanticCacheStoreModeStrictStore,
+				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityStaticGuidance},
+				RequiresIntent:                true,
+				RequiresRequiredSlots:         true,
+				RequiresForbiddenPayloadGuard: true,
+				RequiresProviderSuccess:       true,
+				DenyFallback:                  true,
+				DenyStream:                    true,
+			},
+			SemanticCacheCategorySupportRefund: {
+				Mode:                          SemanticCacheStoreModeStrictStore,
+				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityPolicySummary},
+				RequiresIntent:                true,
+				RequiresRequiredSlots:         true,
+				RequiresForbiddenPayloadGuard: true,
+				RequiresProviderSuccess:       true,
+				DenyFallback:                  true,
+				DenyStream:                    true,
+			},
+			SemanticCacheCategoryCode: {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			SemanticCacheCategoryTranslation: {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			SemanticCacheCategoryReasoning: {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			SemanticCacheCategorySensitive: {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			SemanticCacheCategoryToolCall: {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+			SemanticCacheCategoryUnknown: {
+				Mode: SemanticCacheStoreModeDisabled,
+			},
+		},
+	}
+}
+
 func (p SemanticCacheStorePolicy) Normalize() SemanticCacheStorePolicy {
 	p.PolicyVersion = strings.TrimSpace(p.PolicyVersion)
 	if p.PolicyVersion == "" {

@@ -203,6 +203,26 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	}
 }
 
+func TestBuildDashboardOverviewCacheHitRateUsesOnlyExactCacheEligibleRequests(t *testing.T) {
+	createdAt := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
+	logs := []LlmInvocationLog{
+		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact, CreatedAt: createdAt},
+		{Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact, CreatedAt: createdAt.Add(time.Second)},
+		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(2 * time.Second)},
+		{Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(3 * time.Second)},
+		{Status: StatusFailed, CacheStatus: CacheStatusError, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(4 * time.Second)},
+	}
+
+	overview := BuildDashboardOverview(logs)
+
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 2 {
+		t.Fatalf("expected exact-only cache counts, got %+v", overview)
+	}
+	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.5) {
+		t.Fatalf("expected exact-only cache hit rate 0.5, got %+v", overview.CacheHitRate)
+	}
+}
+
 func TestBuildDashboardOverviewEmptyRangeReturnsZeroRatesAndNoLatency(t *testing.T) {
 	overview := BuildDashboardOverview(nil)
 

@@ -322,20 +322,13 @@ type latencySummaryResponse struct {
 }
 
 type cacheResponse struct {
-	CacheStatus                 string   `json:"cacheStatus"`
-	CacheOutcome                string   `json:"cacheOutcome"`
-	CacheType                   string   `json:"cacheType"`
-	CacheKeyHash                *string  `json:"cacheKeyHash"`
-	CacheHitRequestID           *string  `json:"cacheHitRequestId"`
-	CacheDecisionReason         *string  `json:"cacheDecisionReason"`
-	SemanticCacheHit            bool     `json:"semanticCacheHit"`
-	SemanticSimilarity          *float64 `json:"semanticSimilarity"`
-	SemanticMatchedRequestID    *string  `json:"semanticMatchedRequestId"`
-	SemanticCacheThreshold      *float64 `json:"semanticCacheThreshold"`
-	SemanticCachePolicyVersion  *string  `json:"semanticCachePolicyVersion"`
-	SemanticCacheDecisionReason *string  `json:"semanticCacheDecisionReason"`
-	EmbeddingProvider           *string  `json:"embeddingProvider"`
-	PromptCategory              *string  `json:"promptCategory"`
+	CacheStatus         string  `json:"cacheStatus"`
+	CacheOutcome        string  `json:"cacheOutcome"`
+	CacheType           string  `json:"cacheType"`
+	CacheKeyHash        *string `json:"cacheKeyHash"`
+	CacheHitRequestID   *string `json:"cacheHitRequestId"`
+	CacheDecisionReason *string `json:"cacheDecisionReason"`
+	PromptCategory      *string `json:"promptCategory"`
 }
 
 type routingResponse struct {
@@ -674,20 +667,13 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
 		},
 		Cache: cacheResponse{
-			CacheStatus:                 detail.Cache.CacheStatus,
-			CacheOutcome:                detail.Cache.CacheOutcome,
-			CacheType:                   detail.Cache.CacheType,
-			CacheKeyHash:                stringPointerOrNil(detail.Cache.CacheKeyHash),
-			CacheHitRequestID:           stringPointerOrNil(detail.Cache.CacheHitRequestID),
-			CacheDecisionReason:         stringPointerOrNil(detail.Cache.CacheDecisionReason),
-			SemanticCacheHit:            detail.Cache.SemanticCacheHit,
-			SemanticSimilarity:          float64PointerOrNil(detail.Cache.SemanticSimilarity),
-			SemanticMatchedRequestID:    stringPointerOrNil(detail.Cache.SemanticMatchedRequestID),
-			SemanticCacheThreshold:      float64PointerOrNil(detail.Cache.SemanticCacheThreshold),
-			SemanticCachePolicyVersion:  stringPointerOrNil(detail.Cache.SemanticCachePolicyVersion),
-			SemanticCacheDecisionReason: stringPointerOrNil(detail.Cache.SemanticCacheDecisionReason),
-			EmbeddingProvider:           stringPointerOrNil(detail.Cache.EmbeddingProvider),
-			PromptCategory:              stringPointerOrNil(detail.Cache.PromptCategory),
+			CacheStatus:         detail.Cache.CacheStatus,
+			CacheOutcome:        detail.Cache.CacheOutcome,
+			CacheType:           detail.Cache.CacheType,
+			CacheKeyHash:        stringPointerOrNil(detail.Cache.CacheKeyHash),
+			CacheHitRequestID:   stringPointerOrNil(detail.Cache.CacheHitRequestID),
+			CacheDecisionReason: stringPointerOrNil(detail.Cache.CacheDecisionReason),
+			PromptCategory:      stringPointerOrNil(detail.Cache.PromptCategory),
 		},
 		Routing: routingResponse{
 			RoutingReason:          stringPointerOrNil(detail.Routing.RoutingReason),
@@ -1006,13 +992,6 @@ func copyInt64Map(values map[string]int64) map[string]int64 {
 func stringPointerOrNil(value string) *string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func float64PointerOrNil(value float64) *float64 {
-	if value <= 0 {
 		return nil
 	}
 	return &value

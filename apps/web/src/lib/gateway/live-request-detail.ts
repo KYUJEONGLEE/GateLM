@@ -21,14 +21,7 @@ type GatewayRequestDetailResponse = {
       cacheKeyHash?: string | null;
       cacheStatus?: string;
       cacheType?: string;
-      embeddingProvider?: string | null;
       promptCategory?: string | null;
-      semanticCacheDecisionReason?: string | null;
-      semanticCacheHit?: boolean;
-      semanticCachePolicyVersion?: string | null;
-      semanticCacheThreshold?: number | null;
-      semanticMatchedRequestId?: string | null;
-      semanticSimilarity?: number | null;
     };
     completedAt?: string | null;
     cost?: {
@@ -228,7 +221,6 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     cacheDecisionReason: data.cache?.cacheDecisionReason ?? null,
     cacheKeyHash: data.cache?.cacheKeyHash ?? null,
     cacheHitRequestId: data.cache?.cacheHitRequestId ?? null,
-    embeddingProvider: data.cache?.embeddingProvider ?? null,
     maskingAction,
     maskingDetectedTypes: data.masking?.maskingDetectedTypes ?? [],
     maskingDetectedCount: data.masking?.maskingDetectedCount ?? 0,
@@ -247,12 +239,6 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       reason: status === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-detail",
       durationMs: 0
     },
-    semanticCacheDecisionReason: data.cache?.semanticCacheDecisionReason ?? null,
-    semanticCacheHit: data.cache?.semanticCacheHit ?? false,
-    semanticCachePolicyVersion: data.cache?.semanticCachePolicyVersion ?? null,
-    semanticCacheThreshold: data.cache?.semanticCacheThreshold ?? null,
-    semanticMatchedRequestId: data.cache?.semanticMatchedRequestId ?? null,
-    semanticSimilarity: data.cache?.semanticSimilarity ?? null,
     promptTokens: usageSummary.promptTokens,
     completionTokens: usageSummary.completionTokens,
     totalTokens: usageSummary.totalTokens,

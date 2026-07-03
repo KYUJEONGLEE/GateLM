@@ -359,6 +359,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"terminal_status = 'failed'",
 		"terminal_status = 'rate_limited'",
 		"cache_eligible_requests",
+		"cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact'",
 		"saved_cost_micro_usd",
 		"percentile_disc(0.95)",
 		"status_counts",

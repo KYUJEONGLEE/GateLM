@@ -38,6 +38,28 @@ func TestChatCompletionsSemanticCacheDisabledKeepsExistingFlow(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsSemanticCacheEnabledWithoutServiceNoOps(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+	harness.handler.SemanticCacheService = nil
+	harness.handler.SemanticCacheEnabled = true
+
+	rr := harness.exercise(t, "sc_policy_missing_noop", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("policy/service 없는 semantic cache는 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
+		t.Fatalf("service가 없으면 semantic lookup/store가 없어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("semantic no-op이면 provider가 호출되어야 함: calls=%d", harness.provider.calls)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheEnabled {
+		t.Fatalf("service가 없으면 semantic cache evidence도 disabled로 남아야 함: %+v", logged)
+	}
+}
+
 func TestChatCompletionsSemanticCacheModeOffBypassesLookupStoreAndHit(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 	harness.handler.SemanticCacheMode = cachekey.SemanticCacheModeOff
@@ -75,9 +97,14 @@ func TestChatCompletionsSemanticCacheDefaultModeEnforceKeepsHitPath(t *testing.T
 	if harness.provider.calls != 1 {
 		t.Fatalf("기본 mode=enforce는 기존 semantic hit path를 유지해야 함: calls=%d", harness.provider.calls)
 	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 	resp := decodeSemanticChatResponse(t, second)
-	if resp.GateLM == nil || !resp.GateLM.SemanticCacheHit || !resp.GateLM.SemanticReturnedFromCache {
-		t.Fatalf("기본 enforce semantic hit metadata 불일치: %+v", resp.GateLM)
+	if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || resp.GateLM.ProviderCalled {
+		t.Fatalf("기본 enforce semantic hit response metadata 불일치: %+v", resp.GateLM)
+	}
+	logged := harness.latestLog(t)
+	if !logged.SemanticCacheHit || !logged.SemanticReturnedFromCache || logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonHit {
+		t.Fatalf("기본 enforce semantic hit evidence log 불일치: %+v", logged)
 	}
 }
 
@@ -102,15 +129,16 @@ func TestChatCompletionsSemanticCacheShadowWouldHitDoesNotReturnCachedResponse(t
 	if harness.provider.calls != 2 {
 		t.Fatalf("shadow wouldHit이어도 provider가 호출되어야 함: calls=%d", harness.provider.calls)
 	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 	resp := decodeSemanticChatResponse(t, second)
-	if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || !resp.GateLM.ProviderCalled || resp.GateLM.SemanticReturnedFromCache {
+	if resp.GateLM == nil || !resp.GateLM.ProviderCalled {
 		t.Fatalf("shadow response metadata 불일치: %+v", resp.GateLM)
 	}
-	if !resp.GateLM.SemanticCacheWouldHit || resp.GateLM.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonShadowWouldHit {
-		t.Fatalf("shadow wouldHit metadata 불일치: %+v", resp.GateLM)
-	}
 	logged := harness.latestLog(t)
-	if logged.SemanticCacheHit || !logged.SemanticCacheWouldHit || logged.SemanticReturnedFromCache {
+	if logged.SemanticCacheHit ||
+		!logged.SemanticCacheWouldHit ||
+		logged.SemanticReturnedFromCache ||
+		logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonShadowWouldHit {
 		t.Fatalf("shadow terminal log semantic flags 불일치: %+v", logged)
 	}
 	if logged.SemanticMatchedRequestID != "" {
@@ -158,6 +186,62 @@ func TestChatCompletionsSemanticCacheFirstRequestMissThenStores(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsSemanticCacheStoreRequestCarriesStaticCacheabilityClass(t *testing.T) {
+	harness := newSemanticCacheHarness(t, true)
+
+	rr := harness.exercise(t, "sc_store_cacheability_static", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("정적 안내 응답은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.semantic.upsertCalls != 1 || len(harness.semantic.storeRequests) != 1 {
+		t.Fatalf("정적 안내 응답은 semantic store 후보로 전달되어야 함: upsert=%d requests=%d", harness.semantic.upsertCalls, len(harness.semantic.storeRequests))
+	}
+	storeRequest := harness.semantic.storeRequests[0]
+	if storeRequest.ResponseCacheabilityClass != cachekey.SemanticCacheResponseCacheabilityStaticGuidance {
+		t.Fatalf("정적 안내 응답 cacheability class 불일치: %q", storeRequest.ResponseCacheabilityClass)
+	}
+	if storeRequest.ProviderOutcome != cachekey.SemanticCacheProviderOutcomeSuccess || storeRequest.FallbackUsed || storeRequest.Stream {
+		t.Fatalf("store eligibility material 불일치: %+v", storeRequest)
+	}
+}
+
+func TestChatCompletionsSemanticCacheDynamicUserStateResponseDoesNotStoreOrHit(t *testing.T) {
+	semantic := newCountingSemanticCacheService(t, true)
+	adapter := &routingAwareProviderAdapter{
+		adapterType:     providercatalog.AdapterTypeMock,
+		responseContent: "이번 달 사용량: 12345 tokens",
+	}
+	harness := newSemanticCacheHarnessWithService(t, semantic, adapter)
+	harness.routes["sc_dynamic_usage_first"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+	harness.routes["sc_dynamic_usage_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+	first := harness.exercise(t, "sc_dynamic_usage_first", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("동적 사용량 응답도 사용자에게는 성공으로 반환되어야 함: status=%d body=%s", first.Code, first.Body.String())
+	}
+	if len(semantic.storeRequests) != 1 {
+		t.Fatalf("동적 응답도 store eligibility 평가 material은 전달되어야 함: requests=%d", len(semantic.storeRequests))
+	}
+	if semantic.storeRequests[0].ResponseCacheabilityClass != cachekey.SemanticCacheResponseCacheabilityDynamicUserState {
+		t.Fatalf("동적 응답 cacheability class 불일치: %q", semantic.storeRequests[0].ResponseCacheabilityClass)
+	}
+	if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonDynamicUserState {
+		t.Fatalf("동적 응답은 semantic store에서 bypass되어야 함: reason=%q", logged.SemanticCacheDecisionReason)
+	}
+
+	second := harness.exercise(t, "sc_dynamic_usage_second", routingAwareChatBody("auto", "API 사용량 확인 화면은 어디야?"))
+	if second.Code != http.StatusOK {
+		t.Fatalf("유사한 두 번째 동적 요청도 provider flow로 성공해야 함: status=%d body=%s", second.Code, second.Body.String())
+	}
+	if adapter.calls != 2 {
+		t.Fatalf("동적 응답이 저장되면 두 번째 요청이 semantic hit가 되므로 provider는 다시 호출되어야 함: calls=%d", adapter.calls)
+	}
+	if logged := harness.latestLog(t); logged.SemanticCacheHit || logged.SemanticReturnedFromCache {
+		t.Fatalf("동적 응답은 이후 semantic hit로 재사용되면 안 됨: %+v", logged)
+	}
+}
+
 func TestChatCompletionsSemanticCacheMissReusesLookupEmbeddingForStore(t *testing.T) {
 	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
 	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
@@ -194,15 +278,16 @@ func TestChatCompletionsSemanticCacheSimilarSecondRequestHits(t *testing.T) {
 	if harness.provider.calls != 1 {
 		t.Fatalf("semantic hit 요청은 provider를 다시 호출하면 안 됨: calls=%d", harness.provider.calls)
 	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 	resp := decodeSemanticChatResponse(t, second)
-	if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || !resp.GateLM.SemanticCacheHit || resp.GateLM.ProviderCalled {
-		t.Fatalf("semantic hit metadata 불일치: %+v", resp.GateLM)
-	}
-	if resp.GateLM.SemanticMatchedRequestID != "sc_hit_first" {
-		t.Fatalf("semanticMatchedRequestId는 첫 요청이어야 함: %q", resp.GateLM.SemanticMatchedRequestID)
+	if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || resp.GateLM.ProviderCalled {
+		t.Fatalf("semantic hit response metadata 불일치: %+v", resp.GateLM)
 	}
 	logged := harness.latestLog(t)
-	if logged.CacheType != invocationlog.CacheTypeSemantic || logged.CacheStatus != invocationlog.CacheStatusHit || !logged.SemanticCacheHit {
+	if logged.CacheType != invocationlog.CacheTypeSemantic ||
+		logged.CacheStatus != invocationlog.CacheStatusHit ||
+		!logged.SemanticCacheHit ||
+		logged.SemanticMatchedRequestID != "sc_hit_first" {
 		t.Fatalf("semantic hit가 request log에 남아야 함: %+v", logged)
 	}
 }
@@ -379,18 +464,17 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryRuntimeReturnsOnlyEligible
 	if harness.provider.calls != 1 {
 		t.Fatalf("eligible general canary hit는 provider 재호출이 없어야 함: calls=%d", harness.provider.calls)
 	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 	resp := decodeSemanticChatResponse(t, second)
 	if resp.GateLM == nil ||
 		resp.GateLM.CacheType != invocationlog.CacheTypeSemantic ||
-		!resp.GateLM.SemanticCacheHit ||
-		!resp.GateLM.SemanticReturnedFromCache ||
-		resp.GateLM.ProviderCalled ||
-		resp.GateLM.SemanticCacheMode != cachekey.SemanticCacheModeEnforce {
-		t.Fatalf("general-only canary semantic hit metadata 불일치: %+v", resp.GateLM)
+		resp.GateLM.ProviderCalled {
+		t.Fatalf("general-only canary semantic hit response metadata 불일치: %+v", resp.GateLM)
 	}
 	logged := harness.latestLog(t)
 	if logged.PromptCategory != routingdomain.CategoryGeneral ||
 		logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonHit ||
+		!logged.SemanticCacheHit ||
 		!logged.SemanticReturnedFromCache ||
 		logged.Metadata["semanticReturnedFromCache"] != true ||
 		logged.Metadata["semanticCacheMode"] != cachekey.SemanticCacheModeEnforce ||
@@ -437,10 +521,9 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksDynamicUsageRuntimeR
 	if len(semantic.searchResults) != 1 || semantic.searchResults[0].Reason != cachekey.SemanticCacheReasonIntentUnavailable {
 		t.Fatalf("동적 사용량 조회 lookup reason은 intent_unavailable이어야 함: %+v", semantic.searchResults)
 	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 	resp := decodeSemanticChatResponse(t, second)
 	if resp.GateLM == nil ||
-		resp.GateLM.SemanticCacheHit ||
-		resp.GateLM.SemanticReturnedFromCache ||
 		!resp.GateLM.ProviderCalled {
 		t.Fatalf("동적 사용량 조회 metadata 불일치: %+v", resp.GateLM)
 	}
@@ -537,8 +620,9 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksNonGeneralRuntimeRet
 			if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
 				t.Fatalf("non-general canary 차단은 lookup/store 전에 일어나야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
 			}
+			assertGateLMResponseDoesNotExposeSemanticCache(t, rr)
 			resp := decodeSemanticChatResponse(t, rr)
-			if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || resp.GateLM.SemanticReturnedFromCache || !resp.GateLM.ProviderCalled {
+			if resp.GateLM == nil || !resp.GateLM.ProviderCalled {
 				t.Fatalf("non-general canary 차단 metadata 불일치: %+v", resp.GateLM)
 			}
 			logged := harness.latestLog(t)
@@ -608,8 +692,9 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksTenantAndApplication
 			if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
 				t.Fatalf("scope 밖 요청은 semantic lookup/store 전에 차단되어야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
 			}
+			assertGateLMResponseDoesNotExposeSemanticCache(t, rr)
 			resp := decodeSemanticChatResponse(t, rr)
-			if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || resp.GateLM.SemanticReturnedFromCache || !resp.GateLM.ProviderCalled {
+			if resp.GateLM == nil || !resp.GateLM.ProviderCalled {
 				t.Fatalf("scope 밖 response metadata 불일치: %+v", resp.GateLM)
 			}
 			logged := outside.latestLog(t)
@@ -640,9 +725,14 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 		if harness.provider.calls != 1 {
 			t.Fatalf("한국어 유사 요청 semantic hit는 provider 재호출 금지: calls=%d", harness.provider.calls)
 		}
+		assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 		resp := decodeSemanticChatResponse(t, second)
-		if resp.GateLM == nil || !resp.GateLM.SemanticCacheHit || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic {
+		if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || resp.GateLM.ProviderCalled {
 			t.Fatalf("한국어 유사 요청 semantic hit metadata 불일치: %+v", resp.GateLM)
+		}
+		logged := harness.latestLog(t)
+		if !logged.SemanticCacheHit || !logged.SemanticReturnedFromCache {
+			t.Fatalf("한국어 유사 요청 semantic hit evidence log 불일치: %+v", logged)
 		}
 	})
 
@@ -732,12 +822,14 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 		if harness.provider.calls != 1 {
 			t.Fatalf("한국어 support_refund 유사 요청 hit는 provider 재호출 금지: calls=%d", harness.provider.calls)
 		}
+		assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 		resp := decodeSemanticChatResponse(t, second)
-		if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || !resp.GateLM.SemanticCacheHit || resp.GateLM.ProviderCalled {
+		if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || resp.GateLM.ProviderCalled {
 			t.Fatalf("한국어 support_refund semantic hit metadata 불일치: %+v", resp.GateLM)
 		}
-		if resp.GateLM.SemanticMatchedRequestID != "sc_ko_refund_hit_first" {
-			t.Fatalf("support_refund semanticMatchedRequestId는 첫 요청이어야 함: %q", resp.GateLM.SemanticMatchedRequestID)
+		logged := harness.latestLog(t)
+		if !logged.SemanticCacheHit || logged.SemanticMatchedRequestID != "sc_ko_refund_hit_first" {
+			t.Fatalf("support_refund semantic hit evidence log 불일치: %+v", logged)
 		}
 	})
 
@@ -759,8 +851,9 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 		if len(harness.semantic.searchResults) < 2 || harness.semantic.searchResults[1].Reason != cachekey.SemanticCacheReasonHardNegative {
 			t.Fatalf("support_refund hard negative lookup reason 불일치: %+v", harness.semantic.searchResults)
 		}
+		assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 		resp := decodeSemanticChatResponse(t, second)
-		if resp.GateLM == nil || resp.GateLM.SemanticCacheHit || !resp.GateLM.ProviderCalled {
+		if resp.GateLM == nil || !resp.GateLM.ProviderCalled {
 			t.Fatalf("support_refund hard negative metadata 불일치: %+v", resp.GateLM)
 		}
 	})
@@ -1057,8 +1150,9 @@ func TestChatCompletionsSemanticCacheOpenAIEmbeddingFailureContinuesProviderFlow
 	if harness.provider.calls != 1 {
 		t.Fatalf("embedding 실패 후에도 provider flow는 계속되어야 함: calls=%d", harness.provider.calls)
 	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, rr)
 	resp := decodeSemanticChatResponse(t, rr)
-	if resp.GateLM == nil || !resp.GateLM.ProviderCalled || resp.GateLM.SemanticCacheHit {
+	if resp.GateLM == nil || !resp.GateLM.ProviderCalled {
 		t.Fatalf("embedding 실패 응답 metadata 불일치: %+v", resp.GateLM)
 	}
 	logged := harness.latestLog(t)
@@ -1217,6 +1311,28 @@ func assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t *testing.T, r
 	}
 }
 
+func assertGateLMResponseDoesNotExposeSemanticCache(t *testing.T, rr *httptest.ResponseRecorder) {
+	t.Helper()
+	body := rr.Body.String()
+	for _, key := range []string{
+		"semanticCacheHit",
+		"semanticCacheMode",
+		"semanticCacheWouldHit",
+		"semanticCacheWouldMiss",
+		"semanticCandidateFound",
+		"semanticReturnedFromCache",
+		"semanticSimilarity",
+		"semanticMatchedRequestId",
+		"semanticCacheThreshold",
+		"semanticCachePolicyVersion",
+		"semanticCacheDecisionReason",
+	} {
+		if strings.Contains(body, `"`+key+`"`) {
+			t.Fatalf("gate_lm response must not expose semantic cache evidence key %q: body=%s", key, body)
+		}
+	}
+}
+
 type countingSemanticCacheService struct {
 	service        cachekey.SemanticCacheService
 	searchCalls    int
@@ -1234,6 +1350,7 @@ func newCountingSemanticCacheService(t *testing.T, enabled bool) *countingSemant
 func newCountingSemanticCacheServiceWithEmbeddingProvider(t *testing.T, enabled bool, embeddingProvider cachekey.EmbeddingProvider) *countingSemanticCacheService {
 	t.Helper()
 	store := cachekey.NewInMemorySemanticCacheStore(100)
+	storePolicy := cachekey.DefaultSemanticCacheStorePolicy()
 	service := cachekey.NewSemanticCacheService(store, embeddingProvider, cachekey.SemanticCacheServiceConfig{
 		Enabled:       enabled,
 		Threshold:     0.92,
@@ -1241,6 +1358,7 @@ func newCountingSemanticCacheServiceWithEmbeddingProvider(t *testing.T, enabled 
 		TTL:           time.Hour,
 		PolicyVersion: "v1",
 		HitPolicy:     testHandlerSemanticHitPolicy(t),
+		StorePolicy:   &storePolicy,
 	})
 	return &countingSemanticCacheService{service: service}
 }
