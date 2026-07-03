@@ -129,7 +129,7 @@ class AiSafetyDetection(CamelModel):
     detector_type: str = Field(alias="detectorType", min_length=1)
     source: str = Field(min_length=1)
     confidence: float | None = Field(default=None, ge=0, le=1)
-    action: Literal["redact", "block"]
+    action: Literal["allow", "redact", "block"]
     mode: Literal["shadow"] = "shadow"
 
 

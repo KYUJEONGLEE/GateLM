@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib.parse import urlparse
 
 from fastapi.testclient import TestClient
 
 from app.adapters.safety import PrivacyFilterAdapter
+from app.adapters.safety.llm_classifier import LocalVllmLLMClassifier
 from app.adapters.safety.privacy_filter_adapter import (
     KOELECTRA_PRIVACY_NER_MODEL,
     source_for_model,
@@ -20,6 +26,217 @@ SYNTHETIC_ACCOUNT_NUMBER = "syntheticAccountNumber123456"
 
 
 class AiSafetyRouteTests(unittest.TestCase):
+    def test_detect_merges_llm_shadow_evidence_without_changing_rule_outcome(self) -> None:
+        prompt = "\ubcf8\uc0ac \uc8fc\uc18c\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c 123\uc785\ub2c8\ub2e4."
+        with FakeVllmServer(
+            {
+                "detections": [
+                    {
+                        "detectorType": "postal_address",
+                        "action": "allow",
+                        "confidence": 0.78,
+                        "reasonCode": "business_address_context",
+                    }
+                ]
+            }
+        ) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                    temperature=0,
+                    max_tokens=192,
+                ),
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 1)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["postal_address"])
+        self.assertEqual(len(body["detections"]), 1)
+        self.assertEqual(body["detections"][0]["detectorType"], "postal_address")
+        self.assertEqual(body["detections"][0]["source"], "llm_classifier")
+        self.assertEqual(body["detections"][0]["action"], "allow")
+        self.assertEqual(body["detections"][0]["mode"], "shadow")
+        self.assertEqual(body["detections"][0]["confidence"], 0.78)
+        self.assertEqual(len(fake_vllm.requests), 1)
+        self.assertEqual(fake_vllm.requests[0]["path"], "/v1/chat/completions")
+        self.assertEqual(fake_vllm.requests[0]["body"]["model"], "kakaocorp/kanana-1.5-8b-instruct-2505")
+        self.assertEqual(fake_vllm.requests[0]["body"]["temperature"], 0)
+        self.assertEqual(fake_vllm.requests[0]["body"]["max_tokens"], 192)
+
+    def test_detect_discards_invalid_llm_classifier_json(self) -> None:
+        prompt = "\ubcf8\uc0ac \uc8fc\uc18c\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c 123\uc785\ub2c8\ub2e4."
+        with FakeVllmServer({}, raw_content="not json") as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                ),
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(len(fake_vllm.requests), 1)
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 0)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], [])
+        self.assertEqual(body["detections"], [])
+
+    def test_detect_discards_llm_classifier_values_outside_allowed_enums(self) -> None:
+        prompt = "\ubcf8\uc0ac \uc8fc\uc18c\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c 123\uc785\ub2c8\ub2e4."
+        with FakeVllmServer(
+            {
+                "detections": [
+                    {
+                        "detectorType": "raw_customer_sentence",
+                        "action": "redact",
+                        "confidence": 0.92,
+                        "reasonCode": "business_address_context",
+                    },
+                    {
+                        "detectorType": "postal_address",
+                        "action": "quarantine",
+                        "confidence": 0.91,
+                        "reasonCode": "business_address_context",
+                    },
+                    {
+                        "detectorType": "postal_address",
+                        "action": "allow",
+                        "confidence": 0.90,
+                        "reasonCode": "raw_reason_text",
+                    },
+                ]
+            }
+        ) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                ),
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(len(fake_vllm.requests), 1)
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 0)
+        self.assertEqual(body["detections"], [])
+
+    def test_detect_skips_llm_classifier_for_deterministic_regex_pii(self) -> None:
+        email = "llm-skip@example.test"
+        phone = "010-1234-5678"
+        prompt = f"Contact {email} or {phone}."
+        with FakeVllmServer({"detections": []}) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                ),
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(fake_vllm.requests, [])
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(body["redactedPrompt"], "Contact [EMAIL_1] or [PHONE_NUMBER_1].")
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email", "phone_number"])
+        self.assertNotIn(email, body_text)
+        self.assertNotIn(phone, body_text)
+
+    def test_detect_limits_llm_classifier_candidate_windows(self) -> None:
+        repeated_segments = [
+            f"\ubcf8\uc0ac \uc8fc\uc18c {index}\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c {index}\uc785\ub2c8\ub2e4."
+            for index in range(5)
+        ]
+        prompt = (" \uc77c\ubc18 \uc6b4\uc601 \uba54\ubaa8\ub9cc \ub4e4\uc5b4\uc788\ub294 \uae34 \ubb38\ub2e8. " * 12).join(repeated_segments)
+        with FakeVllmServer({"detections": []}) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                ),
+                llm_window_max_chars=120,
+                llm_window_max_count=3,
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(fake_vllm.requests), 3)
+        for request in fake_vllm.requests:
+            window = classifier_window_from_request(request["body"])
+            self.assertLessEqual(len(window), 120)
+            self.assertNotEqual(window, prompt)
+
+    def test_detect_keeps_existing_result_when_llm_classifier_times_out(self) -> None:
+        prompt = "\ubcf8\uc0ac \uc8fc\uc18c\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c 123\uc785\ub2c8\ub2e4."
+        with FakeVllmServer(
+            {
+                "detections": [
+                    {
+                        "detectorType": "postal_address",
+                        "action": "allow",
+                        "confidence": 0.78,
+                        "reasonCode": "business_address_context",
+                    }
+                ]
+            },
+            delay_seconds=0.08,
+        ) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda _text: [],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=5,
+                ),
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(len(fake_vllm.requests), 1)
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 0)
+        self.assertEqual(body["detections"], [])
+
     def test_detect_returns_sanitized_redacted_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL} for the demo."
         app = create_app()
@@ -580,6 +797,37 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
 
+    def test_detect_applies_role_coreference_from_rule_person_name_without_calling_ml_classifier(self) -> None:
+        raw_name = "Alex Kim"
+        prompt = f"customer_name={raw_name}. He waited for support."
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return []
+
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(classifier)
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "[CUSTOMER_1]. [CUSTOMER_1] waited for support.",
+        )
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
+        self.assertNotIn(raw_name, body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
     def test_detect_redacts_deterministic_pii_without_calling_ml_classifier(self) -> None:
         email = "latency-fast@example.test"
         phone = "010-1234-5678"
@@ -732,11 +980,24 @@ def service_with_classifier(
     classifier: object,
     *,
     model_name: str = "openai/privacy-filter",
+    llm_classifier: object | None = None,
+    llm_window_max_chars: int = 1000,
+    llm_window_max_count: int = 3,
 ) -> AiSafetyDetectorService:
-    return service_with_classifiers((model_name, classifier))
+    return service_with_classifiers(
+        (model_name, classifier),
+        llm_classifier=llm_classifier,
+        llm_window_max_chars=llm_window_max_chars,
+        llm_window_max_count=llm_window_max_count,
+    )
 
 
-def service_with_classifiers(*model_classifiers: tuple[str, object]) -> AiSafetyDetectorService:
+def service_with_classifiers(
+    *model_classifiers: tuple[str, object],
+    llm_classifier: object | None = None,
+    llm_window_max_chars: int = 1000,
+    llm_window_max_count: int = 3,
+) -> AiSafetyDetectorService:
     return AiSafetyDetectorService(
         adapters=tuple(
             PrivacyFilterAdapter(  # type: ignore[arg-type]
@@ -746,6 +1007,9 @@ def service_with_classifiers(*model_classifiers: tuple[str, object]) -> AiSafety
             )
             for model_name, classifier in model_classifiers
         ),
+        llm_classifier=llm_classifier,  # type: ignore[arg-type]
+        llm_window_max_chars=llm_window_max_chars,
+        llm_window_max_count=llm_window_max_count,
     )
 
 
@@ -762,6 +1026,90 @@ def payload(prompt_text: str, *, locale: str = "en-US") -> dict[str, object]:
             "returnConfidence": True,
         },
     }
+
+
+def classifier_window_from_request(body: dict[str, Any]) -> str:
+    messages = body["messages"]
+    user_message = messages[-1]
+    content = json.loads(user_message["content"])
+    return content["candidateWindow"]
+
+
+class FakeVllmServer:
+    def __init__(
+        self,
+        classifier_payload: dict[str, object],
+        *,
+        status_code: int = 200,
+        raw_content: str | None = None,
+        delay_seconds: float = 0,
+    ) -> None:
+        self.classifier_payload = classifier_payload
+        self.status_code = status_code
+        self.raw_content = raw_content
+        self.delay_seconds = delay_seconds
+        self.requests: list[dict[str, Any]] = []
+        self._server: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+
+    @property
+    def base_url(self) -> str:
+        if self._server is None:
+            raise RuntimeError("fake vLLM server is not running")
+        host, port = self._server.server_address
+        return f"http://{host}:{port}/v1"
+
+    def __enter__(self) -> "FakeVllmServer":
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                if owner.delay_seconds > 0:
+                    time.sleep(owner.delay_seconds)
+                length = int(self.headers.get("Content-Length", "0"))
+                raw_body = self.rfile.read(length)
+                body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+                owner.requests.append(
+                    {
+                        "path": urlparse(self.path).path,
+                        "body": body,
+                    }
+                )
+                response_body = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": owner.raw_content
+                                if owner.raw_content is not None
+                                else json.dumps(owner.classifier_payload),
+                            }
+                        }
+                    ]
+                }
+                encoded = json.dumps(response_body).encode("utf-8")
+                try:
+                    self.send_response(owner.status_code)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(encoded)))
+                    self.end_headers()
+                    self.wfile.write(encoded)
+                except OSError:
+                    return
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
 
 
 if __name__ == "__main__":

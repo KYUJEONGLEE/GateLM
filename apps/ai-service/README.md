@@ -65,6 +65,26 @@ Both models are loaded through local Transformers pipelines and their detections
 
 KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`.
 
+## Optional Local LLM Shadow Classifier
+
+The sidecar can add local LLM classifier evidence in `shadow` mode. This path is disabled by default and does not change `outcome` or `redactedPrompt`; rule/ONNX detector results remain the enforcement source.
+
+Run Kanana through a local OpenAI-compatible vLLM endpoint, not through hosted Hugging Face inference:
+
+```bash
+AI_SERVICE_LLM_CLASSIFIER_ENABLED=true
+AI_SERVICE_LLM_CLASSIFIER_BASE_URL=http://127.0.0.1:8002/v1
+AI_SERVICE_LLM_CLASSIFIER_MODEL=kakaocorp/kanana-1.5-8b-instruct-2505
+AI_SERVICE_LLM_CLASSIFIER_TIMEOUT_MS=1000
+AI_SERVICE_LLM_CLASSIFIER_TOTAL_TIMEOUT_MS=2000
+AI_SERVICE_LLM_CLASSIFIER_WINDOW_MAX_CHARS=1000
+AI_SERVICE_LLM_CLASSIFIER_WINDOW_MAX_COUNT=3
+AI_SERVICE_LLM_CLASSIFIER_TEMPERATURE=0
+AI_SERVICE_LLM_CLASSIFIER_MAX_TOKENS=192
+```
+
+The classifier receives only candidate windows selected by the sidecar, capped by the configured window size and count. The sidecar discards invalid JSON, unsupported detector/action/reason codes, timeouts, and local vLLM errors. It stores or returns only sanitized detector labels such as `source=llm_classifier`, `detectorType`, `action`, `mode`, and optional confidence.
+
 ## AI Safety Detector Sidecar
 
 The local detector sidecar endpoint is available at:

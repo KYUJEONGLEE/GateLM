@@ -382,6 +382,7 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             "person_name",
             "[PERSON_NAME_REDACTED]",
             "김민수",
+            expected_redacted_placeholder="[CUSTOMER_1]",
         )
         assert_redacted_detector(
             self,
@@ -389,6 +390,7 @@ class RemoteSafetyPolicyTests(unittest.TestCase):
             "person_name",
             "[PERSON_NAME_REDACTED]",
             "Alex Kim",
+            expected_redacted_placeholder="[CUSTOMER_1]",
         )
         assert_ignored_prompts(
             self,
@@ -1005,6 +1007,8 @@ def assert_redacted_detector(
     detector_type: str,
     placeholder: str,
     raw_value: str,
+    *,
+    expected_redacted_placeholder: str | None = None,
 ) -> None:
     evaluator = HeuristicSafetyEvaluator()
     decision = evaluator.evaluate(
@@ -1015,7 +1019,10 @@ def assert_redacted_detector(
     test_case.assertEqual(decision.action, "redacted")
     test_case.assertEqual(decision.detected_types, (detector_type,))
     test_case.assertEqual(decision.detected_count, 1)
-    test_case.assertIn(expected_placeholder(detector_type, placeholder), decision.redacted_prompt_preview or "")
+    test_case.assertIn(
+        expected_redacted_placeholder or expected_placeholder(detector_type, placeholder),
+        decision.redacted_prompt_preview or "",
+    )
     test_case.assertNotIn(raw_value, decision.redacted_prompt_preview or "")
 
 

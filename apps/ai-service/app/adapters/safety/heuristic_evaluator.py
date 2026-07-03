@@ -3,7 +3,7 @@ from __future__ import annotations
 import ipaddress
 import re
 from dataclasses import dataclass
-from re import Pattern
+from re import Match, Pattern
 from typing import Protocol
 
 from app.domain.safety.detections import Detection, safety_signals_from_detections
@@ -46,17 +46,20 @@ class RegexDetector:
     priority: int
 
     def detect(self, prompt_text: str, config: SafetyDetector) -> list[SafetySignal]:
-        return [
-            SafetySignal(
-                detector_type=self.detector_type,
-                start=match.start(),
-                end=match.end(),
-                action=config.action,
-                placeholder=config.placeholder,
-                priority=self.priority,
+        signals: list[SafetySignal] = []
+        for match in self.pattern.finditer(prompt_text):
+            start, end = _match_value_span(match)
+            signals.append(
+                SafetySignal(
+                    detector_type=self.detector_type,
+                    start=start,
+                    end=end,
+                    action=config.action,
+                    placeholder=config.placeholder,
+                    priority=self.priority,
+                )
             )
-            for match in self.pattern.finditer(prompt_text)
-        ]
+        return signals
 
 
 @dataclass(frozen=True)
@@ -300,7 +303,7 @@ def default_detectors() -> list[PromptDetector]:
             re.compile(
                 r"\b(?:name|customer[_ -]?name|contact[_ -]?name|manager|이름|성명|고객명|담당자)\b"
                 r"\s*[:=]\s*['\"]?"
-                r"(?:[가-힣]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})",
+                r"(?P<value>[가-힣]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})",
                 re.IGNORECASE,
             ),
             31,
@@ -382,3 +385,9 @@ def passes_luhn_check(digits: str) -> bool:
         total += value
         double_next = not double_next
     return total % 10 == 0
+
+
+def _match_value_span(match: Match[str]) -> tuple[int, int]:
+    if "value" in match.re.groupindex:
+        return match.start("value"), match.end("value")
+    return match.start(), match.end()

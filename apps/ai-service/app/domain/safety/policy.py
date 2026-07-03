@@ -94,6 +94,7 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
         "CUSTOMER",
         (
+            "customer name",
             "customer",
             "client",
             "\uace0\uac1d",
@@ -102,6 +103,7 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
         "AGENT",
         (
+            "agent name",
             "support agent",
             "agent",
             "\uc0c1\ub2f4\uc6d0",
@@ -111,6 +113,7 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
         "DOCTOR",
         (
+            "doctor name",
             "doctor",
             "physician",
             "\ub2f4\ub2f9 \uc758\uc0ac",
@@ -121,6 +124,7 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
         "PATIENT",
         (
+            "patient name",
             "patient",
             "\ud658\uc790",
         ),
@@ -128,6 +132,8 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
         "APPLICANT",
         (
+            "applicant name",
+            "candidate name",
             "applicant",
             "candidate",
             "\uc9c0\uc6d0\uc790",
@@ -136,6 +142,7 @@ PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS = (
     (
         "INTERVIEWER",
         (
+            "interviewer name",
             "interviewer",
             "\uba74\uc811\uad00",
         ),
@@ -832,24 +839,19 @@ def _normalize_person_role_context(value: str) -> str:
 
 def _person_role_replacement_start(context: str, role_prefix: str) -> int | None:
     trimmed = context.rstrip()
-    lower = trimmed.lower()
     for prefix, labels in PERSON_ROLE_CONSUMABLE_CONTEXT_LABELS:
         if prefix != role_prefix:
             continue
         for label in labels:
-            label_start = len(lower) - len(label)
-            if label_start < 0 or not lower.endswith(label):
-                continue
-            if not _has_person_role_label_boundary(lower, label_start):
-                continue
-            return len(trimmed) - len(label)
+            match = re.search(_person_role_label_context_pattern(label), trimmed, re.IGNORECASE)
+            if match is not None:
+                return match.start()
     return None
 
 
-def _has_person_role_label_boundary(value: str, label_start: int) -> bool:
-    if label_start <= 0:
-        return True
-    return value[label_start - 1].isspace() or value[label_start - 1] in "([{,.;:"
+def _person_role_label_context_pattern(label: str) -> str:
+    label_pattern = r"[\s_-]+".join(re.escape(part) for part in label.split())
+    return rf"(?<![A-Za-z0-9_\uac00-\ud7a3]){label_pattern}\s*[:=]?$"
 
 
 def _is_possessive_business_role_context(context: str, label: str) -> bool:

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from time import perf_counter
+from typing import Protocol
 
 from app.adapters.safety import PrivacyFilterAdapter
 from app.adapters.safety.heuristic_evaluator import PromptDetector, default_detectors
+from app.adapters.safety.llm_classifier import LLMClassification
 from app.adapters.safety.privacy_filter_adapter import public_model_id_for_model, source_for_model
 from app.domain.safety.detections import Detection, safety_signals_from_detections
 from app.domain.safety.policy import (
@@ -59,6 +62,7 @@ FAST_RULE_DETECTOR_TYPES = frozenset(
         "webhook_url",
     }
 )
+CHEAP_RULE_DETECTOR_TYPES = FAST_RULE_DETECTOR_TYPES | {"person_name"}
 ML_WINDOWING_MIN_CHARS = 1000
 ML_WINDOW_CONTEXT_CHARS = 240
 ML_CONTEXT_PATTERN = re.compile(
@@ -90,6 +94,60 @@ ROLE_CONTEXT_PATTERN = re.compile(
     ),
     re.IGNORECASE,
 )
+ML_CANDIDATE_PATTERNS = (
+    ML_CONTEXT_PATTERN,
+    TITLE_CASE_PERSON_CANDIDATE_PATTERN,
+    KOREAN_PERSON_CANDIDATE_PATTERN,
+    ROLE_CONTEXT_PATTERN,
+)
+LLM_WINDOW_CONTEXT_CHARS = 320
+DEFAULT_LLM_WINDOW_MAX_CHARS = 1000
+DEFAULT_LLM_WINDOW_MAX_COUNT = 3
+DEFAULT_LLM_TOTAL_TIMEOUT_MS = 2000
+LLM_DETERMINISTIC_RULE_DETECTOR_TYPES = frozenset(
+    {
+        "api_key",
+        "authorization_header",
+        "cloud_access_key",
+        "credit_card",
+        "database_url",
+        "driver_license",
+        "email",
+        "github_token",
+        "ip_address",
+        "jwt",
+        "passport_number",
+        "phone_number",
+        "private_key",
+        "provider_api_key",
+        "resident_registration_number",
+        "session_cookie",
+        "slack_token",
+        "webhook_url",
+    }
+)
+LLM_CONTEXT_PATTERN = re.compile(
+    r"\b(?:"
+    r"account|address|bank|birthdate|birthday|confidential|customer|"
+    r"delivery|health|internal|medicine|order|password|policy|private|"
+    r"reset|secret|token|url"
+    r")\b"
+    r"|(?:"
+    r"\uac1c\uc778\uc815\ubcf4|\uacc4\uc57d\uc11c|\uacc4\uc88c|\uace0\uac1d|"
+    r"\uacf5\uac1c\s*\uc804|\ub0b4\ubd80|\ubc30\uc1a1|\ubcf8\uc0ac|"
+    r"\ube44\ubc00\ubc88\ud638|\ube44\ubc88|\uc0dd\ub144\uc6d4\uc77c|"
+    r"\uc8fc\ubbfc\ubc88\ud638|\uc8fc\ubbfc\ub4f1\ub85d\ubc88\ud638|"
+    r"\uc8fc\ubb38\ubc88\ud638|\uc8fc\uc18c|\ud1a0\ud070|\uc6b0\uc6b8\uc99d|"
+    r"\uc57d"
+    r")",
+    re.IGNORECASE,
+)
+LLM_CANDIDATE_PATTERNS = (
+    LLM_CONTEXT_PATTERN,
+    TITLE_CASE_PERSON_CANDIDATE_PATTERN,
+    KOREAN_PERSON_CANDIDATE_PATTERN,
+    ROLE_CONTEXT_PATTERN,
+)
 
 
 @dataclass(frozen=True)
@@ -97,6 +155,11 @@ class MlWindow:
     start: int
     end: int
     text: str
+
+
+class LLMClassifier(Protocol):
+    def classify(self, window_text: str) -> tuple[LLMClassification, ...]:
+        ...
 
 
 DEFAULT_PRIVACY_FILTER_DETECTORS = (
@@ -204,6 +267,10 @@ class AiSafetyDetectorService:
         additional_model_ids: tuple[str, ...] = (),
         detectors: tuple[SafetyDetector, ...] = DEFAULT_PRIVACY_FILTER_DETECTORS,
         detector_runtime: str = "transformers",
+        llm_classifier: LLMClassifier | None = None,
+        llm_window_max_chars: int = DEFAULT_LLM_WINDOW_MAX_CHARS,
+        llm_window_max_count: int = DEFAULT_LLM_WINDOW_MAX_COUNT,
+        llm_total_timeout_ms: int = DEFAULT_LLM_TOTAL_TIMEOUT_MS,
     ) -> None:
         self.adapters = _resolve_adapters(
             adapter=adapter,
@@ -216,6 +283,10 @@ class AiSafetyDetectorService:
         self.model_id = public_model_id_for_model(self.adapter.model_name)
         self.detectors = detectors
         self.fast_rule_detectors = _default_fast_rule_detectors()
+        self.llm_classifier = llm_classifier
+        self.llm_window_max_chars = _positive_int(llm_window_max_chars, DEFAULT_LLM_WINDOW_MAX_CHARS)
+        self.llm_window_max_count = _positive_int(llm_window_max_count, DEFAULT_LLM_WINDOW_MAX_COUNT)
+        self.llm_total_timeout_ms = _positive_int(llm_total_timeout_ms, DEFAULT_LLM_TOTAL_TIMEOUT_MS)
 
     def detect(self, request: AiSafetyDetectRequest) -> AiSafetyDetectResponse:
         started = perf_counter()
@@ -223,7 +294,7 @@ class AiSafetyDetectorService:
         detector_config = {detector.type: detector for detector in self.detectors}
         rule_signals = _fast_rule_signals(prompt_text, detector_config, self.fast_rule_detectors)
         ml_signals: list[SafetySignal] = []
-        if _should_run_ml_adapters(prompt_text, detector_config):
+        if _should_run_ml_adapters(prompt_text, detector_config, rule_signals):
             detections = _ml_detections(prompt_text, rule_signals, self.adapters)
             ml_signals = safety_signals_from_detections(
                 detections,
@@ -234,8 +305,21 @@ class AiSafetyDetectorService:
             [*rule_signals, *ml_signals],
             prompt_text=prompt_text,
         )
+        llm_classifications = _llm_shadow_classifications(
+            prompt_text,
+            [*rule_signals, *ml_signals],
+            classifier=self.llm_classifier,
+            window_max_chars=self.llm_window_max_chars,
+            window_max_count=self.llm_window_max_count,
+            total_timeout_ms=self.llm_total_timeout_ms,
+        )
         redacted_prompt = redact_prompt(prompt_text, signals)
-        type_counts = Counter(signal.detector_type for signal in signals)
+        type_counts = Counter(
+            [
+                *(signal.detector_type for signal in signals),
+                *(classification.detector_type for classification in llm_classifications),
+            ]
+        )
         outcome = _outcome_from_signals(signals)
         latency_ms = max(0, round((perf_counter() - started) * 1000))
 
@@ -250,7 +334,7 @@ class AiSafetyDetectorService:
             redactedPrompt=redacted_prompt,
             redactedPromptPreview=preview_redacted_prompt(redacted_prompt),
             detectorSummary=AiSafetyDetectorSummary(
-                detectedCount=len(signals),
+                detectedCount=len(signals) + len(llm_classifications),
                 detectorCategories=sorted(type_counts),
             ),
             detections=[
@@ -262,6 +346,16 @@ class AiSafetyDetectorService:
                     mode="shadow",
                 )
                 for signal in signals
+            ]
+            + [
+                AiSafetyDetection(
+                    detectorType=classification.detector_type,
+                    source=classification.source,
+                    confidence=classification.confidence if request.detector_config.return_confidence else None,
+                    action=classification.action,
+                    mode="shadow",
+                )
+                for classification in llm_classifications
             ],
             latencyMs=latency_ms,
         )
@@ -279,7 +373,7 @@ def _default_fast_rule_detectors() -> tuple[PromptDetector, ...]:
     return tuple(
         detector
         for detector in default_detectors()
-        if detector.detector_type in FAST_RULE_DETECTOR_TYPES
+        if detector.detector_type in CHEAP_RULE_DETECTOR_TYPES
     )
 
 
@@ -300,6 +394,7 @@ def _fast_rule_signals(
 def _should_run_ml_adapters(
     prompt_text: str,
     detector_config: dict[str, SafetyDetector],
+    rule_signals: list[SafetySignal],
 ) -> bool:
     ml_enabled = any(
         detector_type not in FAST_RULE_DETECTOR_TYPES
@@ -307,11 +402,9 @@ def _should_run_ml_adapters(
     )
     if not ml_enabled:
         return False
-    return (
-        ML_CONTEXT_PATTERN.search(prompt_text) is not None
-        or TITLE_CASE_PERSON_CANDIDATE_PATTERN.search(prompt_text) is not None
-        or KOREAN_PERSON_CANDIDATE_PATTERN.search(prompt_text) is not None
-        or ROLE_CONTEXT_PATTERN.search(prompt_text) is not None
+    return any(
+        not _ml_candidate_covered_by_rule(prompt_text, start, end, rule_signals)
+        for start, end in _ml_context_candidate_spans(prompt_text)
     )
 
 
@@ -368,14 +461,155 @@ def _ml_candidate_spans(
     rule_signals: list[SafetySignal],
 ) -> list[tuple[int, int]]:
     spans = [(signal.start, signal.end) for signal in rule_signals]
-    for pattern in (
-        ML_CONTEXT_PATTERN,
-        TITLE_CASE_PERSON_CANDIDATE_PATTERN,
-        KOREAN_PERSON_CANDIDATE_PATTERN,
-        ROLE_CONTEXT_PATTERN,
-    ):
+    for pattern in ML_CANDIDATE_PATTERNS:
         spans.extend(match.span() for match in pattern.finditer(prompt_text))
     return spans
+
+
+def _ml_context_candidate_spans(prompt_text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    for pattern in ML_CANDIDATE_PATTERNS:
+        spans.extend(match.span() for match in pattern.finditer(prompt_text))
+    return spans
+
+
+def _llm_shadow_classifications(
+    prompt_text: str,
+    detector_signals: list[SafetySignal],
+    *,
+    classifier: LLMClassifier | None,
+    window_max_chars: int,
+    window_max_count: int,
+    total_timeout_ms: int,
+) -> tuple[LLMClassification, ...]:
+    if classifier is None:
+        return ()
+    windows = _llm_candidate_windows(
+        prompt_text,
+        detector_signals,
+        window_max_chars=window_max_chars,
+        window_max_count=window_max_count,
+    )
+    if not windows:
+        return ()
+
+    started = perf_counter()
+    classifications: list[LLMClassification] = []
+    for window in windows:
+        if (perf_counter() - started) * 1000 >= total_timeout_ms:
+            break
+        try:
+            classifications.extend(classifier.classify(window.text))
+        except Exception:
+            continue
+    return tuple(_dedupe_llm_classifications(classifications))
+
+
+def _llm_candidate_windows(
+    prompt_text: str,
+    detector_signals: list[SafetySignal],
+    *,
+    window_max_chars: int,
+    window_max_count: int,
+) -> tuple[MlWindow, ...]:
+    spans = _llm_candidate_spans(prompt_text, detector_signals)
+    if not spans:
+        return ()
+
+    raw_windows: list[tuple[int, int]] = []
+    half_window = max(1, window_max_chars // 2)
+    for start, end in spans:
+        if start < 0 or end <= start or end > len(prompt_text):
+            continue
+        center = start + ((end - start) // 2)
+        window_start = max(0, center - half_window)
+        window_end = min(len(prompt_text), window_start + window_max_chars)
+        window_start = max(0, window_end - window_max_chars)
+        raw_windows.append((window_start, window_end))
+
+    windows = _merged_limited_windows(raw_windows, window_max_chars)
+    return tuple(
+        MlWindow(start, end, prompt_text[start:end])
+        for start, end in windows[:window_max_count]
+        if start < end
+    )
+
+
+def _llm_candidate_spans(
+    prompt_text: str,
+    detector_signals: list[SafetySignal],
+) -> list[tuple[int, int]]:
+    spans = [
+        (signal.start, signal.end)
+        for signal in detector_signals
+        if signal.detector_type not in LLM_DETERMINISTIC_RULE_DETECTOR_TYPES
+    ]
+    for pattern in LLM_CANDIDATE_PATTERNS:
+        spans.extend(match.span() for match in pattern.finditer(prompt_text))
+    return spans
+
+
+def _merged_limited_windows(
+    windows: Iterable[tuple[int, int]],
+    window_max_chars: int,
+) -> list[tuple[int, int]]:
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(windows):
+        if not merged or start > merged[-1][1]:
+            merged.append((start, end))
+            continue
+        previous_start, previous_end = merged[-1]
+        candidate_end = max(previous_end, end)
+        if candidate_end - previous_start <= window_max_chars:
+            merged[-1] = (previous_start, candidate_end)
+            continue
+        merged.append((start, end))
+    return merged
+
+
+def _dedupe_llm_classifications(
+    classifications: list[LLMClassification],
+) -> list[LLMClassification]:
+    deduped: dict[tuple[str, str, str], LLMClassification] = {}
+    for classification in classifications:
+        key = (
+            classification.detector_type,
+            classification.action,
+            classification.reason_code,
+        )
+        existing = deduped.get(key)
+        if existing is None or classification.confidence > existing.confidence:
+            deduped[key] = classification
+    return sorted(
+        deduped.values(),
+        key=lambda item: (item.detector_type, item.action, item.reason_code),
+    )
+
+
+def _ml_candidate_covered_by_rule(
+    prompt_text: str,
+    start: int,
+    end: int,
+    rule_signals: list[SafetySignal],
+) -> bool:
+    return any(
+        _ml_candidate_covered_by_rule_signal(prompt_text, start, end, signal)
+        for signal in rule_signals
+    )
+
+
+def _ml_candidate_covered_by_rule_signal(
+    prompt_text: str,
+    start: int,
+    end: int,
+    signal: SafetySignal,
+) -> bool:
+    if start < signal.end and signal.start < end:
+        return True
+    if signal.detector_type != "person_name" or end > signal.start:
+        return False
+    gap = prompt_text[end : signal.start]
+    return re.fullmatch(r"[\s:=\"'-]*", gap) is not None
 
 
 def _offset_detection(
@@ -447,3 +681,7 @@ def _model_ids(model_id: str, additional_model_ids: tuple[str, ...]) -> tuple[st
     if not ordered:
         return (AI_SAFETY_DETECTOR_MODEL_ID,)
     return tuple(ordered)
+
+
+def _positive_int(value: int, fallback: int) -> int:
+    return value if value > 0 else fallback
