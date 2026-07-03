@@ -83,7 +83,7 @@ AI_SERVICE_LLM_CLASSIFIER_TEMPERATURE=0
 AI_SERVICE_LLM_CLASSIFIER_MAX_TOKENS=192
 ```
 
-The classifier receives only candidate windows selected by the sidecar, capped by the configured window size and count. The sidecar discards invalid JSON, unsupported detector/action/reason codes, timeouts, and local vLLM errors. It stores or returns only sanitized detector labels such as `source=llm_classifier`, `detectorType`, `action`, `mode`, and optional confidence.
+The classifier receives only candidate windows selected by the sidecar, capped by the configured window size and count. Candidate extraction prefers sentence or line boundaries, then selects up to the configured count by risk priority and original order. Keep the default capped path for Gateway-adjacent shadow use; a future "send all candidate windows" mode should be debug/eval-only, not a hot-path default. Its raw JSON output must match `docs/ai-safety-lab/schemas/llm-classifier-output.schema.json`: a single object with a `detections` array, exact detection keys, enum detector/action/reason codes, and numeric confidence. If no allowed `detectorType` fits, the classifier must return an empty `detections` array instead of an unknown fallback. The sidecar discards invalid JSON, extra fields, unsupported detector/action/reason codes, timeouts, and local vLLM errors. It stores or returns only sanitized detector labels such as `source=llm_classifier`, `detectorType`, `action`, `mode`, and optional confidence.
 
 ## AI Safety Detector Sidecar
 

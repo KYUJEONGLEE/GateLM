@@ -13,6 +13,16 @@ DEFAULT_LLM_CLASSIFIER_MODEL = "kakaocorp/kanana-1.5-8b-instruct-2505"
 DEFAULT_LLM_CLASSIFIER_TIMEOUT_MS = 1000
 DEFAULT_LLM_CLASSIFIER_TEMPERATURE = 0.0
 DEFAULT_LLM_CLASSIFIER_MAX_TOKENS = 192
+MAX_LLM_CLASSIFIER_DETECTIONS_PER_WINDOW = 8
+LLM_CLASSIFIER_PAYLOAD_KEYS = frozenset({"detections"})
+LLM_CLASSIFIER_DETECTION_KEYS = frozenset(
+    {
+        "detectorType",
+        "action",
+        "confidence",
+        "reasonCode",
+    }
+)
 
 ALLOWED_LLM_CLASSIFIER_DETECTOR_TYPES = frozenset(
     {
@@ -26,7 +36,6 @@ ALLOWED_LLM_CLASSIFIER_DETECTOR_TYPES = frozenset(
         "resident_registration_number",
         "secret",
         "sensitive_health_context",
-        "unknown_pii",
     }
 )
 ALLOWED_LLM_CLASSIFIER_ACTIONS = frozenset({"allow", "redact", "block"})
@@ -123,17 +132,24 @@ def parse_llm_classifier_content(content: str) -> tuple[LLMClassification, ...]:
         return ()
     if not isinstance(payload, dict):
         return ()
+    if set(payload) != LLM_CLASSIFIER_PAYLOAD_KEYS:
+        return ()
     detections = payload.get("detections")
     if not isinstance(detections, list):
+        return ()
+    if len(detections) > MAX_LLM_CLASSIFIER_DETECTIONS_PER_WINDOW:
         return ()
 
     parsed: list[LLMClassification] = []
     for item in detections:
         if not isinstance(item, dict):
-            continue
+            return ()
+        if set(item) != LLM_CLASSIFIER_DETECTION_KEYS:
+            return ()
         detection = _parse_detection(item)
-        if detection is not None:
-            parsed.append(detection)
+        if detection is None:
+            return ()
+        parsed.append(detection)
     return tuple(parsed)
 
 
@@ -163,14 +179,13 @@ def _parse_detection(item: dict[str, Any]) -> LLMClassification | None:
 def _normalized_string(value: object) -> str:
     if not isinstance(value, str):
         return ""
-    return value.strip()
+    return value
 
 
 def _normalized_confidence(value: object) -> float | None:
-    try:
-        confidence = float(value)
-    except (TypeError, ValueError):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
+    confidence = float(value)
     if not math.isfinite(confidence):
         return None
     if confidence < 0 or confidence > 1:
@@ -187,7 +202,13 @@ def _chat_completions_url(base_url: str) -> str:
 def _system_prompt() -> str:
     return (
         "Classify the provided candidate window for GateLM AI safety shadow evidence. "
-        "Return exactly one JSON object with a detections array. "
-        "Each detection must use detectorType, action, confidence, and reasonCode. "
+        "Return exactly one JSON object matching this shape: "
+        '{"detections":[{"detectorType":"person_name","action":"redact",'
+        '"confidence":0.92,"reasonCode":"single_person_name_context"}]}. '
+        "Use only these top-level keys: detections. "
+        "Each detection must use exactly these keys: detectorType, action, confidence, reasonCode. "
+        "Use confidence as a JSON number between 0 and 1, not a string. "
+        "Use only allowed actions: allow, redact, block. "
+        "If no allowed detectorType fits the candidate window, return an empty detections array. "
         "Do not include source text, spans, offsets, explanations, or raw values."
     )

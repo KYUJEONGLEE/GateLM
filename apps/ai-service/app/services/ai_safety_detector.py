@@ -148,6 +148,51 @@ LLM_CANDIDATE_PATTERNS = (
     KOREAN_PERSON_CANDIDATE_PATTERN,
     ROLE_CONTEXT_PATTERN,
 )
+LLM_WINDOW_BOUNDARY_CHARS = frozenset(".!?\n\r\u3002\uff01\uff1f")
+LLM_ADJACENT_CONTEXT_MAX_CHARS = 240
+LLM_PRIORITY_CRITICAL = 0
+LLM_PRIORITY_CONTEXTUAL_SENSITIVE = 1
+LLM_PRIORITY_AMBIGUOUS_PII = 2
+LLM_PRIORITY_GENERAL_CONTEXT = 3
+LLM_SIGNAL_PRIORITY_BY_DETECTOR_TYPE = {
+    "account_number": LLM_PRIORITY_CRITICAL,
+    "password_assignment": LLM_PRIORITY_CRITICAL,
+    "private_url": LLM_PRIORITY_CRITICAL,
+    "resident_registration_number": LLM_PRIORITY_CRITICAL,
+    "secret": LLM_PRIORITY_CRITICAL,
+    "sensitive_health_context": LLM_PRIORITY_CONTEXTUAL_SENSITIVE,
+    "confidential_business_context": LLM_PRIORITY_CONTEXTUAL_SENSITIVE,
+    "account_id": LLM_PRIORITY_AMBIGUOUS_PII,
+    "person_name": LLM_PRIORITY_AMBIGUOUS_PII,
+    "postal_address": LLM_PRIORITY_AMBIGUOUS_PII,
+    "private_date": LLM_PRIORITY_AMBIGUOUS_PII,
+}
+LLM_CRITICAL_CONTEXT_KEYWORDS = (
+    "accountnumber",
+    "bank",
+    "password",
+    "reset",
+    "secret",
+    "token",
+    "url",
+    "\uacc4\uc88c",
+    "\ube44\ubc00\ubc88\ud638",
+    "\ube44\ubc88",
+    "\uc8fc\ubbfc\ubc88\ud638",
+    "\uc8fc\ubbfc\ub4f1\ub85d\ubc88\ud638",
+    "\ud1a0\ud070",
+)
+LLM_CONTEXTUAL_SENSITIVE_KEYWORDS = (
+    "confidential",
+    "health",
+    "internal",
+    "medicine",
+    "policy",
+    "\uacf5\uac1c\uc804",
+    "\ub0b4\ubd80",
+    "\uc57d",
+    "\uc6b0\uc6b8\uc99d",
+)
 
 
 @dataclass(frozen=True)
@@ -155,6 +200,21 @@ class MlWindow:
     start: int
     end: int
     text: str
+
+
+@dataclass(frozen=True)
+class LlmCandidateSpan:
+    start: int
+    end: int
+    priority: int
+
+
+@dataclass(frozen=True)
+class LlmCandidateWindow:
+    start: int
+    end: int
+    priority: int
+    first_candidate_start: int
 
 
 class LLMClassifier(Protocol):
@@ -516,55 +576,237 @@ def _llm_candidate_windows(
     if not spans:
         return ()
 
-    raw_windows: list[tuple[int, int]] = []
-    half_window = max(1, window_max_chars // 2)
-    for start, end in spans:
-        if start < 0 or end <= start or end > len(prompt_text):
+    raw_windows: list[LlmCandidateWindow] = []
+    for span in spans:
+        if span.start < 0 or span.end <= span.start or span.end > len(prompt_text):
             continue
-        center = start + ((end - start) // 2)
-        window_start = max(0, center - half_window)
-        window_end = min(len(prompt_text), window_start + window_max_chars)
-        window_start = max(0, window_end - window_max_chars)
-        raw_windows.append((window_start, window_end))
+        window_start, window_end = _llm_window_range_for_span(
+            prompt_text,
+            span.start,
+            span.end,
+            window_max_chars,
+        )
+        raw_windows.append(
+            LlmCandidateWindow(
+                start=window_start,
+                end=window_end,
+                priority=span.priority,
+                first_candidate_start=span.start,
+            )
+        )
 
-    windows = _merged_limited_windows(raw_windows, window_max_chars)
+    windows = sorted(
+        _merged_limited_windows(raw_windows, window_max_chars),
+        key=lambda window: (
+            window.priority,
+            window.first_candidate_start,
+            window.start,
+            window.end,
+        ),
+    )
     return tuple(
-        MlWindow(start, end, prompt_text[start:end])
-        for start, end in windows[:window_max_count]
-        if start < end
+        MlWindow(window.start, window.end, prompt_text[window.start : window.end])
+        for window in windows[:window_max_count]
+        if window.start < window.end
     )
 
 
 def _llm_candidate_spans(
     prompt_text: str,
     detector_signals: list[SafetySignal],
-) -> list[tuple[int, int]]:
+) -> list[LlmCandidateSpan]:
     spans = [
-        (signal.start, signal.end)
+        LlmCandidateSpan(
+            start=signal.start,
+            end=signal.end,
+            priority=_llm_signal_priority(signal.detector_type),
+        )
         for signal in detector_signals
         if signal.detector_type not in LLM_DETERMINISTIC_RULE_DETECTOR_TYPES
     ]
-    for pattern in LLM_CANDIDATE_PATTERNS:
-        spans.extend(match.span() for match in pattern.finditer(prompt_text))
+    for match in LLM_CONTEXT_PATTERN.finditer(prompt_text):
+        spans.append(
+            LlmCandidateSpan(
+                start=match.start(),
+                end=match.end(),
+                priority=_llm_context_priority(prompt_text, match.start(), match.end()),
+            )
+        )
+    for pattern in (TITLE_CASE_PERSON_CANDIDATE_PATTERN, KOREAN_PERSON_CANDIDATE_PATTERN, ROLE_CONTEXT_PATTERN):
+        spans.extend(
+            LlmCandidateSpan(
+                start=match.start(),
+                end=match.end(),
+                priority=LLM_PRIORITY_AMBIGUOUS_PII,
+            )
+            for match in pattern.finditer(prompt_text)
+        )
     return spans
 
 
 def _merged_limited_windows(
-    windows: Iterable[tuple[int, int]],
+    windows: Iterable[LlmCandidateWindow],
     window_max_chars: int,
-) -> list[tuple[int, int]]:
-    merged: list[tuple[int, int]] = []
-    for start, end in sorted(windows):
-        if not merged or start > merged[-1][1]:
-            merged.append((start, end))
+) -> list[LlmCandidateWindow]:
+    merged: list[LlmCandidateWindow] = []
+    for window in sorted(windows, key=lambda item: (item.start, item.end)):
+        if not merged or window.start > merged[-1].end:
+            merged.append(window)
             continue
-        previous_start, previous_end = merged[-1]
-        candidate_end = max(previous_end, end)
-        if candidate_end - previous_start <= window_max_chars:
-            merged[-1] = (previous_start, candidate_end)
+        previous = merged[-1]
+        candidate_end = max(previous.end, window.end)
+        if candidate_end - previous.start <= window_max_chars:
+            merged[-1] = LlmCandidateWindow(
+                start=previous.start,
+                end=candidate_end,
+                priority=min(previous.priority, window.priority),
+                first_candidate_start=min(previous.first_candidate_start, window.first_candidate_start),
+            )
             continue
-        merged.append((start, end))
+        merged.append(window)
     return merged
+
+
+def _llm_window_range_for_span(
+    prompt_text: str,
+    start: int,
+    end: int,
+    window_max_chars: int,
+) -> tuple[int, int]:
+    sentence_start, sentence_end = _llm_sentence_or_line_range(prompt_text, start, end)
+    if sentence_end - sentence_start > window_max_chars:
+        return _centered_window_range(prompt_text, start, end, window_max_chars)
+    return _expand_llm_context_range(prompt_text, sentence_start, sentence_end, window_max_chars)
+
+
+def _llm_sentence_or_line_range(
+    prompt_text: str,
+    start: int,
+    end: int,
+) -> tuple[int, int]:
+    window_start = 0
+    for index in range(start - 1, -1, -1):
+        if prompt_text[index] in LLM_WINDOW_BOUNDARY_CHARS:
+            window_start = index + 1
+            break
+
+    window_end = len(prompt_text)
+    for index in range(end, len(prompt_text)):
+        if prompt_text[index] in LLM_WINDOW_BOUNDARY_CHARS:
+            window_end = index + 1
+            break
+
+    return _trim_window_range(prompt_text, window_start, window_end)
+
+
+def _expand_llm_context_range(
+    prompt_text: str,
+    start: int,
+    end: int,
+    window_max_chars: int,
+) -> tuple[int, int]:
+    window_start = start
+    window_end = end
+
+    previous_range = _previous_llm_context_range(prompt_text, window_start)
+    if previous_range is not None:
+        previous_start, previous_end = previous_range
+        if (
+            previous_end - previous_start <= LLM_ADJACENT_CONTEXT_MAX_CHARS
+            and window_end - previous_start <= window_max_chars
+        ):
+            window_start = previous_start
+
+    next_range = _next_llm_context_range(prompt_text, window_end)
+    if next_range is not None:
+        next_start, next_end = next_range
+        if (
+            next_end - next_start <= LLM_ADJACENT_CONTEXT_MAX_CHARS
+            and next_end - window_start <= window_max_chars
+        ):
+            window_end = next_end
+
+    return window_start, window_end
+
+
+def _previous_llm_context_range(prompt_text: str, start: int) -> tuple[int, int] | None:
+    end = start
+    while end > 0 and prompt_text[end - 1].isspace():
+        end -= 1
+    if end <= 0:
+        return None
+
+    previous_start = 0
+    for index in range(end - 2, -1, -1):
+        if prompt_text[index] in LLM_WINDOW_BOUNDARY_CHARS:
+            previous_start = index + 1
+            break
+    previous_start, previous_end = _trim_window_range(prompt_text, previous_start, end)
+    if previous_start >= previous_end:
+        return None
+    return previous_start, previous_end
+
+
+def _next_llm_context_range(prompt_text: str, end: int) -> tuple[int, int] | None:
+    start = end
+    while start < len(prompt_text) and prompt_text[start].isspace():
+        start += 1
+    if start >= len(prompt_text):
+        return None
+
+    next_end = len(prompt_text)
+    for index in range(start + 1, len(prompt_text)):
+        if prompt_text[index] in LLM_WINDOW_BOUNDARY_CHARS:
+            next_end = index + 1
+            break
+    next_start, next_end = _trim_window_range(prompt_text, start, next_end)
+    if next_start >= next_end:
+        return None
+    return next_start, next_end
+
+
+def _centered_window_range(
+    prompt_text: str,
+    start: int,
+    end: int,
+    window_max_chars: int,
+) -> tuple[int, int]:
+    half_window = max(1, window_max_chars // 2)
+    center = start + ((end - start) // 2)
+    window_start = max(0, center - half_window)
+    window_end = min(len(prompt_text), window_start + window_max_chars)
+    window_start = max(0, window_end - window_max_chars)
+    return window_start, window_end
+
+
+def _trim_window_range(prompt_text: str, start: int, end: int) -> tuple[int, int]:
+    while start < end and prompt_text[start].isspace():
+        start += 1
+    while end > start and prompt_text[end - 1].isspace():
+        end -= 1
+    return start, end
+
+
+def _llm_signal_priority(detector_type: str) -> int:
+    return LLM_SIGNAL_PRIORITY_BY_DETECTOR_TYPE.get(
+        detector_type,
+        LLM_PRIORITY_GENERAL_CONTEXT,
+    )
+
+
+def _llm_context_priority(prompt_text: str, start: int, end: int) -> int:
+    sentence_start, sentence_end = _llm_sentence_or_line_range(prompt_text, start, end)
+    normalized_context = _normalized_llm_context(prompt_text[sentence_start:sentence_end])
+    if any(keyword in normalized_context for keyword in LLM_CRITICAL_CONTEXT_KEYWORDS):
+        return LLM_PRIORITY_CRITICAL
+    if any(keyword in normalized_context for keyword in LLM_CONTEXTUAL_SENSITIVE_KEYWORDS):
+        return LLM_PRIORITY_CONTEXTUAL_SENSITIVE
+    return LLM_PRIORITY_GENERAL_CONTEXT
+
+
+def _normalized_llm_context(value: str) -> str:
+    lowered = value.lower()
+    return "".join(char for char in lowered if not char.isspace() and char not in "_-")
 
 
 def _dedupe_llm_classifications(
