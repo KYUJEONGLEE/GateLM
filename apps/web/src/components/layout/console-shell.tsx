@@ -185,12 +185,14 @@ export function ConsoleShell({
     getActiveOpenSections(activeSection)
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isTenantSettingsOpen, setIsTenantSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
   useEffect(() => {
     const storedOpenSections = readStoredOpenSections();
     setOpenSections(mergeOpenSections(storedOpenSections ?? [], getActiveOpenSections(activeSection)));
+    setIsMobileNavigationOpen(false);
   }, [activeSection]);
 
   useEffect(() => {
@@ -208,11 +210,20 @@ export function ConsoleShell({
   }, []);
 
   function toggleSidebar() {
+    if (isMobileViewport()) {
+      setIsMobileNavigationOpen((current) => !current);
+      return;
+    }
+
     setIsSidebarCollapsed((current) => {
       const next = !current;
       writeStoredSidebarCollapsed(next);
       return next;
     });
+  }
+
+  function closeMobileNavigation() {
+    setIsMobileNavigationOpen(false);
   }
 
   function selectTheme(nextTheme: ConsoleTheme) {
@@ -269,6 +280,7 @@ export function ConsoleShell({
           data-active={isChildActive(child)}
           href={child.path(tenantId)}
           key={child.item}
+          onClick={closeMobileNavigation}
         >
           {childLabel}
         </Link>
@@ -277,7 +289,34 @@ export function ConsoleShell({
   }
 
   return (
-    <div className="console-shell" data-sidebar-collapsed={isSidebarCollapsed}>
+    <div
+      className="console-shell"
+      data-mobile-nav-open={isMobileNavigationOpen}
+      data-sidebar-collapsed={isSidebarCollapsed}
+    >
+      <header className="console-mobile-topbar">
+        <button
+          aria-expanded={isMobileNavigationOpen}
+          aria-label={isMobileNavigationOpen ? text.collapseNavigation : text.expandNavigation}
+          className="console-sidebar-toggle"
+          onClick={toggleSidebar}
+          type="button"
+        >
+          <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
+        </button>
+        <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+          <span className="console-brand-mark">G</span>
+          <span className="console-brand-copy">
+            <strong>GateLM</strong>
+          </span>
+        </Link>
+      </header>
+      <button
+        aria-label={text.collapseNavigation}
+        className="console-mobile-nav-backdrop"
+        onClick={closeMobileNavigation}
+        type="button"
+      />
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
           <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
@@ -349,6 +388,7 @@ export function ConsoleShell({
                   className="console-nav-link"
                   data-active={item.section === activeSection}
                   href={item.path(tenantId)}
+                  onClick={closeMobileNavigation}
                 >
                   <span>{label}</span>
                 </Link>
@@ -503,6 +543,10 @@ function writeStoredSidebarCollapsed(isCollapsed: boolean) {
   }
 
   window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+}
+
+function isMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 1100px)").matches;
 }
 
 function readDocumentTheme(): ConsoleTheme {
