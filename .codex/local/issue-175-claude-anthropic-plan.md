@@ -32,6 +32,16 @@ Related: PR #178 merged Gemini through `openai_compatible`.
   `apps/gateway-core/internal/adapters/providers/anthropic`.
 - Convert Chat Completions messages to Anthropic Messages request.
 - Normalize Anthropic text response and usage into GateLM Chat Completions.
+- Keep Claude default-disabled in seed/Web presets until Anthropic API billing
+  can run live completion smoke reliably.
+
+## Verification Notes
+
+- Unit/typecheck coverage passed for adapter, Control Plane, and Web paths.
+- Live model listing reached Anthropic, but Messages completion is externally
+  blocked by account billing/credit state.
+- Gateway safely maps the upstream billing/auth rejection to
+  `provider_unauthorized` without exposing provider raw error bodies.
 
 ## Security
 
