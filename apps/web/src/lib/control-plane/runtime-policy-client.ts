@@ -572,6 +572,11 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     },
     configVersion,
     effectiveAt: new Date().toISOString(),
+    promptCapturePolicy: {
+      enabled: values.promptCaptureEnabled,
+      maxChars: values.promptCaptureMaxChars,
+      mode: values.promptCaptureEnabled ? "log_safe_full" : "disabled"
+    },
     rateLimit: {
       enabled: values.rateLimitEnabled,
       limit: values.rateLimitLimit

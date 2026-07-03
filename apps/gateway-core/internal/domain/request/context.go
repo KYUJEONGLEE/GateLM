@@ -56,6 +56,8 @@ type RuntimeContext struct {
 	HasRoutingPolicy   bool
 	CachePolicy        runtimeconfig.CachePolicy
 	HasCachePolicy     bool
+	PromptCapture      runtimeconfig.PromptCapturePolicy
+	HasPromptCapture   bool
 }
 
 type GovernanceContext struct {

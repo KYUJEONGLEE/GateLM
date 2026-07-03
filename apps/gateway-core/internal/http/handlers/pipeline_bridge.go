@@ -53,6 +53,8 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			HasRoutingPolicy:   reqCtx.HasRuntimeRoutingPolicy,
 			CachePolicy:        reqCtx.RuntimeCachePolicy,
 			HasCachePolicy:     reqCtx.HasRuntimeCachePolicy,
+			PromptCapture:      reqCtx.RuntimePromptCapture,
+			HasPromptCapture:   reqCtx.HasRuntimePromptCapture,
 		},
 		Governance: request.GovernanceContext{
 			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
@@ -144,6 +146,10 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Runtime.HasCachePolicy {
 		reqCtx.RuntimeCachePolicy = gatewayCtx.Runtime.CachePolicy
 		reqCtx.HasRuntimeCachePolicy = true
+	}
+	if gatewayCtx.Runtime.HasPromptCapture {
+		reqCtx.RuntimePromptCapture = gatewayCtx.Runtime.PromptCapture
+		reqCtx.HasRuntimePromptCapture = true
 	}
 
 	if gatewayCtx.Governance.RateLimitDecision != nil {

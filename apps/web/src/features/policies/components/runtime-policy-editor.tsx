@@ -66,6 +66,9 @@ const policyText: Record<
     policyDetails: string;
     pricing: string;
     pricingVersion: string;
+    promptCapture: string;
+    promptCaptureEnabled: string;
+    promptCaptureMaxChars: string;
     promptPrice: string;
     provider: string;
     providerCount: string;
@@ -120,6 +123,9 @@ const policyText: Record<
     policyDetails: "Policy details",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    promptCapture: "Prompt capture",
+    promptCaptureEnabled: "Log-safe capture",
+    promptCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
     providerCount: "Providers",
@@ -173,6 +179,9 @@ const policyText: Record<
     policyDetails: "정책 상세",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    promptCapture: "프롬프트 캡처",
+    promptCaptureEnabled: "로그 안전 캡처",
+    promptCaptureMaxChars: "최대 글자 수",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
     providerCount: "Providers",
@@ -482,6 +491,37 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
               />
             ))}
           </div>
+        </article>
+
+        <article className="console-panel policy-editor-panel">
+          <div className="panel-heading">
+            <h3>{text.promptCapture}</h3>
+          </div>
+          <label className="policy-toggle-row">
+            <input
+              checked={draftValues.promptCaptureEnabled}
+              onChange={(event) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  promptCaptureEnabled: event.target.checked
+                }))
+              }
+              type="checkbox"
+            />
+            <span>{text.promptCaptureEnabled}</span>
+          </label>
+          <PolicyNumberField
+            label={text.promptCaptureMaxChars}
+            max={20000}
+            min={1}
+            onChange={(value) =>
+              setDraftValues((current) => ({
+                ...current,
+                promptCaptureMaxChars: value
+              }))
+            }
+            value={draftValues.promptCaptureMaxChars}
+          />
         </article>
 
         <article className="console-panel policy-editor-panel">
@@ -797,6 +837,14 @@ function RuntimeSnapshotDetail({
           <dd>
             exact {formatEnabled(snapshot.policies.cache.exactCacheEnabled)} / semantic{" "}
             {snapshot.policies.cache.semanticCacheMode}
+          </dd>
+        </div>
+        <div>
+          <dt>{text.promptCapture}</dt>
+          <dd>
+            {formatEnabled(snapshot.policies.promptCapture?.enabled ?? false)} /{" "}
+            {snapshot.policies.promptCapture?.mode ?? "disabled"} / max{" "}
+            {snapshot.policies.promptCapture?.maxChars ?? 8000}
           </dd>
         </div>
         <div>

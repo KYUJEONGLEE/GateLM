@@ -264,6 +264,7 @@ type requestDetailDataResponse struct {
 	Routing         routingResponse                    `json:"routing"`
 	Masking         maskingResponse                    `json:"masking"`
 	SafetySummary   safetySummaryResponse              `json:"safetySummary"`
+	PromptCapture   promptCaptureResponse              `json:"promptCapture"`
 	Error           detailErrorResponse                `json:"error"`
 	CreatedAt       time.Time                          `json:"createdAt"`
 	CompletedAt     *time.Time                         `json:"completedAt"`
@@ -364,6 +365,15 @@ type safetySummaryResponse struct {
 	PolicyAllowedTypes      []string `json:"policyAllowedTypes"`
 	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes"`
 	MaskingAction           string   `json:"maskingAction"`
+}
+
+type promptCaptureResponse struct {
+	Enabled        bool    `json:"enabled"`
+	Mode           string  `json:"mode"`
+	Visibility     string  `json:"visibility"`
+	CapturedPrompt *string `json:"capturedPrompt"`
+	Truncated      bool    `json:"truncated"`
+	MaxChars       int     `json:"maxChars"`
 }
 
 type detailErrorResponse struct {
@@ -705,6 +715,7 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			MandatoryProtectedTypes: append([]string(nil), detail.SafetySummary.MandatoryProtectedTypes...),
 			MaskingAction:           detail.SafetySummary.MaskingAction,
 		},
+		PromptCapture: promptCaptureResponseFromDomain(detail.PromptCapture),
 		Error: detailErrorResponse{
 			ErrorCode:    stringPointerOrNil(detail.Error.ErrorCode),
 			ErrorMessage: stringPointerOrNil(detail.Error.ErrorMessage),
@@ -955,6 +966,30 @@ func runtimeSnapshotResponse(snapshot *runtimeconfig.RuntimeSnapshotProvenance) 
 		}
 	}
 	return response
+}
+
+func promptCaptureResponseFromDomain(fields invocationlog.PromptCaptureFields) promptCaptureResponse {
+	if strings.TrimSpace(fields.Mode) == "" {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+	}
+	if strings.TrimSpace(fields.Visibility) == "" {
+		fields.Visibility = invocationlog.PromptCaptureVisibilityAdminRequestDetail
+	}
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	var capturedPrompt *string
+	if fields.Enabled && strings.TrimSpace(fields.CapturedPrompt) != "" {
+		capturedPrompt = stringPointerOrNil(fields.CapturedPrompt)
+	}
+	return promptCaptureResponse{
+		Enabled:        fields.Enabled,
+		Mode:           fields.Mode,
+		Visibility:     fields.Visibility,
+		CapturedPrompt: capturedPrompt,
+		Truncated:      fields.Truncated,
+		MaxChars:       fields.MaxChars,
+	}
 }
 
 func copyInt64Map(values map[string]int64) map[string]int64 {

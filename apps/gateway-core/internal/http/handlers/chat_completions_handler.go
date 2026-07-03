@@ -2699,6 +2699,8 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		SecurityPolicyVersionID:     reqCtx.SecurityPolicyVersionID,
 		DomainOutcomes:              reqCtx.DomainOutcomes,
 		RedactedPromptForHash:       redactedPrompt,
+		PromptCapturePolicy:         promptCapturePolicyForLog(reqCtx),
+		CapturedPrompt:              redactedPrompt,
 		StartedAt:                   startedAt,
 		CompletedAt:                 completedAt,
 	}))
@@ -2710,6 +2712,13 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 			sanitizeLogValue(err.Error()),
 		)
 	}
+}
+
+func promptCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.PromptCapturePolicy {
+	if reqCtx == nil || !reqCtx.HasRuntimePromptCapture {
+		return runtimeconfig.DefaultPromptCapturePolicy()
+	}
+	return reqCtx.RuntimePromptCapture
 }
 
 func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {

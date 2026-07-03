@@ -39,6 +39,8 @@ type RequestContext struct {
 	HasRuntimeRoutingPolicy bool
 	RuntimeCachePolicy      runtimeconfig.CachePolicy
 	HasRuntimeCachePolicy   bool
+	RuntimePromptCapture    runtimeconfig.PromptCapturePolicy
+	HasRuntimePromptCapture bool
 
 	RateLimitDecision *ratelimit.Decision
 	BudgetDecision    *budget.Decision

@@ -7,6 +7,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
 func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
@@ -103,6 +104,73 @@ func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
 		legacyHashes["securityPolicyHash"] != "hash_security_policy_test" ||
 		legacyHashes["routingPolicyHash"] != "route_p0_v1" {
 		t.Fatalf("unexpected legacy hash bridge: %+v", legacyHashes)
+	}
+}
+
+func TestBuildTerminalLogStoresLogSafePromptCaptureWhenEnabled(t *testing.T) {
+	startedAt := time.Date(2026, 7, 3, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:             "request_prompt_capture",
+		ApplicationID:         "app_demo",
+		Status:                StatusSuccess,
+		HTTPStatus:            200,
+		MaskingAction:         "redacted",
+		RedactedPromptPreview: "문의: [EMAIL_REDACTED]",
+		RedactedPromptForHash: "문의: [EMAIL_REDACTED]",
+		PromptCapturePolicy: runtimeconfig.PromptCapturePolicy{
+			Enabled:  true,
+			Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+			MaxChars: 5,
+		},
+		CapturedPrompt: "문의: [EMAIL_REDACTED]",
+		StartedAt:      startedAt,
+		CompletedAt:    startedAt.Add(10 * time.Millisecond),
+	})
+
+	capture, ok := log.Metadata["promptCapture"].(PromptCaptureFields)
+	if !ok {
+		t.Fatalf("expected prompt capture metadata, got %+v", log.Metadata["promptCapture"])
+	}
+	if !capture.Enabled ||
+		capture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
+		capture.Visibility != PromptCaptureVisibilityAdminRequestDetail ||
+		capture.CapturedPrompt != "문의: [" ||
+		!capture.Truncated ||
+		capture.MaxChars != 5 {
+		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+}
+
+func TestBuildTerminalLogSkipsPromptCaptureBeforeMaskingOrWhenDisabled(t *testing.T) {
+	startedAt := time.Date(2026, 7, 3, 1, 2, 3, 0, time.UTC)
+	disabled := BuildTerminalLog(TerminalLogInput{
+		RequestID:      "request_prompt_capture_disabled",
+		ApplicationID:  "app_demo",
+		Status:         StatusSuccess,
+		HTTPStatus:     200,
+		CapturedPrompt: "문의: [EMAIL_REDACTED]",
+		StartedAt:      startedAt,
+		CompletedAt:    startedAt.Add(10 * time.Millisecond),
+	})
+	if _, exists := disabled.Metadata["promptCapture"]; exists {
+		t.Fatalf("disabled prompt capture must not be stored: %+v", disabled.Metadata)
+	}
+
+	preMasking := BuildTerminalLog(TerminalLogInput{
+		RequestID:     "request_prompt_capture_premasking",
+		ApplicationID: "app_demo",
+		Status:        StatusRateLimited,
+		HTTPStatus:    429,
+		PromptCapturePolicy: runtimeconfig.PromptCapturePolicy{
+			Enabled:  true,
+			Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+			MaxChars: 8000,
+		},
+		StartedAt:   startedAt,
+		CompletedAt: startedAt.Add(10 * time.Millisecond),
+	})
+	if _, exists := preMasking.Metadata["promptCapture"]; exists {
+		t.Fatalf("pre-masking terminal path must not store prompt capture: %+v", preMasking.Metadata)
 	}
 }
 

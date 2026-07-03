@@ -152,12 +152,13 @@ type runtimeSnapshotBudget struct {
 }
 
 type runtimeSnapshotPolicies struct {
-	Safety    runtimeSnapshotSafetyPolicy    `json:"safety"`
-	Routing   runtimeSnapshotRoutingPolicy   `json:"routing"`
-	Cache     runtimeSnapshotCachePolicy     `json:"cache"`
-	RateLimit runtimeSnapshotRateLimitPolicy `json:"rateLimit"`
-	Budget    runtimeSnapshotBudgetPolicy    `json:"budget"`
-	Fallback  runtimeSnapshotFallbackPolicy  `json:"fallback"`
+	Safety        runtimeSnapshotSafetyPolicy        `json:"safety"`
+	Routing       runtimeSnapshotRoutingPolicy       `json:"routing"`
+	Cache         runtimeSnapshotCachePolicy         `json:"cache"`
+	RateLimit     runtimeSnapshotRateLimitPolicy     `json:"rateLimit"`
+	Budget        runtimeSnapshotBudgetPolicy        `json:"budget"`
+	Fallback      runtimeSnapshotFallbackPolicy      `json:"fallback"`
+	PromptCapture runtimeSnapshotPromptCapturePolicy `json:"promptCapture"`
 }
 
 type runtimeSnapshotSafetyPolicy struct {
@@ -201,6 +202,12 @@ type runtimeSnapshotBudgetPolicy struct {
 type runtimeSnapshotFallbackPolicy struct {
 	FallbackProvider string `json:"fallbackProvider"`
 	FallbackModel    string `json:"fallbackModel"`
+}
+
+type runtimeSnapshotPromptCapturePolicy struct {
+	Enabled  bool   `json:"enabled"`
+	Mode     string `json:"mode"`
+	MaxChars int    `json:"maxChars"`
 }
 
 func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimeconfig.ExecutionSnapshot, error) {
@@ -287,6 +294,11 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Type:            cacheType,
 			CachePolicyHash: r.Policies.Cache.CachePolicyHash,
 		},
+		PromptCapture: runtimeconfig.NormalizePromptCapturePolicy(runtimeconfig.PromptCapturePolicy{
+			Enabled:  r.Policies.PromptCapture.Enabled,
+			Mode:     r.Policies.PromptCapture.Mode,
+			MaxChars: r.Policies.PromptCapture.MaxChars,
+		}),
 	}, nil
 }
 

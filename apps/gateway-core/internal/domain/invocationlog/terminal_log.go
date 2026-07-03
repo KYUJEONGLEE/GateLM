@@ -170,9 +170,22 @@ type TerminalLogInput struct {
 
 	RequestBodyHashMaterial string
 	RedactedPromptForHash   string
+	PromptCapturePolicy     runtimeconfig.PromptCapturePolicy
+	CapturedPrompt          string
 	DomainOutcomes          DomainOutcomes
 	StartedAt               time.Time
 	CompletedAt             time.Time
+}
+
+const PromptCaptureVisibilityAdminRequestDetail = "admin_request_detail"
+
+type PromptCaptureFields struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	Visibility     string `json:"visibility"`
+	CapturedPrompt string `json:"capturedPrompt"`
+	Truncated      bool   `json:"truncated"`
+	MaxChars       int    `json:"maxChars"`
 }
 
 type TerminalLogWriter interface {
@@ -287,6 +300,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if strings.TrimSpace(input.EmbeddingProvider) != "" {
 		metadata["embeddingProvider"] = strings.TrimSpace(input.EmbeddingProvider)
 	}
+	if promptCapture, ok := BuildPromptCaptureFields(input.PromptCapturePolicy, input.CapturedPrompt); ok {
+		metadata["promptCapture"] = promptCapture
+	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
 	metadata["providerCalled"] = terminalProviderCalled(input)
 
@@ -387,6 +403,27 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	return log
 }
 
+func BuildPromptCaptureFields(policy runtimeconfig.PromptCapturePolicy, logSafePrompt string) (PromptCaptureFields, bool) {
+	policy = runtimeconfig.NormalizePromptCapturePolicy(policy)
+	if !runtimeconfig.PromptCaptureAllowsLogSafeCapture(policy) {
+		return PromptCaptureFields{}, false
+	}
+	logSafePrompt = strings.TrimSpace(logSafePrompt)
+	if logSafePrompt == "" {
+		return PromptCaptureFields{}, false
+	}
+
+	truncatedPrompt, truncated := truncateRunes(logSafePrompt, policy.MaxChars)
+	return PromptCaptureFields{
+		Enabled:        true,
+		Mode:           policy.Mode,
+		Visibility:     PromptCaptureVisibilityAdminRequestDetail,
+		CapturedPrompt: truncatedPrompt,
+		Truncated:      truncated,
+		MaxChars:       policy.MaxChars,
+	}, true
+}
+
 func logHash(parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "sha256:" + hex.EncodeToString(sum[:])
@@ -412,4 +449,18 @@ func terminalProviderCalled(input TerminalLogInput) bool {
 		return true
 	}
 	return strings.TrimSpace(input.Provider) != "" || strings.TrimSpace(input.SelectedProvider) != ""
+}
+
+func truncateRunes(value string, maxRunes int) (string, bool) {
+	if maxRunes <= 0 {
+		return "", value != ""
+	}
+	count := 0
+	for i := range value {
+		if count == maxRunes {
+			return value[:i], true
+		}
+		count++
+	}
+	return value, false
 }

@@ -23,6 +23,10 @@ const (
 	RuntimeStateStaleSnapshotUsed  = "stale_snapshot_used"
 	DefaultGatewayInstanceIDCompat = "gateway_core_static"
 	DefaultPublishedByCompat       = "runtime_config_compat"
+
+	PromptCaptureModeDisabled    = "disabled"
+	PromptCaptureModeLogSafeFull = "log_safe_full"
+	PromptCaptureDefaultMaxChars = 8000
 )
 
 var (
@@ -31,6 +35,7 @@ var (
 	ErrMissingCredentialBinding = errors.New("runtime config credential binding is missing")
 	ErrInactiveConfig           = errors.New("runtime config is not active")
 	ErrMissingRuntimeHash       = errors.New("runtime config hash is missing")
+	ErrInvalidPromptCapture     = errors.New("runtime config prompt capture policy is invalid")
 	ErrInvalidSafetyPolicy      = errors.New("runtime config safety policy is invalid")
 )
 
@@ -64,6 +69,7 @@ type ActiveConfig struct {
 	SafetyPolicy  SafetyPolicy
 	RoutingPolicy RoutingPolicy
 	CachePolicy   CachePolicy
+	PromptCapture PromptCapturePolicy
 }
 
 type ExecutionSnapshot struct {
@@ -79,6 +85,7 @@ type ExecutionSnapshot struct {
 	SafetyPolicy  SafetyPolicy
 	RoutingPolicy RoutingPolicy
 	CachePolicy   CachePolicy
+	PromptCapture PromptCapturePolicy
 }
 
 type RuntimeSnapshotProvenance struct {
@@ -135,6 +142,12 @@ type CachePolicy struct {
 	CachePolicyHash string
 }
 
+type PromptCapturePolicy struct {
+	Enabled  bool
+	Mode     string
+	MaxChars int
+}
+
 func (c ActiveConfig) Normalize() ActiveConfig {
 	c.ConfigVersion = strings.TrimSpace(c.ConfigVersion)
 	c.ConfigHash = strings.TrimSpace(c.ConfigHash)
@@ -163,6 +176,7 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
 	c.CachePolicy.CachePolicyHash = strings.TrimSpace(c.CachePolicy.CachePolicyHash)
+	c.PromptCapture = NormalizePromptCapturePolicy(c.PromptCapture)
 	return c
 }
 
@@ -188,6 +202,9 @@ func (c ActiveConfig) ValidateActive() error {
 		c.AppTokenStatus != StatusActive {
 		return ErrInactiveConfig
 	}
+	if !IsValidPromptCapturePolicy(c.PromptCapture) {
+		return ErrInvalidPromptCapture
+	}
 	return nil
 }
 
@@ -212,6 +229,7 @@ func (c ActiveConfig) ExecutionSnapshot() ExecutionSnapshot {
 		SafetyPolicy:  c.SafetyPolicy,
 		RoutingPolicy: c.RoutingPolicy,
 		CachePolicy:   c.CachePolicy,
+		PromptCapture: c.PromptCapture,
 	}
 }
 
@@ -235,12 +253,52 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash)
 	s.CachePolicy.Type = strings.TrimSpace(s.CachePolicy.Type)
 	s.CachePolicy.CachePolicyHash = strings.TrimSpace(s.CachePolicy.CachePolicyHash)
+	s.PromptCapture = NormalizePromptCapturePolicy(s.PromptCapture)
 	s.Snapshot = s.Snapshot.Normalize(ActiveConfig{
 		ConfigHash:    s.ConfigHash,
 		SafetyPolicy:  s.SafetyPolicy,
 		RoutingPolicy: s.RoutingPolicy,
 	}, publishedAt, gatewayInstanceID)
 	return s
+}
+
+func DefaultPromptCapturePolicy() PromptCapturePolicy {
+	return PromptCapturePolicy{
+		Enabled:  false,
+		Mode:     PromptCaptureModeDisabled,
+		MaxChars: PromptCaptureDefaultMaxChars,
+	}
+}
+
+func NormalizePromptCapturePolicy(policy PromptCapturePolicy) PromptCapturePolicy {
+	policy.Mode = strings.TrimSpace(policy.Mode)
+	if policy.MaxChars <= 0 {
+		policy.MaxChars = PromptCaptureDefaultMaxChars
+	}
+	if !policy.Enabled {
+		policy.Mode = PromptCaptureModeDisabled
+		return policy
+	}
+	if policy.Mode == "" {
+		policy.Mode = PromptCaptureModeLogSafeFull
+	}
+	return policy
+}
+
+func PromptCaptureAllowsLogSafeCapture(policy PromptCapturePolicy) bool {
+	policy = NormalizePromptCapturePolicy(policy)
+	return policy.Enabled && policy.Mode == PromptCaptureModeLogSafeFull
+}
+
+func IsValidPromptCapturePolicy(policy PromptCapturePolicy) bool {
+	policy = NormalizePromptCapturePolicy(policy)
+	if policy.MaxChars <= 0 {
+		return false
+	}
+	if !policy.Enabled {
+		return policy.Mode == PromptCaptureModeDisabled
+	}
+	return policy.Mode == PromptCaptureModeLogSafeFull
 }
 
 func (s ExecutionSnapshot) Validate() error {
@@ -253,6 +311,9 @@ func (s ExecutionSnapshot) Validate() error {
 	}
 	if err := s.SafetyPolicy.Validate(); err != nil {
 		return err
+	}
+	if !IsValidPromptCapturePolicy(s.PromptCapture) {
+		return ErrInvalidPromptCapture
 	}
 	return nil
 }

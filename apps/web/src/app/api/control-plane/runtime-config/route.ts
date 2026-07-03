@@ -90,6 +90,11 @@ function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraft
     Array.isArray(record.detectors) &&
     Array.isArray(record.models) &&
     Array.isArray(record.pricingRules) &&
+    typeof record.promptCaptureEnabled === "boolean" &&
+    typeof record.promptCaptureMaxChars === "number" &&
+    Number.isInteger(record.promptCaptureMaxChars) &&
+    record.promptCaptureMaxChars >= 1 &&
+    record.promptCaptureMaxChars <= 20000 &&
     typeof record.rateLimitEnabled === "boolean" &&
     Number.isInteger(record.rateLimitLimit) &&
     typeof record.routingDefaultModel === "string" &&

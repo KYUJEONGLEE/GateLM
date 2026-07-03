@@ -25,7 +25,7 @@ v2.0.0은 v1.0.0 baseline을 깨지 않고 다음을 확장한다.
 - Provider별 호출 로직은 Provider Adapter 안에 둔다.
 - Gateway는 editable RuntimeConfig를 직접 소비하지 않고 published RuntimeSnapshot만 소비한다.
 - Observability는 Gateway가 생산한 outcome을 저장/집계한다. Observability가 stage outcome을 새로 추측하지 않는다.
-- Request Log, Request Detail, Dashboard, Metrics는 raw prompt/raw response/raw credential을 저장하거나 출력하지 않는다.
+- Request Log, Request Detail, Dashboard, Metrics는 raw prompt/raw response/raw credential을 저장하거나 출력하지 않는다. 단, Request Detail은 RuntimeSnapshot의 opt-in 정책이 켜진 경우 masking 이후 log-safe captured prompt만 표시할 수 있다.
 - Client request body에서 넘어온 budget scope는 신뢰하지 않는다.
 
 ### 2.2 MUST NOT
@@ -138,7 +138,7 @@ Employee Browser
 | Surface | Show | Hide |
 |---|---|---|
 | Employee UI | response, requestId, simple status | raw token, detector detail, raw prompt/response, policy internals |
-| Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance | raw secret, raw prompt/response, provider raw error body |
+| Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance, opt-in log-safe captured prompt | raw secret, raw prompt/response, provider raw error body |
 
 ## 5. RuntimeConfig And RuntimeSnapshot
 
@@ -524,6 +524,8 @@ Redaction 이후 cache/evidence 입력으로 사용할 수 있는 값은 raw pro
 
 Safety result는 raw value, raw offset, raw prompt fragment를 포함하지 않는다.
 
+Prompt Capture는 RuntimeSnapshot `policies.promptCapture.enabled=true`이고 `mode=log_safe_full`일 때만 Request Detail metadata에 저장할 수 있다. 저장 대상은 request-side masking이 끝난 후의 log-safe prompt이며, raw prompt, raw detected value, raw response, provider raw error body, streaming chunk, Authorization, API/App/Provider key, actual secret은 저장하지 않는다.
+
 `promptHash`, `requestBodyHash`, `cacheKeyHash`는 raw 값은 아니지만 high-cardinality correlation material이다. Internal Gateway context나 evidence storage 후보로만 허용하며, metrics label, Dashboard aggregate label, Employee UI에는 노출하지 않는다. Admin Request Detail 표시 여부는 v2.0.0 freeze 범위 밖의 P1 결정으로 둔다.
 
 ### 8.3 Exact Cache
@@ -654,9 +656,10 @@ streaming outcome
 latency summary
 cost/usage summary
 safety summary
+promptCapture
 ```
 
-Request Detail은 full RuntimeSnapshot, raw prompt, raw response, raw provider error body를 포함하지 않는다.
+Request Detail은 full RuntimeSnapshot, raw prompt, raw response, raw provider error body를 포함하지 않는다. `promptCapture.capturedPrompt`는 opt-in 정책이 켜진 경우의 masking 이후 log-safe prompt 예외이며 Request Log list, Dashboard, Metrics에는 표시하거나 집계하지 않는다.
 
 Request Detail 기본 계약은 credential plaintext, API Key/App Token/Provider Key, Authorization header, actual secret을 포함하지 않는다. `apiKeyId`, `appTokenId` 같은 credential ID의 Admin-only 표시 여부는 v2.0.0 freeze 범위 밖의 P1 결정이다.
 
@@ -875,7 +878,7 @@ safety-domain-outcome.fixture.json
 
 v2.0.0 core 범위에 넣지 않는다.
 
-- raw prompt/raw response 저장 opt-in
+- raw prompt/raw response 저장 opt-in. masking 이후 log-safe captured prompt opt-in은 Request Detail 예외로 허용한다.
 - Semantic Cache를 live response path에 자동 적용
 - ClickHouse 필수화
 - Redpanda event pipeline 필수화

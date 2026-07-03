@@ -146,6 +146,9 @@
         "cache": {
           "$ref": "#/$defs/cachePolicy"
         },
+        "promptCapture": {
+          "$ref": "#/$defs/promptCapturePolicy"
+        },
         "rateLimit": {
           "$ref": "#/$defs/rateLimitPolicy"
         },
@@ -163,6 +166,7 @@
         "safety",
         "routing",
         "cache",
+        "promptCapture",
         "rateLimit",
         "budget",
         "fallback",
@@ -342,6 +346,33 @@
         "exactCacheEnabled",
         "semanticCacheMode",
         "cachePolicyHash"
+      ]
+    },
+    "promptCapturePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opt-in policy for storing only the post-masking log-safe prompt in Request Detail metadata. This never authorizes raw prompt, response, SSE chunk, provider error body, credential, or secret storage.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "log_safe_full"
+          ]
+        },
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        }
+      },
+      "required": [
+        "enabled",
+        "mode",
+        "maxChars"
       ]
     },
     "rateLimitPolicy": {
