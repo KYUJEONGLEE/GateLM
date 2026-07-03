@@ -51,6 +51,8 @@ corepack pnpm run v2.1:routing:evaluate
 corepack pnpm run v2.1:routing:evaluate -- -output reports/routing-eval/report.json
 ```
 
+저장되는 JSON 리포트는 기존 기계용 필드를 유지하면서, 사람이 바로 읽을 수 있는 `한글요약` 블록도 함께 포함한다.
+
 정확도 gate 포함:
 
 ```powershell

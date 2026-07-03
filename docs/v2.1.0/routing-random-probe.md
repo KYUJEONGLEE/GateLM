@@ -27,6 +27,8 @@ reports/routing-probe/routing-probe-<yyyyMMdd-HHmmss>.json
 reports/routing-probe/latest.json
 ```
 
+저장되는 JSON 리포트는 기존 기계용 필드를 유지하면서, 사람이 바로 읽을 수 있는 `한글요약` 블록도 함께 포함한다.
+
 ## 해석
 
 | 항목 | 의미 |

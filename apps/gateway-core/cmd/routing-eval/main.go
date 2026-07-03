@@ -41,6 +41,7 @@ type datasetRecord struct {
 }
 
 type report struct {
+	SummaryKo            evaluationSummaryKo       `json:"한글요약"`
 	DatasetPath          string                    `json:"datasetPath"`
 	ClassifierName       string                    `json:"classifierName"`
 	ClassifierVersion    string                    `json:"classifierVersion"`
@@ -63,6 +64,7 @@ type report struct {
 }
 
 type categoryStats struct {
+	LabelKo       string  `json:"labelKo,omitempty"`
 	Correct       int     `json:"correct"`
 	Incorrect     int     `json:"incorrect"`
 	Total         int     `json:"total"`
@@ -97,6 +99,7 @@ type evaluationFailure struct {
 }
 
 type probeReport struct {
+	SummaryKo         probeSummaryKo       `json:"한글요약"`
 	Mode              string               `json:"mode"`
 	DatasetPath       string               `json:"datasetPath"`
 	ClassifierName    string               `json:"classifierName"`
@@ -111,8 +114,9 @@ type probeReport struct {
 }
 
 type probeStat struct {
-	Total int     `json:"total"`
-	Rate  float64 `json:"rate"`
+	LabelKo string  `json:"labelKo,omitempty"`
+	Total   int     `json:"total"`
+	Rate    float64 `json:"rate"`
 }
 
 type probeSample struct {
@@ -120,6 +124,47 @@ type probeSample struct {
 	Category      string `json:"category"`
 	Tier          string `json:"tier"`
 	RoutingReason string `json:"routingReason"`
+}
+
+type evaluationSummaryKo struct {
+	Title                string              `json:"제목"`
+	Purpose              string              `json:"목적"`
+	DatasetPath          string              `json:"데이터셋"`
+	TotalSamples         int                 `json:"전체샘플수"`
+	CategoryAccuracy     float64             `json:"카테고리정확도"`
+	CategoryErrorRate    float64             `json:"카테고리오답률"`
+	TierAccuracy         float64             `json:"티어정확도"`
+	TierErrorRate        float64             `json:"티어오답률"`
+	AvgLatencyMicros     float64             `json:"평균지연시간Micros"`
+	P95LatencyMicros     float64             `json:"P95지연시간Micros"`
+	CostSavingRate       float64             `json:"예상비용절감률"`
+	FailureCount         int                 `json:"실패수"`
+	CategoryDistribution []koreanStatSummary `json:"카테고리별결과"`
+	TierDistribution     []koreanStatSummary `json:"티어별결과"`
+	HowToRead            string              `json:"읽는법"`
+}
+
+type probeSummaryKo struct {
+	Title                string              `json:"제목"`
+	Purpose              string              `json:"목적"`
+	DatasetPath          string              `json:"데이터셋"`
+	TotalSamples         int                 `json:"전체샘플수"`
+	AvgLatencyMicros     float64             `json:"평균지연시간Micros"`
+	P95LatencyMicros     float64             `json:"P95지연시간Micros"`
+	CostSavingRate       float64             `json:"예상비용절감률"`
+	CategoryDistribution []koreanStatSummary `json:"카테고리분포"`
+	TierDistribution     []koreanStatSummary `json:"티어분포"`
+	HowToRead            string              `json:"읽는법"`
+}
+
+type koreanStatSummary struct {
+	Key       string  `json:"값"`
+	LabelKo   string  `json:"표시명"`
+	Total     int     `json:"전체"`
+	Correct   int     `json:"정답,omitempty"`
+	Incorrect int     `json:"오답,omitempty"`
+	Accuracy  float64 `json:"정확도,omitempty"`
+	Rate      float64 `json:"비율,omitempty"`
 }
 
 func main() {
@@ -278,6 +323,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 		latencies = append(latencies, sampleLatencies...)
 
 		stats := result.ByCategory[expected]
+		stats.LabelKo = categoryLabelKo(expected)
 		stats.Total++
 		if actual == expected {
 			stats.Correct++
@@ -298,6 +344,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 
 		if expectedTier != "" {
 			tierStats := result.ByTier[expectedTier]
+			tierStats.LabelKo = tierLabelKo(expectedTier)
 			tierStats.Total++
 			result.TierLabeledSamples++
 			if actualTier == expectedTier {
@@ -339,6 +386,7 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
 	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
 	sortFailures(result.Failures)
+	result.SummaryKo = buildEvaluationSummaryKo(result)
 	return result
 }
 
@@ -371,10 +419,12 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 		latencies = append(latencies, sampleLatencies...)
 
 		categoryStat := result.ByCategory[category]
+		categoryStat.LabelKo = categoryLabelKo(category)
 		categoryStat.Total++
 		result.ByCategory[category] = categoryStat
 
 		tierStat := result.ByTier[tier]
+		tierStat.LabelKo = tierLabelKo(tier)
 		tierStat.Total++
 		result.ByTier[tier] = tierStat
 
@@ -397,6 +447,7 @@ func probe(datasetPath string, classifierVersion string, records []datasetRecord
 	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
 	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
 	sortProbeSamples(result.Samples)
+	result.SummaryKo = buildProbeSummaryKo(result)
 	return result
 }
 
@@ -518,6 +569,134 @@ func tierCostUnit(tier string) float64 {
 		return tierCostHighQuality
 	default:
 		return tierCostBalanced
+	}
+}
+
+func buildEvaluationSummaryKo(result report) evaluationSummaryKo {
+	return evaluationSummaryKo{
+		Title:                "라우팅 정답 평가 리포트",
+		Purpose:              "정답이 있는 한국어 평가셋으로 category와 tier가 기대대로 맞는지 확인한다.",
+		DatasetPath:          result.DatasetPath,
+		TotalSamples:         result.TotalSamples,
+		CategoryAccuracy:     result.Accuracy,
+		CategoryErrorRate:    result.ErrorRate,
+		TierAccuracy:         result.TierAccuracy,
+		TierErrorRate:        result.TierErrorRate,
+		AvgLatencyMicros:     result.Latency.AvgMicros,
+		P95LatencyMicros:     result.Latency.P95Micros,
+		CostSavingRate:       result.CostEstimate.SavingRate,
+		FailureCount:         len(result.Failures),
+		CategoryDistribution: summarizeCategoryStatsKo(result.ByCategory),
+		TierDistribution:     summarizeCategoryStatsKo(result.ByTier),
+		HowToRead:            "정확도는 정답 라벨과 라우팅 결과가 일치한 비율이고, 실패수는 사람이 룰 또는 평가셋을 보정해야 할 후보 수다.",
+	}
+}
+
+func buildProbeSummaryKo(result probeReport) probeSummaryKo {
+	return probeSummaryKo{
+		Title:                "라우팅 분포 관찰 리포트",
+		Purpose:              "정답이 없는 한국어 샘플이 현재 룰에서 어떤 category와 tier로 분산되는지 확인한다.",
+		DatasetPath:          result.DatasetPath,
+		TotalSamples:         result.TotalSamples,
+		AvgLatencyMicros:     result.Latency.AvgMicros,
+		P95LatencyMicros:     result.Latency.P95Micros,
+		CostSavingRate:       result.CostEstimate.SavingRate,
+		CategoryDistribution: summarizeProbeStatsKo(result.ByCategory),
+		TierDistribution:     summarizeProbeStatsKo(result.ByTier),
+		HowToRead:            "정답률을 보는 리포트가 아니라 general 쏠림, high_quality 과다 사용, 비용 절감 방향을 관찰하는 리포트다.",
+	}
+}
+
+func summarizeCategoryStatsKo(stats map[string]categoryStats) []koreanStatSummary {
+	keys := make([]string, 0, len(stats))
+	for key := range stats {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	summaries := make([]koreanStatSummary, 0, len(keys))
+	for _, key := range keys {
+		stat := stats[key]
+		label := stat.LabelKo
+		if label == "" {
+			label = labelKoForRoutingValue(key)
+		}
+		summaries = append(summaries, koreanStatSummary{
+			Key:       key,
+			LabelKo:   label,
+			Total:     stat.Total,
+			Correct:   stat.Correct,
+			Incorrect: stat.Incorrect,
+			Accuracy:  stat.Accuracy,
+		})
+	}
+	return summaries
+}
+
+func summarizeProbeStatsKo(stats map[string]probeStat) []koreanStatSummary {
+	keys := make([]string, 0, len(stats))
+	for key := range stats {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	summaries := make([]koreanStatSummary, 0, len(keys))
+	for _, key := range keys {
+		stat := stats[key]
+		label := stat.LabelKo
+		if label == "" {
+			label = labelKoForRoutingValue(key)
+		}
+		summaries = append(summaries, koreanStatSummary{
+			Key:     key,
+			LabelKo: label,
+			Total:   stat.Total,
+			Rate:    stat.Rate,
+		})
+	}
+	return summaries
+}
+
+func labelKoForRoutingValue(value string) string {
+	if label := categoryLabelKo(value); label != value {
+		return label
+	}
+	return tierLabelKo(value)
+}
+
+func categoryLabelKo(category string) string {
+	switch category {
+	case routing.CategoryGeneral:
+		return "일반 요청"
+	case routing.CategoryCode:
+		return "코드/개발"
+	case routing.CategoryTranslation:
+		return "번역"
+	case routing.CategorySummarization:
+		return "요약"
+	case routing.CategoryExtractionJSON:
+		return "정보 추출/JSON"
+	case routing.CategorySupportRefund:
+		return "환불/결제/고객지원"
+	case routing.CategoryReasoning:
+		return "비교/판단/추론"
+	case routing.CategoryUnknown:
+		return "분류 불가"
+	default:
+		return category
+	}
+}
+
+func tierLabelKo(tier string) string {
+	switch tier {
+	case routing.TierLowCost:
+		return "저비용"
+	case routing.TierBalanced:
+		return "균형"
+	case routing.TierHighQuality:
+		return "고품질"
+	default:
+		return tier
 	}
 }
 

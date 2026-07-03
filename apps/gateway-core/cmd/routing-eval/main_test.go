@@ -26,6 +26,9 @@ func TestEvaluateReportDoesNotIncludePromptText(t *testing.T) {
 	if strings.Contains(output, "private synthetic prompt text") {
 		t.Fatalf("report must not include prompt text: %s", output)
 	}
+	if !strings.Contains(output, `"한글요약"`) || !strings.Contains(output, "라우팅 정답 평가 리포트") {
+		t.Fatalf("report should include Korean summary for operators: %s", output)
+	}
 	if !strings.Contains(output, "sample_report_redaction") {
 		t.Fatalf("report should include sample id for investigation: %s", output)
 	}
@@ -127,6 +130,9 @@ func TestProbeReportClassifiesUnlabeledRecordsWithoutPromptText(t *testing.T) {
 	output := string(payload)
 	if strings.Contains(output, "quiet workspace reminder") {
 		t.Fatalf("probe report must not include prompt text: %s", output)
+	}
+	if !strings.Contains(output, `"한글요약"`) || !strings.Contains(output, "라우팅 분포 관찰 리포트") {
+		t.Fatalf("probe report should include Korean summary for operators: %s", output)
 	}
 	if report.TotalSamples != 2 {
 		t.Fatalf("expected 2 samples, got %d", report.TotalSamples)
