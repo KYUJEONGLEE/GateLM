@@ -105,7 +105,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "Display name",
     discoverModels: "Discover models",
-    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible providers.",
+    discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible providers such as OpenAI and Gemini.",
     empty: "No provider connections found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture provider connection.",
     management: "management",
@@ -139,7 +139,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     displayName: "표시 이름",
     discoverModels: "모델 조회",
-    discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 Provider에서 활성화됩니다.",
+    discoveryOpenAiOnly: "모델 조회는 OpenAI, Gemini 같은 OpenAI 호환 Provider에서 활성화됩니다.",
     empty: "Provider connection이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture Provider connection을 표시 중입니다.",
     management: "관리",
@@ -293,14 +293,16 @@ export function ProviderConnectionManagement({
             ? locale === "ko"
               ? "현재 Control Plane 빌드에 모델 조회 API가 없습니다. Models 칸에 모델명을 직접 입력하세요."
               : "Model discovery API is not available in this Control Plane build. Enter model names manually."
-            : payload.error ?? "Provider model discovery failed.",
+            : getProviderDiscoveryErrorMessage(payload.error, normalizedProvider, locale),
         status: "error"
       });
       setDiscoveringProvider(null);
       return;
     }
 
-    const discoveredModels = payload.discovery.models.map((item) => item.modelName);
+    const discoveredModels = payload.discovery.models.map((item) =>
+      normalizeDiscoveredModelName(item.modelName)
+    );
     const chatModels = filterChatCompletionModels(discoveredModels);
     const skippedModelCount = discoveredModels.length - chatModels.length;
 
@@ -739,6 +741,25 @@ function isDiscoverSupportedProvider(adapterType: string) {
   return adapterType === "openai_compatible" || adapterType === "mock";
 }
 
+function getProviderDiscoveryErrorMessage(
+  error: string | undefined,
+  provider: string,
+  locale: Locale
+) {
+  const message = error ?? "Provider model discovery failed.";
+
+  if (
+    provider === "gemini" &&
+    message.includes("Provider credential reference is not bound")
+  ) {
+    return locale === "ko"
+      ? "Gemini 모델 조회에는 GEMINI_API_KEY와 credential_ref_gemini_main=GEMINI_API_KEY binding이 필요합니다."
+      : "Gemini model discovery requires GEMINI_API_KEY and credential_ref_gemini_main=GEMINI_API_KEY binding.";
+  }
+
+  return message;
+}
+
 function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: string) {
   const normalizedProvider = provider.trim();
 
@@ -765,7 +786,7 @@ const nonChatModelNameTokens = [
 function splitModelNames(value: string) {
   return value
     .split(/[\n,]/)
-    .map((model) => model.trim())
+    .map((model) => normalizeDiscoveredModelName(model))
     .filter(Boolean)
     .filter(isChatCompletionModelName);
 }
@@ -774,11 +795,21 @@ function filterChatCompletionModels(modelNames: string[]) {
   return Array.from(
     new Set(
       modelNames
-        .map((modelName) => modelName.trim())
+        .map((modelName) => normalizeDiscoveredModelName(modelName))
         .filter(Boolean)
         .filter(isChatCompletionModelName)
     )
   );
+}
+
+function normalizeDiscoveredModelName(modelName: string) {
+  const normalized = modelName.trim();
+
+  if (normalized.startsWith("models/gemini-")) {
+    return normalized.slice("models/".length);
+  }
+
+  return normalized;
 }
 
 function isChatCompletionModelName(modelName: string) {
@@ -885,7 +916,7 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
   return Array.isArray(models)
     ? models.filter(
         (model): model is string => typeof model === "string" && model.trim().length > 0
-      )
+      ).map((model) => normalizeDiscoveredModelName(model))
     : [];
 }
 

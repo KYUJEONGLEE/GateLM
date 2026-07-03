@@ -6,6 +6,9 @@ import type {
   InvocationLogRecord,
   TerminalStatus
 } from "@/lib/fixtures/v1-observability-fixtures";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayProjectLogsResponse = {
@@ -35,6 +38,7 @@ type GatewayProjectLogItem = {
   status?: string;
   terminalStatus?: string;
   totalTokens?: number;
+  userRef?: string | null;
 };
 
 type GatewayBudgetScope = {
@@ -55,10 +59,12 @@ export type LiveGatewayRequestLogFilters = {
   from?: string;
   limit?: number;
   model?: string;
+  projectId?: string;
   provider?: string;
   requestId?: string;
   resolvedBy?: string;
   status?: string;
+  tenantId?: string;
   to?: string;
 };
 
@@ -69,9 +75,11 @@ export async function getLiveGatewayRequestLogs(
 ): Promise<InvocationLogRecord[] | undefined> {
   const config = getLiveGatewayConfig();
   const defaultRange = getLiveRange();
+  const tenantId = getGatewayTenantId(filters.tenantId);
   const query = new URLSearchParams({
     from: filters.from ?? defaultRange.from,
     limit: String(filters.limit ?? 50),
+    tenantId,
     to: filters.to ?? defaultRange.to
   });
   appendOptionalQuery(query, "applicationId", filters.applicationId);
@@ -84,8 +92,28 @@ export async function getLiveGatewayRequestLogs(
   appendOptionalQuery(query, "requestId", filters.requestId);
   appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
+  const projectIds = await getLogProjectIds(filters.projectId, filters.tenantId, config.projectId);
+  const records = await Promise.all(
+    projectIds.map((projectId) => fetchProjectLogs(config.baseUrl, projectId, query))
+  );
+  const flattenedRecords = records.flatMap((projectRecords) => projectRecords ?? []);
+
+  if (flattenedRecords.length === 0 && records.some((projectRecords) => projectRecords === undefined)) {
+    return undefined;
+  }
+
+  return flattenedRecords
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, filters.limit ?? 50);
+}
+
+async function fetchProjectLogs(
+  baseUrl: string,
+  projectId: string,
+  query: URLSearchParams
+): Promise<InvocationLogRecord[] | undefined> {
   const response = await fetch(
-    `${config.baseUrl}/api/projects/${encodeURIComponent(config.projectId)}/logs?${query.toString()}`,
+    `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/logs?${query.toString()}`,
     {
       headers: {
         "X-GateLM-Request-Id": `request_web_logs_${Date.now()}`
@@ -99,7 +127,22 @@ export async function getLiveGatewayRequestLogs(
   }
 
   const payload = (await response.json().catch(() => ({}))) as GatewayProjectLogsResponse;
-  return (payload.data ?? []).map((item) => toInvocationRecord(item, config.projectId));
+  return (payload.data ?? []).map((item) => toInvocationRecord(item, projectId));
+}
+
+async function getLogProjectIds(
+  projectId: string | undefined,
+  routeTenantId: string | undefined,
+  fallbackProjectId: string
+) {
+  if (projectId?.trim()) {
+    return [projectId.trim()];
+  }
+
+  const projectsModel = await getProjectsModel(routeTenantId ?? getControlPlaneTenantId());
+  const projectIds = projectsModel.projects.map((project) => project.id).filter(Boolean);
+
+  return projectIds.length > 0 ? projectIds : [fallbackProjectId];
 }
 
 function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
@@ -117,6 +160,20 @@ function getLiveRange() {
     from: from.toISOString(),
     to: to.toISOString()
   };
+}
+
+function getGatewayTenantId(routeTenantId: string | undefined) {
+  const tenantId = routeTenantId?.trim();
+
+  return tenantId && isUuid(tenantId) ? tenantId : getControlPlaneTenantId();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+}
+
+function formatOptionalModelName(value: string | undefined | null) {
+  return value ? formatModelDisplayName(value, "") || null : null;
 }
 
 function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): InvocationLogRecord {
@@ -146,7 +203,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     budgetScope,
     apiKeyId: "live_gateway_api_key",
     appTokenId: "live_gateway_app_token",
-    endUserId: null,
+    endUserId: item.userRef ?? null,
     featureId: null,
     endpoint: "/v1/chat/completions",
     method: "POST",
@@ -156,9 +213,9 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     promptHash: "not-exposed-by-live-list",
     redactedPromptPreview: null,
     requestedProvider: null,
-    requestedModel: item.requestedModel ?? null,
+    requestedModel: formatOptionalModelName(item.requestedModel),
     selectedProvider: item.provider || null,
-    selectedModel: item.selectedModel || item.model || null,
+    selectedModel: formatOptionalModelName(item.selectedModel || item.model),
     routingReason: item.routingReason || null,
     cacheStatus,
     cacheType: item.cacheType ?? "none",

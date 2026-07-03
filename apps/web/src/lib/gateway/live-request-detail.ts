@@ -7,6 +7,8 @@ import type {
   RuntimeSnapshotProvenance,
   TerminalStatus
 } from "@/lib/fixtures/v1-observability-fixtures";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayRequestDetailResponse = {
@@ -117,15 +119,28 @@ type GatewayDomainOutcomes = Partial<
 >;
 
 export async function getLiveGatewayRequestDetail(
-  requestId: string
+  requestId: string,
+  options: {
+    projectId?: string;
+    tenantId?: string;
+  } = {}
 ): Promise<InvocationLogRecord | undefined> {
   const config = getLiveGatewayConfig();
-  const response = await fetch(`${config.baseUrl}/api/llm-requests/${encodeURIComponent(requestId)}`, {
-    headers: {
-      "X-GateLM-Request-Id": `request_web_detail_${Date.now()}`
-    },
-    cache: "no-store"
-  }).catch(() => undefined);
+  const query = new URLSearchParams();
+
+  appendOptionalQuery(query, "projectId", options.projectId);
+  appendOptionalQuery(query, "tenantId", getGatewayTenantId(options.tenantId));
+
+  const serializedQuery = query.toString();
+  const response = await fetch(
+    `${config.baseUrl}/api/llm-requests/${encodeURIComponent(requestId)}${serializedQuery ? `?${serializedQuery}` : ""}`,
+    {
+      headers: {
+        "X-GateLM-Request-Id": `request_web_detail_${Date.now()}`
+      },
+      cache: "no-store"
+    }
+  ).catch(() => undefined);
 
   if (!response || response.status === 404 || !response.ok) {
     return undefined;
@@ -138,6 +153,24 @@ export async function getLiveGatewayRequestDetail(
   }
 
   return toInvocationRecord(payload.data);
+}
+
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+
+  if (normalized) {
+    query.set(key, normalized);
+  }
+}
+
+function getGatewayTenantId(routeTenantId: string | undefined) {
+  const tenantId = routeTenantId?.trim();
+
+  return tenantId && isUuid(tenantId) ? tenantId : getControlPlaneTenantId();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
@@ -186,9 +219,9 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     promptHash: "not-exposed-by-live-detail",
     redactedPromptPreview: data.masking?.redactedPromptPreview ?? null,
     requestedProvider: null,
-    requestedModel: data.requestedModel ?? null,
+    requestedModel: formatOptionalModelName(data.requestedModel),
     selectedProvider: data.routing?.selectedProvider ?? data.provider ?? null,
-    selectedModel: data.routing?.selectedModel ?? data.selectedModel ?? data.model ?? null,
+    selectedModel: formatOptionalModelName(data.routing?.selectedModel ?? data.selectedModel ?? data.model),
     routingReason: data.routing?.routingReason ?? null,
     cacheStatus,
     cacheType: data.cache?.cacheType ?? "none",
@@ -267,6 +300,10 @@ function normalizePromptCapture(
     truncated: value?.truncated ?? false,
     visibility: value?.visibility ?? "admin_request_detail"
   } as const;
+}
+
+function formatOptionalModelName(value: string | undefined | null) {
+  return value ? formatModelDisplayName(value, "") || null : null;
 }
 
 function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {
