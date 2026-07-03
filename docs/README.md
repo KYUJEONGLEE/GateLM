@@ -31,11 +31,16 @@ GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비
 - `docs/v2.0.0/implementation-pr-packets.md`: PR별 실행 패킷
 - `docs/v2.0.0/acceptance-test-matrix.md`: PR별 acceptance/evidence matrix
 - `docs/v2.0.0/db-migration-plan.md`: DB migration 호환성 계획
+- `docs/v2.0.0/exact-cache-routing-aware-contract.md`: Exact Cache / Routing 팀 공유용 계약 요약
 
 Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
 
 - `docs/v2.0.0/p0-legacy-field-cleanup.md`: legacy field cleanup 참고 문서
 - `docs/v2.0.0/p0-contract-decisions.md`: 공식 계약이 아닌 팀 검토 목록
+
+v2.1.0 고도화/evidence 계약은 v2.0.0 계약을 대체하지 않는 보조 계약이다.
+
+- `docs/v2.1.0/category-evaluation-dataset-contract.md`: Advanced Routing 카테고리 평가셋 evidence 계약
 
 위 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
 
@@ -67,7 +72,7 @@ v2.0.0 목표는 v1.0.0 baseline을 깨지 않으면서 조직 기반 LLMOps Gat
 Customer App / Employee Chat
 -> Gateway
 -> RuntimeSnapshot policy
--> budget / safety / cache / routing
+-> budget / safety / routing / exact cache
 -> Actual Provider or Mock fallback
 -> Request Log / Detail / Dashboard / Metrics / k6 evidence
 ```
@@ -77,7 +82,7 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 - 어떤 tenant/project/application 요청인지
 - 어떤 RuntimeSnapshot이 실제 적용됐는지
 - 어떤 budget scope로 비용과 쿼터가 귀속됐는지
-- safety, budget, cache, routing, provider, fallback, streaming 결과가 무엇인지
+- safety, budget, routing, exact cache, provider, fallback, streaming 결과가 무엇인지
 - Actual Provider가 성공했는지, Mock fallback이 사용됐는지
 - Request Detail, Dashboard, Metrics, k6가 같은 outcome을 보고 있는지
 
@@ -88,7 +93,7 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | Area | Main path |
 |---|---|
 | Control Plane | RuntimeConfig validation/publish, RuntimeSnapshot, Provider/Model catalog, `credentialRef`, budget policy source |
-| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, exact cache, routing, provider, fallback, streaming, logging outcomes |
+| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, routing, routing-aware exact cache, provider, fallback, streaming, logging outcomes |
 | Product Experience | Admin/Developer/Employee surfaces, Employee Chat through Application boundary, Request Detail, Dashboard, Demo Scenario Runner |
 | Safety | request-side safety outcome and sanitized evidence |
 | Observability | Gateway-produced outcomes, Request Log/Detail read model, Dashboard aggregate, metrics label guard, k6/query profile |
@@ -155,6 +160,7 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 | `docs/v2.0.0/fixtures/` | 최소 fixture |
 | `docs/v2.0.0/p0-legacy-field-cleanup.md` | legacy field cleanup 기준 참고 문서 |
 | `docs/v2.0.0/p0-contract-decisions.md` | 공식 계약 전 팀 검토 목록 |
+| `docs/v2.1.0/category-evaluation-dataset-contract.md` | Advanced Routing 카테고리 평가셋 evidence 계약 |
 | `docs/archive/` | 과거 P0/v1 기록 |
 
 과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.

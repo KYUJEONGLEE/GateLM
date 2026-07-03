@@ -65,18 +65,27 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			SecurityPolicyVersionID: reqCtx.SecurityPolicyVersionID,
 		},
 		Routing: request.RoutingContext{
-			RequestedModel:    reqCtx.RequestedModel,
-			SelectedProvider:  reqCtx.SelectedProvider,
-			SelectedModel:     reqCtx.SelectedModel,
-			RoutingReason:     reqCtx.RoutingReason,
-			RoutingPolicyHash: reqCtx.RoutingPolicyHash,
+			RequestedModel:             reqCtx.RequestedModel,
+			SelectedProvider:           reqCtx.SelectedProvider,
+			SelectedProviderID:         reqCtx.SelectedProviderID,
+			SelectedProviderCatalogKey: reqCtx.SelectedProviderCatalogKey,
+			SelectedModel:              reqCtx.SelectedModel,
+			SelectedModelID:            reqCtx.SelectedModelID,
+			ProviderCatalogContentHash: reqCtx.ProviderCatalogContentHash,
+			RoutingDecisionKeyHash:     reqCtx.RoutingDecisionKeyHash,
+			RoutingDecisionMaterial:    map[string]string{"category": reqCtx.PromptCategory},
+			RoutingReason:              reqCtx.RoutingReason,
+			RoutingPolicyHash:          reqCtx.RoutingPolicyHash,
 		},
 		Cache: request.CacheContext{
-			CacheStatus:       reqCtx.CacheStatus,
-			CacheType:         reqCtx.CacheType,
-			CacheKeyHash:      reqCtx.CacheKeyHash,
-			CacheHitRequestID: reqCtx.CacheHitRequestID,
-			SavedCostMicroUSD: reqCtx.SavedCostMicroUSD,
+			CacheStatus:         reqCtx.CacheStatus,
+			CacheType:           reqCtx.CacheType,
+			CacheKeyHash:        reqCtx.CacheKeyHash,
+			CacheHitRequestID:   reqCtx.CacheHitRequestID,
+			CacheKeyVersion:     reqCtx.CacheKeyVersion,
+			CacheDecisionReason: reqCtx.CacheDecisionReason,
+			FallbackOccurred:    reqCtx.FallbackOccurred,
+			SavedCostMicroUSD:   reqCtx.SavedCostMicroUSD,
 		},
 		Status: request.StatusContext{
 			Status:       reqCtx.Status,
@@ -160,8 +169,26 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Routing.SelectedProvider != "" {
 		reqCtx.SelectedProvider = gatewayCtx.Routing.SelectedProvider
 	}
+	if gatewayCtx.Routing.SelectedProviderID != "" {
+		reqCtx.SelectedProviderID = gatewayCtx.Routing.SelectedProviderID
+	}
+	if gatewayCtx.Routing.SelectedProviderCatalogKey != "" {
+		reqCtx.SelectedProviderCatalogKey = gatewayCtx.Routing.SelectedProviderCatalogKey
+	}
 	if gatewayCtx.Routing.SelectedModel != "" {
 		reqCtx.SelectedModel = gatewayCtx.Routing.SelectedModel
+	}
+	if gatewayCtx.Routing.SelectedModelID != "" {
+		reqCtx.SelectedModelID = gatewayCtx.Routing.SelectedModelID
+	}
+	if gatewayCtx.Routing.ProviderCatalogContentHash != "" {
+		reqCtx.ProviderCatalogContentHash = gatewayCtx.Routing.ProviderCatalogContentHash
+	}
+	if gatewayCtx.Routing.RoutingDecisionKeyHash != "" {
+		reqCtx.RoutingDecisionKeyHash = gatewayCtx.Routing.RoutingDecisionKeyHash
+	}
+	if category := gatewayCtx.Routing.RoutingDecisionMaterial["category"]; category != "" {
+		reqCtx.PromptCategory = category
 	}
 	if gatewayCtx.Routing.RoutingReason != "" {
 		reqCtx.RoutingReason = gatewayCtx.Routing.RoutingReason
@@ -182,6 +209,13 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Cache.CacheHitRequestID != "" {
 		reqCtx.CacheHitRequestID = gatewayCtx.Cache.CacheHitRequestID
 	}
+	if gatewayCtx.Cache.CacheKeyVersion != "" {
+		reqCtx.CacheKeyVersion = gatewayCtx.Cache.CacheKeyVersion
+	}
+	if gatewayCtx.Cache.CacheDecisionReason != "" {
+		reqCtx.CacheDecisionReason = gatewayCtx.Cache.CacheDecisionReason
+	}
+	reqCtx.FallbackOccurred = gatewayCtx.Cache.FallbackOccurred
 	reqCtx.SavedCostMicroUSD = gatewayCtx.Cache.SavedCostMicroUSD
 
 	if gatewayCtx.Status.Status != "" {

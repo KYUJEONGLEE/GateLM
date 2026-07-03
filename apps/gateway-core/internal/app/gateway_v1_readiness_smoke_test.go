@@ -19,6 +19,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
@@ -66,7 +67,7 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 		safeMissResp.GateLM.CacheStatus != invocationlog.CacheStatusMiss ||
 		safeMissResp.GateLM.SelectedProvider != "mock" ||
 		safeMissResp.GateLM.SelectedModel != "mock-fast" ||
-		safeMissResp.GateLM.RoutingReason != "short_prompt_low_cost" {
+		safeMissResp.GateLM.RoutingReason != routing.ReasonSupportRefundLowCost {
 		t.Fatalf("unexpected safe miss response: status=%d gate_lm=%#v body=%s", safeMiss.Code, safeMissResp.GateLM, safeMiss.Body.String())
 	}
 	providerCallsAfterMiss := harness.provider.chatCallCount()

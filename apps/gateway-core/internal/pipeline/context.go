@@ -42,12 +42,18 @@ type RequestContext struct {
 	RateLimitDecision *ratelimit.Decision
 	BudgetDecision    *budget.Decision
 
-	RequestedProvider string
-	RequestedModel    string
-	SelectedProvider  string
-	SelectedModel     string
-	RoutingReason     string
-	RoutingPolicyHash string
+	RequestedProvider          string
+	RequestedModel             string
+	SelectedProvider           string
+	SelectedProviderID         string
+	SelectedProviderCatalogKey string
+	SelectedModel              string
+	SelectedModelID            string
+	ProviderCatalogContentHash string
+	RoutingReason              string
+	RoutingPolicyHash          string
+	RoutingDecisionKeyHash     string
+	PromptCategory             string
 
 	MaskingAction           string
 	MaskingDetectedTypes    []string
@@ -55,10 +61,22 @@ type RequestContext struct {
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
+	CacheStatus         string
+	CacheType           string
+	CacheKeyHash        string
+	CacheHitRequestID   string
+	CacheKeyVersion     string
+	CacheDecisionReason string
+	FallbackOccurred    bool
+
+	SemanticCacheHit            bool
+	SemanticSimilarity          float64
+	SemanticMatchedRequestID    string
+	SemanticCacheThreshold      float64
+	SemanticCachePolicyVersion  string
+	SemanticCacheDecisionReason string
+	EmbeddingProvider           string
+	SemanticCacheStoreCandidate bool
 
 	Provider          string
 	Model             string

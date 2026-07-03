@@ -25,7 +25,7 @@ export type RuntimePolicyProvider = {
   providerId: string;
   resolver: "none" | "control_plane_secret_store" | "environment";
   secretRef: string | null;
-  status: string;
+  status: "active" | "disabled" | "degraded";
   timeoutMs: number;
 };
 
@@ -51,8 +51,15 @@ export type RuntimePolicyPricingRule = {
   unit?: "token";
 };
 
+export type RuntimePolicyBudgetPolicy = {
+  enabled: boolean;
+  enforcementMode: "warn" | "block" | "disabled";
+  warningThresholdPercent: number;
+};
+
 export type RuntimePolicyConfig = {
   applicationId: string;
+  budgetPolicy?: RuntimePolicyBudgetPolicy;
   cachePolicy: {
     enabled: boolean;
     ttlSeconds: number;
@@ -92,7 +99,111 @@ export type RuntimePolicyConfig = {
   tenantId: string;
 };
 
+export type RuntimePolicyHistoryItem = {
+  canRollback: boolean;
+  configHash: string;
+  configVersion: string;
+  createdAt: string;
+  effectiveAt: string | null;
+  id: string;
+  publishedAt: string | null;
+  publishState: string;
+  updatedAt: string;
+};
+
+export type RuntimePolicyHistoryDetailSummary = {
+  configHash: string;
+  configVersion: string;
+  detectorCount: number;
+  modelCount: number;
+  providerCount: number;
+  publishState: string;
+};
+
+export type RuntimePolicySnapshot = {
+  budgetResolution: {
+    budgetScopeId: string;
+    budgetScopeType: "application" | "project" | "team";
+    resolvedBy: string;
+    warningThresholdPercent: number;
+  };
+  contentHash: string;
+  gatewayInstanceId: string;
+  lookupKey: {
+    applicationId: string;
+    projectId: string;
+    tenantId: string;
+  };
+  policies: {
+    budget: {
+      enabled: boolean;
+      enforcementMode: string;
+      warningThresholdPercent: number;
+    };
+    cache: {
+      cachePolicyHash: string;
+      exactCacheEnabled: boolean;
+      semanticCacheMode: string;
+    };
+    fallback: {
+      allowedReasons?: string[];
+      enabled: boolean;
+      fallbackModel?: string;
+      fallbackProvider?: string;
+    };
+    rateLimit: {
+      enabled: boolean;
+      limit: number;
+      scope: string;
+      windowSeconds: number;
+    };
+    routing: {
+      autoModelEnabled: boolean;
+      defaultModel: string;
+      defaultProvider: string;
+      defaultRequestedModel: string;
+      routingPolicyHash: string;
+    };
+    safety: {
+      detectorSet?: Array<{
+        action: string;
+        detectorType: string;
+      }>;
+      enabled: boolean;
+      mode: string;
+      policyHash: string;
+      requestSideRequired: boolean;
+    };
+    streaming: {
+      enabled: boolean;
+      thinSliceOnly: true;
+    };
+  };
+  providerCatalogRef: {
+    catalogId: string;
+    catalogVersion: number;
+    contentHash: string;
+  };
+  publishedAt: string;
+  publishedBy: string;
+  runtimeSnapshotId: string;
+  runtimeSnapshotVersion: number;
+  runtimeState: string;
+};
+
+export type RuntimePolicyProviderCatalogSummary = {
+  catalogId: string;
+  catalogVersion: number;
+  contentHash: string;
+  modelCount: number;
+  providerCount: number;
+  updatedAt: string | null;
+};
+
 export type RuntimePolicyDraftValues = {
+  budgetEnabled: boolean;
+  budgetEnforcementMode: "warn" | "block" | "disabled";
+  budgetWarningThresholdPercent: number;
   cacheEnabled: boolean;
   cacheTtlSeconds: number;
   configVersion: string;
@@ -114,15 +225,36 @@ export type RuntimePolicyModel = {
   activeConfig: RuntimePolicyConfig;
   applicationId: string;
   controlPlaneBaseUrl: string;
+  history: {
+    detail: RuntimePolicyHistoryDetailSummary | null;
+    detailLoadError: string | null;
+    items: RuntimePolicyHistoryItem[];
+    loadError: string | null;
+  };
   loadError: string | null;
+  providerCatalog: {
+    canonicalLoadError: string | null;
+    canonicalVerified: boolean | null;
+    loadError: string | null;
+    summary: RuntimePolicyProviderCatalogSummary | null;
+  };
   routeTenantId: string;
+  runtimeSnapshot: {
+    loadError: string | null;
+    snapshot: RuntimePolicySnapshot | null;
+  };
   source: "control-plane" | "fixture";
 };
 
 export function getRuntimePolicyDraftValues(
   config: RuntimePolicyConfig
 ): RuntimePolicyDraftValues {
+  const budgetPolicy = config.budgetPolicy ?? getDefaultRuntimePolicyBudgetPolicy();
+
   return {
+    budgetEnabled: budgetPolicy.enabled,
+    budgetEnforcementMode: budgetPolicy.enforcementMode,
+    budgetWarningThresholdPercent: budgetPolicy.warningThresholdPercent,
     cacheEnabled: config.cachePolicy.enabled,
     cacheTtlSeconds: config.cachePolicy.ttlSeconds,
     configVersion: config.configVersion,
@@ -144,5 +276,13 @@ export function getRuntimePolicyDraftValues(
     routingLowCostModel: config.routingPolicy.lowCostModel,
     routingLowCostProvider: config.routingPolicy.lowCostProvider,
     routingShortPromptMaxChars: config.routingPolicy.shortPromptMaxChars
+  };
+}
+
+export function getDefaultRuntimePolicyBudgetPolicy(): RuntimePolicyBudgetPolicy {
+  return {
+    enabled: false,
+    enforcementMode: "disabled",
+    warningThresholdPercent: 80
   };
 }

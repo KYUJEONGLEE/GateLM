@@ -165,9 +165,13 @@ type runtimeSnapshotSafetyPolicy struct {
 }
 
 type runtimeSnapshotRoutingPolicy struct {
-	DefaultProvider   string `json:"defaultProvider"`
-	DefaultModel      string `json:"defaultModel"`
-	RoutingPolicyHash string `json:"routingPolicyHash"`
+	DefaultProvider     string `json:"defaultProvider"`
+	DefaultModel        string `json:"defaultModel"`
+	LowCostProvider     string `json:"lowCostProvider"`
+	LowCostModel        string `json:"lowCostModel"`
+	HighQualityProvider string `json:"highQualityProvider"`
+	HighQualityModel    string `json:"highQualityModel"`
+	RoutingPolicyHash   string `json:"routingPolicyHash"`
 }
 
 type runtimeSnapshotCachePolicy struct {
@@ -209,6 +213,10 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 
 	defaultProvider := strings.TrimSpace(r.Policies.Routing.DefaultProvider)
 	defaultModel := strings.TrimSpace(r.Policies.Routing.DefaultModel)
+	lowCostProvider := firstNonEmpty(r.Policies.Routing.LowCostProvider, defaultProvider)
+	lowCostModel := firstNonEmpty(r.Policies.Routing.LowCostModel, defaultModel)
+	highQualityProvider := firstNonEmpty(r.Policies.Routing.HighQualityProvider, defaultProvider)
+	highQualityModel := firstNonEmpty(r.Policies.Routing.HighQualityModel, defaultModel)
 	fallbackProvider := firstNonEmpty(r.Policies.Fallback.FallbackProvider, defaultProvider)
 	fallbackModel := firstNonEmpty(r.Policies.Fallback.FallbackModel, defaultModel)
 
@@ -249,13 +257,15 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			SecurityPolicyHash: securityPolicyHash,
 		},
 		RoutingPolicy: runtimeconfig.RoutingPolicy{
-			DefaultProvider:   defaultProvider,
-			DefaultModel:      defaultModel,
-			LowCostProvider:   defaultProvider,
-			LowCostModel:      defaultModel,
-			FallbackProvider:  fallbackProvider,
-			FallbackModel:     fallbackModel,
-			RoutingPolicyHash: routingPolicyHash,
+			DefaultProvider:     defaultProvider,
+			DefaultModel:        defaultModel,
+			LowCostProvider:     lowCostProvider,
+			LowCostModel:        lowCostModel,
+			HighQualityProvider: highQualityProvider,
+			HighQualityModel:    highQualityModel,
+			FallbackProvider:    fallbackProvider,
+			FallbackModel:       fallbackModel,
+			RoutingPolicyHash:   routingPolicyHash,
 		},
 		CachePolicy: runtimeconfig.CachePolicy{
 			Enabled:         r.Policies.Cache.ExactCacheEnabled,

@@ -36,7 +36,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	if first.Header().Get("X-GateLM-Cache-Status") != "miss" || firstResp.GateLM.CacheStatus != "miss" {
 		t.Fatalf("expected first safe request to miss exact cache, header=%q gate_lm=%#v", first.Header().Get("X-GateLM-Cache-Status"), firstResp.GateLM)
 	}
-	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "short_prompt_low_cost" {
+	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "category_support_refund_low_cost" {
 		t.Fatalf("unexpected model=auto routing result: %#v", firstResp.GateLM)
 	}
 	if *demo.providerCalls != 1 || demo.cacheStore.setCalls != 1 || demo.cacheStore.getCalls != 1 {
@@ -46,10 +46,18 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	cacheGetsAfterFirst := demo.cacheStore.getCalls
 	cacheSetsAfterFirst := demo.cacheStore.setCalls
 	firstMaterial := demo.keyBuilder.materials[0]
-	if firstMaterial.SecurityPolicyVersionID != "hash_security_policy_phase3_demo" ||
-		firstMaterial.RoutingPolicyVersionID != "hash_routing_policy_phase3_demo" ||
-		firstMaterial.NormalizedRedactedPrompt != safePrompt {
+	if firstMaterial.SafetyPolicyHash != "hash_security_policy_phase3_demo" ||
+		firstMaterial.MaskingPolicyHash != "hash_security_policy_phase3_demo" ||
+		firstMaterial.RoutingPolicyHash != "hash_routing_policy_phase3_demo" ||
+		firstMaterial.RequestedModel != "auto" ||
+		firstMaterial.ProviderCatalogStableKey != "mock" ||
+		firstMaterial.ModelID != "mock-fast" ||
+		firstMaterial.NormalizedMaskedRequestBodyHash == "" ||
+		firstMaterial.RoutingDecisionKeyHash == "" {
 		t.Fatalf("unexpected exact cache key material: %#v", firstMaterial)
+	}
+	if firstMaterial.NormalizedRedactedPrompt != "" {
+		t.Fatalf("exact cache key material must not keep raw/redacted prompt text: %#v", firstMaterial)
 	}
 
 	second := demo.exercise(t, "request_v1_phase3_safe_hit_002", safePrompt)

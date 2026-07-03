@@ -8,6 +8,8 @@
   },
   "scripts": {
     "verify:v2-docs": "node scripts/verify-v2-docs.mjs",
+    "verify:v2.1-category-eval": "node scripts/verify-v2.1-category-eval.mjs",
+    "v2.1:routing:evaluate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2.1-routing-evaluate.ps1",
     "verify:v2-final": "node scripts/verify-v2-final.mjs",
     "v2:p0:bootstrap:describe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -DescribeOnly",
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",
@@ -17,6 +19,7 @@
     "v2:k6:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-k6-smoke.ps1",
     "v2:release:evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-release-evidence.ps1",
     "v2:final:hardening": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-final-hardening.ps1",
+    "v2:rc:freeze": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-rc-freeze.ps1",
     "dev:control-plane": "pnpm --filter @gatelm/control-plane-api dev",
     "build:control-plane": "pnpm --filter @gatelm/control-plane-api build",
     "typecheck:control-plane": "pnpm --filter @gatelm/control-plane-api typecheck",

@@ -42,7 +42,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.LoadWithError()
+	if err != nil {
+		log.Fatalf("gateway-core configuration failed: %v", err)
+	}
 	if err := validateRuntimeSnapshotMode(cfg); err != nil {
 		log.Fatalf("gateway-core invalid GATEWAY_RUNTIME_SNAPSHOT_MODE: %v", err)
 	}
@@ -243,6 +246,8 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			DefaultModel:        cfg.DefaultModel,
 			LowCostProvider:     cfg.DefaultProvider,
 			LowCostModel:        cfg.LowCostModel,
+			HighQualityProvider: cfg.DefaultProvider,
+			HighQualityModel:    cfg.HighQualityModel,
 			FallbackProvider:    cfg.DefaultProvider,
 			FallbackModel:       cfg.DefaultModel,
 			ShortPromptMaxChars: cfg.ShortPromptMaxChars,
@@ -348,7 +353,7 @@ func mockCatalogModel(modelID string, displayName string, fallbackPriority int) 
 		DisplayName: displayName,
 		Enabled:     true,
 		Capabilities: providercatalog.ModelCapabilities{
-			StreamingSupported: false,
+			StreamingSupported: true,
 			SupportsJSONMode:   false,
 			MaxInputTokens:     4096,
 			MaxOutputTokens:    1024,

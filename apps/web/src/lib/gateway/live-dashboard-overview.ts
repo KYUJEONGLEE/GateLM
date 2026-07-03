@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveDashboardOverviewResponse = {
@@ -122,15 +123,29 @@ type LiveDashboardOverviewResponse = {
 
 const LIVE_RANGE_HOURS = 24;
 
+export type LiveDashboardOverviewFilters = {
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  projectId?: string;
+  resolvedBy?: string;
+};
+
 export async function getLiveDashboardOverview(
-  tenantId: string
+  tenantId: string,
+  filters: LiveDashboardOverviewFilters = {}
 ): Promise<DashboardOverview | undefined> {
   const config = getLiveGatewayConfig();
   const { from, to } = getLiveRange();
+  const gatewayTenantId = toGatewayTenantId(tenantId);
   const query = new URLSearchParams({
     from,
+    tenantId: gatewayTenantId,
     to
   });
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "projectId", filters.projectId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(`${config.baseUrl}/api/dashboard/overview?${query.toString()}`, {
     headers: {
@@ -150,6 +165,21 @@ export async function getLiveDashboardOverview(
   }
 
   return toDashboardOverview(payload.data, tenantId, from, to);
+}
+
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+  if (normalized) {
+    query.set(key, normalized);
+  }
+}
+
+function toGatewayTenantId(tenantId: string) {
+  return isUuid(tenantId) ? tenantId : getControlPlaneTenantId();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getLiveRange() {

@@ -65,43 +65,57 @@ type LlmInvocationLog struct {
 	EndUserID     string
 	FeatureID     string
 
-	Endpoint              string
-	Method                string
-	Source                string
-	Stream                bool
-	RequestedProvider     string
-	RequestedModel        string
-	Provider              string
-	Model                 string
-	SelectedProvider      string
-	SelectedModel         string
-	RoutingReason         string
-	RoutingRuleID         string
-	PromptTokens          int64
-	CompletionTokens      int64
-	TotalTokens           int64
-	CostMicroUSD          int64
-	SavedCostMicroUSD     int64
-	LatencyMs             int64
-	ProviderLatencyMs     *int64
-	Status                string
-	TerminalStatus        string
-	DomainOutcomes        DomainOutcomes
-	HTTPStatus            int
-	ErrorCode             string
-	ErrorMessage          string
-	ErrorStage            string
-	CacheStatus           string
-	CacheType             string
-	CacheKeyHash          string
-	CacheHitRequestID     string
-	MaskingAction         string
-	MaskingDetectedTypes  []string
-	MaskingDetectedCount  int
-	RedactedPromptPreview string
-	RuntimeSnapshot       runtimeconfig.RuntimeSnapshotProvenance
-	CreatedAt             time.Time
-	CompletedAt           *time.Time
+	Endpoint                    string
+	Method                      string
+	Source                      string
+	Stream                      bool
+	RequestedProvider           string
+	RequestedModel              string
+	Provider                    string
+	Model                       string
+	SelectedProvider            string
+	SelectedModel               string
+	RoutingReason               string
+	RoutingRuleID               string
+	PromptTokens                int64
+	CompletionTokens            int64
+	TotalTokens                 int64
+	CostMicroUSD                int64
+	SavedCostMicroUSD           int64
+	LatencyMs                   int64
+	ProviderLatencyMs           *int64
+	Status                      string
+	TerminalStatus              string
+	DomainOutcomes              DomainOutcomes
+	HTTPStatus                  int
+	ErrorCode                   string
+	ErrorMessage                string
+	ErrorStage                  string
+	CacheStatus                 string
+	CacheType                   string
+	CacheKeyHash                string
+	CacheHitRequestID           string
+	CacheDecisionReason         string
+	PromptCategory              string
+	ProviderCalled              bool
+	SelectedProviderID          string
+	SelectedModelID             string
+	RoutingPolicyHash           string
+	RoutingDecisionKeyHash      string
+	SemanticCacheHit            bool
+	SemanticSimilarity          float64
+	SemanticMatchedRequestID    string
+	SemanticCacheThreshold      float64
+	SemanticCachePolicyVersion  string
+	SemanticCacheDecisionReason string
+	EmbeddingProvider           string
+	MaskingAction               string
+	MaskingDetectedTypes        []string
+	MaskingDetectedCount        int
+	RedactedPromptPreview       string
+	RuntimeSnapshot             runtimeconfig.RuntimeSnapshotProvenance
+	CreatedAt                   time.Time
+	CompletedAt                 *time.Time
 }
 
 type RequestLogListItem struct {
@@ -145,6 +159,7 @@ type RequestDetail struct {
 	Model           string
 	RequestedModel  string
 	SelectedModel   string
+	ProviderCalled  bool
 	Usage           UsageFields
 	UsageSummary    UsageSummaryFields
 	Cost            CostFields
@@ -178,17 +193,31 @@ type LatencyFields struct {
 }
 
 type CacheFields struct {
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
+	CacheStatus                 string
+	CacheOutcome                string
+	CacheType                   string
+	CacheKeyHash                string
+	CacheHitRequestID           string
+	CacheDecisionReason         string
+	SemanticCacheHit            bool
+	SemanticSimilarity          float64
+	SemanticMatchedRequestID    string
+	SemanticCacheThreshold      float64
+	SemanticCachePolicyVersion  string
+	SemanticCacheDecisionReason string
+	EmbeddingProvider           string
+	PromptCategory              string
 }
 
 type RoutingFields struct {
-	RoutingReason    string
-	RoutingRuleID    string
-	SelectedProvider string
-	SelectedModel    string
+	RoutingReason          string
+	RoutingRuleID          string
+	SelectedProvider       string
+	SelectedProviderID     string
+	SelectedModel          string
+	SelectedModelID        string
+	RoutingPolicyHash      string
+	RoutingDecisionKeyHash string
 }
 
 type MaskingFields struct {
@@ -486,6 +515,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		Model:          log.Model,
 		RequestedModel: log.RequestedModel,
 		SelectedModel:  log.SelectedModel,
+		ProviderCalled: requestDetailProviderCalled(log),
 		Usage: UsageFields{
 			PromptTokens:     log.PromptTokens,
 			CompletionTokens: log.CompletionTokens,
@@ -509,16 +539,30 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		},
 		LatencySummary: latencySummary,
 		Cache: CacheFields{
-			CacheStatus:       defaultString(log.CacheStatus, CacheStatusBypass),
-			CacheType:         defaultString(log.CacheType, CacheTypeNone),
-			CacheKeyHash:      log.CacheKeyHash,
-			CacheHitRequestID: log.CacheHitRequestID,
+			CacheStatus:                 defaultString(log.CacheStatus, CacheStatusBypass),
+			CacheOutcome:                legacyCacheOutcome(log.CacheStatus),
+			CacheType:                   defaultString(log.CacheType, CacheTypeNone),
+			CacheKeyHash:                log.CacheKeyHash,
+			CacheHitRequestID:           log.CacheHitRequestID,
+			CacheDecisionReason:         log.CacheDecisionReason,
+			SemanticCacheHit:            log.SemanticCacheHit,
+			SemanticSimilarity:          log.SemanticSimilarity,
+			SemanticMatchedRequestID:    log.SemanticMatchedRequestID,
+			SemanticCacheThreshold:      log.SemanticCacheThreshold,
+			SemanticCachePolicyVersion:  log.SemanticCachePolicyVersion,
+			SemanticCacheDecisionReason: log.SemanticCacheDecisionReason,
+			EmbeddingProvider:           log.EmbeddingProvider,
+			PromptCategory:              log.PromptCategory,
 		},
 		Routing: RoutingFields{
-			RoutingReason:    log.RoutingReason,
-			RoutingRuleID:    log.RoutingRuleID,
-			SelectedProvider: log.SelectedProvider,
-			SelectedModel:    log.SelectedModel,
+			RoutingReason:          log.RoutingReason,
+			RoutingRuleID:          log.RoutingRuleID,
+			SelectedProvider:       log.SelectedProvider,
+			SelectedProviderID:     log.SelectedProviderID,
+			SelectedModel:          log.SelectedModel,
+			SelectedModelID:        log.SelectedModelID,
+			RoutingPolicyHash:      log.RoutingPolicyHash,
+			RoutingDecisionKeyHash: log.RoutingDecisionKeyHash,
 		},
 		Masking: MaskingFields{
 			MaskingAction:         defaultString(log.MaskingAction, "none"),
@@ -536,6 +580,23 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		CreatedAt:   log.CreatedAt,
 		CompletedAt: log.CompletedAt,
 	}
+}
+
+func requestDetailProviderCalled(log LlmInvocationLog) bool {
+	if log.ProviderCalled {
+		return true
+	}
+	if defaultString(log.CacheStatus, CacheStatusBypass) == CacheStatusHit {
+		return false
+	}
+	switch NormalizeTerminalStatus(firstNonEmptyString(log.TerminalStatus, log.Status)) {
+	case StatusBlocked, StatusRateLimited, StatusCancelled:
+		return false
+	}
+	if log.ProviderLatencyMs != nil {
+		return true
+	}
+	return strings.TrimSpace(log.Provider) != "" || strings.TrimSpace(log.SelectedProvider) != ""
 }
 
 func runtimeSnapshotPointer(snapshot runtimeconfig.RuntimeSnapshotProvenance, createdAt time.Time) *runtimeconfig.RuntimeSnapshotProvenance {
@@ -601,6 +662,8 @@ func legacyCacheOutcome(cacheStatus string) string {
 		return "miss"
 	case CacheStatusError:
 		return "error"
+	case CacheStatusStoreSkipped:
+		return "store_skipped"
 	case CacheStatusBypass:
 		return "bypassed"
 	default:

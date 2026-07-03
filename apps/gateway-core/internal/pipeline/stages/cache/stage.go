@@ -9,13 +9,15 @@ import (
 const (
 	StageName = "exact_cache_lookup"
 
-	CacheStatusHit    = "hit"
-	CacheStatusMiss   = "miss"
-	CacheStatusBypass = "bypass"
-	CacheStatusError  = "error"
+	CacheStatusHit          = "hit"
+	CacheStatusMiss         = "miss"
+	CacheStatusBypass       = "bypass"
+	CacheStatusError        = "error"
+	CacheStatusStoreSkipped = "store_skipped"
 
-	CacheTypeNone  = "none"
-	CacheTypeExact = "exact"
+	CacheTypeNone     = "none"
+	CacheTypeExact    = "exact"
+	CacheTypeSemantic = "semantic"
 
 	MaskingActionBlocked = "blocked"
 )

@@ -47,10 +47,10 @@ prompt
 -> overlap merge / dedupe
 -> policy evaluator
 -> redaction engine
--> downstream cache/routing/provider path
+-> downstream routing/cache/provider path
 ```
 
-Request-side safety는 downstream cache, routing, provider call, streaming start보다 먼저 완료되어야 한다.
+Request-side safety는 downstream routing, cache, provider call, streaming start보다 먼저 완료되어야 한다.
 
 초기 ML detector는 `shadow`로 시작한다. regex/rule detector가 초기 enforcement baseline이며, ML detector의 enforce 승격은 evaluation evidence와 별도 계약 판단 이후에만 한다.
 

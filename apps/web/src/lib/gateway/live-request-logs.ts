@@ -1,6 +1,11 @@
 import "server-only";
 
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type {
+  DomainOutcome,
+  DomainOutcomes,
+  InvocationLogRecord,
+  TerminalStatus
+} from "@/lib/fixtures/v1-observability-fixtures";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayProjectLogsResponse = {
@@ -15,6 +20,7 @@ type GatewayProjectLogItem = {
   completionTokens?: number;
   costMicroUsd?: number;
   createdAt?: string;
+  domainOutcomes?: GatewayDomainOutcomes;
   httpStatus?: number;
   latencyMs?: number;
   maskingAction?: string;
@@ -27,6 +33,7 @@ type GatewayProjectLogItem = {
   routingReason?: string;
   selectedModel?: string;
   status?: string;
+  terminalStatus?: string;
   totalTokens?: number;
 };
 
@@ -36,16 +43,46 @@ type GatewayBudgetScope = {
   resolvedBy?: string;
 };
 
+type GatewayDomainOutcomes = Partial<
+  Record<keyof DomainOutcomes, Partial<DomainOutcome> | null>
+>;
+
+export type LiveGatewayRequestLogFilters = {
+  applicationId?: string;
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  cacheStatus?: string;
+  from?: string;
+  limit?: number;
+  model?: string;
+  provider?: string;
+  requestId?: string;
+  resolvedBy?: string;
+  status?: string;
+  to?: string;
+};
+
 const LIVE_RANGE_HOURS = 24;
 
-export async function getLiveGatewayRequestLogs(): Promise<InvocationLogRecord[] | undefined> {
+export async function getLiveGatewayRequestLogs(
+  filters: LiveGatewayRequestLogFilters = {}
+): Promise<InvocationLogRecord[] | undefined> {
   const config = getLiveGatewayConfig();
-  const { from, to } = getLiveRange();
+  const defaultRange = getLiveRange();
   const query = new URLSearchParams({
-    from,
-    limit: "50",
-    to
+    from: filters.from ?? defaultRange.from,
+    limit: String(filters.limit ?? 50),
+    to: filters.to ?? defaultRange.to
   });
+  appendOptionalQuery(query, "applicationId", filters.applicationId);
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "cacheStatus", filters.cacheStatus);
+  appendOptionalQuery(query, "status", filters.status);
+  appendOptionalQuery(query, "model", filters.model);
+  appendOptionalQuery(query, "provider", filters.provider);
+  appendOptionalQuery(query, "requestId", filters.requestId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(
     `${config.baseUrl}/api/projects/${encodeURIComponent(config.projectId)}/logs?${query.toString()}`,
@@ -65,6 +102,13 @@ export async function getLiveGatewayRequestLogs(): Promise<InvocationLogRecord[]
   return (payload.data ?? []).map((item) => toInvocationRecord(item, config.projectId));
 }
 
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+  if (normalized) {
+    query.set(key, normalized);
+  }
+}
+
 function getLiveRange() {
   const to = new Date();
   const from = new Date(to.getTime() - LIVE_RANGE_HOURS * 60 * 60 * 1000);
@@ -79,10 +123,19 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
   const requestId = item.requestId ?? "";
   const createdAt = item.createdAt ?? new Date().toISOString();
   const cacheStatus = item.cacheStatus ?? "bypass";
-  const status = normalizeLegacyBridgeStatus(item.status);
+  const status = normalizeLegacyBridgeStatus(item.terminalStatus ?? item.status);
+  const rawMaskingAction = normalizeMaskingAction(item.maskingAction);
   const costMicroUsd = item.costMicroUsd ?? 0;
   const applicationId = item.applicationId ?? "live_gateway_application";
   const budgetScope = normalizeBudgetScope(item.budgetScope, applicationId);
+  const domainOutcomes = normalizeDomainOutcomes(
+    item.domainOutcomes,
+    legacyDomainOutcomes(status, cacheStatus, rawMaskingAction)
+  );
+  const maskingAction =
+    rawMaskingAction === "none"
+      ? maskingActionFromSafetyOutcome(domainOutcomes.safety.outcome)
+      : rawMaskingAction;
 
   return {
     requestId,
@@ -109,11 +162,15 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     routingReason: item.routingReason || null,
     cacheStatus,
     cacheType: item.cacheType ?? "none",
+    cacheDecisionReason: null,
     cacheKeyHash: null,
     cacheHitRequestId: null,
-    maskingAction: normalizeMaskingAction(item.maskingAction),
+    embeddingProvider: null,
+    maskingAction,
     maskingDetectedTypes: [],
     maskingDetectedCount: 0,
+    promptCategory: null,
+    providerCalled: domainOutcomes.provider.outcome !== "not_called",
     rateLimitDecision: {
       allowed: status !== "rate_limited",
       scope: budgetScope.budgetScopeType,
@@ -127,6 +184,12 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
       reason: status === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-list",
       durationMs: 0
     },
+    semanticCacheDecisionReason: null,
+    semanticCacheHit: false,
+    semanticCachePolicyVersion: null,
+    semanticCacheThreshold: null,
+    semanticMatchedRequestId: null,
+    semanticSimilarity: null,
     promptTokens: item.promptTokens ?? 0,
     completionTokens: item.completionTokens ?? 0,
     totalTokens: item.totalTokens ?? 0,
@@ -135,6 +198,8 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     latencyMs: item.latencyMs ?? 0,
     providerLatencyMs: null,
     status,
+    terminalStatus: status,
+    domainOutcomes,
     httpStatus: item.httpStatus ?? 0,
     errorCode: null,
     errorMessage: null,
@@ -176,6 +241,79 @@ function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, application
     budgetScopeId: applicationId,
     resolvedBy: "default_application"
   };
+}
+
+function normalizeDomainOutcomes(
+  value: GatewayDomainOutcomes | undefined,
+  fallback: DomainOutcomes
+): DomainOutcomes {
+  return {
+    auth: normalizeDomainOutcome(value?.auth, fallback.auth),
+    runtime: normalizeDomainOutcome(value?.runtime, fallback.runtime),
+    rateLimit: normalizeDomainOutcome(value?.rateLimit, fallback.rateLimit),
+    budget: normalizeDomainOutcome(value?.budget, fallback.budget),
+    safety: normalizeDomainOutcome(value?.safety, fallback.safety),
+    routing: normalizeDomainOutcome(value?.routing, fallback.routing),
+    cache: normalizeDomainOutcome(value?.cache, fallback.cache),
+    provider: normalizeDomainOutcome(value?.provider, fallback.provider),
+    fallback: normalizeDomainOutcome(value?.fallback, fallback.fallback),
+    streaming: normalizeDomainOutcome(value?.streaming, fallback.streaming),
+    logging: normalizeDomainOutcome(value?.logging, fallback.logging)
+  };
+}
+
+function normalizeDomainOutcome(
+  value: Partial<DomainOutcome> | null | undefined,
+  fallback: DomainOutcome
+): DomainOutcome {
+  return {
+    outcome: value?.outcome ?? fallback.outcome,
+    reason: value?.reason ?? fallback.reason ?? null,
+    code: value?.code ?? fallback.code ?? null
+  };
+}
+
+function legacyDomainOutcomes(
+  status: TerminalStatus,
+  cacheStatus: string,
+  maskingAction: InvocationLogRecord["maskingAction"]
+): DomainOutcomes {
+  const cacheOutcome =
+    cacheStatus === "hit" || cacheStatus === "miss" || cacheStatus === "error"
+      ? cacheStatus
+      : cacheStatus === "bypass"
+        ? "bypassed"
+        : "not_used";
+  const safetyOutcome =
+    maskingAction === "blocked" || maskingAction === "redacted" ? maskingAction : "passed";
+  const providerOutcome =
+    status === "blocked" || status === "rate_limited" || cacheOutcome === "hit"
+      ? "not_called"
+      : status === "failed"
+        ? "error"
+        : "success";
+
+  return {
+    auth: { outcome: "passed" },
+    runtime: { outcome: "snapshot_active" },
+    rateLimit: { outcome: status === "rate_limited" ? "rate_limited" : "not_checked" },
+    budget: { outcome: "allowed" },
+    safety: { outcome: safetyOutcome },
+    routing: { outcome: cacheOutcome === "hit" ? "skipped" : "selected" },
+    cache: { outcome: cacheOutcome },
+    provider: { outcome: providerOutcome },
+    fallback: { outcome: "not_called" },
+    streaming: { outcome: "not_streaming" },
+    logging: { outcome: "written" }
+  };
+}
+
+function maskingActionFromSafetyOutcome(outcome: string): InvocationLogRecord["maskingAction"] {
+  if (outcome === "redacted" || outcome === "blocked") {
+    return outcome;
+  }
+
+  return "none";
 }
 
 // Live Gateway list payloads may still carry legacy status names; normalize them for the v2-facing read model.

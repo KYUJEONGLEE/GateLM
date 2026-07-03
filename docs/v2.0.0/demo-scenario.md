@@ -9,7 +9,7 @@
 RuntimeConfig publish
 -> RuntimeSnapshot active
 -> Gateway request
--> budget / safety / cache / routing
+-> budget / safety / routing / exact cache
 -> Actual Provider or Mock fallback
 -> Request Detail / Dashboard / Metrics evidence
 ```

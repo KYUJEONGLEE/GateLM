@@ -137,6 +137,102 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('b'.repeat(64));
   });
 
+  it('keeps optional high-quality routing model in the runtime policy', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      providerConfig: { models: ['mock-fast', 'mock-balanced', 'mock-smart'] },
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {
+      routingPolicy: {
+        defaultProvider: 'mock',
+        defaultModel: 'mock-balanced',
+        lowCostProvider: 'mock',
+        lowCostModel: 'mock-fast',
+        highQualityProvider: 'mock',
+        highQualityModel: 'mock-smart',
+      },
+    });
+
+    expect(result.runtimeConfig.routingPolicy).toEqual(
+      expect.objectContaining({
+        defaultModel: 'mock-balanced',
+        lowCostModel: 'mock-fast',
+        highQualityProvider: 'mock',
+        highQualityModel: 'mock-smart',
+      }),
+    );
+    expect(result.runtimeConfig.routingPolicy.routingPolicyHash).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+  });
+
+  it('uses the selected high-quality provider default model when the model is omitted', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.providerConnection.findMany.mockResolvedValue([
+      {
+        id: providerId,
+        tenantId,
+        projectId,
+        provider: 'openai-main',
+        displayName: 'OpenAI Main',
+        status: ProviderConnectionStatus.ACTIVE,
+        baseUrl: 'https://api.openai.example/v1',
+        timeoutMs: 30000,
+        secretRef: 'secret/provider/openai-main',
+        credentialPrefix: 'sk_',
+        credentialLast4: '9xA1',
+        resolver: 'none',
+        providerConfig: { models: ['gpt-4o'] },
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000601',
+        tenantId,
+        projectId,
+        provider: 'mock-premium',
+        displayName: 'Mock Premium',
+        status: ProviderConnectionStatus.ACTIVE,
+        baseUrl: 'http://mock-premium:8090',
+        timeoutMs: 30000,
+        secretRef: 'secret/provider/mock-premium',
+        credentialPrefix: 'mock_',
+        credentialLast4: '8bB2',
+        resolver: 'none',
+        providerConfig: { models: ['mock-smart', 'mock-balanced'] },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {
+      routingPolicy: {
+        defaultProvider: 'openai-main',
+        defaultModel: 'gpt-4o',
+        highQualityProvider: 'mock-premium',
+      },
+    });
+
+    expect(result.runtimeConfig.routingPolicy).toEqual(
+      expect.objectContaining({
+        defaultProvider: 'openai-main',
+        defaultModel: 'gpt-4o',
+        highQualityProvider: 'mock-premium',
+        highQualityModel: 'mock-smart',
+      }),
+    );
+  });
+
   it('publishes a draft as the single active runtime config snapshot', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
@@ -249,7 +345,7 @@ describe('RuntimeConfigsService', () => {
     expect(result.publishState).toBe('active');
     expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v1');
     expect(result.providers[0]?.credentialRef).toEqual({
-      credentialRefId: `provider_credential:${providerId}`,
+      credentialRefId: 'secret/provider/mock',
       credentialVersion: 1,
       credentialState: 'active',
     });
@@ -723,6 +819,7 @@ describe('RuntimeConfigsService', () => {
       warningThresholdPercent: 80,
     });
     expect(result.policies.routing.defaultProvider).toBe('mock');
+    expect(result.policies.routing.lowCostModel).toBe('mock-fast');
     expect(result.policies.safety.requestSideRequired).toBe(true);
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
@@ -1716,6 +1813,8 @@ describe('RuntimeConfigsService', () => {
           defaultRequestedModel: 'auto',
           defaultProvider: 'mock',
           defaultModel: 'mock-fast',
+          lowCostProvider: 'mock',
+          lowCostModel: 'mock-fast',
           routingPolicyHash: 'e'.repeat(64),
         },
         cache: {

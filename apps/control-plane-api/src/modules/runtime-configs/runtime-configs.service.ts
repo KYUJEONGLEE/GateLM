@@ -667,19 +667,32 @@ export class RuntimeConfigsService {
       args.dto.routingPolicy?.lowCostProvider ?? defaultModel.provider,
       args.dto.routingPolicy?.lowCostModel,
     );
+    const highQualityModel =
+      (args.dto.routingPolicy?.highQualityProvider ||
+        args.dto.routingPolicy?.highQualityModel)
+        ? this.resolveModelForProvider(
+            models,
+            args.dto.routingPolicy?.highQualityProvider ??
+              defaultModel.provider,
+            args.dto.routingPolicy?.highQualityModel,
+          )
+        : undefined;
     const fallbackModel = this.resolveModelForProvider(
       models,
       args.dto.routingPolicy?.fallbackProvider ?? defaultModel.provider,
       args.dto.routingPolicy?.fallbackModel,
     );
-    this.assertSelectedProviderConnectionsActive(providers, [
+    const selectedProviders = [
       defaultModel.provider,
       lowCostModel.provider,
+      ...(highQualityModel ? [highQualityModel.provider] : []),
       fallbackModel.provider,
-    ]);
+    ];
+    this.assertSelectedProviderConnectionsActive(providers, selectedProviders);
     this.assertSelectedModelsActive([
       defaultModel,
       lowCostModel,
+      ...(highQualityModel ? [highQualityModel] : []),
       fallbackModel,
     ]);
     const effectiveAt = args.dto.effectiveAt
@@ -693,6 +706,7 @@ export class RuntimeConfigsService {
       dto: args.dto,
       defaultModel,
       lowCostModel,
+      highQualityModel,
       fallbackModel,
     });
     const providersResponse = providers.map((provider) =>
@@ -704,6 +718,7 @@ export class RuntimeConfigsService {
         [
           defaultModel.provider,
           lowCostModel.provider,
+          ...(highQualityModel ? [highQualityModel.provider] : []),
           fallbackModel.provider,
         ],
       );
@@ -896,8 +911,9 @@ export class RuntimeConfigsService {
       document.fallbackProvider,
       document.routingPolicy.defaultProvider,
       document.routingPolicy.lowCostProvider,
+      document.routingPolicy.highQualityProvider,
       document.routingPolicy.fallbackProvider,
-    ]);
+    ].filter((providerName): providerName is string => Boolean(providerName)));
     const currentProviders = await this.prisma.providerConnection.findMany({
       where: {
         projectId: context.projectId,
@@ -956,6 +972,16 @@ export class RuntimeConfigsService {
       document.routingPolicy.lowCostProvider,
       document.routingPolicy.lowCostModel,
     );
+    if (
+      document.routingPolicy.highQualityProvider ||
+      document.routingPolicy.highQualityModel
+    ) {
+      this.assertSelectedModelIsExecutable(
+        document,
+        document.routingPolicy.highQualityProvider ?? '',
+        document.routingPolicy.highQualityModel ?? '',
+      );
+    }
     this.assertSelectedModelIsExecutable(
       document,
       document.routingPolicy.fallbackProvider,
@@ -1470,6 +1496,7 @@ export class RuntimeConfigsService {
     dto: UpsertRuntimeConfigDraftDto;
     defaultModel: RuntimeConfigModelResponseDto;
     lowCostModel: RuntimeConfigModelResponseDto;
+    highQualityModel?: RuntimeConfigModelResponseDto;
     fallbackModel: RuntimeConfigModelResponseDto;
   }): RuntimeConfigRoutingPolicyResponseDto {
     const routingPolicyWithoutHash = {
@@ -1479,6 +1506,12 @@ export class RuntimeConfigsService {
       defaultModel: args.defaultModel.model,
       lowCostProvider: args.lowCostModel.provider,
       lowCostModel: args.lowCostModel.model,
+      ...(args.highQualityModel
+        ? {
+            highQualityProvider: args.highQualityModel.provider,
+            highQualityModel: args.highQualityModel.model,
+          }
+        : {}),
       fallbackProvider: args.fallbackModel.provider,
       fallbackModel: args.fallbackModel.model,
       shortPromptMaxChars:
@@ -1669,6 +1702,15 @@ export class RuntimeConfigsService {
           defaultRequestedModel: document.routingPolicy.autoModel,
           defaultProvider: document.routingPolicy.defaultProvider,
           defaultModel: document.routingPolicy.defaultModel,
+          lowCostProvider: document.routingPolicy.lowCostProvider,
+          lowCostModel: document.routingPolicy.lowCostModel,
+          ...(document.routingPolicy.highQualityProvider &&
+          document.routingPolicy.highQualityModel
+            ? {
+                highQualityProvider: document.routingPolicy.highQualityProvider,
+                highQualityModel: document.routingPolicy.highQualityModel,
+              }
+            : {}),
           routingPolicyHash: document.routingPolicy.routingPolicyHash,
         },
         cache: {
@@ -2053,6 +2095,14 @@ export class RuntimeConfigsService {
     ) {
       return 'low';
     }
+    if (
+      document.routingPolicy.highQualityProvider &&
+      document.routingPolicy.highQualityModel &&
+      model.provider === document.routingPolicy.highQualityProvider &&
+      model.model === document.routingPolicy.highQualityModel
+    ) {
+      return 'premium';
+    }
 
     return 'balanced';
   }
@@ -2072,6 +2122,14 @@ export class RuntimeConfigsService {
       model.model === document.routingPolicy.defaultModel
     ) {
       return 1;
+    }
+    if (
+      document.routingPolicy.highQualityProvider &&
+      document.routingPolicy.highQualityModel &&
+      model.provider === document.routingPolicy.highQualityProvider &&
+      model.model === document.routingPolicy.highQualityModel
+    ) {
+      return 2;
     }
     if (
       model.provider === document.routingPolicy.fallbackProvider &&
@@ -2131,7 +2189,7 @@ export class RuntimeConfigsService {
           provider.credentialRef ??
           (provider.secretRef
             ? {
-                credentialRefId: `provider_credential:${provider.providerId}`,
+                credentialRefId: provider.secretRef,
                 credentialVersion: 1,
                 credentialState:
                   provider.status === 'active' ? 'active' : 'disabled',
@@ -2164,7 +2222,7 @@ export class RuntimeConfigsService {
       return null;
     }
     return {
-      credentialRefId: `provider_credential:${provider.id}`,
+      credentialRefId: provider.secretRef,
       credentialVersion: 1,
       credentialState:
         provider.status === ProviderConnectionStatus.ACTIVE
@@ -2242,6 +2300,13 @@ export class RuntimeConfigsService {
         defaultModel: document.routingPolicy.defaultModel,
         lowCostProvider: document.routingPolicy.lowCostProvider,
         lowCostModel: document.routingPolicy.lowCostModel,
+        ...(document.routingPolicy.highQualityProvider &&
+        document.routingPolicy.highQualityModel
+          ? {
+              highQualityProvider: document.routingPolicy.highQualityProvider,
+              highQualityModel: document.routingPolicy.highQualityModel,
+            }
+          : {}),
         fallbackProvider: document.routingPolicy.fallbackProvider,
         fallbackModel: document.routingPolicy.fallbackModel,
         shortPromptMaxChars: document.routingPolicy.shortPromptMaxChars,

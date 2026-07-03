@@ -88,7 +88,7 @@ class PrivacyFilterAdapter:
         *,
         classifier: Callable[[str], object] | None = None,
         model_name: str = DEFAULT_PRIVACY_FILTER_MODEL,
-        source: str = DEFAULT_PRIVACY_FILTER_SOURCE,
+        source: str | None = None,
         label_map: Mapping[str, str] | None = None,
         min_confidence: float = DEFAULT_ML_MIN_CONFIDENCE,
         aggregation_strategy: str | None = None,
@@ -97,7 +97,7 @@ class PrivacyFilterAdapter:
         self._lock = threading.Lock()
         self._classifier = classifier
         self.model_name = model_name
-        self.source = source
+        self.source = source or source_for_model(model_name)
         self.label_map = label_map or DEFAULT_LABEL_MAP
         self.min_confidence = min_confidence
         self.aggregation_strategy = aggregation_strategy or aggregation_strategy_for_model(model_name)
@@ -130,10 +130,7 @@ class PrivacyFilterAdapter:
 
     def _load_classifier(self) -> Callable[[str], object]:
         if self.runtime == PRIVACY_FILTER_RUNTIME_ONNX:
-            try:
-                return self._load_onnx_classifier()
-            except ImportError:
-                return self._load_transformers_classifier()
+            return self._load_onnx_classifier()
         return self._load_transformers_classifier()
 
     def _load_transformers_classifier(self) -> Callable[[str], object]:
@@ -154,8 +151,11 @@ class PrivacyFilterAdapter:
         try:
             from optimum.onnxruntime import ORTModelForTokenClassification
             from transformers import AutoTokenizer, pipeline
-        except ImportError:
-            raise
+        except ImportError as exc:
+            raise RuntimeError(
+                "PrivacyFilterAdapter requires the optional ai-service onnx dependencies "
+                "when AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx."
+            ) from exc
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         model = ORTModelForTokenClassification.from_pretrained(self.model_name)

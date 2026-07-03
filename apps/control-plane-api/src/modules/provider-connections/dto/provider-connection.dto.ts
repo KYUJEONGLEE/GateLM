@@ -1,4 +1,4 @@
-import { ProviderConnectionStatus } from '@prisma/client';
+import { ProviderConnectionStatus, ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
@@ -89,6 +89,25 @@ export class ListProvidersQueryDto {
   cursor?: string;
 }
 
+export class ListProviderPresetsQueryDto {
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 50;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{1,63}$/)
+  cursor?: string;
+
+  @IsOptional()
+  @IsEnum(ResourceStatus)
+  status?: ResourceStatus = ResourceStatus.ACTIVE;
+}
+
 export interface ProviderCredentialPreviewDto {
   prefix: string | null;
   last4: string | null;
@@ -108,4 +127,42 @@ export interface ProviderResponseDto {
   providerConfig: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProviderPresetResponseDto {
+  adapterType: string;
+  baseUrl: string;
+  credentialRequired: boolean;
+  defaultResolver: string;
+  defaultTimeoutMs: number;
+  displayName: string;
+  modelsEndpointPath: string;
+  providerConfig: Record<string, unknown> | null;
+  providerKey: string;
+  sortOrder: number;
+  status: ResourceStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProviderModelDiscoveryItemDto {
+  createdAt: string | null;
+  displayName: string;
+  modelName: string;
+  object: string | null;
+  ownedBy: string | null;
+  provider: string;
+  providerId: string;
+  source: 'provider_models_endpoint';
+}
+
+export interface ProviderModelDiscoveryResponseDto {
+  adapterType: string;
+  baseUrl: string;
+  credentialRequired: boolean;
+  discoveredAt: string;
+  modelCount: number;
+  models: ProviderModelDiscoveryItemDto[];
+  provider: string;
+  providerId: string;
 }

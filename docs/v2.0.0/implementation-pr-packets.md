@@ -306,7 +306,7 @@ Rollback:
 - Keep RuntimeConfig source records.
 - Repoint active snapshot pointer to previous snapshot or disable RuntimeSnapshot live adapter behind config.
 
-## PR-3. Budget, Request-Side Safety, Exact Cache, Routing
+## PR-3. Budget, Request-Side Safety, Routing, Exact Cache
 
 Branch:
 
@@ -316,7 +316,7 @@ feat/v2-budget-safety-cache-routing
 
 Goal:
 
-- Provider 호출 전에 budget/rate limit, request-side safety, exact cache, routing 순서를 고정한다.
+- Provider 호출 전에 budget/rate limit, request-side safety, routing, routing-aware exact cache 순서를 고정한다.
 
 Primary files:
 
@@ -333,12 +333,13 @@ Primary files:
 Consumes:
 
 - `contracts.md` sections 3, 6, 8
+- `exact-cache-routing-aware-contract.md`
 - safety/cache/outcome schema fixtures
 
 Produces:
 
 - pre-provider gate order
-- budget/safety/cache/routing domain outcomes
+- budget/safety/routing/cache domain outcomes
 
 Implementation order:
 
@@ -346,14 +347,15 @@ Implementation order:
 2. Load RuntimeSnapshot.
 3. Resolve budget scope and apply budget/rate limit.
 4. Run request-side safety.
-5. Check Exact Cache.
-6. Run routing for provider/model.
-7. Call provider/fallback only after all gates pass or cache misses.
+5. Run routing/category/provider/model decision.
+6. Build routing-aware Exact Cache key and check Exact Cache.
+7. Call provider/fallback only after all gates pass and cache misses.
 
 Acceptance:
 
 - Budget block prevents provider call.
 - Safety block prevents provider call, cache write, and streaming start.
+- Exact cache key uses stable execution identity: category, providerId, modelId, providerCatalogHash, routingDecisionKeyHash.
 - Exact cache hit bypasses provider.
 - `model=auto` records selected provider/model and routing reason.
 - Semantic Cache remains evidence-only.

@@ -11,6 +11,15 @@ export const metadata: Metadata = {
   description: "GateLM Web Console"
 };
 
+const themeInitScript = `
+try {
+  var theme = window.localStorage.getItem("gatelm_console_theme");
+  document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+} catch (error) {
+  document.documentElement.dataset.theme = "light";
+}
+`;
+
 export default async function RootLayout({
   children
 }: Readonly<{
@@ -19,8 +28,11 @@ export default async function RootLayout({
   const locale = await getRequestLocale();
 
   return (
-    <html lang={locale} className={cn("font-sans", geist.variable)}>
-      <body>{children}</body>
+    <html lang={locale} className={cn("font-sans", geist.variable)} suppressHydrationWarning>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {children}
+      </body>
     </html>
   );
 }

@@ -384,7 +384,15 @@ func routingOutcome(log TerminalLog) RoutingOutcome {
 		return RoutingOutcome{Outcome: "not_checked"}
 	}
 	if strings.TrimSpace(log.SelectedProvider) == "" && strings.TrimSpace(log.SelectedModel) == "" {
-		return RoutingOutcome{Outcome: "skipped", RequestedModel: stringPointer(log.RequestedModel)}
+		routingReason := log.RoutingReason
+		if strings.TrimSpace(routingReason) == "" && log.CacheStatus == CacheStatusHit {
+			routingReason = "exact_cache_hit_provider_bypass"
+		}
+		return RoutingOutcome{
+			Outcome:        "skipped",
+			RequestedModel: stringPointer(log.RequestedModel),
+			RoutingReason:  stringPointer(routingReason),
+		}
 	}
 	return RoutingOutcome{
 		Outcome:          "selected",
@@ -404,6 +412,8 @@ func cacheOutcome(cacheStatus string, cacheType string, cacheHitRequestID string
 		outcome = "miss"
 	case CacheStatusError:
 		outcome = "error"
+	case CacheStatusStoreSkipped:
+		outcome = "store_skipped"
 	case "":
 		outcome = "bypassed"
 	case CacheStatusBypass:

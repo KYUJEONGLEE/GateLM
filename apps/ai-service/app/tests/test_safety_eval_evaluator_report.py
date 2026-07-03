@@ -13,6 +13,7 @@ from app.domain.safety_eval.report import (
     build_report,
     load_semantic_cache_evidence_fixture,
     scan_path_for_forbidden_sensitive_values,
+    scan_text_for_forbidden_sensitive_values,
     write_reports,
 )
 from app.schemas.safety_eval import SafetyEvalError
@@ -105,6 +106,25 @@ class SafetyEvalEvaluatorReportTests(unittest.TestCase):
     def test_security_scan_rejects_forbidden_raw_fixture(self) -> None:
         with self.assertRaisesRegex(SafetyEvalError, "forbidden field name"):
             scan_path_for_forbidden_sensitive_values(FIXTURE_DIR / "forbidden-raw.fixture.json")
+
+    def test_security_scan_rejects_markdown_forbidden_field_references(self) -> None:
+        for text in (
+            "`rawPrompt`",
+            "- rawPrompt: do not include source text",
+            "**rawPrompt**: do not include source text",
+        ):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(
+                    SafetyEvalError,
+                    "forbidden field name",
+                ):
+                    scan_text_for_forbidden_sensitive_values(text, "bad markdown")
+
+    def test_security_scan_allows_plain_words_without_field_shape(self) -> None:
+        scan_text_for_forbidden_sensitive_values(
+            "This report summarizes messages without storing source content.",
+            "safe markdown",
+        )
 
     def test_report_includes_semantic_cache_evidence_only_fixture(self) -> None:
         cases = load_corpus(CORPUS_PATH, SCHEMA_PATH)

@@ -40,6 +40,35 @@ const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
 const CONFIG_HASH_ALGORITHM =
   'sha256(canonical_json(runtimeConfig_without_configHash))';
 const DEMO_MODELS = ['mock-fast', 'mock-balanced'] as const;
+export const PROVIDER_PRESETS = [
+  {
+    providerKey: 'openai',
+    displayName: 'OpenAI',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://api.openai.com/v1',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
+    sortOrder: 10,
+  },
+  {
+    providerKey: 'gemini',
+    displayName: 'Gemini',
+    adapterType: 'openai_compatible',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    requestFormat: 'openai_chat_completions',
+    modelDiscoveryType: 'openai_compatible_models',
+    sortOrder: 20,
+  },
+  {
+    providerKey: 'claude',
+    displayName: 'Claude',
+    adapterType: 'anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    requestFormat: 'anthropic_messages',
+    modelDiscoveryType: 'anthropic_models',
+    sortOrder: 30,
+  },
+] as const;
 
 type DemoProviderMode = 'mock' | 'actual';
 
@@ -306,6 +335,8 @@ export function buildDemoRuntimeConfigDocument(
 
 export async function seedDemoData(client: PrismaClient): Promise<void> {
   await client.$transaction(async (tx) => {
+    await seedProviderPresets(tx);
+
     await tx.tenant.upsert({
       where: { id: DEMO_TENANT_ID },
       update: {
@@ -632,6 +663,69 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
   });
 }
 
+async function seedProviderPresets(
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  const activeProviderPresetKeys = PROVIDER_PRESETS.map(
+    (preset) => preset.providerKey,
+  );
+
+  await tx.providerPreset.updateMany({
+    where: {
+      providerKey: { notIn: activeProviderPresetKeys },
+      status: ResourceStatus.ACTIVE,
+    },
+    data: { status: ResourceStatus.ARCHIVED },
+  });
+
+  for (const preset of PROVIDER_PRESETS) {
+    await tx.providerPreset.upsert({
+      where: { providerKey: preset.providerKey },
+      update: {
+        displayName: preset.displayName,
+        adapterType: preset.adapterType,
+        baseUrl: preset.baseUrl,
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: ResourceStatus.ACTIVE,
+        sortOrder: preset.sortOrder,
+        providerConfig: providerPresetConfig(preset),
+      },
+      create: {
+        providerKey: preset.providerKey,
+        displayName: preset.displayName,
+        adapterType: preset.adapterType,
+        baseUrl: preset.baseUrl,
+        modelsEndpointPath: '/models',
+        credentialRequired: true,
+        defaultResolver: 'environment',
+        defaultTimeoutMs: 30000,
+        status: ResourceStatus.ACTIVE,
+        sortOrder: preset.sortOrder,
+        providerConfig: providerPresetConfig(preset),
+      },
+    });
+  }
+}
+
+function providerPresetConfig(
+  preset: (typeof PROVIDER_PRESETS)[number],
+): Prisma.InputJsonObject {
+  return {
+    providerKey: preset.providerKey,
+    adapterType: preset.adapterType,
+    requestFormat: preset.requestFormat,
+    modelsEndpointPath: '/models',
+    credentialRequired: true,
+    modelDiscovery: {
+      type: preset.modelDiscoveryType,
+      cacheTtlSeconds: 3600,
+    },
+  };
+}
+
 function buildDemoRuntimeSnapshot(
   runtimeConfig: RuntimeConfig,
   document: ActiveRuntimeConfigResponseDto,
@@ -691,6 +785,15 @@ function buildDemoRuntimeSnapshot(
         defaultRequestedModel: document.routingPolicy.autoModel,
         defaultProvider: document.routingPolicy.defaultProvider,
         defaultModel: document.routingPolicy.defaultModel,
+        lowCostProvider: document.routingPolicy.lowCostProvider,
+        lowCostModel: document.routingPolicy.lowCostModel,
+        ...(document.routingPolicy.highQualityProvider &&
+        document.routingPolicy.highQualityModel
+          ? {
+              highQualityProvider: document.routingPolicy.highQualityProvider,
+              highQualityModel: document.routingPolicy.highQualityModel,
+            }
+          : {}),
         routingPolicyHash: document.routingPolicy.routingPolicyHash,
       },
       cache: {
@@ -1064,7 +1167,7 @@ function buildMockModel(
     displayName,
     status: 'active',
     contextWindowTokens: 8192,
-    supportsStreaming: false,
+    supportsStreaming: true,
     supportsJsonMode: false,
   };
 }

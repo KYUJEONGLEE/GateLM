@@ -43,7 +43,7 @@ v2.0.0의 기본 흐름은 아래다.
 Customer App / Employee Chat
 -> Gateway
 -> RuntimeSnapshot policy
--> budget / safety / cache / routing
+-> budget / safety / routing / exact cache
 -> Actual Provider or Mock fallback
 -> Request Log / Detail / Dashboard / Metrics / k6 evidence
 ```
@@ -89,7 +89,7 @@ cache key, metrics label, dashboard aggregate label에도 위 값이나 high-car
 | 1 | `feat/gateway-outcome-adoption-gate` | `terminalStatus + domainOutcomes` canonical adoption |
 | 2A | `feat/provider-adapter-openai-and-mock-fallback` | Actual OpenAI Provider Adapter and Mock fallback |
 | 2B | `feat/runtime-snapshot-live-thin-slice` | RuntimeSnapshot execution view and provenance |
-| 3 | `feat/v2-budget-safety-cache-routing` | budget, safety, exact cache, routing order |
+| 3 | `feat/v2-budget-safety-cache-routing` | budget, safety, routing-aware exact cache order |
 | 4 | `feat/streaming-thin-slice` | streaming feel and final outcome logging |
 | 5 | `feat/v2-observability-dashboard-k6` | Request Detail, Dashboard, metrics guard, k6 baseline |
 | 6 | `feat/v2-demo-evidence` | Demo Scenario Runner, preset evidence, final presentation proof |

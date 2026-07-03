@@ -880,10 +880,6 @@ def _confidence_rank(confidence: float) -> float:
     return confidence
 
 
-def _overlaps(left: SafetySignal, right: SafetySignal) -> bool:
-    return left.start < right.end and right.start < left.end
-
-
 def _normalize_signal_span(
     signal: SafetySignal,
     prompt_text: str | None,

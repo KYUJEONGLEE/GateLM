@@ -42,7 +42,19 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 
 	gatewayCtx.Routing.RequestedModel = decision.RequestedModel
 	gatewayCtx.Routing.SelectedProvider = decision.SelectedProvider
+	gatewayCtx.Routing.SelectedProviderID = decision.SelectedProviderID
+	gatewayCtx.Routing.SelectedProviderCatalogKey = decision.SelectedProviderCatalogKey
 	gatewayCtx.Routing.SelectedModel = decision.SelectedModel
+	gatewayCtx.Routing.SelectedModelID = decision.SelectedModelID
+	gatewayCtx.Routing.ProviderCatalogContentHash = decision.ProviderCatalogContentHash
+	gatewayCtx.Routing.RoutingDecisionKeyHash = decision.RoutingDecisionKeyHash
+	gatewayCtx.Routing.RoutingDecisionMaterial = map[string]string{
+		"routingMode":   decision.RoutingDecisionMaterial.RoutingMode,
+		"category":      decision.RoutingDecisionMaterial.Category,
+		"tier":          decision.RoutingDecisionMaterial.Tier,
+		"capability":    decision.RoutingDecisionMaterial.Capability,
+		"policyVariant": decision.RoutingDecisionMaterial.PolicyVariant,
+	}
 	gatewayCtx.Routing.RoutingReason = decision.RoutingReason
 	gatewayCtx.Routing.RoutingPolicyHash = decision.PolicyHash
 

@@ -188,6 +188,140 @@ func TestChatCompletionsHandlerRecordsLogWriteErrors(t *testing.T) {
 	assertHandlerMetricsContains(t, registry.RenderPrometheus(), `gatelm_log_writes_total{operation="terminal",status="error"} 1`)
 }
 
+func TestChatCompletionsHandlerRecordsStreamingObservabilityMetrics(t *testing.T) {
+	registry := metrics.NewRegistry()
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":null}],"usage":{"prompt_tokens":4,"completion_tokens":0,"total_tokens":4}}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"첫 토큰"},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}`),
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock", streamingAdapter),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+		MetricsRegistry: registry,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("스트리밍 metric을 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	output := registry.RenderPrometheus()
+	assertHandlerMetricsContains(t, output, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_duration_seconds_count{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"} 1`)
+	assertHandlerMetricsHasNoForbiddenLabels(t, output)
+}
+
+func TestChatCompletionsHandlerRecordsInterruptedStreamingMetricsWithoutTTFTBeforeContent(t *testing.T) {
+	registry := metrics.NewRegistry()
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
+		},
+		nextErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("stream interrupted")),
+	}
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock", streamingAdapter),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+		MetricsRegistry: registry,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("중간 오류 metric을 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	output := registry.RenderPrometheus()
+	assertHandlerMetricsContains(t, output, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="provider_error",selected_model="mock-balanced",selected_provider="mock",stream_outcome="interrupted"} 1`)
+	assertHandlerMetricsNotContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"}`)
+	assertHandlerMetricsHasNoForbiddenLabels(t, output)
+}
+
+func TestChatCompletionsHandlerRecordsCancelledStreamingMetrics(t *testing.T) {
+	registry := metrics.NewRegistry()
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_stream_metrics","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"취소 전 토큰"},"finish_reason":null}]}`),
+		},
+		nextErr: context.Canceled,
+	}
+	handler := ChatCompletionsHandler{
+		Providers:       provider.NewRegistry("mock", streamingAdapter),
+		DefaultModel:    "mock-balanced",
+		DefaultProvider: "mock",
+		MetricsRegistry: registry,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("취소 metric을 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	output := registry.RenderPrometheus()
+	assertHandlerMetricsContains(t, output, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_relay_total{error_code="internal_error",selected_model="mock-balanced",selected_provider="mock",stream_outcome="cancelled"} 1`)
+	assertHandlerMetricsContains(t, output, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"} 1`)
+	assertHandlerMetricsHasNoForbiddenLabels(t, output)
+}
+
+func TestStreamEventHasContentDeltaOnlyForNonEmptyContent(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{
+			name: "role only",
+			raw:  `{"choices":[{"delta":{"role":"assistant"}}]}`,
+			want: false,
+		},
+		{
+			name: "usage only",
+			raw:  `{"choices":[{"delta":{}}],"usage":{"prompt_tokens":4,"completion_tokens":0,"total_tokens":4}}`,
+			want: false,
+		},
+		{
+			name: "empty content",
+			raw:  `{"choices":[{"delta":{"content":""}}]}`,
+			want: false,
+		},
+		{
+			name: "whitespace content token",
+			raw:  `{"choices":[{"delta":{"content":" "}}]}`,
+			want: true,
+		},
+		{
+			name: "korean content",
+			raw:  `{"choices":[{"delta":{"content":"안녕"}}]}`,
+			want: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := streamEventHasContentDelta([]byte(tc.raw)); got != tc.want {
+				t.Fatalf("streamEventHasContentDelta()=%v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestChatCompletionsHandlerRecordsAuthFailureLogWriteErrors(t *testing.T) {
 	registry := metrics.NewRegistry()
 	handler := ChatCompletionsHandler{

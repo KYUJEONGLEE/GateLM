@@ -106,6 +106,45 @@ func TestActiveConfigValidateActiveRejectsInactiveCredentialStatus(t *testing.T)
 	}
 }
 
+func TestRoutingPolicySimpleRouterConfigUsesHighQualityModelWhenConfigured(t *testing.T) {
+	policy := RoutingPolicy{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		FallbackProvider:    "mock",
+		FallbackModel:       "mock-fallback",
+		RoutingPolicyHash:   "hash_routing_policy_test",
+	}
+
+	config := policy.SimpleRouterConfig()
+
+	if config.LowCostProvider != "mock-cheap" || config.LowCostModel != "mock-fast" {
+		t.Fatalf("expected low-cost route to use configured provider/model: %#v", config)
+	}
+	if config.HighQualityProvider != "mock-premium" || config.HighQualityModel != "mock-smart" {
+		t.Fatalf("expected high-quality route to use configured provider/model: %#v", config)
+	}
+}
+
+func TestRoutingPolicySimpleRouterConfigFallsBackHighQualityToDefaultModel(t *testing.T) {
+	policy := RoutingPolicy{
+		DefaultProvider:   "mock",
+		DefaultModel:      "mock-balanced",
+		FallbackProvider:  "mock",
+		FallbackModel:     "mock-fallback",
+		RoutingPolicyHash: "hash_routing_policy_test",
+	}
+
+	config := policy.SimpleRouterConfig()
+
+	if config.HighQualityProvider != "mock" || config.HighQualityModel != "mock-balanced" {
+		t.Fatalf("expected high-quality route to fall back to default provider/model: %#v", config)
+	}
+}
+
 func testActiveConfig() ActiveConfig {
 	return ActiveConfig{
 		ConfigVersion:     "runtime_config_test",
@@ -136,6 +175,8 @@ func testActiveConfig() ActiveConfig {
 			DefaultModel:        "mock-balanced",
 			LowCostProvider:     "mock",
 			LowCostModel:        "mock-fast",
+			HighQualityProvider: "mock",
+			HighQualityModel:    "mock-smart",
 			FallbackProvider:    "mock",
 			FallbackModel:       "mock-balanced",
 			ShortPromptMaxChars: 500,

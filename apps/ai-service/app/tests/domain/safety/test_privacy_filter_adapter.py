@@ -5,6 +5,7 @@ import time
 import sys
 import types
 import unittest
+from unittest import mock
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
@@ -189,7 +190,7 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         transformers_module.AutoTokenizer = FakeAutoTokenizer
         transformers_module.pipeline = fake_pipeline
 
-        with unittest.mock.patch.dict(
+        with mock.patch.dict(
             sys.modules,
             {
                 "optimum": optimum_module,
@@ -220,6 +221,24 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(runtime_for_value("onnx"), "onnx")
         self.assertEqual(runtime_for_value("TRANSFORMERS"), "transformers")
         self.assertEqual(runtime_for_value("bad-runtime"), "transformers")
+
+    def test_adapter_derives_source_from_local_onnx_model_path(self) -> None:
+        adapter = PrivacyFilterAdapter(
+            model_name=f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}",
+            runtime="onnx",
+        )
+
+        self.assertEqual(adapter.source, KOELECTRA_PRIVACY_NER_SOURCE)
+
+    def test_onnx_runtime_requires_onnx_dependencies(self) -> None:
+        with mock.patch.dict(sys.modules, {"optimum.onnxruntime": None}):
+            adapter = PrivacyFilterAdapter(
+                model_name=f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}",
+                runtime="onnx",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "onnx dependencies"):
+                adapter._load_classifier()
 
 
 def remote_context() -> RemoteSafetyContext:

@@ -74,6 +74,33 @@ func TestStageUsesRuntimeRateLimitConfigWhenLoaded(t *testing.T) {
 	}
 }
 
+func TestStagePassesProjectScopedRuntimeRateLimitConfig(t *testing.T) {
+	limiter := &fakeLimiter{
+		decision: ratelimit.Decision{
+			Allowed: true,
+			Reason:  ratelimit.ReasonWithinLimit,
+		},
+	}
+	stage := NewStage(limiter, testConfig())
+	gatewayCtx := testGatewayContext()
+	gatewayCtx.Runtime.RateLimitConfig = ratelimit.Config{
+		Enabled:       true,
+		Scope:         ratelimit.ScopeProject,
+		Algorithm:     ratelimit.AlgorithmFixedWindow,
+		WindowSeconds: 60,
+		Limit:         11,
+	}
+	gatewayCtx.Runtime.HasRateLimitConfig = true
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected project scoped runtime config request to pass, got %v", err)
+	}
+
+	if limiter.request.Config.Scope != ratelimit.ScopeProject || limiter.request.ProjectID != "project_demo" {
+		t.Fatalf("expected project scoped rate limit request, got %#v", limiter.request)
+	}
+}
+
 func TestStageBlocksRequestWhenLimitExceeded(t *testing.T) {
 	// Given 같은 Application이 이미 limit을 초과했다
 	stage := NewStage(&fakeLimiter{
