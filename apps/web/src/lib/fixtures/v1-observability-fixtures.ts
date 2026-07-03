@@ -53,6 +53,8 @@ export type DomainOutcome = {
   outcome: string;
   reason?: string | null;
   code?: string | null;
+  policyAllowedTypes?: string[];
+  mandatoryProtectedTypes?: string[];
 };
 
 export type DomainOutcomes = {
@@ -136,6 +138,8 @@ export type InvocationLogRecord = {
     outcome: string;
     detectedCount: number;
     detectorCategories: string[];
+    policyAllowedTypes?: string[];
+    mandatoryProtectedTypes?: string[];
     maskingAction: string | null;
   };
   httpStatus: number;

@@ -18,6 +18,7 @@ type ApplyRequest struct {
 	Prompt                  string
 	SecurityPolicyVersionID string
 	EntityScope             *EntityScope
+	DetectorPolicies        []DetectorPolicy
 }
 
 func NewEngine(registry Registry, securityPolicyVersionID string) Engine {
@@ -43,18 +44,22 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		securityPolicyVersionID = DefaultSecurityPolicyVersionID
 	}
 
-	effective := effectiveDetectionsForInput(req.Prompt, normalizeDetectionSpans(req.Prompt, e.registry.Detect(req.Prompt)))
-	if len(effective) == 0 {
+	rawDetections := normalizeDetectionSpans(req.Prompt, e.registry.Detect(req.Prompt))
+	effectiveAll := effectiveDetectionsForInput(req.Prompt, applyDetectorPolicies(rawDetections, req.DetectorPolicies))
+	protected := detectionsWithProtection(effectiveAll)
+	allowed := detectionsAllowedByPolicy(effectiveAll)
+	if len(effectiveAll) == 0 {
 		return Result{
 			Action:                  ActionNone,
 			RedactedPrompt:          req.Prompt,
+			LogSafePrompt:           req.Prompt,
 			RedactedPromptPreview:   PreviewRedactedPrompt(req.Prompt),
 			SecurityPolicyVersionID: securityPolicyVersionID,
 		}, nil
 	}
 
 	action := ActionNone
-	for _, detection := range effective {
+	for _, detection := range protected {
 		if detection.Action == ActionBlocked {
 			action = ActionBlocked
 			break
@@ -68,16 +73,21 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 	if entityScope == nil {
 		entityScope = NewEntityScope()
 	}
-	effective = detectionsWithEntityPlaceholders(req.Prompt, effective, entityScope)
-	redactionDetections := withRelationshipRolePlaceholders(req.Prompt, effective)
-	redactionDetections = withCoreferencePlaceholders(req.Prompt, effective, redactionDetections)
+	protected = detectionsWithEntityPlaceholders(req.Prompt, protected, entityScope)
+	redactionDetections := withRelationshipRolePlaceholders(req.Prompt, protected)
+	redactionDetections = withCoreferencePlaceholders(req.Prompt, protected, redactionDetections)
 	redactedPrompt := redact(req.Prompt, redactionDetections)
+	logSafePrompt := redact(req.Prompt, detectionsWithEntityPlaceholders(req.Prompt, effectiveAll, entityScope))
 	return Result{
 		Action:                  action,
-		DetectedTypes:           detectedTypes(effective),
-		DetectedCount:           len(effective),
+		DetectedTypes:           detectedTypes(protected),
+		DetectedCount:           len(protected),
+		PolicyAllowedTypes:      detectedTypes(allowed),
+		PolicyAllowedCount:      len(allowed),
+		MandatoryProtectedTypes: mandatoryProtectedTypes(protected),
 		RedactedPrompt:          redactedPrompt,
-		RedactedPromptPreview:   PreviewRedactedPrompt(redactedPrompt),
+		LogSafePrompt:           logSafePrompt,
+		RedactedPromptPreview:   PreviewRedactedPrompt(logSafePrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}, nil
 }
@@ -104,6 +114,93 @@ func detectionsWithEntityPlaceholders(input string, detections []Detection, enti
 		}
 	}
 	return withPlaceholders
+}
+
+func applyDetectorPolicies(detections []Detection, policies []DetectorPolicy) []Detection {
+	if len(detections) == 0 {
+		return nil
+	}
+	overrides := detectorPolicyMap(policies)
+	applied := make([]Detection, 0, len(detections))
+	for _, detection := range detections {
+		if detection.Start < 0 || detection.End <= detection.Start {
+			continue
+		}
+		detection.Type = strings.TrimSpace(detection.Type)
+		if detection.Placeholder == "" {
+			placeholder, _ := PlaceholderForDetector(detection.Type)
+			detection.Placeholder = placeholder
+		}
+		if override, ok := overrides[detection.Type]; ok {
+			switch override {
+			case PolicyActionAllow:
+				if !IsMandatoryDetector(detection.Type) {
+					detection.Action = ActionNone
+				}
+			case PolicyActionRedact:
+				detection.Action = ActionRedacted
+			case PolicyActionBlock:
+				detection.Action = ActionBlocked
+			}
+		}
+		applied = append(applied, detection)
+	}
+	return applied
+}
+
+func detectorPolicyMap(policies []DetectorPolicy) map[string]PolicyAction {
+	if len(policies) == 0 {
+		return nil
+	}
+	overrides := make(map[string]PolicyAction, len(policies))
+	for _, policy := range policies {
+		detectorType := strings.TrimSpace(policy.DetectorType)
+		action := PolicyAction(strings.TrimSpace(string(policy.Action)))
+		switch action {
+		case PolicyActionAllow, PolicyActionRedact, PolicyActionBlock:
+			if detectorType != "" {
+				overrides[detectorType] = action
+			}
+		}
+	}
+	return overrides
+}
+
+func detectionsWithProtection(detections []Detection) []Detection {
+	protected := make([]Detection, 0, len(detections))
+	for _, detection := range detections {
+		if detection.Action == ActionRedacted || detection.Action == ActionBlocked {
+			protected = append(protected, detection)
+		}
+	}
+	return protected
+}
+
+func detectionsAllowedByPolicy(detections []Detection) []Detection {
+	allowed := make([]Detection, 0, len(detections))
+	for _, detection := range detections {
+		if detection.Action == ActionNone {
+			allowed = append(allowed, detection)
+		}
+	}
+	return allowed
+}
+
+func mandatoryProtectedTypes(detections []Detection) []string {
+	seen := map[string]struct{}{}
+	for _, detection := range detections {
+		detectorType := strings.TrimSpace(detection.Type)
+		if !IsMandatoryDetector(detectorType) {
+			continue
+		}
+		seen[detectorType] = struct{}{}
+	}
+	types := make([]string, 0, len(seen))
+	for detectorType := range seen {
+		types = append(types, detectorType)
+	}
+	sort.Strings(types)
+	return types
 }
 
 func PreviewRedactedPrompt(prompt string) string {

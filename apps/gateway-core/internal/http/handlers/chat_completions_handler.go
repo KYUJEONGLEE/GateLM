@@ -180,7 +180,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
-	maskingResult, redactedMessages, redactedPrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID))
+	maskingResult, redactedMessages, redactedPrompt, logSafePrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID), reqCtx.RuntimeSafetyPolicy)
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway masking failed.", "mask_or_block")
 		return
@@ -188,13 +188,15 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.MaskingAction = string(maskingResult.Action)
 	reqCtx.MaskingDetectedTypes = maskingResult.DetectedTypes
 	reqCtx.MaskingDetectedCount = maskingResult.DetectedCount
-	if maskingResult.Action == maskdomain.ActionNone {
+	reqCtx.PolicyAllowedTypes = maskingResult.PolicyAllowedTypes
+	reqCtx.MandatoryProtectedTypes = maskingResult.MandatoryProtectedTypes
+	if maskingResult.Action == maskdomain.ActionNone && len(maskingResult.PolicyAllowedTypes) == 0 {
 		reqCtx.RedactedPromptPreview = ""
 	} else {
 		reqCtx.RedactedPromptPreview = maskingResult.RedactedPromptPreview
 	}
 	reqCtx.SecurityPolicyVersionID = maskingResult.SecurityPolicyVersionID
-	terminalLogPrompt = redactedPrompt
+	terminalLogPrompt = firstNonEmpty(logSafePrompt, redactedPrompt)
 
 	if maskingResult.Action == maskdomain.ActionBlocked {
 		reqCtx.Status = "blocked"
@@ -1260,49 +1262,57 @@ func (h *ChatCompletionsHandler) ensureGatewayFlowDefaults() {
 	}
 }
 
-func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []provider.ChatMessage, securityPolicyVersionID string) (maskdomain.Result, []provider.ChatMessage, string, error) {
+func (h *ChatCompletionsHandler) applyMasking(ctx context.Context, messages []provider.ChatMessage, securityPolicyVersionID string, safetyPolicy runtimeconfig.SafetyPolicy) (maskdomain.Result, []provider.ChatMessage, string, string, error) {
 	redactedMessages := make([]provider.ChatMessage, len(messages))
 	results := make([]maskdomain.Result, 0, len(messages))
 	redactedPromptParts := make([]string, 0, len(messages))
 	entityScope := maskdomain.NewEntityScope()
+	logSafePromptParts := make([]string, 0, len(messages))
 	if strings.TrimSpace(securityPolicyVersionID) == "" {
 		securityPolicyVersionID = h.SecurityPolicyVersionID
 	}
+	detectorPolicies := maskingDetectorPolicies(safetyPolicy)
 
 	for index, message := range messages {
 		content, err := chatMessageText(message)
 		if err != nil {
-			return maskdomain.Result{}, nil, "", err
+			return maskdomain.Result{}, nil, "", "", err
 		}
 
 		result, err := h.MaskingEngine.Apply(ctx, maskdomain.ApplyRequest{
 			Prompt:                  content,
 			SecurityPolicyVersionID: securityPolicyVersionID,
 			EntityScope:             entityScope,
+			DetectorPolicies:        detectorPolicies,
 		})
 		if err != nil {
-			return maskdomain.Result{}, nil, "", err
+			return maskdomain.Result{}, nil, "", "", err
 		}
 
 		redactedMessages[index] = message
 		encodedContent, err := json.Marshal(result.RedactedPrompt)
 		if err != nil {
-			return maskdomain.Result{}, nil, "", err
+			return maskdomain.Result{}, nil, "", "", err
 		}
 		redactedMessages[index].Content = encodedContent
 		results = append(results, result)
 		redactedPromptParts = append(redactedPromptParts, result.RedactedPrompt)
+		logSafePromptParts = append(logSafePromptParts, firstNonEmpty(result.LogSafePrompt, result.RedactedPrompt))
 	}
 
 	combinedPrompt := strings.Join(redactedPromptParts, "\n")
-	combined := combineMaskingResults(results, combinedPrompt, securityPolicyVersionID)
-	return combined, redactedMessages, combinedPrompt, nil
+	combinedLogSafePrompt := strings.Join(logSafePromptParts, "\n")
+	combined := combineMaskingResults(results, combinedPrompt, combinedLogSafePrompt, securityPolicyVersionID)
+	return combined, redactedMessages, combinedPrompt, combinedLogSafePrompt, nil
 }
 
-func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, fallbackPolicyVersion string) maskdomain.Result {
+func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, logSafePrompt string, fallbackPolicyVersion string) maskdomain.Result {
 	action := maskdomain.ActionNone
 	detectedTypeSet := map[string]struct{}{}
+	policyAllowedTypeSet := map[string]struct{}{}
+	mandatoryProtectedTypeSet := map[string]struct{}{}
 	detectedCount := 0
+	policyAllowedCount := 0
 	securityPolicyVersionID := strings.TrimSpace(fallbackPolicyVersion)
 
 	for _, result := range results {
@@ -1314,7 +1324,14 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 		for _, detectorType := range result.DetectedTypes {
 			detectedTypeSet[detectorType] = struct{}{}
 		}
+		for _, detectorType := range result.PolicyAllowedTypes {
+			policyAllowedTypeSet[detectorType] = struct{}{}
+		}
+		for _, detectorType := range result.MandatoryProtectedTypes {
+			mandatoryProtectedTypeSet[detectorType] = struct{}{}
+		}
 		detectedCount += result.DetectedCount
+		policyAllowedCount += result.PolicyAllowedCount
 		if result.SecurityPolicyVersionID != "" {
 			securityPolicyVersionID = result.SecurityPolicyVersionID
 		}
@@ -1328,15 +1345,51 @@ func combineMaskingResults(results []maskdomain.Result, redactedPrompt string, f
 		detectedTypes = append(detectedTypes, detectorType)
 	}
 	sort.Strings(detectedTypes)
+	policyAllowedTypes := sortedKeys(policyAllowedTypeSet)
+	mandatoryProtectedTypes := sortedKeys(mandatoryProtectedTypeSet)
+	if strings.TrimSpace(logSafePrompt) == "" {
+		logSafePrompt = redactedPrompt
+	}
 
 	return maskdomain.Result{
 		Action:                  action,
 		DetectedTypes:           detectedTypes,
 		DetectedCount:           detectedCount,
+		PolicyAllowedTypes:      policyAllowedTypes,
+		PolicyAllowedCount:      policyAllowedCount,
+		MandatoryProtectedTypes: mandatoryProtectedTypes,
 		RedactedPrompt:          redactedPrompt,
-		RedactedPromptPreview:   maskdomain.PreviewRedactedPrompt(redactedPrompt),
+		LogSafePrompt:           logSafePrompt,
+		RedactedPromptPreview:   maskdomain.PreviewRedactedPrompt(logSafePrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}
+}
+
+func maskingDetectorPolicies(policy runtimeconfig.SafetyPolicy) []maskdomain.DetectorPolicy {
+	policy = policy.Normalize()
+	if len(policy.DetectorSet) == 0 {
+		return nil
+	}
+	policies := make([]maskdomain.DetectorPolicy, 0, len(policy.DetectorSet))
+	for _, detector := range policy.DetectorSet {
+		policies = append(policies, maskdomain.DetectorPolicy{
+			DetectorType: detector.DetectorType,
+			Action:       maskdomain.PolicyAction(detector.Action),
+		})
+	}
+	return policies
+}
+
+func sortedKeys(set map[string]struct{}) []string {
+	if len(set) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(set))
+	for value := range set {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return values
 }
 
 func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
@@ -2425,38 +2478,40 @@ func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocatio
 func buildDomainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {
 	providerLatencyMs := providerLatencyForLog(reqCtx)
 	return invocationlog.BuildDomainOutcomes(invocationlog.TerminalLog{
-		RequestID:             reqCtx.RequestID,
-		TraceID:               reqCtx.TraceID,
-		ApplicationID:         reqCtx.ApplicationID,
-		BudgetScope:           reqCtx.BudgetScope,
-		ConfigHash:            reqCtx.ConfigHash,
-		SecurityPolicyHash:    reqCtx.SecurityPolicyHash,
-		RuntimeSnapshot:       reqCtx.RuntimeSnapshot,
-		RateLimitDecision:     reqCtx.RateLimitDecision,
-		BudgetDecision:        reqCtx.BudgetDecision,
-		Stream:                reqCtx.Stream,
-		RequestedModel:        reqCtx.RequestedModel,
-		Provider:              reqCtx.Provider,
-		Model:                 reqCtx.Model,
-		SelectedProvider:      reqCtx.SelectedProvider,
-		SelectedModel:         reqCtx.SelectedModel,
-		RoutingReason:         reqCtx.RoutingReason,
-		RoutingPolicyHash:     reqCtx.RoutingPolicyHash,
-		LatencyMs:             reqCtx.LatencyMs,
-		ProviderLatencyMs:     providerLatencyMs,
-		Status:                reqCtx.Status,
-		HTTPStatus:            reqCtx.HTTPStatus,
-		ErrorCode:             reqCtx.ErrorCode,
-		ErrorStage:            reqCtx.ErrorStage,
-		CacheStatus:           reqCtx.CacheStatus,
-		CacheType:             reqCtx.CacheType,
-		CacheHitRequestID:     reqCtx.CacheHitRequestID,
-		MaskingAction:         reqCtx.MaskingAction,
-		MaskingDetectedTypes:  reqCtx.MaskingDetectedTypes,
-		MaskingDetectedCount:  reqCtx.MaskingDetectedCount,
-		RedactedPromptPreview: reqCtx.RedactedPromptPreview,
-		CreatedAt:             reqCtx.StartedAt.UTC(),
-		CompletedAt:           time.Now().UTC(),
+		RequestID:               reqCtx.RequestID,
+		TraceID:                 reqCtx.TraceID,
+		ApplicationID:           reqCtx.ApplicationID,
+		BudgetScope:             reqCtx.BudgetScope,
+		ConfigHash:              reqCtx.ConfigHash,
+		SecurityPolicyHash:      reqCtx.SecurityPolicyHash,
+		RuntimeSnapshot:         reqCtx.RuntimeSnapshot,
+		RateLimitDecision:       reqCtx.RateLimitDecision,
+		BudgetDecision:          reqCtx.BudgetDecision,
+		Stream:                  reqCtx.Stream,
+		RequestedModel:          reqCtx.RequestedModel,
+		Provider:                reqCtx.Provider,
+		Model:                   reqCtx.Model,
+		SelectedProvider:        reqCtx.SelectedProvider,
+		SelectedModel:           reqCtx.SelectedModel,
+		RoutingReason:           reqCtx.RoutingReason,
+		RoutingPolicyHash:       reqCtx.RoutingPolicyHash,
+		LatencyMs:               reqCtx.LatencyMs,
+		ProviderLatencyMs:       providerLatencyMs,
+		Status:                  reqCtx.Status,
+		HTTPStatus:              reqCtx.HTTPStatus,
+		ErrorCode:               reqCtx.ErrorCode,
+		ErrorStage:              reqCtx.ErrorStage,
+		CacheStatus:             reqCtx.CacheStatus,
+		CacheType:               reqCtx.CacheType,
+		CacheHitRequestID:       reqCtx.CacheHitRequestID,
+		MaskingAction:           reqCtx.MaskingAction,
+		MaskingDetectedTypes:    reqCtx.MaskingDetectedTypes,
+		MaskingDetectedCount:    reqCtx.MaskingDetectedCount,
+		PolicyAllowedTypes:      reqCtx.PolicyAllowedTypes,
+		MandatoryProtectedTypes: reqCtx.MandatoryProtectedTypes,
+		RedactedPromptPreview:   reqCtx.RedactedPromptPreview,
+		CreatedAt:               reqCtx.StartedAt.UTC(),
+		CompletedAt:             time.Now().UTC(),
 	})
 }
 
@@ -2638,6 +2693,8 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		MaskingAction:               reqCtx.MaskingAction,
 		MaskingDetectedTypes:        reqCtx.MaskingDetectedTypes,
 		MaskingDetectedCount:        reqCtx.MaskingDetectedCount,
+		PolicyAllowedTypes:          reqCtx.PolicyAllowedTypes,
+		MandatoryProtectedTypes:     reqCtx.MandatoryProtectedTypes,
 		RedactedPromptPreview:       reqCtx.RedactedPromptPreview,
 		SecurityPolicyVersionID:     reqCtx.SecurityPolicyVersionID,
 		DomainOutcomes:              reqCtx.DomainOutcomes,

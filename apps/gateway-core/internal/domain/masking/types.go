@@ -8,6 +8,14 @@ const (
 	ActionBlocked  Action = "blocked"
 )
 
+type PolicyAction string
+
+const (
+	PolicyActionAllow  PolicyAction = "allow"
+	PolicyActionRedact PolicyAction = "redact"
+	PolicyActionBlock  PolicyAction = "block"
+)
+
 type DetectorType string
 
 const (
@@ -40,9 +48,18 @@ type Result struct {
 	Action                  Action
 	DetectedTypes           []string
 	DetectedCount           int
+	PolicyAllowedTypes      []string
+	PolicyAllowedCount      int
+	MandatoryProtectedTypes []string
 	RedactedPrompt          string
+	LogSafePrompt           string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
+}
+
+type DetectorPolicy struct {
+	DetectorType string
+	Action       PolicyAction
 }
 
 func P0ActionForDetector(detectorType string) (Action, bool) {
@@ -53,6 +70,15 @@ func P0ActionForDetector(detectorType string) (Action, bool) {
 		return ActionBlocked, true
 	default:
 		return ActionNone, false
+	}
+}
+
+func IsMandatoryDetector(detectorType string) bool {
+	switch DetectorType(detectorType) {
+	case DetectorResidentRegistrationNumber, DetectorAPIKey, DetectorAuthorizationHeader, DetectorJWT, DetectorPrivateKey:
+		return true
+	default:
+		return false
 	}
 }
 

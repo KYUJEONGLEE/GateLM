@@ -105,6 +105,8 @@
     "outcome": "passed",
     "detectedCount": 0,
     "detectorCategories": [],
+    "policyAllowedTypes": [],
+    "mandatoryProtectedTypes": [],
     "maskingAction": "none"
   },
   "createdAt": "2026-06-29T06:01:10Z",
