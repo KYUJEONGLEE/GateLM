@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/routing"
 )
@@ -18,6 +20,7 @@ const (
 	defaultClassifierName    = "rule_based_category_classifier"
 	defaultClassifierVersion = "rule_based_category_classifier_v1"
 	defaultDatasetPath       = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
+	defaultLatencyIterations = 20
 )
 
 type datasetRecord struct {
@@ -26,18 +29,25 @@ type datasetRecord struct {
 	RedactedPrompt   *string `json:"redactedPrompt"`
 	Prompt           *string `json:"prompt"`
 	ExpectedCategory string  `json:"expectedCategory"`
+	ExpectedTier     string  `json:"expectedTier"`
 }
 
 type report struct {
-	DatasetPath       string                    `json:"datasetPath"`
-	ClassifierName    string                    `json:"classifierName"`
-	ClassifierVersion string                    `json:"classifierVersion"`
-	TotalSamples      int                       `json:"totalSamples"`
-	CorrectSamples    int                       `json:"correctSamples"`
-	Accuracy          float64                   `json:"accuracy"`
-	ByCategory        map[string]categoryStats  `json:"byCategory"`
-	ConfusionMatrix   map[string]map[string]int `json:"confusionMatrix"`
-	Failures          []classificationFailure   `json:"failures"`
+	DatasetPath        string                    `json:"datasetPath"`
+	ClassifierName     string                    `json:"classifierName"`
+	ClassifierVersion  string                    `json:"classifierVersion"`
+	TotalSamples       int                       `json:"totalSamples"`
+	CorrectSamples     int                       `json:"correctSamples"`
+	Accuracy           float64                   `json:"accuracy"`
+	TierLabeledSamples int                       `json:"tierLabeledSamples"`
+	TierCorrectSamples int                       `json:"tierCorrectSamples"`
+	TierAccuracy       float64                   `json:"tierAccuracy"`
+	ByCategory         map[string]categoryStats  `json:"byCategory"`
+	ByTier             map[string]categoryStats  `json:"byTier"`
+	ConfusionMatrix    map[string]map[string]int `json:"confusionMatrix"`
+	Latency            latencyStats              `json:"latency"`
+	CostEstimate       costEstimate              `json:"costEstimate"`
+	Failures           []evaluationFailure       `json:"failures"`
 }
 
 type categoryStats struct {
@@ -46,10 +56,29 @@ type categoryStats struct {
 	Accuracy float64 `json:"accuracy"`
 }
 
-type classificationFailure struct {
+type latencyStats struct {
+	Iterations int     `json:"iterations"`
+	Samples    int     `json:"samples"`
+	P50Micros  float64 `json:"p50Micros"`
+	P95Micros  float64 `json:"p95Micros"`
+	MaxMicros  float64 `json:"maxMicros"`
+}
+
+type costEstimate struct {
+	BaselineTier      string             `json:"baselineTier"`
+	BaselineCostUnits float64            `json:"baselineCostUnits"`
+	ActualCostUnits   float64            `json:"actualCostUnits"`
+	SavedCostUnits    float64            `json:"savedCostUnits"`
+	SavingRate        float64            `json:"savingRate"`
+	UnitRates         map[string]float64 `json:"unitRates"`
+}
+
+type evaluationFailure struct {
 	SampleID         string `json:"sampleId"`
 	ExpectedCategory string `json:"expectedCategory"`
 	ActualCategory   string `json:"actualCategory"`
+	ExpectedTier     string `json:"expectedTier,omitempty"`
+	ActualTier       string `json:"actualTier,omitempty"`
 }
 
 func main() {
@@ -57,6 +86,8 @@ func main() {
 	outputPath := flag.String("output", "", "optional report output path")
 	classifierVersion := flag.String("classifier-version", defaultClassifierVersion, "classifier version label for the report")
 	minAccuracy := flag.Float64("min-accuracy", 0, "optional minimum exact-match accuracy, from 0 to 1")
+	minTierAccuracy := flag.Float64("min-tier-accuracy", 0, "optional minimum tier exact-match accuracy, from 0 to 1")
+	latencyIterations := flag.Int("latency-iterations", defaultLatencyIterations, "routing decision iterations per sample for latency measurement")
 	pretty := flag.Bool("pretty", true, "pretty-print JSON report")
 	flag.Parse()
 
@@ -65,7 +96,7 @@ func main() {
 		exitWithError(err)
 	}
 
-	evalReport := evaluate(*datasetPath, *classifierVersion, records)
+	evalReport := evaluate(*datasetPath, *classifierVersion, records, *latencyIterations)
 	payload, err := marshalReport(evalReport, *pretty)
 	if err != nil {
 		exitWithError(err)
@@ -84,6 +115,9 @@ func main() {
 
 	if *minAccuracy > 0 && evalReport.Accuracy < *minAccuracy {
 		exitWithError(fmt.Errorf("accuracy %.4f is below minimum %.4f", evalReport.Accuracy, *minAccuracy))
+	}
+	if *minTierAccuracy > 0 && evalReport.TierLabeledSamples > 0 && evalReport.TierAccuracy < *minTierAccuracy {
+		exitWithError(fmt.Errorf("tier accuracy %.4f is below minimum %.4f", evalReport.TierAccuracy, *minTierAccuracy))
 	}
 }
 
@@ -152,21 +186,34 @@ func validateRecords(records []datasetRecord) ([]datasetRecord, error) {
 	return records, nil
 }
 
-func evaluate(datasetPath string, classifierVersion string, records []datasetRecord) report {
-	classifier := routing.NewRuleBasedCategoryClassifier()
+func evaluate(datasetPath string, classifierVersion string, records []datasetRecord, latencyIterations int) report {
+	if latencyIterations <= 0 {
+		latencyIterations = 1
+	}
+	router := routing.NewSimpleRouter(routing.SimpleRouterConfig{})
 	result := report{
 		DatasetPath:       datasetPath,
 		ClassifierName:    defaultClassifierName,
 		ClassifierVersion: classifierVersion,
 		TotalSamples:      len(records),
 		ByCategory:        map[string]categoryStats{},
+		ByTier:            map[string]categoryStats{},
 		ConfusionMatrix:   map[string]map[string]int{},
-		Failures:          []classificationFailure{},
+		Failures:          []evaluationFailure{},
+		CostEstimate: costEstimate{
+			BaselineTier: routing.TierHighQuality,
+			UnitRates:    tierCostUnits(),
+		},
 	}
 
+	latencies := []float64{}
 	for _, record := range records {
 		expected := strings.TrimSpace(record.ExpectedCategory)
-		actual := classifier.Classify(record.promptText())
+		expectedTier := strings.TrimSpace(record.ExpectedTier)
+		decision, sampleLatencies := decideWithLatency(router, record.promptText(), latencyIterations)
+		actual := decision.RoutingDecisionMaterial.Category
+		actualTier := decision.RoutingDecisionMaterial.Tier
+		latencies = append(latencies, sampleLatencies...)
 
 		stats := result.ByCategory[expected]
 		stats.Total++
@@ -174,24 +221,73 @@ func evaluate(datasetPath string, classifierVersion string, records []datasetRec
 			stats.Correct++
 			result.CorrectSamples++
 		} else {
-			result.Failures = append(result.Failures, classificationFailure{
+			result.Failures = append(result.Failures, evaluationFailure{
 				SampleID:         record.expectedID(),
 				ExpectedCategory: expected,
 				ActualCategory:   actual,
+				ExpectedTier:     expectedTier,
+				ActualTier:       actualTier,
 			})
 		}
 		stats.Accuracy = ratio(stats.Correct, stats.Total)
 		result.ByCategory[expected] = stats
 
+		if expectedTier != "" {
+			tierStats := result.ByTier[expectedTier]
+			tierStats.Total++
+			result.TierLabeledSamples++
+			if actualTier == expectedTier {
+				tierStats.Correct++
+				result.TierCorrectSamples++
+			} else if actual == expected {
+				result.Failures = append(result.Failures, evaluationFailure{
+					SampleID:         record.expectedID(),
+					ExpectedCategory: expected,
+					ActualCategory:   actual,
+					ExpectedTier:     expectedTier,
+					ActualTier:       actualTier,
+				})
+			}
+			tierStats.Accuracy = ratio(tierStats.Correct, tierStats.Total)
+			result.ByTier[expectedTier] = tierStats
+		}
+
 		if _, ok := result.ConfusionMatrix[expected]; !ok {
 			result.ConfusionMatrix[expected] = map[string]int{}
 		}
 		result.ConfusionMatrix[expected][actual]++
+
+		result.CostEstimate.BaselineCostUnits += tierCostUnit(routing.TierHighQuality)
+		result.CostEstimate.ActualCostUnits += tierCostUnit(actualTier)
 	}
 
 	result.Accuracy = ratio(result.CorrectSamples, result.TotalSamples)
+	result.TierAccuracy = ratio(result.TierCorrectSamples, result.TierLabeledSamples)
+	result.Latency = summarizeLatency(latencies, latencyIterations)
+	result.CostEstimate.BaselineCostUnits = round4(result.CostEstimate.BaselineCostUnits)
+	result.CostEstimate.ActualCostUnits = round4(result.CostEstimate.ActualCostUnits)
+	result.CostEstimate.SavedCostUnits = round4(result.CostEstimate.BaselineCostUnits - result.CostEstimate.ActualCostUnits)
+	result.CostEstimate.SavingRate = ratioFloat(result.CostEstimate.SavedCostUnits, result.CostEstimate.BaselineCostUnits)
 	sortFailures(result.Failures)
 	return result
+}
+
+func decideWithLatency(router *routing.SimpleRouter, prompt string, iterations int) (routing.Decision, []float64) {
+	latencies := make([]float64, 0, iterations)
+	var decision routing.Decision
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		nextDecision, err := router.DecideRoute(context.Background(), routing.Request{
+			RequestedModel: "auto",
+			PromptText:     prompt,
+		})
+		elapsed := time.Since(start)
+		latencies = append(latencies, durationMicros(elapsed))
+		if err == nil {
+			decision = nextDecision
+		}
+	}
+	return decision, latencies
 }
 
 func (r datasetRecord) expectedID() string {
@@ -215,8 +311,75 @@ func ratio(numerator int, denominator int) float64 {
 	if denominator <= 0 {
 		return 0
 	}
-	value := float64(numerator) / float64(denominator)
+	return ratioFloat(float64(numerator), float64(denominator))
+}
+
+func ratioFloat(numerator float64, denominator float64) float64 {
+	if denominator <= 0 {
+		return 0
+	}
+	return round4(numerator / denominator)
+}
+
+func round4(value float64) float64 {
 	return math.Round(value*10000) / 10000
+}
+
+func summarizeLatency(latencies []float64, iterations int) latencyStats {
+	if len(latencies) == 0 {
+		return latencyStats{Iterations: iterations}
+	}
+	sort.Float64s(latencies)
+	return latencyStats{
+		Iterations: iterations,
+		Samples:    len(latencies),
+		P50Micros:  round4(percentile(latencies, 0.50)),
+		P95Micros:  round4(percentile(latencies, 0.95)),
+		MaxMicros:  round4(latencies[len(latencies)-1]),
+	}
+}
+
+func durationMicros(duration time.Duration) float64 {
+	micros := float64(duration.Nanoseconds()) / 1000
+	if micros <= 0 {
+		return 0.001
+	}
+	return micros
+}
+
+func percentile(sortedValues []float64, p float64) float64 {
+	if len(sortedValues) == 0 {
+		return 0
+	}
+	if p <= 0 {
+		return sortedValues[0]
+	}
+	if p >= 1 {
+		return sortedValues[len(sortedValues)-1]
+	}
+	index := int(math.Ceil(float64(len(sortedValues))*p)) - 1
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(sortedValues) {
+		index = len(sortedValues) - 1
+	}
+	return sortedValues[index]
+}
+
+func tierCostUnits() map[string]float64 {
+	return map[string]float64{
+		routing.TierLowCost:     1,
+		routing.TierBalanced:    3,
+		routing.TierHighQuality: 10,
+	}
+}
+
+func tierCostUnit(tier string) float64 {
+	if value, ok := tierCostUnits()[tier]; ok {
+		return value
+	}
+	return tierCostUnits()[routing.TierBalanced]
 }
 
 func marshalReport(report report, pretty bool) ([]byte, error) {
@@ -226,7 +389,7 @@ func marshalReport(report report, pretty bool) ([]byte, error) {
 	return json.Marshal(report)
 }
 
-func sortFailures(failures []classificationFailure) {
+func sortFailures(failures []evaluationFailure) {
 	sort.Slice(failures, func(i int, j int) bool {
 		return failures[i].SampleID < failures[j].SampleID
 	})

@@ -2,74 +2,107 @@
 
 ## 목표
 
-룰 기반 라우팅 MVP 이후의 고도화는 한 번에 동적 라우팅으로 뛰지 않고, 평가 가능성부터 닫는다.
+v2.1 라우팅 고도화의 1차 목표는 외부 모델을 추가 호출하지 않고, 룰 기반 라우팅이 비용 절감에 도움이 되는지 측정 가능한 형태로 만드는 것이다.
 
-핵심 순서는 아래와 같다.
+이번 단계는 Gateway hot path를 바꾸지 않는다. RuntimeConfig, RuntimeSnapshot, Provider Catalog, Request Log, Metrics 계약도 변경하지 않는다.
 
-1. 평가: 현재 분류기가 무엇을 맞히고 틀리는지 재현 가능한 리포트로 본다.
-2. 운영: 관리자 공개 설정은 enabled와 low/default/high 모델 선택으로 제한하고, 세부 룰은 GateLM 내부 정책으로 관리한다.
-3. 동적 라우팅: 비용, latency, provider 상태, fallback 우선순위를 라우팅 판단에 반영한다.
+## 왜 평가 기반부터 하는가
 
-## Stage 1. Evaluation Report
+라우팅의 핵심 가치는 "가능한 요청은 더 싼 모델로 보내고, 필요한 요청만 더 비싼 모델로 올리는 것"이다.
 
-현재 단계다.
+따라서 라우팅 고도화는 감으로 룰을 추가하는 방식이 아니라 아래 숫자로 판단해야 한다.
 
-목표:
+| 지표 | 의미 |
+|---|---|
+| category accuracy | 프롬프트 업무 유형을 맞혔는가 |
+| tier accuracy | low_cost / balanced / high_quality 선택이 맞았는가 |
+| routing latency p50/p95 | 라우팅 판단이 충분히 빠른가 |
+| estimated cost saving | 전부 high_quality로 보낸 baseline 대비 비용을 얼마나 줄였는가 |
+| failures | 어떤 sample이 왜 틀렸는가 |
 
-- offline dataset을 입력으로 받아 실제 Gateway routing classifier를 실행한다.
-- 전체 accuracy, category별 accuracy, confusion matrix, failure sample id를 출력한다.
-- report에는 raw prompt, raw response, secret, requestId, traceId를 출력하지 않는다.
+## 이번 PR 범위
 
-실행:
+이번 PR은 "룰 기반 라우팅 평가 기반"만 다룬다.
+
+포함한다.
+
+- synthetic 평가셋의 `expectedTier` label
+- category/tier 정확도 계산
+- routing latency p50/p95 계산
+- high_quality baseline 대비 상대 비용 절감률 계산
+- prompt text를 노출하지 않는 failure report
+- 멘토 공유용 성능 테스트 시나리오 문서
+
+포함하지 않는다.
+
+- 사용자 프롬프트 자동 수집
+- LLM judge 호출
+- fine-tuning 또는 classifier 학습
+- RuntimeConfig/RuntimeSnapshot 필드 추가
+- Gateway 요청 처리 hot path 변경
+- provider health overlay 또는 circuit breaker
+
+## 실행 방법
+
+기본 평가셋을 사용한다.
 
 ```powershell
 corepack pnpm run v2.1:routing:evaluate
 ```
 
-회귀 검증용 Go testdata를 기준으로 강하게 검사할 때:
+리포트를 파일로 남긴다.
 
 ```powershell
-corepack pnpm run v2.1:routing:evaluate -- -dataset apps/gateway-core/internal/domain/routing/testdata/category_eval_cases.json -min-accuracy 1
+corepack pnpm run v2.1:routing:evaluate -- -output reports/routing-eval/report.json
 ```
 
-해석:
+최소 정확도 gate를 건다.
 
-- `accuracy`는 exact-match 기준이다.
-- `failures`는 `sampleId`, `expectedCategory`, `actualCategory`만 포함한다.
-- 실패가 나오면 prompt를 로그에 노출하지 말고 dataset label 또는 classifier rule을 별도로 검토한다.
+```powershell
+corepack pnpm run v2.1:routing:evaluate -- -min-accuracy 0.8 -min-tier-accuracy 0.8
+```
 
-## Stage 2. Operational Routing Policy
+latency 측정 반복 횟수를 조정한다.
 
-목표:
+```powershell
+corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
+```
 
-- 관리자에게 공개할 RuntimeConfig 범위는 `routing.enabled`와 low/default/high 모델 선택으로 제한한다.
-- routing category, priority, keyword, policyVariant는 Gateway 내부 embedded policy로 관리한다.
-- Request Log와 Dashboard에서 routingReason, routingDecisionKeyHash, selected provider/model을 일관되게 보여준다.
+## 리포트 해석
 
-현재 구현:
+리포트에는 raw prompt, raw response, secret, requestId, traceId를 남기지 않는다.
 
-- 기본 category keyword와 priority를 `apps/gateway-core/internal/domain/routing/category_policy.json`으로 분리했다.
-- 이 파일은 관리자 편집용 계약이 아니라 GateLM 내부 embedded policy다.
-- Gateway hot path는 외부 파일을 매 요청마다 읽지 않고, binary에 embed된 정책 데이터를 사용한다.
-- RuntimeConfig/RuntimeSnapshot에는 세부 룰을 싣지 않고, 관리자 공개 설정과 실행 결과 provenance만 연결한다.
-- 이후 RuntimeSnapshot에 연결하더라도 세부 룰 본문이 아니라 `policyVersion`/hash 같은 추적 정보만 싣는 것을 기본값으로 한다.
+실패 케이스는 아래 값만 남긴다.
 
-주의:
+- sampleId
+- expectedCategory
+- actualCategory
+- expectedTier
+- actualTier
 
-- category keyword, priority, detector-like rule을 UI/API/fixture에 공개하지 않는다.
-- provider/model enum lock을 만들지 않는다.
-- safety/masking 책임을 routing policy에 섞지 않는다.
+비용 절감률은 실제 provider 가격표가 아니라 상대 단위 기반 evidence다.
 
-## Stage 3. Dynamic Routing
+| Tier | Relative cost unit |
+|---|---:|
+| low_cost | 1 |
+| balanced | 3 |
+| high_quality | 10 |
 
-목표:
+`estimated cost saving`은 모든 요청을 high_quality로 보냈을 때와 현재 라우팅 결과를 비교한다.
 
-- 비용 tier, provider latency, provider health, fallback priority를 라우팅 결정에 반영한다.
-- 동일 category라도 provider 상태와 운영 정책에 따라 선택 모델이 달라질 수 있게 한다.
-- cache key material에는 실제 응답 경로를 바꾸는 결정값만 넣는다.
+## 다음 단계
 
-주의:
+평가셋과 리포트가 준비된 뒤에는 아래 순서로 진행한다.
 
-- 동적 값 전체를 cache key에 넣으면 cache 효율이 급격히 떨어질 수 있다.
-- provider raw error, raw credential, Authorization header는 routing/caching material에 넣지 않는다.
-- 동적 라우팅은 Stage 1 report와 Stage 2 policy provenance가 닫힌 뒤 시작한다.
+1. 평가셋을 늘린다.
+2. 실패 sample을 보고 룰을 수동으로 보강한다.
+3. 같은 평가셋으로 accuracy와 latency가 개선됐는지 비교한다.
+4. 실제 성능 테스트 시나리오에서 Gateway 전체 latency와 routing-only latency를 분리해 본다.
+
+## 주의사항
+
+- 라우팅은 safety/masking 책임을 가져오지 않는다.
+- 고객 프롬프트는 자동 수집하지 않는다.
+- 평가셋은 synthetic 또는 사람이 별도로 준비한 안전한 redacted sample만 사용한다.
+- category/tier label은 평가용 evidence이며, 그대로 API/DB 필드로 승격하지 않는다.
+- 라우팅 룰 상세는 관리자 UI에 노출하지 않는다.

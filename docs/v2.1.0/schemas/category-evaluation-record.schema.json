@@ -24,9 +24,9 @@
     },
     "redactedPrompt": {
       "type": "string",
-      "minLength": 1,
+      "minLength": 0,
       "maxLength": 65536,
-      "description": "Safety-masked prompt text. Raw prompt, raw detected values, and secrets are forbidden."
+      "description": "Safety-masked prompt text. It may be empty when the prompt is fully redacted. Raw prompt, raw detected values, and secrets are forbidden."
     },
     "expectedCategory": {
       "type": "string",
@@ -40,6 +40,15 @@
         "reasoning",
         "unknown"
       ]
+    },
+    "expectedTier": {
+      "type": "string",
+      "enum": [
+        "low_cost",
+        "balanced",
+        "high_quality"
+      ],
+      "description": "Expected routing tier for offline evaluation. This is an evidence label, not a RuntimeConfig or RuntimeSnapshot field."
     },
     "labelSource": {
       "type": "string",
@@ -98,6 +107,7 @@
     "sampleId",
     "redactedPrompt",
     "expectedCategory",
+    "expectedTier",
     "labelSource",
     "consentType",
     "source",
