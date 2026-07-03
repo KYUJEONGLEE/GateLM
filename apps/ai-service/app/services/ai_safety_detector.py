@@ -154,6 +154,8 @@ LLM_PRIORITY_CRITICAL = 0
 LLM_PRIORITY_CONTEXTUAL_SENSITIVE = 1
 LLM_PRIORITY_AMBIGUOUS_PII = 2
 LLM_PRIORITY_GENERAL_CONTEXT = 3
+LLM_ML_SUFFICIENT_CONFIDENCE = 0.90
+LLM_RULE_SUFFICIENT_SOURCES = frozenset({"local_rule"})
 LLM_SIGNAL_PRIORITY_BY_DETECTOR_TYPE = {
     "account_number": LLM_PRIORITY_CRITICAL,
     "password_assignment": LLM_PRIORITY_CRITICAL,
@@ -193,6 +195,73 @@ LLM_CONTEXTUAL_SENSITIVE_KEYWORDS = (
     "\uc57d",
     "\uc6b0\uc6b8\uc99d",
 )
+LLM_CONTEXT_COVERING_DETECTOR_TYPES_BY_KEYWORD = {
+    "account": frozenset({"account_id", "account_number", "bank_account"}),
+    "accountnumber": frozenset({"account_number", "bank_account"}),
+    "bank": frozenset({"account_number", "bank_account"}),
+    "birthdate": frozenset({"date_of_birth", "private_date"}),
+    "birthday": frozenset({"date_of_birth", "private_date"}),
+    "customer": frozenset({"person_name", "customer_id"}),
+    "delivery": frozenset({"postal_address"}),
+    "medicine": frozenset({"sensitive_health_context"}),
+    "order": frozenset({"account_id"}),
+    "password": frozenset({"password_assignment", "secret"}),
+    "reset": frozenset({"private_url", "secret"}),
+    "secret": frozenset(
+        {
+            "api_key",
+            "authorization_header",
+            "cloud_access_key",
+            "database_url",
+            "github_token",
+            "jwt",
+            "password_assignment",
+            "private_key",
+            "provider_api_key",
+            "secret",
+            "session_cookie",
+            "slack_token",
+            "webhook_url",
+        }
+    ),
+    "token": frozenset(
+        {
+            "api_key",
+            "authorization_header",
+            "cloud_access_key",
+            "github_token",
+            "jwt",
+            "provider_api_key",
+            "secret",
+            "session_cookie",
+            "slack_token",
+        }
+    ),
+    "url": frozenset({"database_url", "private_url", "webhook_url"}),
+    "\uacc4\uc88c": frozenset({"account_number", "bank_account"}),
+    "\ube44\ubc00\ubc88\ud638": frozenset({"password_assignment", "secret"}),
+    "\ube44\ubc88": frozenset({"password_assignment", "secret"}),
+    "\uc0dd\ub144\uc6d4\uc77c": frozenset({"date_of_birth", "private_date"}),
+    "\uc8fc\ubb38\ubc88\ud638": frozenset({"account_id"}),
+    "\uc8fc\ubbfc\ubc88\ud638": frozenset({"resident_registration_number"}),
+    "\uc8fc\ubbfc\ub4f1\ub85d\ubc88\ud638": frozenset({"resident_registration_number"}),
+    "\uc8fc\uc18c": frozenset({"postal_address"}),
+    "\ud1a0\ud070": frozenset(
+        {
+            "api_key",
+            "authorization_header",
+            "cloud_access_key",
+            "github_token",
+            "jwt",
+            "provider_api_key",
+            "secret",
+            "session_cookie",
+            "slack_token",
+        }
+    ),
+    "\uc57d": frozenset({"sensitive_health_context"}),
+    "\uc6b0\uc6b8\uc99d": frozenset({"sensitive_health_context"}),
+}
 
 
 @dataclass(frozen=True)
@@ -575,6 +644,7 @@ def _llm_candidate_windows(
     spans = _llm_candidate_spans(prompt_text, detector_signals)
     if not spans:
         return ()
+    sufficient_signals = _llm_sufficient_signals(detector_signals)
 
     raw_windows: list[LlmCandidateWindow] = []
     for span in spans:
@@ -586,6 +656,14 @@ def _llm_candidate_windows(
             span.end,
             window_max_chars,
         )
+        if _llm_window_triggers_fully_covered(
+            prompt_text,
+            spans,
+            sufficient_signals,
+            window_start,
+            window_end,
+        ):
+            continue
         raw_windows.append(
             LlmCandidateWindow(
                 start=window_start,
@@ -665,6 +743,87 @@ def _merged_limited_windows(
             continue
         merged.append(window)
     return merged
+
+
+def _llm_sufficient_signals(
+    detector_signals: list[SafetySignal],
+) -> tuple[SafetySignal, ...]:
+    return tuple(
+        signal
+        for signal in detector_signals
+        if _is_llm_sufficient_signal(signal)
+    )
+
+
+def _is_llm_sufficient_signal(signal: SafetySignal) -> bool:
+    if signal.start < 0 or signal.end <= signal.start:
+        return False
+    if signal.source in LLM_RULE_SUFFICIENT_SOURCES or signal.source.startswith("regex_"):
+        return True
+    return signal.confidence >= LLM_ML_SUFFICIENT_CONFIDENCE
+
+
+def _llm_window_triggers_fully_covered(
+    prompt_text: str,
+    spans: list[LlmCandidateSpan],
+    sufficient_signals: tuple[SafetySignal, ...],
+    window_start: int,
+    window_end: int,
+) -> bool:
+    triggers = [
+        span
+        for span in spans
+        if span.start < window_end and window_start < span.end
+    ]
+    if not triggers:
+        return False
+    return all(
+        _llm_trigger_covered_by_sufficient_signal(
+            prompt_text,
+            trigger,
+            sufficient_signals,
+        )
+        for trigger in triggers
+    )
+
+
+def _llm_trigger_covered_by_sufficient_signal(
+    prompt_text: str,
+    trigger: LlmCandidateSpan,
+    sufficient_signals: tuple[SafetySignal, ...],
+) -> bool:
+    for signal in sufficient_signals:
+        if signal.start <= trigger.start and trigger.end <= signal.end:
+            return True
+        if _llm_context_trigger_covered_by_signal(prompt_text, trigger, signal):
+            return True
+    return False
+
+
+def _llm_context_trigger_covered_by_signal(
+    prompt_text: str,
+    trigger: LlmCandidateSpan,
+    signal: SafetySignal,
+) -> bool:
+    if not _same_llm_sentence_or_line(prompt_text, trigger.start, trigger.end, signal.start, signal.end):
+        return False
+    normalized_trigger = _normalized_llm_context(prompt_text[trigger.start : trigger.end])
+    covering_types = LLM_CONTEXT_COVERING_DETECTOR_TYPES_BY_KEYWORD.get(normalized_trigger)
+    if covering_types is None:
+        return False
+    return signal.detector_type in covering_types
+
+
+def _same_llm_sentence_or_line(
+    prompt_text: str,
+    left_start: int,
+    left_end: int,
+    right_start: int,
+    right_end: int,
+) -> bool:
+    left_range = _llm_sentence_or_line_range(prompt_text, left_start, left_end)
+    right_range = _llm_sentence_or_line_range(prompt_text, right_start, right_end)
+    return left_range == right_range
 
 
 def _llm_window_range_for_span(

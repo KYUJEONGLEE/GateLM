@@ -364,6 +364,73 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertIn(low_risk_sentences[0], windows[1])
         self.assertIn(low_risk_sentences[1], windows[2])
 
+    def test_detect_skips_llm_classifier_windows_already_covered_by_high_confidence_ml(self) -> None:
+        covered_sentence = "Please review Alex Benchmark before support handoff."
+        ambiguous_sentence = "The customer health note mentions medicine context."
+        prompt = f"{covered_sentence} {ambiguous_sentence}"
+        raw_name = "Alex Benchmark"
+        with FakeVllmServer({"detections": []}) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda text: [
+                    {
+                        "entity_group": "person_name",
+                        "score": 0.95,
+                        "start": text.index(raw_name),
+                        "end": text.index(raw_name) + len(raw_name),
+                        "word": raw_name,
+                    }
+                ],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                ),
+                llm_window_max_chars=80,
+                llm_window_max_count=3,
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(fake_vllm.requests), 1)
+        window = classifier_window_from_request(fake_vllm.requests[0]["body"])
+        self.assertEqual(window, ambiguous_sentence)
+        self.assertNotIn(raw_name, window)
+
+    def test_detect_keeps_llm_classifier_window_for_low_confidence_ml(self) -> None:
+        prompt = "Please review Alex Benchmark before support handoff."
+        raw_name = "Alex Benchmark"
+        with FakeVllmServer({"detections": []}) as fake_vllm:
+            app = create_app()
+            app.state.ai_safety_detector_service = service_with_classifier(
+                lambda text: [
+                    {
+                        "entity_group": "person_name",
+                        "score": 0.89,
+                        "start": text.index(raw_name),
+                        "end": text.index(raw_name) + len(raw_name),
+                        "word": raw_name,
+                    }
+                ],
+                llm_classifier=LocalVllmLLMClassifier(
+                    base_url=fake_vllm.base_url,
+                    model="kakaocorp/kanana-1.5-8b-instruct-2505",
+                    timeout_ms=1000,
+                ),
+                llm_window_max_chars=80,
+                llm_window_max_count=3,
+            )
+            client = TestClient(app)
+
+            response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(fake_vllm.requests), 1)
+        window = classifier_window_from_request(fake_vllm.requests[0]["body"])
+        self.assertIn(raw_name, window)
+
     def test_detect_keeps_existing_result_when_llm_classifier_times_out(self) -> None:
         prompt = "\ubcf8\uc0ac \uc8fc\uc18c\ub294 \ud14c\uc2a4\ud2b8\uc2dc \ud14c\uc2a4\ud2b8\uad6c \ud14c\uc2a4\ud2b8\ub85c 123\uc785\ub2c8\ub2e4."
         with FakeVllmServer(
