@@ -244,6 +244,11 @@ services:
 
   ai-service:
     image: ${GATELM_IMAGE_REGISTRY}/ai-service:${GATELM_IMAGE_TAG}
+    build:
+      context: ../..
+      dockerfile: infra/docker/ai-service.Dockerfile
+      args:
+        AI_SERVICE_INSTALL_ML_DEPS: ${AI_SERVICE_INSTALL_ML_DEPS}
     restart: unless-stopped
     environment:
       AI_SERVICE_HOST: 0.0.0.0
@@ -251,6 +256,12 @@ services:
       AI_SERVICE_LOG_LEVEL: ${AI_SERVICE_LOG_LEVEL}
       AI_SERVICE_REMOTE_SAFETY_MODE: ${AI_SERVICE_REMOTE_SAFETY_MODE}
       AI_SERVICE_ACCESS_LOG_ENABLED: ${AI_SERVICE_ACCESS_LOG_ENABLED}
+      TRANSFORMERS_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
+      HF_HUB_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE}
+      AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: ${AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID}
+      AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS}
+    volumes:
+      - ../../apps/ai-service/.cache/huggingface/models:/app/.cache/huggingface/models:ro
     ports:
       - "${SELFHOST_AI_SERVICE_PORT}:8001"
     healthcheck:

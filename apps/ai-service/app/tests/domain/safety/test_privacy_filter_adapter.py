@@ -2,12 +2,25 @@ from __future__ import annotations
 
 import threading
 import time
+import sys
+import types
 import unittest
+from unittest import mock
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator
-from app.adapters.safety.privacy_filter_adapter import PrivacyFilterAdapter, normalize_label
+from app.adapters.safety.privacy_filter_adapter import (
+    KOELECTRA_PRIVACY_NER_MODEL,
+    KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
+    KOELECTRA_PRIVACY_NER_SOURCE,
+    PrivacyFilterAdapter,
+    aggregation_strategy_for_model,
+    normalize_label,
+    public_model_id_for_model,
+    runtime_for_value,
+    source_for_model,
+)
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
 
@@ -49,7 +62,7 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
                     "word": "Alex Kim",
                 },
                 {
-                    "entity_group": "organization_name",
+                    "entity_group": "unsupported_custom_label",
                     "score": 0.99,
                     "start": 20,
                     "end": 29,
@@ -84,7 +97,7 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(decision.action, "redacted")
         self.assertEqual(decision.detected_types, ("person_name",))
         self.assertEqual(decision.detected_count, 1)
-        self.assertIn("[PERSON_NAME_REDACTED]", decision.redacted_prompt_preview or "")
+        self.assertIn("[PERSON_1]", decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_name, decision.redacted_prompt_preview or "")
 
     def test_label_normalization_strips_bio_prefix(self) -> None:
@@ -94,7 +107,43 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(normalize_label("private_url"), "private_url")
         self.assertEqual(normalize_label("secret"), "secret")
         self.assertEqual(normalize_label("account_number"), "account_number")
-        self.assertIsNone(normalize_label("ORG"))
+        self.assertEqual(normalize_label("ORG"), "organization_name")
+
+    def test_label_normalization_supports_koelectra_privacy_ner_suffix_labels(self) -> None:
+        self.assertEqual(normalize_label("PER-B"), "person_name")
+        self.assertEqual(normalize_label("LOC-I"), "postal_address")
+        self.assertEqual(normalize_label("RRN-B"), "resident_registration_number")
+        self.assertEqual(normalize_label("EMA-I"), "email")
+        self.assertEqual(normalize_label("ID-B"), "account_id")
+        self.assertEqual(normalize_label("PWD-I"), "password_assignment")
+        self.assertEqual(normalize_label("PHN-B"), "phone_number")
+        self.assertEqual(normalize_label("CRD-I"), "credit_card")
+        self.assertEqual(normalize_label("ACC-B"), "account_number")
+        self.assertEqual(normalize_label("PSP-I"), "passport_number")
+        self.assertEqual(normalize_label("DLN-B"), "driver_license")
+        self.assertEqual(normalize_label("ORG-B"), "organization_name")
+
+    def test_source_for_model_identifies_koelectra_privacy_ner(self) -> None:
+        self.assertEqual(source_for_model(KOELECTRA_PRIVACY_NER_MODEL), KOELECTRA_PRIVACY_NER_SOURCE)
+        self.assertEqual(
+            source_for_model(f"C:/models/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}"),
+            KOELECTRA_PRIVACY_NER_SOURCE,
+        )
+        self.assertEqual(source_for_model("custom/example-token-classifier"), "huggingface_token_classifier")
+
+    def test_local_openai_privacy_filter_keeps_public_model_identity(self) -> None:
+        local_path = "C:/models/openai--privacy-filter"
+
+        self.assertEqual(source_for_model(local_path), "openai_privacy_filter")
+        self.assertEqual(public_model_id_for_model(local_path), "openai/privacy-filter")
+
+    def test_aggregation_strategy_preserves_koelectra_suffix_labels(self) -> None:
+        self.assertEqual(aggregation_strategy_for_model(KOELECTRA_PRIVACY_NER_MODEL), "none")
+        self.assertEqual(
+            aggregation_strategy_for_model(f"C:/models/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}"),
+            "none",
+        )
+        self.assertEqual(aggregation_strategy_for_model("openai/privacy-filter"), "simple")
 
     def test_adapter_lazy_loads_classifier_once_across_threads(self) -> None:
         load_count = 0
@@ -114,6 +163,82 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
             list(executor.map(adapter.detect, ["safe prompt"] * 8))
 
         self.assertEqual(load_count, 1)
+
+    def test_adapter_loads_onnx_token_classification_pipeline_when_runtime_is_onnx(self) -> None:
+        calls: dict[str, object] = {}
+
+        class FakeORTModelForTokenClassification:
+            @classmethod
+            def from_pretrained(cls, model_name: str) -> object:
+                calls["model_name"] = model_name
+                return "fake_onnx_model"
+
+        class FakeAutoTokenizer:
+            @classmethod
+            def from_pretrained(cls, model_name: str) -> object:
+                calls["tokenizer_name"] = model_name
+                return "fake_tokenizer"
+
+        def fake_pipeline(**kwargs: object) -> Callable[[str], object]:
+            calls["pipeline_kwargs"] = kwargs
+            return lambda _text: []
+
+        optimum_module = types.ModuleType("optimum")
+        onnxruntime_module = types.ModuleType("optimum.onnxruntime")
+        onnxruntime_module.ORTModelForTokenClassification = FakeORTModelForTokenClassification
+        transformers_module = types.ModuleType("transformers")
+        transformers_module.AutoTokenizer = FakeAutoTokenizer
+        transformers_module.pipeline = fake_pipeline
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "optimum": optimum_module,
+                "optimum.onnxruntime": onnxruntime_module,
+                "transformers": transformers_module,
+            },
+        ):
+            adapter = PrivacyFilterAdapter(
+                model_name="C:/models/onnx-openai--privacy-filter",
+                runtime="onnx",
+            )
+            classifier = adapter._load_classifier()
+
+        self.assertEqual(calls["model_name"], "C:/models/onnx-openai--privacy-filter")
+        self.assertEqual(calls["tokenizer_name"], "C:/models/onnx-openai--privacy-filter")
+        self.assertIsNotNone(classifier)
+        self.assertEqual(
+            calls["pipeline_kwargs"],
+            {
+                "task": "token-classification",
+                "model": "fake_onnx_model",
+                "tokenizer": "fake_tokenizer",
+                "aggregation_strategy": "simple",
+            },
+        )
+
+    def test_runtime_for_value_defaults_to_transformers_for_unknown_values(self) -> None:
+        self.assertEqual(runtime_for_value("onnx"), "onnx")
+        self.assertEqual(runtime_for_value("TRANSFORMERS"), "transformers")
+        self.assertEqual(runtime_for_value("bad-runtime"), "transformers")
+
+    def test_adapter_derives_source_from_local_onnx_model_path(self) -> None:
+        adapter = PrivacyFilterAdapter(
+            model_name=f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}",
+            runtime="onnx",
+        )
+
+        self.assertEqual(adapter.source, KOELECTRA_PRIVACY_NER_SOURCE)
+
+    def test_onnx_runtime_requires_onnx_dependencies(self) -> None:
+        with mock.patch.dict(sys.modules, {"optimum.onnxruntime": None}):
+            adapter = PrivacyFilterAdapter(
+                model_name=f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}",
+                runtime="onnx",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "onnx dependencies"):
+                adapter._load_classifier()
 
 
 def remote_context() -> RemoteSafetyContext:

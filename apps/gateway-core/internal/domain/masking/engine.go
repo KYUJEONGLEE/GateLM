@@ -17,6 +17,7 @@ type Engine struct {
 type ApplyRequest struct {
 	Prompt                  string
 	SecurityPolicyVersionID string
+	EntityScope             *EntityScope
 	DetectorPolicies        []DetectorPolicy
 }
 
@@ -43,7 +44,8 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		securityPolicyVersionID = DefaultSecurityPolicyVersionID
 	}
 
-	effectiveAll := effectiveDetections(applyDetectorPolicies(e.registry.Detect(req.Prompt), req.DetectorPolicies))
+	rawDetections := normalizeDetectionSpans(req.Prompt, e.registry.Detect(req.Prompt))
+	effectiveAll := effectiveDetectionsForInput(req.Prompt, applyDetectorPolicies(rawDetections, req.DetectorPolicies))
 	protected := detectionsWithProtection(effectiveAll)
 	allowed := detectionsAllowedByPolicy(effectiveAll)
 	if len(effectiveAll) == 0 {
@@ -67,8 +69,15 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		}
 	}
 
-	redactedPrompt := redact(req.Prompt, protected)
-	logSafePrompt := redact(req.Prompt, effectiveAll)
+	entityScope := req.EntityScope
+	if entityScope == nil {
+		entityScope = NewEntityScope()
+	}
+	protected = detectionsWithEntityPlaceholders(req.Prompt, protected, entityScope)
+	redactionDetections := withRelationshipRolePlaceholders(req.Prompt, protected)
+	redactionDetections = withCoreferencePlaceholders(req.Prompt, protected, redactionDetections)
+	redactedPrompt := redact(req.Prompt, redactionDetections)
+	logSafePrompt := redact(req.Prompt, detectionsWithEntityPlaceholders(req.Prompt, effectiveAll, entityScope))
 	return Result{
 		Action:                  action,
 		DetectedTypes:           detectedTypes(protected),
@@ -81,6 +90,30 @@ func (e Engine) Apply(_ context.Context, req ApplyRequest) (Result, error) {
 		RedactedPromptPreview:   PreviewRedactedPrompt(logSafePrompt),
 		SecurityPolicyVersionID: securityPolicyVersionID,
 	}, nil
+}
+
+func detectionsWithEntityPlaceholders(input string, detections []Detection, entityScope *EntityScope) []Detection {
+	if len(detections) == 0 || entityScope == nil {
+		return detections
+	}
+
+	withPlaceholders := make([]Detection, len(detections))
+	copy(withPlaceholders, detections)
+	for index, detection := range withPlaceholders {
+		if detection.Action != ActionRedacted || detection.Start < 0 || detection.End > len(input) || detection.End <= detection.Start {
+			continue
+		}
+		rawValue := input[detection.Start:detection.End]
+		roleContext := personRoleContext{}
+		if DetectorType(detection.Type) == DetectorPersonName {
+			roleContext = inferPersonRoleContext(input, detection.Start)
+		}
+		withPlaceholders[index].Placeholder = entityScope.PlaceholderForRole(detection.Type, rawValue, roleContext.prefix, detection.Placeholder)
+		if roleContext.consumeLabel {
+			withPlaceholders[index].Start = roleContext.redactStart
+		}
+	}
+	return withPlaceholders
 }
 
 func applyDetectorPolicies(detections []Detection, policies []DetectorPolicy) []Detection {
@@ -180,6 +213,10 @@ func PreviewRedactedPrompt(prompt string) string {
 }
 
 func effectiveDetections(detections []Detection) []Detection {
+	return effectiveDetectionsForInput("", detections)
+}
+
+func effectiveDetectionsForInput(input string, detections []Detection) []Detection {
 	candidates := make([]Detection, 0, len(detections))
 	for _, detection := range detections {
 		if detection.Start < 0 || detection.End <= detection.Start {
@@ -218,7 +255,60 @@ func effectiveDetections(detections []Detection) []Detection {
 		return selected[i].End < selected[j].End
 	})
 
-	return selected
+	if input == "" {
+		return selected
+	}
+	return mergeAdjacentDetections(input, selected)
+}
+
+func mergeAdjacentDetections(input string, detections []Detection) []Detection {
+	if len(detections) == 0 {
+		return detections
+	}
+
+	merged := make([]Detection, 0, len(detections))
+	for _, detection := range detections {
+		if len(merged) == 0 {
+			merged = append(merged, detection)
+			continue
+		}
+
+		previous := merged[len(merged)-1]
+		if shouldMergeAdjacentDetection(input, previous, detection) {
+			if detection.End > previous.End {
+				previous.End = detection.End
+			}
+			merged[len(merged)-1] = previous
+			continue
+		}
+		merged = append(merged, detection)
+	}
+	return merged
+}
+
+func shouldMergeAdjacentDetection(input string, previous Detection, current Detection) bool {
+	if DetectorType(previous.Type) != DetectorPostalAddress || DetectorType(current.Type) != DetectorPostalAddress {
+		return false
+	}
+	if previous.Action != current.Action || previous.Placeholder != current.Placeholder {
+		return false
+	}
+	if current.Start < previous.End || previous.End > len(input) || current.Start > len(input) {
+		return false
+	}
+	return isAddressMergeGap(input[previous.End:current.Start])
+}
+
+func isAddressMergeGap(gap string) bool {
+	for _, r := range gap {
+		switch r {
+		case ' ', '\t', '\r', '\n', ',':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func actionRank(action Action) int {

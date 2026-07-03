@@ -52,9 +52,9 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 		MaskingAction:           "redacted",
 		MaskingDetectedTypes:    []string{"email"},
 		MaskingDetectedCount:    1,
-		RedactedPromptPreview:   "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptPreview:   "Send a reply to [EMAIL_1].",
 		SecurityPolicyVersionID: "sec_p0_v1",
-		RedactedPromptForHash:   "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptForHash:   "Send a reply to [EMAIL_1].",
 		StartedAt:               startedAt,
 		CompletedAt:             completedAt,
 	}))
@@ -103,7 +103,7 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	assertArg(t, args, 39, 1)
 	assertHashArg(t, args, 40)
 	assertHashArg(t, args, 41)
-	assertArg(t, args, 42, "Send a reply to [EMAIL_REDACTED].")
+	assertArg(t, args, 42, "Send a reply to [EMAIL_1].")
 
 	ledgerArgs := execer.argsHistory[1]
 	if len(ledgerArgs) != 10 {

@@ -99,6 +99,7 @@ phone_number
 postal_address
 date_of_birth
 person_name
+organization_name
 customer_id
 employee_id
 account_id
@@ -125,7 +126,6 @@ passport_number
 driver_license
 secret
 address
-organization_name
 unknown_pii
 ```
 
@@ -164,6 +164,12 @@ Initial `openai/privacy-filter` label mapping:
 
 `secret` from `openai/privacy-filter` maps to `secret`. Existing regex/rule secret detectors remain the enforce baseline for critical block behavior.
 
+Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+
+| Model Label | GateLM Detector Type | Default Action Candidate |
+|---|---|---|
+| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+
 ## 9. Request-Level Action
 
 Policy evaluator는 detector 결과를 request-level action으로 접는다.
@@ -181,6 +187,7 @@ block > redact > allow
 - `postal_address`
 - `date_of_birth`
 - `person_name`
+- `organization_name`
 - `customer_id`
 - `employee_id`
 - `account_id`
@@ -220,6 +227,7 @@ Redaction placeholder 후보:
 [EMAIL_REDACTED]
 [PHONE_NUMBER_REDACTED]
 [PERSON_NAME_REDACTED]
+[ORGANIZATION_NAME_REDACTED]
 [ADDRESS_REDACTED]
 [DATE_OF_BIRTH_REDACTED]
 [CUSTOMER_ID_REDACTED]

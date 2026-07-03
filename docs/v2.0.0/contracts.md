@@ -602,6 +602,8 @@ Semantic Cache experiment도 raw prompt를 사용하지 않는다. redaction 이
 
 `maskingAction`, `detectedTypes`, `redactedPromptPreview`는 sanitized summary/display 후보이며 raw detected value, raw offset, raw prompt fragment를 포함하지 않는다. Employee UI는 detector detail과 policy internals를 숨긴다. Admin/Developer UI는 계약된 sanitized summary만 볼 수 있다.
 
+`detectedTypes`와 `detectorSummary.detectorCategories`의 값은 GateLM-normalized detector type label이다. `organization_name`은 조직명/기관명 탐지를 표현하는 v2 safety detector type이며 기본 action 후보는 `redact`다. 이 값은 조직명 원문이나 prompt fragment가 아니라 낮은 cardinality의 sanitized category label만 담는다.
+
 ## 9. Streaming Thin Slice
 
 v2.0.0 Streaming은 thin slice로 제한한다.

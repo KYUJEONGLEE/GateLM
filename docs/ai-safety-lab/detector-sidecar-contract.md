@@ -134,6 +134,14 @@ Initial `openai/privacy-filter` label mapping:
 | `private_url` | `private_url` | `redact` |
 | `secret` | `secret` | `block` |
 
+Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+
+| Model Label | GateLM Detector Type | Action Candidate |
+|---|---|---|
+| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+
+When KoELECTRA is configured as an additional detector, the sidecar keeps the primary `model.modelId` as `openai/privacy-filter` and exposes KoELECTRA contribution through sanitized `detections[].source` and `detectorSummary.detectorCategories`.
+
 ## 9. Schema
 
 The response shape is described by:

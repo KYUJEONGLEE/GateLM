@@ -120,7 +120,7 @@ AI Safety Lab 전용 schema는 `docs/ai-safety-lab/schemas/eval-case.schema.json
 |---|---|
 | safe none | 민감정보가 없는 요청이 allow되는지 확인 |
 | basic redaction | email, phone_number 같은 redaction category 확인 |
-| name/address shadow | person_name, postal_address 같은 ML category의 false positive 관찰 |
+| name/address/organization shadow | person_name, postal_address, organization_name 같은 ML category의 false positive 관찰 |
 | critical block | api_key, authorization_header, jwt, resident_registration_number block 확인 |
 | repeated detection | 같은 detector type이 여러 번 등장할 때 count 확인 |
 | overlap conflict | 같은 span 또는 겹친 span에서 action 우선순위 확인 |
@@ -218,6 +218,8 @@ Initial `openai/privacy-filter` label mapping:
 | `private_date` | `private_date` | `redacted` |
 | `private_url` | `private_url` | `redacted` |
 | `secret` | `secret` | `blocked` |
+
+For `amoeba04/koelectra-small-v3-privacy-ner`, `ORG-B` and `ORG-I` normalize to the GateLM detector type `organization_name` and use the `redacted` action expectation.
 
 Because `openai/privacy-filter` starts in `shadow`, blocked action candidates from this model do not prove provider/cache bypass. Provider/cache bypass remains a regex/rule enforce or Gateway integration evidence claim.
 

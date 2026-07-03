@@ -45,6 +45,7 @@
           "minimum": 0
         },
         "detectorCategories": {
+          "description": "GateLM-normalized detector categories such as email, person_name, postal_address, or organization_name.",
           "type": "array",
           "items": {
             "type": "string",
