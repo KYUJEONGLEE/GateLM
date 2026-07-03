@@ -211,7 +211,7 @@ func TestChatCompletionsSemanticCacheThresholdMissCallsProvider(t *testing.T) {
 	harness := newSemanticCacheHarness(t, true)
 
 	harness.exercise(t, "sc_threshold_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
-	rr := harness.exercise(t, "sc_threshold_second", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+	rr := harness.exercise(t, "sc_threshold_second", routingAwareChatBody("auto", "사용량 메뉴 위치 알려줘"))
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("threshold miss 요청은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
@@ -371,7 +371,7 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryRuntimeReturnsOnlyEligible
 	harness.routes["sc_canary_general_second"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
 	first := harness.exercise(t, "sc_canary_general_first", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
-	second := harness.exercise(t, "sc_canary_general_second", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+	second := harness.exercise(t, "sc_canary_general_second", routingAwareChatBody("auto", "API 사용량 확인 화면은 어디야?"))
 
 	if first.Code != http.StatusOK || second.Code != http.StatusOK {
 		t.Fatalf("general-only canary 요청은 모두 성공해야 함: first=%d second=%d body=%s", first.Code, second.Code, second.Body.String())
@@ -402,7 +402,57 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryRuntimeReturnsOnlyEligible
 	}
 	assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t, second, logged,
 		"사용량은 어디서 확인해?",
-		"이번 달 사용량 통계를 보여줘",
+		"API 사용량 확인 화면은 어디야?",
+	)
+}
+
+func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksDynamicUsageRuntimeReturns(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithIdentity(t, semantic, "tenant_demo", "project_demo", "app_demo")
+	configureGeneralOnlySemanticCanary(harness)
+	harness.routes["sc_canary_usage_static_seed"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+	harness.routes["sc_canary_usage_dynamic"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
+
+	first := harness.exercise(t, "sc_canary_usage_static_seed", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("static usage guidance seed 요청은 성공해야 함: status=%d body=%s", first.Code, first.Body.String())
+	}
+	embeddingCallsAfterSeed := embeddingProvider.calls
+	semantic.resetCounts()
+
+	second := harness.exercise(t, "sc_canary_usage_dynamic", routingAwareChatBody("auto", "내 이번 달 사용량 보여줘"))
+	if second.Code != http.StatusOK {
+		t.Fatalf("동적 사용량 조회 요청도 provider flow로 성공해야 함: status=%d body=%s", second.Code, second.Body.String())
+	}
+	if harness.provider.calls != 2 {
+		t.Fatalf("동적 사용량 조회는 semantic cache hit 없이 provider를 호출해야 함: calls=%d", harness.provider.calls)
+	}
+	if embeddingProvider.calls != embeddingCallsAfterSeed {
+		t.Fatalf("동적 사용량 조회는 intent_unavailable로 embedding 호출 전에 제외되어야 함: before=%d after=%d", embeddingCallsAfterSeed, embeddingProvider.calls)
+	}
+	if semantic.searchCalls != 1 || semantic.upsertCalls != 1 {
+		t.Fatalf("동적 사용량 조회는 lookup/store 시도 후 intent policy에서 제외되어야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+	}
+	if len(semantic.searchResults) != 1 || semantic.searchResults[0].Reason != cachekey.SemanticCacheReasonIntentUnavailable {
+		t.Fatalf("동적 사용량 조회 lookup reason은 intent_unavailable이어야 함: %+v", semantic.searchResults)
+	}
+	resp := decodeSemanticChatResponse(t, second)
+	if resp.GateLM == nil ||
+		resp.GateLM.SemanticCacheHit ||
+		resp.GateLM.SemanticReturnedFromCache ||
+		!resp.GateLM.ProviderCalled {
+		t.Fatalf("동적 사용량 조회 metadata 불일치: %+v", resp.GateLM)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonIntentUnavailable ||
+		logged.SemanticReturnedFromCache ||
+		logged.Metadata["semanticReturnedFromCache"] != false {
+		t.Fatalf("동적 사용량 조회 log reason 불일치: %+v", logged)
+	}
+	assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t, second, logged,
+		"사용량은 어디서 확인해?",
+		"내 이번 달 사용량 보여줘",
 	)
 }
 
@@ -547,7 +597,7 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksTenantAndApplication
 			outside.handler.SemanticCacheAllowedApplicationIDs = tc.allowedApps
 			outside.routes["sc_canary_scope_outside"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
-			rr := outside.exercise(t, "sc_canary_scope_outside", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+			rr := outside.exercise(t, "sc_canary_scope_outside", routingAwareChatBody("auto", "API 사용량 확인 화면은 어디야?"))
 
 			if rr.Code != http.StatusOK {
 				t.Fatalf("scope 밖 general 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
@@ -571,7 +621,7 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksTenantAndApplication
 			}
 			assertSemanticCacheRuntimeOutputDoesNotLeakForbiddenMarkers(t, rr, logged,
 				"사용량은 어디서 확인해?",
-				"이번 달 사용량 통계를 보여줘",
+				"API 사용량 확인 화면은 어디야?",
 			)
 		})
 	}
@@ -600,7 +650,7 @@ func TestChatCompletionsSemanticCacheKoreanRequests(t *testing.T) {
 		harness := newSemanticCacheHarness(t, true)
 
 		harness.exercise(t, "sc_ko_miss_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
-		rr := harness.exercise(t, "sc_ko_miss_second", routingAwareChatBody("auto", "이번 달 사용량 통계를 보여줘"))
+		rr := harness.exercise(t, "sc_ko_miss_second", routingAwareChatBody("auto", "사용량 메뉴 위치 알려줘"))
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("한국어 비유사 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())

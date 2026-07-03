@@ -51,6 +51,7 @@
       "create": ["발급", "생성", "만들", "만드는", "새로 만들", "새로 만드는"],
       "delete": ["삭제", "삭제하는", "탈퇴", "없애"],
       "usage": ["사용량", "이용량", "사용 통계", "사용량 통계"],
+      "usage_help": ["어디서", "어디야", "위치", "메뉴", "화면", "확인 방법", "확인하는 방법", "보는 방법"],
       "monthly": ["이번 달", "월간", "당월"],
       "refund": ["환불", "환급", "돌려받"],
       "refund_request": ["환불 접수", "환불 신청"],
@@ -107,10 +108,10 @@
     },
     "usage.monthly_usage_check": {
       "category": "general",
-      "matchAll": ["usage"],
+      "matchAll": ["usage", "usage_help"],
       "requiredSlots": {
         "usageObject": "api_usage",
-        "usagePeriod": "monthly"
+        "usageAnswerType": "static_guidance"
       },
       "priority": 80
     },

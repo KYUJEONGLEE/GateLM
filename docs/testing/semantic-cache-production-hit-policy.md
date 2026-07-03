@@ -193,7 +193,7 @@ production hit 조건:
 | --- | --- | --- |
 | `general` | `account.password_reset` | `accountAction=password_reset` |
 | `general` | `account.api_key_create` | `accountAction=api_key_create` |
-| `general` | `usage.monthly_usage_check` | `usagePeriod=monthly`, `usageObject=api_usage` |
+| `general` | `usage.monthly_usage_check` | `usageObject=api_usage`, `usageAnswerType=static_guidance` |
 | `support_refund` | `support_refund.shipping_fee_refund` | `supportAction=refund`, `refundObject=shipping_fee` |
 | `support_refund` | `support_refund.order_cancel` | `supportAction=cancel`, `refundObject=order_payment` |
 | `support_refund` | `support_refund.exchange_request` | `supportAction=exchange` |
