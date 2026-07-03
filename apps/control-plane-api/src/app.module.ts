@@ -11,6 +11,7 @@ import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
+import { TeamsModule } from './modules/teams/teams.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ApiKeysModule,
     AppTokensModule,
     RuntimeConfigsModule,
+    TeamsModule,
     HealthModule,
   ],
 })

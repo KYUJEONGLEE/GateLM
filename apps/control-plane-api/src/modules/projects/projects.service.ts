@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Project } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
@@ -10,6 +10,8 @@ import {
   ProjectResponseDto,
   UpdateProjectDto,
 } from './dto/project.dto';
+
+const DEFAULT_PROJECT_BUDGET_USD = 100;
 
 @Injectable()
 export class ProjectsService {
@@ -26,6 +28,7 @@ export class ProjectsService {
         tenantId,
         name: dto.name,
         description: this.toNullableDescription(dto.description),
+        totalBudgetUsd: dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD,
       },
     });
 
@@ -72,6 +75,13 @@ export class ProjectsService {
     }
     if (dto.status !== undefined) {
       data.status = dto.status;
+    }
+    if (dto.totalBudgetUsd !== undefined) {
+      await this.assertProjectBudgetCanCoverApplications(
+        projectId,
+        dto.totalBudgetUsd,
+      );
+      data.totalBudgetUsd = dto.totalBudgetUsd;
     }
 
     if (Object.keys(data).length === 0) {
@@ -121,6 +131,73 @@ export class ProjectsService {
     return value && value.length > 0 ? value : null;
   }
 
+  private async assertProjectBudgetCanCoverApplications(
+    projectId: string,
+    totalBudgetUsd: number,
+  ): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        applications: {
+          where: {
+            status: {
+              not: 'ARCHIVED',
+            },
+          },
+          select: {
+            budgetLimitMode: true,
+            budgetLimitPercent: true,
+            budgetLimitUsd: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project not found.');
+    }
+
+    const allocatedBudgetUsd = project.applications.reduce(
+      (total, application) =>
+        total +
+        this.getApplicationBudgetLimitUsd({
+          budgetLimitMode: application.budgetLimitMode,
+          budgetLimitPercent: this.toNumber(application.budgetLimitPercent),
+          budgetLimitUsd: this.toNumber(application.budgetLimitUsd),
+          projectBudgetUsd: totalBudgetUsd,
+        }),
+      0,
+    );
+
+    if (allocatedBudgetUsd > totalBudgetUsd) {
+      throw new ConflictException(
+        'Application budgets exceed the project budget.',
+      );
+    }
+  }
+
+  private getApplicationBudgetLimitUsd(args: {
+    budgetLimitMode: string;
+    budgetLimitPercent: number | null;
+    budgetLimitUsd: number | null;
+    projectBudgetUsd: number;
+  }): number {
+    if (args.budgetLimitMode === 'PERCENT') {
+      return (
+        args.projectBudgetUsd *
+        Math.max(0, Math.min(args.budgetLimitPercent ?? 0, 100)) /
+        100
+      );
+    }
+
+    return Math.max(0, args.budgetLimitUsd ?? 0);
+  }
+
+  private toNumber(value: Prisma.Decimal | null | undefined): number | null {
+    return value === null || value === undefined ? null : value.toNumber();
+  }
+
   private isRecordNotFoundError(
     error: unknown,
   ): error is Prisma.PrismaClientKnownRequestError {
@@ -137,6 +214,8 @@ export class ProjectsService {
       name: project.name,
       description: project.description,
       status: project.status,
+      totalBudgetUsd:
+        this.toNumber(project.totalBudgetUsd) ?? DEFAULT_PROJECT_BUDGET_USD,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
     };

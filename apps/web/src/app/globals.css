@@ -1921,6 +1921,84 @@ select {
   height: 16px;
 }
 
+.application-budget-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.application-budget-summary span:first-child {
+  color: var(--foreground);
+}
+
+.application-budget-fields {
+  display: grid;
+  gap: 8px;
+  min-width: 160px;
+}
+
+.application-budget-fields .policy-field {
+  gap: 4px;
+}
+
+.application-budget-fields input,
+.application-budget-fields select {
+  min-height: 36px;
+}
+
+.local-application-pill {
+  display: inline-grid;
+  gap: 3px;
+  min-width: 128px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.local-application-pill strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.local-application-pill small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.team-attach-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: min(100%, 420px);
+}
+
+.team-attach-controls select {
+  min-width: 190px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.team-attach-controls .primary-button {
+  height: 38px;
+}
+
 .project-empty {
   margin: 0;
   color: var(--text-muted);
@@ -4757,6 +4835,10 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .team-attach-controls {
+    justify-content: flex-start;
+  }
+
   .provider-wide-field {
     grid-column: span 2;
   }
@@ -5077,6 +5159,7 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .api-key-row-actions,
   .project-detail-actions,
   .applications-panel-heading,
+  .team-attach-controls,
   .modal-actions,
   .model-catalog-actions {
     flex-direction: column;
@@ -5085,6 +5168,9 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .model-catalog-actions,
   .model-catalog-actions .policy-field,
   .applications-panel-heading .primary-button,
+  .team-attach-controls,
+  .team-attach-controls select,
+  .team-attach-controls .primary-button,
   .modal-actions button,
   .project-detail-actions .primary-button,
   .model-catalog-actions button {

@@ -111,6 +111,9 @@ export async function updateApplication(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(values.applicationId)}`,
       {
         body: JSON.stringify({
+          budgetLimitMode: values.budgetLimitMode,
+          budgetLimitPercent: values.budgetLimitPercent,
+          budgetLimitUsd: values.budgetLimitUsd,
           description: values.description.trim(),
           name: values.name.trim(),
           status: values.status
@@ -154,7 +157,11 @@ async function listApplications(projectId: string): Promise<ApplicationListResul
 
 function toApplicationPayload(values: ApplicationFormValues) {
   return {
+    budgetLimitMode: values.budgetLimitMode,
+    budgetLimitPercent: values.budgetLimitPercent,
+    budgetLimitUsd: values.budgetLimitUsd,
     description: values.description.trim() || undefined,
+    localApplicationKey: values.localApplicationKey,
     name: values.name.trim()
   };
 }
@@ -268,9 +275,14 @@ function getFixtureApplication(): ApplicationRecord {
   const timestamp = runtimeConfig.generatedAt;
 
   return {
+    budgetLimitMode: "FIXED",
+    budgetLimitPercent: null,
+    budgetLimitUsd: 0,
     createdAt: timestamp,
     description: "Customer-facing chat application from the v1 runtime config fixture.",
+    effectiveBudgetLimitUsd: 0,
     id: runtimeConfig.applicationId,
+    localApplicationKey: "chat",
     name: "Customer Demo App",
     projectId: runtimeConfig.projectId,
     status: runtimeConfig.applicationStatus === "active" ? "ACTIVE" : "DISABLED",
@@ -300,15 +312,52 @@ function toApplicationRecord(value: unknown): ApplicationRecord | null {
   }
 
   return {
+    budgetLimitMode: normalizeBudgetLimitMode(record.budgetLimitMode),
+    budgetLimitPercent: normalizeNullableNumber(record.budgetLimitPercent),
+    budgetLimitUsd: normalizeNullableNumber(record.budgetLimitUsd),
     createdAt: record.createdAt,
     description: typeof record.description === "string" ? record.description : null,
+    effectiveBudgetLimitUsd: normalizeNumber(record.effectiveBudgetLimitUsd, 0),
     id: record.id,
+    localApplicationKey: normalizeLocalApplicationKey(record.localApplicationKey),
     name: record.name,
     projectId: record.projectId,
     status,
     tenantId: record.tenantId,
     updatedAt: record.updatedAt
   };
+}
+
+function normalizeBudgetLimitMode(value: unknown): ApplicationRecord["budgetLimitMode"] {
+  return value === "PERCENT" ? "PERCENT" : "FIXED";
+}
+
+function normalizeLocalApplicationKey(value: unknown): ApplicationRecord["localApplicationKey"] {
+  return value === "chat" ? "chat" : "chat";
+}
+
+function normalizeNullableNumber(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function normalizeNumber(value: unknown, fallback: number) {
+  return normalizeNullableNumber(value) ?? fallback;
 }
 
 function normalizeApplicationStatus(value: unknown): ApplicationRecord["status"] | null {

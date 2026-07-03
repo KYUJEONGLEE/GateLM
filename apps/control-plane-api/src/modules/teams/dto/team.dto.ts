@@ -3,7 +3,6 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -17,7 +16,7 @@ function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
 
-export class CreateProjectDto {
+export class CreateTeamDto {
   @Transform(({ value }) => trimString(value))
   @IsString()
   @MinLength(1)
@@ -29,16 +28,9 @@ export class CreateProjectDto {
   @IsString()
   @MaxLength(500)
   description?: string;
-
-  @Type(() => Number)
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100000000)
-  totalBudgetUsd?: number;
 }
 
-export class UpdateProjectDto {
+export class UpdateTeamDto {
   @Transform(({ value }) => trimString(value))
   @IsOptional()
   @IsString()
@@ -55,16 +47,9 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsEnum(ResourceStatus)
   status?: ResourceStatus;
-
-  @Type(() => Number)
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100000000)
-  totalBudgetUsd?: number;
 }
 
-export class ListProjectsQueryDto {
+export class ListTeamsQueryDto {
   @Type(() => Number)
   @IsOptional()
   @IsInt()
@@ -77,13 +62,29 @@ export class ListProjectsQueryDto {
   cursor?: string;
 }
 
-export interface ProjectResponseDto {
+export class AttachProjectTeamDto {
+  @IsUUID()
+  teamId!: string;
+}
+
+export interface TeamResponseDto {
   id: string;
   tenantId: string;
   name: string;
   description: string | null;
   status: ResourceStatus;
-  totalBudgetUsd: number;
+  projectCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectTeamResponseDto {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  teamId: string;
+  teamName: string;
+  teamDescription: string | null;
+  teamStatus: ResourceStatus;
+  assignedAt: string;
 }

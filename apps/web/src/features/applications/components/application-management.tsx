@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
+  ApplicationBudgetLimitMode,
   ApplicationFormValues,
   ApplicationRecord,
   ApplicationsModel,
@@ -19,6 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 type ApplicationManagementProps = {
   locale: Locale;
   model: ApplicationsModel;
+  projectBudgetUsd?: number;
 };
 
 type SubmitState = {
@@ -42,9 +44,20 @@ type OneTimeAppTokenState = {
 };
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
+const localApplicationOptions = [
+  {
+    description: "/application/chat",
+    key: "chat",
+    label: "Chat"
+  }
+] as const;
 
 const emptyApplicationForm: ApplicationFormValues = {
+  budgetLimitMode: "FIXED",
+  budgetLimitPercent: 0,
+  budgetLimitUsd: 0,
   description: "",
+  localApplicationKey: "chat",
   name: ""
 };
 
@@ -53,6 +66,10 @@ const applicationText: Record<
   {
     applicationId: string;
     appToken: string;
+    budget: string;
+    budgetMode: string;
+    budgetPercent: string;
+    budgetSummary: string;
     cancel: string;
     close: string;
     create: string;
@@ -62,6 +79,7 @@ const applicationText: Record<
     description: string;
     empty: string;
     fixtureFallback: string;
+    localApplication: string;
     management: string;
     name: string;
     save: string;
@@ -75,6 +93,10 @@ const applicationText: Record<
   en: {
     applicationId: "Application ID",
     appToken: "App Token",
+    budget: "Budget limit",
+    budgetMode: "Budget mode",
+    budgetPercent: "Budget percent",
+    budgetSummary: "Allocated budget",
     cancel: "Cancel",
     close: "OK",
     create: "Create application",
@@ -84,6 +106,7 @@ const applicationText: Record<
     description: "Description",
     empty: "No applications found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture application.",
+    localApplication: "Local application",
     management: "management",
     name: "Name",
     save: "Save",
@@ -96,6 +119,10 @@ const applicationText: Record<
   ko: {
     applicationId: "Application ID",
     appToken: "App Token",
+    budget: "예산 한도",
+    budgetMode: "예산 방식",
+    budgetPercent: "예산 비율",
+    budgetSummary: "배정 예산",
     cancel: "취소",
     close: "확인",
     create: "애플리케이션 생성",
@@ -105,6 +132,7 @@ const applicationText: Record<
     description: "설명",
     empty: "애플리케이션이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 애플리케이션을 표시 중입니다.",
+    localApplication: "로컬 애플리케이션",
     management: "관리",
     name: "이름",
     save: "저장",
@@ -116,7 +144,11 @@ const applicationText: Record<
   }
 };
 
-export function ApplicationManagement({ locale, model }: ApplicationManagementProps) {
+export function ApplicationManagement({
+  locale,
+  model,
+  projectBudgetUsd = 100
+}: ApplicationManagementProps) {
   const router = useRouter();
   const text = applicationText[locale];
   const [applications, setApplications] = useState<ApplicationRecord[]>(model.applications);
@@ -137,6 +169,10 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
     message: "",
     status: "idle"
   });
+  const allocatedBudgetUsd = applications
+    .filter((application) => application.status !== "ARCHIVED")
+    .reduce((total, application) => total + application.effectiveBudgetLimitUsd, 0);
+  const remainingBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd);
 
   function openCreateModal() {
     setCreateValues(emptyApplicationForm);
@@ -157,6 +193,14 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
       setSubmitState({
         message:
           locale === "ko" ? "애플리케이션 이름을 입력하세요." : "Application name is required.",
+        status: "error"
+      });
+      return;
+    }
+    if (!isValidApplicationBudgetValues(createValues)) {
+      setSubmitState({
+        message:
+          locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
         status: "error"
       });
       return;
@@ -260,6 +304,14 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
       });
       return;
     }
+    if (!isValidApplicationBudgetValues(values)) {
+      setSubmitState({
+        message:
+          locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
+        status: "error"
+      });
+      return;
+    }
 
     setPendingAction(`update:${applicationId}`);
     setSubmitState({ message: "", status: "idle" });
@@ -316,13 +368,6 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
 
   return (
     <main className="console-content">
-      <section className="dashboard-hero">
-        <div>
-          <p className="console-kicker">{text.management}</p>
-          <h2>{text.title}</h2>
-        </div>
-      </section>
-
       {model.source === "fixture" ? (
         <p className="policy-alert" data-status="warning">
           {text.fixtureFallback} {model.loadError}
@@ -333,6 +378,13 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
           {submitState.message}
         </p>
       ) : null}
+      <section className="application-budget-summary" aria-label={text.budgetSummary}>
+        <span>
+          {text.budgetSummary}: {formatBudgetUsd(allocatedBudgetUsd)} /{" "}
+          {formatBudgetUsd(projectBudgetUsd)}
+        </span>
+        <span>{formatBudgetUsd(remainingBudgetUsd)} remaining</span>
+      </section>
 
       <section className="console-panel">
         <div className="applications-panel-heading">
@@ -352,7 +404,9 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
               <thead>
                 <tr>
                   <th>{text.name}</th>
+                  <th>{text.localApplication}</th>
                   <th>{text.description}</th>
+                  <th>{text.budget}</th>
                   <th>{text.status}</th>
                   <th>{text.updated}</th>
                   <th>{text.applicationId}</th>
@@ -380,6 +434,9 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                         </label>
                       </td>
                       <td>
+                        <ReadonlyLocalApplication value={application.localApplicationKey} />
+                      </td>
+                      <td>
                         <label className="policy-field project-table-field">
                           <span>{text.description}</span>
                           <textarea
@@ -390,6 +447,18 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                             value={rowValues.description}
                           />
                         </label>
+                      </td>
+                      <td>
+                        <ApplicationBudgetFields
+                          budgetLimitMode={rowValues.budgetLimitMode}
+                          budgetLimitPercent={rowValues.budgetLimitPercent}
+                          budgetLimitUsd={rowValues.budgetLimitUsd}
+                          labels={text}
+                          onChange={(values) => updateRow(application.id, values)}
+                        />
+                        <small className="project-muted">
+                          {formatBudgetLimit(application)}
+                        </small>
                       </td>
                       <td>
                         <div className="project-status-cell">
@@ -510,6 +579,25 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                   />
                 </label>
                 <label className="policy-field">
+                  <span>{text.localApplication}</span>
+                  <select
+                    onChange={(event) =>
+                      setCreateValues((current) => ({
+                        ...current,
+                        localApplicationKey: event.target.value as ApplicationFormValues["localApplicationKey"]
+                      }))
+                    }
+                    required
+                    value={createValues.localApplicationKey}
+                  >
+                    {localApplicationOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label} ({option.description})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="policy-field">
                   <span>{text.description}</span>
                   <input
                     maxLength={500}
@@ -523,6 +611,18 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                     value={createValues.description}
                   />
                 </label>
+                <ApplicationBudgetFields
+                  budgetLimitMode={createValues.budgetLimitMode}
+                  budgetLimitPercent={createValues.budgetLimitPercent}
+                  budgetLimitUsd={createValues.budgetLimitUsd}
+                  labels={text}
+                  onChange={(values) =>
+                    setCreateValues((current) => ({
+                      ...current,
+                      ...values
+                    }))
+                  }
+                />
               </div>
             )}
 
@@ -543,7 +643,11 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                   </button>
                   <button
                     className="primary-button"
-                    disabled={pendingAction !== null || createValues.name.trim().length === 0}
+                    disabled={
+                      pendingAction !== null ||
+                      createValues.name.trim().length === 0 ||
+                      !isValidApplicationBudgetValues(createValues)
+                    }
                     onClick={() => void submitCreateApplication()}
                     type="button"
                   >
@@ -562,7 +666,11 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
 function getApplicationUpdateValues(application: ApplicationRecord): ApplicationUpdateValues {
   return {
     applicationId: application.id,
+    budgetLimitMode: application.budgetLimitMode,
+    budgetLimitPercent: application.budgetLimitPercent ?? 0,
+    budgetLimitUsd: application.budgetLimitUsd ?? 0,
     description: nullableText(application.description, ""),
+    localApplicationKey: application.localApplicationKey,
     name: application.name,
     status: application.status
   };
@@ -570,4 +678,109 @@ function getApplicationUpdateValues(application: ApplicationRecord): Application
 
 function formatApplicationStatus(status: ApplicationStatus) {
   return status.toLowerCase();
+}
+
+function ReadonlyLocalApplication({ value }: { value: ApplicationRecord["localApplicationKey"] }) {
+  const option = localApplicationOptions.find((item) => item.key === value) ?? localApplicationOptions[0];
+
+  return (
+    <div className="local-application-pill">
+      <strong>{option.label}</strong>
+      <small>{option.description}</small>
+    </div>
+  );
+}
+
+function isValidApplicationBudgetValues(values: ApplicationFormValues) {
+  if (values.budgetLimitMode === "PERCENT") {
+    return (
+      Number.isFinite(values.budgetLimitPercent) &&
+      values.budgetLimitPercent >= 0 &&
+      values.budgetLimitPercent <= 100
+    );
+  }
+
+  return Number.isFinite(values.budgetLimitUsd) && values.budgetLimitUsd >= 0;
+}
+
+function ApplicationBudgetFields({
+  budgetLimitMode,
+  budgetLimitPercent,
+  budgetLimitUsd,
+  labels,
+  onChange
+}: {
+  budgetLimitMode: ApplicationBudgetLimitMode;
+  budgetLimitPercent: number;
+  budgetLimitUsd: number;
+  labels: (typeof applicationText)[Locale];
+  onChange: (values: Partial<ApplicationFormValues>) => void;
+}) {
+  return (
+    <div className="application-budget-fields">
+      <label className="policy-field project-table-field">
+        <span>{labels.budgetMode}</span>
+        <select
+          onChange={(event) =>
+            onChange({
+              budgetLimitMode: event.target.value as ApplicationBudgetLimitMode
+            })
+          }
+          value={budgetLimitMode}
+        >
+          <option value="FIXED">Fixed</option>
+          <option value="PERCENT">Percent</option>
+        </select>
+      </label>
+      {budgetLimitMode === "PERCENT" ? (
+        <label className="policy-field project-table-field">
+          <span>{labels.budgetPercent}</span>
+          <input
+            max={100}
+            min={0}
+            onChange={(event) =>
+              onChange({
+                budgetLimitPercent: Number(event.target.value)
+              })
+            }
+            step="0.01"
+            type="number"
+            value={budgetLimitPercent}
+          />
+        </label>
+      ) : (
+        <label className="policy-field project-table-field">
+          <span>{labels.budget}</span>
+          <input
+            min={0}
+            onChange={(event) =>
+              onChange({
+                budgetLimitUsd: Number(event.target.value)
+              })
+            }
+            step="0.01"
+            type="number"
+            value={budgetLimitUsd}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function formatBudgetLimit(application: ApplicationRecord) {
+  if (application.budgetLimitMode === "PERCENT") {
+    return `${application.budgetLimitPercent ?? 0}% = ${formatBudgetUsd(
+      application.effectiveBudgetLimitUsd
+    )}`;
+  }
+
+  return formatBudgetUsd(application.effectiveBudgetLimitUsd);
+}
+
+function formatBudgetUsd(value: number) {
+  return `$${value.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0
+  })}`;
 }

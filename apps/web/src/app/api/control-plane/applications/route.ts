@@ -4,9 +4,11 @@ import {
   updateApplication
 } from "@/lib/control-plane/applications-client";
 import type {
+  ApplicationBudgetLimitMode,
   ApplicationFormValues,
   ApplicationStatus,
-  ApplicationUpdateValues
+  ApplicationUpdateValues,
+  LocalApplicationKey
 } from "@/lib/control-plane/applications-types";
 
 type RequestPayload = {
@@ -60,6 +62,10 @@ function isApplicationFormValues(value: unknown): value is ApplicationFormValues
   return (
     typeof record.name === "string"
     && typeof record.description === "string"
+    && isLocalApplicationKey(record.localApplicationKey)
+    && isApplicationBudgetLimitMode(record.budgetLimitMode)
+    && isBudgetNumber(record.budgetLimitUsd, 100000000)
+    && isBudgetNumber(record.budgetLimitPercent, 100)
     && (record.projectId === undefined || typeof record.projectId === "string")
   );
 }
@@ -76,4 +82,23 @@ function isApplicationUpdateValues(value: unknown): value is ApplicationUpdateVa
 
 function isApplicationStatus(value: unknown): value is ApplicationStatus {
   return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED";
+}
+
+function isApplicationBudgetLimitMode(
+  value: unknown
+): value is ApplicationBudgetLimitMode {
+  return value === "FIXED" || value === "PERCENT";
+}
+
+function isLocalApplicationKey(value: unknown): value is LocalApplicationKey {
+  return value === "chat";
+}
+
+function isBudgetNumber(value: unknown, max: number) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= max
+  );
 }

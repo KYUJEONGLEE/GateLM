@@ -2,7 +2,9 @@ import { ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -16,6 +18,9 @@ function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
 
+export type ApplicationBudgetLimitModeDto = 'FIXED' | 'PERCENT';
+export type LocalApplicationKeyDto = 'chat';
+
 export class CreateApplicationDto {
   @Transform(({ value }) => trimString(value))
   @IsString()
@@ -28,6 +33,28 @@ export class CreateApplicationDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsIn(['chat'])
+  localApplicationKey?: LocalApplicationKeyDto;
+
+  @IsOptional()
+  @IsIn(['FIXED', 'PERCENT'])
+  budgetLimitMode?: ApplicationBudgetLimitModeDto;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  budgetLimitUsd?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  budgetLimitPercent?: number;
 }
 
 export class UpdateApplicationDto {
@@ -47,6 +74,24 @@ export class UpdateApplicationDto {
   @IsOptional()
   @IsEnum(ResourceStatus)
   status?: ResourceStatus;
+
+  @IsOptional()
+  @IsIn(['FIXED', 'PERCENT'])
+  budgetLimitMode?: ApplicationBudgetLimitModeDto;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  budgetLimitUsd?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  budgetLimitPercent?: number;
 }
 
 export class ListApplicationsQueryDto {
@@ -69,6 +114,11 @@ export interface ApplicationResponseDto {
   name: string;
   description: string | null;
   status: ResourceStatus;
+  localApplicationKey: LocalApplicationKeyDto;
+  budgetLimitMode: ApplicationBudgetLimitModeDto;
+  budgetLimitUsd: number | null;
+  budgetLimitPercent: number | null;
+  effectiveBudgetLimitUsd: number;
   createdAt: string;
   updatedAt: string;
 }
