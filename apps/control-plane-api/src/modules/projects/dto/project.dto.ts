@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -28,6 +29,13 @@ export class CreateProjectDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  totalBudgetUsd?: number;
 }
 
 export class UpdateProjectDto {
@@ -47,6 +55,13 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsEnum(ResourceStatus)
   status?: ResourceStatus;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  totalBudgetUsd?: number;
 }
 
 export class ListProjectsQueryDto {
@@ -68,6 +83,7 @@ export interface ProjectResponseDto {
   name: string;
   description: string | null;
   status: ResourceStatus;
+  totalBudgetUsd: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -43,6 +43,7 @@ type SemanticCacheEntry struct {
 	EntryID                    string
 	RequestID                  string
 	Boundary                   SemanticCacheBoundary
+	IntentMaterial             SemanticCacheIntentMaterial
 	EmbeddingVector            []float64
 	CachedResponse             []byte
 	CreatedAt                  time.Time
@@ -56,12 +57,20 @@ type SemanticCacheMatch struct {
 }
 
 type SemanticCacheSearchResult struct {
-	Hit          bool
-	MatchedEntry *SemanticCacheEntry
-	Similarity   float64
-	Threshold    float64
-	Reason       string
-	Matches      []SemanticCacheMatch
+	Hit                    bool
+	MatchedEntry           *SemanticCacheEntry
+	Similarity             float64
+	Threshold              float64
+	Reason                 string
+	Matches                []SemanticCacheMatch
+	QueryVector            []float64
+	IntentMaterial         SemanticCacheIntentMaterial
+	EmbeddingInput         NormalizedEmbeddingInput
+	RerankerApplied        bool
+	RerankerPassed         bool
+	RerankerScore          float64
+	RerankerThreshold      float64
+	RerankerDecisionReason string
 }
 
 type SemanticCacheDecision struct {
@@ -75,6 +84,12 @@ type SemanticCacheDecision struct {
 	SemanticCachePolicyVersion  string
 	SemanticCacheDecisionReason string
 	EmbeddingProvider           string
+	NormalizationVersion        string
+	RerankerApplied             bool
+	RerankerPassed              bool
+	RerankerScore               float64
+	RerankerThreshold           float64
+	RerankerDecisionReason      string
 }
 
 func (b SemanticCacheBoundary) Normalize() SemanticCacheBoundary {
@@ -124,6 +139,7 @@ func (b SemanticCacheBoundary) Equal(other SemanticCacheBoundary) bool {
 func (e SemanticCacheEntry) Clone() SemanticCacheEntry {
 	cloned := e
 	cloned.Boundary = e.Boundary.Normalize()
+	cloned.IntentMaterial = e.IntentMaterial.Clone()
 	cloned.EmbeddingVector = append([]float64{}, e.EmbeddingVector...)
 	cloned.CachedResponse = append([]byte{}, e.CachedResponse...)
 	return cloned
@@ -153,5 +169,11 @@ func (r SemanticCacheSearchResult) Decision(enabled bool, embeddingProvider stri
 		SemanticCachePolicyVersion:  strings.TrimSpace(policyVersion),
 		SemanticCacheDecisionReason: strings.TrimSpace(r.Reason),
 		EmbeddingProvider:           strings.TrimSpace(embeddingProvider),
+		NormalizationVersion:        strings.TrimSpace(r.EmbeddingInput.NormalizationVersion),
+		RerankerApplied:             r.RerankerApplied,
+		RerankerPassed:              r.RerankerPassed,
+		RerankerScore:               r.RerankerScore,
+		RerankerThreshold:           r.RerankerThreshold,
+		RerankerDecisionReason:      strings.TrimSpace(r.RerankerDecisionReason),
 	}
 }

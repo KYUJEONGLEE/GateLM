@@ -7,12 +7,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 )
 
 const (
 	SemanticCacheStoreInMemory           = "in_memory"
 	SemanticCacheEmbeddingProviderFake   = "fake"
 	SemanticCacheEmbeddingProviderOpenAI = "openai"
+	SemanticCacheClassifierTypeNoop      = cachekey.CacheabilityClassifierTypeNoop
+	SemanticCacheClassifierTypeStub      = cachekey.CacheabilityClassifierTypeStub
+	SemanticCacheClassifierTypeFastText  = cachekey.CacheabilityClassifierTypeFastText
 )
 
 type Config struct {
@@ -66,6 +71,11 @@ type Config struct {
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
 	AISafetySidecar          AISafetySidecarConfig
+	AsyncLogEnabled          bool
+	AsyncLogQueueSize        int
+	AsyncLogWorkerCount      int
+	AsyncLogWriteTimeout     time.Duration
+	AsyncLogShutdownTimeout  time.Duration
 	SemanticCache            SemanticCacheConfig
 }
 
@@ -79,22 +89,33 @@ type AISafetySidecarConfig struct {
 }
 
 type SemanticCacheConfig struct {
-	Enabled             bool
-	Threshold           float64
-	TopK                int
-	TTL                 time.Duration
-	Store               string
-	MaxEntries          int
-	EmbeddingProvider   string
-	EmbeddingModel      string
-	EmbeddingDimensions int
-	EmbeddingTimeout    time.Duration
-	OpenAIBaseURL       string
-	OpenAIAPIKey        string
-	PolicyVersion       string
-	KeyVersion          string
-	AllowCategories     []string
-	DenyCategories      []string
+	Enabled                 bool
+	Mode                    string
+	Threshold               float64
+	TopK                    int
+	TTL                     time.Duration
+	Store                   string
+	MaxEntries              int
+	EmbeddingProvider       string
+	EmbeddingModel          string
+	EmbeddingDimensions     int
+	EmbeddingTimeout        time.Duration
+	OpenAIBaseURL           string
+	OpenAIAPIKey            string
+	PolicyVersion           string
+	KeyVersion              string
+	IntentPolicyPath        string
+	AllowCategories         []string
+	DenyCategories          []string
+	AllowedTenantIDs        []string
+	AllowedApplicationIDs   []string
+	AllowedCategories       []string
+	CategoryThresholds      map[string]float64
+	ClassifierEnabled       bool
+	ClassifierType          string
+	ClassifierEndpoint      string
+	ClassifierMinConfidence float64
+	ClassifierTimeout       time.Duration
 }
 
 func Load() Config {
@@ -162,7 +183,12 @@ func LoadWithError() (Config, error) {
 			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
 			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
 		},
-		SemanticCache: semanticCache,
+		AsyncLogEnabled:         envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
+		AsyncLogQueueSize:       envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
+		AsyncLogWorkerCount:     envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
+		AsyncLogWriteTimeout:    envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
+		AsyncLogShutdownTimeout: envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
+		SemanticCache:           semanticCache,
 	}
 	return cfg, err
 }
@@ -172,6 +198,16 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 	if err != nil {
 		return SemanticCacheConfig{}, err
 	}
+	classifierEnabled, err := semanticEnvBool("SEMANTIC_CACHE_CLASSIFIER_ENABLED", false)
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	mode := semanticEnvString("SEMANTIC_CACHE_MODE", cachekey.SemanticCacheModeEnforce)
+	switch mode {
+	case cachekey.SemanticCacheModeOff, cachekey.SemanticCacheModeShadow, cachekey.SemanticCacheModeEnforce:
+	default:
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache mode %q", mode)
+	}
 	store := semanticEnvString("SEMANTIC_CACHE_STORE", SemanticCacheStoreInMemory)
 	if store != SemanticCacheStoreInMemory {
 		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache store %q", store)
@@ -180,29 +216,83 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 	if embeddingProvider != SemanticCacheEmbeddingProviderFake && embeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
 		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache embedding provider %q", embeddingProvider)
 	}
-	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	if enabled && embeddingProvider == SemanticCacheEmbeddingProviderOpenAI && openAIAPIKey == "" {
-		return SemanticCacheConfig{}, fmt.Errorf("OPENAI_API_KEY is required when SEMANTIC_CACHE_ENABLED=true and SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai")
+	classifierType := semanticEnvString("SEMANTIC_CACHE_CLASSIFIER_TYPE", SemanticCacheClassifierTypeStub)
+	switch classifierType {
+	case SemanticCacheClassifierTypeNoop, SemanticCacheClassifierTypeStub, SemanticCacheClassifierTypeFastText:
+	default:
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache classifier type %q", classifierType)
 	}
+	classifierEndpoint := semanticEnvString("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT", "")
+	if classifierEnabled && classifierType == SemanticCacheClassifierTypeFastText {
+		parsedEndpoint, parseErr := url.Parse(classifierEndpoint)
+		if strings.TrimSpace(classifierEndpoint) == "" || parseErr != nil || parsedEndpoint.Scheme == "" || parsedEndpoint.Host == "" {
+			return SemanticCacheConfig{}, fmt.Errorf("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT is required when SEMANTIC_CACHE_CLASSIFIER_ENABLED=true and SEMANTIC_CACHE_CLASSIFIER_TYPE=fasttext")
+		}
+	}
+	intentPolicyPath := semanticEnvString("SEMANTIC_CACHE_INTENT_POLICY_PATH", "")
+	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	if enabled && mode != cachekey.SemanticCacheModeOff && embeddingProvider == SemanticCacheEmbeddingProviderOpenAI && strings.TrimSpace(intentPolicyPath) != "" && openAIAPIKey == "" {
+		return SemanticCacheConfig{}, fmt.Errorf("OPENAI_API_KEY is required when SEMANTIC_CACHE_ENABLED=true, SEMANTIC_CACHE_MODE is not off, SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai, and SEMANTIC_CACHE_INTENT_POLICY_PATH is set")
+	}
+	threshold := semanticEnvFloat("SEMANTIC_CACHE_THRESHOLD", 0.92, 0, 1)
+	threshold = semanticEnvFloat("SEMANTIC_CACHE_DEFAULT_THRESHOLD", threshold, 0, 1)
 
 	return SemanticCacheConfig{
-		Enabled:             enabled,
-		Threshold:           semanticEnvFloat("SEMANTIC_CACHE_THRESHOLD", 0.92, 0, 1),
-		TopK:                semanticEnvInt("SEMANTIC_CACHE_TOP_K", 3, 1),
-		TTL:                 time.Duration(semanticEnvInt("SEMANTIC_CACHE_TTL_SECONDS", 3600, 1)) * time.Second,
-		Store:               store,
-		MaxEntries:          semanticEnvInt("SEMANTIC_CACHE_MAX_ENTRIES", 1000, 1),
-		EmbeddingProvider:   embeddingProvider,
-		EmbeddingModel:      semanticEnvString("SEMANTIC_CACHE_EMBEDDING_MODEL", "text-embedding-3-small"),
-		EmbeddingDimensions: semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", 0, 0),
-		EmbeddingTimeout:    time.Duration(semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", 3000, 1)) * time.Millisecond,
-		OpenAIBaseURL:       semanticEnvString("SEMANTIC_CACHE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIAPIKey:        openAIAPIKey,
-		PolicyVersion:       semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
-		KeyVersion:          semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
-		AllowCategories:     semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
-		DenyCategories:      semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
+		Enabled:                 enabled,
+		Mode:                    mode,
+		Threshold:               threshold,
+		TopK:                    semanticEnvInt("SEMANTIC_CACHE_TOP_K", 3, 1),
+		TTL:                     time.Duration(semanticEnvInt("SEMANTIC_CACHE_TTL_SECONDS", 3600, 1)) * time.Second,
+		Store:                   store,
+		MaxEntries:              semanticEnvInt("SEMANTIC_CACHE_MAX_ENTRIES", 1000, 1),
+		EmbeddingProvider:       embeddingProvider,
+		EmbeddingModel:          semanticEnvString("SEMANTIC_CACHE_EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingDimensions:     semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", 0, 0),
+		EmbeddingTimeout:        time.Duration(semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", 3000, 1)) * time.Millisecond,
+		OpenAIBaseURL:           semanticEnvString("SEMANTIC_CACHE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIAPIKey:            openAIAPIKey,
+		PolicyVersion:           semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
+		KeyVersion:              semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
+		IntentPolicyPath:        intentPolicyPath,
+		AllowCategories:         semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
+		DenyCategories:          semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
+		AllowedTenantIDs:        semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_TENANT_IDS", nil),
+		AllowedApplicationIDs:   semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS", nil),
+		AllowedCategories:       semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_CATEGORIES", nil),
+		CategoryThresholds:      semanticCacheCategoryThresholds(),
+		ClassifierEnabled:       classifierEnabled,
+		ClassifierType:          classifierType,
+		ClassifierEndpoint:      classifierEndpoint,
+		ClassifierMinConfidence: semanticEnvFloat("SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE", cachekey.DefaultCacheabilityClassifierMinConfidence, 0, 1),
+		ClassifierTimeout:       time.Duration(semanticEnvInt("SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS", int(cachekey.DefaultCacheabilityClassifierTimeout.Milliseconds()), 1)) * time.Millisecond,
 	}, nil
+}
+
+func semanticCacheCategoryThresholds() map[string]float64 {
+	envByCategory := map[string]string{
+		"general":        "SEMANTIC_CACHE_THRESHOLD_GENERAL",
+		"account_access": "SEMANTIC_CACHE_THRESHOLD_ACCOUNT_ACCESS",
+		"support_refund": "SEMANTIC_CACHE_THRESHOLD_SUPPORT_REFUND",
+		"code":           "SEMANTIC_CACHE_THRESHOLD_CODE",
+		"translation":    "SEMANTIC_CACHE_THRESHOLD_TRANSLATION",
+		"unknown":        "SEMANTIC_CACHE_THRESHOLD_UNKNOWN",
+	}
+	thresholds := map[string]float64{}
+	for category, key := range envByCategory {
+		value := semanticEnvString(key, "")
+		if value == "" {
+			continue
+		}
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil || parsed <= 0 || parsed > 1 {
+			continue
+		}
+		thresholds[category] = parsed
+	}
+	if len(thresholds) == 0 {
+		return nil
+	}
+	return thresholds
 }
 
 func envString(key string, fallback string) string {

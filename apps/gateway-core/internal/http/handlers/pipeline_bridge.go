@@ -6,6 +6,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
@@ -53,6 +54,10 @@ func newGatewayContext(reqCtx *pipeline.RequestContext, promptText string) *requ
 			HasRoutingPolicy:   reqCtx.HasRuntimeRoutingPolicy,
 			CachePolicy:        reqCtx.RuntimeCachePolicy,
 			HasCachePolicy:     reqCtx.HasRuntimeCachePolicy,
+			PromptCapture:      reqCtx.RuntimePromptCapture,
+			HasPromptCapture:   reqCtx.HasRuntimePromptCapture,
+			ResponseCapture:    reqCtx.RuntimeResponseCapture,
+			HasResponseCapture: reqCtx.HasRuntimeResponseCapture,
 		},
 		Governance: request.GovernanceContext{
 			RateLimitDecision: reqCtx.RateLimitDecision.Clone(),
@@ -144,6 +149,14 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Runtime.HasCachePolicy {
 		reqCtx.RuntimeCachePolicy = gatewayCtx.Runtime.CachePolicy
 		reqCtx.HasRuntimeCachePolicy = true
+	}
+	if gatewayCtx.Runtime.HasPromptCapture {
+		reqCtx.RuntimePromptCapture = gatewayCtx.Runtime.PromptCapture
+		reqCtx.HasRuntimePromptCapture = true
+	}
+	if gatewayCtx.Runtime.HasResponseCapture {
+		reqCtx.RuntimeResponseCapture = gatewayCtx.Runtime.ResponseCapture
+		reqCtx.HasRuntimeResponseCapture = true
 	}
 
 	if gatewayCtx.Governance.RateLimitDecision != nil {
@@ -245,6 +258,8 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Status.ErrorStage != "" {
 		reqCtx.ErrorStage = gatewayCtx.Status.ErrorStage
 	}
+
+	stagetiming.Merge(&reqCtx.StageTimings, gatewayCtx.StageTimings)
 }
 
 func writeGatewayPipelineFailure(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {

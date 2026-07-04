@@ -14,6 +14,12 @@ type GatewayRequest struct {
 	DurationSeconds float64
 }
 
+type GatewayStageDuration struct {
+	Stage           string
+	Status          string
+	DurationSeconds float64
+}
+
 type ProviderRequest struct {
 	SelectedProvider string
 	SelectedModel    string
@@ -79,6 +85,14 @@ func (r *Registry) GatewayRequestCompleted(request GatewayRequest) {
 	r.ObserveHistogram(GatewayRequestDurationSeconds, labels, request.DurationSeconds)
 }
 
+func (r *Registry) GatewayStageDuration(duration GatewayStageDuration) {
+	labels := []Label{
+		{Name: "stage", Value: defaultLabelValue(duration.Stage)},
+		{Name: "status", Value: normalizeStatus(duration.Status)},
+	}
+	r.ObserveHistogram(GatewayStageDurationSeconds, labels, duration.DurationSeconds)
+}
+
 func (r *Registry) ProviderRequest(request ProviderRequest) {
 	labels := []Label{
 		{Name: "selected_provider", Value: request.SelectedProvider},
@@ -125,6 +139,31 @@ func (r *Registry) LogWrite(write LogWrite) {
 	r.ObserveHistogram(LogWriteDurationSeconds, labels, write.DurationSeconds)
 }
 
+type AsyncLogEvent struct {
+	Operation       string
+	Status          string
+	DurationSeconds float64
+}
+
+func (r *Registry) AsyncLogEnqueue(event AsyncLogEvent) {
+	labels := asyncLogLabels(event.Operation, event.Status)
+	r.AddCounter(AsyncLogEnqueueTotal, labels, 1)
+	r.ObserveHistogram(AsyncLogEnqueueDurationSeconds, labels, event.DurationSeconds)
+}
+
+func (r *Registry) AsyncLogQueueDepth(operation string, depth int) {
+	r.SetGauge(AsyncLogQueueDepth, []Label{{Name: "operation", Value: operation}}, float64(depth))
+}
+
+func (r *Registry) AsyncLogDropped(operation string, status string) {
+	r.AddCounter(AsyncLogDroppedTotal, asyncLogLabels(operation, status), 1)
+}
+
+func (r *Registry) AsyncLogPersist(event AsyncLogEvent) {
+	labels := asyncLogLabels(event.Operation, event.Status)
+	r.AddCounter(AsyncLogPersistTotal, labels, 1)
+	r.ObserveHistogram(AsyncLogPersistDurationSeconds, labels, event.DurationSeconds)
+}
 func (r *Registry) StreamStarted(selectedProvider string, selectedModel string) {
 	r.AddGauge(StreamsActive, streamBaseLabels(selectedProvider, selectedModel), 1)
 }
@@ -175,6 +214,12 @@ func normalizeStatus(status string) string {
 	}
 }
 
+func asyncLogLabels(operation string, status string) []Label {
+	return []Label{
+		{Name: "operation", Value: defaultLabelValue(operation)},
+		{Name: "status", Value: defaultLabelValue(status)},
+	}
+}
 func streamBaseLabels(selectedProvider string, selectedModel string) []Label {
 	return []Label{
 		{Name: "selected_provider", Value: selectedProvider},

@@ -7,12 +7,14 @@ export type ProjectRecord = {
   name: string;
   status: ProjectStatus;
   tenantId: string;
+  totalBudgetUsd: number;
   updatedAt: string;
 };
 
 export type ProjectFormValues = {
   description: string;
   name: string;
+  totalBudgetUsd: number;
 };
 
 export type ProjectUpdateValues = ProjectFormValues & {

@@ -204,8 +204,13 @@ func mandatoryProtectedTypes(detections []Detection) []string {
 }
 
 func PreviewRedactedPrompt(prompt string) string {
-	normalized := strings.Join(strings.Fields(strings.TrimSpace(prompt)), " ")
-	runes := []rune(normalized)
+	trimmed := strings.TrimSpace(prompt)
+	runes := []rune(trimmed)
+	if len(runes) <= RedactedPromptPreviewMaxRunes {
+		return trimmed
+	}
+	normalized := strings.Join(strings.Fields(trimmed), " ")
+	runes = []rune(normalized)
 	if len(runes) <= RedactedPromptPreviewMaxRunes {
 		return normalized
 	}

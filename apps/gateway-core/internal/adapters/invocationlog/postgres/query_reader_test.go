@@ -236,6 +236,28 @@ func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testin
 	}
 }
 
+func TestApplyInvocationMetadataFieldsMapsPromptAndResponseCapture(t *testing.T) {
+	log := invocationlog.LlmInvocationLog{}
+	applyInvocationMetadataFields(&log, []byte(`{"promptCapture":{"enabled":true,"mode":"log_safe_full","visibility":"admin_request_detail","capturedPrompt":"문의: [EMAIL_REDACTED]","truncated":false,"maxChars":8000},"responseCapture":{"enabled":true,"mode":"raw_full","visibility":"admin_request_detail","capturedResponse":"Mock response","truncated":false,"maxChars":8000}}`))
+
+	if !log.PromptCapture.Enabled ||
+		log.PromptCapture.Mode != "log_safe_full" ||
+		log.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail ||
+		log.PromptCapture.CapturedPrompt != "문의: [EMAIL_REDACTED]" ||
+		log.PromptCapture.Truncated ||
+		log.PromptCapture.MaxChars != 8000 {
+		t.Fatalf("unexpected prompt capture fields: %+v", log.PromptCapture)
+	}
+	if !log.ResponseCapture.Enabled ||
+		log.ResponseCapture.Mode != "raw_full" ||
+		log.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail ||
+		log.ResponseCapture.CapturedResponse != "Mock response" ||
+		log.ResponseCapture.Truncated ||
+		log.ResponseCapture.MaxChars != 8000 {
+		t.Fatalf("unexpected response capture fields: %+v", log.ResponseCapture)
+	}
+}
+
 func TestDecodeDomainOutcomesMetadataNormalizesNullDomainOutcomes(t *testing.T) {
 	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":null}`))
 	if err != nil {
@@ -345,6 +367,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"terminal_status = 'failed'",
 		"terminal_status = 'rate_limited'",
 		"cache_eligible_requests",
+		"cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact'",
 		"saved_cost_micro_usd",
 		"percentile_disc(0.95)",
 		"status_counts",

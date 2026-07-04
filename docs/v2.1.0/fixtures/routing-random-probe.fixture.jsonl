@@ -1,0 +1,1000 @@
+{"sampleId":"ko_probe_0001","redactedPrompt":"고랭 코드에서 오류가 나는 이유를 알려줘. 샘플 0001.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0002","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0002.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0003","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0003.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0004","redactedPrompt":"주문 요청 내용을 json 형태로 구조화해줘. 샘플 0004.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0005","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0005.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0006","redactedPrompt":"버튼 문구 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0006.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0007","redactedPrompt":"캐시 우선 전략 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0007.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0008","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0008.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0009","redactedPrompt":"문의 내용 내용을 json 형태로 구조화해줘. 샘플 0009.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0010","redactedPrompt":"배송 지연 후 환불 가능 여부를 알려줘. 샘플 0010.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0011","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0011.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0012","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0012.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0013","redactedPrompt":"사용량 화면에서 알림 위치를 알려줘. 샘플 0013.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0014","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0014.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0015","redactedPrompt":"보고서의 요점을 세 줄로 정리해줘. 샘플 0015.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0016","redactedPrompt":"알림 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0016.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0017","redactedPrompt":"구독 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0017.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0018","redactedPrompt":"단순 룰 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0018.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0019","redactedPrompt":"고객 안내 문장을 중국어로 번역해줘. 샘플 0019.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0020","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0020.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0021","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0021.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0022","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0022.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0023","redactedPrompt":"동기 처리와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0023.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0024","redactedPrompt":"알림 화면에서 목록 위치를 알려줘. 샘플 0024.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0025","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0025.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0026","redactedPrompt":"저비용 모델와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0026.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0027","redactedPrompt":"캐시 우선 전략와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0027.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0028","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0028.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0029","redactedPrompt":"검토 메모에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0029.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0030","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0030.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0031","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0031.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0032","redactedPrompt":"단순 룰와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0032.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0033","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0033.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0034","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0034.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0035","redactedPrompt":"워크스페이스 화면에서 설정 위치를 알려줘. 샘플 0035.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0036","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0036.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0037","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0037.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0038","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0038.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0039","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0039.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0040","redactedPrompt":"공지 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0040.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0041","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0041.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0042","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0042.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0043","redactedPrompt":"팀 화면에서 메뉴 위치를 알려줘. 샘플 0043.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0044","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0044.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0045","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0045.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0046","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0046.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0047","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0047.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0048","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0048.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0049","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0049.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0050","redactedPrompt":"저비용 모델와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0050.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0051","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0051.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0052","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0052.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0053","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0053.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0054","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0054.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0055","redactedPrompt":"관리자 화면에서 목록 위치를 알려줘. 샘플 0055.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0056","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0056.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0057","redactedPrompt":"공지 문장을 중국어로 번역해줘. 샘플 0057.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0058","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0058.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0059","redactedPrompt":"주문 요청 내용을 json 형태로 구조화해줘. 샘플 0059.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0060","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0060.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0061","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0061.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0062","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0062.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0063","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0063.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0064","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0064.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0065","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0065.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0066","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0066.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0067","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0067.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0068","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0068.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0069","redactedPrompt":"캐시 우선 전략 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0069.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0070","redactedPrompt":"공지 문장을 영문로 번역해줘. 샘플 0070.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0071","redactedPrompt":"고랭 코드에서 예외가 나는 이유를 알려줘. 샘플 0071.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0072","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0072.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0073","redactedPrompt":"상품 반품 후 환불 가능 여부를 알려줘. 샘플 0073.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0074","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0074.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0075","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0075.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0076","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0076.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0077","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0077.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0078","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0078.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0079","redactedPrompt":"짧은 설명 문장을 영문로 번역해줘. 샘플 0079.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0080","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0080.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0081","redactedPrompt":"단순 룰와 고품질 모델의 장단점을 비교해줘. 샘플 0081.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0082","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0082.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0083","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0083.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0084","redactedPrompt":"프로젝트 화면에서 상태 위치를 알려줘. 샘플 0084.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0085","redactedPrompt":"짧은 설명 문장을 영어로 번역해줘. 샘플 0085.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0086","redactedPrompt":"공지 문장을 한국어로 번역해줘. 샘플 0086.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0087","redactedPrompt":"캐시 우선 전략와 고품질 모델의 장단점을 비교해줘. 샘플 0087.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0088","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0088.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0089","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0089.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0090","redactedPrompt":"빠른 배포 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0090.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0091","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0091.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0092","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0092.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0093","redactedPrompt":"자바스크립트 코드에서 오류가 나는 이유를 알려줘. 샘플 0093.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0094","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0094.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0095","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0095.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0096","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0096.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0097","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0097.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0098","redactedPrompt":"팀 화면에서 상태 위치를 알려줘. 샘플 0098.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0099","redactedPrompt":"알림 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0099.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0100","redactedPrompt":"저비용 모델 대신 안정 배포를 선택할 때 트레이드오프를 분석해줘. 샘플 0100.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0101","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0101.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0102","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0102.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0103","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0103.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0104","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0104.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0105","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0105.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0106","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0106.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0107","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0107.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0108","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0108.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0109","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0109.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0110","redactedPrompt":"저비용 모델 대신 안정 배포를 선택할 때 트레이드오프를 분석해줘. 샘플 0110.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0111","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0111.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0112","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0112.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0113","redactedPrompt":"빠른 배포 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0113.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0114","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0114.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0115","redactedPrompt":"동기 처리와 비동기 처리의 장단점을 비교해줘. 샘플 0115.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0116","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0116.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0117","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0117.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0118","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0118.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0119","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0119.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0120","redactedPrompt":"관리자 화면에서 가이드 위치를 알려줘. 샘플 0120.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0121","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0121.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0122","redactedPrompt":"캐시 우선 전략와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0122.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0123","redactedPrompt":"저비용 모델와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0123.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0124","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0124.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0125","redactedPrompt":"단순 룰 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0125.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0126","redactedPrompt":"저비용 모델와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0126.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0127","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0127.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0128","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0128.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0129","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0129.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0130","redactedPrompt":"사용량 화면에서 목록 위치를 알려줘. 샘플 0130.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0131","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0131.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0132","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0132.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0133","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0133.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0134","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0134.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0135","redactedPrompt":"파이썬 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0135.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0136","redactedPrompt":"캐시 우선 전략와 안정 배포의 장단점을 비교해줘. 샘플 0136.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0137","redactedPrompt":"워크스페이스 화면에서 메뉴 위치를 알려줘. 샘플 0137.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0138","redactedPrompt":"짧은 설명 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0138.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0139","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0139.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0140","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0140.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0141","redactedPrompt":"공지 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0141.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0142","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0142.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0143","redactedPrompt":"문의 내용에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0143.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0144","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0144.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0145","redactedPrompt":"단순 룰와 비동기 처리의 장단점을 비교해줘. 샘플 0145.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0146","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0146.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0147","redactedPrompt":"공지 문장을 영어로 번역해줘. 샘플 0147.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0148","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0148.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0149","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0149.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0150","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0150.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0151","redactedPrompt":"보고서 내용을 핵심만 요약해줘. 샘플 0151.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0152","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0152.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0153","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0153.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0154","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0154.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0155","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0155.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0156","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0156.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0157","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0157.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0158","redactedPrompt":"배포 노트 내용을 핵심만 요약해줘. 샘플 0158.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0159","redactedPrompt":"중국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0159.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0160","redactedPrompt":"버튼 문구 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0160.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0161","redactedPrompt":"단순 룰 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0161.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0162","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0162.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0163","redactedPrompt":"검토 메모에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0163.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0164","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0164.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0165","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0165.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0166","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0166.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0167","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0167.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0168","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0168.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0169","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0169.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0170","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0170.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0171","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0171.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0172","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0172.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0173","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0173.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0174","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0174.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0175","redactedPrompt":"문의 내용 항목을 표로 정리해줘. 샘플 0175.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0176","redactedPrompt":"고객 안내 문장을 영문로 번역해줘. 샘플 0176.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0177","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0177.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0178","redactedPrompt":"알림 화면에서 목록 위치를 알려줘. 샘플 0178.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0179","redactedPrompt":"캐시 우선 전략와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0179.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0180","redactedPrompt":"계정 화면에서 목록 위치를 알려줘. 샘플 0180.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0181","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0181.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0182","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0182.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0183","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0183.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0184","redactedPrompt":"버튼 문구 문장을 중국어로 번역해줘. 샘플 0184.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0185","redactedPrompt":"짧은 설명 문장을 한국어로 번역해줘. 샘플 0185.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0186","redactedPrompt":"상담 기록 항목을 표로 정리해줘. 샘플 0186.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0187","redactedPrompt":"파이썬 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0187.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0188","redactedPrompt":"동기 처리와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0188.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0189","redactedPrompt":"배포 노트 내용을 핵심만 요약해줘. 샘플 0189.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0190","redactedPrompt":"단순 룰와 정확도 우선 전략의 장단점을 비교해줘. 샘플 0190.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0191","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0191.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0192","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0192.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0193","redactedPrompt":"알림 화면에서 권한 위치를 알려줘. 샘플 0193.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0194","redactedPrompt":"구독 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0194.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0195","redactedPrompt":"검토 메모에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0195.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0196","redactedPrompt":"동기 처리 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0196.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0197","redactedPrompt":"단순 룰 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0197.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0198","redactedPrompt":"상담 기록 항목을 표로 정리해줘. 샘플 0198.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0199","redactedPrompt":"워크스페이스 화면에서 설정 위치를 알려줘. 샘플 0199.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0200","redactedPrompt":"빠른 배포와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0200.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0201","redactedPrompt":"주문 요청 내용을 json 형태로 구조화해줘. 샘플 0201.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0202","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0202.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0203","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0203.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0204","redactedPrompt":"메일 제목 문장을 중국어로 번역해줘. 샘플 0204.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0205","redactedPrompt":"동기 처리 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0205.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0206","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0206.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0207","redactedPrompt":"문의 내용 항목을 표로 정리해줘. 샘플 0207.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0208","redactedPrompt":"짧은 설명 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0208.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0209","redactedPrompt":"빠른 배포와 복합 룰의 장단점을 비교해줘. 샘플 0209.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0210","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0210.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0211","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0211.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0212","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0212.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0213","redactedPrompt":"동기 처리와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0213.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0214","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0214.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0215","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0215.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0216","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0216.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0217","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0217.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0218","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0218.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0219","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0219.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0220","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0220.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0221","redactedPrompt":"버튼 문구 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0221.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0222","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0222.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0223","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0223.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0224","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0224.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0225","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0225.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0226","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0226.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0227","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0227.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0228","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0228.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0229","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0229.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0230","redactedPrompt":"저비용 모델 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0230.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0231","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0231.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0232","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0232.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0233","redactedPrompt":"문의 내용 항목을 표로 정리해줘. 샘플 0233.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0234","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0234.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0235","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0235.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0236","redactedPrompt":"알림 화면에서 알림 위치를 알려줘. 샘플 0236.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0237","redactedPrompt":"공지 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0237.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0238","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0238.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0239","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0239.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0240","redactedPrompt":"동기 처리와 복합 룰의 장단점을 비교해줘. 샘플 0240.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0241","redactedPrompt":"동기 처리 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0241.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0242","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0242.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0243","redactedPrompt":"공지 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0243.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0244","redactedPrompt":"문의 내용에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0244.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0245","redactedPrompt":"메일 제목 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0245.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0246","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0246.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0247","redactedPrompt":"프로젝트 화면에서 목록 위치를 알려줘. 샘플 0247.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0248","redactedPrompt":"동기 처리와 고품질 모델의 장단점을 비교해줘. 샘플 0248.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0249","redactedPrompt":"사용량 화면에서 권한 위치를 알려줘. 샘플 0249.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0250","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0250.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0251","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0251.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0252","redactedPrompt":"SQL 코드에서 오류가 나는 이유를 알려줘. 샘플 0252.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0253","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0253.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0254","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0254.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0255","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0255.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0256","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0256.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0257","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0257.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0258","redactedPrompt":"알림 화면에서 가이드 위치를 알려줘. 샘플 0258.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0259","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0259.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0260","redactedPrompt":"상품 반품 후 환불 가능 여부를 알려줘. 샘플 0260.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0261","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0261.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0262","redactedPrompt":"캐시 우선 전략와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0262.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0263","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0263.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0264","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0264.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0265","redactedPrompt":"단순 룰와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0265.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0266","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0266.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0267","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0267.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0268","redactedPrompt":"빠른 배포와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0268.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0269","redactedPrompt":"빠른 배포 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0269.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0270","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0270.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0271","redactedPrompt":"사용량 화면에서 알림 위치를 알려줘. 샘플 0271.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0272","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0272.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0273","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0273.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0274","redactedPrompt":"영문로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0274.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0275","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0275.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0276","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0276.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0277","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0277.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0278","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0278.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0279","redactedPrompt":"워크스페이스 화면에서 목록 위치를 알려줘. 샘플 0279.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0280","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0280.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0281","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0281.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0282","redactedPrompt":"SQL 코드에서 예외가 나는 이유를 알려줘. 샘플 0282.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0283","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0283.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0284","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0284.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0285","redactedPrompt":"주문 취소 관련 결제 취소 절차를 알려줘. 샘플 0285.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0286","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0286.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0287","redactedPrompt":"관리자 화면에서 알림 위치를 알려줘. 샘플 0287.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0288","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0288.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0289","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0289.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0290","redactedPrompt":"공지 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0290.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0291","redactedPrompt":"SQL 코드에서 오류가 나는 이유를 알려줘. 샘플 0291.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0292","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0292.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0293","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0293.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0294","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0294.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0295","redactedPrompt":"공지 문장을 영문로 번역해줘. 샘플 0295.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0296","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0296.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0297","redactedPrompt":"상담 기록 내용을 json 형태로 구조화해줘. 샘플 0297.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0298","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0298.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0299","redactedPrompt":"회의록의 요점을 세 줄로 정리해줘. 샘플 0299.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0300","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0300.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0301","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0301.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0302","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0302.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0303","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0303.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0304","redactedPrompt":"동기 처리와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0304.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0305","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0305.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0306","redactedPrompt":"중국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0306.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0307","redactedPrompt":"타입스크립트 코드에서 예외가 나는 이유를 알려줘. 샘플 0307.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0308","redactedPrompt":"메일 제목 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0308.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0309","redactedPrompt":"버튼 문구 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0309.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0310","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0310.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0311","redactedPrompt":"동기 처리와 고품질 모델의 장단점을 비교해줘. 샘플 0311.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0312","redactedPrompt":"빠른 배포 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0312.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0313","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0313.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0314","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0314.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0315","redactedPrompt":"메일 제목 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0315.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0316","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0316.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0317","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0317.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0318","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0318.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0319","redactedPrompt":"알림 화면에서 알림 위치를 알려줘. 샘플 0319.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0320","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0320.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0321","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0321.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0322","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0322.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0323","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0323.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0324","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0324.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0325","redactedPrompt":"자바스크립트 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0325.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0326","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0326.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0327","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0327.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0328","redactedPrompt":"알림 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0328.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0329","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0329.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0330","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0330.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0331","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0331.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0332","redactedPrompt":"고객 안내 문장을 영문로 번역해줘. 샘플 0332.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0333","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0333.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0334","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0334.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0335","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0335.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0336","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0336.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0337","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0337.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0338","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0338.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0339","redactedPrompt":"타입스크립트 코드에서 에러가 나는 이유를 알려줘. 샘플 0339.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0340","redactedPrompt":"상담 기록 내용을 json 형태로 구조화해줘. 샘플 0340.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0341","redactedPrompt":"빠른 배포와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0341.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0342","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0342.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0343","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0343.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0344","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0344.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0345","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0345.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0346","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0346.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0347","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0347.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0348","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0348.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0349","redactedPrompt":"문의 내용 내용을 json 형태로 구조화해줘. 샘플 0349.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0350","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0350.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0351","redactedPrompt":"단순 룰와 비동기 처리의 장단점을 비교해줘. 샘플 0351.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0352","redactedPrompt":"메일 제목 문장을 영어로 번역해줘. 샘플 0352.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0353","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0353.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0354","redactedPrompt":"단순 룰 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0354.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0355","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0355.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0356","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0356.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0357","redactedPrompt":"문의 내용 항목을 표로 정리해줘. 샘플 0357.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0358","redactedPrompt":"고랭 코드에서 에러가 나는 이유를 알려줘. 샘플 0358.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0359","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0359.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0360","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0360.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0361","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0361.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0362","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0362.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0363","redactedPrompt":"계정 화면에서 목록 위치를 알려줘. 샘플 0363.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0364","redactedPrompt":"메일 제목 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0364.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0365","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0365.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0366","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0366.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0367","redactedPrompt":"공지 문장을 중국어로 번역해줘. 샘플 0367.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0368","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0368.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0369","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0369.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0370","redactedPrompt":"상담 기록 항목을 표로 정리해줘. 샘플 0370.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0371","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0371.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0372","redactedPrompt":"공지 문장을 중국어로 번역해줘. 샘플 0372.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0373","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0373.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0374","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0374.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0375","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0375.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0376","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0376.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0377","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0377.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0378","redactedPrompt":"캐시 우선 전략와 비동기 처리의 장단점을 비교해줘. 샘플 0378.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0379","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0379.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0380","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0380.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0381","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0381.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0382","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0382.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0383","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0383.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0384","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0384.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0385","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0385.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0386","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0386.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0387","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0387.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0388","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0388.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0389","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0389.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0390","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0390.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0391","redactedPrompt":"단순 룰와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0391.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0392","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0392.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0393","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0393.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0394","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0394.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0395","redactedPrompt":"계정 화면에서 메뉴 위치를 알려줘. 샘플 0395.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0396","redactedPrompt":"버튼 문구 문장을 일본어로 번역해줘. 샘플 0396.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0397","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0397.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0398","redactedPrompt":"프로젝트 화면에서 상태 위치를 알려줘. 샘플 0398.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0399","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0399.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0400","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0400.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0401","redactedPrompt":"고랭 코드에서 에러가 나는 이유를 알려줘. 샘플 0401.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0402","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0402.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0403","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0403.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0404","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0404.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0405","redactedPrompt":"알림 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0405.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0406","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0406.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0407","redactedPrompt":"보고서 내용을 핵심만 요약해줘. 샘플 0407.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0408","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0408.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0409","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0409.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0410","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0410.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0411","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0411.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0412","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0412.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0413","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0413.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0414","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0414.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0415","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0415.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0416","redactedPrompt":"고랭 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0416.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0417","redactedPrompt":"회의록의 요점을 세 줄로 정리해줘. 샘플 0417.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0418","redactedPrompt":"고객 안내 문장을 영어로 번역해줘. 샘플 0418.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0419","redactedPrompt":"주문 요청 내용을 json 형태로 구조화해줘. 샘플 0419.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0420","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0420.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0421","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0421.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0422","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0422.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0423","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0423.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0424","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0424.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0425","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0425.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0426","redactedPrompt":"구독 취소 후 환불 가능 여부를 알려줘. 샘플 0426.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0427","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0427.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0428","redactedPrompt":"주문 취소 관련 결제 취소 절차를 알려줘. 샘플 0428.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0429","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0429.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0430","redactedPrompt":"짧은 설명 문장을 중국어로 번역해줘. 샘플 0430.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0431","redactedPrompt":"문의 내용에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0431.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0432","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0432.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0433","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0433.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0434","redactedPrompt":"계정 화면에서 목록 위치를 알려줘. 샘플 0434.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0435","redactedPrompt":"보고서 내용을 핵심만 요약해줘. 샘플 0435.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0436","redactedPrompt":"배송 지연 대신 교환이나 반품이 가능한지 알려줘. 샘플 0436.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0437","redactedPrompt":"관리자 화면에서 상태 위치를 알려줘. 샘플 0437.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0438","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0438.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0439","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0439.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0440","redactedPrompt":"자바스크립트 코드에서 에러가 나는 이유를 알려줘. 샘플 0440.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0441","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0441.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0442","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0442.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0443","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0443.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0444","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0444.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0445","redactedPrompt":"워크스페이스 화면에서 알림 위치를 알려줘. 샘플 0445.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0446","redactedPrompt":"저비용 모델와 비동기 처리의 장단점을 비교해줘. 샘플 0446.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0447","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0447.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0448","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0448.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0449","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0449.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0450","redactedPrompt":"보고서 내용을 핵심만 요약해줘. 샘플 0450.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0451","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0451.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0452","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0452.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0453","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0453.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0454","redactedPrompt":"동기 처리와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0454.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0455","redactedPrompt":"배송 지연 대신 교환이나 반품이 가능한지 알려줘. 샘플 0455.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0456","redactedPrompt":"자바스크립트 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0456.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0457","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0457.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0458","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0458.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0459","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0459.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0460","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0460.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0461","redactedPrompt":"고객 안내 문장을 중국어로 번역해줘. 샘플 0461.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0462","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0462.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0463","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0463.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0464","redactedPrompt":"파이썬 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0464.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0465","redactedPrompt":"저비용 모델와 비동기 처리의 장단점을 비교해줘. 샘플 0465.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0466","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0466.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0467","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0467.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0468","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0468.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0469","redactedPrompt":"고객 안내 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0469.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0470","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0470.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0471","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0471.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0472","redactedPrompt":"배송 지연 대신 교환이나 반품이 가능한지 알려줘. 샘플 0472.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0473","redactedPrompt":"공지 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0473.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0474","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0474.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0475","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0475.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0476","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0476.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0477","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0477.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0478","redactedPrompt":"짧은 설명 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0478.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0479","redactedPrompt":"SQL 코드에서 버그가 나는 이유를 알려줘. 샘플 0479.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0480","redactedPrompt":"배포 노트 내용을 핵심만 요약해줘. 샘플 0480.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0481","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0481.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0482","redactedPrompt":"공지 문장을 한국어로 번역해줘. 샘플 0482.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0483","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0483.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0484","redactedPrompt":"사용량 화면에서 설정 위치를 알려줘. 샘플 0484.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0485","redactedPrompt":"문의 내용 내용을 json 형태로 구조화해줘. 샘플 0485.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0486","redactedPrompt":"단순 룰 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0486.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0487","redactedPrompt":"구독 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0487.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0488","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0488.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0489","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0489.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0490","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0490.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0491","redactedPrompt":"저비용 모델 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0491.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0492","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0492.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0493","redactedPrompt":"고랭 코드에서 오류가 나는 이유를 알려줘. 샘플 0493.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0494","redactedPrompt":"자바스크립트 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0494.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0495","redactedPrompt":"구독 취소 후 환불 가능 여부를 알려줘. 샘플 0495.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0496","redactedPrompt":"버튼 문구 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0496.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0497","redactedPrompt":"캐시 우선 전략와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0497.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0498","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0498.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0499","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0499.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0500","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0500.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0501","redactedPrompt":"사용량 화면에서 목록 위치를 알려줘. 샘플 0501.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0502","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0502.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0503","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0503.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0504","redactedPrompt":"빠른 배포와 복합 룰의 장단점을 비교해줘. 샘플 0504.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0505","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0505.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0506","redactedPrompt":"저비용 모델와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0506.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0507","redactedPrompt":"메일 제목 문장을 한국어로 번역해줘. 샘플 0507.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0508","redactedPrompt":"버튼 문구 문장을 중국어로 번역해줘. 샘플 0508.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0509","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0509.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0510","redactedPrompt":"팀 화면에서 알림 위치를 알려줘. 샘플 0510.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0511","redactedPrompt":"파이썬 코드에서 에러가 나는 이유를 알려줘. 샘플 0511.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0512","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0512.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0513","redactedPrompt":"저비용 모델와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0513.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0514","redactedPrompt":"저비용 모델와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0514.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0515","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0515.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0516","redactedPrompt":"동기 처리와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0516.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0517","redactedPrompt":"구독 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0517.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0518","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0518.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0519","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0519.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0520","redactedPrompt":"문의 내용 항목을 표로 정리해줘. 샘플 0520.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0521","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0521.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0522","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0522.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0523","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0523.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0524","redactedPrompt":"파이썬 코드에서 오류가 나는 이유를 알려줘. 샘플 0524.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0525","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0525.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0526","redactedPrompt":"단순 룰와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0526.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0527","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0527.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0528","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0528.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0529","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0529.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0530","redactedPrompt":"문의 내용에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0530.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0531","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0531.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0532","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0532.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0533","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0533.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0534","redactedPrompt":"저비용 모델 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0534.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0535","redactedPrompt":"영문로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0535.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0536","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0536.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0537","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0537.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0538","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0538.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0539","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0539.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0540","redactedPrompt":"알림 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0540.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0541","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0541.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0542","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0542.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0543","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0543.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0544","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0544.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0545","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0545.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0546","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0546.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0547","redactedPrompt":"사용량 화면에서 메뉴 위치를 알려줘. 샘플 0547.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0548","redactedPrompt":"고랭 코드에서 예외가 나는 이유를 알려줘. 샘플 0548.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0549","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0549.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0550","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0550.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0551","redactedPrompt":"단순 룰와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0551.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0552","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0552.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0553","redactedPrompt":"캐시 우선 전략와 비동기 처리의 장단점을 비교해줘. 샘플 0553.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0554","redactedPrompt":"캐시 우선 전략 대신 안정 배포를 선택할 때 트레이드오프를 분석해줘. 샘플 0554.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0555","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0555.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0556","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0556.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0557","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0557.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0558","redactedPrompt":"짧은 설명 문장을 중국어로 번역해줘. 샘플 0558.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0559","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0559.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0560","redactedPrompt":"빠른 배포 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0560.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0561","redactedPrompt":"보고서 내용을 핵심만 요약해줘. 샘플 0561.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0562","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0562.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0563","redactedPrompt":"중국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0563.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0564","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0564.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0565","redactedPrompt":"배포 노트 내용을 핵심만 요약해줘. 샘플 0565.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0566","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0566.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0567","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0567.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0568","redactedPrompt":"배송 지연 후 환불 가능 여부를 알려줘. 샘플 0568.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0569","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0569.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0570","redactedPrompt":"상담 기록 항목을 표로 정리해줘. 샘플 0570.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0571","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0571.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0572","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0572.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0573","redactedPrompt":"사용량 화면에서 메뉴 위치를 알려줘. 샘플 0573.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0574","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0574.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0575","redactedPrompt":"배송 지연 대신 교환이나 반품이 가능한지 알려줘. 샘플 0575.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0576","redactedPrompt":"워크스페이스 화면에서 메뉴 위치를 알려줘. 샘플 0576.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0577","redactedPrompt":"버튼 문구 안내문을 한국어 문체로 자연스럽게 바꿔줘. 샘플 0577.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0578","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0578.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0579","redactedPrompt":"메일 제목 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0579.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0580","redactedPrompt":"관리자 화면에서 메뉴 위치를 알려줘. 샘플 0580.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0581","redactedPrompt":"짧은 설명 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0581.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0582","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0582.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0583","redactedPrompt":"고랭 코드에서 버그가 나는 이유를 알려줘. 샘플 0583.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0584","redactedPrompt":"자바스크립트 코드에서 에러가 나는 이유를 알려줘. 샘플 0584.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0585","redactedPrompt":"단순 룰와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0585.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0586","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0586.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0587","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0587.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0588","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0588.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0589","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0589.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0590","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0590.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0591","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0591.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0592","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0592.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0593","redactedPrompt":"공지 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0593.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0594","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0594.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0595","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0595.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0596","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0596.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0597","redactedPrompt":"저비용 모델 대신 정확도 우선 전략를 선택할 때 트레이드오프를 분석해줘. 샘플 0597.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0598","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0598.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0599","redactedPrompt":"상품 반품 후 환불 가능 여부를 알려줘. 샘플 0599.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0600","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0600.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0601","redactedPrompt":"동기 처리와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0601.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0602","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0602.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0603","redactedPrompt":"단순 룰와 복합 룰의 장단점을 비교해줘. 샘플 0603.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0604","redactedPrompt":"저비용 모델 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0604.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0605","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0605.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0606","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0606.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0607","redactedPrompt":"동기 처리와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0607.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0608","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0608.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0609","redactedPrompt":"SQL 코드에서 오류가 나는 이유를 알려줘. 샘플 0609.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0610","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0610.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0611","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0611.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0612","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0612.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0613","redactedPrompt":"프로젝트 화면에서 목록 위치를 알려줘. 샘플 0613.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0614","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0614.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0615","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0615.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0616","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0616.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0617","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0617.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0618","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0618.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0619","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0619.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0620","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0620.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0621","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0621.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0622","redactedPrompt":"배송 지연 대신 교환이나 반품이 가능한지 알려줘. 샘플 0622.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0623","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0623.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0624","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0624.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0625","redactedPrompt":"프로젝트 화면에서 권한 위치를 알려줘. 샘플 0625.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0626","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0626.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0627","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0627.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0628","redactedPrompt":"고랭 코드에서 오류가 나는 이유를 알려줘. 샘플 0628.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0629","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0629.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0630","redactedPrompt":"자바스크립트 코드에서 오류가 나는 이유를 알려줘. 샘플 0630.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0631","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0631.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0632","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0632.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0633","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0633.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0634","redactedPrompt":"단순 룰와 고품질 모델의 장단점을 비교해줘. 샘플 0634.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0635","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0635.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0636","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0636.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0637","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0637.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0638","redactedPrompt":"메일 제목 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0638.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0639","redactedPrompt":"타입스크립트 코드에서 예외가 나는 이유를 알려줘. 샘플 0639.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0640","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0640.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0641","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0641.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0642","redactedPrompt":"저비용 모델와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0642.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0643","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0643.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0644","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0644.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0645","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0645.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0646","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0646.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0647","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0647.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0648","redactedPrompt":"고랭 코드에서 버그가 나는 이유를 알려줘. 샘플 0648.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0649","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0649.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0650","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0650.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0651","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0651.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0652","redactedPrompt":"파이썬 코드에서 오류가 나는 이유를 알려줘. 샘플 0652.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0653","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0653.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0654","redactedPrompt":"영문로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0654.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0655","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0655.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0656","redactedPrompt":"영문로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0656.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0657","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0657.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0658","redactedPrompt":"사용량 설정을 어디에서 바꾸는지 알려줘. 샘플 0658.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0659","redactedPrompt":"버튼 문구 문장을 중국어로 번역해줘. 샘플 0659.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0660","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0660.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0661","redactedPrompt":"SQL 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0661.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0662","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0662.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0663","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0663.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0664","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0664.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0665","redactedPrompt":"빠른 배포와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0665.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0666","redactedPrompt":"영문로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0666.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0667","redactedPrompt":"짧은 설명 문장을 중국어로 번역해줘. 샘플 0667.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0668","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0668.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0669","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0669.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0670","redactedPrompt":"회의록의 요점을 세 줄로 정리해줘. 샘플 0670.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0671","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0671.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0672","redactedPrompt":"동기 처리와 비동기 처리의 장단점을 비교해줘. 샘플 0672.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0673","redactedPrompt":"워크스페이스 화면에서 메뉴 위치를 알려줘. 샘플 0673.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0674","redactedPrompt":"회의록의 요점을 세 줄로 정리해줘. 샘플 0674.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0675","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0675.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0676","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0676.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0677","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0677.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0678","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0678.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0679","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0679.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0680","redactedPrompt":"단순 룰와 복합 룰의 장단점을 비교해줘. 샘플 0680.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0681","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0681.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0682","redactedPrompt":"동기 처리 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0682.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0683","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0683.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0684","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0684.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0685","redactedPrompt":"메일 제목 문장을 중국어로 번역해줘. 샘플 0685.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0686","redactedPrompt":"워크스페이스 화면에서 목록 위치를 알려줘. 샘플 0686.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0687","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0687.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0688","redactedPrompt":"단순 룰 대신 안정 배포를 선택할 때 트레이드오프를 분석해줘. 샘플 0688.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0689","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0689.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0690","redactedPrompt":"사용량 화면에서 가이드 위치를 알려줘. 샘플 0690.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0691","redactedPrompt":"고랭 코드에서 에러가 나는 이유를 알려줘. 샘플 0691.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0692","redactedPrompt":"저비용 모델와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0692.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0693","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0693.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0694","redactedPrompt":"자바스크립트 코드에서 예외가 나는 이유를 알려줘. 샘플 0694.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0695","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0695.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0696","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0696.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0697","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0697.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0698","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0698.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0699","redactedPrompt":"짧은 설명 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0699.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0700","redactedPrompt":"고객 안내 문장을 영어로 번역해줘. 샘플 0700.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0701","redactedPrompt":"상담 기록 항목을 표로 정리해줘. 샘플 0701.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0702","redactedPrompt":"공지 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0702.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0703","redactedPrompt":"계정 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0703.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0704","redactedPrompt":"빠른 배포와 안정 배포의 장단점을 비교해줘. 샘플 0704.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0705","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0705.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0706","redactedPrompt":"사용량 화면에서 메뉴 위치를 알려줘. 샘플 0706.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0707","redactedPrompt":"목록 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0707.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0708","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0708.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0709","redactedPrompt":"동기 처리 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0709.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0710","redactedPrompt":"메일 제목 안내문을 한국어 문체로 자연스럽게 바꿔줘. 샘플 0710.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0711","redactedPrompt":"저비용 모델와 안정 배포의 장단점을 비교해줘. 샘플 0711.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0712","redactedPrompt":"배송 지연 대신 교환이나 반품이 가능한지 알려줘. 샘플 0712.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0713","redactedPrompt":"메일 제목 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0713.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0714","redactedPrompt":"메일 제목 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0714.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0715","redactedPrompt":"고객 안내 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0715.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0716","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0716.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0717","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0717.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0718","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0718.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0719","redactedPrompt":"계정 화면에서 상태 위치를 알려줘. 샘플 0719.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0720","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0720.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0721","redactedPrompt":"주문 취소 대신 교환이나 반품이 가능한지 알려줘. 샘플 0721.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0722","redactedPrompt":"짧은 설명 문장을 영어로 번역해줘. 샘플 0722.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0723","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0723.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0724","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0724.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0725","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0725.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0726","redactedPrompt":"버튼 문구 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0726.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0727","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0727.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0728","redactedPrompt":"동기 처리와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0728.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0729","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0729.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0730","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0730.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0731","redactedPrompt":"상담 기록 내용을 json 형태로 구조화해줘. 샘플 0731.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0732","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0732.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0733","redactedPrompt":"관리자 화면에서 설정 위치를 알려줘. 샘플 0733.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0734","redactedPrompt":"동기 처리와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0734.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0735","redactedPrompt":"파이썬 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0735.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0736","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0736.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0737","redactedPrompt":"동기 처리 대신 정확도 우선 전략를 선택할 때 트레이드오프를 분석해줘. 샘플 0737.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0738","redactedPrompt":"동기 처리와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0738.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0739","redactedPrompt":"캐시 우선 전략와 복합 룰의 장단점을 비교해줘. 샘플 0739.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0740","redactedPrompt":"버튼 문구 문장을 영문로 번역해줘. 샘플 0740.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0741","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0741.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0742","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0742.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0743","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0743.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0744","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0744.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0745","redactedPrompt":"고랭 코드에서 버그가 나는 이유를 알려줘. 샘플 0745.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0746","redactedPrompt":"상담 기록 항목을 표로 정리해줘. 샘플 0746.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0747","redactedPrompt":"고객 안내 문장을 영문로 번역해줘. 샘플 0747.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0748","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0748.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0749","redactedPrompt":"자바스크립트 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0749.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0750","redactedPrompt":"문의 내용 내용을 json 형태로 구조화해줘. 샘플 0750.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0751","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0751.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0752","redactedPrompt":"워크스페이스 화면에서 가이드 위치를 알려줘. 샘플 0752.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0753","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0753.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0754","redactedPrompt":"저비용 모델와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0754.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0755","redactedPrompt":"주문 요청 내용을 json 형태로 구조화해줘. 샘플 0755.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0756","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0756.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0757","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0757.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0758","redactedPrompt":"알림 화면에서 목록 위치를 알려줘. 샘플 0758.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0759","redactedPrompt":"버튼 문구 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0759.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0760","redactedPrompt":"워크스페이스 화면에서 권한 위치를 알려줘. 샘플 0760.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0761","redactedPrompt":"보고서 내용을 핵심만 요약해줘. 샘플 0761.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0762","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0762.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0763","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0763.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0764","redactedPrompt":"저비용 모델와 복합 룰의 장단점을 비교해줘. 샘플 0764.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0765","redactedPrompt":"캐시 우선 전략와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0765.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0766","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0766.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0767","redactedPrompt":"계정 화면에서 상태 위치를 알려줘. 샘플 0767.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0768","redactedPrompt":"동기 처리 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0768.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0769","redactedPrompt":"공지 내용을 핵심만 요약해줘. 샘플 0769.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0770","redactedPrompt":"저비용 모델와 고품질 모델의 장단점을 비교해줘. 샘플 0770.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0771","redactedPrompt":"메일 제목 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0771.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0772","redactedPrompt":"프로젝트 화면에서 설정 위치를 알려줘. 샘플 0772.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0773","redactedPrompt":"주문 요청 내용을 json 형태로 구조화해줘. 샘플 0773.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0774","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0774.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0775","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0775.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0776","redactedPrompt":"타입스크립트 코드에서 버그가 나는 이유를 알려줘. 샘플 0776.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0777","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0777.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0778","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0778.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0779","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0779.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0780","redactedPrompt":"타입스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0780.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0781","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0781.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0782","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0782.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0783","redactedPrompt":"파이썬 코드에서 오류가 나는 이유를 알려줘. 샘플 0783.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0784","redactedPrompt":"빠른 배포 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0784.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0785","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0785.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0786","redactedPrompt":"짧은 설명 문장을 한국어로 번역해줘. 샘플 0786.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0787","redactedPrompt":"팀 화면에서 권한 위치를 알려줘. 샘플 0787.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0788","redactedPrompt":"저비용 모델 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0788.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0789","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0789.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0790","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0790.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0791","redactedPrompt":"SQL 코드에서 버그가 나는 이유를 알려줘. 샘플 0791.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0792","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0792.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0793","redactedPrompt":"보고서의 요점을 세 줄로 정리해줘. 샘플 0793.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0794","redactedPrompt":"회의록의 요점을 세 줄로 정리해줘. 샘플 0794.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0795","redactedPrompt":"관리자 화면에서 목록 위치를 알려줘. 샘플 0795.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0796","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0796.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0797","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0797.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0798","redactedPrompt":"검토 메모에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0798.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0799","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0799.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0800","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0800.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0801","redactedPrompt":"회의록에서 중요한 항목만 뽑아 요약해줘. 샘플 0801.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0802","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0802.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0803","redactedPrompt":"단순 룰와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0803.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0804","redactedPrompt":"버튼 문구 안내문을 한국어 문체로 자연스럽게 바꿔줘. 샘플 0804.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0805","redactedPrompt":"공지 문장을 영어로 번역해줘. 샘플 0805.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0806","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0806.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0807","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0807.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0808","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0808.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0809","redactedPrompt":"메일 제목 문장을 한국어로 번역해줘. 샘플 0809.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0810","redactedPrompt":"저비용 모델와 비동기 처리의 장단점을 비교해줘. 샘플 0810.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0811","redactedPrompt":"단순 룰와 고품질 모델의 장단점을 비교해줘. 샘플 0811.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0812","redactedPrompt":"알림 화면에서 권한 위치를 알려줘. 샘플 0812.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0813","redactedPrompt":"빠른 배포 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0813.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0814","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0814.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0815","redactedPrompt":"짧은 설명 안내문을 영어 문체로 자연스럽게 바꿔줘. 샘플 0815.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0816","redactedPrompt":"고객 안내 안내문을 한국어 문체로 자연스럽게 바꿔줘. 샘플 0816.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0817","redactedPrompt":"문의 내용 내용을 json 형태로 구조화해줘. 샘플 0817.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0818","redactedPrompt":"빠른 배포와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0818.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0819","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0819.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0820","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0820.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0821","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0821.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0822","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0822.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0823","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0823.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0824","redactedPrompt":"업무 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0824.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0825","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0825.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0826","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0826.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0827","redactedPrompt":"알림 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0827.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0828","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0828.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0829","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0829.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0830","redactedPrompt":"빠른 배포와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0830.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0831","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0831.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0832","redactedPrompt":"메일 제목 안내문을 영문 문체로 자연스럽게 바꿔줘. 샘플 0832.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0833","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0833.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0834","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0834.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0835","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0835.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0836","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0836.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0837","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0837.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0838","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0838.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0839","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0839.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0840","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0840.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0841","redactedPrompt":"워크스페이스 화면에서 설정 위치를 알려줘. 샘플 0841.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0842","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0842.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0843","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0843.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0844","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0844.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0845","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0845.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0846","redactedPrompt":"고랭 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0846.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0847","redactedPrompt":"타입스크립트 코드에서 버그가 나는 이유를 알려줘. 샘플 0847.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0848","redactedPrompt":"고랭 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0848.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0849","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0849.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0850","redactedPrompt":"상담 기록 내용을 json 형태로 구조화해줘. 샘플 0850.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0851","redactedPrompt":"팀 화면에서 메뉴 위치를 알려줘. 샘플 0851.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0852","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0852.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0853","redactedPrompt":"상담 기록에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0853.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0854","redactedPrompt":"팀 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0854.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0855","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0855.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0856","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0856.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0857","redactedPrompt":"상태 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0857.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0858","redactedPrompt":"검토 메모 내용을 json 형태로 구조화해줘. 샘플 0858.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0859","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0859.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0860","redactedPrompt":"오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0860.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0861","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0861.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0862","redactedPrompt":"버튼 문구 문장을 일본어로 번역해줘. 샘플 0862.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0863","redactedPrompt":"배포 노트 내용을 핵심만 요약해줘. 샘플 0863.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0864","redactedPrompt":"주문 취소 관련 결제 취소 절차를 알려줘. 샘플 0864.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0865","redactedPrompt":"예외 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0865.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0866","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0866.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0867","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0867.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0868","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0868.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0869","redactedPrompt":"프로젝트 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0869.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0870","redactedPrompt":"회의록의 요점을 세 줄로 정리해줘. 샘플 0870.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0871","redactedPrompt":"결제 오류 후 환불 가능 여부를 알려줘. 샘플 0871.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0872","redactedPrompt":"단순 룰와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0872.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0873","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0873.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0874","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0874.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0875","redactedPrompt":"상품 반품 후 환불 가능 여부를 알려줘. 샘플 0875.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0876","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0876.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0877","redactedPrompt":"캐시 우선 전략 대신 비동기 처리를 선택할 때 트레이드오프를 분석해줘. 샘플 0877.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0878","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0878.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0879","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0879.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0880","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0880.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0881","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0881.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0882","redactedPrompt":"파이썬 코드에서 에러가 나는 이유를 알려줘. 샘플 0882.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0883","redactedPrompt":"주문 취소 관련 결제 취소 절차를 알려줘. 샘플 0883.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0884","redactedPrompt":"주문 취소 관련 결제 취소 절차를 알려줘. 샘플 0884.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0885","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0885.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0886","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0886.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0887","redactedPrompt":"알림 화면에서 메뉴 위치를 알려줘. 샘플 0887.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0888","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0888.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0889","redactedPrompt":"주문 요청에서 필요한 필드 추출 결과를 json으로 보여줘. 샘플 0889.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0890","redactedPrompt":"결제 오류 관련 결제 취소 절차를 알려줘. 샘플 0890.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0891","redactedPrompt":"알림 화면에서 알림 위치를 알려줘. 샘플 0891.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0892","redactedPrompt":"구독 취소 관련 결제 취소 절차를 알려줘. 샘플 0892.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0893","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0893.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0894","redactedPrompt":"캐시 우선 전략 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0894.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0895","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0895.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0896","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0896.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0897","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0897.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0898","redactedPrompt":"타입스크립트 코드에서 버그가 나는 이유를 알려줘. 샘플 0898.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0899","redactedPrompt":"동기 처리와 비동기 처리의 장단점을 비교해줘. 샘플 0899.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0900","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0900.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0901","redactedPrompt":"관리자 설정을 어디에서 바꾸는지 알려줘. 샘플 0901.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0902","redactedPrompt":"공지의 요점을 세 줄로 정리해줘. 샘플 0902.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0903","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0903.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0904","redactedPrompt":"상품 반품 관련 결제 취소 절차를 알려줘. 샘플 0904.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0905","redactedPrompt":"공지 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0905.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0906","redactedPrompt":"버그 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0906.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0907","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0907.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0908","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0908.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0909","redactedPrompt":"구독 취소 후 환불 가능 여부를 알려줘. 샘플 0909.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0910","redactedPrompt":"저비용 모델와 안정 배포 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0910.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0911","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0911.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0912","redactedPrompt":"관리자 화면에서 알림 위치를 알려줘. 샘플 0912.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0913","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0913.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0914","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0914.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0915","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0915.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0916","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0916.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0917","redactedPrompt":"프로젝트 설정을 어디에서 바꾸는지 알려줘. 샘플 0917.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0918","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0918.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0919","redactedPrompt":"메일 제목 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0919.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0920","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0920.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0921","redactedPrompt":"동기 처리와 정확도 우선 전략의 장단점을 비교해줘. 샘플 0921.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0922","redactedPrompt":"배포 노트의 요점을 세 줄로 정리해줘. 샘플 0922.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0923","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0923.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0924","redactedPrompt":"권한 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0924.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0925","redactedPrompt":"단순 룰와 정확도 우선 전략의 장단점을 비교해줘. 샘플 0925.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0926","redactedPrompt":"짧은 설명 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0926.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0927","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0927.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0928","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0928.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0929","redactedPrompt":"상담 기록에서 중요한 항목만 뽑아 요약해줘. 샘플 0929.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0930","redactedPrompt":"단순 룰와 복합 룰 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0930.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0931","redactedPrompt":"동기 처리 대신 안정 배포를 선택할 때 트레이드오프를 분석해줘. 샘플 0931.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0932","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0932.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0933","redactedPrompt":"워크스페이스 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0933.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0934","redactedPrompt":"고객 안내 안내문을 일본어 문체로 자연스럽게 바꿔줘. 샘플 0934.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0935","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0935.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0936","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0936.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0937","redactedPrompt":"저비용 모델 대신 정확도 우선 전략를 선택할 때 트레이드오프를 분석해줘. 샘플 0937.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0938","redactedPrompt":"캐시 우선 전략와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0938.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0939","redactedPrompt":"단순 룰와 복합 룰의 장단점을 비교해줘. 샘플 0939.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0940","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0940.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0941","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0941.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0942","redactedPrompt":"결제 오류 대신 교환이나 반품이 가능한지 알려줘. 샘플 0942.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0943","redactedPrompt":"관리자 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0943.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0944","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0944.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0945","redactedPrompt":"워크스페이스 화면에서 목록 위치를 알려줘. 샘플 0945.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0946","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0946.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0947","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0947.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0948","redactedPrompt":"워크스페이스 화면에서 알림 위치를 알려줘. 샘플 0948.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0949","redactedPrompt":"영어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0949.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0950","redactedPrompt":"배포 노트에서 중요한 항목만 뽑아 요약해줘. 샘플 0950.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0951","redactedPrompt":"파이썬 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0951.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0952","redactedPrompt":"사용량 사용 방법을 처음 보는 사람에게 설명해줘. 샘플 0952.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0953","redactedPrompt":"컴파일 오류 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0953.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0954","redactedPrompt":"알림 설정을 어디에서 바꾸는지 알려줘. 샘플 0954.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0955","redactedPrompt":"자바스크립트 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 0955.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0956","redactedPrompt":"동기 처리와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0956.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0957","redactedPrompt":"팀 화면에서 메뉴 위치를 알려줘. 샘플 0957.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0958","redactedPrompt":"팀 설정을 어디에서 바꾸는지 알려줘. 샘플 0958.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0959","redactedPrompt":"동기 처리와 정확도 우선 전략 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0959.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0960","redactedPrompt":"상품 반품 후 환불 가능 여부를 알려줘. 샘플 0960.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0961","redactedPrompt":"상품 반품 대신 교환이나 반품이 가능한지 알려줘. 샘플 0961.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0962","redactedPrompt":"단순 룰와 고품질 모델 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0962.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0963","redactedPrompt":"계정 화면에서 알림 위치를 알려줘. 샘플 0963.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0964","redactedPrompt":"주문 요청 항목을 표로 정리해줘. 샘플 0964.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0965","redactedPrompt":"계정 화면에서 상태 위치를 알려줘. 샘플 0965.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0966","redactedPrompt":"동기 처리와 비동기 처리 중 어떤 게 나은지 근거와 함께 추천해줘. 샘플 0966.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0967","redactedPrompt":"상담 기록의 요점을 세 줄로 정리해줘. 샘플 0967.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0968","redactedPrompt":"단순 룰와 정확도 우선 전략의 장단점을 비교해줘. 샘플 0968.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0969","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0969.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0970","redactedPrompt":"검토 메모 항목을 표로 정리해줘. 샘플 0970.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0971","redactedPrompt":"계정 설정을 어디에서 바꾸는지 알려줘. 샘플 0971.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0972","redactedPrompt":"워크스페이스 설정을 어디에서 바꾸는지 알려줘. 샘플 0972.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0973","redactedPrompt":"캐시 우선 전략와 고품질 모델의 장단점을 비교해줘. 샘플 0973.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0974","redactedPrompt":"공지에서 중요한 항목만 뽑아 요약해줘. 샘플 0974.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0975","redactedPrompt":"문의 내용 항목을 표로 정리해줘. 샘플 0975.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0976","redactedPrompt":"저비용 모델 대신 복합 룰를 선택할 때 트레이드오프를 분석해줘. 샘플 0976.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0977","redactedPrompt":"업무 요청 내용을 json 형태로 구조화해줘. 샘플 0977.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0978","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0978.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0979","redactedPrompt":"가이드 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0979.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0980","redactedPrompt":"메뉴 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0980.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0981","redactedPrompt":"회의록 내용을 핵심만 요약해줘. 샘플 0981.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0982","redactedPrompt":"버튼 문구 안내문을 중국어 문체로 자연스럽게 바꿔줘. 샘플 0982.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0983","redactedPrompt":"일본어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0983.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0984","redactedPrompt":"주문 취소 후 환불 가능 여부를 알려줘. 샘플 0984.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0985","redactedPrompt":"사용량 화면에서 알림 위치를 알려줘. 샘플 0985.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0986","redactedPrompt":"배송 지연 관련 결제 취소 절차를 알려줘. 샘플 0986.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0987","redactedPrompt":"설정 관련 안내 문구를 조금 더 명확하게 다듬어줘. 샘플 0987.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0988","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0988.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0989","redactedPrompt":"관리자 화면에서 상태 위치를 알려줘. 샘플 0989.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0990","redactedPrompt":"상담 기록 내용을 핵심만 요약해줘. 샘플 0990.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0991","redactedPrompt":"동기 처리 대신 고품질 모델를 선택할 때 트레이드오프를 분석해줘. 샘플 0991.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0992","redactedPrompt":"저비용 모델와 정확도 우선 전략의 장단점을 비교해줘. 샘플 0992.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0993","redactedPrompt":"파이썬 코드에서 컴파일 오류가 나는 이유를 알려줘. 샘플 0993.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0994","redactedPrompt":"공지 문장을 한국어로 번역해줘. 샘플 0994.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0995","redactedPrompt":"업무 요청 항목을 표로 정리해줘. 샘플 0995.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0996","redactedPrompt":"에러 관련 스택 트레이스를 보고 코드 문제를 설명해줘. 샘플 0996.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0997","redactedPrompt":"보고서에서 중요한 항목만 뽑아 요약해줘. 샘플 0997.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0998","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0998.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_0999","redactedPrompt":"한국어로 읽기 쉬운 고객 안내 문구를 만들어줘. 샘플 0999.","source":"synthetic_korean_probe","language":"ko"}
+{"sampleId":"ko_probe_1000","redactedPrompt":"SQL 함수 로직을 더 읽기 쉽게 리팩토링해줘. 샘플 1000.","source":"synthetic_korean_probe","language":"ko"}

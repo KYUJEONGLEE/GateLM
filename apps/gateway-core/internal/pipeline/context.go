@@ -7,6 +7,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type RequestContext struct {
@@ -27,18 +28,22 @@ type RequestContext struct {
 	EndUserID     string
 	FeatureID     string
 
-	ConfigHash              string
-	SecurityPolicyHash      string
-	RuntimeSafetyPolicy     runtimeconfig.SafetyPolicy
-	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
-	RuntimeRateLimit        ratelimit.Config
-	HasRuntimeRateLimit     bool
-	RuntimeBudgetPolicy     budget.Policy
-	HasRuntimeBudgetPolicy  bool
-	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy
-	HasRuntimeRoutingPolicy bool
-	RuntimeCachePolicy      runtimeconfig.CachePolicy
-	HasRuntimeCachePolicy   bool
+	ConfigHash                string
+	SecurityPolicyHash        string
+	RuntimeSafetyPolicy       runtimeconfig.SafetyPolicy
+	RuntimeSnapshot           runtimeconfig.RuntimeSnapshotProvenance
+	RuntimeRateLimit          ratelimit.Config
+	HasRuntimeRateLimit       bool
+	RuntimeBudgetPolicy       budget.Policy
+	HasRuntimeBudgetPolicy    bool
+	RuntimeRoutingPolicy      runtimeconfig.RoutingPolicy
+	HasRuntimeRoutingPolicy   bool
+	RuntimeCachePolicy        runtimeconfig.CachePolicy
+	HasRuntimeCachePolicy     bool
+	RuntimePromptCapture      runtimeconfig.PromptCapturePolicy
+	HasRuntimePromptCapture   bool
+	RuntimeResponseCapture    runtimeconfig.ResponseCapturePolicy
+	HasRuntimeResponseCapture bool
 
 	RateLimitDecision *ratelimit.Decision
 	BudgetDecision    *budget.Decision
@@ -73,6 +78,15 @@ type RequestContext struct {
 	FallbackOccurred    bool
 
 	SemanticCacheHit            bool
+	SemanticCacheEnabled        bool
+	SemanticCacheMode           string
+	SemanticCacheWouldHit       bool
+	SemanticCacheWouldMiss      bool
+	SemanticCacheCandidateFound bool
+	SemanticCacheCandidateHash  string
+	SemanticReturnedFromCache   bool
+	SemanticCanonicalIntent     string
+	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
 	SemanticMatchedRequestID    string
 	SemanticCacheThreshold      float64
@@ -80,6 +94,14 @@ type RequestContext struct {
 	SemanticCacheDecisionReason string
 	EmbeddingProvider           string
 	SemanticCacheStoreCandidate bool
+	SemanticCacheLookupVector   []float64
+
+	SemanticCacheClassifierEvaluated    bool
+	SemanticCacheClassifierPassed       bool
+	SemanticCacheClassifierLabel        string
+	SemanticCacheClassifierConfidence   float64
+	SemanticCacheClassifierReasonCode   string
+	SemanticCacheClassifierModelVersion string
 
 	Provider          string
 	Model             string
@@ -92,13 +114,16 @@ type RequestContext struct {
 	SavedCostMicroUSD int64
 	LatencyMs         int64
 
-	Status       string
-	HTTPStatus   int
-	ErrorCode    string
-	ErrorMessage string
-	ErrorStage   string
+	Status           string
+	HTTPStatus       int
+	CapturedResponse string
+	ErrorCode        string
+	ErrorMessage     string
+	ErrorStage       string
 
 	DomainOutcomes invocationlog.DomainOutcomes
+
+	StageTimings stagetiming.Timings
 }
 
 func NewRequestContext(input NewRequestContextInput) *RequestContext {

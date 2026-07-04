@@ -115,6 +115,8 @@ type LlmInvocationLog struct {
 	PolicyAllowedTypes          []string
 	MandatoryProtectedTypes     []string
 	RedactedPromptPreview       string
+	PromptCapture               PromptCaptureFields
+	ResponseCapture             ResponseCaptureFields
 	RuntimeSnapshot             runtimeconfig.RuntimeSnapshotProvenance
 	CreatedAt                   time.Time
 	CompletedAt                 *time.Time
@@ -171,6 +173,8 @@ type RequestDetail struct {
 	Routing         RoutingFields
 	Masking         MaskingFields
 	SafetySummary   SafetySummaryFields
+	PromptCapture   PromptCaptureFields
+	ResponseCapture ResponseCaptureFields
 	RuntimeSnapshot *runtimeconfig.RuntimeSnapshotProvenance
 	Error           ErrorFields
 	CreatedAt       time.Time
@@ -581,6 +585,8 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 			RedactedPromptPreview:   log.RedactedPromptPreview,
 		},
 		SafetySummary:   safetySummary,
+		PromptCapture:   normalizePromptCaptureFields(log.PromptCapture),
+		ResponseCapture: normalizeResponseCaptureFields(log.ResponseCapture),
 		RuntimeSnapshot: runtimeSnapshotPointer(log.RuntimeSnapshot, log.CreatedAt),
 		Error: ErrorFields{
 			ErrorCode:    log.ErrorCode,
@@ -590,6 +596,44 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		CreatedAt:   log.CreatedAt,
 		CompletedAt: log.CompletedAt,
 	}
+}
+
+func normalizePromptCaptureFields(fields PromptCaptureFields) PromptCaptureFields {
+	fields.Mode = strings.TrimSpace(fields.Mode)
+	fields.Visibility = strings.TrimSpace(fields.Visibility)
+	fields.CapturedPrompt = strings.TrimSpace(fields.CapturedPrompt)
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	if !fields.Enabled {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+		fields.CapturedPrompt = ""
+		fields.Truncated = false
+	}
+	if fields.Visibility == "" {
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+	}
+	return fields
+}
+
+func normalizeResponseCaptureFields(fields ResponseCaptureFields) ResponseCaptureFields {
+	fields.Mode = strings.TrimSpace(fields.Mode)
+	fields.Visibility = strings.TrimSpace(fields.Visibility)
+	fields.CapturedResponse = strings.TrimSpace(fields.CapturedResponse)
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
+	}
+	if !fields.Enabled {
+		fields.Mode = runtimeconfig.ResponseCaptureModeDisabled
+		fields.Visibility = ResponseCaptureVisibilityAdminRequestDetail
+		fields.CapturedResponse = ""
+		fields.Truncated = false
+	}
+	if fields.Visibility == "" {
+		fields.Visibility = ResponseCaptureVisibilityAdminRequestDetail
+	}
+	return fields
 }
 
 func requestDetailProviderCalled(log LlmInvocationLog) bool {
@@ -748,7 +792,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		if domainOutcomes.Fallback.Outcome == "success" {
 			aggregate.FallbackSuccessCount++
 		}
-		if isCacheEligible(log.CacheStatus) {
+		if isExactCacheEligible(log.CacheStatus, log.CacheType) {
 			aggregate.CacheEligibleRequests++
 		}
 		if isExactCacheHit(log.CacheStatus, log.CacheType) {
@@ -963,8 +1007,16 @@ func isLatencyEligibleStatus(status string) bool {
 	return status == StatusSuccess || status == StatusFailed
 }
 
-func isCacheEligible(cacheStatus string) bool {
-	return defaultString(cacheStatus, CacheStatusBypass) != CacheStatusBypass
+func isExactCacheEligible(cacheStatus string, cacheType string) bool {
+	if defaultString(cacheType, CacheTypeNone) != CacheTypeExact {
+		return false
+	}
+	switch defaultString(cacheStatus, CacheStatusBypass) {
+	case CacheStatusHit, CacheStatusMiss, CacheStatusError:
+		return true
+	default:
+		return false
+	}
 }
 
 func isExactCacheHit(cacheStatus string, cacheType string) bool {

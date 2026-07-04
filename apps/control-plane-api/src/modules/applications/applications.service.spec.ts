@@ -48,6 +48,9 @@ describe('ApplicationsService', () => {
       name: `Application ${id}`,
       description: null,
       status: ResourceStatus.ACTIVE,
+      budgetLimitMode: 'FIXED',
+      budgetLimitPercent: null,
+      budgetLimitUsd: null,
       createdAt,
       updatedAt: createdAt,
     };
@@ -55,7 +58,11 @@ describe('ApplicationsService', () => {
 
   it('sets hasMore and nextCursor from limit plus one pagination', async () => {
     const { service, prisma } = createService();
-    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.project.findUnique.mockResolvedValue({
+      id: projectId,
+      tenantId,
+      totalBudgetUsd: null,
+    });
     prisma.application.findMany.mockResolvedValue([
       application('00000000-0000-4000-8000-000000000301'),
       application('00000000-0000-4000-8000-000000000302'),

@@ -11,9 +11,11 @@ import (
 
 const (
 	AdapterTypeOpenAICompatible = "openai_compatible"
+	AdapterTypeAnthropic        = "anthropic"
 	AdapterTypeMock             = "mock"
 
 	RequestFormatOpenAIChatCompletions = "openai_chat_completions"
+	RequestFormatAnthropicMessages     = "anthropic_messages"
 	RequestFormatMockChatCompletions   = "mock_chat_completions"
 )
 

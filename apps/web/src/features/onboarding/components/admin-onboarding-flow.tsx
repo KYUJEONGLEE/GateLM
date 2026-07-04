@@ -130,6 +130,7 @@ type OnboardingDraft = {
   fallbackModel: string;
   lowCostModel: string;
   projectName: string;
+  projectTotalBudgetUsd: string;
   projectStatus: string;
   runtimePublishState: string;
   safetyMode: string;
@@ -178,7 +179,8 @@ export function AdminOnboardingFlow({
   const activeStepLabel = activeStep.labels[locale].label;
   const isCreatingCredential = projectSetupState.status === "saving";
   const isProjectStepIncomplete =
-    activeStep.id === "project" && draft.projectName.trim().length === 0;
+    activeStep.id === "project" &&
+    (draft.projectName.trim().length === 0 || !isValidBudgetInput(draft.projectTotalBudgetUsd));
   const isReviewIncomplete =
     activeStep.id === "runtime-config" && projectSetupState.status !== "issued";
   const isPrimaryActionDisabled =
@@ -189,6 +191,7 @@ export function AdminOnboardingFlow({
     isCreatingCredential ||
     projectSetupState.status === "issued" ||
     draft.projectName.trim().length === 0 ||
+    !isValidBudgetInput(draft.projectTotalBudgetUsd) ||
     draft.apiKeyDisplayName.trim().length === 0;
 
   function updateDraft(field: keyof OnboardingDraft, value: string) {
@@ -240,7 +243,8 @@ export function AdminOnboardingFlow({
             action: "create",
             values: {
               description: "",
-              name: draft.projectName
+              name: draft.projectName,
+              totalBudgetUsd: Number(draft.projectTotalBudgetUsd)
             }
           }),
           headers: {
@@ -275,7 +279,8 @@ export function AdminOnboardingFlow({
               description: project.description ?? "",
               name: project.name,
               projectId: project.id,
-              status: selectedProjectStatus
+              status: selectedProjectStatus,
+              totalBudgetUsd: Number(draft.projectTotalBudgetUsd)
             }
           }),
           headers: {
@@ -460,6 +465,13 @@ function renderStepContent({
           onChange={updateDraft}
           value={draft.projectName}
         />
+        <OnboardingField
+          field="projectTotalBudgetUsd"
+          inputMode="decimal"
+          label="Project budget"
+          onChange={updateDraft}
+          value={draft.projectTotalBudgetUsd}
+        />
         <OnboardingSelect
           field="projectStatus"
           label="Status"
@@ -580,7 +592,7 @@ function OnboardingField({
   value
 }: {
   field: keyof OnboardingDraft;
-  inputMode?: "numeric";
+  inputMode?: "decimal" | "numeric";
   label: string;
   onChange: (field: keyof OnboardingDraft, value: string) => void;
   value: string;
@@ -773,6 +785,12 @@ function normalizeDraftProjectStatus(value: string): ProjectStatus {
   return "ACTIVE";
 }
 
+function isValidBudgetInput(value: string) {
+  const parsed = Number(value);
+
+  return value.trim().length > 0 && Number.isFinite(parsed) && parsed >= 0;
+}
+
 export function normalizeOnboardingStepId(value: string | string[] | undefined): OnboardingStepId {
   const stepId = Array.isArray(value) ? value[0] : value;
   return onboardingSteps.some((step) => step.id === stepId)
@@ -810,6 +828,7 @@ function buildInitialDraft(model: AdminOnboardingModel): OnboardingDraft {
       model.modelSelection.lowCostModel
     ),
     projectName: "",
+    projectTotalBudgetUsd: "100",
     projectStatus: normalizeDraftProjectStatus(model.project.status),
     runtimePublishState: model.runtimeConfig.publishState,
     safetyMode: model.runtimeConfig.safetyMode

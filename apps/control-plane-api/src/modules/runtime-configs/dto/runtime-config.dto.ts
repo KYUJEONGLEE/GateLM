@@ -79,6 +79,40 @@ export class RuntimeConfigCachePolicyDto {
   ttlSeconds?: number;
 }
 
+export class RuntimeConfigPromptCapturePolicyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(['disabled', 'log_safe_full'])
+  mode?: 'disabled' | 'log_safe_full';
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20000)
+  maxChars?: number;
+}
+
+export class RuntimeConfigResponseCapturePolicyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(['disabled', 'raw_full'])
+  mode?: 'disabled' | 'raw_full';
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20000)
+  maxChars?: number;
+}
+
 export class RuntimeConfigRoutingPolicyDto {
   @IsOptional()
   @IsString()
@@ -276,6 +310,16 @@ export class UpsertRuntimeConfigDraftDto {
 
   @IsOptional()
   @ValidateNested()
+  @Type(() => RuntimeConfigPromptCapturePolicyDto)
+  promptCapturePolicy?: RuntimeConfigPromptCapturePolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuntimeConfigResponseCapturePolicyDto)
+  responseCapturePolicy?: RuntimeConfigResponseCapturePolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
   @Type(() => RuntimeConfigRoutingPolicyDto)
   routingPolicy?: RuntimeConfigRoutingPolicyDto;
 
@@ -447,6 +491,18 @@ export interface RuntimeConfigCachePolicyResponseDto {
   ttlSeconds: number;
 }
 
+export interface RuntimeConfigPromptCapturePolicyResponseDto {
+  enabled: boolean;
+  mode: 'disabled' | 'log_safe_full';
+  maxChars: number;
+}
+
+export interface RuntimeConfigResponseCapturePolicyResponseDto {
+  enabled: boolean;
+  mode: 'disabled' | 'raw_full';
+  maxChars: number;
+}
+
 export interface RuntimeConfigRoutingPolicyResponseDto {
   type: 'simple';
   autoModel: 'auto';
@@ -527,6 +583,8 @@ export interface ActiveRuntimeConfigResponseDto {
   budgetPolicy: RuntimeConfigBudgetPolicyResponseDto;
   safetyPolicy: RuntimeConfigSafetyPolicyResponseDto;
   cachePolicy: RuntimeConfigCachePolicyResponseDto;
+  promptCapturePolicy: RuntimeConfigPromptCapturePolicyResponseDto;
+  responseCapturePolicy: RuntimeConfigResponseCapturePolicyResponseDto;
   routingPolicy: RuntimeConfigRoutingPolicyResponseDto;
   pricingRules: RuntimeConfigPricingRuleResponseDto[];
   hashing: RuntimeConfigHashingDto;
@@ -559,7 +617,10 @@ export interface ProviderCatalogCredentialRefDto {
 }
 
 export interface ProviderCatalogAdapterConfigDto {
-  requestFormat: 'openai_chat_completions' | 'mock_chat_completions';
+  requestFormat:
+    | 'openai_chat_completions'
+    | 'anthropic_messages'
+    | 'mock_chat_completions';
   apiVersion?: string;
 }
 
@@ -636,6 +697,18 @@ export interface RuntimeSnapshotCachePolicyDto {
   cachePolicyHash: string;
 }
 
+export interface RuntimeSnapshotPromptCapturePolicyDto {
+  enabled: boolean;
+  mode: 'disabled' | 'log_safe_full';
+  maxChars: number;
+}
+
+export interface RuntimeSnapshotResponseCapturePolicyDto {
+  enabled: boolean;
+  mode: 'disabled' | 'raw_full';
+  maxChars: number;
+}
+
 export interface RuntimeSnapshotRateLimitPolicyDto {
   enabled: boolean;
   scope: 'application';
@@ -665,6 +738,8 @@ export interface RuntimeSnapshotPoliciesDto {
   safety: RuntimeSnapshotSafetyPolicyDto;
   routing: RuntimeSnapshotRoutingPolicyDto;
   cache: RuntimeSnapshotCachePolicyDto;
+  promptCapture: RuntimeSnapshotPromptCapturePolicyDto;
+  responseCapture: RuntimeSnapshotResponseCapturePolicyDto;
   rateLimit: RuntimeSnapshotRateLimitPolicyDto;
   budget: RuntimeSnapshotBudgetPolicyDto;
   fallback: RuntimeSnapshotFallbackPolicyDto;

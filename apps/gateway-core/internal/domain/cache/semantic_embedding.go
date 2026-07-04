@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"math"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 type EmbeddingInput struct {
@@ -101,6 +103,7 @@ func hashVector(text string, dimensions int) []float64 {
 }
 
 func normalizeSemanticText(text string) string {
+	text = norm.NFC.String(text)
 	return strings.Join(strings.Fields(strings.TrimSpace(strings.ToLower(text))), " ")
 }
 

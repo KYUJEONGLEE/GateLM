@@ -7,6 +7,8 @@ import type {
   RuntimeSnapshotProvenance,
   TerminalStatus
 } from "@/lib/fixtures/v1-observability-fixtures";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayRequestDetailResponse = {
@@ -19,14 +21,7 @@ type GatewayRequestDetailResponse = {
       cacheKeyHash?: string | null;
       cacheStatus?: string;
       cacheType?: string;
-      embeddingProvider?: string | null;
       promptCategory?: string | null;
-      semanticCacheDecisionReason?: string | null;
-      semanticCacheHit?: boolean;
-      semanticCachePolicyVersion?: string | null;
-      semanticCacheThreshold?: number | null;
-      semanticMatchedRequestId?: string | null;
-      semanticSimilarity?: number | null;
     };
     completedAt?: string | null;
     cost?: {
@@ -58,6 +53,14 @@ type GatewayRequestDetailResponse = {
       redactedPromptPreview?: string | null;
     };
     model?: string;
+    promptCapture?: {
+      capturedPrompt?: string | null;
+      enabled?: boolean;
+      maxChars?: number;
+      mode?: "disabled" | "log_safe_full";
+      truncated?: boolean;
+      visibility?: "admin_request_detail";
+    };
     projectId?: string;
     provider?: string;
     providerCalled?: boolean;
@@ -109,15 +112,28 @@ type GatewayDomainOutcomes = Partial<
 >;
 
 export async function getLiveGatewayRequestDetail(
-  requestId: string
+  requestId: string,
+  options: {
+    projectId?: string;
+    tenantId?: string;
+  } = {}
 ): Promise<InvocationLogRecord | undefined> {
   const config = getLiveGatewayConfig();
-  const response = await fetch(`${config.baseUrl}/api/llm-requests/${encodeURIComponent(requestId)}`, {
-    headers: {
-      "X-GateLM-Request-Id": `request_web_detail_${Date.now()}`
-    },
-    cache: "no-store"
-  }).catch(() => undefined);
+  const query = new URLSearchParams();
+
+  appendOptionalQuery(query, "projectId", options.projectId);
+  appendOptionalQuery(query, "tenantId", getGatewayTenantId(options.tenantId));
+
+  const serializedQuery = query.toString();
+  const response = await fetch(
+    `${config.baseUrl}/api/llm-requests/${encodeURIComponent(requestId)}${serializedQuery ? `?${serializedQuery}` : ""}`,
+    {
+      headers: {
+        "X-GateLM-Request-Id": `request_web_detail_${Date.now()}`
+      },
+      cache: "no-store"
+    }
+  ).catch(() => undefined);
 
   if (!response || response.status === 404 || !response.ok) {
     return undefined;
@@ -130,6 +146,24 @@ export async function getLiveGatewayRequestDetail(
   }
 
   return toInvocationRecord(payload.data);
+}
+
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+
+  if (normalized) {
+    query.set(key, normalized);
+  }
+}
+
+function getGatewayTenantId(routeTenantId: string | undefined) {
+  const tenantId = routeTenantId?.trim();
+
+  return tenantId && isUuid(tenantId) ? tenantId : getControlPlaneTenantId();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data"]>): InvocationLogRecord {
@@ -178,16 +212,15 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
     promptHash: "not-exposed-by-live-detail",
     redactedPromptPreview: data.masking?.redactedPromptPreview ?? null,
     requestedProvider: null,
-    requestedModel: data.requestedModel ?? null,
+    requestedModel: formatOptionalModelName(data.requestedModel),
     selectedProvider: data.routing?.selectedProvider ?? data.provider ?? null,
-    selectedModel: data.routing?.selectedModel ?? data.selectedModel ?? data.model ?? null,
+    selectedModel: formatOptionalModelName(data.routing?.selectedModel ?? data.selectedModel ?? data.model),
     routingReason: data.routing?.routingReason ?? null,
     cacheStatus,
     cacheType: data.cache?.cacheType ?? "none",
     cacheDecisionReason: data.cache?.cacheDecisionReason ?? null,
     cacheKeyHash: data.cache?.cacheKeyHash ?? null,
     cacheHitRequestId: data.cache?.cacheHitRequestId ?? null,
-    embeddingProvider: data.cache?.embeddingProvider ?? null,
     maskingAction,
     maskingDetectedTypes: data.masking?.maskingDetectedTypes ?? [],
     maskingDetectedCount: data.masking?.maskingDetectedCount ?? 0,
@@ -206,12 +239,6 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       reason: status === "rate_limited" ? "limit_exceeded" : "not-exposed-by-live-detail",
       durationMs: 0
     },
-    semanticCacheDecisionReason: data.cache?.semanticCacheDecisionReason ?? null,
-    semanticCacheHit: data.cache?.semanticCacheHit ?? false,
-    semanticCachePolicyVersion: data.cache?.semanticCachePolicyVersion ?? null,
-    semanticCacheThreshold: data.cache?.semanticCacheThreshold ?? null,
-    semanticMatchedRequestId: data.cache?.semanticMatchedRequestId ?? null,
-    semanticSimilarity: data.cache?.semanticSimilarity ?? null,
     promptTokens: usageSummary.promptTokens,
     completionTokens: usageSummary.completionTokens,
     totalTokens: usageSummary.totalTokens,
@@ -233,6 +260,7 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
         data.safetySummary?.mandatoryProtectedTypes ?? data.masking?.mandatoryProtectedTypes ?? [],
       maskingAction: data.safetySummary?.maskingAction ?? maskingAction
     },
+    promptCapture: normalizePromptCapture(data.promptCapture),
     httpStatus: data.httpStatus ?? 0,
     errorCode: data.error?.errorCode ?? null,
     errorMessage: data.error?.errorMessage ?? null,
@@ -245,6 +273,23 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       }
     }
   };
+}
+
+function normalizePromptCapture(
+  value: NonNullable<GatewayRequestDetailResponse["data"]>["promptCapture"]
+) {
+  return {
+    capturedPrompt: value?.capturedPrompt ?? null,
+    enabled: value?.enabled ?? false,
+    maxChars: value?.maxChars ?? 8000,
+    mode: value?.mode ?? "disabled",
+    truncated: value?.truncated ?? false,
+    visibility: value?.visibility ?? "admin_request_detail"
+  } as const;
+}
+
+function formatOptionalModelName(value: string | undefined | null) {
+  return value ? formatModelDisplayName(value, "") || null : null;
 }
 
 function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {

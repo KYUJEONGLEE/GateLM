@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 
 const DEFAULT_RATE_LIMIT_MAX_ATTEMPTS = 60;
 const HARD_RATE_LIMIT_MAX_ATTEMPTS = 60;
+const DEFAULT_APPLICATION_CHAT_MAX_TOKENS = 2048;
+const MAX_APPLICATION_CHAT_MAX_TOKENS = 4096;
 
 export type LiveGatewayConfig = {
   apiKey: string;
@@ -77,10 +79,10 @@ function getApplicationChatMaxTokens() {
   const configured = parsePositiveInt(process.env.GATELM_APPLICATION_CHAT_MAX_TOKENS);
 
   if (configured) {
-    return Math.max(64, Math.min(configured, 2048));
+    return Math.max(64, Math.min(configured, MAX_APPLICATION_CHAT_MAX_TOKENS));
   }
 
-  return 512;
+  return DEFAULT_APPLICATION_CHAT_MAX_TOKENS;
 }
 
 function getProviderFailureModels() {

@@ -6,6 +6,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type GatewayContext struct {
@@ -18,6 +19,8 @@ type GatewayContext struct {
 	Routing    RoutingContext
 	Cache      CacheContext
 	Status     StatusContext
+
+	StageTimings stagetiming.Timings
 }
 
 type RequestContext struct {
@@ -56,6 +59,10 @@ type RuntimeContext struct {
 	HasRoutingPolicy   bool
 	CachePolicy        runtimeconfig.CachePolicy
 	HasCachePolicy     bool
+	PromptCapture      runtimeconfig.PromptCapturePolicy
+	HasPromptCapture   bool
+	ResponseCapture    runtimeconfig.ResponseCapturePolicy
+	HasResponseCapture bool
 }
 
 type GovernanceContext struct {

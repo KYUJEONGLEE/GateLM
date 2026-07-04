@@ -25,8 +25,11 @@ const requestDetailText: Record<
     close: string;
     detailTitle: string;
     emptyPreview: string;
+    capturedPrompt: string;
     none: string;
     noPreview: string;
+    promptCapture: string;
+    truncated: string;
     yes: string;
     no: string;
   }
@@ -36,8 +39,11 @@ const requestDetailText: Record<
     close: "Close",
     detailTitle: "Request detail",
     emptyPreview: "No preview stored",
+    capturedPrompt: "Captured prompt",
     none: "none",
     noPreview: "No preview stored",
+    promptCapture: "Prompt capture",
+    truncated: "Truncated",
     no: "no",
     yes: "yes"
   },
@@ -46,8 +52,11 @@ const requestDetailText: Record<
     close: "닫기",
     detailTitle: "요청 상세",
     emptyPreview: "저장된 preview 없음",
+    capturedPrompt: "캡처된 프롬프트",
     none: "없음",
     noPreview: "저장된 preview 없음",
+    promptCapture: "프롬프트 캡처",
+    truncated: "잘림 여부",
     no: "아니오",
     yes: "예"
   }
@@ -167,6 +176,22 @@ export function RequestLogDetailPanel({
         ]}
       />
 
+      {record.promptCapture?.enabled && record.promptCapture.capturedPrompt ? (
+        <section className="detail-section">
+          <h3>{text.promptCapture}</h3>
+          <dl>
+            <div>
+              <dt>{text.capturedPrompt}</dt>
+              <dd className="detail-preformatted">{record.promptCapture.capturedPrompt}</dd>
+            </div>
+            <div>
+              <dt>{text.truncated}</dt>
+              <dd>{record.promptCapture.truncated ? text.yes : text.no}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+
       <DetailSection
         title="Identity"
         rows={[
@@ -208,22 +233,7 @@ export function RequestLogDetailPanel({
               record.cacheHitRequestId ? formatDisplayIdentifier(record.cacheHitRequestId) : null
             )
           ],
-          ["Prompt category", nullableText(record.promptCategory, text.none)],
-          ["Semantic cache", record.semanticCacheHit ? text.yes : text.no],
-          ["Semantic similarity", formatOptionalPercent(record.semanticSimilarity, text.none)],
-          [
-            "Semantic matched request",
-            nullableText(
-              record.semanticMatchedRequestId
-                ? formatDisplayIdentifier(record.semanticMatchedRequestId)
-                : null,
-              text.none
-            )
-          ],
-          [
-            "Semantic decision",
-            nullableText(record.semanticCacheDecisionReason, text.none)
-          ]
+          ["Prompt category", nullableText(record.promptCategory, text.none)]
         ]}
       />
 
@@ -317,17 +327,6 @@ function formatMicroUsd(value: number) {
     minimumFractionDigits: 0,
     style: "currency"
   }).format(value / 1_000_000);
-}
-
-function formatOptionalPercent(value: number | null | undefined, fallback: string) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 1,
-    style: "percent"
-  }).format(value);
 }
 
 function identifierToDisplayName(value: string, fallback: string) {

@@ -12,6 +12,7 @@ import (
 const (
 	GatewayRequestsTotal             = "gatelm_gateway_requests_total"
 	GatewayRequestDurationSeconds    = "gatelm_gateway_request_duration_seconds"
+	GatewayStageDurationSeconds      = "gatelm_gateway_stage_duration_seconds"
 	GatewayInflightRequests          = "gatelm_gateway_inflight_requests"
 	ProviderRequestsTotal            = "gatelm_provider_requests_total"
 	ProviderRequestDurationSeconds   = "gatelm_provider_request_duration_seconds"
@@ -21,6 +22,12 @@ const (
 	MaskingActionsTotal              = "gatelm_masking_actions_total"
 	LogWritesTotal                   = "gatelm_log_writes_total"
 	LogWriteDurationSeconds          = "gatelm_log_write_duration_seconds"
+	AsyncLogEnqueueTotal             = "gatelm_async_log_enqueue_total"
+	AsyncLogEnqueueDurationSeconds   = "gatelm_async_log_enqueue_duration_seconds"
+	AsyncLogQueueDepth               = "gatelm_async_log_queue_depth"
+	AsyncLogDroppedTotal             = "gatelm_async_log_dropped_total"
+	AsyncLogPersistTotal             = "gatelm_async_log_persist_total"
+	AsyncLogPersistDurationSeconds   = "gatelm_async_log_persist_duration_seconds"
 	StreamsActive                    = "gatelm_streams_active"
 	StreamRelayTotal                 = "gatelm_stream_relay_total"
 	StreamDurationSeconds            = "gatelm_stream_duration_seconds"
@@ -62,6 +69,7 @@ type metricSpec struct {
 var metricSpecs = map[string]metricSpec{
 	GatewayRequestsTotal:             {"counter", "Total Gateway requests by terminal outcome."},
 	GatewayRequestDurationSeconds:    {"histogram", "Gateway request duration in seconds."},
+	GatewayStageDurationSeconds:      {"histogram", "Gateway stage duration in seconds."},
 	GatewayInflightRequests:          {"gauge", "Current in-flight Gateway requests."},
 	ProviderRequestsTotal:            {"counter", "Total provider requests issued by Gateway."},
 	ProviderRequestDurationSeconds:   {"histogram", "Provider request duration in seconds."},
@@ -71,6 +79,12 @@ var metricSpecs = map[string]metricSpec{
 	MaskingActionsTotal:              {"counter", "Total Gateway masking actions."},
 	LogWritesTotal:                   {"counter", "Total invocation log writes."},
 	LogWriteDurationSeconds:          {"histogram", "Invocation log write duration in seconds."},
+	AsyncLogEnqueueTotal:             {"counter", "Total async invocation log enqueue attempts."},
+	AsyncLogEnqueueDurationSeconds:   {"histogram", "Async invocation log enqueue duration in seconds."},
+	AsyncLogQueueDepth:               {"gauge", "Current async invocation log queue depth."},
+	AsyncLogDroppedTotal:             {"counter", "Total async invocation logs dropped before persistence."},
+	AsyncLogPersistTotal:             {"counter", "Total async invocation log persistence attempts."},
+	AsyncLogPersistDurationSeconds:   {"histogram", "Async invocation log persistence duration in seconds."},
 	StreamsActive:                    {"gauge", "Current active Gateway streaming relays."},
 	StreamRelayTotal:                 {"counter", "Total Gateway streaming relay attempts by outcome."},
 	StreamDurationSeconds:            {"histogram", "Gateway streaming relay duration in seconds."},
@@ -81,6 +95,7 @@ var allowedLabels = map[string]struct{}{
 	"endpoint":           {},
 	"method":             {},
 	"status":             {},
+	"stage":              {},
 	"http_status":        {},
 	"error_code":         {},
 	"cache_status":       {},

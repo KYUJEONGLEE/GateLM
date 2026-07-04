@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import traceback
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -422,7 +423,9 @@ def run_detector(case: MasterEvalCase, service: AiSafetyDetectorService) -> Actu
                 detectorConfig=AiSafetyDetectorConfig(returnConfidence=False),
             )
         )
-    except Exception:
+    except Exception as exc:
+        print(f"detector runtime error for case {case.case_id}: {exc}", file=sys.stderr)
+        traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
         return ActualDetectorResult(
             outcome="error",
             detected_types=(),

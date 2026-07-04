@@ -1,0 +1,43 @@
+groups:
+  - name: gatelm-gateway-observability
+    rules:
+      - alert: GateLMGatewayMetricsTargetDown
+        expr: up{job="gatelm-gateway"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: GateLM Gateway metrics target is down
+          description: Prometheus cannot scrape the Gateway /metrics endpoint.
+
+      - alert: GateLMGatewayHighErrorRate
+        expr: |
+          (
+            sum(rate(gatelm_gateway_requests_total{status=~"failed|cancelled"}[5m]))
+            /
+            clamp_min(sum(rate(gatelm_gateway_requests_total[5m])), 1)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: GateLM Gateway error rate is above 5 percent
+          description: Failed or cancelled Gateway requests are above the demo warning threshold.
+
+      - alert: GateLMAsyncLogDropsDetected
+        expr: sum(increase(gatelm_async_log_dropped_total[5m])) > 0
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: GateLM async log drops detected
+          description: Async invocation logs were dropped before persistence.
+
+      - alert: GateLMAsyncLogQueueBacklog
+        expr: max_over_time(gatelm_async_log_queue_depth[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: GateLM async log queue backlog is growing
+          description: Async invocation log queue depth stayed above the demo backlog threshold.

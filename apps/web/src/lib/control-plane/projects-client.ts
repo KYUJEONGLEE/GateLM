@@ -105,7 +105,8 @@ export async function updateProject(values: ProjectUpdateValues): Promise<Projec
         body: JSON.stringify({
           description: values.description.trim(),
           name: values.name.trim(),
-          status: values.status
+          status: values.status,
+          totalBudgetUsd: values.totalBudgetUsd
         }),
         cache: "no-store",
         headers: {
@@ -147,7 +148,8 @@ async function listProjects(tenantId: string): Promise<ProjectListResult> {
 function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
-    name: values.name.trim()
+    name: values.name.trim(),
+    totalBudgetUsd: values.totalBudgetUsd
   };
 }
 
@@ -266,6 +268,7 @@ function getFixtureProject(): ProjectRecord {
     name: "Customer Support",
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
+    totalBudgetUsd: 100,
     updatedAt: timestamp
   };
 }
@@ -296,8 +299,31 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     name: record.name,
     status,
     tenantId: record.tenantId,
+    totalBudgetUsd: normalizeNumber(record.totalBudgetUsd, 100),
     updatedAt: record.updatedAt
   };
+}
+
+function normalizeNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return fallback;
+    }
+
+    const parsed = Number(trimmed);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
 }
 
 function normalizeProjectStatus(value: unknown): ProjectRecord["status"] | null {

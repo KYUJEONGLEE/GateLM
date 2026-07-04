@@ -395,7 +395,7 @@ select
   count(*) filter (where terminal_status = 'rate_limited')::bigint as rate_limited_requests,
   count(*) filter (where terminal_status = 'cancelled')::bigint as cancelled_requests,
   count(*) filter (where cache_outcome = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
-  count(*) filter (where cache_outcome in ('hit', 'miss', 'error'))::bigint as cache_eligible_requests,
+  count(*) filter (where cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_eligible_requests,
   count(*) filter (where fallback_outcome = 'success')::bigint as fallback_success_requests,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
@@ -799,6 +799,26 @@ type invocationMetadataJSON struct {
 	SemanticCachePolicyVersion  string                            `json:"semanticCachePolicyVersion"`
 	SemanticCacheDecisionReason string                            `json:"semanticCacheDecisionReason"`
 	EmbeddingProvider           string                            `json:"embeddingProvider"`
+	PromptCapture               *promptCaptureMetadataJSON        `json:"promptCapture"`
+	ResponseCapture             *responseCaptureMetadataJSON      `json:"responseCapture"`
+}
+
+type promptCaptureMetadataJSON struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	Visibility     string `json:"visibility"`
+	CapturedPrompt string `json:"capturedPrompt"`
+	Truncated      bool   `json:"truncated"`
+	MaxChars       int    `json:"maxChars"`
+}
+
+type responseCaptureMetadataJSON struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	Visibility       string `json:"visibility"`
+	CapturedResponse string `json:"capturedResponse"`
+	Truncated        bool   `json:"truncated"`
+	MaxChars         int    `json:"maxChars"`
 }
 
 type runtimeMetadataJSON struct {
@@ -872,6 +892,26 @@ func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []by
 	}
 	if strings.TrimSpace(metadata.EmbeddingProvider) != "" {
 		log.EmbeddingProvider = strings.TrimSpace(metadata.EmbeddingProvider)
+	}
+	if metadata.PromptCapture != nil {
+		log.PromptCapture = invocationlog.PromptCaptureFields{
+			Enabled:        metadata.PromptCapture.Enabled,
+			Mode:           strings.TrimSpace(metadata.PromptCapture.Mode),
+			Visibility:     strings.TrimSpace(metadata.PromptCapture.Visibility),
+			CapturedPrompt: strings.TrimSpace(metadata.PromptCapture.CapturedPrompt),
+			Truncated:      metadata.PromptCapture.Truncated,
+			MaxChars:       metadata.PromptCapture.MaxChars,
+		}
+	}
+	if metadata.ResponseCapture != nil {
+		log.ResponseCapture = invocationlog.ResponseCaptureFields{
+			Enabled:          metadata.ResponseCapture.Enabled,
+			Mode:             strings.TrimSpace(metadata.ResponseCapture.Mode),
+			Visibility:       strings.TrimSpace(metadata.ResponseCapture.Visibility),
+			CapturedResponse: strings.TrimSpace(metadata.ResponseCapture.CapturedResponse),
+			Truncated:        metadata.ResponseCapture.Truncated,
+			MaxChars:         metadata.ResponseCapture.MaxChars,
+		}
 	}
 }
 

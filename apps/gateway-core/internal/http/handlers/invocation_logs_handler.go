@@ -264,6 +264,8 @@ type requestDetailDataResponse struct {
 	Routing         routingResponse                    `json:"routing"`
 	Masking         maskingResponse                    `json:"masking"`
 	SafetySummary   safetySummaryResponse              `json:"safetySummary"`
+	PromptCapture   promptCaptureResponse              `json:"promptCapture"`
+	ResponseCapture responseCaptureResponse            `json:"responseCapture"`
 	Error           detailErrorResponse                `json:"error"`
 	CreatedAt       time.Time                          `json:"createdAt"`
 	CompletedAt     *time.Time                         `json:"completedAt"`
@@ -321,20 +323,13 @@ type latencySummaryResponse struct {
 }
 
 type cacheResponse struct {
-	CacheStatus                 string   `json:"cacheStatus"`
-	CacheOutcome                string   `json:"cacheOutcome"`
-	CacheType                   string   `json:"cacheType"`
-	CacheKeyHash                *string  `json:"cacheKeyHash"`
-	CacheHitRequestID           *string  `json:"cacheHitRequestId"`
-	CacheDecisionReason         *string  `json:"cacheDecisionReason"`
-	SemanticCacheHit            bool     `json:"semanticCacheHit"`
-	SemanticSimilarity          *float64 `json:"semanticSimilarity"`
-	SemanticMatchedRequestID    *string  `json:"semanticMatchedRequestId"`
-	SemanticCacheThreshold      *float64 `json:"semanticCacheThreshold"`
-	SemanticCachePolicyVersion  *string  `json:"semanticCachePolicyVersion"`
-	SemanticCacheDecisionReason *string  `json:"semanticCacheDecisionReason"`
-	EmbeddingProvider           *string  `json:"embeddingProvider"`
-	PromptCategory              *string  `json:"promptCategory"`
+	CacheStatus         string  `json:"cacheStatus"`
+	CacheOutcome        string  `json:"cacheOutcome"`
+	CacheType           string  `json:"cacheType"`
+	CacheKeyHash        *string `json:"cacheKeyHash"`
+	CacheHitRequestID   *string `json:"cacheHitRequestId"`
+	CacheDecisionReason *string `json:"cacheDecisionReason"`
+	PromptCategory      *string `json:"promptCategory"`
 }
 
 type routingResponse struct {
@@ -364,6 +359,24 @@ type safetySummaryResponse struct {
 	PolicyAllowedTypes      []string `json:"policyAllowedTypes"`
 	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes"`
 	MaskingAction           string   `json:"maskingAction"`
+}
+
+type promptCaptureResponse struct {
+	Enabled        bool    `json:"enabled"`
+	Mode           string  `json:"mode"`
+	Visibility     string  `json:"visibility"`
+	CapturedPrompt *string `json:"capturedPrompt"`
+	Truncated      bool    `json:"truncated"`
+	MaxChars       int     `json:"maxChars"`
+}
+
+type responseCaptureResponse struct {
+	Enabled          bool    `json:"enabled"`
+	Mode             string  `json:"mode"`
+	Visibility       string  `json:"visibility"`
+	CapturedResponse *string `json:"capturedResponse"`
+	Truncated        bool    `json:"truncated"`
+	MaxChars         int     `json:"maxChars"`
 }
 
 type detailErrorResponse struct {
@@ -664,20 +677,13 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
 		},
 		Cache: cacheResponse{
-			CacheStatus:                 detail.Cache.CacheStatus,
-			CacheOutcome:                detail.Cache.CacheOutcome,
-			CacheType:                   detail.Cache.CacheType,
-			CacheKeyHash:                stringPointerOrNil(detail.Cache.CacheKeyHash),
-			CacheHitRequestID:           stringPointerOrNil(detail.Cache.CacheHitRequestID),
-			CacheDecisionReason:         stringPointerOrNil(detail.Cache.CacheDecisionReason),
-			SemanticCacheHit:            detail.Cache.SemanticCacheHit,
-			SemanticSimilarity:          float64PointerOrNil(detail.Cache.SemanticSimilarity),
-			SemanticMatchedRequestID:    stringPointerOrNil(detail.Cache.SemanticMatchedRequestID),
-			SemanticCacheThreshold:      float64PointerOrNil(detail.Cache.SemanticCacheThreshold),
-			SemanticCachePolicyVersion:  stringPointerOrNil(detail.Cache.SemanticCachePolicyVersion),
-			SemanticCacheDecisionReason: stringPointerOrNil(detail.Cache.SemanticCacheDecisionReason),
-			EmbeddingProvider:           stringPointerOrNil(detail.Cache.EmbeddingProvider),
-			PromptCategory:              stringPointerOrNil(detail.Cache.PromptCategory),
+			CacheStatus:         detail.Cache.CacheStatus,
+			CacheOutcome:        detail.Cache.CacheOutcome,
+			CacheType:           detail.Cache.CacheType,
+			CacheKeyHash:        stringPointerOrNil(detail.Cache.CacheKeyHash),
+			CacheHitRequestID:   stringPointerOrNil(detail.Cache.CacheHitRequestID),
+			CacheDecisionReason: stringPointerOrNil(detail.Cache.CacheDecisionReason),
+			PromptCategory:      stringPointerOrNil(detail.Cache.PromptCategory),
 		},
 		Routing: routingResponse{
 			RoutingReason:          stringPointerOrNil(detail.Routing.RoutingReason),
@@ -705,6 +711,8 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			MandatoryProtectedTypes: append([]string(nil), detail.SafetySummary.MandatoryProtectedTypes...),
 			MaskingAction:           detail.SafetySummary.MaskingAction,
 		},
+		PromptCapture:   promptCaptureResponseFromDomain(detail.PromptCapture),
+		ResponseCapture: responseCaptureResponseFromDomain(detail.ResponseCapture),
 		Error: detailErrorResponse{
 			ErrorCode:    stringPointerOrNil(detail.Error.ErrorCode),
 			ErrorMessage: stringPointerOrNil(detail.Error.ErrorMessage),
@@ -957,6 +965,54 @@ func runtimeSnapshotResponse(snapshot *runtimeconfig.RuntimeSnapshotProvenance) 
 	return response
 }
 
+func promptCaptureResponseFromDomain(fields invocationlog.PromptCaptureFields) promptCaptureResponse {
+	if strings.TrimSpace(fields.Mode) == "" {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+	}
+	if strings.TrimSpace(fields.Visibility) == "" {
+		fields.Visibility = invocationlog.PromptCaptureVisibilityAdminRequestDetail
+	}
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	var capturedPrompt *string
+	if fields.Enabled && strings.TrimSpace(fields.CapturedPrompt) != "" {
+		capturedPrompt = stringPointerOrNil(fields.CapturedPrompt)
+	}
+	return promptCaptureResponse{
+		Enabled:        fields.Enabled,
+		Mode:           fields.Mode,
+		Visibility:     fields.Visibility,
+		CapturedPrompt: capturedPrompt,
+		Truncated:      fields.Truncated,
+		MaxChars:       fields.MaxChars,
+	}
+}
+
+func responseCaptureResponseFromDomain(fields invocationlog.ResponseCaptureFields) responseCaptureResponse {
+	if strings.TrimSpace(fields.Mode) == "" {
+		fields.Mode = runtimeconfig.ResponseCaptureModeDisabled
+	}
+	if strings.TrimSpace(fields.Visibility) == "" {
+		fields.Visibility = invocationlog.ResponseCaptureVisibilityAdminRequestDetail
+	}
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
+	}
+	var capturedResponse *string
+	if fields.Enabled && strings.TrimSpace(fields.CapturedResponse) != "" {
+		capturedResponse = stringPointerOrNil(fields.CapturedResponse)
+	}
+	return responseCaptureResponse{
+		Enabled:          fields.Enabled,
+		Mode:             fields.Mode,
+		Visibility:       fields.Visibility,
+		CapturedResponse: capturedResponse,
+		Truncated:        fields.Truncated,
+		MaxChars:         fields.MaxChars,
+	}
+}
+
 func copyInt64Map(values map[string]int64) map[string]int64 {
 	if values == nil {
 		return map[string]int64{}
@@ -971,13 +1027,6 @@ func copyInt64Map(values map[string]int64) map[string]int64 {
 func stringPointerOrNil(value string) *string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func float64PointerOrNil(value float64) *float64 {
-	if value <= 0 {
 		return nil
 	}
 	return &value

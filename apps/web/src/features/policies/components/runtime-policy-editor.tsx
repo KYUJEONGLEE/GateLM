@@ -33,6 +33,10 @@ type SubmitState =
       status: "success";
     };
 
+type PolicySection = "general" | "cache";
+
+const hiddenPolicySectionStyle = { display: "none" } as const;
+
 const policyText: Record<
   Locale,
   {
@@ -42,6 +46,7 @@ const policyText: Record<
     budgetWarning: string;
     cache: string;
     cacheEnabled: string;
+    cacheSection: string;
     cacheTtl: string;
     catalogVersion: string;
     configVersion: string;
@@ -54,9 +59,11 @@ const policyText: Record<
     enabled: string;
     fallbackRoute: string;
     fixtureFallback: string;
+    general: string;
     jsonMode: string;
     limit: string;
     lowCostRoute: string;
+    logSafeCaptureHint: string;
     mandatoryProtection: string;
     mandatoryProtectionHint: string;
     mode: string;
@@ -66,6 +73,9 @@ const policyText: Record<
     policyDetails: string;
     pricing: string;
     pricingVersion: string;
+    promptCapture: string;
+    promptCaptureEnabled: string;
+    promptCaptureMaxChars: string;
     promptPrice: string;
     provider: string;
     providerCount: string;
@@ -83,6 +93,10 @@ const policyText: Record<
     shortPrompt: string;
     snapshotState: string;
     snapshotVersion: string;
+    semanticCache: string;
+    semanticCacheDisabled: string;
+    semanticCacheEvidenceOnly: string;
+    semanticCacheNote: string;
     streaming: string;
     title: string;
     tokens: string;
@@ -95,6 +109,7 @@ const policyText: Record<
     budgetWarning: "Warning threshold",
     cache: "Exact cache",
     cacheEnabled: "Cache enabled",
+    cacheSection: "Cache",
     cacheTtl: "TTL seconds",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
@@ -107,9 +122,12 @@ const policyText: Record<
     enabled: "Enabled",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
+    general: "General",
     jsonMode: "JSON",
     limit: "Limit",
     lowCostRoute: "Low-cost route",
+    logSafeCaptureHint:
+      "Stores only the post-masking log-safe prompt in Request Detail when enabled.",
     mandatoryProtection: "Mandatory sensitive data protection: always active",
     mandatoryProtectionHint:
       "API key, JWT, Authorization header, private key, and RRN stay protected regardless of PII masking settings.",
@@ -120,6 +138,9 @@ const policyText: Record<
     policyDetails: "Policy details",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    promptCapture: "Prompt capture",
+    promptCaptureEnabled: "Log-safe capture",
+    promptCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
     providerCount: "Providers",
@@ -137,6 +158,11 @@ const policyText: Record<
     shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
+    semanticCache: "Semantic cache",
+    semanticCacheDisabled: "disabled",
+    semanticCacheEvidenceOnly: "evidence only",
+    semanticCacheNote:
+      "Current Control Plane derives semantic cache evidence mode from the cache policy. It is not a live response path.",
     streaming: "Streaming",
     title: "Policies",
     tokens: "Context tokens"
@@ -148,6 +174,7 @@ const policyText: Record<
     budgetWarning: "Warning threshold",
     cache: "Exact cache",
     cacheEnabled: "캐시 사용",
+    cacheSection: "캐시",
     cacheTtl: "TTL 초",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
@@ -160,9 +187,12 @@ const policyText: Record<
     enabled: "사용",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
+    general: "General",
     jsonMode: "JSON",
     limit: "한도",
     lowCostRoute: "Low-cost route",
+    logSafeCaptureHint:
+      "켜져 있을 때 Request Detail에 masking 이후 log-safe prompt만 저장합니다.",
     mandatoryProtection: "중요 민감정보 보호: 항상 활성화",
     mandatoryProtectionHint:
       "API key, JWT, Authorization header, private key, 주민등록번호는 PII masking 설정과 관계없이 항상 보호됩니다.",
@@ -173,6 +203,9 @@ const policyText: Record<
     policyDetails: "정책 상세",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    promptCapture: "프롬프트 캡처",
+    promptCaptureEnabled: "로그 안전 캡처",
+    promptCaptureMaxChars: "최대 글자 수",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
     providerCount: "Providers",
@@ -190,6 +223,11 @@ const policyText: Record<
     shortPrompt: "Short prompt 기준",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
+    semanticCache: "Semantic cache",
+    semanticCacheDisabled: "disabled",
+    semanticCacheEvidenceOnly: "evidence only",
+    semanticCacheNote:
+      "현재 Control Plane은 cache policy에서 semantic cache evidence mode를 파생합니다. 실시간 응답 경로는 아닙니다.",
     streaming: "Streaming",
     title: "정책",
     tokens: "Context tokens"
@@ -205,6 +243,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     message: "",
     status: "idle"
   });
+  const [activePolicySection, setActivePolicySection] = useState<PolicySection>("general");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
@@ -212,6 +251,10 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
       : model.activeConfig;
+  const generalSectionStyle =
+    activePolicySection === "general" ? undefined : hiddenPolicySectionStyle;
+  const cacheSectionStyle =
+    activePolicySection === "cache" ? undefined : hiddenPolicySectionStyle;
   const providerOptions = model.activeConfig.providers;
   const modelOptionsByProvider = useMemo(
     () => groupModelsByProvider(draftValues.models),
@@ -370,8 +413,26 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
         </p>
       ) : null}
 
+      <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
+        {(["general", "cache"] as const).map((section) => (
+          <button
+            aria-selected={activePolicySection === section}
+            data-active={activePolicySection === section}
+            key={section}
+            onClick={() => setActivePolicySection(section)}
+            role="tab"
+            type="button"
+          >
+            {section === "general" ? text.general : text.cacheSection}
+          </button>
+        ))}
+      </div>
+
       <section className="policy-layout policy-settings-list">
-        <article className="console-panel policy-editor-panel">
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.budget}</h3>
           </div>
@@ -427,7 +488,10 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           />
         </article>
 
-        <article className="console-panel policy-editor-panel">
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.rateLimit}</h3>
           </div>
@@ -458,7 +522,10 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           />
         </article>
 
-        <article className="console-panel policy-editor-panel wide-panel">
+        <article
+          className="console-panel policy-editor-panel wide-panel"
+          style={generalSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.detectors}</h3>
           </div>
@@ -484,7 +551,45 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           </div>
         </article>
 
-        <article className="console-panel policy-editor-panel">
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
+          <div className="panel-heading">
+            <h3>{text.promptCapture}</h3>
+          </div>
+          <label className="policy-toggle-row">
+            <input
+              checked={draftValues.promptCaptureEnabled}
+              onChange={(event) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  promptCaptureEnabled: event.target.checked
+                }))
+              }
+              type="checkbox"
+            />
+            <span>{text.promptCaptureEnabled}</span>
+          </label>
+          <p className="project-muted">{text.logSafeCaptureHint}</p>
+          <PolicyNumberField
+            label={text.promptCaptureMaxChars}
+            max={20000}
+            min={1}
+            onChange={(value) =>
+              setDraftValues((current) => ({
+                ...current,
+                promptCaptureMaxChars: value
+              }))
+            }
+            value={draftValues.promptCaptureMaxChars}
+          />
+        </article>
+
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.routing}</h3>
           </div>
@@ -519,7 +624,10 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           </div>
         </article>
 
-        <article className="console-panel policy-editor-panel">
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.routingAdvanced}</h3>
           </div>
@@ -537,7 +645,10 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           />
         </article>
 
-        <article className="console-panel policy-editor-panel">
+        <article
+          className="console-panel policy-editor-panel"
+          style={cacheSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.cache}</h3>
           </div>
@@ -568,7 +679,38 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           />
         </article>
 
-        <article className="console-panel policy-editor-panel">
+        <article
+          className="console-panel policy-editor-panel"
+          style={cacheSectionStyle}
+        >
+          <div className="panel-heading">
+            <h3>{text.semanticCache}</h3>
+          </div>
+          <label aria-disabled="true" className="policy-toggle-row">
+            <input checked={draftValues.cacheEnabled} disabled readOnly type="checkbox" />
+            <span>
+              {draftValues.cacheEnabled
+                ? text.semanticCacheEvidenceOnly
+                : text.semanticCacheDisabled}
+            </span>
+          </label>
+          <dl className="policy-summary-list">
+            <div>
+              <dt>{text.mode}</dt>
+              <dd>
+                {draftValues.cacheEnabled
+                  ? text.semanticCacheEvidenceOnly
+                  : text.semanticCacheDisabled}
+              </dd>
+            </div>
+          </dl>
+          <p className="project-muted">{text.semanticCacheNote}</p>
+        </article>
+
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
           <div className="panel-heading">
             <h3>{text.activeConfig}</h3>
           </div>
@@ -800,6 +942,14 @@ function RuntimeSnapshotDetail({
           </dd>
         </div>
         <div>
+          <dt>{text.promptCapture}</dt>
+          <dd>
+            {formatEnabled(snapshot.policies.promptCapture?.enabled ?? false)} /{" "}
+            {snapshot.policies.promptCapture?.mode ?? "disabled"} / max{" "}
+            {snapshot.policies.promptCapture?.maxChars ?? 8000}
+          </dd>
+        </div>
+        <div>
           <dt>{text.detectors}</dt>
           <dd>
             {formatEnabled(snapshot.policies.safety.enabled)} / {snapshot.policies.safety.mode} / request-side{" "}
@@ -982,6 +1132,7 @@ function DetectorEditor({
   onChange: (detector: RuntimePolicyDetector) => void;
 }) {
   const isMandatory = isMandatorySafetyDetector(detector.type);
+  const actionValue = isMandatory ? "block" : detector.action;
 
   return (
     <div className="policy-detector-row">
@@ -1006,13 +1157,14 @@ function DetectorEditor({
       <label className="policy-field">
         <span>{labels.mode}</span>
         <select
+          disabled={isMandatory}
           onChange={(event) =>
             onChange({
               ...detector,
               action: event.target.value === "block" ? "block" : "redact"
             })
           }
-          value={detector.action}
+          value={actionValue}
         >
           <option value="redact">redact</option>
           <option value="block">block</option>

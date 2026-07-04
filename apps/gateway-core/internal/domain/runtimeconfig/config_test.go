@@ -70,6 +70,66 @@ func TestRuntimeSnapshotProvenanceNormalizesV2FacingFields(t *testing.T) {
 	}
 }
 
+func TestPromptCapturePolicyNormalizeAndValidate(t *testing.T) {
+	enabled := NormalizePromptCapturePolicy(PromptCapturePolicy{
+		Enabled: true,
+	})
+	if enabled.Mode != PromptCaptureModeLogSafeFull || enabled.MaxChars != PromptCaptureDefaultMaxChars {
+		t.Fatalf("unexpected enabled prompt capture defaults: %+v", enabled)
+	}
+	if !PromptCaptureAllowsLogSafeCapture(enabled) {
+		t.Fatalf("expected enabled log-safe policy to allow capture")
+	}
+
+	disabled := NormalizePromptCapturePolicy(PromptCapturePolicy{
+		Enabled: false,
+		Mode:    PromptCaptureModeLogSafeFull,
+	})
+	if disabled.Mode != PromptCaptureModeDisabled || PromptCaptureAllowsLogSafeCapture(disabled) {
+		t.Fatalf("unexpected disabled prompt capture policy: %+v", disabled)
+	}
+
+	config := testActiveConfig()
+	config.PromptCapture = PromptCapturePolicy{
+		Enabled:  true,
+		Mode:     "raw_full",
+		MaxChars: 8000,
+	}
+	if !errors.Is(config.ValidateActive(), ErrInvalidPromptCapture) {
+		t.Fatalf("expected invalid prompt capture policy to fail active validation")
+	}
+}
+
+func TestResponseCapturePolicyNormalizeAndValidate(t *testing.T) {
+	enabled := NormalizeResponseCapturePolicy(ResponseCapturePolicy{
+		Enabled: true,
+	})
+	if enabled.Mode != ResponseCaptureModeRawFull || enabled.MaxChars != ResponseCaptureDefaultMaxChars {
+		t.Fatalf("unexpected enabled response capture defaults: %+v", enabled)
+	}
+	if !ResponseCaptureAllowsRawCapture(enabled) {
+		t.Fatalf("expected enabled raw response policy to allow capture")
+	}
+
+	disabled := NormalizeResponseCapturePolicy(ResponseCapturePolicy{
+		Enabled: false,
+		Mode:    ResponseCaptureModeRawFull,
+	})
+	if disabled.Mode != ResponseCaptureModeDisabled || ResponseCaptureAllowsRawCapture(disabled) {
+		t.Fatalf("unexpected disabled response capture policy: %+v", disabled)
+	}
+
+	config := testActiveConfig()
+	config.ResponseCapture = ResponseCapturePolicy{
+		Enabled:  true,
+		Mode:     "log_safe_full",
+		MaxChars: 8000,
+	}
+	if !errors.Is(config.ValidateActive(), ErrInvalidResponseCapture) {
+		t.Fatalf("expected invalid response capture policy to fail active validation")
+	}
+}
+
 func TestActiveConfigValidateActiveRejectsInactiveCredentialStatus(t *testing.T) {
 	tests := []struct {
 		name   string

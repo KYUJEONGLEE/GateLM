@@ -10,6 +10,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type TerminalLog struct {
@@ -71,6 +72,15 @@ type TerminalLog struct {
 	ProviderCatalogContentHash string
 
 	SemanticCacheHit            bool
+	SemanticCacheEnabled        bool
+	SemanticCacheMode           string
+	SemanticCacheWouldHit       bool
+	SemanticCacheWouldMiss      bool
+	SemanticCacheCandidateFound bool
+	SemanticCacheCandidateHash  string
+	SemanticReturnedFromCache   bool
+	SemanticCanonicalIntent     string
+	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
 	SemanticMatchedRequestID    string
 	SemanticCacheThreshold      float64
@@ -89,6 +99,7 @@ type TerminalLog struct {
 	RequestBodyHash string
 	PromptHash      string
 	DomainOutcomes  DomainOutcomes
+	StageTimings    stagetiming.Timings
 	Metadata        map[string]any
 	CreatedAt       time.Time
 	CompletedAt     time.Time
@@ -153,6 +164,15 @@ type TerminalLogInput struct {
 	ProviderCatalogContentHash string
 
 	SemanticCacheHit            bool
+	SemanticCacheEnabled        bool
+	SemanticCacheMode           string
+	SemanticCacheWouldHit       bool
+	SemanticCacheWouldMiss      bool
+	SemanticCacheCandidateFound bool
+	SemanticCacheCandidateHash  string
+	SemanticReturnedFromCache   bool
+	SemanticCanonicalIntent     string
+	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
 	SemanticMatchedRequestID    string
 	SemanticCacheThreshold      float64
@@ -170,9 +190,36 @@ type TerminalLogInput struct {
 
 	RequestBodyHashMaterial string
 	RedactedPromptForHash   string
+	PromptCapturePolicy     runtimeconfig.PromptCapturePolicy
+	CapturedPrompt          string
+	ResponseCapturePolicy   runtimeconfig.ResponseCapturePolicy
+	CapturedResponse        string
 	DomainOutcomes          DomainOutcomes
+	StageTimings            stagetiming.Timings
 	StartedAt               time.Time
 	CompletedAt             time.Time
+}
+
+const PromptCaptureVisibilityAdminRequestDetail = "admin_request_detail"
+
+const ResponseCaptureVisibilityAdminRequestDetail = "admin_request_detail"
+
+type PromptCaptureFields struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	Visibility     string `json:"visibility"`
+	CapturedPrompt string `json:"capturedPrompt"`
+	Truncated      bool   `json:"truncated"`
+	MaxChars       int    `json:"maxChars"`
+}
+
+type ResponseCaptureFields struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	Visibility       string `json:"visibility"`
+	CapturedResponse string `json:"capturedResponse"`
+	Truncated        bool   `json:"truncated"`
+	MaxChars         int    `json:"maxChars"`
 }
 
 type TerminalLogWriter interface {
@@ -268,7 +315,24 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if strings.TrimSpace(input.PromptCategory) != "" {
 		metadata["promptCategory"] = strings.TrimSpace(input.PromptCategory)
 	}
+	metadata["semanticCacheEnabled"] = input.SemanticCacheEnabled
+	if strings.TrimSpace(input.SemanticCacheMode) != "" {
+		metadata["semanticCacheMode"] = strings.TrimSpace(input.SemanticCacheMode)
+	}
 	metadata["semanticCacheHit"] = input.SemanticCacheHit
+	metadata["semanticCacheWouldHit"] = input.SemanticCacheWouldHit
+	metadata["semanticCacheWouldMiss"] = input.SemanticCacheWouldMiss
+	metadata["semanticCandidateFound"] = input.SemanticCacheCandidateFound
+	metadata["semanticReturnedFromCache"] = input.SemanticReturnedFromCache
+	if strings.TrimSpace(input.SemanticCacheCandidateHash) != "" {
+		metadata["semanticCandidateHash"] = strings.TrimSpace(input.SemanticCacheCandidateHash)
+	}
+	if strings.TrimSpace(input.SemanticCanonicalIntent) != "" {
+		metadata["semanticCanonicalIntent"] = strings.TrimSpace(input.SemanticCanonicalIntent)
+	}
+	if strings.TrimSpace(input.SemanticRequiredSlotsHash) != "" {
+		metadata["semanticRequiredSlotsHash"] = strings.TrimSpace(input.SemanticRequiredSlotsHash)
+	}
 	if input.SemanticSimilarity > 0 {
 		metadata["semanticSimilarity"] = input.SemanticSimilarity
 	}
@@ -286,6 +350,15 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	}
 	if strings.TrimSpace(input.EmbeddingProvider) != "" {
 		metadata["embeddingProvider"] = strings.TrimSpace(input.EmbeddingProvider)
+	}
+	if promptCapture, ok := BuildPromptCaptureFields(input.PromptCapturePolicy, input.CapturedPrompt); ok {
+		metadata["promptCapture"] = promptCapture
+	}
+	if responseCapture, ok := BuildResponseCaptureFields(input.ResponseCapturePolicy, input.CapturedResponse); ok {
+		metadata["responseCapture"] = responseCapture
+	}
+	if len(input.StageTimings) > 0 {
+		metadata["stageTimings"] = stagetiming.Clone(input.StageTimings)
 	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
 	metadata["providerCalled"] = terminalProviderCalled(input)
@@ -352,6 +425,15 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		ProviderCatalogContentHash: strings.TrimSpace(input.ProviderCatalogContentHash),
 
 		SemanticCacheHit:            input.SemanticCacheHit,
+		SemanticCacheEnabled:        input.SemanticCacheEnabled,
+		SemanticCacheMode:           strings.TrimSpace(input.SemanticCacheMode),
+		SemanticCacheWouldHit:       input.SemanticCacheWouldHit,
+		SemanticCacheWouldMiss:      input.SemanticCacheWouldMiss,
+		SemanticCacheCandidateFound: input.SemanticCacheCandidateFound,
+		SemanticCacheCandidateHash:  strings.TrimSpace(input.SemanticCacheCandidateHash),
+		SemanticReturnedFromCache:   input.SemanticReturnedFromCache,
+		SemanticCanonicalIntent:     strings.TrimSpace(input.SemanticCanonicalIntent),
+		SemanticRequiredSlotsHash:   strings.TrimSpace(input.SemanticRequiredSlotsHash),
 		SemanticSimilarity:          input.SemanticSimilarity,
 		SemanticMatchedRequestID:    strings.TrimSpace(input.SemanticMatchedRequestID),
 		SemanticCacheThreshold:      input.SemanticCacheThreshold,
@@ -369,6 +451,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 
 		RequestBodyHash: logHash("request_body", requestBodyHashMaterial),
 		PromptHash:      logHash("prompt", promptHashMaterial),
+		StageTimings:    stagetiming.Clone(input.StageTimings),
 		Metadata:        metadata,
 		CreatedAt:       input.StartedAt.UTC(),
 		CompletedAt:     completedAt.UTC(),
@@ -385,6 +468,48 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	log.Metadata["domainOutcomes"] = log.DomainOutcomes
 	log.Metadata["gatewayStageOutcomes"] = BuildGatewayStageOutcomes(log)
 	return log
+}
+
+func BuildPromptCaptureFields(policy runtimeconfig.PromptCapturePolicy, logSafePrompt string) (PromptCaptureFields, bool) {
+	policy = runtimeconfig.NormalizePromptCapturePolicy(policy)
+	if !runtimeconfig.PromptCaptureAllowsLogSafeCapture(policy) {
+		return PromptCaptureFields{}, false
+	}
+	logSafePrompt = strings.TrimSpace(logSafePrompt)
+	if logSafePrompt == "" {
+		return PromptCaptureFields{}, false
+	}
+
+	truncatedPrompt, truncated := truncateRunes(logSafePrompt, policy.MaxChars)
+	return PromptCaptureFields{
+		Enabled:        true,
+		Mode:           policy.Mode,
+		Visibility:     PromptCaptureVisibilityAdminRequestDetail,
+		CapturedPrompt: truncatedPrompt,
+		Truncated:      truncated,
+		MaxChars:       policy.MaxChars,
+	}, true
+}
+
+func BuildResponseCaptureFields(policy runtimeconfig.ResponseCapturePolicy, rawResponse string) (ResponseCaptureFields, bool) {
+	policy = runtimeconfig.NormalizeResponseCapturePolicy(policy)
+	if !runtimeconfig.ResponseCaptureAllowsRawCapture(policy) {
+		return ResponseCaptureFields{}, false
+	}
+	rawResponse = strings.TrimSpace(rawResponse)
+	if rawResponse == "" {
+		return ResponseCaptureFields{}, false
+	}
+
+	truncatedResponse, truncated := truncateRunes(rawResponse, policy.MaxChars)
+	return ResponseCaptureFields{
+		Enabled:          true,
+		Mode:             policy.Mode,
+		Visibility:       ResponseCaptureVisibilityAdminRequestDetail,
+		CapturedResponse: truncatedResponse,
+		Truncated:        truncated,
+		MaxChars:         policy.MaxChars,
+	}, true
 }
 
 func logHash(parts ...string) string {
@@ -412,4 +537,18 @@ func terminalProviderCalled(input TerminalLogInput) bool {
 		return true
 	}
 	return strings.TrimSpace(input.Provider) != "" || strings.TrimSpace(input.SelectedProvider) != ""
+}
+
+func truncateRunes(value string, maxRunes int) (string, bool) {
+	if maxRunes <= 0 {
+		return "", value != ""
+	}
+	count := 0
+	for i := range value {
+		if count == maxRunes {
+			return value[:i], true
+		}
+		count++
+	}
+	return value, false
 }

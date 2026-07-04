@@ -39,8 +39,10 @@ import {
   RuntimeConfigHistoryResponseDto,
   RuntimeConfigModelResponseDto,
   RuntimeConfigPricingRuleResponseDto,
+  RuntimeConfigPromptCapturePolicyResponseDto,
   RuntimeConfigProviderDto,
   RuntimeConfigRateLimitResponseDto,
+  RuntimeConfigResponseCapturePolicyResponseDto,
   RuntimeConfigRoutingPolicyResponseDto,
   RuntimeConfigSafetyDetectorResponseDto,
   RuntimeConfigSafetyPolicyResponseDto,
@@ -59,6 +61,8 @@ const DEFAULT_PUBLISHED_BY = 'control_plane';
 const DEFAULT_GATEWAY_INSTANCE_ID = 'gateway_core_static';
 const DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT = 80;
 const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
+const DEFAULT_PROMPT_CAPTURE_MAX_CHARS = 8000;
+const DEFAULT_RESPONSE_CAPTURE_MAX_CHARS = 8000;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
@@ -769,6 +773,12 @@ export class RuntimeConfigsService {
       budgetPolicy: this.resolveBudgetPolicy(args.dto.budgetPolicy),
       safetyPolicy,
       cachePolicy: this.resolveCachePolicy(args.dto.cachePolicy),
+      promptCapturePolicy: this.resolvePromptCapturePolicy(
+        args.dto.promptCapturePolicy,
+      ),
+      responseCapturePolicy: this.resolveResponseCapturePolicy(
+        args.dto.responseCapturePolicy,
+      ),
       routingPolicy,
       pricingRules,
       hashing: this.resolveHashing(),
@@ -1005,6 +1015,8 @@ export class RuntimeConfigsService {
       document.cachePolicy.type !== 'exact' ||
       !Number.isInteger(document.cachePolicy.ttlSeconds) ||
       document.cachePolicy.ttlSeconds < 1 ||
+      !this.isExecutablePromptCapturePolicy(document.promptCapturePolicy) ||
+      !this.isExecutableResponseCapturePolicy(document.responseCapturePolicy) ||
       document.safetyPolicy.mode !== 'rule_based' ||
       !document.safetyPolicy.securityPolicyHash ||
       !Array.isArray(document.safetyPolicy.detectors) ||
@@ -1038,6 +1050,8 @@ export class RuntimeConfigsService {
       !document.rateLimit ||
       !document.budgetPolicy ||
       !document.cachePolicy ||
+      !document.promptCapturePolicy ||
+      !document.responseCapturePolicy ||
       !document.safetyPolicy ||
       !document.routingPolicy ||
       !Array.isArray(document.pricingRules)
@@ -1483,6 +1497,52 @@ export class RuntimeConfigsService {
     };
   }
 
+  private resolvePromptCapturePolicy(
+    dto: UpsertRuntimeConfigDraftDto['promptCapturePolicy'],
+  ): RuntimeConfigPromptCapturePolicyResponseDto {
+    const enabled = dto?.enabled ?? false;
+    const mode = enabled ? dto?.mode ?? 'log_safe_full' : 'disabled';
+    if (enabled && mode !== 'log_safe_full') {
+      throw new ConflictException(
+        'Runtime Config prompt capture policy is invalid.',
+      );
+    }
+    if (!enabled && dto?.mode && dto.mode !== 'disabled') {
+      throw new ConflictException(
+        'Runtime Config prompt capture policy is invalid.',
+      );
+    }
+
+    return {
+      enabled,
+      mode,
+      maxChars: dto?.maxChars ?? DEFAULT_PROMPT_CAPTURE_MAX_CHARS,
+    };
+  }
+
+  private resolveResponseCapturePolicy(
+    dto: UpsertRuntimeConfigDraftDto['responseCapturePolicy'],
+  ): RuntimeConfigResponseCapturePolicyResponseDto {
+    const enabled = dto?.enabled ?? false;
+    const mode = enabled ? dto?.mode ?? 'raw_full' : 'disabled';
+    if (enabled && mode !== 'raw_full') {
+      throw new ConflictException(
+        'Runtime Config response capture policy is invalid.',
+      );
+    }
+    if (!enabled && dto?.mode && dto.mode !== 'disabled') {
+      throw new ConflictException(
+        'Runtime Config response capture policy is invalid.',
+      );
+    }
+
+    return {
+      enabled,
+      mode,
+      maxChars: dto?.maxChars ?? DEFAULT_RESPONSE_CAPTURE_MAX_CHARS,
+    };
+  }
+
   private resolveSafetyPolicy(
     dto: UpsertRuntimeConfigDraftDto['safetyPolicy'],
   ): RuntimeConfigSafetyPolicyResponseDto {
@@ -1600,6 +1660,8 @@ export class RuntimeConfigsService {
         'budgetPolicy',
         'safetyPolicy',
         'cachePolicy',
+        'promptCapturePolicy',
+        'responseCapturePolicy',
         'routingPolicy',
         'pricingRules',
       ],
@@ -1748,6 +1810,16 @@ export class RuntimeConfigsService {
           cachePolicyHash: this.sha256(
             this.canonicalJson(document.cachePolicy),
           ),
+        },
+        promptCapture: {
+          enabled: document.promptCapturePolicy.enabled,
+          mode: document.promptCapturePolicy.mode,
+          maxChars: document.promptCapturePolicy.maxChars,
+        },
+        responseCapture: {
+          enabled: document.responseCapturePolicy.enabled,
+          mode: document.responseCapturePolicy.mode,
+          maxChars: document.responseCapturePolicy.maxChars,
         },
         rateLimit: {
           enabled: document.rateLimit.enabled,
@@ -2037,6 +2109,10 @@ export class RuntimeConfigsService {
   private toRuntimeProviderAdapterConfig(
     adapterType: string,
   ): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+    if (adapterType === 'anthropic') {
+      return { requestFormat: 'anthropic_messages' };
+    }
+
     return {
       requestFormat:
         adapterType === 'mock'
@@ -2048,12 +2124,20 @@ export class RuntimeConfigsService {
   private toAdapterRequestFormat(
     value: unknown,
     adapterType: string,
-  ): 'openai_chat_completions' | 'mock_chat_completions' {
+  ):
+    | 'openai_chat_completions'
+    | 'anthropic_messages'
+    | 'mock_chat_completions' {
     if (
       value === 'openai_chat_completions' ||
+      value === 'anthropic_messages' ||
       value === 'mock_chat_completions'
     ) {
       return value;
+    }
+
+    if (adapterType === 'anthropic') {
+      return 'anthropic_messages';
     }
 
     return adapterType === 'mock'
@@ -2322,6 +2406,16 @@ export class RuntimeConfigsService {
         enabled: document.cachePolicy.enabled,
         ttlSeconds: document.cachePolicy.ttlSeconds,
       },
+      promptCapturePolicy: {
+        enabled: document.promptCapturePolicy.enabled,
+        mode: document.promptCapturePolicy.mode,
+        maxChars: document.promptCapturePolicy.maxChars,
+      },
+      responseCapturePolicy: {
+        enabled: document.responseCapturePolicy.enabled,
+        mode: document.responseCapturePolicy.mode,
+        maxChars: document.responseCapturePolicy.maxChars,
+      },
       routingPolicy: {
         defaultProvider: document.routingPolicy.defaultProvider,
         defaultModel: document.routingPolicy.defaultModel,
@@ -2416,6 +2510,10 @@ export class RuntimeConfigsService {
       budgetPolicy: this.normalizeRuntimeConfigBudgetPolicy(
         runtimeDocument,
       ),
+      promptCapturePolicy:
+        this.normalizeRuntimeConfigPromptCapturePolicy(runtimeDocument),
+      responseCapturePolicy:
+        this.normalizeRuntimeConfigResponseCapturePolicy(runtimeDocument),
     };
   }
 
@@ -2442,6 +2540,36 @@ export class RuntimeConfigsService {
       (budgetPolicy.enabled
         ? budgetPolicy.enforcementMode !== 'disabled'
         : budgetPolicy.enforcementMode === 'disabled')
+    );
+  }
+
+  private isExecutablePromptCapturePolicy(
+    policy: RuntimeConfigPromptCapturePolicyResponseDto,
+  ): boolean {
+    return (
+      Boolean(policy) &&
+      typeof policy.enabled === 'boolean' &&
+      Number.isInteger(policy.maxChars) &&
+      policy.maxChars >= 1 &&
+      policy.maxChars <= 20000 &&
+      (policy.enabled
+        ? policy.mode === 'log_safe_full'
+        : policy.mode === 'disabled')
+    );
+  }
+
+  private isExecutableResponseCapturePolicy(
+    policy: RuntimeConfigResponseCapturePolicyResponseDto,
+  ): boolean {
+    return (
+      Boolean(policy) &&
+      typeof policy.enabled === 'boolean' &&
+      Number.isInteger(policy.maxChars) &&
+      policy.maxChars >= 1 &&
+      policy.maxChars <= 20000 &&
+      (policy.enabled
+        ? policy.mode === 'raw_full'
+        : policy.mode === 'disabled')
     );
   }
 
@@ -2487,6 +2615,94 @@ export class RuntimeConfigsService {
     }
 
     return normalized;
+  }
+
+  private normalizeRuntimeConfigPromptCapturePolicy(
+    runtimeDocument: Record<string, unknown>,
+  ): RuntimeConfigPromptCapturePolicyResponseDto {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        runtimeDocument,
+        'promptCapturePolicy',
+      )
+    ) {
+      return this.defaultRuntimeConfigPromptCapturePolicy();
+    }
+
+    const policy = runtimeDocument.promptCapturePolicy;
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    const candidate = policy as Record<string, unknown>;
+    const enabled = candidate.enabled === true;
+    const mode = enabled ? candidate.mode ?? 'log_safe_full' : 'disabled';
+    const normalized: RuntimeConfigPromptCapturePolicyResponseDto = {
+      enabled,
+      mode: mode as RuntimeConfigPromptCapturePolicyResponseDto['mode'],
+      maxChars:
+        typeof candidate.maxChars === 'number'
+          ? candidate.maxChars
+          : DEFAULT_PROMPT_CAPTURE_MAX_CHARS,
+    };
+
+    if (!this.isExecutablePromptCapturePolicy(normalized)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    return normalized;
+  }
+
+  private defaultRuntimeConfigPromptCapturePolicy(): RuntimeConfigPromptCapturePolicyResponseDto {
+    return {
+      enabled: false,
+      mode: 'disabled',
+      maxChars: DEFAULT_PROMPT_CAPTURE_MAX_CHARS,
+    };
+  }
+
+  private normalizeRuntimeConfigResponseCapturePolicy(
+    runtimeDocument: Record<string, unknown>,
+  ): RuntimeConfigResponseCapturePolicyResponseDto {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        runtimeDocument,
+        'responseCapturePolicy',
+      )
+    ) {
+      return this.defaultRuntimeConfigResponseCapturePolicy();
+    }
+
+    const policy = runtimeDocument.responseCapturePolicy;
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    const candidate = policy as Record<string, unknown>;
+    const enabled = candidate.enabled === true;
+    const mode = enabled ? candidate.mode ?? 'raw_full' : 'disabled';
+    const normalized: RuntimeConfigResponseCapturePolicyResponseDto = {
+      enabled,
+      mode: mode as RuntimeConfigResponseCapturePolicyResponseDto['mode'],
+      maxChars:
+        typeof candidate.maxChars === 'number'
+          ? candidate.maxChars
+          : DEFAULT_RESPONSE_CAPTURE_MAX_CHARS,
+    };
+
+    if (!this.isExecutableResponseCapturePolicy(normalized)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    return normalized;
+  }
+
+  private defaultRuntimeConfigResponseCapturePolicy(): RuntimeConfigResponseCapturePolicyResponseDto {
+    return {
+      enabled: false,
+      mode: 'disabled',
+      maxChars: DEFAULT_RESPONSE_CAPTURE_MAX_CHARS,
+    };
   }
 
   private toInputJsonObject(value: object): Prisma.InputJsonObject {

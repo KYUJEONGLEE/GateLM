@@ -182,6 +182,66 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.PromptCapture = runtimeconfig.PromptCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasPromptCapture = true
+			gatewayCtx.Runtime.ResponseCapture = runtimeconfig.ResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasResponseCapture = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Send a reply to user@example.invalid.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	capture, ok := logWriter.logs[0].Metadata["promptCapture"].(invocationlog.PromptCaptureFields)
+	if !ok {
+		t.Fatalf("expected prompt capture metadata, got %+v", logWriter.logs[0].Metadata["promptCapture"])
+	}
+	if !capture.Enabled ||
+		capture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
+		capture.CapturedPrompt != "Send a reply to [EMAIL_1]." ||
+		strings.Contains(capture.CapturedPrompt, "user@example.invalid") {
+		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+	responseCapture, ok := logWriter.logs[0].Metadata["responseCapture"].(invocationlog.ResponseCaptureFields)
+	if !ok {
+		t.Fatalf("expected response capture metadata, got %+v", logWriter.logs[0].Metadata["responseCapture"])
+	}
+	if !responseCapture.Enabled ||
+		responseCapture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
+		responseCapture.CapturedResponse != "Mock response" {
+		t.Fatalf("unexpected response capture metadata: %+v", responseCapture)
+	}
+}
+
 func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
@@ -1588,7 +1648,7 @@ func TestChatCompletionsHandlerKeepsEntityScopeAcrossRequestMessages(t *testing.
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
-	expectedPreview := "Primary contact is [EMAIL_1]. Email [EMAIL_2], then [EMAIL_1]."
+	expectedPreview := "Primary contact is [EMAIL_1].\nEmail [EMAIL_2], then [EMAIL_1]."
 	if logWriter.logs[0].RedactedPromptPreview != expectedPreview {
 		t.Fatalf("expected request-scoped log preview %q, got %q", expectedPreview, logWriter.logs[0].RedactedPromptPreview)
 	}
@@ -1650,7 +1710,7 @@ func TestChatCompletionsHandlerKeepsFirstPersonRoleAcrossRequestMessages(t *test
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
-	expectedPreview := "customer_name=[CUSTOMER_1] patient_name=[CUSTOMER_1]"
+	expectedPreview := "customer_name=[CUSTOMER_1]\npatient_name=[CUSTOMER_1]"
 	if logWriter.logs[0].RedactedPromptPreview != expectedPreview {
 		t.Fatalf("expected role-aware log preview %q, got %q", expectedPreview, logWriter.logs[0].RedactedPromptPreview)
 	}
@@ -3675,6 +3735,16 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 				"exactCacheEnabled": true,
 				"semanticCacheMode": "evidence_only",
 				"cachePolicyHash":   "hash_cache_policy_live_handler",
+			},
+			"promptCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.PromptCaptureModeDisabled,
+				"maxChars": runtimeconfig.PromptCaptureDefaultMaxChars,
+			},
+			"responseCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.ResponseCaptureModeDisabled,
+				"maxChars": runtimeconfig.ResponseCaptureDefaultMaxChars,
 			},
 			"rateLimit": map[string]any{
 				"enabled":       false,

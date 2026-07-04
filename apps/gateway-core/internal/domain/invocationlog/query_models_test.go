@@ -82,6 +82,14 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 		MaskingAction:         "none",
 		MaskingDetectedTypes:  []string{},
 		RedactedPromptPreview: "Write a short refund response.",
+		PromptCapture: PromptCaptureFields{
+			Enabled:        true,
+			Mode:           runtimeconfig.PromptCaptureModeLogSafeFull,
+			Visibility:     PromptCaptureVisibilityAdminRequestDetail,
+			CapturedPrompt: "Write a short refund response.",
+			Truncated:      false,
+			MaxChars:       8000,
+		},
 		RuntimeSnapshot: runtimeconfig.RuntimeSnapshotProvenance{
 			RuntimeSnapshotID:      "runtime_snapshot_query_test",
 			RuntimeSnapshotVersion: 2,
@@ -110,6 +118,9 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	}
 	if detail.Masking.RedactedPromptPreview != "Write a short refund response." {
 		t.Fatalf("unexpected redacted prompt preview: %+v", detail.Masking)
+	}
+	if !detail.PromptCapture.Enabled || detail.PromptCapture.CapturedPrompt != "Write a short refund response." {
+		t.Fatalf("unexpected prompt capture detail: %+v", detail.PromptCapture)
 	}
 	if detail.Latency.ProviderLatencyMs == nil || *detail.Latency.ProviderLatencyMs != 86 {
 		t.Fatalf("unexpected provider latency: %+v", detail.Latency)
@@ -189,6 +200,26 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	}
 	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
+	}
+}
+
+func TestBuildDashboardOverviewCacheHitRateUsesOnlyExactCacheEligibleRequests(t *testing.T) {
+	createdAt := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
+	logs := []LlmInvocationLog{
+		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact, CreatedAt: createdAt},
+		{Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact, CreatedAt: createdAt.Add(time.Second)},
+		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(2 * time.Second)},
+		{Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(3 * time.Second)},
+		{Status: StatusFailed, CacheStatus: CacheStatusError, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(4 * time.Second)},
+	}
+
+	overview := BuildDashboardOverview(logs)
+
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 2 {
+		t.Fatalf("expected exact-only cache counts, got %+v", overview)
+	}
+	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.5) {
+		t.Fatalf("expected exact-only cache hit rate 0.5, got %+v", overview.CacheHitRate)
 	}
 }
 

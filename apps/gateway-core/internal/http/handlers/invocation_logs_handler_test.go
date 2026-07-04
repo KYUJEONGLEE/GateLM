@@ -277,6 +277,22 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				MaskingDetectedCount:  1,
 				RedactedPromptPreview: "Send a reply to [EMAIL_1].",
 			},
+			PromptCapture: invocationlog.PromptCaptureFields{
+				Enabled:        true,
+				Mode:           runtimeconfig.PromptCaptureModeLogSafeFull,
+				Visibility:     invocationlog.PromptCaptureVisibilityAdminRequestDetail,
+				CapturedPrompt: "Send a reply to [EMAIL_REDACTED].",
+				Truncated:      false,
+				MaxChars:       8000,
+			},
+			ResponseCapture: invocationlog.ResponseCaptureFields{
+				Enabled:          true,
+				Mode:             runtimeconfig.ResponseCaptureModeRawFull,
+				Visibility:       invocationlog.ResponseCaptureVisibilityAdminRequestDetail,
+				CapturedResponse: "Mock response",
+				Truncated:        false,
+				MaxChars:         8000,
+			},
 			RuntimeSnapshot: &runtimeconfig.RuntimeSnapshotProvenance{
 				RuntimeSnapshotID:      "runtime_snapshot_detail_test",
 				RuntimeSnapshotVersion: 2,
@@ -324,6 +340,18 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	}
 	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_1]." {
 		t.Fatalf("expected redacted prompt preview, got %+v", response.Data.Masking)
+	}
+	if !response.Data.PromptCapture.Enabled ||
+		response.Data.PromptCapture.CapturedPrompt == nil ||
+		*response.Data.PromptCapture.CapturedPrompt != "Send a reply to [EMAIL_REDACTED]." ||
+		response.Data.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail {
+		t.Fatalf("unexpected prompt capture response: %+v", response.Data.PromptCapture)
+	}
+	if !response.Data.ResponseCapture.Enabled ||
+		response.Data.ResponseCapture.CapturedResponse == nil ||
+		*response.Data.ResponseCapture.CapturedResponse != "Mock response" ||
+		response.Data.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail {
+		t.Fatalf("unexpected response capture response: %+v", response.Data.ResponseCapture)
 	}
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)

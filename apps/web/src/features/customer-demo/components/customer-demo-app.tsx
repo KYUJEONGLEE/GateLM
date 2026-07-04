@@ -153,6 +153,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
   const requestInFlight = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const hasScenarios = model.scenarios.length > 0;
   const text = customerDemoText[locale];
@@ -320,26 +321,29 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     } finally {
       requestInFlight.current = false;
       setIsLoading(false);
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      });
     }
   }, [client, inputValue, model, text.error]);
 
   return (
     <main className="customer-demo-shell customer-chat-shell" data-sidebar-open={isSidebarOpen}>
+      <button
+        aria-expanded={isSidebarOpen}
+        aria-label={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
+        className="customer-chat-sidebar-toggle"
+        onClick={toggleSidebar}
+        title={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
+        type="button"
+      >
+        {isSidebarOpen ? (
+          <PanelLeftClose aria-hidden="true" size={18} strokeWidth={2.2} />
+        ) : (
+          <PanelLeftOpen aria-hidden="true" size={18} strokeWidth={2.2} />
+        )}
+      </button>
       <aside className="customer-chat-sidebar" aria-label="Application navigation">
-        <button
-          aria-expanded={isSidebarOpen}
-          aria-label={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
-          className="customer-chat-sidebar-toggle"
-          onClick={toggleSidebar}
-          title={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
-          type="button"
-        >
-          {isSidebarOpen ? (
-            <PanelLeftClose aria-hidden="true" size={18} strokeWidth={2.2} />
-          ) : (
-            <PanelLeftOpen aria-hidden="true" size={18} strokeWidth={2.2} />
-          )}
-        </button>
         <section className="customer-chat-sidebar-history" aria-label={text.sidebar.current}>
           <span>{text.sidebar.application}</span>
           <div className="customer-chat-sidebar-card">
@@ -457,6 +461,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 disabled={isLoading || !hasScenarios}
                 onChange={(event) => setInputValue(event.target.value)}
                 placeholder={text.inputPlaceholder}
+                ref={inputRef}
                 type="text"
                 value={inputValue}
               />

@@ -572,6 +572,11 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     },
     configVersion,
     effectiveAt: new Date().toISOString(),
+    promptCapturePolicy: {
+      enabled: values.promptCaptureEnabled,
+      maxChars: values.promptCaptureMaxChars,
+      mode: values.promptCaptureEnabled ? "log_safe_full" : "disabled"
+    },
     rateLimit: {
       enabled: values.rateLimitEnabled,
       limit: values.rateLimitLimit
@@ -587,7 +592,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     },
     safetyPolicy: {
       detectors: values.detectors.map((detector) => ({
-        action: detector.action,
+        action: isMandatorySafetyDetector(detector.type) ? "block" : detector.action,
         enabled: isMandatorySafetyDetector(detector.type) ? true : detector.enabled,
         placeholder: detector.placeholder,
         type: detector.type

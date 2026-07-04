@@ -78,7 +78,7 @@ func TestRuleBasedCategoryClassifierUsesPolicyPriority(t *testing.T) {
 	policy.CategoryPriority = []string{CategorySupportRefund, CategoryTranslation}
 
 	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
-	actual := classifier.Classify("환불 정책을 영어로 번역해줘")
+	actual := classifier.Classify("refund policy to english")
 
 	if actual != CategorySupportRefund {
 		t.Fatalf("expected policy priority to choose support_refund, got %s", actual)
@@ -155,6 +155,48 @@ func TestCategoryScanPrefixKeepsUTF8Boundary(t *testing.T) {
 	}
 	if !utf8.ValidString(prefix) {
 		t.Fatalf("expected UTF-8 safe prefix, got %q", prefix)
+	}
+}
+
+func TestRuleBasedCategoryClassifierWeightsLeadingIntentOverLaterContext(t *testing.T) {
+	classifier := NewRuleBasedCategoryClassifier()
+
+	tests := []struct {
+		name     string
+		prompt   string
+		expected string
+	}{
+		{
+			name:     "summarization beats later technical context",
+			prompt:   "Summarize the release notes into three bullets. Background mentions Go handler code, JSON fields, and refund policy only as context.",
+			expected: CategorySummarization,
+		},
+		{
+			name:     "reasoning beats later implementation context",
+			prompt:   "Compare the rollout options and recommend the safest order. Background mentions TypeScript code and translation copy only as context.",
+			expected: CategoryReasoning,
+		},
+		{
+			name:     "extraction beats later translation context",
+			prompt:   "Extract the invoice amount and status as JSON. Background mentions English copy and refund wording only as context.",
+			expected: CategoryExtractionJSON,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if actual := classifier.Classify(tt.prompt); actual != tt.expected {
+				t.Fatalf("expected %s, got %s", tt.expected, actual)
+			}
+		})
+	}
+}
+
+func TestCategoryPrimaryIntentUsesEarliestSeparator(t *testing.T) {
+	prompt := normalizeCategoryText("Compare the rollout options? Summarize the release notes. Background mentions code.")
+
+	if actual := categoryPrimaryIntentText(prompt); actual != "compare the rollout options" {
+		t.Fatalf("expected earliest separator to end primary intent, got %q", actual)
 	}
 }
 

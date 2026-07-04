@@ -64,7 +64,7 @@ func TestP0EngineRedactsConservativeLabeledNameOrganizationAndAddress(t *testing
 	engine := NewP0Engine()
 
 	result, err := engine.Apply(context.Background(), ApplyRequest{
-		Prompt: "customer_name=Alex Kim, organization=Acme Corp, address=100 Example Street",
+		Prompt: "name=Alex Kim, organization=Acme Corp, address=100 Example Street",
 	})
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
@@ -73,7 +73,7 @@ func TestP0EngineRedactsConservativeLabeledNameOrganizationAndAddress(t *testing
 	if result.Action != ActionRedacted {
 		t.Fatalf("expected redacted action, got %s", result.Action)
 	}
-	for _, placeholder := range []string{"[CUSTOMER_1]", "[ORGANIZATION_1]", "[ADDRESS_1]"} {
+	for _, placeholder := range []string{"[PERSON_1]", "[ORGANIZATION_1]", "[ADDRESS_1]"} {
 		if !strings.Contains(result.RedactedPrompt, placeholder) {
 			t.Fatalf("expected redacted prompt to contain %s, got %q", placeholder, result.RedactedPrompt)
 		}

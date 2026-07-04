@@ -403,7 +403,6 @@ def default_detectors() -> list[PromptDetector]:
         RegexDetector(
             "person_name",
             re.compile(
-                r"(?!)"
                 r"\b(?:name|customer[_ -]?name|contact[_ -]?name|manager|이름|성명|고객명|담당자)\b"
                 r"\s*[:=]\s*['\"]?"
                 r"(?P<value>[가-힣]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})",

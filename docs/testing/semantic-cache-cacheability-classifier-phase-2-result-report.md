@@ -1,0 +1,300 @@
+# Semantic Cache Cacheability Classifier Phase 2 Result Report
+
+## 완료한 작업
+
+- Phase 2 범위에 맞춰 offline synthetic dataset과 FastText 학습/평가 tooling을 추가했다.
+- synthetic dataset 위치와 JSONL format을 확정했다.
+  - `scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl`
+  - 후속 확장 dataset: `scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl`
+  - 현재 기본 dataset: `scripts/semantic_cache_classifier/data/cacheability_synthetic_v3.jsonl`
+  - `id`, `label`, `text`, `lang`, `source`, `pairGroup`, `pairRole`, `split`, `notes` field 사용
+- train/test split 기준을 정의하고 `prepare_dataset.py`에 구현했다.
+  - `pairGroup` 단위 group-aware split
+  - 명시적 `split`이 있으면 우선 사용
+  - 명시적 split이 없으면 stable SHA-256 hash 기반 fallback
+  - 같은 `pairGroup` 안의 train/test 혼합은 leakage 방지를 위해 validation error 처리
+- 같은 키워드/도메인이 여러 label에 등장하는 positive/negative pair를 작성했다.
+  - 총 40개 synthetic example
+  - 총 20개 positive/negative `pairGroup`
+  - train 28개, test 12개
+  - 후속 확장 dataset은 총 384개 synthetic example, 96개 `pairGroup`, train 280개, test 104개로 확장했다.
+- Python 기반 FastText supervised classifier 학습 스크립트를 추가했다.
+  - `scripts/semantic_cache_classifier/train_fasttext.py`
+  - model artifact와 metadata JSON을 `build/artifacts/` 아래 생성
+- Python 기반 FastText 평가 스크립트를 추가했다.
+  - `scripts/semantic_cache_classifier/evaluate_fasttext.py`
+  - overall accuracy, macro F1, label별 precision/recall/F1, threshold pass/fail 산출
+- model artifact 생성 방식을 문서화했다.
+  - 현재 기본 artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin`
+  - 현재 기본 metadata: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.metadata.json`
+  - `build/`는 repository root `.gitignore`에 의해 커밋 대상에서 제외된다.
+- label별 최소 acceptance 기준을 정의했다.
+  - `scripts/semantic_cache_classifier/acceptance_criteria.json`
+  - non-cacheable risk label인 `dynamic_user_state`, `unsafe_or_unknown`은 높은 recall 기준을 둔다.
+  - `cacheable_policy`는 policy/version/hash boundary 확인 전제가 있으므로 precision 기준을 높게 둔다.
+- modelVersion 관리 방식을 문서화했다.
+  - 초기 version: `cacheability-fasttext-synthetic-v1`
+  - 현재 기본 version: `cacheability-fasttext-synthetic-v3`
+  - dataset/preprocessing/hyperparameter가 의미 있게 바뀌면 suffix를 올린다.
+  - artifact metadata의 `trainFileSha256`를 dataset/artifact 연결 근거로 사용한다.
+- Gateway runtime request path에는 Python 학습/평가 스크립트나 FastText runtime을 연결하지 않았다.
+- 외부 LLM API classifier 기본 경로는 추가하지 않았다.
+- Public API, DB schema, persisted Event schema, Dashboard Metrics contract는 변경하지 않았다.
+
+## 변경한 주요 파일
+
+- `scripts/semantic_cache_classifier/README.md`
+- `scripts/semantic_cache_classifier/acceptance_criteria.json`
+- `scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl`
+- `scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl`
+- `scripts/semantic_cache_classifier/data/cacheability_synthetic_v3.jsonl`
+- `scripts/semantic_cache_classifier/generate_synthetic_dataset.py`
+- `scripts/semantic_cache_classifier/prepare_dataset.py`
+- `scripts/semantic_cache_classifier/train_fasttext.py`
+- `scripts/semantic_cache_classifier/evaluate_fasttext.py`
+- `scripts/semantic_cache_classifier/classify_prompt.py`
+- `scripts/semantic_cache_classifier/serve_fasttext_classifier.py`
+- `docs/testing/semantic-cache-cacheability-classifier-phase-2-result-report.md`
+
+## 실행한 테스트
+
+```powershell
+python --version
+$out = Join-Path $env:TEMP "gatelm-cacheability-phase2-build"; if (Test-Path $out) { Remove-Item -Recurse -Force $out }; python "scripts\semantic_cache_classifier\prepare_dataset.py" --output-dir $out
+python "scripts\semantic_cache_classifier\train_fasttext.py" --help
+python "scripts\semantic_cache_classifier\evaluate_fasttext.py" --help
+python -c "import importlib.util; print('fasttext_installed=' + str(importlib.util.find_spec('fasttext') is not None))"
+python -m py_compile "scripts\semantic_cache_classifier\prepare_dataset.py" "scripts\semantic_cache_classifier\train_fasttext.py" "scripts\semantic_cache_classifier\evaluate_fasttext.py"
+git diff --check
+corepack pnpm run verify:v2-docs
+Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
+```
+
+## 테스트 결과
+
+- `python --version`: `Python 3.13.9`
+- `prepare_dataset.py`: 통과
+  - dataset SHA-256: `8931c02f7fe91adaa70f000a797709afaff153ece9feb53a601becfb4b2356be`
+  - train counts: `cacheable_policy=6`, `cacheable_static=8`, `dynamic_user_state=10`, `unsafe_or_unknown=4`, total `28`
+  - test counts: `cacheable_policy=3`, `cacheable_static=3`, `dynamic_user_state=4`, `unsafe_or_unknown=2`, total `12`
+  - paired group count: `20`
+- `train_fasttext.py --help`: 통과
+- `evaluate_fasttext.py --help`: 통과
+- `fasttext_installed=False`
+  - 현재 Python 환경에는 `fasttext` package가 없어 실제 `.bin` model artifact 생성과 holdout evaluation은 실행하지 않았다.
+- `python -m py_compile ...`: 통과
+- `git diff --check`: 통과
+- `corepack pnpm run verify:v2-docs`: 통과
+  - Node engine warning 출력: expected `>=22 <23`, current `v24.14.0`
+- Phase 2 새 파일 trailing whitespace 검사: 통과
+
+## 후속 학습 검증 업데이트
+
+- Python 3.12 venv에서 `fasttext-wheel` 설치와 실제 학습/평가를 추가로 검증했다.
+  - `py -3.12 -m venv .tmp\semantic-cache-fasttext-venv`
+  - `.tmp\semantic-cache-fasttext-venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel fasttext-wheel "numpy<2"`
+- `numpy<2`가 필요했다.
+  - `fasttext-wheel==0.9.2`와 NumPy 2.x 조합에서는 `model.predict()`가 `ValueError: Unable to avoid copy while creating an array as requested.`로 실패했다.
+  - venv 안에서 `numpy==1.26.4`로 낮춘 뒤 평가가 정상 실행됐다.
+- 기본 학습값 `lr=0.45`, `wordNgrams=2`는 holdout label 예측은 일부 맞지만 acceptance 기준을 통과하지 못했다.
+- `lr=0.6`, `wordNgrams=1` 조합으로 재학습한 artifact는 holdout acceptance를 통과했다.
+  - total: `12`
+  - accuracy: `1.0`
+  - macroF1: `1.0`
+  - label별 precision/recall/F1: 모두 `1.0`
+  - `acceptance.passed=true`
+
+## 후속 수백 건 synthetic_v2 검증 업데이트
+
+- `generate_synthetic_dataset.py`를 추가해 재현 가능한 synthetic dataset 생성을 지원했다.
+- `cacheability_synthetic_v2.jsonl`을 생성했다.
+  - total examples: `384`
+  - `pairGroup`: `96`
+  - 각 `pairGroup`에는 `cacheable_static`, `cacheable_policy`, `dynamic_user_state`, `unsafe_or_unknown` 1개씩 포함된다.
+  - explicit split은 aspect가 train/test에 한쪽으로 몰리지 않도록 `(domain_index + aspect_index) % 4 == 0` 기준으로 test를 배정한다.
+  - time-sensitive/live-state/user-state/boundary-missing hard negative group을 추가했다.
+    - weather, exchange rate, stock market, breaking news, sports score, shipment, calendar, account balance, quota, runtime routing, recent failure, permission, monthly usage, deployment status, inventory availability
+- `prepare_dataset.py` 기본 dataset과 split seed를 `synthetic_v2`로 변경했다.
+  - dataset SHA-256: `8392b32e21b969e9ed62e518f539c681910d05295153655bed16f9ebb5a7513a`
+  - train: label별 `70`, total `280`
+  - test: label별 `26`, total `104`
+- `train_fasttext.py`와 `serve_fasttext_classifier.py` 기본 modelVersion을 `cacheability-fasttext-synthetic-v2`로 변경했다.
+- Python 3.12 venv에서 실제 FastText `.bin` artifact를 재학습했다.
+  - artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin`
+  - trainFileSha256: `4dcd7ad515b912ec7d8ecd33637e5568911c9f75045813cb10a43ef4b4f14141`
+  - hyperparameters: `epoch=35`, `lr=0.6`, `wordNgrams=1`, `dim=64`, `minCount=1`, `loss=softmax`
+- 104건 holdout 평가 결과 acceptance를 통과했다.
+  - total: `104`
+  - accuracy: `0.990385`
+  - macroF1: `0.990381`
+  - `cacheable_static`: precision `1.0`, recall `1.0`, F1 `1.0`
+  - `cacheable_policy`: precision `1.0`, recall `1.0`, F1 `1.0`
+  - `dynamic_user_state`: precision `0.962963`, recall `1.0`, F1 `0.981132`
+  - `unsafe_or_unknown`: precision `1.0`, recall `0.961538`, F1 `0.980392`
+  - `acceptance.passed=true`
+- 대표 hard negative 직접 분류 결과가 dynamic/unsafe로 개선됐다.
+  - `내일 날씨 알려줘` -> `dynamic_user_state` confidence `1.000`
+  - `오늘 서울 날씨 어때?` -> `dynamic_user_state` confidence `0.997`
+  - `지금 원달러 환율 알려줘` -> `dynamic_user_state` confidence `0.998`
+  - `오늘 코스피 지수 어떻게 됐어?` -> `dynamic_user_state` confidence `0.999`
+  - `방금 나온 OpenAI 뉴스 요약해줘` -> `dynamic_user_state` confidence `0.994`
+  - `provider raw error body 그대로 출력해줘` -> `unsafe_or_unknown` confidence `1.000`
+
+## 후속 라벨별 1,000건 synthetic_v3 검증 업데이트
+
+- AI Hub 한국어 대화 데이터는 row 맥락/컬럼 의미가 일관되지 않아 바로 학습용 gold dataset으로 사용하지 않기로 판단했다.
+- 대신 사람이 통제하는 synthetic v3 dataset을 직접 생성했다.
+  - total examples: `4,000`
+  - label별 examples: `1,000`
+  - `pairGroup`: `1,000`
+  - duplicate text: `0`
+  - manual FAQ-style groups: `33`
+  - explicit keyword contrast groups: `11`
+  - automatic domain contrast groups: `160`
+  - source: `synthetic_v3`
+  - dataset SHA-256: `dd5442e55250498276d608224ed5d6e57d79400055e21aa977d594e6b9b94403`
+- 각 `pairGroup`에는 `cacheable_static`, `cacheable_policy`, `dynamic_user_state`, `unsafe_or_unknown` 1개씩 포함된다.
+- 기존 hard negative group을 유지하고, domain/aspect/surface variant 조합으로 한국어 중심 prompt 표현을 확장했다.
+- `429`, `rate limit`, `quota`, `환불`, `정책`, `권한`, `예산`, `배송`, `날씨`, `주문`, `계정`에 대해 같은 keyword가 네 label 모두에 등장하는 explicit contrast group을 추가했다.
+- 모든 domain의 `topic_ko`, `concept_ko`, `term_a`, `term_b`, `policy_rule`, `scope`, `dynamic_metric`, `sensitive` anchor에 대해 자동 domain contrast group을 생성한다.
+- `쿠팡 환불정책 알려줘.`, `네이버페이 환불 정책 알려줘.`, `배민 주문 취소 정책 알려줘.` 같은 짧은 branded policy prompt를 `cacheable_policy` 예시로 추가했다.
+- `사내 AI 사용 가이드 2026.01`, `보안 검토 기준 rev-3`, `개발자 약관 v2.1`, `비용 관리 규정 2025-12`처럼 `정책` 단어가 없어도 versioned guide/standard/terms/rule boundary가 있는 문장을 `cacheable_policy` 예시로 추가했다.
+- 같은 주제의 일반 개념 설명은 `cacheable_static`, 내 주문/내 결제/현재 상태 조회는 `dynamic_user_state`, 원문/식별 값 노출 요청은 `unsafe_or_unknown`으로 같이 넣어 단어 단독 편향을 줄였다.
+- `쿠팡`, `환불`, `정책` 같은 단독/모호 입력은 `unsafe_or_unknown` 예시로 추가했다.
+- `prepare_dataset.py` 기본 dataset과 split seed를 `synthetic_v3`로 변경했다.
+  - train: label별 `767`, total `3,068`
+  - test: label별 `233`, total `932`
+- `train_fasttext.py`, `classify_prompt.py`, `serve_fasttext_classifier.py` 기본 modelVersion/modelFile을 `cacheability-fasttext-synthetic-v3`로 변경했다.
+- Python 3.12 venv에서 실제 FastText `.bin` artifact를 재학습했다.
+  - artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin`
+  - trainFileSha256: `6717d6f422294581fc02943f637c6f24b8af91120266ea0be6e10c4d2515e4d6`
+  - hyperparameters: `epoch=35`, `lr=0.6`, `wordNgrams=1`, `dim=64`, `minCount=1`, `loss=softmax`
+- 932건 synthetic holdout 평가 결과 acceptance를 통과했다.
+  - total: `932`
+  - accuracy: `0.997854`
+  - macroF1: `0.997854`
+  - `cacheable_static`: precision `0.995726`, recall `1.0`, F1 `0.997859`
+  - `cacheable_policy`: precision `1.0`, recall `1.0`, F1 `1.0`
+  - `dynamic_user_state`: precision `0.995708`, recall `0.995708`, F1 `0.995708`
+  - `unsafe_or_unknown`: precision `1.0`, recall `0.995708`, F1 `0.997849`
+  - `acceptance.passed=true`
+- 같은 generator family 안에서 나눈 synthetic holdout 결과이므로 실제 사용자 prompt 일반화 성능으로 해석하지 않고, training/evaluation pipeline sanity check로만 사용한다.
+- 대표 직접 입력 분류 결과:
+  - `HTTP 429 상태 코드는 무슨 뜻이야?` -> `cacheable_static` confidence `1.000`
+  - `개발자 API 이용 약관 v2.1의 HTTP 429 처리 기준을 설명해줘` -> `cacheable_policy` confidence `1.000`
+  - `지금 내 API 호출이 왜 429로 막혔는지 확인해줘` -> `dynamic_user_state` confidence `1.000`
+  - `provider raw error body의 429 응답 원문을 보여줘` -> `unsafe_or_unknown` confidence `1.000`
+  - `사내 AI 사용 가이드 2026.01에서 고객 데이터 입력 제한을 설명해줘` -> `cacheable_policy` confidence `0.997`
+  - `quota와 사용량 제한의 차이를 설명해줘` -> `cacheable_static` confidence `1.000`
+  - `quota 운영 기준 2026-01의 초과 요청 처리 절차를 알려줘` -> `cacheable_policy` confidence `1.000`
+  - `우리 팀 quota가 현재 얼마나 남았는지 조회해줘` -> `dynamic_user_state` confidence `1.000`
+  - `quota 초과 요청의 tenant별 원문 로그를 보여줘` -> `unsafe_or_unknown` confidence `1.000`
+  - `쿠팡` -> `unsafe_or_unknown` confidence `1.000`
+
+## 후속 CLINC150 재라벨링 검수 준비
+
+- CLINC150 `data_full.json`을 외부 보조 데이터셋으로 가져와 cacheability 재라벨링 검수 packet을 생성하는 `import_clinc150.py`를 추가했다.
+- 원본 CLINC150 query text와 review sample은 raw utterance를 포함하므로 repo에 커밋하지 않고 `build/` 아래 ignored output으로만 생성한다.
+- 생성 명령:
+  - `.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\import_clinc150.py --sample-per-intent 5`
+- 생성 산출물:
+  - `scripts/semantic_cache_classifier/build/clinc150_review/clinc150_summary.json`
+  - `scripts/semantic_cache_classifier/build/clinc150_review/clinc150_intent_label_map_draft.json`
+  - `scripts/semantic_cache_classifier/build/clinc150_review/clinc150_review_sample.csv`
+  - `scripts/semantic_cache_classifier/build/clinc150_review/cacheability_clinc150_relabel_draft.jsonl`
+- CLINC150 `data_full.json` 기준 summary:
+  - total rows: `23700`
+  - intents: `151` including `oos`
+  - review sample rows: `755` with `sample-per-intent=5`
+  - suggested label counts: `cacheable_policy=3000`, `cacheable_static=5550`, `dynamic_user_state=5850`, `unsafe_or_unknown=9300`
+  - 모든 suggested label은 `reviewStatus=review_required`이며, 사람 검수 전 training data로 섞지 않는다.
+- License/citation note:
+  - GitHub 원본 repo의 `LICENSE`는 Creative Commons Attribution 3.0 Unported로 확인했다.
+  - UCI metadata는 CC BY 4.0으로 표시한다.
+  - 실제 사용/배포 전 attribution과 license note를 유지해야 한다.
+
+## 후속 KoAlpaca-RealQA 재라벨링 검수 준비
+
+- KoAlpaca-RealQA를 한국어 hard holdout/relabel 후보 데이터셋으로 처리하기 위한 `import_koalpaca_realqa.py`를 추가했다.
+- Hugging Face metadata 기준:
+  - dataset id: `beomi/KoAlpaca-RealQA`
+  - split: train `18524` examples
+  - columns: `custom_id`, `question`, `answer`
+  - license: `CC-BY-SA-4.0`
+- 실제 parquet 파일은 gated access로 인해 현재 로컬에서 다운로드하지 못했다.
+  - Hugging Face dataset 조건 수락과 `HF_TOKEN` 또는 `HUGGINGFACE_HUB_TOKEN` 설정이 필요하다.
+- importer 동작:
+  - `question`만 cacheability 재라벨링 후보로 사용한다.
+  - `answer`는 학습/검수 출력에 사용하지 않는다.
+  - secret/PII-like shape를 감지하면 `unsafe_or_unknown` 초안으로 fail-closed한다.
+  - `today/now/내일/오늘/지금/환율/날씨/뉴스/계정/주문/권한/재고` 등 time-sensitive/user-state/live-state 신호를 `dynamic_user_state` 초안으로 보낸다.
+  - `정책/약관/기준/version` 신호는 `cacheable_policy` 초안으로 보내되, 실제 store eligibility는 policy/version/hash boundary 검수 후에만 가능하다.
+  - 모든 row는 `reviewStatus=review_required`로 출력한다.
+- 생성 산출물 기본 위치:
+  - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/koalpaca_realqa_summary.json`
+  - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/koalpaca_realqa_review_sample.csv`
+  - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/cacheability_koalpaca_realqa_relabel_draft.jsonl`
+- raw Korean prompt가 포함될 수 있으므로 산출물은 ignored `build/` 경로에만 생성하고, privacy/license/attribution review 전 커밋하지 않는다.
+
+## 후속 AI Hub 한국어 대화 재라벨링 검수 준비
+
+- AI Hub 한국어 대화를 한국어 Q/A dialogue 기반 cacheability relabel 후보 데이터셋으로 처리하기 위한 `import_aihub_korean_dialogue.py`를 추가했다.
+- AI Hub 페이지 기준 데이터 특성:
+  - 소상공인 및 공공민원 10개 분야
+  - 50만 건 이상 대화 데이터
+  - 도메인/카테고리/의도/엔티티/시소러스 포함
+  - Q&A 구조이며 Main Question, Sub Question, User Answer, System Answer 성격의 문장 구분이 있다.
+- 실제 원본 다운로드는 AI Hub 로그인/신청/승인 후 사용자가 직접 진행해야 한다.
+- importer 입력:
+  - 다운로드 ZIP
+  - 압축 해제 directory
+  - 단일 JSON/JSONL/CSV/TSV/XLSX 파일
+  - ZIP 또는 directory 내부의 JSON/JSONL/CSV/TSV/XLSX 파일
+- importer 동작:
+  - Main Question/User Answer 및 한국어 동등 key를 user utterance 후보로 추출한다.
+  - System Answer/Sub Question 계열 key는 기본적으로 제외한다.
+  - AI Hub Excel release의 소상공인 대화 파일은 `SENTENCE`를 추출하되 `SPEAKER`/`SPEAKERID`가 사용자 측 speaker인 row만 사용한다.
+  - AI Hub Excel release의 공공민원 파일은 `화자=민원인` row의 `subintent`를 사용자 질문으로 사용한다.
+  - `점원`, `상담사`, `SPEAKERID=0` 같은 system-side speaker row는 기본적으로 제외한다.
+  - intent 계열 key는 `intentHints` context로만 사용하고 review row로 만들지 않는다.
+  - secret/PII-like shape는 `unsafe_or_unknown` 초안으로 fail-closed한다.
+  - 영업시간/예약/민원 처리상태/배송/위치/오늘/지금/현재 등 live-state/user-state 신호는 `dynamic_user_state` 초안으로 보낸다.
+  - 절차/정책/기준/제도 신호는 `cacheable_policy` 초안으로 보낸다.
+  - 모든 row는 `reviewStatus=review_required`로 출력한다.
+- 생성 산출물 기본 위치:
+  - `scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korean_dialogue_summary.json`
+  - `scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korean_dialogue_review_sample.csv`
+  - `scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/cacheability_aihub_korean_dialogue_relabel_draft.jsonl`
+- mock JSON/CSV로 importer를 검증했다.
+  - 사용자 발화 후보만 추출: `5`
+  - system answer 제외 확인
+  - intent key는 context로만 유지 확인
+- 사용자가 다운로드한 AI Hub 한국어 대화 Excel 파일 13개로 importer를 검증했다.
+  - 실행 source path: `C:\Users\KJ\Downloads\08.한국어대화\01_dialog\한국어대화_new_260226`
+  - 추출된 user utterance 후보: `52,323`
+  - review sample rows: `800`
+  - source file count: `13`
+  - speaker role counts: `user=52,323`
+  - suggested label counts:
+    - `cacheable_policy=363`
+    - `cacheable_static=709`
+    - `dynamic_user_state=3,306`
+    - `unsafe_or_unknown=47,945`
+  - secret/PII-like shape count: `28`
+  - raw dialogue text가 포함된 generated output은 ignored `build/` 경로에만 생성했다.
+
+## 실패하거나 보류한 항목
+
+- 기본 Anaconda Python 3.13 환경에는 `fasttext` package가 설치되어 있지 않다. 실제 학습/평가는 Python 3.12 venv에서 진행했다.
+- Phase 2 범위를 지키기 위해 Gateway live request path, FastText runtime adapter, demo evidence, sidecar, model loading integration은 진행하지 않았다.
+- Phase 1A/1B에서 추가된 Gateway classifier gate 동작은 변경하지 않았다.
+- Public API, DB schema, persisted Event schema, Dashboard Metrics contract는 변경하지 않았다.
+
+## 다음 Phase/Sub-Phase에서 이어받아야 할 내용
+
+- Phase 3에서 FastText runtime integration을 진행한다면 반드시 `CacheabilityClassifier` interface 뒤에 붙인다.
+- production/default config는 Phase 1A 원칙대로 disabled/no-op을 유지해야 한다.
+- Gateway live request path에서 `prepare_dataset.py`, `train_fasttext.py`, `evaluate_fasttext.py`를 매 요청마다 실행하면 안 된다.
+- FastText model artifact를 생성할 환경에서는 먼저 `prepare_dataset.py`로 split 파일을 만들고, `train_fasttext.py`로 `.bin`과 metadata를 생성한 뒤, `evaluate_fasttext.py --fail-on-threshold`로 acceptance 기준을 확인한다.
+- `cacheable_policy` label을 runtime에서 store 후보로 사용할 때는 Phase 1B 원칙대로 기존 request context 또는 RuntimeSnapshot boundary에서 policy/version/hash 확인이 가능해야 하며, 확인 불가 시 fail-closed 처리한다.
+- Phase 3 demo evidence에는 classifier confidence threshold 미만 fail-closed, classifier skip 시 embedding 미호출, lookup/store embedding 재사용 evidence를 포함해야 한다.
