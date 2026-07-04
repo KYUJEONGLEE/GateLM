@@ -587,8 +587,8 @@ export function ProviderConnectionManagement({
                 <tr>
                   <th>{text.provider}</th>
                   <th>{text.status}</th>
-                  <th>{text.credential}</th>
                   <th>{text.updated}</th>
+                  <th>{text.providerId}</th>
                   <th />
                 </tr>
               </thead>
@@ -612,18 +612,18 @@ export function ProviderConnectionManagement({
                       </Badge>
                     </td>
                     <td>
-                      <span className="project-muted">
-                        {nullableText(provider.credentialPreview?.prefix, "none")}
-                      </span>
-                      <small className="project-muted">
-                        last4: {nullableText(provider.credentialPreview?.last4, "none")}
-                      </small>
-                    </td>
-                    <td>
                       <span className="project-muted">{formatDateTime(provider.updatedAt)}</span>
                       <small className="project-muted">
                         {text.created}: {formatDateTime(provider.createdAt)}
                       </small>
+                    </td>
+                    <td>
+                      <code className="project-code provider-id-mask" tabIndex={0}>
+                        <span aria-hidden="true" className="provider-id-mask-value">
+                          *****
+                        </span>
+                        <span className="provider-id-actual">{provider.id}</span>
+                      </code>
                     </td>
                     <td>
                       <div className="project-row-actions">

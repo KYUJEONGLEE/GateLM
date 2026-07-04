@@ -1899,6 +1899,44 @@ select {
   overflow-wrap: anywhere;
 }
 
+.provider-id-mask {
+  position: relative;
+  display: inline-grid;
+  min-width: 92px;
+  cursor: default;
+}
+
+.provider-id-mask:focus-visible {
+  outline: 2px solid rgba(72, 128, 255, 0.2);
+  outline-offset: 3px;
+}
+
+.provider-id-actual {
+  position: absolute;
+  inset: 0 auto auto 0;
+  max-width: min(360px, 42vw);
+  padding: 2px 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.provider-id-mask:hover .provider-id-mask-value,
+.provider-id-mask:focus .provider-id-mask-value,
+.provider-id-mask:focus-visible .provider-id-mask-value {
+  opacity: 0;
+}
+
+.provider-id-mask:hover .provider-id-actual,
+.provider-id-mask:focus .provider-id-actual,
+.provider-id-mask:focus-visible .provider-id-actual {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .project-row-actions {
   display: flex;
   justify-content: flex-end;
@@ -2142,7 +2180,7 @@ select {
   column-gap: 40px;
   row-gap: 16px;
   align-items: start;
-  width: min(100%, 1120px);
+  width: 100%;
   padding: 28px 0;
   background: transparent;
   border: 0;
@@ -2231,7 +2269,7 @@ select {
   column-gap: 40px;
   row-gap: 16px;
   align-items: start;
-  width: min(100%, 1120px);
+  width: 100%;
   padding: 28px 0;
   border-top: 1px solid var(--border);
 }
@@ -2273,7 +2311,7 @@ select {
 }
 
 .management-line-content > .application-budget-summary {
-  width: min(100%, 1120px);
+  width: 100%;
   padding: 16px 0;
   background: transparent;
   border: 0;
@@ -2286,7 +2324,7 @@ select {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  width: min(100%, 1120px);
+  width: 100%;
   padding: 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
