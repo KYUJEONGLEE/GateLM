@@ -32,10 +32,12 @@ from app.schemas.safety import (
 FAST_RULE_DETECTOR_TYPES = frozenset(
     {
         "account_id",
+        "account_number",
         "api_key",
         "authorization_header",
         "bank_account",
         "cloud_access_key",
+        "confidential_business_context",
         "credit_card",
         "customer_id",
         "database_url",
@@ -46,14 +48,18 @@ FAST_RULE_DETECTOR_TYPES = frozenset(
         "github_token",
         "ip_address",
         "jwt",
+        "organization_name",
         "passport_number",
         "password_assignment",
         "phone_number",
         "postal_address",
+        "private_date",
         "private_key",
         "private_url",
         "provider_api_key",
         "resident_registration_number",
+        "secret",
+        "sensitive_health_context",
         "session_cookie",
         "slack_token",
         "webhook_url",
@@ -93,9 +99,89 @@ ROLE_CONTEXT_PATTERN = re.compile(
 )
 ML_CANDIDATE_PATTERNS = (
     ML_CONTEXT_PATTERN,
-    TITLE_CASE_PERSON_CANDIDATE_PATTERN,
-    KOREAN_PERSON_CANDIDATE_PATTERN,
     ROLE_CONTEXT_PATTERN,
+)
+NON_REAL_CONTEXT_CHARS = 80
+NON_REAL_ALLOW_DETECTOR_TYPES = frozenset(
+    {
+        "account_id",
+        "account_number",
+        "api_key",
+        "authorization_header",
+        "bank_account",
+        "cloud_access_key",
+        "confidential_business_context",
+        "credit_card",
+        "customer_id",
+        "database_url",
+        "date_of_birth",
+        "driver_license",
+        "email",
+        "employee_id",
+        "github_token",
+        "ip_address",
+        "jwt",
+        "organization_name",
+        "passport_number",
+        "password_assignment",
+        "person_name",
+        "phone_number",
+        "postal_address",
+        "private_date",
+        "private_key",
+        "private_url",
+        "provider_api_key",
+        "resident_registration_number",
+        "secret",
+        "sensitive_health_context",
+        "session_cookie",
+        "slack_token",
+        "webhook_url",
+    }
+)
+NON_REAL_DATA_CONTEXT_PATTERN = re.compile(
+    r"(?<![@.])\b(?:example|sample|dummy|mock|fake|placeholder|fixture|template|"
+    r"format(?:\s+only|\s+example)?|docs?|documentation|catalog|training|"
+    r"synthetic|non[-\s]?real|unit\s+test)\b(?!\.[A-Za-z])|"
+    r"(?:\uc608\uc2dc|\uc0d8\ud50c\s*(?:\uac12|\ub370\uc774\ud130|\ubb38\uc11c|\uce74\ud0c8\ub85c\uadf8|\uc608\uc2dc)|\ub354\ubbf8|\uac00\uc9dc|"
+    r"\ud50c\ub808\uc774\uc2a4\ud640\ub354|\ubb38\uc11c|\ubb38\uc11c\ud654|"
+    r"\ud15c\ud50c\ub9bf|\ud615\uc2dd|\ud3ec\ub9f7|\uad50\uc721\uc790\ub8cc|"
+    r"\ud14c\uc2a4\ud2b8\uc6a9|\uc720\ub2db\s*\ud14c\uc2a4\ud2b8)",
+    re.IGNORECASE,
+)
+REAL_DATA_CONTEXT_PATTERN = re.compile(
+    r"(?<!non-)(?<!non\s)\b(?:real|actual|production|prod|live|raw|unmasked|external|"
+    r"customer\s+data|user\s+data)\b|"
+    r"(?:\uc2e4\uc81c|\uc6b4\uc601|\ud504\ub85c\ub355\uc158|\uc6d0\ubcf8|"
+    r"\ubbf8\ub9c8\uc2a4\ud0b9|\uc678\ubd80|\ubc18\ucd9c)",
+    re.IGNORECASE,
+)
+NEGATED_REAL_DATA_CONTEXT_PATTERN = re.compile(
+    r"\b(?:no|not|without)\s+"
+    r"(?:real|actual|production|prod|live|raw|unmasked|customer\s+data|user\s+data)"
+    r"(?:\s+(?:data|value|values|exposure|record|records))?\b|"
+    r"\bnon[-\s](?:real|production|prod|live)\b|"
+    r"(?:\uc2e4\uc81c\s*\ub370\uc774\ud130\s*\uc5c6|\uc6b4\uc601\s*\ub370\uc774\ud130\s*\uc5c6|"
+    r"\uac00\uc9dc\s*\ub370\uc774\ud130|\ube44\uc2e4\s*\ub370\uc774\ud130)",
+    re.IGNORECASE,
+)
+ACTION_BLOCK_CONTEXT_PATTERN = re.compile(
+    r"\b(?:external(?:ly)?|external\s+share|share\s+externally|outside|"
+    r"third[-\s]?party|contractor|bulk\s+export|export|download|"
+    r"unauthorized|copy|incident|paste|exfiltrat(?:e|ion))\b|"
+    r"(?:\uc678\ubd80|\ubc18\ucd9c|\uc720\ucd9c|\ub300\ub7c9|\ub0b4\ubcf4\ub0b4\uae30|"
+    r"\ubb34\ub2e8|\ubd99\uc5ec\ub123|\uc0ac\uace0|\ubcf4\uc548\s*\uc0ac\uace0)",
+    re.IGNORECASE,
+)
+ACTION_REDACT_CONTEXT_PATTERN = re.compile(
+    r"\b(?:support|legal\s+review|hr\s+record|hr|analytics|"
+    r"minimi[sz]e|data\s+minimi[sz]ation|policy\s+review|ops\s+note|"
+    r"internal\s+review|review\s+note|redact|mask(?:ed|ing)?|"
+    r"pseudonymi[sz]e)\b|"
+    r"(?:\ub0b4\ubd80|\uac80\ud1a0|\uc815\ucc45|\ub9c8\uc2a4\ud0b9|"
+    r"\ube44\uc2dd\ubcc4|\ucd5c\uc18c\ud654|\ubc95\ubb34|\uc778\uc0ac|"
+    r"\uc0c1\ub2f4|\uc9c0\uc6d0)",
+    re.IGNORECASE,
 )
 
 
@@ -198,6 +284,18 @@ DEFAULT_PRIVACY_FILTER_DETECTORS = (
         action="block",
         placeholder="[SECRET_REDACTED]",
     ),
+    SafetyDetector(
+        type="confidential_business_context",
+        enabled=True,
+        action="block",
+        placeholder="[CONFIDENTIAL_BUSINESS_CONTEXT_REDACTED]",
+    ),
+    SafetyDetector(
+        type="sensitive_health_context",
+        enabled=True,
+        action="block",
+        placeholder="[SENSITIVE_HEALTH_CONTEXT_REDACTED]",
+    ),
 )
 
 
@@ -210,7 +308,7 @@ class AiSafetyDetectorService:
         model_id: str = AI_SAFETY_DETECTOR_MODEL_ID,
         additional_model_ids: tuple[str, ...] = (),
         detectors: tuple[SafetyDetector, ...] = DEFAULT_PRIVACY_FILTER_DETECTORS,
-        detector_runtime: str = "transformers",
+        detector_runtime: str = "onnx",
     ) -> None:
         self.adapters = _resolve_adapters(
             adapter=adapter,
@@ -223,6 +321,17 @@ class AiSafetyDetectorService:
         self.model_id = public_model_id_for_model(self.adapter.model_name)
         self.detectors = detectors
         self.fast_rule_detectors = _default_fast_rule_detectors()
+
+    def detector_model_states(self) -> list[dict[str, str]]:
+        return [
+            {
+                "modelId": public_model_id_for_model(adapter.model_name),
+                "source": adapter.source,
+                "runtime": adapter.runtime,
+                "loadState": adapter.load_state,
+            }
+            for adapter in self.adapters
+        ]
 
     def detect(self, request: AiSafetyDetectRequest) -> AiSafetyDetectResponse:
         started = perf_counter()
@@ -241,11 +350,14 @@ class AiSafetyDetectorService:
             [*rule_signals, *ml_signals],
             prompt_text=prompt_text,
         )
-        redacted_prompt = redact_prompt(prompt_text, signals)
+        signals = _apply_non_real_data_allow_guard(prompt_text, signals)
+        signals = _apply_contextual_action_policy(prompt_text, signals)
+        enforcement_signals = _enforcement_signals(signals)
+        redacted_prompt = redact_prompt(prompt_text, enforcement_signals)
         type_counts = Counter(
             signal.detector_type for signal in signals
         )
-        outcome = _outcome_from_signals(signals)
+        outcome = _outcome_from_signals(enforcement_signals)
         latency_ms = max(0, round((perf_counter() - started) * 1000))
 
         return AiSafetyDetectResponse(
@@ -282,6 +394,94 @@ def _outcome_from_signals(signals: list[SafetySignal]) -> str:
     if signals:
         return "redacted"
     return "passed"
+
+
+def _enforcement_signals(signals: list[SafetySignal]) -> list[SafetySignal]:
+    return [signal for signal in signals if signal.action != "allow"]
+
+
+def _apply_contextual_action_policy(
+    prompt_text: str,
+    signals: list[SafetySignal],
+) -> list[SafetySignal]:
+    block_context = ACTION_BLOCK_CONTEXT_PATTERN.search(prompt_text) is not None
+    redact_context = ACTION_REDACT_CONTEXT_PATTERN.search(prompt_text) is not None
+    if not block_context and not redact_context:
+        return signals
+
+    action = "block" if block_context else "redact"
+    return [
+        signal
+        if signal.action == "allow"
+        else replace(signal, action=action)
+        for signal in signals
+    ]
+
+
+def _apply_non_real_data_allow_guard(
+    prompt_text: str,
+    signals: list[SafetySignal],
+) -> list[SafetySignal]:
+    return [
+        replace(signal, action="allow")
+        if _should_allow_non_real_data_signal(prompt_text, signal)
+        else signal
+        for signal in signals
+    ]
+
+
+def _should_allow_non_real_data_signal(prompt_text: str, signal: SafetySignal) -> bool:
+    if signal.detector_type not in NON_REAL_ALLOW_DETECTOR_TYPES:
+        return False
+    context = _signal_surrounding_context(prompt_text, signal)
+    if _has_blocking_real_data_context(context):
+        return False
+    return NON_REAL_DATA_CONTEXT_PATTERN.search(context) is not None
+
+
+def _has_blocking_real_data_context(context: str) -> bool:
+    sanitized = NEGATED_REAL_DATA_CONTEXT_PATTERN.sub(" ", context)
+    return REAL_DATA_CONTEXT_PATTERN.search(sanitized) is not None
+
+
+def _signal_surrounding_context(prompt_text: str, signal: SafetySignal) -> str:
+    excluded_start = _token_context_start(prompt_text, signal.start)
+    excluded_end = _token_context_end(prompt_text, signal.end)
+    before_start = max(0, excluded_start - NON_REAL_CONTEXT_CHARS)
+    after_end = min(len(prompt_text), excluded_end + NON_REAL_CONTEXT_CHARS)
+    before = _same_sentence_before_context(prompt_text[before_start:excluded_start])
+    after = _same_sentence_after_context(prompt_text[excluded_end:after_end])
+    return f"{before} {after}"
+
+
+def _token_context_start(prompt_text: str, start: int) -> int:
+    while start > 0 and _is_token_context_char(prompt_text[start - 1]):
+        start -= 1
+    return start
+
+
+def _token_context_end(prompt_text: str, end: int) -> int:
+    while end < len(prompt_text) and _is_token_context_char(prompt_text[end]):
+        end += 1
+    return end
+
+
+def _is_token_context_char(char: str) -> bool:
+    return char.isalnum() or char in "_-.:/?=&%#+"
+
+
+def _same_sentence_before_context(value: str) -> str:
+    boundary = max(value.rfind("."), value.rfind("!"), value.rfind("?"), value.rfind("\n"))
+    if boundary == -1:
+        return value
+    return value[boundary + 1 :]
+
+
+def _same_sentence_after_context(value: str) -> str:
+    boundaries = [index for marker in (".", "!", "?", "\n") if (index := value.find(marker)) != -1]
+    if not boundaries:
+        return value
+    return value[: min(boundaries)]
 
 
 def _default_fast_rule_detectors() -> tuple[PromptDetector, ...]:
@@ -408,7 +608,7 @@ def _ml_candidate_covered_by_rule_signal(
 ) -> bool:
     if start < signal.end and signal.start < end:
         return True
-    if signal.detector_type != "person_name" or end > signal.start:
+    if end > signal.start:
         return False
     gap = prompt_text[end : signal.start]
     return re.fullmatch(r"[\s:=\"'-]*", gap) is not None

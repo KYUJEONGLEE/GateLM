@@ -55,6 +55,13 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
 
         self.assertEqual(settings.ai_safety_detector_runtime, "onnx")
 
+    def test_settings_defaults_ai_safety_detector_runtime_to_onnx(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(DEFAULT_AI_SAFETY_DETECTOR_RUNTIME, "onnx")
+        self.assertEqual(settings.ai_safety_detector_runtime, "onnx")
+
     def test_settings_rejects_unknown_ai_safety_detector_runtime(self) -> None:
         with patch.dict(os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "bad"}, clear=True):
             settings = load_settings()
