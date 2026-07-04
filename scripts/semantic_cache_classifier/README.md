@@ -118,6 +118,20 @@ python scripts/semantic_cache_classifier/evaluate_fasttext.py `
 
 The evaluation script reads `acceptance_criteria.json` by default and reports overall accuracy, macro F1, per-label precision/recall/F1, and threshold pass/fail details.
 
+## Ad Hoc Prompt Check
+
+Use `classify_prompt.py` to inspect how the trained artifact classifies a prompt:
+
+```powershell
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\classify_prompt.py --text "비밀번호 재설정 방법을 알려줘"
+```
+
+Omit `--text` to start interactive mode:
+
+```powershell
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\classify_prompt.py
+```
+
 ## Runtime Sidecar
 
 Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The sidecar loads a trained `.bin` artifact once at process startup and serves classification over HTTP:
