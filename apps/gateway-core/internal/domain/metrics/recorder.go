@@ -14,6 +14,12 @@ type GatewayRequest struct {
 	DurationSeconds float64
 }
 
+type GatewayStageDuration struct {
+	Stage           string
+	Status          string
+	DurationSeconds float64
+}
+
 type ProviderRequest struct {
 	SelectedProvider string
 	SelectedModel    string
@@ -77,6 +83,14 @@ func (r *Registry) GatewayRequestCompleted(request GatewayRequest) {
 	}, -1)
 	r.AddCounter(GatewayRequestsTotal, labels, 1)
 	r.ObserveHistogram(GatewayRequestDurationSeconds, labels, request.DurationSeconds)
+}
+
+func (r *Registry) GatewayStageDuration(duration GatewayStageDuration) {
+	labels := []Label{
+		{Name: "stage", Value: defaultLabelValue(duration.Stage)},
+		{Name: "status", Value: normalizeStatus(duration.Status)},
+	}
+	r.ObserveHistogram(GatewayStageDurationSeconds, labels, duration.DurationSeconds)
 }
 
 func (r *Registry) ProviderRequest(request ProviderRequest) {

@@ -7,6 +7,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type RequestContext struct {
@@ -121,6 +122,8 @@ type RequestContext struct {
 	ErrorStage       string
 
 	DomainOutcomes invocationlog.DomainOutcomes
+
+	StageTimings stagetiming.Timings
 }
 
 func NewRequestContext(input NewRequestContextInput) *RequestContext {
