@@ -182,6 +182,16 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		metricsRegistry = metrics.NewRegistry()
 	}
 	semanticCacheService := routerOptions.SemanticCacheService
+	semanticCacheClassifier, classifierErr := cachekey.NewCacheabilityClassifier(cachekey.CacheabilityClassifierConfig{
+		Enabled:       cfg.SemanticCache.ClassifierEnabled,
+		Type:          cfg.SemanticCache.ClassifierType,
+		Endpoint:      cfg.SemanticCache.ClassifierEndpoint,
+		MinConfidence: cfg.SemanticCache.ClassifierMinConfidence,
+		Timeout:       cfg.SemanticCache.ClassifierTimeout,
+	})
+	if classifierErr != nil {
+		panic("failed to initialize semantic cache cacheability classifier: " + classifierErr.Error())
+	}
 	if semanticCacheService == nil && cfg.SemanticCache.Enabled && cfg.SemanticCache.Mode != cachekey.SemanticCacheModeOff {
 		intentPolicyPath := strings.TrimSpace(cfg.SemanticCache.IntentPolicyPath)
 		if intentPolicyPath != "" {
@@ -240,39 +250,42 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	})
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
-		Providers:                          providers,
-		ProviderCatalogResolver:            routerOptions.ProviderCatalogs,
-		CredentialResolver:                 routerOptions.Credentials,
-		DefaultModel:                       cfg.DefaultModel,
-		DefaultProvider:                    cfg.DefaultProvider,
-		MaxRequestBodyBytes:                cfg.MaxRequestBodyBytes,
-		APIKeyAuthenticator:                apiKeyAuthenticator,
-		AppTokenValidator:                  appTokenValidator,
-		ExpectedTenantID:                   cfg.ExpectedTenantID,
-		ExpectedProjectID:                  cfg.ExpectedProjectID,
-		ExpectedAppID:                      cfg.ExpectedApplicationID,
-		RuntimePolicyPipeline:              firstNonNilPipeline(routerOptions.RuntimePolicyPipeline, routerOptions.RateLimitPipeline),
-		RateLimitPipeline:                  routerOptions.RateLimitPipeline,
-		PreProviderPipeline:                preProviderPipeline,
-		AuthFailureLogWriter:               authFailureLogWriter,
-		TerminalLogWriter:                  terminalLogWriter,
-		MaskingEngine:                      maskdomain.NewP0Engine(),
-		MetricsRegistry:                    metricsRegistry,
-		ExactCacheStore:                    routerOptions.ExactCacheStore,
-		ExactCacheKeyBuilder:               exactCacheKeyBuilder,
-		ExactCacheTTL:                      cfg.ExactCacheTTL,
-		CachePolicyHash:                    cfg.CachePolicyHash,
-		SecurityPolicyVersionID:            cfg.SecurityPolicyHash,
-		SemanticCacheService:               semanticCacheService,
-		SemanticCacheEnabled:               cfg.SemanticCache.Enabled,
-		SemanticCacheMode:                  cfg.SemanticCache.Mode,
-		SemanticCacheAllowCategories:       cfg.SemanticCache.AllowCategories,
-		SemanticCacheDenyCategories:        cfg.SemanticCache.DenyCategories,
-		SemanticCacheAllowedTenantIDs:      cfg.SemanticCache.AllowedTenantIDs,
-		SemanticCacheAllowedApplicationIDs: cfg.SemanticCache.AllowedApplicationIDs,
-		SemanticCacheAllowedCategories:     cfg.SemanticCache.AllowedCategories,
-		SemanticCachePolicyVersion:         cfg.SemanticCache.PolicyVersion,
-		SemanticCacheKeyVersion:            cfg.SemanticCache.KeyVersion,
+		Providers:                            providers,
+		ProviderCatalogResolver:              routerOptions.ProviderCatalogs,
+		CredentialResolver:                   routerOptions.Credentials,
+		DefaultModel:                         cfg.DefaultModel,
+		DefaultProvider:                      cfg.DefaultProvider,
+		MaxRequestBodyBytes:                  cfg.MaxRequestBodyBytes,
+		APIKeyAuthenticator:                  apiKeyAuthenticator,
+		AppTokenValidator:                    appTokenValidator,
+		ExpectedTenantID:                     cfg.ExpectedTenantID,
+		ExpectedProjectID:                    cfg.ExpectedProjectID,
+		ExpectedAppID:                        cfg.ExpectedApplicationID,
+		RuntimePolicyPipeline:                firstNonNilPipeline(routerOptions.RuntimePolicyPipeline, routerOptions.RateLimitPipeline),
+		RateLimitPipeline:                    routerOptions.RateLimitPipeline,
+		PreProviderPipeline:                  preProviderPipeline,
+		AuthFailureLogWriter:                 authFailureLogWriter,
+		TerminalLogWriter:                    terminalLogWriter,
+		MaskingEngine:                        maskdomain.NewP0Engine(),
+		MetricsRegistry:                      metricsRegistry,
+		ExactCacheStore:                      routerOptions.ExactCacheStore,
+		ExactCacheKeyBuilder:                 exactCacheKeyBuilder,
+		ExactCacheTTL:                        cfg.ExactCacheTTL,
+		CachePolicyHash:                      cfg.CachePolicyHash,
+		SecurityPolicyVersionID:              cfg.SecurityPolicyHash,
+		SemanticCacheService:                 semanticCacheService,
+		SemanticCacheEnabled:                 cfg.SemanticCache.Enabled,
+		SemanticCacheMode:                    cfg.SemanticCache.Mode,
+		SemanticCacheAllowCategories:         cfg.SemanticCache.AllowCategories,
+		SemanticCacheDenyCategories:          cfg.SemanticCache.DenyCategories,
+		SemanticCacheAllowedTenantIDs:        cfg.SemanticCache.AllowedTenantIDs,
+		SemanticCacheAllowedApplicationIDs:   cfg.SemanticCache.AllowedApplicationIDs,
+		SemanticCacheAllowedCategories:       cfg.SemanticCache.AllowedCategories,
+		SemanticCachePolicyVersion:           cfg.SemanticCache.PolicyVersion,
+		SemanticCacheKeyVersion:              cfg.SemanticCache.KeyVersion,
+		SemanticCacheClassifier:              semanticCacheClassifier,
+		SemanticCacheClassifierMinConfidence: cfg.SemanticCache.ClassifierMinConfidence,
+		SemanticCacheClassifierTimeout:       cfg.SemanticCache.ClassifierTimeout,
 	}))
 
 	return mux

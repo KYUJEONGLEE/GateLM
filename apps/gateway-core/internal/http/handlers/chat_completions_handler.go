@@ -64,40 +64,47 @@ type SemanticCacheService interface {
 	Upsert(ctx context.Context, request cachekey.SemanticCacheStoreRequest) (cachekey.SemanticCacheDecision, error)
 }
 
+type CacheabilityClassifier interface {
+	Classify(ctx context.Context, request cachekey.CacheabilityClassificationRequest) (cachekey.CacheabilityClassifierResult, error)
+}
+
 type ChatCompletionsHandler struct {
-	Providers                          *provider.Registry
-	ProviderCatalogResolver            providercatalog.Resolver
-	CredentialResolver                 credentials.Resolver
-	DefaultModel                       string
-	DefaultProvider                    string
-	MaxRequestBodyBytes                int64
-	APIKeyAuthenticator                APIKeyAuthenticator
-	AppTokenValidator                  AppTokenValidator
-	ExpectedTenantID                   string
-	ExpectedProjectID                  string
-	ExpectedAppID                      string
-	RuntimePolicyPipeline              GatewayPipeline
-	RateLimitPipeline                  GatewayPipeline
-	PreProviderPipeline                GatewayPipeline
-	AuthFailureLogWriter               invocationlog.AuthFailureLogWriter
-	TerminalLogWriter                  invocationlog.TerminalLogWriter
-	MaskingEngine                      MaskingEngine
-	MetricsRegistry                    *metrics.Registry
-	ExactCacheStore                    ports.CacheStore
-	ExactCacheKeyBuilder               ExactCacheKeyBuilder
-	ExactCacheTTL                      time.Duration
-	CachePolicyHash                    string
-	SecurityPolicyVersionID            string
-	SemanticCacheService               SemanticCacheService
-	SemanticCacheEnabled               bool
-	SemanticCacheMode                  string
-	SemanticCacheAllowCategories       []string
-	SemanticCacheDenyCategories        []string
-	SemanticCacheAllowedTenantIDs      []string
-	SemanticCacheAllowedApplicationIDs []string
-	SemanticCacheAllowedCategories     []string
-	SemanticCachePolicyVersion         string
-	SemanticCacheKeyVersion            string
+	Providers                            *provider.Registry
+	ProviderCatalogResolver              providercatalog.Resolver
+	CredentialResolver                   credentials.Resolver
+	DefaultModel                         string
+	DefaultProvider                      string
+	MaxRequestBodyBytes                  int64
+	APIKeyAuthenticator                  APIKeyAuthenticator
+	AppTokenValidator                    AppTokenValidator
+	ExpectedTenantID                     string
+	ExpectedProjectID                    string
+	ExpectedAppID                        string
+	RuntimePolicyPipeline                GatewayPipeline
+	RateLimitPipeline                    GatewayPipeline
+	PreProviderPipeline                  GatewayPipeline
+	AuthFailureLogWriter                 invocationlog.AuthFailureLogWriter
+	TerminalLogWriter                    invocationlog.TerminalLogWriter
+	MaskingEngine                        MaskingEngine
+	MetricsRegistry                      *metrics.Registry
+	ExactCacheStore                      ports.CacheStore
+	ExactCacheKeyBuilder                 ExactCacheKeyBuilder
+	ExactCacheTTL                        time.Duration
+	CachePolicyHash                      string
+	SecurityPolicyVersionID              string
+	SemanticCacheService                 SemanticCacheService
+	SemanticCacheEnabled                 bool
+	SemanticCacheMode                    string
+	SemanticCacheAllowCategories         []string
+	SemanticCacheDenyCategories          []string
+	SemanticCacheAllowedTenantIDs        []string
+	SemanticCacheAllowedApplicationIDs   []string
+	SemanticCacheAllowedCategories       []string
+	SemanticCachePolicyVersion           string
+	SemanticCacheKeyVersion              string
+	SemanticCacheClassifier              CacheabilityClassifier
+	SemanticCacheClassifierMinConfidence float64
+	SemanticCacheClassifierTimeout       time.Duration
 }
 
 func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -1574,9 +1581,14 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 	}
 	normalizedText := embeddingInput.Text
 
+	if !h.semanticCacheabilityGateAllowsLookup(ctx, reqCtx, boundary, normalizedText) {
+		return false, nil
+	}
+
 	result, decision, err := h.SemanticCacheService.Search(ctx, cachekey.SemanticCacheLookupRequest{
-		Boundary:       boundary,
-		NormalizedText: normalizedText,
+		Boundary:               boundary,
+		NormalizedText:         normalizedText,
+		CacheabilityGatePassed: true,
 	})
 	h.applySemanticCacheDecision(reqCtx, decision)
 	h.applySemanticCacheSearchMetadata(reqCtx, result)
@@ -1607,7 +1619,8 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 		reqCtx.CacheDecisionReason = cachekey.SemanticCacheReasonShadowWouldMiss
 		reqCtx.SemanticCacheStoreCandidate = true
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
-		return false, append([]float64(nil), result.QueryVector...)
+		reqCtx.SemanticCacheLookupVector = append([]float64(nil), result.QueryVector...)
+		return false, append([]float64(nil), reqCtx.SemanticCacheLookupVector...)
 	}
 	if !result.Hit || result.MatchedEntry == nil {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
@@ -1615,7 +1628,8 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 		reqCtx.CacheDecisionReason = firstNonEmpty(decision.SemanticCacheDecisionReason, cachekey.SemanticCacheReasonThresholdMiss)
 		reqCtx.SemanticCacheStoreCandidate = true
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
-		return false, append([]float64(nil), result.QueryVector...)
+		reqCtx.SemanticCacheLookupVector = append([]float64(nil), result.QueryVector...)
+		return false, append([]float64(nil), reqCtx.SemanticCacheLookupVector...)
 	}
 
 	reqCtx.CacheStatus = cachestage.CacheStatusHit
@@ -1626,6 +1640,7 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 	reqCtx.CacheDecisionReason = firstNonEmpty(decision.SemanticCacheDecisionReason, cachekey.SemanticCacheReasonHit)
 	reqCtx.SemanticCacheStoreCandidate = false
 	reqCtx.SemanticReturnedFromCache = true
+	reqCtx.SemanticCacheLookupVector = nil
 	reqCtx.RoutingReason = firstNonEmpty(reqCtx.RoutingReason, "semantic_cache_hit_provider_bypass")
 	h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
 
@@ -1680,12 +1695,18 @@ func (h *ChatCompletionsHandler) writeSemanticCache(ctx context.Context, reqCtx 
 		h.markSemanticCacheBypass(reqCtx, cachekey.SemanticCacheReasonCategoryDenied, boundary.PromptCategory)
 		return
 	}
+	if !h.semanticCacheabilityGateAllowsStore(reqCtx, boundary) {
+		return
+	}
 	embeddingInput, ok := semanticEmbeddingInput(chatReq.Messages)
 	if !ok {
 		h.markSemanticCacheBypass(reqCtx, firstNonEmpty(embeddingInput.BypassReason, cachekey.SemanticCacheReasonEmbeddingInputUnavailable), boundary.PromptCategory)
 		return
 	}
 	normalizedText := embeddingInput.Text
+	if len(embeddingVector) == 0 && len(reqCtx.SemanticCacheLookupVector) > 0 {
+		embeddingVector = append([]float64(nil), reqCtx.SemanticCacheLookupVector...)
+	}
 
 	cacheable := *providerResp
 	cacheable.GateLM = nil
@@ -2549,7 +2570,7 @@ func (h *ChatCompletionsHandler) semanticCacheBoundary(reqCtx *pipeline.RequestC
 		ProviderCatalogContentHash: firstNonEmpty(reqCtx.ProviderCatalogContentHash, reqCtx.RuntimeSnapshot.ProviderCatalogRef.ContentHash, "legacy-provider-catalog-v1"),
 		RoutingPolicyHash:          firstNonEmpty(reqCtx.RoutingPolicyHash, reqCtx.RuntimeRoutingPolicy.RoutingPolicyHash, routingdomain.DefaultPolicyHash),
 		RoutingDecisionKeyHash:     routingDecisionHash,
-		SemanticCachePolicyHash:    firstNonEmpty(h.SemanticCachePolicyVersion, "v1"),
+		SemanticCachePolicyHash:    firstNonEmpty(reqCtx.RuntimeCachePolicy.CachePolicyHash, h.CachePolicyHash, h.SemanticCachePolicyVersion, "v1"),
 		SafetyPolicyHash:           firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID, h.SecurityPolicyVersionID),
 		MaskingPolicyHash:          firstNonEmpty(reqCtx.SecurityPolicyVersionID, reqCtx.SecurityPolicyHash, h.SecurityPolicyVersionID),
 		RequestParamsHash:          requestParamsHash(chatReq),
@@ -2608,6 +2629,144 @@ func (h *ChatCompletionsHandler) semanticPromptCategory(reqCtx *pipeline.Request
 		return cachekey.SemanticCacheCategoryUnknown
 	}
 	return cachekey.CanonicalSemanticCacheCategory(reqCtx.PromptCategory)
+}
+
+func (h *ChatCompletionsHandler) semanticCacheabilityGateAllowsLookup(ctx context.Context, reqCtx *pipeline.RequestContext, boundary cachekey.SemanticCacheBoundary, normalizedText string) bool {
+	if reqCtx == nil {
+		return false
+	}
+	classifier := h.SemanticCacheClassifier
+	if classifier == nil {
+		reqCtx.SemanticCacheClassifierEvaluated = false
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierMissing, boundary.PromptCategory)
+		return false
+	}
+
+	timeout := h.semanticCacheabilityClassifierTimeout()
+	classifierCtx := ctx
+	cancel := func() {}
+	if timeout > 0 {
+		classifierCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	defer cancel()
+
+	result, err := classifier.Classify(classifierCtx, cachekey.CacheabilityClassificationRequest{
+		NormalizedText: normalizedText,
+		PromptCategory: boundary.PromptCategory,
+	})
+	if err != nil {
+		reqCtx.SemanticCacheClassifierEvaluated = true
+		reqCtx.SemanticCacheClassifierPassed = false
+		reason := cachekey.CacheabilityReasonClassifierError
+		if errors.Is(err, cachekey.ErrCacheabilityClassifierInvalidResult) {
+			reason = cachekey.CacheabilityReasonClassifierInvalid
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			reason = cachekey.CacheabilityReasonClassifierTimeout
+		}
+		h.markSemanticCacheBypass(reqCtx, reason, boundary.PromptCategory)
+		return false
+	}
+
+	result = result.Normalize()
+	h.applySemanticCacheabilityClassifierResult(reqCtx, result)
+	if err := result.Validate(); err != nil {
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierInvalid, boundary.PromptCategory)
+		return false
+	}
+	if !result.Label.CacheableCandidate() {
+		reqCtx.SemanticCacheClassifierPassed = false
+		reason := cachekey.CacheabilityReasonClassifierNotCacheable
+		if result.ReasonCode == cachekey.CacheabilityReasonClassifierDisabled {
+			reason = cachekey.CacheabilityReasonClassifierDisabled
+		}
+		h.markSemanticCacheBypass(reqCtx, reason, boundary.PromptCategory)
+		return false
+	}
+	if result.Confidence < h.semanticCacheabilityClassifierMinConfidence() {
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierLowConfidence, boundary.PromptCategory)
+		return false
+	}
+	if result.Label.Normalize() == cachekey.CacheabilityLabelCacheablePolicy && !semanticCachePolicyBoundaryVerified(reqCtx, boundary) {
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierPolicyBoundaryGap, boundary.PromptCategory)
+		return false
+	}
+
+	reqCtx.SemanticCacheClassifierPassed = true
+	return true
+}
+
+func (h *ChatCompletionsHandler) semanticCacheabilityGateAllowsStore(reqCtx *pipeline.RequestContext, boundary cachekey.SemanticCacheBoundary) bool {
+	if reqCtx == nil {
+		return false
+	}
+	result := cachekey.CacheabilityClassifierResult{
+		Label:        cachekey.CacheabilityLabel(reqCtx.SemanticCacheClassifierLabel),
+		Confidence:   reqCtx.SemanticCacheClassifierConfidence,
+		ReasonCode:   reqCtx.SemanticCacheClassifierReasonCode,
+		ModelVersion: reqCtx.SemanticCacheClassifierModelVersion,
+	}.Normalize()
+	if !reqCtx.SemanticCacheClassifierEvaluated || !reqCtx.SemanticCacheClassifierPassed {
+		h.markSemanticCacheBypass(reqCtx, firstNonEmpty(reqCtx.SemanticCacheDecisionReason, cachekey.CacheabilityReasonClassifierNotCacheable), boundary.PromptCategory)
+		return false
+	}
+	if err := result.Validate(); err != nil {
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierInvalid, boundary.PromptCategory)
+		return false
+	}
+	if !result.Passes(h.semanticCacheabilityClassifierMinConfidence()) {
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierLowConfidence, boundary.PromptCategory)
+		return false
+	}
+	if result.Label.Normalize() == cachekey.CacheabilityLabelCacheablePolicy && !semanticCachePolicyBoundaryVerified(reqCtx, boundary) {
+		reqCtx.SemanticCacheClassifierPassed = false
+		h.markSemanticCacheBypass(reqCtx, cachekey.CacheabilityReasonClassifierPolicyBoundaryGap, boundary.PromptCategory)
+		return false
+	}
+	return true
+}
+
+func (h *ChatCompletionsHandler) applySemanticCacheabilityClassifierResult(reqCtx *pipeline.RequestContext, result cachekey.CacheabilityClassifierResult) {
+	if reqCtx == nil {
+		return
+	}
+	result = result.Normalize()
+	reqCtx.SemanticCacheClassifierEvaluated = true
+	reqCtx.SemanticCacheClassifierPassed = false
+	reqCtx.SemanticCacheClassifierLabel = string(result.Label)
+	reqCtx.SemanticCacheClassifierConfidence = result.Confidence
+	reqCtx.SemanticCacheClassifierReasonCode = result.ReasonCode
+	reqCtx.SemanticCacheClassifierModelVersion = result.ModelVersion
+}
+
+func (h *ChatCompletionsHandler) semanticCacheabilityClassifierMinConfidence() float64 {
+	if h.SemanticCacheClassifierMinConfidence <= 0 || h.SemanticCacheClassifierMinConfidence > 1 {
+		return cachekey.DefaultCacheabilityClassifierMinConfidence
+	}
+	return h.SemanticCacheClassifierMinConfidence
+}
+
+func (h *ChatCompletionsHandler) semanticCacheabilityClassifierTimeout() time.Duration {
+	if h.SemanticCacheClassifierTimeout <= 0 {
+		return cachekey.DefaultCacheabilityClassifierTimeout
+	}
+	return h.SemanticCacheClassifierTimeout
+}
+
+func semanticCachePolicyBoundaryVerified(reqCtx *pipeline.RequestContext, boundary cachekey.SemanticCacheBoundary) bool {
+	if reqCtx == nil {
+		return false
+	}
+	policyHash := strings.TrimSpace(reqCtx.RuntimeCachePolicy.CachePolicyHash)
+	if policyHash == "" || !reqCtx.HasRuntimeCachePolicy {
+		return false
+	}
+	return strings.TrimSpace(boundary.SemanticCachePolicyHash) == policyHash
 }
 
 func (h *ChatCompletionsHandler) initializeSemanticCacheContext(reqCtx *pipeline.RequestContext) {

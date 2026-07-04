@@ -455,6 +455,38 @@ func TestSemanticCacheServiceWithoutIntentPolicyDoesNotCallEmbeddingProvider(t *
 	}
 }
 
+func TestSemanticCacheServiceWithIntentPolicyDoesNotLetMaterializationMissBlockEmbeddingLookup(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
+	service := NewSemanticCacheService(NewInMemorySemanticCacheStore(10), provider, SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+		HitPolicy:     testSemanticHitPolicy(t),
+	})
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:               boundary,
+		NormalizedText:         "정해진 intent rule과 매칭되지 않는 일반 질문",
+		CacheabilityGatePassed: true,
+	})
+	if err != nil {
+		t.Fatalf("materialization miss는 request 실패로 승격되면 안 됨: %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("intent materialization miss여도 embedding lookup은 수행되어야 함: calls=%d", provider.calls)
+	}
+	if len(result.QueryVector) == 0 {
+		t.Fatalf("embedding lookup 결과 vector가 남아야 함: %+v", result)
+	}
+	if result.Hit || decision.SemanticCacheHit || decision.SemanticCacheDecisionReason != SemanticCacheReasonIntentUnavailable {
+		t.Fatalf("materialization miss는 provider bypass hit로 이어지면 안 됨: result=%+v decision=%+v", result, decision)
+	}
+}
+
 func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)

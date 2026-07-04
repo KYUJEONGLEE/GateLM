@@ -1,0 +1,140 @@
+# Semantic Cache Cacheability Classifier Offline Training
+
+This directory contains Phase 2 offline tooling for the Semantic Cache cacheability classifier.
+
+The scripts in this directory are not part of the Gateway live request path. Gateway runtime must not execute `prepare_dataset.py`, `train_fasttext.py`, or `evaluate_fasttext.py` per request. Runtime integration belongs to a later phase and must stay behind the internal `CacheabilityClassifier` interface.
+
+## Dataset
+
+Canonical synthetic dataset:
+
+```text
+scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl
+```
+
+Each line is one JSON object with the following fields:
+
+| Field | Required | Meaning |
+|---|---:|---|
+| `id` | yes | Stable synthetic example id. |
+| `label` | yes | One of `cacheable_static`, `cacheable_policy`, `dynamic_user_state`, `unsafe_or_unknown`. |
+| `text` | yes | Synthetic request-like text used for FastText training. Do not use real user prompts, secrets, or personal data. |
+| `lang` | yes | Language hint, currently `ko`, `en`, or `ko-en`. |
+| `source` | yes | Dataset source/version marker. |
+| `pairGroup` | yes | Stable group for positive/negative contrast examples sharing a keyword or domain. |
+| `pairRole` | yes | `positive` for cacheable candidates, `negative` for non-cacheable contrasts. |
+| `split` | no | Optional explicit `train` or `test`. If omitted, `prepare_dataset.py` assigns a deterministic group-aware split. |
+| `notes` | no | Short sanitized rationale for maintainers. |
+
+FastText supervised files are generated from `label` and `text`:
+
+```text
+__label__cacheable_static synthetic text...
+```
+
+The dataset intentionally includes the same keywords across cacheable and non-cacheable labels. This is required so the model learns cacheability risk instead of simple keyword matching.
+
+## Split Rule
+
+`prepare_dataset.py` applies this split rule:
+
+1. If every record in a `pairGroup` has the same explicit `split`, use that split.
+2. If `split` is absent, assign the entire `pairGroup` by stable SHA-256 hash using `--seed` and `--test-ratio`.
+3. Mixed train/test records inside one `pairGroup` are rejected to avoid pair leakage.
+4. The generated manifest records per-label counts for train and test.
+
+Default generated files:
+
+```text
+scripts/semantic_cache_classifier/build/cacheability.train.txt
+scripts/semantic_cache_classifier/build/cacheability.test.txt
+scripts/semantic_cache_classifier/build/cacheability.dataset_manifest.json
+```
+
+The repository root ignores `build/`, so generated split files and model artifacts should not be committed.
+
+## Model Artifact
+
+Training command:
+
+```powershell
+python scripts/semantic_cache_classifier/prepare_dataset.py
+python scripts/semantic_cache_classifier/train_fasttext.py --model-version cacheability-fasttext-synthetic-v1
+```
+
+Default artifact outputs:
+
+```text
+scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin
+scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.metadata.json
+```
+
+The metadata file records:
+
+- `modelVersion`
+- training file hash
+- classifier labels
+- FastText hyperparameters
+- artifact filename
+- offline-only runtime boundary note
+
+## Evaluation
+
+Evaluation command:
+
+```powershell
+python scripts/semantic_cache_classifier/evaluate_fasttext.py `
+  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin `
+  --fail-on-threshold
+```
+
+The evaluation script reads `acceptance_criteria.json` by default and reports overall accuracy, macro F1, per-label precision/recall/F1, and threshold pass/fail details.
+
+## Runtime Sidecar
+
+Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The sidecar loads a trained `.bin` artifact once at process startup and serves classification over HTTP:
+
+```powershell
+python scripts/semantic_cache_classifier/serve_fasttext_classifier.py `
+  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin `
+  --model-version cacheability-fasttext-synthetic-v1 `
+  --host 127.0.0.1 `
+  --port 8765
+```
+
+Gateway env for the sidecar path:
+
+```dotenv
+SEMANTIC_CACHE_CLASSIFIER_ENABLED=true
+SEMANTIC_CACHE_CLASSIFIER_TYPE=fasttext
+SEMANTIC_CACHE_CLASSIFIER_ENDPOINT=http://127.0.0.1:8765/classify
+SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE=0.90
+SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS=30
+```
+
+This runtime path calls only the already-running sidecar. It does not invoke `prepare_dataset.py`, `train_fasttext.py`, or `evaluate_fasttext.py` per Gateway request.
+
+## Acceptance
+
+Minimum acceptance criteria are defined in:
+
+```text
+scripts/semantic_cache_classifier/acceptance_criteria.json
+```
+
+The high-risk labels `dynamic_user_state` and `unsafe_or_unknown` use stricter recall thresholds because false cacheable predictions must fail closed. `cacheable_policy` requires strong precision because policy explanations can only be reused when the Gateway boundary already includes a verified policy/version/hash from existing runtime context.
+
+## Model Version
+
+Initial model version:
+
+```text
+cacheability-fasttext-synthetic-v1
+```
+
+Versioning rules:
+
+- Increment the suffix when the committed dataset, labels, preprocessing, or training hyperparameters change materially.
+- Keep the model artifact metadata next to the `.bin` artifact.
+- Treat `datasetSha256` and `trainFileSha256` in metadata as the reproducibility link between dataset and artifact.
+- Do not introduce a public API, DB field, Event field, or Metrics label solely for model versioning in Phase 2.
