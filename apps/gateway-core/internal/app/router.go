@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 
+	aiservice "gatelm/apps/gateway-core/internal/adapters/safety/aiservice"
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
@@ -32,6 +33,7 @@ type RouterOptions struct {
 	RateLimitPipeline     handlers.GatewayPipeline
 	RuntimePolicyPipeline handlers.GatewayPipeline
 	PreProviderPipeline   handlers.GatewayPipeline
+	MaskingEngine         handlers.MaskingEngine
 	ProviderCatalogs      providercatalog.Resolver
 	Credentials           credentials.Resolver
 }
@@ -85,6 +87,12 @@ func WithMetrics(registry *metrics.Registry) RouterOption {
 func WithPreProviderPipeline(preProviderPipeline handlers.GatewayPipeline) RouterOption {
 	return func(options *RouterOptions) {
 		options.PreProviderPipeline = preProviderPipeline
+	}
+}
+
+func WithMaskingEngine(maskingEngine handlers.MaskingEngine) RouterOption {
+	return func(options *RouterOptions) {
+		options.MaskingEngine = maskingEngine
 	}
 }
 
@@ -203,6 +211,21 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		}
 	}
 
+	maskingEngine := routerOptions.MaskingEngine
+	if maskingEngine == nil {
+		maskingEngine = maskdomain.NewP0Engine()
+	}
+	if cfg.AISafetySidecar.Enabled {
+		maskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
+			Local:       maskingEngine,
+			EndpointURL: cfg.AISafetySidecar.EndpointURL,
+			Timeout:     cfg.AISafetySidecar.Timeout,
+			ModelID:     cfg.AISafetySidecar.ModelID,
+			DetectorSet: cfg.AISafetySidecar.DetectorSet,
+			Locale:      cfg.AISafetySidecar.Locale,
+		})
+	}
+
 	mux.Handle("GET /healthz", handlers.HealthHandler{ServiceName: "gateway-core"})
 	mux.Handle("GET /metrics", handlers.MetricsHandler{Registry: metricsRegistry})
 	mux.Handle("GET /readyz", handlers.ReadyHandler{
@@ -244,7 +267,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		PreProviderPipeline:          preProviderPipeline,
 		AuthFailureLogWriter:         authFailureLogWriter,
 		TerminalLogWriter:            terminalLogWriter,
-		MaskingEngine:                maskdomain.NewP0Engine(),
+		MaskingEngine:                maskingEngine,
 		MetricsRegistry:              metricsRegistry,
 		ExactCacheStore:              routerOptions.ExactCacheStore,
 		ExactCacheKeyBuilder:         exactCacheKeyBuilder,

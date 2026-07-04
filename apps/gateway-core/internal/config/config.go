@@ -65,7 +65,17 @@ type Config struct {
 	RateLimitEnabled         bool
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
+	AISafetySidecar          AISafetySidecarConfig
 	SemanticCache            SemanticCacheConfig
+}
+
+type AISafetySidecarConfig struct {
+	Enabled     bool
+	EndpointURL string
+	Timeout     time.Duration
+	ModelID     string
+	DetectorSet string
+	Locale      string
 }
 
 type SemanticCacheConfig struct {
@@ -144,7 +154,15 @@ func LoadWithError() (Config, error) {
 		RateLimitEnabled:         envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:      envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:           envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
-		SemanticCache:            semanticCache,
+		AISafetySidecar: AISafetySidecarConfig{
+			Enabled:     envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
+			EndpointURL: envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
+			Timeout:     envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 300),
+			ModelID:     envString("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter"),
+			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
+			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
+		},
+		SemanticCache: semanticCache,
 	}
 	return cfg, err
 }

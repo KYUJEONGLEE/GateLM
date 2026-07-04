@@ -308,9 +308,21 @@ schemas/safety-detection.schema.json
 schemas/safety-summary.schema.json
 schemas/detector-sidecar-response.schema.json
 schemas/eval-case.schema.json
+schemas/master-eval-case.schema.json
 ```
 
 이 schema들은 Lab draft 검증용이다. 기존 v2 schema/fixture 계약을 대체하지 않는다.
+
+`master-eval-case.schema.json` is the single master corpus row contract for
+synthetic AI Safety Lab evaluation. A master row keeps one `inputTemplate` and
+separates target-specific expectations under `expectations.gateway`,
+and `expectations.detector`. Runners must read only the expectation block they
+evaluate. This keeps Gateway enforce checks and sidecar detector checks aligned
+without forcing them to share one final outcome.
+
+The master corpus is the broad shadow evaluation dataset and currently targets
+1000 synthetic cases. Normal unit/integration tests should stay on small
+representative sidecar responses rather than the full eval corpus.
 
 ## 15. Evidence And Metrics
 

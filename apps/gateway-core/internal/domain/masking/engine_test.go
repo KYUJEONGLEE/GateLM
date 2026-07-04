@@ -73,7 +73,7 @@ func TestP0EngineRedactsConservativeLabeledNameOrganizationAndAddress(t *testing
 	if result.Action != ActionRedacted {
 		t.Fatalf("expected redacted action, got %s", result.Action)
 	}
-	for _, placeholder := range []string{"[PERSON_1]", "[ORGANIZATION_1]", "[ADDRESS_1]"} {
+	for _, placeholder := range []string{"[CUSTOMER_1]", "[ORGANIZATION_1]", "[ADDRESS_1]"} {
 		if !strings.Contains(result.RedactedPrompt, placeholder) {
 			t.Fatalf("expected redacted prompt to contain %s, got %q", placeholder, result.RedactedPrompt)
 		}
