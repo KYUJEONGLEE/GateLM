@@ -11,17 +11,25 @@ const DEFAULT_TENANT_ID = "00000000-0000-4000-8000-000000000100";
 const DEFAULT_PROJECT_ID = "00000000-0000-4000-8000-000000000200";
 const DEFAULT_API_KEY = "glm_api_test_redacted";
 const DEFAULT_APP_TOKEN = "glm_app_token_test_redacted";
-const REQUIRED_ASYNC_METRIC_FAMILIES = [
+const REQUIRED_METRIC_FAMILIES = [
+  "gatelm_gateway_requests_total",
+  "gatelm_gateway_request_duration_seconds",
+  "gatelm_gateway_inflight_requests",
+  "gatelm_provider_requests_total",
+  "gatelm_provider_request_duration_seconds",
+  "gatelm_cache_operations_total",
+  "gatelm_rate_limit_decisions_total",
+  "gatelm_rate_limit_decision_duration_seconds",
+  "gatelm_masking_actions_total",
+  "gatelm_log_writes_total",
+  "gatelm_log_write_duration_seconds",
   "gatelm_async_log_enqueue_total",
   "gatelm_async_log_enqueue_duration_seconds",
   "gatelm_async_log_queue_depth",
   "gatelm_async_log_dropped_total",
   "gatelm_async_log_persist_total",
   "gatelm_async_log_persist_duration_seconds",
-  "gatelm_log_writes_total",
-  "gatelm_log_write_duration_seconds",
 ];
-
 const PROMPT_BY_SCENARIO = {
   safe_request: "Write a short safe customer support reply for GateLM async log dashboard evidence.",
   exact_cache_seed: "Write a short safe cacheable response for GateLM async log dashboard evidence.",
@@ -324,7 +332,7 @@ async function fetchText(url) {
 }
 
 function summarizeMetrics(metricsText, trafficExpected) {
-  const families = REQUIRED_ASYNC_METRIC_FAMILIES.map((name) => {
+  const families = REQUIRED_METRIC_FAMILIES.map((name) => {
     const sampleLines = metricsText
       .split(/\r?\n/)
       .filter((line) => line.startsWith(`${name}{`) || line.startsWith(`${name}_bucket{`) || line.startsWith(`${name}_sum{`) || line.startsWith(`${name}_count{`) || line.startsWith(`${name} `));
@@ -335,16 +343,32 @@ function summarizeMetrics(metricsText, trafficExpected) {
       totalSampleValue: sampleLines.reduce((sum, line) => sum + metricLineValue(line), 0),
     };
   });
+  const gatewayRequestSamples = sumMetric(metricsText, "gatelm_gateway_requests_total");
+  const providerRequestSamples = sumMetric(metricsText, "gatelm_provider_requests_total");
   return {
     trafficExpected,
     requiredFamilies: families,
+    gatewayRequestSamples,
+    gatewayFailureSamples: sumMetricMatching(metricsText, "gatelm_gateway_requests_total", (line) => /status="(failed|blocked|rate_limited|cancelled)"/.test(line) || /http_status="5\d\d"/.test(line)),
+    gatewayStatusSamples: sumMetricByLabel(metricsText, "gatelm_gateway_requests_total", "status"),
+    gatewayHttpStatusSamples: sumMetricByLabel(metricsText, "gatelm_gateway_requests_total", "http_status"),
+    inflightRequestSamples: sumMetric(metricsText, "gatelm_gateway_inflight_requests"),
+    providerRequestSamples,
+    providerErrorSamples: sumMetricMatching(metricsText, "gatelm_provider_requests_total", (line) => /status="failed"/.test(line) || /http_status="5\d\d"/.test(line)),
+    providerStatusSamples: sumMetricByLabel(metricsText, "gatelm_provider_requests_total", "status"),
+    providerBypassEstimateSamples: Math.max(0, gatewayRequestSamples - providerRequestSamples),
+    cacheOperationSamples: sumMetric(metricsText, "gatelm_cache_operations_total"),
+    rateLimitDeniedSamples: sumMetric(metricsText, "gatelm_rate_limit_decisions_total", "rate_limit_allowed=\"false\""),
+    maskingActionSamples: sumMetric(metricsText, "gatelm_masking_actions_total"),
+    logWriteErrorSamples: sumMetricMatching(metricsText, "gatelm_log_writes_total", (line) => !/status="success"/.test(line)),
     enqueueSuccessSamples: sumMetric(metricsText, "gatelm_async_log_enqueue_total", "status=\"success\""),
+    enqueueTotalSamples: sumMetric(metricsText, "gatelm_async_log_enqueue_total"),
     persistSuccessSamples: sumMetric(metricsText, "gatelm_async_log_persist_total", "status=\"success\""),
+    persistTotalSamples: sumMetric(metricsText, "gatelm_async_log_persist_total"),
     dropSamples: sumMetric(metricsText, "gatelm_async_log_dropped_total"),
     queueDepthSamples: sumMetric(metricsText, "gatelm_async_log_queue_depth"),
   };
 }
-
 function assertEvidence({ requestResults, overview, metricsSummary, trafficExpected }) {
   const assertions = [];
 
@@ -364,6 +388,10 @@ function assertEvidence({ requestResults, overview, metricsSummary, trafficExpec
     const persistedRequests = numberValue(overview?.totals?.totalRequests);
     recordAssertion(assertions, "synthetic traffic produced at least one successful request", successCount > 0);
     recordAssertion(assertions, "dashboard counted synthetic request window", persistedRequests >= requestResults.length);
+    recordAssertion(assertions, "gateway request samples exist", metricsSummary.gatewayRequestSamples >= requestResults.length);
+    recordAssertion(assertions, "provider request samples exist", metricsSummary.providerRequestSamples > 0);
+    recordAssertion(assertions, "cache operation samples are visible", metricsSummary.cacheOperationSamples > 0);
+    recordAssertion(assertions, "masking action samples are visible", metricsSummary.maskingActionSamples > 0);
     recordAssertion(assertions, "async enqueue success samples exist", metricsSummary.enqueueSuccessSamples >= requestResults.length);
     recordAssertion(assertions, "async persist success samples exist", metricsSummary.persistSuccessSamples > 0);
   }
@@ -453,6 +481,27 @@ function sumMetric(metricsText, name, requiredFragment = "") {
     .reduce((sum, line) => sum + metricLineValue(line), 0);
 }
 
+function sumMetricMatching(metricsText, name, predicate) {
+  return metricsText
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith(`${name}{`) || line.startsWith(`${name} `))
+    .filter(predicate)
+    .reduce((sum, line) => sum + metricLineValue(line), 0);
+}
+
+function sumMetricByLabel(metricsText, name, labelName) {
+  const totals = {};
+  const labelPattern = new RegExp(`${labelName}="([^"]+)"`);
+  for (const line of metricsText.split(/\r?\n/)) {
+    if (!line.startsWith(`${name}{`) && !line.startsWith(`${name} `)) {
+      continue;
+    }
+    const match = line.match(labelPattern);
+    const value = match ? match[1] : "none";
+    totals[value] = (totals[value] ?? 0) + metricLineValue(line);
+  }
+  return totals;
+}
 function metricLineValue(line) {
   const match = line.trim().match(/\s(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)$/i);
   return match ? Number(match[1]) : 0;

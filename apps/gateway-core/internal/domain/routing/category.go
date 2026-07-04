@@ -9,6 +9,8 @@ import (
 )
 
 const maxCategoryScanBytes = 2048
+const primaryIntentScanBytes = 420
+const primaryIntentScoreMultiplier = 5
 
 //go:embed category_policy.json
 var defaultCategoryPolicyJSON []byte
@@ -85,6 +87,8 @@ func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals 
 	if isUnclassifiablePrompt(normalized, tokens) {
 		return signals
 	}
+	primaryIntent := categoryPrimaryIntentText(normalized)
+	primaryIntentTokens := categoryTokens(primaryIntent)
 	signals.HasCodeSignal = matchesCategoryRule(normalized, tokens, policy.Rules[CategoryCode])
 	signals.WantsTranslation = matchesCategoryRule(normalized, tokens, policy.Rules[CategoryTranslation])
 	signals.WantsSummarization = matchesCategoryRule(normalized, tokens, policy.Rules[CategorySummarization])
@@ -95,7 +99,13 @@ func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals 
 	bestCategory := ""
 	bestScore := 0
 	for _, category := range policy.CategoryPriority {
-		score := scoreCategoryRule(normalized, tokens, policy.Rules[canonicalCategory(category)])
+		score := scoreCategoryRuleWithPrimaryIntent(
+			normalized,
+			tokens,
+			primaryIntent,
+			primaryIntentTokens,
+			policy.Rules[canonicalCategory(category)],
+		)
 		if score.Matched && score.Score > bestScore {
 			bestCategory = category
 			bestScore = score.Score
@@ -139,6 +149,19 @@ func categoryScanPrefixWithLimit(prompt string, limit int) string {
 	return prompt[:limit]
 }
 
+func categoryPrimaryIntentText(text string) string {
+	prefix := categoryScanPrefixWithLimit(text, primaryIntentScanBytes)
+	if prefix == "" {
+		return ""
+	}
+	for _, separator := range []string{". ", "? ", "! ", "\n", "\r"} {
+		if index := strings.Index(prefix, separator); index > 0 {
+			return strings.TrimSpace(prefix[:index])
+		}
+	}
+	return strings.TrimSpace(prefix)
+}
+
 func matchesCategoryRule(text string, tokens []string, rule CategoryRule) bool {
 	return scoreCategoryRule(text, tokens, rule).Matched
 }
@@ -146,6 +169,21 @@ func matchesCategoryRule(text string, tokens []string, rule CategoryRule) bool {
 type categoryRuleScore struct {
 	Matched bool
 	Score   int
+}
+
+func scoreCategoryRuleWithPrimaryIntent(text string, tokens []string, primaryText string, primaryTokens []string, rule CategoryRule) categoryRuleScore {
+	fullScore := scoreCategoryRule(text, tokens, rule)
+	if primaryText == "" || primaryText == text {
+		return fullScore
+	}
+
+	primaryScore := scoreCategoryRule(primaryText, primaryTokens, rule)
+	if !primaryScore.Matched {
+		return fullScore
+	}
+
+	score := fullScore.Score + primaryScore.Score*primaryIntentScoreMultiplier
+	return categoryRuleScore{Matched: true, Score: score}
 }
 
 func scoreCategoryRule(text string, tokens []string, rule CategoryRule) categoryRuleScore {
