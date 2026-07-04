@@ -16,6 +16,7 @@ import type {
   ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
 import type { OneTimeAppTokenResponse } from "@/lib/control-plane/app-tokens-types";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import type { RuntimePolicyModelConfig } from "@/lib/control-plane/runtime-policy-types";
@@ -26,6 +27,7 @@ type ApplicationManagementProps = {
   modelOptions?: RuntimePolicyModelConfig[];
   policySummariesByApplicationId?: Record<string, ApplicationPolicySummary | null>;
   projectBudgetUsd?: number;
+  providerConnections?: ProviderConnectionRecord[];
   tenantId: string;
 };
 
@@ -167,11 +169,12 @@ export function ApplicationManagement({
   modelOptions = [],
   policySummariesByApplicationId = {},
   projectBudgetUsd = 100,
+  providerConnections = [],
   tenantId
 }: ApplicationManagementProps) {
   const router = useRouter();
   const text = applicationText[locale];
-  const selectableModels = getSelectableModelOptions(modelOptions);
+  const selectableModels = getSelectableModelOptions(modelOptions, providerConnections);
   const [applications, setApplications] = useState<ApplicationRecord[]>(model.applications);
   const [createValues, setCreateValues] =
     useState<ApplicationFormValues>(() => getEmptyApplicationForm(selectableModels));
@@ -659,6 +662,15 @@ export function ApplicationManagement({
                       onChange={(event) =>
                         setCreateValues((current) => ({
                           ...current,
+                          providerConnectionIds:
+                            selectableModels.find((option) => option.value === event.target.value)
+                              ?.providerConnectionId
+                              ? [
+                                  selectableModels.find(
+                                    (option) => option.value === event.target.value
+                                  )?.providerConnectionId ?? ""
+                                ].filter(Boolean)
+                              : [],
                           selectedModelKey: event.target.value
                         }))
                       }
@@ -727,15 +739,20 @@ function getApplicationUpdateValues(application: ApplicationRecord): Application
 }
 
 function getEmptyApplicationForm(
-  modelOptions: Array<{ label: string; value: string }>
+  modelOptions: Array<{ label: string; providerConnectionId: string | null; value: string }>
 ): ApplicationFormValues {
+  const selectedModel = modelOptions[0];
+
   return {
     budgetLimitMode: "FIXED",
     budgetLimitPercent: 0,
     budgetLimitUsd: 0,
     description: "",
     name: "",
-    selectedModelKey: modelOptions[0]?.value ?? ""
+    providerConnectionIds: selectedModel?.providerConnectionId
+      ? [selectedModel.providerConnectionId]
+      : [],
+    selectedModelKey: selectedModel?.value ?? ""
   };
 }
 
@@ -837,11 +854,41 @@ function formatBudgetUsd(value: number) {
   })}`;
 }
 
-function getSelectableModelOptions(models: RuntimePolicyModelConfig[]) {
+function getSelectableModelOptions(
+  models: RuntimePolicyModelConfig[],
+  providerConnections: ProviderConnectionRecord[]
+) {
+  const registryOptions = providerConnections.flatMap((providerConnection) =>
+    getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
+      label: `${model} (${providerConnection.provider})`,
+      providerConnectionId: providerConnection.id,
+      value: `${providerConnection.provider}::${model}`
+    }))
+  );
+
+  if (registryOptions.length > 0) {
+    return registryOptions;
+  }
+
   return models
     .filter((model) => model.status === "active")
     .map((model) => ({
       label: `${model.displayName || model.model} (${model.provider})`,
+      providerConnectionId: null,
       value: `${model.provider}::${model.model}`
     }));
+}
+
+function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
+  const models = providerConfig?.models;
+
+  return Array.isArray(models)
+    ? Array.from(
+        new Set(
+          models
+            .map((model) => (typeof model === "string" ? model.trim() : ""))
+            .filter(Boolean)
+        )
+      )
+    : [];
 }

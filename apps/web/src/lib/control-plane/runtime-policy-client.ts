@@ -4,10 +4,12 @@ import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-co
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl,
+  getControlPlaneTenantId,
   getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
 import {
-  listProviderConnections
+  listApplicationProviderConnections,
+  listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
 import { getRuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
@@ -116,6 +118,8 @@ export async function getRuntimePolicyModelForApplication(
   applicationId: string,
   projectId = getControlPlaneProjectId()
 ): Promise<RuntimePolicyModel> {
+  void projectId;
+
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const fallbackConfig = getFixtureRuntimeConfig();
 
@@ -124,14 +128,20 @@ export async function getRuntimePolicyModelForApplication(
     history,
     runtimeSnapshot,
     providerCatalog,
-    providerConnections
+    providerConnections,
+    tenantProviderConnections
   ] = await Promise.all([
     fetchActiveRuntimeConfig(applicationId),
     fetchRuntimeConfigHistory(applicationId),
     fetchActiveRuntimeSnapshot(applicationId),
     fetchActiveProviderCatalog(applicationId),
-    listProviderConnections(projectId)
+    listApplicationProviderConnections(applicationId),
+    listTenantProviderConnections(getControlPlaneTenantId())
   ]);
+  const providerConnectionState = toProviderConnectionState(
+    tenantProviderConnections,
+    providerConnections
+  );
   const historyDetail =
     history.ok && history.data[0]
       ? await fetchRuntimeConfigHistoryDetail(applicationId, history.data[0].configVersion)
@@ -170,6 +180,7 @@ export async function getRuntimePolicyModelForApplication(
         loadError: providerCatalog.ok ? null : providerCatalog.error,
         summary: providerCatalog.ok ? providerCatalog.data : null
       },
+      providerConnections: providerConnectionState,
       routeTenantId,
       runtimeSnapshot: {
         loadError: runtimeSnapshot.ok ? null : runtimeSnapshot.error,
@@ -204,6 +215,7 @@ export async function getRuntimePolicyModelForApplication(
         loadError: providerCatalog.ok ? null : providerCatalog.error,
         summary: providerCatalog.ok ? providerCatalog.data : null
       },
+      providerConnections: providerConnectionState,
       routeTenantId,
       runtimeSnapshot: {
         loadError: runtimeSnapshot.ok ? null : runtimeSnapshot.error,
@@ -230,6 +242,7 @@ export async function getRuntimePolicyModelForApplication(
       loadError: activeConfig.error,
       summary: null
     },
+    providerConnections: providerConnectionState,
     routeTenantId,
     runtimeSnapshot: {
       loadError: activeConfig.error,
@@ -238,6 +251,36 @@ export async function getRuntimePolicyModelForApplication(
     source: "fixture"
   };
 }
+
+function toProviderConnectionState(
+  tenantProviderConnections: ProviderListLikeResult,
+  applicationProviderConnections: ProviderListLikeResult
+): RuntimePolicyModel["providerConnections"] {
+  return {
+    available: tenantProviderConnections.ok ? tenantProviderConnections.data : [],
+    loadError: [
+      tenantProviderConnections.ok ? null : tenantProviderConnections.error,
+      applicationProviderConnections.ok ? null : applicationProviderConnections.error
+    ]
+      .filter(Boolean)
+      .join(" "),
+    selectedIds: applicationProviderConnections.ok
+      ? applicationProviderConnections.data.map((providerConnection) => providerConnection.id)
+      : []
+  };
+}
+
+type ProviderListLikeResult =
+  | {
+      data: ProviderConnectionRecord[];
+      ok: true;
+      status: number;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
 
 function mergeProviderConnectionCandidates(
   config: RuntimePolicyConfig,
@@ -400,19 +443,16 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
-  const activeConfig = targetActiveConfig.ok
-    ? targetActiveConfig
-    : await fetchActiveRuntimeConfig(getControlPlaneApplicationId());
+  const activeConfig = await fetchRuntimeConfigForModelSelection(applicationId);
 
-  if (!activeConfig.ok) {
+  if (!activeConfig) {
     return {
-      error: activeConfig.error,
+      error: "Runtime Policy model selection is not available for this application.",
       ok: false
     };
   }
 
-  const selectedModel = activeConfig.data.models.find(
+  const selectedModel = activeConfig.models.find(
     (model) => model.provider === selected.provider && model.model === selected.model
   );
 
@@ -423,7 +463,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const draftValues = getRuntimePolicyDraftValues(activeConfig.data);
+  const draftValues = getRuntimePolicyDraftValues(activeConfig);
   const nextValues: RuntimePolicyDraftValues = {
     ...draftValues,
     routingDefaultModel: selectedModel.model,
@@ -454,6 +494,33 @@ export async function publishRuntimePolicyModelSelectionForApplication(
         error: published.error,
         ok: false
       };
+}
+
+async function fetchRuntimeConfigForModelSelection(
+  applicationId: string
+): Promise<RuntimePolicyConfig | null> {
+  const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
+
+  if (targetActiveConfig.ok) {
+    return targetActiveConfig.data;
+  }
+
+  if (targetActiveConfig.status !== 404) {
+    return null;
+  }
+
+  const providerConnections = await listApplicationProviderConnections(applicationId);
+
+  if (!providerConnections.ok) {
+    return null;
+  }
+
+  return makeRuntimePolicyConfigTemplate(
+    getFixtureRuntimeConfig(),
+    getControlPlaneTenantId(),
+    applicationId,
+    providerConnections.data
+  );
 }
 
 export async function saveRuntimePolicyDraft(
@@ -566,7 +633,18 @@ function makeRuntimePolicyConfigTemplate(
     mergedConfig.models.find((model) => model.status === "active") ?? mergedConfig.models[0];
 
   if (!preferredModel) {
-    return mergedConfig;
+    return {
+      ...mergedConfig,
+      routingPolicy: {
+        ...mergedConfig.routingPolicy,
+        defaultModel: "",
+        defaultProvider: "",
+        fallbackModel: "",
+        fallbackProvider: "",
+        lowCostModel: "",
+        lowCostProvider: ""
+      }
+    };
   }
 
   return {

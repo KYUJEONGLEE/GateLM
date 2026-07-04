@@ -662,7 +662,7 @@ export class RuntimeConfigsService {
     const [apiKey, appToken, providers] = await Promise.all([
       this.getActiveApiKeyOrThrow(context.projectId, args.now),
       this.getActiveAppTokenOrThrow(context.id, args.now),
-      this.getProvidersOrThrow(context.projectId),
+      this.getApplicationProvidersOrThrow(context.id),
     ]);
     const activeProvider = this.getPrimaryActiveProvider(providers);
     const models = this.resolveModels(args.dto.models, providers);
@@ -926,12 +926,21 @@ export class RuntimeConfigsService {
       document.routingPolicy.highQualityProvider,
       document.routingPolicy.fallbackProvider,
     ].filter((providerName): providerName is string => Boolean(providerName)));
-    const currentProviders = await this.prisma.providerConnection.findMany({
-      where: {
-        projectId: context.projectId,
-        provider: { in: [...selectedProviderNames] },
-      },
-    });
+    const currentProviderConnections =
+      await this.prisma.applicationProviderConnection.findMany({
+        where: {
+          applicationId: context.id,
+          providerConnection: {
+            provider: { in: [...selectedProviderNames] },
+          },
+        },
+        include: {
+          providerConnection: true,
+        },
+      });
+    const currentProviders = currentProviderConnections.map(
+      (connection) => connection.providerConnection,
+    );
     const currentByName = new Map(
       currentProviders.map((provider) => [provider.provider, provider]),
     );
@@ -1245,17 +1254,24 @@ export class RuntimeConfigsService {
     return appToken;
   }
 
-  private async getProvidersOrThrow(
-    projectId: string,
+  private async getApplicationProvidersOrThrow(
+    applicationId: string,
   ): Promise<ProviderConnection[]> {
-    const providers = await this.prisma.providerConnection.findMany({
-      where: { projectId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+    const connections =
+      await this.prisma.applicationProviderConnection.findMany({
+        where: { applicationId },
+        include: {
+          providerConnection: true,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+    const providers = connections.map(
+      (connection) => connection.providerConnection,
+    );
 
     if (providers.length === 0) {
       throw new ConflictException(
-        'Runtime Config requires at least one provider connection.',
+        'Runtime Config requires at least one application provider connection.',
       );
     }
 

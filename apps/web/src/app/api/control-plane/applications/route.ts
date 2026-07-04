@@ -66,6 +66,15 @@ function isApplicationFormValues(value: unknown): value is ApplicationFormValues
     && isBudgetNumber(record.budgetLimitUsd, 100000000)
     && isBudgetNumber(record.budgetLimitPercent, 100)
     && (record.projectId === undefined || typeof record.projectId === "string")
+    && (
+      record.providerConnectionIds === undefined ||
+      (
+        Array.isArray(record.providerConnectionIds) &&
+        record.providerConnectionIds.every((providerConnectionId) =>
+          typeof providerConnectionId === "string"
+        )
+      )
+    )
     && (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string")
   );
 }

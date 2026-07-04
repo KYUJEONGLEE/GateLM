@@ -3,6 +3,7 @@ import "server-only";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneBaseUrl,
+  getControlPlaneTenantId,
   getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
 import type {
@@ -89,8 +90,9 @@ export async function getProviderConnectionsModel(
 ): Promise<ProviderConnectionsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
+  const controlPlaneTenantId = getControlPlaneTenantId();
   const [listResult, presetResult] = await Promise.all([
-    listProviderConnections(controlPlaneProjectId),
+    listTenantProviderConnections(controlPlaneTenantId),
     listProviderPresets()
   ]);
   const providerPresets = presetResult.ok
@@ -131,11 +133,11 @@ export async function getProviderConnectionsModel(
 export async function upsertProviderConnection(
   values: ProviderConnectionFormValues
 ): Promise<ProviderRequestResult> {
-  const projectId = getControlPlaneProjectId();
+  const tenantId = getControlPlaneTenantId();
 
   try {
     const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers`,
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers`,
       {
         body: JSON.stringify(toProviderPayload(values)),
         cache: "no-store",
@@ -157,11 +159,11 @@ export async function upsertProviderConnection(
 }
 
 export async function discoverProviderModels(provider: string): Promise<ProviderDiscoveryResult> {
-  const projectId = getControlPlaneProjectId();
+  const tenantId = getControlPlaneTenantId();
 
   try {
     const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(provider)}/discover-models`,
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(provider)}/discover-models`,
       {
         cache: "no-store",
         method: "POST"
@@ -185,8 +187,7 @@ export async function removeProviderModel({
   modelName: string;
   provider: string;
 }): Promise<ProviderRequestResult> {
-  const projectId = getControlPlaneProjectId();
-  const listResult = await listProviderConnections(projectId);
+  const listResult = await listTenantProviderConnections(getControlPlaneTenantId());
 
   if (!listResult.ok) {
     return listResult;
@@ -254,6 +255,80 @@ export async function listProviderConnections(projectId: string): Promise<Provid
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers?limit=50`,
       {
         cache: "no-store"
+      }
+    );
+
+    return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function listTenantProviderConnections(
+  tenantId: string
+): Promise<ProviderListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers?limit=50`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function listApplicationProviderConnections(
+  applicationId: string
+): Promise<ProviderListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/providers`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function setApplicationProviderConnections({
+  applicationId,
+  providerConnectionIds
+}: {
+  applicationId: string;
+  providerConnectionIds: string[];
+}): Promise<ProviderListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/providers`,
+      {
+        body: JSON.stringify({
+          providerConnectionIds
+        }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
       }
     );
 
@@ -832,7 +907,7 @@ function toProviderRecord(value: unknown): ProviderConnectionRecord | null {
   if (
     typeof record.id !== "string" ||
     typeof record.tenantId !== "string" ||
-    typeof record.projectId !== "string" ||
+    (record.projectId !== null && typeof record.projectId !== "string") ||
     typeof record.provider !== "string" ||
     typeof record.displayName !== "string" ||
     typeof record.baseUrl !== "string" ||
@@ -851,7 +926,7 @@ function toProviderRecord(value: unknown): ProviderConnectionRecord | null {
     credentialPreview: toCredentialPreview(record.credentialPreview),
     displayName: record.displayName,
     id: record.id,
-    projectId: record.projectId,
+    projectId: typeof record.projectId === "string" ? record.projectId : null,
     provider: record.provider,
     providerConfig: toRecordOrNull(record.providerConfig),
     resolver: record.resolver,

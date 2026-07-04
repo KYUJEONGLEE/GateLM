@@ -1,10 +1,12 @@
 "use client";
 
 import { Save, UploadCloud } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -56,6 +58,9 @@ const policyText: Record<
   {
     activeConfig: string;
     activeAppTokenMissing: string;
+    applicationProviders: string;
+    applicationProvidersHint: string;
+    applicationProvidersSaved: string;
     appTokenIssueFailed: string;
     appTokenIssued: string;
     budget: string;
@@ -86,6 +91,7 @@ const policyText: Record<
     mode: string;
     model: string;
     models: string;
+    noProviderModels: string;
     placeholder: string;
     policyDetails: string;
     pricing: string;
@@ -95,6 +101,7 @@ const policyText: Record<
     promptCaptureMaxChars: string;
     promptPrice: string;
     provider: string;
+    providerConnectionMissing: string;
     providerCount: string;
     providerCatalog: string;
     publish: string;
@@ -107,6 +114,8 @@ const policyText: Record<
     routingAdvanced: string;
     runtimeSnapshot: string;
     saveDraft: string;
+    saveProviders: string;
+    savingProviders: string;
     issueAppToken: string;
     issuingAppToken: string;
     shortPrompt: string;
@@ -126,6 +135,10 @@ const policyText: Record<
     activeConfig: "Active config",
     activeAppTokenMissing:
       "Runtime policy save and publish require an active App Token for this application.",
+    applicationProviders: "Application providers",
+    applicationProvidersHint:
+      "Select the providers this application can use. Routing only shows models from connected providers.",
+    applicationProvidersSaved: "Application provider connections saved.",
     appTokenIssueFailed: "App Token issue failed.",
     appTokenIssued:
       "Active App Token prepared. The token plaintext is not displayed on this policy screen.",
@@ -159,6 +172,7 @@ const policyText: Record<
     mode: "Mode",
     model: "Model",
     models: "Models",
+    noProviderModels: "No configured models",
     placeholder: "Placeholder",
     policyDetails: "Policy details",
     pricing: "Pricing rules",
@@ -168,6 +182,8 @@ const policyText: Record<
     promptCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
+    providerConnectionMissing:
+      "Connect at least one provider with configured models before saving or publishing this policy.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
     publish: "Publish active config",
@@ -180,6 +196,8 @@ const policyText: Record<
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Save draft",
+    saveProviders: "Save providers",
+    savingProviders: "Saving...",
     issueAppToken: "Issue App Token",
     issuingAppToken: "Issuing...",
     shortPrompt: "Short prompt threshold",
@@ -200,6 +218,10 @@ const policyText: Record<
     activeConfig: "Active config",
     activeAppTokenMissing:
       "Runtime policy 저장과 게시에는 이 애플리케이션의 active App Token이 필요합니다.",
+    applicationProviders: "Application providers",
+    applicationProvidersHint:
+      "이 애플리케이션이 사용할 provider를 선택합니다. Routing은 연결된 provider의 model만 표시합니다.",
+    applicationProvidersSaved: "Application provider 연결을 저장했습니다.",
     appTokenIssueFailed: "App Token 발급에 실패했습니다.",
     appTokenIssued:
       "Active App Token이 준비되었습니다. 이 정책 화면에서는 token 원문을 표시하지 않습니다.",
@@ -233,6 +255,7 @@ const policyText: Record<
     mode: "모드",
     model: "Model",
     models: "Models",
+    noProviderModels: "설정된 model 없음",
     placeholder: "Placeholder",
     policyDetails: "정책 상세",
     pricing: "Pricing rules",
@@ -242,6 +265,8 @@ const policyText: Record<
     promptCaptureMaxChars: "최대 글자 수",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
+    providerConnectionMissing:
+      "정책을 저장하거나 게시하려면 model이 설정된 provider를 하나 이상 연결해야 합니다.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
     publish: "Active config 게시",
@@ -254,6 +279,8 @@ const policyText: Record<
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Draft 저장",
+    saveProviders: "Provider 저장",
+    savingProviders: "저장 중...",
     issueAppToken: "App Token 발급",
     issuingAppToken: "발급 중...",
     shortPrompt: "Short prompt 기준",
@@ -277,6 +304,7 @@ export function RuntimePolicyEditor({
   locale,
   model
 }: RuntimePolicyEditorProps) {
+  const router = useRouter();
   const text = policyText[locale];
   const [activeAppTokenCount, setActiveAppTokenCount] = useState(
     appTokenReadiness?.activeAppTokenCount ?? 1
@@ -291,8 +319,20 @@ export function RuntimePolicyEditor({
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>("general");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isIssuingAppToken, setIsIssuingAppToken] = useState(false);
+  const [isSavingProviders, setIsSavingProviders] = useState(false);
+  const [providerSelectionIds, setProviderSelectionIds] = useState<string[]>(
+    model.providerConnections.selectedIds
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
+  useEffect(() => {
+    setDraftValues(getRuntimePolicyDraftValues(model.activeConfig));
+    setProviderSelectionIds(model.providerConnections.selectedIds);
+  }, [
+    model.activeConfig,
+    model.applicationId,
+    model.providerConnections.selectedIds
+  ]);
   const displayConfig =
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
@@ -303,6 +343,14 @@ export function RuntimePolicyEditor({
     activePolicySection === "cache" ? undefined : hiddenPolicySectionStyle;
   const hasActiveAppToken = activeAppTokenCount > 0;
   const providerOptions = model.activeConfig.providers;
+  const selectedProviderIdSet = useMemo(
+    () => new Set(providerSelectionIds),
+    [providerSelectionIds]
+  );
+  const hasProviderSelectionChanged = !haveSameStringSet(
+    providerSelectionIds,
+    model.providerConnections.selectedIds
+  );
   const modelOptionsByProvider = useMemo(
     () => groupModelsByProvider(draftValues.models),
     [draftValues.models]
@@ -322,6 +370,60 @@ export function RuntimePolicyEditor({
       model.activeConfig.providers
     ]
   );
+  const hasRoutingCandidates =
+    routingProviderOptions.length > 0 &&
+    Boolean(draftValues.routingDefaultProvider && draftValues.routingDefaultModel) &&
+    Boolean(draftValues.routingLowCostProvider && draftValues.routingLowCostModel) &&
+    Boolean(draftValues.routingFallbackProvider && draftValues.routingFallbackModel);
+
+  function toggleProviderSelection(providerConnection: ProviderConnectionRecord) {
+    const providerModels = getProviderConnectionModels(providerConnection);
+
+    if (providerModels.length === 0) {
+      return;
+    }
+
+    setProviderSelectionIds((current) =>
+      current.includes(providerConnection.id)
+        ? current.filter((providerConnectionId) => providerConnectionId !== providerConnection.id)
+        : [...current, providerConnection.id]
+    );
+  }
+
+  async function saveApplicationProviders() {
+    setIsSavingProviders(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/application-providers", {
+      body: JSON.stringify({
+        applicationId: model.applicationId,
+        providerConnectionIds: providerSelectionIds
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+
+    if (!response.ok) {
+      setSubmitState({
+        message: payload.error ?? "Application provider update failed.",
+        status: "error"
+      });
+      setIsSavingProviders(false);
+      return;
+    }
+
+    setSubmitState({
+      message: text.applicationProvidersSaved,
+      status: "success"
+    });
+    setIsSavingProviders(false);
+    router.refresh();
+  }
 
   function updateRoutingProvider(
     route: "default" | "fallback" | "lowCost",
@@ -363,6 +465,14 @@ export function RuntimePolicyEditor({
     if (!hasActiveAppToken) {
       setSubmitState({
         message: text.activeAppTokenMissing,
+        status: "error"
+      });
+      return;
+    }
+
+    if (!hasRoutingCandidates) {
+      setSubmitState({
+        message: text.providerConnectionMissing,
         status: "error"
       });
       return;
@@ -496,7 +606,7 @@ export function RuntimePolicyEditor({
             {text.details}
           </Button>
           <Button
-            disabled={isSubmitting || !hasActiveAppToken}
+            disabled={isSubmitting || !hasActiveAppToken || !hasRoutingCandidates}
             onClick={() => void submitPolicy("save-draft")}
             type="button"
             variant="outline"
@@ -505,7 +615,7 @@ export function RuntimePolicyEditor({
             {text.saveDraft}
           </Button>
           <Button
-            disabled={isSubmitting || !hasActiveAppToken}
+            disabled={isSubmitting || !hasActiveAppToken || !hasRoutingCandidates}
             onClick={() => void submitPolicy("publish")}
             type="button"
           >
@@ -543,6 +653,11 @@ export function RuntimePolicyEditor({
           </Button>
         </div>
       ) : null}
+      {!hasRoutingCandidates ? (
+        <div className="policy-alert runtime-credential-alert" data-status="error">
+          <span>{text.providerConnectionMissing}</span>
+        </div>
+      ) : null}
       {submitState.message ? (
         <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
           <AlertDescription>{submitState.message}</AlertDescription>
@@ -565,6 +680,60 @@ export function RuntimePolicyEditor({
       </div>
 
       <section className="policy-layout policy-settings-list">
+        <article
+          className="console-panel policy-editor-panel wide-panel"
+          style={generalSectionStyle}
+        >
+          <div className="panel-heading">
+            <h3>{text.applicationProviders}</h3>
+            <Button
+              disabled={!hasProviderSelectionChanged || isSavingProviders}
+              onClick={() => void saveApplicationProviders()}
+              type="button"
+              variant="outline"
+            >
+              {isSavingProviders ? text.savingProviders : text.saveProviders}
+            </Button>
+          </div>
+          <p className="project-muted">{text.applicationProvidersHint}</p>
+          {model.providerConnections.loadError ? (
+            <p className="project-muted">{model.providerConnections.loadError}</p>
+          ) : null}
+          <div className="policy-provider-list">
+            {model.providerConnections.available.length === 0 ? (
+              <p className="project-muted">{text.providerConnectionMissing}</p>
+            ) : null}
+            {model.providerConnections.available.map((providerConnection) => {
+              const providerModels = getProviderConnectionModels(providerConnection);
+              const isSelectable = providerModels.length > 0;
+
+              return (
+                <label
+                  aria-disabled={!isSelectable}
+                  className="policy-provider-option"
+                  data-disabled={!isSelectable}
+                  key={providerConnection.id}
+                >
+                  <input
+                    checked={selectedProviderIdSet.has(providerConnection.id)}
+                    disabled={!isSelectable || isSavingProviders}
+                    onChange={() => toggleProviderSelection(providerConnection)}
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{providerConnection.displayName}</strong>
+                    <small>
+                      {providerConnection.provider}
+                      {" · "}
+                      {isSelectable ? providerModels.join(", ") : text.noProviderModels}
+                    </small>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </article>
+
         <article
           className="console-panel policy-editor-panel"
           style={generalSectionStyle}
@@ -1403,4 +1572,30 @@ function getRoutingProviderOptions(
   }
 
   return Array.from(providerOptions.values());
+}
+
+function getProviderConnectionModels(providerConnection: ProviderConnectionRecord) {
+  const models = providerConnection.providerConfig?.models;
+
+  if (!Array.isArray(models)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      models
+        .map((model) => (typeof model === "string" ? model.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+}
+
+function haveSameStringSet(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const rightValues = new Set(right);
+
+  return left.every((value) => rightValues.has(value));
 }

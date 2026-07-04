@@ -7,6 +7,7 @@ import {
 } from "@/features/projects/components/project-management";
 import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
+import { getProviderConnectionsModel } from "@/lib/control-plane/provider-connections-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
 import type { RuntimePolicyConfig } from "@/lib/control-plane/runtime-policy-types";
@@ -31,6 +32,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   const applicationsModel = await getApplicationsModel(tenantId, project.id);
+  const providerConnectionsModel = await getProviderConnectionsModel(tenantId);
   const projectTeamsModel = await getProjectTeamsModel(tenantId, project.id);
   const activeApplication = applicationsModel.applications.find(
     (application) => application.status === "ACTIVE"
@@ -81,6 +83,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           ])
         )}
         projectBudgetUsd={project.totalBudgetUsd}
+        providerConnections={providerConnectionsModel.providers}
         tenantId={tenantId}
       />
       <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />

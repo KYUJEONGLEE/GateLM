@@ -1790,6 +1790,55 @@ select {
   grid-template-columns: 1fr;
 }
 
+.policy-provider-list {
+  display: grid;
+  gap: 0;
+}
+
+.policy-provider-option {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 52px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.policy-provider-option:last-child {
+  border-bottom: 0;
+}
+
+.policy-provider-option[data-disabled="true"] {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.policy-provider-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-blue);
+}
+
+.policy-provider-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.policy-provider-option strong {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.policy-provider-option small {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
 .policy-settings-list .policy-routing-pair {
   display: grid;
   grid-template-columns: 146px minmax(170px, 1fr) minmax(170px, 1fr);

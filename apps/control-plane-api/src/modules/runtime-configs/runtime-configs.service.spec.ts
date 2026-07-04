@@ -38,6 +38,7 @@ describe('RuntimeConfigsService', () => {
       gatewayApiKey: { findFirst: jest.Mock; findUnique: jest.Mock };
       appToken: { findFirst: jest.Mock; findUnique: jest.Mock };
       providerConnection: { findMany: jest.Mock };
+      applicationProviderConnection: { findMany: jest.Mock };
       runtimeConfig: {
         findFirst: jest.Mock;
         findMany: jest.Mock;
@@ -68,6 +69,9 @@ describe('RuntimeConfigsService', () => {
         findUnique: jest.fn(),
       },
       providerConnection: {
+        findMany: jest.fn(),
+      },
+      applicationProviderConnection: {
         findMany: jest.fn(),
       },
       runtimeConfig: {
@@ -1868,6 +1872,19 @@ describe('RuntimeConfigsService', () => {
         ...providerOverrides,
       },
     ]);
+    prisma.applicationProviderConnection.findMany.mockImplementation(async () => {
+      const providers = await prisma.providerConnection.findMany();
+
+      return providers.map((provider: { id: string }) => ({
+        id: `application-provider-${provider.id}`,
+        tenantId,
+        projectId,
+        applicationId,
+        providerConnectionId: provider.id,
+        providerConnection: provider,
+        createdAt: now,
+      }));
+    });
   }
 
   function runtimeConfigRecord(

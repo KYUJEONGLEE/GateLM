@@ -179,7 +179,8 @@ function toApplicationPayload(values: ApplicationFormValues) {
     budgetLimitPercent: values.budgetLimitPercent,
     budgetLimitUsd: values.budgetLimitUsd,
     description: values.description.trim() || undefined,
-    name: values.name.trim()
+    name: values.name.trim(),
+    providerConnectionIds: values.providerConnectionIds ?? []
   };
 }
 

@@ -11,7 +11,7 @@ export type ProviderConnectionRecord = {
   credentialPreview: ProviderCredentialPreview;
   displayName: string;
   id: string;
-  projectId: string;
+  projectId: string | null;
   provider: string;
   providerConfig: Record<string, unknown> | null;
   resolver: string;
