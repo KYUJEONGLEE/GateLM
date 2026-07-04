@@ -158,6 +158,29 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - UCI metadata는 CC BY 4.0으로 표시한다.
   - 실제 사용/배포 전 attribution과 license note를 유지해야 한다.
 
+## 후속 KoAlpaca-RealQA 재라벨링 검수 준비
+
+- KoAlpaca-RealQA를 한국어 hard holdout/relabel 후보 데이터셋으로 처리하기 위한 `import_koalpaca_realqa.py`를 추가했다.
+- Hugging Face metadata 기준:
+  - dataset id: `beomi/KoAlpaca-RealQA`
+  - split: train `18524` examples
+  - columns: `custom_id`, `question`, `answer`
+  - license: `CC-BY-SA-4.0`
+- 실제 parquet 파일은 gated access로 인해 현재 로컬에서 다운로드하지 못했다.
+  - Hugging Face dataset 조건 수락과 `HF_TOKEN` 또는 `HUGGINGFACE_HUB_TOKEN` 설정이 필요하다.
+- importer 동작:
+  - `question`만 cacheability 재라벨링 후보로 사용한다.
+  - `answer`는 학습/검수 출력에 사용하지 않는다.
+  - secret/PII-like shape를 감지하면 `unsafe_or_unknown` 초안으로 fail-closed한다.
+  - `today/now/내일/오늘/지금/환율/날씨/뉴스/계정/주문/권한/재고` 등 time-sensitive/user-state/live-state 신호를 `dynamic_user_state` 초안으로 보낸다.
+  - `정책/약관/기준/version` 신호는 `cacheable_policy` 초안으로 보내되, 실제 store eligibility는 policy/version/hash boundary 검수 후에만 가능하다.
+  - 모든 row는 `reviewStatus=review_required`로 출력한다.
+- 생성 산출물 기본 위치:
+  - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/koalpaca_realqa_summary.json`
+  - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/koalpaca_realqa_review_sample.csv`
+  - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/cacheability_koalpaca_realqa_relabel_draft.jsonl`
+- raw Korean prompt가 포함될 수 있으므로 산출물은 ignored `build/` 경로에만 생성하고, privacy/license/attribution review 전 커밋하지 않는다.
+
 ## 실패하거나 보류한 항목
 
 - 기본 Anaconda Python 3.13 환경에는 `fasttext` package가 설치되어 있지 않다. 실제 학습/평가는 Python 3.12 venv에서 진행했다.

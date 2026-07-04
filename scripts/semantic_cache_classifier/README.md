@@ -153,6 +153,25 @@ scripts/semantic_cache_classifier/build/clinc150_review/cacheability_clinc150_re
 
 All generated CLINC150 labels are draft suggestions with `reviewStatus=review_required`. Do not mix them into training data until the label map and sampled utterances have been manually reviewed.
 
+## KoAlpaca-RealQA Relabeling Review
+
+KoAlpaca-RealQA is a better source for Korean prompt-style cacheability review than CLINC150, but the Hugging Face dataset is gated and licensed as `CC-BY-SA-4.0`. Accept the dataset conditions first and set `HF_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, or `HF_HUB_TOKEN` before downloading.
+
+```powershell
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe -m pip install pyarrow
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\import_koalpaca_realqa.py --download --sample-per-label 200
+```
+
+Default outputs are ignored under `build/` because they include Korean real-user-style prompts:
+
+```text
+scripts/semantic_cache_classifier/build/koalpaca_realqa_review/koalpaca_realqa_summary.json
+scripts/semantic_cache_classifier/build/koalpaca_realqa_review/koalpaca_realqa_review_sample.csv
+scripts/semantic_cache_classifier/build/koalpaca_realqa_review/cacheability_koalpaca_realqa_relabel_draft.jsonl
+```
+
+All generated KoAlpaca-RealQA labels are draft suggestions with `reviewStatus=review_required`. Use the review sample as a hard holdout candidate first; do not mix it into training data until privacy, attribution, license, and label review are complete.
+
 ## Runtime Sidecar
 
 Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The sidecar loads a trained `.bin` artifact once at process startup and serves classification over HTTP:
