@@ -285,6 +285,14 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				Truncated:      false,
 				MaxChars:       8000,
 			},
+			ResponseCapture: invocationlog.ResponseCaptureFields{
+				Enabled:          true,
+				Mode:             runtimeconfig.ResponseCaptureModeRawFull,
+				Visibility:       invocationlog.ResponseCaptureVisibilityAdminRequestDetail,
+				CapturedResponse: "Mock response",
+				Truncated:        false,
+				MaxChars:         8000,
+			},
 			RuntimeSnapshot: &runtimeconfig.RuntimeSnapshotProvenance{
 				RuntimeSnapshotID:      "runtime_snapshot_detail_test",
 				RuntimeSnapshotVersion: 2,
@@ -338,6 +346,12 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 		*response.Data.PromptCapture.CapturedPrompt != "Send a reply to [EMAIL_REDACTED]." ||
 		response.Data.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail {
 		t.Fatalf("unexpected prompt capture response: %+v", response.Data.PromptCapture)
+	}
+	if !response.Data.ResponseCapture.Enabled ||
+		response.Data.ResponseCapture.CapturedResponse == nil ||
+		*response.Data.ResponseCapture.CapturedResponse != "Mock response" ||
+		response.Data.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail {
+		t.Fatalf("unexpected response capture response: %+v", response.Data.ResponseCapture)
 	}
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)

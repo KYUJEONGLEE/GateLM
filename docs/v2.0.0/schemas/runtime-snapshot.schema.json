@@ -149,6 +149,9 @@
         "promptCapture": {
           "$ref": "#/$defs/promptCapturePolicy"
         },
+        "responseCapture": {
+          "$ref": "#/$defs/responseCapturePolicy"
+        },
         "rateLimit": {
           "$ref": "#/$defs/rateLimitPolicy"
         },
@@ -167,6 +170,7 @@
         "routing",
         "cache",
         "promptCapture",
+        "responseCapture",
         "rateLimit",
         "budget",
         "fallback",
@@ -351,7 +355,7 @@
     "promptCapturePolicy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Opt-in policy for storing only the post-masking log-safe prompt in Request Detail metadata. This never authorizes raw prompt, response, SSE chunk, provider error body, credential, or secret storage.",
+      "description": "Opt-in policy for storing only the post-masking provider-bound prompt in Request Detail metadata. This never authorizes pre-masking raw prompt, SSE chunk, provider error body, credential, or secret storage.",
       "properties": {
         "enabled": {
           "type": "boolean"
@@ -361,6 +365,33 @@
           "enum": [
             "disabled",
             "log_safe_full"
+          ]
+        },
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        }
+      },
+      "required": [
+        "enabled",
+        "mode",
+        "maxChars"
+      ]
+    },
+    "responseCapturePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opt-in policy for storing the assistant response returned through the Gateway in Request Detail metadata. Disabled by default.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "raw_full"
           ]
         },
         "maxChars": {

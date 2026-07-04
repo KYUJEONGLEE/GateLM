@@ -60,6 +60,11 @@
       "mode": "disabled",
       "maxChars": 8000
     },
+    "responseCapture": {
+      "enabled": false,
+      "mode": "disabled",
+      "maxChars": 8000
+    },
     "rateLimit": {
       "enabled": true,
       "scope": "application",

@@ -27,20 +27,22 @@ type RequestContext struct {
 	EndUserID     string
 	FeatureID     string
 
-	ConfigHash              string
-	SecurityPolicyHash      string
-	RuntimeSafetyPolicy     runtimeconfig.SafetyPolicy
-	RuntimeSnapshot         runtimeconfig.RuntimeSnapshotProvenance
-	RuntimeRateLimit        ratelimit.Config
-	HasRuntimeRateLimit     bool
-	RuntimeBudgetPolicy     budget.Policy
-	HasRuntimeBudgetPolicy  bool
-	RuntimeRoutingPolicy    runtimeconfig.RoutingPolicy
-	HasRuntimeRoutingPolicy bool
-	RuntimeCachePolicy      runtimeconfig.CachePolicy
-	HasRuntimeCachePolicy   bool
-	RuntimePromptCapture    runtimeconfig.PromptCapturePolicy
-	HasRuntimePromptCapture bool
+	ConfigHash                string
+	SecurityPolicyHash        string
+	RuntimeSafetyPolicy       runtimeconfig.SafetyPolicy
+	RuntimeSnapshot           runtimeconfig.RuntimeSnapshotProvenance
+	RuntimeRateLimit          ratelimit.Config
+	HasRuntimeRateLimit       bool
+	RuntimeBudgetPolicy       budget.Policy
+	HasRuntimeBudgetPolicy    bool
+	RuntimeRoutingPolicy      runtimeconfig.RoutingPolicy
+	HasRuntimeRoutingPolicy   bool
+	RuntimeCachePolicy        runtimeconfig.CachePolicy
+	HasRuntimeCachePolicy     bool
+	RuntimePromptCapture      runtimeconfig.PromptCapturePolicy
+	HasRuntimePromptCapture   bool
+	RuntimeResponseCapture    runtimeconfig.ResponseCapturePolicy
+	HasRuntimeResponseCapture bool
 
 	RateLimitDecision *ratelimit.Decision
 	BudgetDecision    *budget.Decision
@@ -103,11 +105,12 @@ type RequestContext struct {
 	SavedCostMicroUSD int64
 	LatencyMs         int64
 
-	Status       string
-	HTTPStatus   int
-	ErrorCode    string
-	ErrorMessage string
-	ErrorStage   string
+	Status           string
+	HTTPStatus       int
+	CapturedResponse string
+	ErrorCode        string
+	ErrorMessage     string
+	ErrorStage       string
 
 	DomainOutcomes invocationlog.DomainOutcomes
 }

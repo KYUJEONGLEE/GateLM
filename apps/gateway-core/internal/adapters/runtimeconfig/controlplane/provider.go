@@ -152,13 +152,14 @@ type runtimeSnapshotBudget struct {
 }
 
 type runtimeSnapshotPolicies struct {
-	Safety        runtimeSnapshotSafetyPolicy        `json:"safety"`
-	Routing       runtimeSnapshotRoutingPolicy       `json:"routing"`
-	Cache         runtimeSnapshotCachePolicy         `json:"cache"`
-	RateLimit     runtimeSnapshotRateLimitPolicy     `json:"rateLimit"`
-	Budget        runtimeSnapshotBudgetPolicy        `json:"budget"`
-	Fallback      runtimeSnapshotFallbackPolicy      `json:"fallback"`
-	PromptCapture runtimeSnapshotPromptCapturePolicy `json:"promptCapture"`
+	Safety          runtimeSnapshotSafetyPolicy          `json:"safety"`
+	Routing         runtimeSnapshotRoutingPolicy         `json:"routing"`
+	Cache           runtimeSnapshotCachePolicy           `json:"cache"`
+	RateLimit       runtimeSnapshotRateLimitPolicy       `json:"rateLimit"`
+	Budget          runtimeSnapshotBudgetPolicy          `json:"budget"`
+	Fallback        runtimeSnapshotFallbackPolicy        `json:"fallback"`
+	PromptCapture   runtimeSnapshotPromptCapturePolicy   `json:"promptCapture"`
+	ResponseCapture runtimeSnapshotResponseCapturePolicy `json:"responseCapture"`
 }
 
 type runtimeSnapshotSafetyPolicy struct {
@@ -205,6 +206,12 @@ type runtimeSnapshotFallbackPolicy struct {
 }
 
 type runtimeSnapshotPromptCapturePolicy struct {
+	Enabled  bool   `json:"enabled"`
+	Mode     string `json:"mode"`
+	MaxChars int    `json:"maxChars"`
+}
+
+type runtimeSnapshotResponseCapturePolicy struct {
 	Enabled  bool   `json:"enabled"`
 	Mode     string `json:"mode"`
 	MaxChars int    `json:"maxChars"`
@@ -298,6 +305,11 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Enabled:  r.Policies.PromptCapture.Enabled,
 			Mode:     r.Policies.PromptCapture.Mode,
 			MaxChars: r.Policies.PromptCapture.MaxChars,
+		}),
+		ResponseCapture: runtimeconfig.NormalizeResponseCapturePolicy(runtimeconfig.ResponseCapturePolicy{
+			Enabled:  r.Policies.ResponseCapture.Enabled,
+			Mode:     r.Policies.ResponseCapture.Mode,
+			MaxChars: r.Policies.ResponseCapture.MaxChars,
 		}),
 	}, nil
 }

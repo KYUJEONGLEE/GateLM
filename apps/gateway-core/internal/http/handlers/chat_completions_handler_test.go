@@ -182,7 +182,7 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
-func TestChatCompletionsHandlerStoresLogSafePromptCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
+func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
@@ -192,6 +192,12 @@ func TestChatCompletionsHandlerStoresLogSafePromptCaptureWhenRuntimePolicyEnable
 				MaxChars: 8000,
 			}
 			gatewayCtx.Runtime.HasPromptCapture = true
+			gatewayCtx.Runtime.ResponseCapture = runtimeconfig.ResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasResponseCapture = true
 		},
 	}
 	handler := ChatCompletionsHandler{
@@ -224,6 +230,15 @@ func TestChatCompletionsHandlerStoresLogSafePromptCaptureWhenRuntimePolicyEnable
 		capture.CapturedPrompt != "Send a reply to [EMAIL_1]." ||
 		strings.Contains(capture.CapturedPrompt, "user@example.invalid") {
 		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+	responseCapture, ok := logWriter.logs[0].Metadata["responseCapture"].(invocationlog.ResponseCaptureFields)
+	if !ok {
+		t.Fatalf("expected response capture metadata, got %+v", logWriter.logs[0].Metadata["responseCapture"])
+	}
+	if !responseCapture.Enabled ||
+		responseCapture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
+		responseCapture.CapturedResponse != "Mock response" {
+		t.Fatalf("unexpected response capture metadata: %+v", responseCapture)
 	}
 }
 
@@ -3723,6 +3738,11 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 				"enabled":  false,
 				"mode":     runtimeconfig.PromptCaptureModeDisabled,
 				"maxChars": runtimeconfig.PromptCaptureDefaultMaxChars,
+			},
+			"responseCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.ResponseCaptureModeDisabled,
+				"maxChars": runtimeconfig.ResponseCaptureDefaultMaxChars,
 			},
 			"rateLimit": map[string]any{
 				"enabled":       false,

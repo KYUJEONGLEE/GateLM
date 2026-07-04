@@ -26,6 +26,8 @@ const requestDetailText: Record<
     detailTitle: string;
     emptyPreview: string;
     capturedPrompt: string;
+    capturedResponse: string;
+    responseCapture: string;
     none: string;
     noPreview: string;
     promptCapture: string;
@@ -40,6 +42,8 @@ const requestDetailText: Record<
     detailTitle: "Request detail",
     emptyPreview: "No preview stored",
     capturedPrompt: "Captured prompt",
+    capturedResponse: "Captured response",
+    responseCapture: "Response capture",
     none: "none",
     noPreview: "No preview stored",
     promptCapture: "Prompt capture",
@@ -53,6 +57,8 @@ const requestDetailText: Record<
     detailTitle: "요청 상세",
     emptyPreview: "저장된 preview 없음",
     capturedPrompt: "캡처된 프롬프트",
+    capturedResponse: "Captured response",
+    responseCapture: "Response capture",
     none: "없음",
     noPreview: "저장된 preview 없음",
     promptCapture: "프롬프트 캡처",
@@ -187,6 +193,22 @@ export function RequestLogDetailPanel({
             <div>
               <dt>{text.truncated}</dt>
               <dd>{record.promptCapture.truncated ? text.yes : text.no}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+
+      {record.responseCapture?.enabled && record.responseCapture.capturedResponse ? (
+        <section className="detail-section">
+          <h3>{text.responseCapture}</h3>
+          <dl>
+            <div>
+              <dt>{text.capturedResponse}</dt>
+              <dd className="detail-preformatted">{record.responseCapture.capturedResponse}</dd>
+            </div>
+            <div>
+              <dt>{text.truncated}</dt>
+              <dd>{record.responseCapture.truncated ? text.yes : text.no}</dd>
             </div>
           </dl>
         </section>

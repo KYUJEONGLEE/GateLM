@@ -800,6 +800,7 @@ type invocationMetadataJSON struct {
 	SemanticCacheDecisionReason string                            `json:"semanticCacheDecisionReason"`
 	EmbeddingProvider           string                            `json:"embeddingProvider"`
 	PromptCapture               *promptCaptureMetadataJSON        `json:"promptCapture"`
+	ResponseCapture             *responseCaptureMetadataJSON      `json:"responseCapture"`
 }
 
 type promptCaptureMetadataJSON struct {
@@ -809,6 +810,15 @@ type promptCaptureMetadataJSON struct {
 	CapturedPrompt string `json:"capturedPrompt"`
 	Truncated      bool   `json:"truncated"`
 	MaxChars       int    `json:"maxChars"`
+}
+
+type responseCaptureMetadataJSON struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	Visibility       string `json:"visibility"`
+	CapturedResponse string `json:"capturedResponse"`
+	Truncated        bool   `json:"truncated"`
+	MaxChars         int    `json:"maxChars"`
 }
 
 type runtimeMetadataJSON struct {
@@ -891,6 +901,16 @@ func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []by
 			CapturedPrompt: strings.TrimSpace(metadata.PromptCapture.CapturedPrompt),
 			Truncated:      metadata.PromptCapture.Truncated,
 			MaxChars:       metadata.PromptCapture.MaxChars,
+		}
+	}
+	if metadata.ResponseCapture != nil {
+		log.ResponseCapture = invocationlog.ResponseCaptureFields{
+			Enabled:          metadata.ResponseCapture.Enabled,
+			Mode:             strings.TrimSpace(metadata.ResponseCapture.Mode),
+			Visibility:       strings.TrimSpace(metadata.ResponseCapture.Visibility),
+			CapturedResponse: strings.TrimSpace(metadata.ResponseCapture.CapturedResponse),
+			Truncated:        metadata.ResponseCapture.Truncated,
+			MaxChars:         metadata.ResponseCapture.MaxChars,
 		}
 	}
 }

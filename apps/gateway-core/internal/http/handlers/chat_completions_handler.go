@@ -1897,6 +1897,10 @@ func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context
 		return
 	}
 
+	if responseText := capturedChatCompletionResponse(providerResp); responseText != "" {
+		reqCtx.CapturedResponse = responseText
+	}
+
 	if !reqCtx.Stream {
 		attachGateLMMetadata(providerResp, reqCtx)
 		setGatewayHeaders(w, reqCtx)
@@ -2357,6 +2361,24 @@ func chatChoiceContent(choice provider.ChatChoice) string {
 		return ""
 	}
 	return content
+}
+
+func capturedChatCompletionResponse(resp *provider.ChatCompletionResponse) string {
+	if resp == nil {
+		return ""
+	}
+	var builder strings.Builder
+	for _, choice := range resp.Choices {
+		content := strings.TrimSpace(chatChoiceContent(choice))
+		if content == "" {
+			continue
+		}
+		if builder.Len() > 0 {
+			builder.WriteByte('\n')
+		}
+		builder.WriteString(content)
+	}
+	return strings.TrimSpace(builder.String())
 }
 
 func splitStreamingContent(content string) []string {
@@ -3057,6 +3079,8 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		RedactedPromptForHash:       redactedPrompt,
 		PromptCapturePolicy:         promptCapturePolicyForLog(reqCtx),
 		CapturedPrompt:              redactedPrompt,
+		ResponseCapturePolicy:       responseCapturePolicyForLog(reqCtx),
+		CapturedResponse:            reqCtx.CapturedResponse,
 		StartedAt:                   startedAt,
 		CompletedAt:                 completedAt,
 	}))
@@ -3075,6 +3099,13 @@ func promptCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.Pr
 		return runtimeconfig.DefaultPromptCapturePolicy()
 	}
 	return reqCtx.RuntimePromptCapture
+}
+
+func responseCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.ResponseCapturePolicy {
+	if reqCtx == nil || !reqCtx.HasRuntimeResponseCapture {
+		return runtimeconfig.DefaultResponseCapturePolicy()
+	}
+	return reqCtx.RuntimeResponseCapture
 }
 
 func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {

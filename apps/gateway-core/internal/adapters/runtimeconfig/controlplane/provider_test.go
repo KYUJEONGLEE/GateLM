@@ -66,6 +66,11 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 		snapshot.PromptCapture.MaxChars != 1200 {
 		t.Fatalf("unexpected prompt capture policy: %+v", snapshot.PromptCapture)
 	}
+	if !snapshot.ResponseCapture.Enabled ||
+		snapshot.ResponseCapture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
+		snapshot.ResponseCapture.MaxChars != 1600 {
+		t.Fatalf("unexpected response capture policy: %+v", snapshot.ResponseCapture)
+	}
 }
 
 func TestProviderRejectsRuntimeSnapshotLookupKeyMismatch(t *testing.T) {
@@ -170,6 +175,11 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				Enabled:  true,
 				Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
 				MaxChars: 1200,
+			},
+			ResponseCapture: runtimeSnapshotResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 1600,
 			},
 			RateLimit: runtimeSnapshotRateLimitPolicy{
 				Enabled:       true,

@@ -116,6 +116,11 @@ describe('RuntimeConfigsService', () => {
         mode: 'log_safe_full',
         maxChars: 1200,
       },
+      responseCapturePolicy: {
+        enabled: true,
+        mode: 'raw_full',
+        maxChars: 1600,
+      },
     });
 
     expect(prisma.runtimeConfig.create).toHaveBeenCalledWith(
@@ -140,6 +145,11 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       mode: 'log_safe_full',
       maxChars: 1200,
+    });
+    expect(result.runtimeConfig.responseCapturePolicy).toEqual({
+      enabled: true,
+      mode: 'raw_full',
+      maxChars: 1600,
     });
     expect(result.runtimeConfig.configHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('secretHash');
@@ -823,6 +833,11 @@ describe('RuntimeConfigsService', () => {
         mode: 'log_safe_full' as const,
         maxChars: 1200,
       },
+      responseCapturePolicy: {
+        enabled: true,
+        mode: 'raw_full' as const,
+        maxChars: 1600,
+      },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
       runtimeConfigRecord(activeDocument, {
@@ -866,6 +881,11 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       mode: 'log_safe_full',
       maxChars: 1200,
+    });
+    expect(result.policies.responseCapture).toEqual({
+      enabled: true,
+      mode: 'raw_full',
+      maxChars: 1600,
     });
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
@@ -1057,6 +1077,36 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       mode: 'log_safe_full',
       maxChars: 1200,
+    });
+  });
+
+  it('defaults missing response capture mode to raw_full when capture is enabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.responseCapturePolicy = {
+      enabled: true,
+      maxChars: 1600,
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.responseCapture).toEqual({
+      enabled: true,
+      mode: 'raw_full',
+      maxChars: 1600,
     });
   });
 
@@ -1977,6 +2027,11 @@ describe('RuntimeConfigsService', () => {
           mode: 'disabled',
           maxChars: 8000,
         },
+        responseCapture: {
+          enabled: false,
+          mode: 'disabled',
+          maxChars: 8000,
+        },
         rateLimit: {
           enabled: true,
           scope: 'application',
@@ -2113,6 +2168,11 @@ describe('RuntimeConfigsService', () => {
       },
       cachePolicy: { enabled: true, type: 'exact', ttlSeconds: 3600 },
       promptCapturePolicy: {
+        enabled: false,
+        mode: 'disabled',
+        maxChars: 8000,
+      },
+      responseCapturePolicy: {
         enabled: false,
         mode: 'disabled',
         maxChars: 8000,

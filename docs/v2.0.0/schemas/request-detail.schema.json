@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gatelm.local/schemas/v2.0.0/request-detail.schema.json",
   "title": "GateLM v2.0.0 Request Detail",
-  "description": "Schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes; it does not include raw prompts, raw responses, credentials, authorization headers, or provider raw error bodies. The only prompt text exception is opt-in post-masking log-safe prompt capture for Admin Request Detail.",
+  "description": "Schema for the v2 Request Detail read model. This schema consumes Gateway-produced terminalStatus and domain outcomes. Prompt capture stores only the post-masking provider-bound prompt when enabled; response capture stores the returned assistant response only when explicitly enabled.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,6 +22,7 @@
     "usageSummary",
     "safetySummary",
     "promptCapture",
+    "responseCapture",
     "createdAt"
   ],
   "properties": {
@@ -105,6 +106,9 @@
     },
     "promptCapture": {
       "$ref": "#/$defs/promptCapture"
+    },
+    "responseCapture": {
+      "$ref": "#/$defs/responseCapture"
     },
     "createdAt": {
       "type": "string",
@@ -382,7 +386,7 @@
     "promptCapture": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Admin Request Detail only. capturedPrompt is the post-masking log-safe prompt and must never contain raw detected values, credentials, secrets, provider responses, SSE chunks, or provider raw error bodies.",
+      "description": "Admin Request Detail only. capturedPrompt is the post-masking provider-bound prompt and must never contain pre-masking raw detected values, credentials, secrets, SSE chunks, or provider raw error bodies.",
       "required": [
         "enabled",
         "mode",
@@ -411,7 +415,51 @@
             "string",
             "null"
           ],
-          "description": "Post-masking log-safe prompt. Null when disabled, unavailable, or not captured."
+          "description": "Post-masking provider-bound prompt. Null when disabled, unavailable, or not captured."
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        }
+      }
+    },
+    "responseCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Admin Request Detail only. capturedResponse is the assistant response returned through the Gateway and is null unless explicitly enabled.",
+      "required": [
+        "enabled",
+        "mode",
+        "visibility",
+        "capturedResponse",
+        "truncated",
+        "maxChars"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "raw_full"
+          ]
+        },
+        "visibility": {
+          "type": "string",
+          "const": "admin_request_detail"
+        },
+        "capturedResponse": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Returned assistant response. Null when disabled, unavailable, or not captured."
         },
         "truncated": {
           "type": "boolean"

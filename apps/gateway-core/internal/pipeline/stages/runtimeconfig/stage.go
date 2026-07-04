@@ -78,6 +78,8 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		HasCachePolicy:     true,
 		PromptCapture:      snapshot.PromptCapture,
 		HasPromptCapture:   true,
+		ResponseCapture:    snapshot.ResponseCapture,
+		HasResponseCapture: true,
 	}
 
 	gatewayCtx.Masking.SecurityPolicyVersionID = snapshot.SafetyPolicy.SecurityPolicyHash
