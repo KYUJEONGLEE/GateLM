@@ -25,9 +25,10 @@ type SemanticCacheServiceConfig struct {
 }
 
 type SemanticCacheLookupRequest struct {
-	Boundary       SemanticCacheBoundary
-	NormalizedText string
-	IntentMaterial SemanticCacheIntentMaterial
+	Boundary               SemanticCacheBoundary
+	NormalizedText         string
+	IntentMaterial         SemanticCacheIntentMaterial
+	CacheabilityGatePassed bool
 }
 
 type SemanticCacheStoreRequest struct {
@@ -135,7 +136,7 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
 	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
-	if !intentOK {
+	if !intentOK && !request.CacheabilityGatePassed {
 		result.Reason = intentReason
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
@@ -146,11 +147,18 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), err
 	}
 	queryVector := append([]float64(nil), embedding.Vector...)
-	threshold := s.intentThreshold(intentMaterial)
-	result, err = s.store.Search(ctx, request.Boundary, queryVector, threshold, s.config.TopK)
+	threshold := s.config.Threshold
+	if intentOK {
+		threshold = s.intentThreshold(intentMaterial)
+		result, err = s.store.Search(ctx, request.Boundary, queryVector, threshold, s.config.TopK)
+	}
 	result.QueryVector = queryVector
 	result.IntentMaterial = intentMaterial
 	result.EmbeddingInput = embeddingInput
+	if !intentOK {
+		result.Reason = firstSemanticReason(intentReason, result.Reason)
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 	result = s.applyHitPolicy(result, intentMaterial, threshold)
 	result = s.applyReranker(ctx, result, intentMaterial, threshold)
 	return result, result.Decision(true, providerName, s.config.PolicyVersion), err

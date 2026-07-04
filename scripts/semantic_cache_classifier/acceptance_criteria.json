@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "modelFamily": "fasttext-supervised",
+  "minimumOverallAccuracy": 0.8,
+  "minimumMacroF1": 0.78,
+  "labels": {
+    "cacheable_static": {
+      "minPrecision": 0.8,
+      "minRecall": 0.75,
+      "minF1": 0.77
+    },
+    "cacheable_policy": {
+      "minPrecision": 0.85,
+      "minRecall": 0.7,
+      "minF1": 0.76
+    },
+    "dynamic_user_state": {
+      "minPrecision": 0.85,
+      "minRecall": 0.85,
+      "minF1": 0.85
+    },
+    "unsafe_or_unknown": {
+      "minPrecision": 0.85,
+      "minRecall": 0.85,
+      "minF1": 0.85
+    }
+  },
+  "riskNotes": [
+    "dynamic_user_state and unsafe_or_unknown require high recall so non-cacheable requests are less likely to be admitted to Semantic Cache.",
+    "cacheable_policy requires high precision because store eligibility still depends on an existing runtime boundary containing verified policy version or hash material.",
+    "Low confidence predictions remain compatible with the Phase 1 fail-closed gate by using the Gateway classifier confidence threshold."
+  ]
+}

@@ -187,13 +187,12 @@ SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS=30
 
 각 결과 보고서는 최소한 아래 항목을 포함한다.
 
-- Summary
-- Files Changed
-- Behavior Changes
-- Tests Run
-- Acceptance Status
-- Known Gaps
-- Next Phase Handoff
+- 완료한 작업
+- 변경한 주요 파일
+- 실행한 테스트
+- 테스트 결과
+- 실패하거나 보류한 항목
+- 다음 Phase/Sub-Phase에서 이어받아야 할 내용
 
 결과 보고서에도 raw prompt, raw response, API key, token, secret, provider raw error body, 실제 개인정보를 남기지 않는다.
 
@@ -224,6 +223,22 @@ head: feature/semantic-cache-classifier-gate
 Phase 1 PR이 merge되지 않은 상태에서 Phase 2를 `dev` 기준 새 브랜치로 시작하면 Phase 1 코드가 없는 상태가 된다. 이 경우 중복 구현, 보고서와 실제 코드 불일치, Gateway path 재작업이 발생할 수 있으므로 피한다.
 
 각 Phase는 같은 branch 안에서 별도 commit으로 남긴다. 각 commit에는 해당 Phase 결과 보고서도 함께 포함한다.
+
+각 Phase commit이 완료되면 같은 feature branch를 remote에 push한다. Push는 같은 branch에 누적한다.
+
+처음 push:
+
+```powershell
+git push -u origin feature/semantic-cache-classifier-gate
+```
+
+이후 push:
+
+```powershell
+git push
+```
+
+Push 전에는 최소한 `git status`, `git diff --check`, 해당 Phase 검증 명령을 확인한다. Push가 실패하면 force push하지 말고 원인을 확인한다.
 
 예외적으로 Phase를 PR로 분리해야 한다면, 다음 Phase branch는 `dev`가 아니라 직전 Phase branch를 base로 만들어 stacked PR로 운영한다. 이 경우에도 다음 Phase 시작 전 이전 Phase 결과 보고서를 읽고 실제 코드가 branch에 존재하는지 확인한다.
 

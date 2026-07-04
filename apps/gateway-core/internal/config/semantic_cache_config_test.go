@@ -28,6 +28,11 @@ var semanticCacheEnvKeys = []string{
 	"SEMANTIC_CACHE_ALLOWED_TENANT_IDS",
 	"SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS",
 	"SEMANTIC_CACHE_ALLOWED_CATEGORIES",
+	"SEMANTIC_CACHE_CLASSIFIER_ENABLED",
+	"SEMANTIC_CACHE_CLASSIFIER_TYPE",
+	"SEMANTIC_CACHE_CLASSIFIER_ENDPOINT",
+	"SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE",
+	"SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS",
 	"SEMANTIC_CACHE_THRESHOLD_GENERAL",
 	"SEMANTIC_CACHE_THRESHOLD_ACCOUNT_ACCESS",
 	"SEMANTIC_CACHE_THRESHOLD_SUPPORT_REFUND",
@@ -107,6 +112,21 @@ func TestSemanticCacheConfigDefaults(t *testing.T) {
 	if len(cfg.CategoryThresholds) != 0 {
 		t.Fatalf("category threshold override 기본값은 비어 있어야 함: %+v", cfg.CategoryThresholds)
 	}
+	if cfg.ClassifierEnabled {
+		t.Fatalf("cacheability classifier 기본값은 disabled여야 함")
+	}
+	if cfg.ClassifierType != SemanticCacheClassifierTypeStub {
+		t.Fatalf("cacheability classifier type 기본값 불일치: got %q", cfg.ClassifierType)
+	}
+	if cfg.ClassifierEndpoint != "" {
+		t.Fatalf("cacheability classifier endpoint 기본값은 비어 있어야 함: got %q", cfg.ClassifierEndpoint)
+	}
+	if cfg.ClassifierMinConfidence != 0.90 {
+		t.Fatalf("cacheability classifier min confidence 기본값 불일치: got %v", cfg.ClassifierMinConfidence)
+	}
+	if cfg.ClassifierTimeout != 30*time.Millisecond {
+		t.Fatalf("cacheability classifier timeout 기본값 불일치: got %s", cfg.ClassifierTimeout)
+	}
 }
 
 func TestSemanticCacheConfigDefaultCategoriesUseRoutingContract(t *testing.T) {
@@ -134,12 +154,14 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		t.Setenv("SEMANTIC_CACHE_MAX_ENTRIES", "0")
 		t.Setenv("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", "-1")
 		t.Setenv("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", "0")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE", "2")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS", "0")
 
 		cfg, err := LoadSemanticCacheConfig()
 		if err != nil {
 			t.Fatalf("범위 밖 숫자값은 fallback되어야 함: %v", err)
 		}
-		if cfg.Threshold != 0.92 || cfg.TopK != 3 || cfg.TTL != time.Hour || cfg.MaxEntries != 1000 || cfg.EmbeddingDimensions != 0 || cfg.EmbeddingTimeout != 3*time.Second {
+		if cfg.Threshold != 0.92 || cfg.TopK != 3 || cfg.TTL != time.Hour || cfg.MaxEntries != 1000 || cfg.EmbeddingDimensions != 0 || cfg.EmbeddingTimeout != 3*time.Second || cfg.ClassifierMinConfidence != 0.90 || cfg.ClassifierTimeout != 30*time.Millisecond {
 			t.Fatalf("invalid numeric fallback 불일치: %+v", cfg)
 		}
 	})
@@ -256,6 +278,16 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		}
 	})
 
+	t.Run("unknown classifier type returns explicit error", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_TYPE", "remote_llm")
+
+		_, err := LoadSemanticCacheConfig()
+		if err == nil || !strings.Contains(err.Error(), "unsupported semantic cache classifier type") {
+			t.Fatalf("unknown classifier type은 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
 	t.Run("invalid enabled bool returns explicit error", func(t *testing.T) {
 		resetSemanticCacheEnv(t)
 		t.Setenv("SEMANTIC_CACHE_ENABLED", "maybe")
@@ -263,6 +295,16 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		_, err := LoadSemanticCacheConfig()
 		if err == nil || !strings.Contains(err.Error(), "must be a boolean") {
 			t.Fatalf("invalid bool은 명시 에러를 반환해야 함: %v", err)
+		}
+	})
+
+	t.Run("invalid classifier enabled bool returns explicit error", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_ENABLED", "maybe")
+
+		_, err := LoadSemanticCacheConfig()
+		if err == nil || !strings.Contains(err.Error(), "must be a boolean") {
+			t.Fatalf("invalid classifier bool은 명시 에러를 반환해야 함: %v", err)
 		}
 	})
 
@@ -302,6 +344,48 @@ func TestSemanticCacheConfigInvalidValues(t *testing.T) {
 		}
 		if cfg.CategoryThresholds["general"] != 0.45 || cfg.CategoryThresholds["support_refund"] != 0.7 {
 			t.Fatalf("category threshold parsing 불일치: %+v", cfg.CategoryThresholds)
+		}
+	})
+
+	t.Run("cacheability classifier can be explicitly enabled for stub", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_TYPE", "stub")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE", "0.91")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS", "25")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("classifier stub config는 로드되어야 함: %v", err)
+		}
+		if !cfg.ClassifierEnabled || cfg.ClassifierType != SemanticCacheClassifierTypeStub || cfg.ClassifierMinConfidence != 0.91 || cfg.ClassifierTimeout != 25*time.Millisecond {
+			t.Fatalf("classifier config parsing 불일치: %+v", cfg)
+		}
+	})
+
+	t.Run("cacheability classifier can be explicitly enabled for fasttext sidecar", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_TYPE", "fasttext")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT", "http://127.0.0.1:8765/classify")
+
+		cfg, err := LoadSemanticCacheConfig()
+		if err != nil {
+			t.Fatalf("classifier fasttext config는 endpoint와 함께 로드되어야 함: %v", err)
+		}
+		if !cfg.ClassifierEnabled || cfg.ClassifierType != SemanticCacheClassifierTypeFastText || cfg.ClassifierEndpoint != "http://127.0.0.1:8765/classify" {
+			t.Fatalf("fasttext classifier config parsing 불일치: %+v", cfg)
+		}
+	})
+
+	t.Run("enabled fasttext classifier requires endpoint", func(t *testing.T) {
+		resetSemanticCacheEnv(t)
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_ENABLED", "true")
+		t.Setenv("SEMANTIC_CACHE_CLASSIFIER_TYPE", "fasttext")
+
+		_, err := LoadSemanticCacheConfig()
+		if err == nil || !strings.Contains(err.Error(), "SEMANTIC_CACHE_CLASSIFIER_ENDPOINT is required") {
+			t.Fatalf("enabled fasttext classifier는 endpoint 누락 시 명시 에러를 반환해야 함: %v", err)
 		}
 	})
 }

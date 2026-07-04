@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +18,9 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
+	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/ports"
 )
@@ -71,6 +74,9 @@ func TestChatCompletionsSemanticCacheModeOffBypassesLookupStoreAndHit(t *testing
 	}
 	if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
 		t.Fatalf("mode=off에서는 semantic lookup/store가 없어야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+	}
+	if harness.classifier.calls != 0 {
+		t.Fatalf("mode=off cheap deny에서는 classifier 호출도 없어야 함: calls=%d", harness.classifier.calls)
 	}
 	if harness.provider.calls != 1 {
 		t.Fatalf("mode=off에서는 provider가 호출되어야 함: calls=%d", harness.provider.calls)
@@ -317,6 +323,7 @@ func TestChatCompletionsSemanticCacheExactHitHasPriority(t *testing.T) {
 
 	first := harness.exercise(t, "sc_exact_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
 	harness.semantic.resetCounts()
+	harness.classifier.calls = 0
 	second := harness.exercise(t, "sc_exact_second", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
 
 	if first.Code != http.StatusOK || second.Code != http.StatusOK {
@@ -325,10 +332,372 @@ func TestChatCompletionsSemanticCacheExactHitHasPriority(t *testing.T) {
 	if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
 		t.Fatalf("exact cache hit이면 semantic lookup/store 금지: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
 	}
+	if harness.classifier.calls != 0 {
+		t.Fatalf("exact cache hit이면 classifier 호출도 금지: calls=%d", harness.classifier.calls)
+	}
 	resp := decodeSemanticChatResponse(t, second)
 	if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeExact || resp.GateLM.ProviderCalled {
 		t.Fatalf("exact cache hit metadata 불일치: %+v", resp.GateLM)
 	}
+}
+
+func TestChatCompletionsSemanticCacheClassifierSkipPreventsLookupStoreAndEmbedding(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+	harness.classifier.result = &cachekey.CacheabilityClassifierResult{
+		Label:        cachekey.CacheabilityLabelDynamicUserState,
+		Confidence:   0.99,
+		ReasonCode:   cachekey.CacheabilityReasonDynamicStub,
+		ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+	}
+
+	rr := harness.exercise(t, "sc_classifier_dynamic_skip", routingAwareChatBody("auto", "내 이번 달 사용량 보여줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("classifier skip 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.classifier.calls != 1 {
+		t.Fatalf("exact miss 이후 classifier는 1회 호출되어야 함: calls=%d", harness.classifier.calls)
+	}
+	if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+		t.Fatalf("dynamic classifier 결과는 semantic lookup/store 금지: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+	}
+	if embeddingProvider.calls != 0 {
+		t.Fatalf("classifier skip이면 embedding provider 호출 금지: calls=%d", embeddingProvider.calls)
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("classifier skip은 provider execution을 막으면 안 됨: calls=%d", harness.provider.calls)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierNotCacheable || logged.SemanticReturnedFromCache {
+		t.Fatalf("classifier skip reason/log 불일치: %+v", logged)
+	}
+}
+
+func TestChatCompletionsSemanticCacheClassifierLowConfidenceSkipsEmbeddingAndStore(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+	harness.classifier.result = &cachekey.CacheabilityClassifierResult{
+		Label:        cachekey.CacheabilityLabelCacheableStatic,
+		Confidence:   0.50,
+		ReasonCode:   cachekey.CacheabilityReasonStaticStub,
+		ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+	}
+
+	rr := harness.exercise(t, "sc_classifier_low_confidence", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("low confidence 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.classifier.calls != 1 {
+		t.Fatalf("classifier 호출 수 불일치: %d", harness.classifier.calls)
+	}
+	if semantic.searchCalls != 0 || semantic.upsertCalls != 0 || embeddingProvider.calls != 0 {
+		t.Fatalf("low confidence는 semantic/embedding 모두 skip되어야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierLowConfidence {
+		t.Fatalf("low confidence reason 불일치: %q", logged.SemanticCacheDecisionReason)
+	}
+}
+
+func TestChatCompletionsSemanticCacheClassifierNoopDisablesSemanticPathOnly(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+	harness.handler.SemanticCacheClassifier = cachekey.NoopCacheabilityClassifier{}
+
+	rr := harness.exercise(t, "sc_classifier_noop", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("classifier no-op 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if semantic.searchCalls != 0 || semantic.upsertCalls != 0 || embeddingProvider.calls != 0 {
+		t.Fatalf("classifier no-op은 semantic/embedding만 skip해야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("classifier no-op은 provider execution을 막으면 안 됨: calls=%d", harness.provider.calls)
+	}
+	if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierDisabled {
+		t.Fatalf("classifier no-op reason 불일치: %q", logged.SemanticCacheDecisionReason)
+	}
+}
+
+func TestChatCompletionsSemanticCacheFastTextSidecarDemoPairGatesLookup(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+	classifier, sidecar := newFastTextSidecarClassifierForHandlerTest(t, func(text string) (cachekey.CacheabilityLabel, float64) {
+		if strings.Contains(text, "내 이번 달") || strings.Contains(text, "사용량 보여") {
+			return cachekey.CacheabilityLabelDynamicUserState, 0.99
+		}
+		return cachekey.CacheabilityLabelCacheableStatic, 0.96
+	})
+	harness.handler.SemanticCacheClassifier = classifier
+
+	static := harness.exercise(t, "sc_fasttext_demo_static", routingAwareChatBody("auto", "비밀번호 재설정 절차를 알려줘"))
+	if static.Code != http.StatusOK {
+		t.Fatalf("fasttext static demo 요청은 성공해야 함: status=%d body=%s", static.Code, static.Body.String())
+	}
+	if semantic.searchCalls != 1 || semantic.upsertCalls != 1 || embeddingProvider.calls != 1 {
+		t.Fatalf("fasttext cacheable demo는 lookup/store와 embedding 1회를 수행해야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, static)
+
+	semantic.resetCounts()
+	embeddingCallsAfterStatic := embeddingProvider.calls
+	dynamic := harness.exercise(t, "sc_fasttext_demo_dynamic", routingAwareChatBody("auto", "내 이번 달 사용량 보여줘"))
+	if dynamic.Code != http.StatusOK {
+		t.Fatalf("fasttext dynamic demo 요청도 provider flow로 성공해야 함: status=%d body=%s", dynamic.Code, dynamic.Body.String())
+	}
+	if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+		t.Fatalf("fasttext dynamic demo는 semantic lookup/store를 skip해야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+	}
+	if embeddingProvider.calls != embeddingCallsAfterStatic {
+		t.Fatalf("fasttext dynamic demo는 embedding 호출 전에 skip되어야 함: before=%d after=%d", embeddingCallsAfterStatic, embeddingProvider.calls)
+	}
+	if harness.provider.calls != 2 {
+		t.Fatalf("fasttext dynamic demo는 provider execution을 막으면 안 됨: calls=%d", harness.provider.calls)
+	}
+	if sidecar.requestCount() != 2 {
+		t.Fatalf("fasttext sidecar는 exact miss 요청마다 1회씩 호출되어야 함: calls=%d", sidecar.requestCount())
+	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, dynamic)
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierNotCacheable || logged.SemanticReturnedFromCache {
+		t.Fatalf("fasttext dynamic demo fail-closed log 불일치: %+v", logged)
+	}
+}
+
+func TestChatCompletionsSemanticCacheFastTextSidecarInvalidResponseSkipsSemanticOnly(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"label":`))
+	}))
+	defer server.Close()
+	classifier, err := cachekey.NewFastTextSidecarCacheabilityClassifier(cachekey.FastTextSidecarCacheabilityClassifierConfig{
+		Endpoint:   server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("fasttext sidecar classifier 생성 실패: %v", err)
+	}
+	harness.handler.SemanticCacheClassifier = classifier
+
+	rr := harness.exercise(t, "sc_fasttext_invalid_response", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("invalid sidecar response 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if semantic.searchCalls != 0 || semantic.upsertCalls != 0 || embeddingProvider.calls != 0 {
+		t.Fatalf("invalid sidecar response는 semantic/embedding만 skip해야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+	}
+	if harness.provider.calls != 1 {
+		t.Fatalf("invalid sidecar response는 provider execution을 막으면 안 됨: calls=%d", harness.provider.calls)
+	}
+	if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierInvalid {
+		t.Fatalf("invalid sidecar response reason 불일치: %q", logged.SemanticCacheDecisionReason)
+	}
+	assertGateLMResponseDoesNotExposeSemanticCache(t, rr)
+}
+
+func TestChatCompletionsSemanticCacheFastTextSidecarHonorsShadowAndEnforce(t *testing.T) {
+	classifier, _ := newFastTextSidecarClassifierForHandlerTest(t, func(text string) (cachekey.CacheabilityLabel, float64) {
+		return cachekey.CacheabilityLabelCacheableStatic, 0.96
+	})
+
+	t.Run("enforce can return existing semantic hit", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.handler.SemanticCacheClassifier = classifier
+
+		first := harness.exercise(t, "sc_fasttext_enforce_first", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+		second := harness.exercise(t, "sc_fasttext_enforce_second", routingAwareChatBody("auto", "패스워드 초기화는 어떻게 해?"))
+
+		if first.Code != http.StatusOK || second.Code != http.StatusOK {
+			t.Fatalf("fasttext enforce demo 요청은 성공해야 함: first=%d second=%d body=%s", first.Code, second.Code, second.Body.String())
+		}
+		if harness.provider.calls != 1 {
+			t.Fatalf("fasttext enforce hit는 provider를 다시 호출하지 않아야 함: calls=%d", harness.provider.calls)
+		}
+		resp := decodeSemanticChatResponse(t, second)
+		if resp.GateLM == nil || resp.GateLM.CacheType != invocationlog.CacheTypeSemantic || resp.GateLM.ProviderCalled {
+			t.Fatalf("fasttext enforce hit metadata 불일치: %+v", resp.GateLM)
+		}
+		assertGateLMResponseDoesNotExposeSemanticCache(t, second)
+	})
+
+	t.Run("shadow never returns candidate as cached response", func(t *testing.T) {
+		harness := newSemanticCacheHarness(t, true)
+		harness.handler.SemanticCacheClassifier = classifier
+
+		first := harness.exercise(t, "sc_fasttext_shadow_seed", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+		if first.Code != http.StatusOK {
+			t.Fatalf("fasttext shadow seed 요청은 성공해야 함: status=%d body=%s", first.Code, first.Body.String())
+		}
+		harness.semantic.resetCounts()
+		harness.handler.SemanticCacheMode = cachekey.SemanticCacheModeShadow
+
+		second := harness.exercise(t, "sc_fasttext_shadow_candidate", routingAwareChatBody("auto", "패스워드 초기화는 어떻게 해?"))
+		if second.Code != http.StatusOK {
+			t.Fatalf("fasttext shadow candidate 요청은 성공해야 함: status=%d body=%s", second.Code, second.Body.String())
+		}
+		if harness.semantic.searchCalls != 1 || harness.semantic.upsertCalls != 0 {
+			t.Fatalf("fasttext shadow hit candidate는 lookup만 수행해야 함: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+		}
+		if harness.provider.calls != 2 {
+			t.Fatalf("fasttext shadow hit candidate도 provider를 호출해야 함: calls=%d", harness.provider.calls)
+		}
+		resp := decodeSemanticChatResponse(t, second)
+		if resp.GateLM == nil || !resp.GateLM.ProviderCalled {
+			t.Fatalf("fasttext shadow response metadata 불일치: %+v", resp.GateLM)
+		}
+		assertGateLMResponseDoesNotExposeSemanticCache(t, second)
+		logged := harness.latestLog(t)
+		if logged.SemanticCacheHit || !logged.SemanticCacheWouldHit || logged.SemanticReturnedFromCache || logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonShadowWouldHit {
+			t.Fatalf("fasttext shadow log 불일치: %+v", logged)
+		}
+	})
+}
+
+func TestChatCompletionsSemanticCacheClassifierFailureModesSkipSemanticOnly(t *testing.T) {
+	cases := []struct {
+		name       string
+		result     *cachekey.CacheabilityClassifierResult
+		err        error
+		wantReason string
+	}{
+		{
+			name:       "error",
+			err:        errors.New("classifier unavailable"),
+			wantReason: cachekey.CacheabilityReasonClassifierError,
+		},
+		{
+			name:       "timeout",
+			err:        context.DeadlineExceeded,
+			wantReason: cachekey.CacheabilityReasonClassifierTimeout,
+		},
+		{
+			name: "invalid result",
+			result: &cachekey.CacheabilityClassifierResult{
+				Label:        "invalid_label",
+				Confidence:   0.95,
+				ReasonCode:   "invalid",
+				ModelVersion: "test",
+			},
+			wantReason: cachekey.CacheabilityReasonClassifierInvalid,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+			semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+			harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+			harness.classifier.result = tc.result
+			harness.classifier.err = tc.err
+
+			rr := harness.exercise(t, "sc_classifier_failure_"+strings.ReplaceAll(tc.name, " ", "_"), routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("classifier failure 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if semantic.searchCalls != 0 || semantic.upsertCalls != 0 || embeddingProvider.calls != 0 {
+				t.Fatalf("classifier failure는 semantic/embedding만 skip해야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+			}
+			if harness.provider.calls != 1 {
+				t.Fatalf("classifier failure는 provider execution을 막으면 안 됨: calls=%d", harness.provider.calls)
+			}
+			if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != tc.wantReason {
+				t.Fatalf("classifier failure reason 불일치: got=%q want=%q", logged.SemanticCacheDecisionReason, tc.wantReason)
+			}
+		})
+	}
+}
+
+func TestChatCompletionsSemanticCacheClassifierResultAndLookupVectorStoredOnRequestContext(t *testing.T) {
+	embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+	semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+	harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+
+	rr := harness.exercise(t, "sc_classifier_context_reuse", routingAwareChatBody("auto", "비밀번호 재설정 방법 알려줘"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("classifier pass 요청은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if harness.classifier.calls != 1 || len(harness.classifier.requests) != 1 {
+		t.Fatalf("classifier request 저장 불일치: calls=%d requests=%d", harness.classifier.calls, len(harness.classifier.requests))
+	}
+	if harness.classifier.requests[0].NormalizedText != "비밀번호 재설정 방법 알려줘" {
+		t.Fatalf("classifier normalized text 불일치: %q", harness.classifier.requests[0].NormalizedText)
+	}
+	if semantic.searchCalls != 1 || semantic.upsertCalls != 1 {
+		t.Fatalf("classifier pass 후 semantic lookup/store 호출 수 불일치: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
+	}
+	if embeddingProvider.calls != 1 {
+		t.Fatalf("lookup vector가 request context/store로 재사용되어야 함: embeddingCalls=%d", embeddingProvider.calls)
+	}
+	if len(semantic.storeRequests) != 1 || len(semantic.storeRequests[0].EmbeddingVector) == 0 {
+		t.Fatalf("store request는 lookup vector를 받아야 함: %+v", semantic.storeRequests)
+	}
+	logged := harness.latestLog(t)
+	if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonStored {
+		t.Fatalf("store success reason 불일치: %q", logged.SemanticCacheDecisionReason)
+	}
+}
+
+func TestChatCompletionsSemanticCacheCacheablePolicyRequiresVerifiedBoundary(t *testing.T) {
+	t.Run("missing cache policy hash fails closed", func(t *testing.T) {
+		embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+		semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+		harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+		harness.classifier.result = &cachekey.CacheabilityClassifierResult{
+			Label:        cachekey.CacheabilityLabelCacheablePolicy,
+			Confidence:   0.95,
+			ReasonCode:   cachekey.CacheabilityReasonPolicyStub,
+			ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+		}
+
+		rr := harness.exercise(t, "sc_classifier_policy_boundary_missing", routingAwareChatBody("auto", "refund policy 설명해줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("policy boundary missing 요청도 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if semantic.searchCalls != 0 || semantic.upsertCalls != 0 || embeddingProvider.calls != 0 {
+			t.Fatalf("policy boundary missing은 semantic/embedding skip되어야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+		}
+		if logged := harness.latestLog(t); logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierPolicyBoundaryGap {
+			t.Fatalf("policy boundary missing reason 불일치: %q", logged.SemanticCacheDecisionReason)
+		}
+	})
+
+	t.Run("runtime cache policy hash allows policy candidate", func(t *testing.T) {
+		embeddingProvider := &countingSemanticEmbeddingProvider{delegate: cachekey.NewFakeEmbeddingProvider("fake-test")}
+		semantic := newCountingSemanticCacheServiceWithEmbeddingProvider(t, true, embeddingProvider)
+		harness := newSemanticCacheHarnessWithService(t, semantic, &routingAwareProviderAdapter{adapterType: providercatalog.AdapterTypeMock})
+		harness.classifier.result = &cachekey.CacheabilityClassifierResult{
+			Label:        cachekey.CacheabilityLabelCacheablePolicy,
+			Confidence:   0.95,
+			ReasonCode:   cachekey.CacheabilityReasonPolicyStub,
+			ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+		}
+		harness.handler.RuntimePolicyPipeline = runtimeCachePolicyHashPipeline{hash: "runtime_cache_policy_hash_v1"}
+
+		rr := harness.exercise(t, "sc_classifier_policy_boundary_present", routingAwareChatBody("auto", "refund policy 설명해줘"))
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("verified policy boundary 요청은 provider flow로 성공해야 함: status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if semantic.searchCalls != 1 || semantic.upsertCalls != 1 || embeddingProvider.calls != 1 {
+			t.Fatalf("verified policy boundary는 semantic lookup/store 후보여야 함: search=%d upsert=%d embedding=%d", semantic.searchCalls, semantic.upsertCalls, embeddingProvider.calls)
+		}
+		if len(semantic.lookupRequests) != 1 || semantic.lookupRequests[0].Boundary.SemanticCachePolicyHash != "runtime_cache_policy_hash_v1" {
+			t.Fatalf("runtime cache policy hash가 boundary에 포함되어야 함: %+v", semantic.lookupRequests)
+		}
+	})
 }
 
 func TestChatCompletionsSemanticCacheCategoryDenylistBypasses(t *testing.T) {
@@ -358,6 +727,9 @@ func TestChatCompletionsSemanticCacheCategoryDenylistBypasses(t *testing.T) {
 			}
 			if harness.semantic.searchCalls != 0 || harness.semantic.upsertCalls != 0 {
 				t.Fatalf("deny category는 semantic lookup/store 금지: search=%d upsert=%d", harness.semantic.searchCalls, harness.semantic.upsertCalls)
+			}
+			if harness.classifier.calls != 0 {
+				t.Fatalf("deny category cheap deny에서는 classifier 호출도 금지: calls=%d", harness.classifier.calls)
 			}
 			if harness.provider.calls != 1 {
 				t.Fatalf("deny category bypass 후 provider flow는 유지되어야 함: calls=%d", harness.provider.calls)
@@ -498,12 +870,25 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksDynamicUsageRuntimeR
 	harness.routes["sc_canary_usage_static_seed"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 	harness.routes["sc_canary_usage_dynamic"] = routingAwareRoute{providerName: "provider-a", modelID: "model_low", category: routingdomain.CategoryGeneral}
 
+	harness.classifier.result = &cachekey.CacheabilityClassifierResult{
+		Label:        cachekey.CacheabilityLabelCacheableStatic,
+		Confidence:   0.95,
+		ReasonCode:   cachekey.CacheabilityReasonStaticStub,
+		ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+	}
 	first := harness.exercise(t, "sc_canary_usage_static_seed", routingAwareChatBody("auto", "사용량은 어디서 확인해?"))
 	if first.Code != http.StatusOK {
 		t.Fatalf("static usage guidance seed 요청은 성공해야 함: status=%d body=%s", first.Code, first.Body.String())
 	}
 	embeddingCallsAfterSeed := embeddingProvider.calls
 	semantic.resetCounts()
+	harness.classifier.calls = 0
+	harness.classifier.result = &cachekey.CacheabilityClassifierResult{
+		Label:        cachekey.CacheabilityLabelDynamicUserState,
+		Confidence:   0.99,
+		ReasonCode:   cachekey.CacheabilityReasonDynamicStub,
+		ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+	}
 
 	second := harness.exercise(t, "sc_canary_usage_dynamic", routingAwareChatBody("auto", "내 이번 달 사용량 보여줘"))
 	if second.Code != http.StatusOK {
@@ -513,13 +898,10 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksDynamicUsageRuntimeR
 		t.Fatalf("동적 사용량 조회는 semantic cache hit 없이 provider를 호출해야 함: calls=%d", harness.provider.calls)
 	}
 	if embeddingProvider.calls != embeddingCallsAfterSeed {
-		t.Fatalf("동적 사용량 조회는 intent_unavailable로 embedding 호출 전에 제외되어야 함: before=%d after=%d", embeddingCallsAfterSeed, embeddingProvider.calls)
+		t.Fatalf("동적 사용량 조회는 classifier gate에서 embedding 호출 전에 제외되어야 함: before=%d after=%d", embeddingCallsAfterSeed, embeddingProvider.calls)
 	}
-	if semantic.searchCalls != 1 || semantic.upsertCalls != 1 {
-		t.Fatalf("동적 사용량 조회는 lookup/store 시도 후 intent policy에서 제외되어야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
-	}
-	if len(semantic.searchResults) != 1 || semantic.searchResults[0].Reason != cachekey.SemanticCacheReasonIntentUnavailable {
-		t.Fatalf("동적 사용량 조회 lookup reason은 intent_unavailable이어야 함: %+v", semantic.searchResults)
+	if semantic.searchCalls != 0 || semantic.upsertCalls != 0 {
+		t.Fatalf("동적 사용량 조회는 classifier gate에서 semantic lookup/store가 제외되어야 함: search=%d upsert=%d", semantic.searchCalls, semantic.upsertCalls)
 	}
 	assertGateLMResponseDoesNotExposeSemanticCache(t, second)
 	resp := decodeSemanticChatResponse(t, second)
@@ -528,7 +910,7 @@ func TestChatCompletionsSemanticCacheGeneralOnlyCanaryBlocksDynamicUsageRuntimeR
 		t.Fatalf("동적 사용량 조회 metadata 불일치: %+v", resp.GateLM)
 	}
 	logged := harness.latestLog(t)
-	if logged.SemanticCacheDecisionReason != cachekey.SemanticCacheReasonIntentUnavailable ||
+	if logged.SemanticCacheDecisionReason != cachekey.CacheabilityReasonClassifierNotCacheable ||
 		logged.SemanticReturnedFromCache ||
 		logged.Metadata["semanticReturnedFromCache"] != false {
 		t.Fatalf("동적 사용량 조회 log reason 불일치: %+v", logged)
@@ -1178,6 +1560,7 @@ type semanticCacheHarness struct {
 	catalog    providercatalog.Catalog
 	provider   *routingAwareProviderAdapter
 	semantic   *countingSemanticCacheService
+	classifier *countingCacheabilityClassifier
 	logWriter  *recordingTerminalLogWriter
 	cacheStore *routingAwareMemoryStore
 	keyBuilder *routingAwareRecordingExactKeyBuilder
@@ -1214,10 +1597,19 @@ func newSemanticCacheHarnessWithService(t *testing.T, semantic *countingSemantic
 	cacheStore := &routingAwareMemoryStore{entries: map[string]ports.CacheEntry{}}
 	keyBuilder := &routingAwareRecordingExactKeyBuilder{delegate: cachekey.NewExactKeyBuilder([]byte("semantic-cache-exact-secret"))}
 	logWriter := &recordingTerminalLogWriter{}
+	classifier := &countingCacheabilityClassifier{
+		result: &cachekey.CacheabilityClassifierResult{
+			Label:        cachekey.CacheabilityLabelCacheableStatic,
+			Confidence:   0.95,
+			ReasonCode:   cachekey.CacheabilityReasonStaticStub,
+			ModelVersion: cachekey.CacheabilityClassifierStubModelVersion,
+		},
+	}
 	harness := &semanticCacheHarness{
 		catalog:    catalog,
 		provider:   adapters[0],
 		semantic:   semantic,
+		classifier: classifier,
 		logWriter:  logWriter,
 		cacheStore: cacheStore,
 		keyBuilder: keyBuilder,
@@ -1245,8 +1637,11 @@ func newSemanticCacheHarnessWithService(t *testing.T, semantic *countingSemantic
 			cachekey.SemanticCacheCategoryToolCall,
 			cachekey.SemanticCacheCategoryUnknown,
 		},
-		SemanticCachePolicyVersion: "v1",
-		SemanticCacheKeyVersion:    "v1",
+		SemanticCachePolicyVersion:           "v1",
+		SemanticCacheKeyVersion:              "v1",
+		SemanticCacheClassifier:              classifier,
+		SemanticCacheClassifierMinConfidence: 0.90,
+		SemanticCacheClassifierTimeout:       30 * time.Millisecond,
 	}
 	withTestAuth(handler)
 	harness.handler = handler
@@ -1375,6 +1770,96 @@ func testHandlerSemanticHitPolicy(t *testing.T) *cachekey.SemanticCacheHitPolicy
 type countingSemanticEmbeddingProvider struct {
 	delegate cachekey.FakeEmbeddingProvider
 	calls    int
+}
+
+type countingCacheabilityClassifier struct {
+	delegate cachekey.CacheabilityClassifier
+	result   *cachekey.CacheabilityClassifierResult
+	err      error
+	calls    int
+	requests []cachekey.CacheabilityClassificationRequest
+}
+
+type fastTextSidecarHandlerTestServer struct {
+	mu       sync.Mutex
+	requests []string
+}
+
+func newFastTextSidecarClassifierForHandlerTest(t *testing.T, classify func(text string) (cachekey.CacheabilityLabel, float64)) (cachekey.CacheabilityClassifier, *fastTextSidecarHandlerTestServer) {
+	t.Helper()
+	sidecar := &fastTextSidecarHandlerTestServer{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("fasttext sidecar method 불일치: %s", r.Method)
+		}
+		var payload struct {
+			Text           string `json:"text"`
+			PromptCategory string `json:"promptCategory"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("fasttext sidecar request decode 실패: %v", err)
+		}
+		text := strings.TrimSpace(payload.Text)
+		sidecar.mu.Lock()
+		sidecar.requests = append(sidecar.requests, text)
+		sidecar.mu.Unlock()
+		label, confidence := classify(text)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"label":        string(label),
+			"confidence":   confidence,
+			"reasonCode":   cachekey.CacheabilityReasonFastTextSidecar,
+			"modelVersion": "cacheability-fasttext-synthetic-v1",
+		}); err != nil {
+			t.Fatalf("fasttext sidecar response encode 실패: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	classifier, err := cachekey.NewFastTextSidecarCacheabilityClassifier(cachekey.FastTextSidecarCacheabilityClassifierConfig{
+		Endpoint:   server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("fasttext sidecar classifier 생성 실패: %v", err)
+	}
+	return classifier, sidecar
+}
+
+func (s *fastTextSidecarHandlerTestServer) requestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.requests)
+}
+
+func (c *countingCacheabilityClassifier) Classify(ctx context.Context, request cachekey.CacheabilityClassificationRequest) (cachekey.CacheabilityClassifierResult, error) {
+	c.calls++
+	c.requests = append(c.requests, request)
+	if c.err != nil {
+		return cachekey.CacheabilityClassifierResult{}, c.err
+	}
+	if c.result != nil {
+		return *c.result, nil
+	}
+	if c.delegate != nil {
+		return c.delegate.Classify(ctx, request)
+	}
+	return cachekey.NoopCacheabilityClassifier{}.Classify(ctx, request)
+}
+
+type runtimeCachePolicyHashPipeline struct {
+	hash string
+}
+
+func (p runtimeCachePolicyHashPipeline) Execute(_ context.Context, gatewayCtx *request.GatewayContext) error {
+	gatewayCtx.Runtime.CachePolicy = runtimeconfig.CachePolicy{
+		Enabled:         true,
+		Type:            runtimeconfig.CacheTypeExact,
+		TTLSeconds:      600,
+		CachePolicyHash: p.hash,
+	}
+	gatewayCtx.Runtime.HasCachePolicy = true
+	return nil
 }
 
 func (p *countingSemanticEmbeddingProvider) Embed(ctx context.Context, input cachekey.EmbeddingInput) (cachekey.EmbeddingResult, error) {

@@ -91,6 +91,14 @@ type RequestContext struct {
 	SemanticCacheDecisionReason string
 	EmbeddingProvider           string
 	SemanticCacheStoreCandidate bool
+	SemanticCacheLookupVector   []float64
+
+	SemanticCacheClassifierEvaluated    bool
+	SemanticCacheClassifierPassed       bool
+	SemanticCacheClassifierLabel        string
+	SemanticCacheClassifierConfidence   float64
+	SemanticCacheClassifierReasonCode   string
+	SemanticCacheClassifierModelVersion string
 
 	Provider          string
 	Model             string

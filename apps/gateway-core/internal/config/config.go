@@ -15,6 +15,9 @@ const (
 	SemanticCacheStoreInMemory           = "in_memory"
 	SemanticCacheEmbeddingProviderFake   = "fake"
 	SemanticCacheEmbeddingProviderOpenAI = "openai"
+	SemanticCacheClassifierTypeNoop      = cachekey.CacheabilityClassifierTypeNoop
+	SemanticCacheClassifierTypeStub      = cachekey.CacheabilityClassifierTypeStub
+	SemanticCacheClassifierTypeFastText  = cachekey.CacheabilityClassifierTypeFastText
 )
 
 type Config struct {
@@ -76,28 +79,33 @@ type Config struct {
 }
 
 type SemanticCacheConfig struct {
-	Enabled               bool
-	Mode                  string
-	Threshold             float64
-	TopK                  int
-	TTL                   time.Duration
-	Store                 string
-	MaxEntries            int
-	EmbeddingProvider     string
-	EmbeddingModel        string
-	EmbeddingDimensions   int
-	EmbeddingTimeout      time.Duration
-	OpenAIBaseURL         string
-	OpenAIAPIKey          string
-	PolicyVersion         string
-	KeyVersion            string
-	IntentPolicyPath      string
-	AllowCategories       []string
-	DenyCategories        []string
-	AllowedTenantIDs      []string
-	AllowedApplicationIDs []string
-	AllowedCategories     []string
-	CategoryThresholds    map[string]float64
+	Enabled                 bool
+	Mode                    string
+	Threshold               float64
+	TopK                    int
+	TTL                     time.Duration
+	Store                   string
+	MaxEntries              int
+	EmbeddingProvider       string
+	EmbeddingModel          string
+	EmbeddingDimensions     int
+	EmbeddingTimeout        time.Duration
+	OpenAIBaseURL           string
+	OpenAIAPIKey            string
+	PolicyVersion           string
+	KeyVersion              string
+	IntentPolicyPath        string
+	AllowCategories         []string
+	DenyCategories          []string
+	AllowedTenantIDs        []string
+	AllowedApplicationIDs   []string
+	AllowedCategories       []string
+	CategoryThresholds      map[string]float64
+	ClassifierEnabled       bool
+	ClassifierType          string
+	ClassifierEndpoint      string
+	ClassifierMinConfidence float64
+	ClassifierTimeout       time.Duration
 }
 
 func Load() Config {
@@ -172,6 +180,10 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 	if err != nil {
 		return SemanticCacheConfig{}, err
 	}
+	classifierEnabled, err := semanticEnvBool("SEMANTIC_CACHE_CLASSIFIER_ENABLED", false)
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
 	mode := semanticEnvString("SEMANTIC_CACHE_MODE", cachekey.SemanticCacheModeEnforce)
 	switch mode {
 	case cachekey.SemanticCacheModeOff, cachekey.SemanticCacheModeShadow, cachekey.SemanticCacheModeEnforce:
@@ -186,6 +198,19 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 	if embeddingProvider != SemanticCacheEmbeddingProviderFake && embeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
 		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache embedding provider %q", embeddingProvider)
 	}
+	classifierType := semanticEnvString("SEMANTIC_CACHE_CLASSIFIER_TYPE", SemanticCacheClassifierTypeStub)
+	switch classifierType {
+	case SemanticCacheClassifierTypeNoop, SemanticCacheClassifierTypeStub, SemanticCacheClassifierTypeFastText:
+	default:
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache classifier type %q", classifierType)
+	}
+	classifierEndpoint := semanticEnvString("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT", "")
+	if classifierEnabled && classifierType == SemanticCacheClassifierTypeFastText {
+		parsedEndpoint, parseErr := url.Parse(classifierEndpoint)
+		if strings.TrimSpace(classifierEndpoint) == "" || parseErr != nil || parsedEndpoint.Scheme == "" || parsedEndpoint.Host == "" {
+			return SemanticCacheConfig{}, fmt.Errorf("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT is required when SEMANTIC_CACHE_CLASSIFIER_ENABLED=true and SEMANTIC_CACHE_CLASSIFIER_TYPE=fasttext")
+		}
+	}
 	intentPolicyPath := semanticEnvString("SEMANTIC_CACHE_INTENT_POLICY_PATH", "")
 	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if enabled && mode != cachekey.SemanticCacheModeOff && embeddingProvider == SemanticCacheEmbeddingProviderOpenAI && strings.TrimSpace(intentPolicyPath) != "" && openAIAPIKey == "" {
@@ -195,28 +220,33 @@ func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
 	threshold = semanticEnvFloat("SEMANTIC_CACHE_DEFAULT_THRESHOLD", threshold, 0, 1)
 
 	return SemanticCacheConfig{
-		Enabled:               enabled,
-		Mode:                  mode,
-		Threshold:             threshold,
-		TopK:                  semanticEnvInt("SEMANTIC_CACHE_TOP_K", 3, 1),
-		TTL:                   time.Duration(semanticEnvInt("SEMANTIC_CACHE_TTL_SECONDS", 3600, 1)) * time.Second,
-		Store:                 store,
-		MaxEntries:            semanticEnvInt("SEMANTIC_CACHE_MAX_ENTRIES", 1000, 1),
-		EmbeddingProvider:     embeddingProvider,
-		EmbeddingModel:        semanticEnvString("SEMANTIC_CACHE_EMBEDDING_MODEL", "text-embedding-3-small"),
-		EmbeddingDimensions:   semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", 0, 0),
-		EmbeddingTimeout:      time.Duration(semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", 3000, 1)) * time.Millisecond,
-		OpenAIBaseURL:         semanticEnvString("SEMANTIC_CACHE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIAPIKey:          openAIAPIKey,
-		PolicyVersion:         semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
-		KeyVersion:            semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
-		IntentPolicyPath:      intentPolicyPath,
-		AllowCategories:       semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
-		DenyCategories:        semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
-		AllowedTenantIDs:      semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_TENANT_IDS", nil),
-		AllowedApplicationIDs: semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS", nil),
-		AllowedCategories:     semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_CATEGORIES", nil),
-		CategoryThresholds:    semanticCacheCategoryThresholds(),
+		Enabled:                 enabled,
+		Mode:                    mode,
+		Threshold:               threshold,
+		TopK:                    semanticEnvInt("SEMANTIC_CACHE_TOP_K", 3, 1),
+		TTL:                     time.Duration(semanticEnvInt("SEMANTIC_CACHE_TTL_SECONDS", 3600, 1)) * time.Second,
+		Store:                   store,
+		MaxEntries:              semanticEnvInt("SEMANTIC_CACHE_MAX_ENTRIES", 1000, 1),
+		EmbeddingProvider:       embeddingProvider,
+		EmbeddingModel:          semanticEnvString("SEMANTIC_CACHE_EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingDimensions:     semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", 0, 0),
+		EmbeddingTimeout:        time.Duration(semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", 3000, 1)) * time.Millisecond,
+		OpenAIBaseURL:           semanticEnvString("SEMANTIC_CACHE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIAPIKey:            openAIAPIKey,
+		PolicyVersion:           semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
+		KeyVersion:              semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
+		IntentPolicyPath:        intentPolicyPath,
+		AllowCategories:         semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general", "support_refund"}),
+		DenyCategories:          semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
+		AllowedTenantIDs:        semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_TENANT_IDS", nil),
+		AllowedApplicationIDs:   semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS", nil),
+		AllowedCategories:       semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_CATEGORIES", nil),
+		CategoryThresholds:      semanticCacheCategoryThresholds(),
+		ClassifierEnabled:       classifierEnabled,
+		ClassifierType:          classifierType,
+		ClassifierEndpoint:      classifierEndpoint,
+		ClassifierMinConfidence: semanticEnvFloat("SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE", cachekey.DefaultCacheabilityClassifierMinConfidence, 0, 1),
+		ClassifierTimeout:       time.Duration(semanticEnvInt("SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS", int(cachekey.DefaultCacheabilityClassifierTimeout.Milliseconds()), 1)) * time.Millisecond,
 	}, nil
 }
 

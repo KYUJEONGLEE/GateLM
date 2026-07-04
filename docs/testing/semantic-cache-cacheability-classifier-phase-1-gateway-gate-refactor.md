@@ -30,7 +30,7 @@ Phase 1B 완료 시 아래 결과 보고서 파일을 생성한다.
 docs/testing/semantic-cache-cacheability-classifier-phase-1b-result-report.md
 ```
 
-보고서는 Summary, Files Changed, Behavior Changes, Tests Run, Acceptance Status, Known Gaps, Next Phase Handoff를 포함한다.
+보고서는 완료한 작업, 변경한 주요 파일, 실행한 테스트, 테스트 결과, 실패하거나 보류한 항목, 다음 Phase/Sub-Phase에서 이어받아야 할 내용을 포함한다.
 
 ## Phase 1A Scope
 

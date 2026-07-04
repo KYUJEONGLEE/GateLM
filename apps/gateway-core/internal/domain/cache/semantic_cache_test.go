@@ -455,6 +455,42 @@ func TestSemanticCacheServiceWithoutIntentPolicyDoesNotCallEmbeddingProvider(t *
 	}
 }
 
+func TestSemanticCacheServiceWithIntentPolicyDoesNotLetMaterializationMissBlockEmbeddingLookup(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, nil)
+	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
+	store := &countingTestSemanticCacheStore{delegate: NewInMemorySemanticCacheStore(10)}
+	service := NewSemanticCacheService(store, provider, SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+		HitPolicy:     testSemanticHitPolicy(t),
+	})
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:               boundary,
+		NormalizedText:         "정해진 intent rule과 매칭되지 않는 일반 질문",
+		CacheabilityGatePassed: true,
+	})
+	if err != nil {
+		t.Fatalf("materialization miss는 request 실패로 승격되면 안 됨: %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("intent materialization miss여도 embedding lookup은 수행되어야 함: calls=%d", provider.calls)
+	}
+	if store.searchCalls != 0 {
+		t.Fatalf("intent materialization miss이면 semantic store search는 수행하면 안 됨: calls=%d", store.searchCalls)
+	}
+	if len(result.QueryVector) == 0 {
+		t.Fatalf("embedding lookup 결과 vector가 남아야 함: %+v", result)
+	}
+	if result.Hit || decision.SemanticCacheHit || decision.SemanticCacheDecisionReason != SemanticCacheReasonIntentUnavailable {
+		t.Fatalf("materialization miss는 provider bypass hit로 이어지면 안 됨: result=%+v decision=%+v", result, decision)
+	}
+}
+
 func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)
@@ -901,4 +937,20 @@ func (p *countingTestEmbeddingProvider) ProviderName() string {
 
 func (p *countingTestEmbeddingProvider) ModelName() string {
 	return p.delegate.ModelName()
+}
+
+type countingTestSemanticCacheStore struct {
+	delegate    SemanticCacheStore
+	searchCalls int
+	upsertCalls int
+}
+
+func (s *countingTestSemanticCacheStore) Search(ctx context.Context, boundary SemanticCacheBoundary, vector []float64, threshold float64, topK int) (SemanticCacheSearchResult, error) {
+	s.searchCalls++
+	return s.delegate.Search(ctx, boundary, vector, threshold, topK)
+}
+
+func (s *countingTestSemanticCacheStore) Upsert(ctx context.Context, entry SemanticCacheEntry) error {
+	s.upsertCalls++
+	return s.delegate.Upsert(ctx, entry)
 }
