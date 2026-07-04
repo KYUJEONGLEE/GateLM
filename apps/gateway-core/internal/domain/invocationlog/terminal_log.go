@@ -10,6 +10,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type TerminalLog struct {
@@ -98,6 +99,7 @@ type TerminalLog struct {
 	RequestBodyHash string
 	PromptHash      string
 	DomainOutcomes  DomainOutcomes
+	StageTimings    stagetiming.Timings
 	Metadata        map[string]any
 	CreatedAt       time.Time
 	CompletedAt     time.Time
@@ -193,6 +195,7 @@ type TerminalLogInput struct {
 	ResponseCapturePolicy   runtimeconfig.ResponseCapturePolicy
 	CapturedResponse        string
 	DomainOutcomes          DomainOutcomes
+	StageTimings            stagetiming.Timings
 	StartedAt               time.Time
 	CompletedAt             time.Time
 }
@@ -354,6 +357,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if responseCapture, ok := BuildResponseCaptureFields(input.ResponseCapturePolicy, input.CapturedResponse); ok {
 		metadata["responseCapture"] = responseCapture
 	}
+	if len(input.StageTimings) > 0 {
+		metadata["stageTimings"] = stagetiming.Clone(input.StageTimings)
+	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
 	metadata["providerCalled"] = terminalProviderCalled(input)
 
@@ -445,6 +451,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 
 		RequestBodyHash: logHash("request_body", requestBodyHashMaterial),
 		PromptHash:      logHash("prompt", promptHashMaterial),
+		StageTimings:    stagetiming.Clone(input.StageTimings),
 		Metadata:        metadata,
 		CreatedAt:       input.StartedAt.UTC(),
 		CompletedAt:     completedAt.UTC(),

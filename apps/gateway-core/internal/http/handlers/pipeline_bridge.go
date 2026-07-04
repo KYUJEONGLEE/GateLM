@@ -6,6 +6,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 	"gatelm/apps/gateway-core/internal/pipeline"
 )
 
@@ -257,6 +258,8 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Status.ErrorStage != "" {
 		reqCtx.ErrorStage = gatewayCtx.Status.ErrorStage
 	}
+
+	stagetiming.Merge(&reqCtx.StageTimings, gatewayCtx.StageTimings)
 }
 
 func writeGatewayPipelineFailure(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {

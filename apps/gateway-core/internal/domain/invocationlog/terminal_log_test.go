@@ -8,6 +8,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 func TestBuildTerminalLogMapsP0ContextWithoutRawPrompt(t *testing.T) {
@@ -473,5 +474,32 @@ func TestBuildTerminalLogCarriesBudgetCheckerErrorAsSystemFailure(t *testing.T) 
 		log.DomainOutcomes.Provider.Outcome != "not_called" ||
 		log.DomainOutcomes.Fallback.Outcome != "not_called" {
 		t.Fatalf("unexpected budget checker error outcomes: %+v", log.DomainOutcomes)
+	}
+}
+
+func TestBuildTerminalLogStoresStageTimingsMetadata(t *testing.T) {
+	startedAt := time.Date(2026, 7, 4, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:     "request_stage_timing",
+		ApplicationID: "app_demo",
+		Status:        StatusSuccess,
+		HTTPStatus:    200,
+		StageTimings: stagetiming.Timings{
+			"pii_masking":            {DurationMs: 3, Count: 1},
+			"provider_response_wait": {DurationMs: 120, Count: 1},
+		},
+		StartedAt:   startedAt,
+		CompletedAt: startedAt.Add(130 * time.Millisecond),
+	})
+
+	if log.StageTimings["pii_masking"].DurationMs != 3 {
+		t.Fatalf("expected log stage timings to be preserved, got %#v", log.StageTimings)
+	}
+	timings, ok := log.Metadata["stageTimings"].(stagetiming.Timings)
+	if !ok {
+		t.Fatalf("expected stageTimings metadata, got %#v", log.Metadata["stageTimings"])
+	}
+	if timings["provider_response_wait"].DurationMs != 120 || timings["provider_response_wait"].Count != 1 {
+		t.Fatalf("unexpected stage timings metadata: %#v", timings)
 	}
 }

@@ -66,3 +66,19 @@ func (s *recordStage) Execute(_ context.Context, gatewayCtx *request.GatewayCont
 	}
 	return nil
 }
+
+func TestPipelineExecuteRecordsStageTiming(t *testing.T) {
+	gatewayCtx := &request.GatewayContext{}
+	first := &recordStage{name: "first"}
+	second := &recordStage{name: "second"}
+
+	err := New(first, second).Execute(context.Background(), gatewayCtx)
+
+	if err != nil {
+		t.Fatalf("expected pipeline to pass, got %v", err)
+	}
+	if gatewayCtx.StageTimings["first"].Count != 1 || gatewayCtx.StageTimings["second"].Count != 1 {
+		t.Fatalf("expected stage timings for both stages, got %#v", gatewayCtx.StageTimings)
+	}
+
+}

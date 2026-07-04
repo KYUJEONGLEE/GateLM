@@ -29,6 +29,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/request"
 	routingdomain "gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
@@ -184,8 +185,11 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	if runtimePolicyPipeline := h.runtimePolicyPipeline(); runtimePolicyPipeline != nil {
+		policyChecksStartedAt := time.Now()
 		gatewayCtx := newGatewayContext(reqCtx, "")
-		if err := runtimePolicyPipeline.Execute(r.Context(), gatewayCtx); err != nil {
+		err := runtimePolicyPipeline.Execute(r.Context(), gatewayCtx)
+		recordRequestStageTiming(reqCtx, stagetiming.StagePolicyChecksTotal, time.Since(policyChecksStartedAt))
+		if err != nil {
 			applyGatewayContext(reqCtx, gatewayCtx)
 			writeGatewayPipelineFailure(w, reqCtx, err)
 			return
@@ -193,7 +197,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		applyGatewayContext(reqCtx, gatewayCtx)
 	}
 
+	maskingStartedAt := time.Now()
 	maskingResult, redactedMessages, redactedPrompt, logSafePrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID), reqCtx.RuntimeSafetyPolicy)
+	recordRequestStageTiming(reqCtx, stagetiming.StagePIIMasking, time.Since(maskingStartedAt))
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway masking failed.", "mask_or_block")
 		return
@@ -297,6 +303,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	providerStartedAt := time.Now()
 	providerResp, err := target.Adapter.CreateChatCompletion(r.Context(), target.ExecutionConfig, providerReq)
 	providerDuration := time.Since(providerStartedAt)
+	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, providerDuration)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
@@ -790,6 +797,7 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 	fallbackStartedAt := time.Now()
 	fallbackResp, fallbackCallErr := fallbackTarget.Adapter.CreateChatCompletion(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
 	fallbackDuration := time.Since(fallbackStartedAt)
+	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, fallbackDuration)
 	if fallbackCallErr != nil || fallbackResp == nil {
 		h.recordProviderRequest(metrics.ProviderRequest{
 			SelectedProvider: fallbackTarget.ProviderName,
@@ -860,6 +868,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 	streamMetrics := h.startStreamMetrics(reqCtx.SelectedProvider, reqCtx.SelectedModel, providerStartedAt)
 	started, usage, cacheableResp, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	providerDuration := time.Since(providerStartedAt)
+	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, providerDuration)
 	reqCtx.ProviderLatencyMs = providerDuration.Milliseconds()
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	if usage != nil {
@@ -931,6 +940,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 }
 
 func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWriter, r *http.Request, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, target providerCallTarget, err error, providerDuration time.Duration, startedAt time.Time) {
+	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, providerDuration)
 	code := provider.SafeErrorCode(err)
 	if errors.Is(err, context.Canceled) {
 		h.recordProviderRequest(metrics.ProviderRequest{
@@ -1046,6 +1056,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	streamMetrics := h.startStreamMetrics(fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackStartedAt)
 	started, usage, _, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
 	fallbackDuration := time.Since(fallbackStartedAt)
+	recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, fallbackDuration)
 	if usage != nil {
 		reqCtx.PromptTokens = usage.PromptTokens
 		reqCtx.CompletionTokens = usage.CompletionTokens
@@ -1410,6 +1421,10 @@ func sortedKeys(set map[string]struct{}) []string {
 }
 
 func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
+	cacheStartedAt := time.Now()
+	defer func() {
+		recordRequestStageTiming(reqCtx, stagetiming.StageCacheExactLookup, time.Since(cacheStartedAt))
+	}()
 	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) {
 		bypassExactCache(reqCtx, "masking_blocked")
 		return nil, "", false
@@ -1523,6 +1538,8 @@ func (h *ChatCompletionsHandler) writeSemanticCachedChatCompletionIfHit(ctx cont
 	if reqCtx == nil {
 		return false, nil
 	}
+	cacheStartedAt := time.Now()
+	defer func() { recordRequestStageTiming(reqCtx, stagetiming.StageCacheSemantic, time.Since(cacheStartedAt)) }()
 	h.initializeSemanticCacheContext(reqCtx)
 	promptCategory := h.semanticPromptCategory(reqCtx)
 	if !h.semanticCacheConfiguredEnabled() {
@@ -3235,6 +3252,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		RedactedPromptPreview:       reqCtx.RedactedPromptPreview,
 		SecurityPolicyVersionID:     reqCtx.SecurityPolicyVersionID,
 		DomainOutcomes:              reqCtx.DomainOutcomes,
+		StageTimings:                reqCtx.StageTimings,
 		RedactedPromptForHash:       redactedPrompt,
 		PromptCapturePolicy:         promptCapturePolicyForLog(reqCtx),
 		CapturedPrompt:              redactedPrompt,
@@ -3282,6 +3300,13 @@ func providerLatencyForLog(reqCtx *pipeline.RequestContext) *int64 {
 	return &providerLatencyMs
 }
 
+func recordRequestStageTiming(reqCtx *pipeline.RequestContext, stage string, duration time.Duration) {
+	if reqCtx == nil {
+		return
+	}
+	stagetiming.Record(&reqCtx.StageTimings, stage, duration)
+}
+
 func (h *ChatCompletionsHandler) recordGatewayRequestStarted(reqCtx *pipeline.RequestContext) {
 	if h.MetricsRegistry == nil || reqCtx == nil {
 		return
@@ -3306,6 +3331,18 @@ func (h *ChatCompletionsHandler) recordGatewayRequestCompleted(reqCtx *pipeline.
 		ErrorCode:       reqCtx.ErrorCode,
 		DurationSeconds: completedAt.Sub(startedAt).Seconds(),
 	})
+
+	for _, stage := range stagetiming.OrderedStages(reqCtx.StageTimings) {
+		timing := reqCtx.StageTimings[stage]
+		if timing.DurationMs <= 0 {
+			continue
+		}
+		h.MetricsRegistry.GatewayStageDuration(metrics.GatewayStageDuration{
+			Stage:           stage,
+			Status:          status,
+			DurationSeconds: float64(timing.DurationMs) / 1000,
+		})
+	}
 
 	if reqCtx.RateLimitDecision != nil {
 		h.MetricsRegistry.RateLimitDecision(metrics.RateLimitDecision{

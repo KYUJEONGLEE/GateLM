@@ -12,6 +12,7 @@ import (
 const (
 	GatewayRequestsTotal             = "gatelm_gateway_requests_total"
 	GatewayRequestDurationSeconds    = "gatelm_gateway_request_duration_seconds"
+	GatewayStageDurationSeconds      = "gatelm_gateway_stage_duration_seconds"
 	GatewayInflightRequests          = "gatelm_gateway_inflight_requests"
 	ProviderRequestsTotal            = "gatelm_provider_requests_total"
 	ProviderRequestDurationSeconds   = "gatelm_provider_request_duration_seconds"
@@ -68,6 +69,7 @@ type metricSpec struct {
 var metricSpecs = map[string]metricSpec{
 	GatewayRequestsTotal:             {"counter", "Total Gateway requests by terminal outcome."},
 	GatewayRequestDurationSeconds:    {"histogram", "Gateway request duration in seconds."},
+	GatewayStageDurationSeconds:      {"histogram", "Gateway stage duration in seconds."},
 	GatewayInflightRequests:          {"gauge", "Current in-flight Gateway requests."},
 	ProviderRequestsTotal:            {"counter", "Total provider requests issued by Gateway."},
 	ProviderRequestDurationSeconds:   {"histogram", "Provider request duration in seconds."},
@@ -93,6 +95,7 @@ var allowedLabels = map[string]struct{}{
 	"endpoint":           {},
 	"method":             {},
 	"status":             {},
+	"stage":              {},
 	"http_status":        {},
 	"error_code":         {},
 	"cache_status":       {},
