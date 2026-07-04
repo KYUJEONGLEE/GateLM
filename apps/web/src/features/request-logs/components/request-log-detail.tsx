@@ -195,8 +195,8 @@ export function RequestLogDetailPanel({
       <DetailSection
         title="Identity"
         rows={[
-          ["Project", formatProjectDisplayName(record.projectId)],
-          ["Application", formatApplicationDisplayName(record.applicationId)]
+          ["Project ID", record.projectId],
+          ["Application ID", record.applicationId]
         ]}
       />
 
@@ -285,41 +285,6 @@ function DetailSection({ rows, title }: { rows: Array<[string, string]>; title: 
   );
 }
 
-function formatProjectDisplayName(projectId: string) {
-  const normalized = formatDisplayIdentifier(projectId);
-
-  if (
-    projectId === "live_gateway_project" ||
-    projectId === "00000000-0000-4000-8000-000000000200"
-  ) {
-    return "Default project";
-  }
-
-  if (normalized.includes("synthetic")) {
-    return "Synthetic project";
-  }
-
-  if (normalized.includes("project_ai")) {
-    return "AI project";
-  }
-
-  return identifierToDisplayName(normalized, "Project");
-}
-
-function formatApplicationDisplayName(applicationId: string) {
-  const normalized = formatDisplayIdentifier(applicationId);
-
-  if (applicationId === "live_gateway_application" || normalized === "app_customer") {
-    return "Acme Support";
-  }
-
-  if (normalized.includes("employee_chat")) {
-    return "Employee Chat";
-  }
-
-  return identifierToDisplayName(normalized, "Application");
-}
-
 function formatMicroUsd(value: number) {
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
@@ -327,18 +292,4 @@ function formatMicroUsd(value: number) {
     minimumFractionDigits: 0,
     style: "currency"
   }).format(value / 1_000_000);
-}
-
-function identifierToDisplayName(value: string, fallback: string) {
-  const normalized = value
-    .replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, "")
-    .replace(/^(app|application|project)_/i, "")
-    .replaceAll(/[_-]+/g, " ")
-    .trim();
-
-  if (!normalized) {
-    return fallback;
-  }
-
-  return normalized.replaceAll(/\b\w/g, (character) => character.toUpperCase());
 }
