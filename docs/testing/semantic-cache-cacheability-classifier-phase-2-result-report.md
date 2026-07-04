@@ -181,6 +181,36 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - `scripts/semantic_cache_classifier/build/koalpaca_realqa_review/cacheability_koalpaca_realqa_relabel_draft.jsonl`
 - raw Korean prompt가 포함될 수 있으므로 산출물은 ignored `build/` 경로에만 생성하고, privacy/license/attribution review 전 커밋하지 않는다.
 
+## 후속 AI Hub 한국어 대화 재라벨링 검수 준비
+
+- AI Hub 한국어 대화를 한국어 Q/A dialogue 기반 cacheability relabel 후보 데이터셋으로 처리하기 위한 `import_aihub_korean_dialogue.py`를 추가했다.
+- AI Hub 페이지 기준 데이터 특성:
+  - 소상공인 및 공공민원 10개 분야
+  - 50만 건 이상 대화 데이터
+  - 도메인/카테고리/의도/엔티티/시소러스 포함
+  - Q&A 구조이며 Main Question, Sub Question, User Answer, System Answer 성격의 문장 구분이 있다.
+- 실제 원본 다운로드는 AI Hub 로그인/신청/승인 후 사용자가 직접 진행해야 한다.
+- importer 입력:
+  - 다운로드 ZIP
+  - 압축 해제 directory
+  - 단일 JSON/JSONL/CSV/TSV 파일
+- importer 동작:
+  - Main Question/User Answer 및 한국어 동등 key를 user utterance 후보로 추출한다.
+  - System Answer/Sub Question 계열 key는 기본적으로 제외한다.
+  - intent 계열 key는 `intentHints` context로만 사용하고 review row로 만들지 않는다.
+  - secret/PII-like shape는 `unsafe_or_unknown` 초안으로 fail-closed한다.
+  - 영업시간/예약/민원 처리상태/배송/위치/오늘/지금/현재 등 live-state/user-state 신호는 `dynamic_user_state` 초안으로 보낸다.
+  - 절차/정책/기준/제도 신호는 `cacheable_policy` 초안으로 보낸다.
+  - 모든 row는 `reviewStatus=review_required`로 출력한다.
+- 생성 산출물 기본 위치:
+  - `scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korean_dialogue_summary.json`
+  - `scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korean_dialogue_review_sample.csv`
+  - `scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/cacheability_aihub_korean_dialogue_relabel_draft.jsonl`
+- mock JSON/CSV로 importer를 검증했다.
+  - 사용자 발화 후보만 추출: `5`
+  - system answer 제외 확인
+  - intent key는 context로만 유지 확인
+
 ## 실패하거나 보류한 항목
 
 - 기본 Anaconda Python 3.13 환경에는 `fasttext` package가 설치되어 있지 않다. 실제 학습/평가는 Python 3.12 venv에서 진행했다.

@@ -172,6 +172,32 @@ scripts/semantic_cache_classifier/build/koalpaca_realqa_review/cacheability_koal
 
 All generated KoAlpaca-RealQA labels are draft suggestions with `reviewStatus=review_required`. Use the review sample as a hard holdout candidate first; do not mix it into training data until privacy, attribution, license, and label review are complete.
 
+## AI Hub Korean Dialogue Relabeling Review
+
+AI Hub Korean Dialogue can be used as a Korean Q/A dialogue relabeling source after the dataset download is approved on AI Hub. Pass the downloaded ZIP file or extracted directory to the importer:
+
+```powershell
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\import_aihub_korean_dialogue.py --source-path .tmp\aihub_korean_dialogue --sample-per-label 200
+```
+
+Supported source inputs:
+
+```text
+directory containing JSON/JSONL/CSV/TSV/ZIP files
+single ZIP file
+single JSON/JSONL/CSV/TSV file
+```
+
+Default outputs are ignored under `build/` because they may include Korean dialogue text:
+
+```text
+scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korean_dialogue_summary.json
+scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korean_dialogue_review_sample.csv
+scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/cacheability_aihub_korean_dialogue_relabel_draft.jsonl
+```
+
+The importer extracts likely user utterance fields such as main question, user answer, and Korean equivalents. System answer fields are excluded by default. All generated labels are draft suggestions with `reviewStatus=review_required`.
+
 ## Runtime Sidecar
 
 Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The sidecar loads a trained `.bin` artifact once at process startup and serves classification over HTTP:
