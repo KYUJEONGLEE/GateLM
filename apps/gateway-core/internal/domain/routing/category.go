@@ -154,10 +154,16 @@ func categoryPrimaryIntentText(text string) string {
 	if prefix == "" {
 		return ""
 	}
+	minIndex := -1
 	for _, separator := range []string{". ", "? ", "! ", "\n", "\r"} {
 		if index := strings.Index(prefix, separator); index > 0 {
-			return strings.TrimSpace(prefix[:index])
+			if minIndex == -1 || index < minIndex {
+				minIndex = index
+			}
 		}
+	}
+	if minIndex > 0 {
+		return strings.TrimSpace(prefix[:minIndex])
 	}
 	return strings.TrimSpace(prefix)
 }

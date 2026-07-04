@@ -191,6 +191,15 @@ func TestRuleBasedCategoryClassifierWeightsLeadingIntentOverLaterContext(t *test
 		})
 	}
 }
+
+func TestCategoryPrimaryIntentUsesEarliestSeparator(t *testing.T) {
+	prompt := normalizeCategoryText("Compare the rollout options? Summarize the release notes. Background mentions code.")
+
+	if actual := categoryPrimaryIntentText(prompt); actual != "compare the rollout options" {
+		t.Fatalf("expected earliest separator to end primary intent, got %q", actual)
+	}
+}
+
 func TestCategoryEvalCasesFromFixture(t *testing.T) {
 	payload, err := os.ReadFile("testdata/category_eval_cases.json")
 	if err != nil {
