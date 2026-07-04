@@ -56,7 +56,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const [locale, overview, recentRecords, rateLimitedRecords] = await Promise.all([
     getRequestLocale(),
     getLiveDashboardOverview(tenantId, liveFilters),
-    getLiveGatewayRequestLogs({ from: liveRange.from, limit: 50, tenantId, to: liveRange.to }),
+    getLiveGatewayRequestLogs({ from: liveRange.from, limit: 100, tenantId, to: liveRange.to }),
     getLiveGatewayRequestLogs({
       from: liveRange.from,
       limit: 5,
@@ -104,6 +104,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
       <DashboardOverviewView
         activeTab={activeTab}
+        applicationTokenRecords={(recentRecords ?? []).map(toDisplayModelRecord)}
         detailPanel={
           displayScopedSelectedDetail ? (
             <RequestLogDetailAside
