@@ -1015,6 +1015,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	stream, fallbackCallErr := fallbackAdapter.CreateChatCompletionStream(r.Context(), fallbackTarget.ExecutionConfig, fallbackReq)
 	if fallbackCallErr != nil {
 		fallbackDuration := time.Since(fallbackStartedAt)
+		recordRequestStageTiming(reqCtx, stagetiming.StageProviderResponse, fallbackDuration)
 		if requestWasCanceled(r.Context(), fallbackCallErr) {
 			h.writeStreamingOpenCancellation(w, reqCtx, fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackDuration)
 			return
