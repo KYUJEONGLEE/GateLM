@@ -17,6 +17,7 @@ import io
 import json
 import re
 import zipfile
+import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,7 +30,7 @@ DEFAULT_SOURCE_PATH = REPO_ROOT / ".tmp" / "aihub_korean_dialogue"
 DEFAULT_OUTPUT_DIR = BASE_DIR / "build" / "aihub_korean_dialogue_review"
 
 DATASET_ID = "AIHub Korean Dialogue"
-DATASET_URL = "https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&aihubDataSe=data&dataSetSn=116"
+DATASET_URL = "https://aihub.or.kr/aidata/85"
 
 LABELS = {
     "cacheable_static",
@@ -85,6 +86,25 @@ ANSWER_OR_SYSTEM_KEYS = {
     "점원",
 }
 
+USER_SPEAKER_VALUES = {
+    "customer",
+    "user",
+    "고객",
+    "민원인",
+    "사용자",
+    "손님",
+}
+
+SYSTEM_SPEAKER_VALUES = {
+    "agent",
+    "assistant",
+    "clerk",
+    "system",
+    "상담사",
+    "시스템",
+    "점원",
+}
+
 TEXT_KEY_HINTS = {
     "question",
     "utterance",
@@ -96,6 +116,23 @@ TEXT_KEY_HINTS = {
     "사용자",
     "손님",
     "질문",
+}
+
+SENTENCE_KEYS = {
+    "sentence",
+    "문장",
+    "발화",
+}
+
+SPEAKER_KEYS = {
+    "speaker",
+    "speakerid",
+    "화자",
+}
+
+PUBLIC_DIALOGUE_QUESTION_KEYS = {
+    "subintent",
+    "비식별 데이터",
 }
 
 INTENT_KEYS = {
@@ -248,7 +285,12 @@ STATIC_TERMS = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-path", type=Path, default=DEFAULT_SOURCE_PATH, help="Downloaded ZIP, extracted directory, or single JSON/CSV file.")
+    parser.add_argument(
+        "--source-path",
+        type=Path,
+        default=DEFAULT_SOURCE_PATH,
+        help="Downloaded ZIP, extracted directory, or single JSON/JSONL/CSV/TSV/XLSX file.",
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--sample-per-label", type=int, default=200)
     parser.add_argument("--max-rows", type=int, help="Optional cap for quick local experiments.")
@@ -301,6 +343,12 @@ def likely_intent_key(key: str) -> bool:
     return normalized in INTENT_KEYS or compact in {compact_key(item) for item in INTENT_KEYS}
 
 
+def likely_public_dialogue_question_key(key: str) -> bool:
+    normalized = normalize_key(key)
+    compact = compact_key(key)
+    return normalized in PUBLIC_DIALOGUE_QUESTION_KEYS or compact in {compact_key(item) for item in PUBLIC_DIALOGUE_QUESTION_KEYS}
+
+
 def stable_id(source_file: str, text: str, source_index: str) -> str:
     digest = hashlib.sha256(f"{source_file}\0{source_index}\0{text}".encode("utf-8")).hexdigest()
     return f"aihub-kor-dialogue-{digest[:16]}"
@@ -313,7 +361,7 @@ def stable_sort_key(row: dict[str, Any]) -> str:
 def iter_input_files(source_path: Path) -> Iterable[tuple[str, bytes]]:
     if source_path.is_dir():
         for path in sorted(source_path.rglob("*")):
-            if path.is_file() and path.suffix.lower() in {".json", ".jsonl", ".csv", ".tsv", ".zip"}:
+            if path.is_file() and path.suffix.lower() in {".json", ".jsonl", ".csv", ".tsv", ".xlsx", ".zip"}:
                 yield from iter_input_files(path)
         return
     if not source_path.exists():
@@ -322,10 +370,10 @@ def iter_input_files(source_path: Path) -> Iterable[tuple[str, bytes]]:
         with zipfile.ZipFile(source_path) as archive:
             for name in sorted(archive.namelist()):
                 suffix = Path(name).suffix.lower()
-                if suffix in {".json", ".jsonl", ".csv", ".tsv"} and not name.endswith("/"):
+                if suffix in {".json", ".jsonl", ".csv", ".tsv", ".xlsx"} and not name.endswith("/"):
                     yield name, archive.read(name)
         return
-    if source_path.suffix.lower() in {".json", ".jsonl", ".csv", ".tsv"}:
+    if source_path.suffix.lower() in {".json", ".jsonl", ".csv", ".tsv", ".xlsx"}:
         yield str(source_path), source_path.read_bytes()
         return
     raise SystemExit(f"unsupported source path: {source_path}")
@@ -412,6 +460,208 @@ def read_jsonl_rows(source_name: str, text: str, include_system: bool) -> list[d
     return rows
 
 
+def read_xlsx_rows(source_name: str, raw: bytes, include_system: bool) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for sheet_name, sheet_rows in iter_xlsx_sheets(raw):
+        header_index, headers = detect_header(sheet_rows)
+        if header_index < 0:
+            continue
+        for row_number, row_values in enumerate(sheet_rows[header_index + 1 :], start=header_index + 2):
+            record = row_to_record(headers, row_values)
+            rows.extend(extract_excel_record_rows(source_name, sheet_name, row_number, record, include_system))
+    return rows
+
+
+def iter_xlsx_sheets(raw: bytes) -> Iterable[tuple[str, list[list[str]]]]:
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        shared_strings = read_xlsx_shared_strings(archive)
+        for sheet_name, sheet_path in read_xlsx_sheet_paths(archive):
+            if sheet_path not in archive.namelist():
+                continue
+            yield sheet_name, read_xlsx_sheet_rows(archive.read(sheet_path), shared_strings)
+
+
+def read_xlsx_shared_strings(archive: zipfile.ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in archive.namelist():
+        return []
+    root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+    strings: list[str] = []
+    for si in root.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}si"):
+        parts = [
+            node.text or ""
+            for node in si.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+        ]
+        strings.append("".join(parts))
+    return strings
+
+
+def read_xlsx_sheet_paths(archive: zipfile.ZipFile) -> list[tuple[str, str]]:
+    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+    rels_root = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    rels = {
+        rel.attrib.get("Id", ""): rel.attrib.get("Target", "")
+        for rel in rels_root.findall("{http://schemas.openxmlformats.org/package/2006/relationships}Relationship")
+    }
+    sheets: list[tuple[str, str]] = []
+    for sheet in workbook.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"):
+        name = sheet.attrib.get("name", "Sheet")
+        rel_id = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", "")
+        target = rels.get(rel_id, "")
+        if not target:
+            continue
+        path = target if target.startswith("xl/") else f"xl/{target.lstrip('/')}"
+        sheets.append((name, path))
+    return sheets
+
+
+def read_xlsx_sheet_rows(raw_sheet_xml: bytes, shared_strings: list[str]) -> list[list[str]]:
+    root = ET.fromstring(raw_sheet_xml)
+    rows: list[list[str]] = []
+    for row in root.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row"):
+        cells: dict[int, str] = {}
+        for cell in row.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c"):
+            index = xlsx_column_index(cell.attrib.get("r", ""))
+            if index < 0:
+                continue
+            cells[index] = xlsx_cell_value(cell, shared_strings)
+        if not cells:
+            rows.append([])
+            continue
+        max_index = max(cells)
+        rows.append([cells.get(index, "") for index in range(max_index + 1)])
+    return rows
+
+
+def xlsx_column_index(cell_ref: str) -> int:
+    letters = "".join(ch for ch in cell_ref if ch.isalpha())
+    if not letters:
+        return -1
+    value = 0
+    for char in letters.upper():
+        value = value * 26 + (ord(char) - ord("A") + 1)
+    return value - 1
+
+
+def xlsx_cell_value(cell: ET.Element, shared_strings: list[str]) -> str:
+    cell_type = cell.attrib.get("t", "")
+    if cell_type == "inlineStr":
+        parts = [
+            node.text or ""
+            for node in cell.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+        ]
+        return normalize_text("".join(parts))
+    value_node = cell.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v")
+    raw = value_node.text if value_node is not None and value_node.text is not None else ""
+    if cell_type == "s":
+        try:
+            return normalize_text(shared_strings[int(raw)])
+        except (ValueError, IndexError):
+            return ""
+    if cell_type == "b":
+        return "TRUE" if raw == "1" else "FALSE"
+    return normalize_text(raw)
+
+
+def detect_header(sheet_rows: list[list[str]]) -> tuple[int, list[str]]:
+    for index, row in enumerate(sheet_rows[:20]):
+        normalized = [normalize_text(value) for value in row]
+        nonempty = [value for value in normalized if value]
+        if len(nonempty) < 3:
+            continue
+        compact_headers = {compact_key(value) for value in nonempty}
+        if compact_headers & {compact_key(item) for item in USER_UTTERANCE_KEYS | SENTENCE_KEYS | SPEAKER_KEYS}:
+            return index, normalized
+    return -1, []
+
+
+def row_to_record(headers: list[str], values: list[str]) -> dict[str, str]:
+    record: dict[str, str] = {}
+    for index, header in enumerate(headers):
+        if not header:
+            continue
+        value = normalize_text(values[index]) if index < len(values) else ""
+        if value:
+            record[header] = value
+    return record
+
+
+def extract_excel_record_rows(
+    source_name: str,
+    sheet_name: str,
+    row_number: int,
+    record: dict[str, str],
+    include_system: bool,
+) -> list[dict[str, Any]]:
+    speaker = record_speaker(record)
+    if speaker_is_system(speaker) and not include_system:
+        return []
+    if speaker and not speaker_is_user(speaker) and not include_system:
+        return []
+
+    context = {
+        normalize_key(key): value
+        for key, value in record.items()
+        if likely_intent_key(key) and not likely_public_dialogue_question_key(key) and value
+    }
+    candidates: list[tuple[str, str, str]] = []
+
+    sentence = first_record_value(record, SENTENCE_KEYS)
+    if sentence:
+        candidates.append(("SENTENCE", sentence, "system" if speaker_is_system(speaker) else "user"))
+    elif speaker_is_user(speaker):
+        public_question = first_record_value(record, PUBLIC_DIALOGUE_QUESTION_KEYS)
+        if public_question:
+            candidates.append(("public_question", public_question, "user"))
+        else:
+            question = first_record_value(record, USER_UTTERANCE_KEYS)
+            if question:
+                candidates.append(("question", question, "user"))
+    else:
+        for key, value in record.items():
+            role = candidate_role(key, include_system)
+            if role:
+                candidates.append((key, value, role))
+
+    rows: list[dict[str, Any]] = []
+    seen_text: set[str] = set()
+    for key, text, role in candidates:
+        text = normalize_text(text)
+        if not text or text in seen_text:
+            continue
+        seen_text.add(text)
+        rows.append(make_source_row(source_name, f"{sheet_name}!row{row_number}.{key}", text, role, context))
+    return rows
+
+
+def first_record_value(record: dict[str, str], keys: set[str]) -> str:
+    normalized_targets = {normalize_key(key) for key in keys}
+    compact_targets = {compact_key(key) for key in keys}
+    for key, value in record.items():
+        if normalize_key(key) in normalized_targets or compact_key(key) in compact_targets:
+            return value
+    return ""
+
+
+def record_speaker(record: dict[str, str]) -> str:
+    return first_record_value(record, SPEAKER_KEYS)
+
+
+def speaker_is_user(value: str) -> bool:
+    if not value:
+        return False
+    normalized = normalize_key(value)
+    compact = compact_key(value)
+    return normalized in USER_SPEAKER_VALUES or compact in {compact_key(item) for item in USER_SPEAKER_VALUES} or value == "1"
+
+
+def speaker_is_system(value: str) -> bool:
+    if not value:
+        return False
+    normalized = normalize_key(value)
+    compact = compact_key(value)
+    return normalized in SYSTEM_SPEAKER_VALUES or compact in {compact_key(item) for item in SYSTEM_SPEAKER_VALUES} or value == "0"
+
+
 def make_source_row(source_name: str, source_index: str, text: str, role: str, context: dict[str, str]) -> dict[str, Any]:
     return {
         "id": stable_id(source_name, text, source_index),
@@ -438,6 +688,8 @@ def load_rows(source_path: Path, include_system: bool, max_rows: int | None) -> 
             file_rows = read_delimited_rows(source_name, text, ",", include_system)
         elif suffix == ".tsv":
             file_rows = read_delimited_rows(source_name, text, "\t", include_system)
+        elif suffix == ".xlsx":
+            file_rows = read_xlsx_rows(source_name, raw, include_system)
         else:
             continue
         for row in file_rows:

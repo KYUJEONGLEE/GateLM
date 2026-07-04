@@ -6,11 +6,13 @@ The scripts in this directory are not part of the Gateway live request path. Gat
 
 ## Dataset
 
-Canonical synthetic dataset:
+Current default synthetic dataset:
 
 ```text
-scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl
+scripts/semantic_cache_classifier/data/cacheability_synthetic_v3.jsonl
 ```
+
+`cacheability_synthetic_v2.jsonl` is retained as the previous smaller synthetic dataset for comparison.
 
 Each line is one JSON object with the following fields:
 
@@ -34,13 +36,13 @@ __label__cacheable_static synthetic text...
 
 The dataset intentionally includes the same keywords across cacheable and non-cacheable labels. This is required so the model learns cacheability risk instead of simple keyword matching.
 
-The current `synthetic_v2` dataset is generated from sanitized templates:
+The current default `synthetic_v3` dataset is generated from sanitized templates:
 
 ```powershell
 python scripts/semantic_cache_classifier/generate_synthetic_dataset.py
 ```
 
-It produces 384 examples across 96 `pairGroup` values. Each group contains one example for each label so train/test splits remain balanced by label while still avoiding pair leakage. The dataset includes hard negative groups for time-sensitive, live-state, user-state, and boundary-missing prompts such as weather, exchange rates, stock prices, breaking news, quota, routing, permissions, and raw provider errors.
+It produces 4,000 examples across 1,000 `pairGroup` values, exactly 1,000 examples per label. Each group contains one example for each label so train/test splits remain balanced by label while still avoiding pair leakage. The dataset includes manual FAQ-style prompts, explicit keyword contrast prompts, automatic domain-wide contrast prompts for every domain anchor, short branded policy prompts, versioned guide/standard/terms/rule prompts that do not always use the word "policy", ambiguous short-token fail-closed prompts, and hard negative groups for time-sensitive, live-state, user-state, and boundary-missing prompts such as weather, exchange rates, stock prices, breaking news, quota, routing, permissions, and raw provider errors.
 
 ## Split Rule
 
@@ -67,7 +69,7 @@ Training command:
 
 ```powershell
 python scripts/semantic_cache_classifier/prepare_dataset.py
-python scripts/semantic_cache_classifier/train_fasttext.py --model-version cacheability-fasttext-synthetic-v2
+python scripts/semantic_cache_classifier/train_fasttext.py
 ```
 
 Windows local setup that has been verified:
@@ -79,7 +81,7 @@ py -3.12 -m venv .tmp\semantic-cache-fasttext-venv
 
 `fasttext-wheel==0.9.2` currently imports as `fasttext`. Keep `numpy<2` in this venv because FastText 0.9.2 prediction can fail with NumPy 2.x.
 
-The checked default training hyperparameters for the synthetic v2 dataset are:
+The checked default training hyperparameters for the synthetic v3 dataset are:
 
 ```text
 epoch=35
@@ -93,8 +95,8 @@ loss=softmax
 Default artifact outputs:
 
 ```text
-scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin
-scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.metadata.json
+scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin
+scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.metadata.json
 ```
 
 The metadata file records:
@@ -112,7 +114,7 @@ Evaluation command:
 
 ```powershell
 python scripts/semantic_cache_classifier/evaluate_fasttext.py `
-  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin `
+  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin `
   --fail-on-threshold
 ```
 
@@ -183,9 +185,9 @@ AI Hub Korean Dialogue can be used as a Korean Q/A dialogue relabeling source af
 Supported source inputs:
 
 ```text
-directory containing JSON/JSONL/CSV/TSV/ZIP files
+directory containing JSON/JSONL/CSV/TSV/XLSX/ZIP files
 single ZIP file
-single JSON/JSONL/CSV/TSV file
+single JSON/JSONL/CSV/TSV/XLSX file
 ```
 
 Default outputs are ignored under `build/` because they may include Korean dialogue text:
@@ -196,7 +198,12 @@ scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/aihub_korea
 scripts/semantic_cache_classifier/build/aihub_korean_dialogue_review/cacheability_aihub_korean_dialogue_relabel_draft.jsonl
 ```
 
-The importer extracts likely user utterance fields such as main question, user answer, and Korean equivalents. System answer fields are excluded by default. All generated labels are draft suggestions with `reviewStatus=review_required`.
+For the downloaded AI Hub Korean Dialogue Excel release, the importer extracts only likely user-side utterances by default:
+
+- Small-business dialogue workbooks use `SENTENCE` when `SPEAKER`/`SPEAKERID` identifies a user-side speaker such as `고객`/`1`.
+- Public civil-service workbooks use `subintent` when `화자` identifies a user-side speaker such as `민원인`.
+
+System answer fields and system-side speakers such as `점원`, `상담사`, and `0` are excluded by default. All generated labels are draft suggestions with `reviewStatus=review_required`.
 
 ## Runtime Sidecar
 
@@ -204,8 +211,8 @@ Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The 
 
 ```powershell
 python scripts/semantic_cache_classifier/serve_fasttext_classifier.py `
-  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin `
-  --model-version cacheability-fasttext-synthetic-v2 `
+  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin `
+  --model-version cacheability-fasttext-synthetic-v3 `
   --host 127.0.0.1 `
   --port 8765
 ```
@@ -237,7 +244,7 @@ The high-risk labels `dynamic_user_state` and `unsafe_or_unknown` use stricter r
 Current default model version:
 
 ```text
-cacheability-fasttext-synthetic-v2
+cacheability-fasttext-synthetic-v3
 ```
 
 Versioning rules:

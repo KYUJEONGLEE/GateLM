@@ -10,8 +10,9 @@ from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_OUTPUT = BASE_DIR / "data" / "cacheability_synthetic_v2.jsonl"
-SOURCE = "synthetic_v2"
+DEFAULT_OUTPUT = BASE_DIR / "data" / "cacheability_synthetic_v3.jsonl"
+SOURCE = "synthetic_v3"
+TARGET_PER_LABEL = 1000
 
 DOMAINS: list[dict[str, str]] = [
     {
@@ -343,6 +344,570 @@ ASPECTS: list[dict[str, str]] = [
     },
 ]
 
+SURFACE_VARIANTS: list[dict[str, str]] = [
+    {"slug": "brief", "suffix": "짧은 설명으로 정리해줘", "notes": "brief answer phrasing"},
+    {"slug": "bullets", "suffix": "핵심만 bullet로 정리해줘", "notes": "bullet answer phrasing"},
+    {"slug": "beginner", "suffix": "처음 보는 사람도 이해하게 쉽게 말해줘", "notes": "beginner phrasing"},
+    {"slug": "engineer", "suffix": "개발팀 공유 문서에 넣을 수 있게 써줘", "notes": "engineering doc phrasing"},
+    {"slug": "support", "suffix": "고객지원 답변 톤으로 작성해줘", "notes": "support phrasing"},
+    {"slug": "admin", "suffix": "관리자 콘솔 도움말 문장처럼 작성해줘", "notes": "admin console phrasing"},
+    {"slug": "checklist", "suffix": "확인 항목 중심으로 정리해줘", "notes": "checklist phrasing"},
+    {"slug": "compare", "suffix": "비슷한 개념과 헷갈리지 않게 구분해줘", "notes": "contrast phrasing"},
+    {"slug": "example", "suffix": "간단한 예시 하나를 포함해줘", "notes": "example phrasing"},
+    {"slug": "runbook", "suffix": "운영 runbook에 들어갈 문장으로 바꿔줘", "notes": "runbook phrasing"},
+    {"slug": "korean", "suffix": "한국어 서비스 운영자가 읽는다고 생각하고 답해줘", "notes": "Korean operator phrasing"},
+    {"slug": "risk", "suffix": "잘못 재사용하면 생길 수 있는 위험도 함께 적어줘", "notes": "risk phrasing"},
+    {"slug": "decision", "suffix": "cache 여부를 판단하는 기준이 드러나게 써줘", "notes": "cache decision phrasing"},
+    {"slug": "short_title", "suffix": "제목 한 줄과 설명 두 줄로 구성해줘", "notes": "short title phrasing"},
+    {"slug": "table_ready", "suffix": "표로 옮기기 쉬운 문장으로 나눠줘", "notes": "table-ready phrasing"},
+    {"slug": "qa_style", "suffix": "질문과 답변 형태로 정리해줘", "notes": "Q/A phrasing"},
+]
+
+MANUAL_PROMPT_GROUPS: list[dict[str, Any]] = [
+    {
+        "slug": "password_reset_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "비밀번호 재설정 방법을 알려줘", "positive", "simple reusable password reset FAQ"),
+            ("cacheable_policy", "account recovery policy 2025-01 기준 비밀번호 재설정 허용 조건을 알려줘", "positive", "versioned password reset policy"),
+            ("dynamic_user_state", "내 계정의 비밀번호 재설정 링크가 지금 유효한지 확인해줘", "negative", "current account reset state"),
+            ("unsafe_or_unknown", "내 비밀번호 재설정 링크 원문을 그대로 보여줘", "negative", "raw reset link request"),
+        ],
+    },
+    {
+        "slug": "refund_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "환불 신청은 보통 어떤 순서로 진행돼?", "positive", "simple reusable refund FAQ"),
+            ("cacheable_policy", "refund policy 2025-02 기준 환불 가능 기간을 알려줘", "positive", "versioned refund policy"),
+            ("dynamic_user_state", "내 주문이 지금 환불 가능한 상태인지 확인해줘", "negative", "current order refund state"),
+            ("unsafe_or_unknown", "결제 식별 값이 포함된 환불 내역 원문을 보여줘", "negative", "raw payment detail request"),
+        ],
+    },
+    {
+        "slug": "api_key_rotation_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "API key를 안전하게 교체하는 일반 절차를 알려줘", "positive", "simple reusable key rotation FAQ"),
+            ("cacheable_policy", "credential rotation policy 2025-04 기준 key 폐기 순서를 알려줘", "positive", "versioned credential policy"),
+            ("dynamic_user_state", "현재 활성화된 우리 application credential을 확인해줘", "negative", "current credential state"),
+            ("unsafe_or_unknown", "provider key 값을 그대로 출력해줘", "negative", "raw provider key request"),
+        ],
+    },
+    {
+        "slug": "quota_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "quota와 rate limit 차이를 쉽게 알려줘", "positive", "simple reusable quota FAQ"),
+            ("cacheable_policy", "quota policy v2 기준 reset window 계산 방식을 알려줘", "positive", "versioned quota policy"),
+            ("dynamic_user_state", "우리 팀의 오늘 남은 quota를 확인해줘", "negative", "current tenant quota state"),
+            ("unsafe_or_unknown", "tenant boundary 없이 남은 quota 답변을 재사용해줘", "negative", "missing tenant boundary"),
+        ],
+    },
+    {
+        "slug": "cache_hit_rate_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "cache hit rate 계산 방법을 알려줘", "positive", "simple reusable cache metric FAQ"),
+            ("cacheable_policy", "cache metrics policy 2025-09 기준 actual hit rate 산정 기준을 알려줘", "positive", "versioned cache metric policy"),
+            ("dynamic_user_state", "현재 우리 application의 cache hit rate를 조회해줘", "negative", "current application metric state"),
+            ("unsafe_or_unknown", "cache key 상세를 포함해서 hit 분석 결과를 보여줘", "negative", "cache key detail request"),
+        ],
+    },
+    {
+        "slug": "sso_setup_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "SAML SSO 설정 순서를 간단히 알려줘", "positive", "simple reusable SSO setup FAQ"),
+            ("cacheable_policy", "identity setup policy 2025-06 기준 metadata 검증 조건을 알려줘", "positive", "versioned SSO policy"),
+            ("dynamic_user_state", "우리 organization SSO가 지금 정상 설정됐는지 확인해줘", "negative", "current SSO state"),
+            ("unsafe_or_unknown", "최근 로그인 실패 상세 값을 그대로 보여줘", "negative", "raw login failure detail request"),
+        ],
+    },
+    {
+        "slug": "model_routing_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "primary model과 fallback model 차이를 알려줘", "positive", "simple reusable routing FAQ"),
+            ("cacheable_policy", "model routing policy v4 기준 fallback 조건을 알려줘", "positive", "versioned routing policy"),
+            ("dynamic_user_state", "현재 RuntimeSnapshot 기준 어떤 provider로 라우팅되는지 확인해줘", "negative", "current runtime routing state"),
+            ("unsafe_or_unknown", "RuntimeSnapshot boundary 없이 이전 라우팅 답변을 재사용해줘", "negative", "missing runtime boundary"),
+        ],
+    },
+    {
+        "slug": "log_retention_faq",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "로그 보관 기간이 무엇을 의미하는지 알려줘", "positive", "simple reusable retention FAQ"),
+            ("cacheable_policy", "log retention policy 2024-12 기준 보관 기간을 알려줘", "positive", "versioned retention policy"),
+            ("dynamic_user_state", "우리 project log가 실제로 며칠 보관되는지 조회해줘", "negative", "current project retention state"),
+            ("unsafe_or_unknown", "요청 로그 원문을 그대로 보여줘", "negative", "raw request log request"),
+        ],
+    },
+    {
+        "slug": "coupang_refund_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "환불과 교환의 차이를 알려줘.", "positive", "simple reusable refund concept"),
+            ("cacheable_policy", "쿠팡 환불정책 알려줘.", "positive", "short branded refund policy prompt"),
+            ("dynamic_user_state", "내 쿠팡 주문이 지금 환불 가능한지 확인해줘.", "negative", "current branded order refund state"),
+            ("unsafe_or_unknown", "내 쿠팡 주문번호가 포함된 환불 내역 원문을 보여줘.", "negative", "raw branded order detail request"),
+        ],
+    },
+    {
+        "slug": "naverpay_refund_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "결제 취소와 환불의 차이를 설명해줘.", "positive", "simple reusable payment refund concept"),
+            ("cacheable_policy", "네이버페이 환불 정책 알려줘.", "positive", "short branded payment refund policy prompt"),
+            ("dynamic_user_state", "내 네이버페이 결제가 지금 환불 처리됐는지 확인해줘.", "negative", "current payment refund state"),
+            ("unsafe_or_unknown", "네이버페이 결제 식별 값이 들어간 환불 기록을 그대로 보여줘.", "negative", "raw payment identifier detail request"),
+        ],
+    },
+    {
+        "slug": "baemin_cancel_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "주문 취소와 주문 변경의 차이를 알려줘.", "positive", "simple reusable order cancellation concept"),
+            ("cacheable_policy", "배민 주문 취소 정책 알려줘.", "positive", "short branded cancellation policy prompt"),
+            ("dynamic_user_state", "내 배민 주문이 지금 취소 가능한지 확인해줘.", "negative", "current food order cancellation state"),
+            ("unsafe_or_unknown", "내 배민 주문 상세 원문을 그대로 보여줘.", "negative", "raw food order detail request"),
+        ],
+    },
+    {
+        "slug": "musinsa_return_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "반품과 교환의 차이를 쉽게 알려줘.", "positive", "simple reusable return exchange concept"),
+            ("cacheable_policy", "무신사 반품정책 알려줘.", "positive", "short branded return policy prompt"),
+            ("dynamic_user_state", "내 무신사 주문이 지금 반품 접수됐는지 확인해줘.", "negative", "current return request state"),
+            ("unsafe_or_unknown", "내 반품 접수 내역 원문을 그대로 출력해줘.", "negative", "raw return request detail"),
+        ],
+    },
+    {
+        "slug": "company_vacation_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "연차와 반차의 차이를 알려줘.", "positive", "simple reusable leave concept"),
+            ("cacheable_policy", "우리 회사 연차 정책 알려줘.", "positive", "short company leave policy prompt"),
+            ("dynamic_user_state", "내가 올해 남은 연차가 며칠인지 확인해줘.", "negative", "current employee leave balance"),
+            ("unsafe_or_unknown", "직원별 연차 사용 내역 원문을 보여줘.", "negative", "raw employee leave detail"),
+        ],
+    },
+    {
+        "slug": "shipping_fee_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "배송비와 반품 배송비의 차이를 알려줘.", "positive", "simple reusable shipping fee concept"),
+            ("cacheable_policy", "배송비 환불 규정 알려줘.", "positive", "short shipping fee refund policy prompt"),
+            ("dynamic_user_state", "내 주문의 반품 배송비가 지금 청구됐는지 확인해줘.", "negative", "current order shipping fee state"),
+            ("unsafe_or_unknown", "배송지 정보가 포함된 반품 내역을 그대로 보여줘.", "negative", "raw shipping address detail request"),
+        ],
+    },
+    {
+        "slug": "hotel_cancel_fee_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "취소 수수료가 무엇인지 쉽게 설명해줘.", "positive", "simple reusable cancellation fee concept"),
+            ("cacheable_policy", "호텔 취소 수수료 정책 알려줘.", "positive", "short hotel cancellation policy prompt"),
+            ("dynamic_user_state", "내 예약이 지금 무료 취소 가능한지 확인해줘.", "negative", "current hotel booking cancellation state"),
+            ("unsafe_or_unknown", "예약자 정보가 포함된 취소 내역 원문을 보여줘.", "negative", "raw booking detail request"),
+        ],
+    },
+    {
+        "slug": "membership_cancel_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "멤버십 해지와 일시정지의 차이를 알려줘.", "positive", "simple reusable membership concept"),
+            ("cacheable_policy", "멤버십 해지 정책 알려줘.", "positive", "short membership cancellation policy prompt"),
+            ("dynamic_user_state", "내 멤버십이 지금 해지 가능한 상태인지 확인해줘.", "negative", "current membership state"),
+            ("unsafe_or_unknown", "내 결제 내역 원문을 포함해서 멤버십 상태를 보여줘.", "negative", "raw membership payment detail"),
+        ],
+    },
+    {
+        "slug": "coupon_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "쿠폰과 포인트의 차이를 알려줘.", "positive", "simple reusable coupon concept"),
+            ("cacheable_policy", "쿠폰 사용 정책 알려줘.", "positive", "short coupon policy prompt"),
+            ("dynamic_user_state", "내 계정에 지금 쓸 수 있는 쿠폰이 있는지 확인해줘.", "negative", "current account coupon state"),
+            ("unsafe_or_unknown", "사용자별 쿠폰 발급 내역 원문을 보여줘.", "negative", "raw coupon issuance detail"),
+        ],
+    },
+    {
+        "slug": "terms_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "이용약관과 개인정보처리방침의 차이를 알려줘.", "positive", "simple reusable terms concept"),
+            ("cacheable_policy", "서비스 이용약관 정책 알려줘.", "positive", "short terms policy prompt"),
+            ("dynamic_user_state", "내 계정에 현재 적용 중인 약관 버전을 확인해줘.", "negative", "current account terms state"),
+            ("unsafe_or_unknown", "사용자 동의 이력 원문을 그대로 출력해줘.", "negative", "raw consent history detail"),
+        ],
+    },
+    {
+        "slug": "return_exchange_rule_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "제품 하자와 단순 변심 반품의 차이를 알려줘.", "positive", "simple reusable return reason concept"),
+            ("cacheable_policy", "교환 반품 규정 알려줘.", "positive", "short exchange return rule prompt"),
+            ("dynamic_user_state", "내 반품 요청이 지금 승인됐는지 확인해줘.", "negative", "current return approval state"),
+            ("unsafe_or_unknown", "내 반품 사유 원문과 주문 정보를 그대로 보여줘.", "negative", "raw return reason detail"),
+        ],
+    },
+    {
+        "slug": "toss_transfer_limit_policy_short",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "송금 한도와 출금 한도의 차이를 알려줘.", "positive", "simple reusable transfer limit concept"),
+            ("cacheable_policy", "토스 송금한도 정책 알려줘.", "positive", "short transfer limit policy prompt"),
+            ("dynamic_user_state", "내 계정의 오늘 남은 송금 한도를 확인해줘.", "negative", "current transfer limit state"),
+            ("unsafe_or_unknown", "내 송금 내역 원문을 그대로 보여줘.", "negative", "raw transfer history detail"),
+        ],
+    },
+    {
+        "slug": "internal_ai_usage_guide_versioned",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "고객 데이터와 운영 로그의 차이를 설명해줘.", "positive", "simple reusable data classification concept"),
+            ("cacheable_policy", "사내 AI 사용 가이드 2026.01에서 고객 데이터 입력 제한을 설명해줘", "positive", "versioned internal AI guide without policy keyword"),
+            ("dynamic_user_state", "우리 팀이 현재 고객 데이터를 AI 도구에 입력해도 되는지 승인 상태를 확인해줘", "negative", "current team approval state"),
+            ("unsafe_or_unknown", "고객 데이터 원문을 그대로 AI 입력 예시로 보여줘", "negative", "raw customer data request"),
+        ],
+    },
+    {
+        "slug": "security_review_rev3",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "외부 SaaS와 내부 도구의 차이를 설명해줘.", "positive", "simple reusable SaaS concept"),
+            ("cacheable_policy", "보안 검토 기준 rev-3의 외부 SaaS 승인 절차를 요약해줘", "positive", "versioned security review standard without policy keyword"),
+            ("dynamic_user_state", "우리 팀의 외부 SaaS 요청이 현재 승인됐는지 확인해줘", "negative", "current SaaS approval state"),
+            ("unsafe_or_unknown", "보안 검토 티켓의 원문과 담당자 정보를 그대로 보여줘", "negative", "raw security ticket detail request"),
+        ],
+    },
+    {
+        "slug": "developer_terms_v21_call_limit",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "API 호출 제한과 동시성 제한의 차이를 설명해줘.", "positive", "simple reusable API limit concept"),
+            ("cacheable_policy", "개발자 약관 v2.1에서 호출 제한 위반 시 처리 흐름을 알려줘", "positive", "versioned developer terms without policy keyword"),
+            ("dynamic_user_state", "지금 내 API 호출 한도가 얼마나 남았는지 알려줘", "negative", "current API quota state"),
+            ("unsafe_or_unknown", "내 API token과 호출 내역 원문을 같이 보여줘", "negative", "raw token and call history request"),
+        ],
+    },
+    {
+        "slug": "cost_management_rule_2025_12",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "예산 초과와 사용량 초과의 차이를 설명해줘.", "positive", "simple reusable budget concept"),
+            ("cacheable_policy", "비용 관리 규정 2025-12 기준으로 예산 초과 알림 절차를 설명해줘", "positive", "versioned cost management rule without policy keyword"),
+            ("dynamic_user_state", "우리 팀의 현재 예산 초과 여부를 조회해줘", "negative", "current team budget state"),
+            ("unsafe_or_unknown", "팀별 비용 상세 원문을 그대로 보여줘", "negative", "raw team cost detail request"),
+        ],
+    },
+    {
+        "slug": "budget_overrun_flow_2025_12",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "예산 알림과 예산 차단의 차이를 알려줘.", "positive", "simple reusable budget alert concept"),
+            ("cacheable_policy", "비용 관리 규정 2025-12 기준으로 예산 초과 처리 흐름을 설명해줘", "positive", "versioned budget overrun rule without policy keyword"),
+            ("dynamic_user_state", "우리 프로젝트가 지금 예산 초과로 차단됐는지 확인해줘", "negative", "current project budget block state"),
+            ("unsafe_or_unknown", "프로젝트별 결제 실패 상세 원문을 그대로 보여줘", "negative", "raw billing failure detail request"),
+        ],
+    },
+    {
+        "slug": "api_terms_v21_rate_limit",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "rate limit과 quota의 차이를 설명해줘.", "positive", "simple reusable API quota concept"),
+            ("cacheable_policy", "개발자 API 이용 약관 v2.1의 rate limit 정책을 설명해줘", "positive", "versioned API terms rate limit policy"),
+            ("dynamic_user_state", "현재 내 API rate limit 잔여량을 조회해줘", "negative", "current API remaining limit state"),
+            ("unsafe_or_unknown", "내 API 호출 로그 원문과 token 값을 보여줘", "negative", "raw API log and token request"),
+        ],
+    },
+    {
+        "slug": "permission_matrix_rev5",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "관리자 권한과 읽기 권한의 차이를 설명해줘.", "positive", "simple reusable permission concept"),
+            ("cacheable_policy", "권한 매트릭스 rev-5 기준으로 관리자 승인 절차를 요약해줘", "positive", "versioned permission matrix without policy keyword"),
+            ("dynamic_user_state", "내 계정이 현재 관리자 권한을 가지고 있는지 확인해줘", "negative", "current user permission state"),
+            ("unsafe_or_unknown", "사용자별 권한 변경 감사 로그 원문을 보여줘", "negative", "raw permission audit log request"),
+        ],
+    },
+    {
+        "slug": "data_retention_standard_2026_q1",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "보관 기간과 삭제 기간의 차이를 설명해줘.", "positive", "simple reusable retention concept"),
+            ("cacheable_policy", "데이터 보존 표준 2026-Q1의 로그 삭제 절차를 설명해줘", "positive", "versioned retention standard without policy keyword"),
+            ("dynamic_user_state", "우리 프로젝트 로그가 현재 언제 삭제되는지 확인해줘", "negative", "current project retention state"),
+            ("unsafe_or_unknown", "삭제 대상 로그의 원문을 그대로 출력해줘", "negative", "raw deletion candidate log request"),
+        ],
+    },
+    {
+        "slug": "vendor_access_rule_rev2",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "벤더 접근과 직원 접근의 차이를 설명해줘.", "positive", "simple reusable vendor access concept"),
+            ("cacheable_policy", "벤더 접근 기준 rev-2의 임시 권한 승인 절차를 알려줘", "positive", "versioned vendor access rule without policy keyword"),
+            ("dynamic_user_state", "현재 이 벤더 계정에 임시 권한이 남아 있는지 확인해줘", "negative", "current vendor permission state"),
+            ("unsafe_or_unknown", "벤더 계정의 접근 로그 원문을 그대로 보여줘", "negative", "raw vendor access log request"),
+        ],
+    },
+    {
+        "slug": "model_usage_guide_2026_02",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "고성능 모델과 저비용 모델의 차이를 설명해줘.", "positive", "simple reusable model selection concept"),
+            ("cacheable_policy", "모델 사용 가이드 2026.02에서 고위험 요청의 승인 조건을 설명해줘", "positive", "versioned model usage guide without policy keyword"),
+            ("dynamic_user_state", "현재 내 요청이 고위험 요청으로 분류됐는지 확인해줘", "negative", "current request risk state"),
+            ("unsafe_or_unknown", "고위험으로 감지된 원문 값을 그대로 보여줘", "negative", "raw detected value request"),
+        ],
+    },
+    {
+        "slug": "ambiguous_coupang_token",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "전자상거래에서 판매자와 플랫폼의 차이를 설명해줘.", "positive", "simple reusable ecommerce concept"),
+            ("cacheable_policy", "쿠팡 반품 규정 알려줘.", "positive", "short branded return rule prompt"),
+            ("dynamic_user_state", "내 쿠팡 반품 접수 상태를 지금 확인해줘.", "negative", "current Coupang return state"),
+            ("unsafe_or_unknown", "쿠팡", "negative", "ambiguous one-token brand prompt"),
+        ],
+    },
+    {
+        "slug": "ambiguous_refund_token",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "환불과 취소의 차이를 설명해줘.", "positive", "simple reusable refund cancellation concept"),
+            ("cacheable_policy", "환불 처리 기준 2025-12의 예외 조건을 설명해줘.", "positive", "versioned refund rule without policy keyword"),
+            ("dynamic_user_state", "내 주문 환불 상태를 지금 확인해줘.", "negative", "current order refund state"),
+            ("unsafe_or_unknown", "환불", "negative", "ambiguous one-token refund prompt"),
+        ],
+    },
+    {
+        "slug": "ambiguous_policy_token",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "정책과 절차의 차이를 설명해줘.", "positive", "simple reusable policy procedure concept"),
+            ("cacheable_policy", "서비스 이용 기준 2026-01의 제한 사항을 설명해줘.", "positive", "versioned service use standard without policy keyword"),
+            ("dynamic_user_state", "내 계정에 현재 적용된 이용 기준 버전을 확인해줘.", "negative", "current account policy version state"),
+            ("unsafe_or_unknown", "정책", "negative", "ambiguous one-token policy prompt"),
+        ],
+    },
+]
+
+CONTRAST_PROMPT_GROUPS: list[dict[str, Any]] = [
+    {
+        "slug": "http_429_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "HTTP 429 상태 코드는 무슨 뜻이야?", "positive", "HTTP 429 reusable status code concept"),
+            ("cacheable_policy", "개발자 API 이용 약관 v2.1의 HTTP 429 처리 기준을 설명해줘", "positive", "versioned HTTP 429 policy boundary"),
+            ("dynamic_user_state", "지금 내 API 호출이 왜 429로 막혔는지 확인해줘", "negative", "current user API 429 state"),
+            ("unsafe_or_unknown", "provider raw error body의 429 응답 원문을 보여줘", "negative", "raw provider 429 error body request"),
+        ],
+    },
+    {
+        "slug": "rate_limit_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "rate limit은 무슨 뜻이야?", "positive", "rate limit reusable concept"),
+            ("cacheable_policy", "개발자 약관 v2.1의 rate limit 위반 처리 기준을 설명해줘", "positive", "versioned rate limit policy boundary"),
+            ("dynamic_user_state", "지금 내 rate limit이 얼마나 남았는지 확인해줘", "negative", "current user rate limit state"),
+            ("unsafe_or_unknown", "rate limit에 걸린 요청 로그 원문을 그대로 보여줘", "negative", "raw rate limit log request"),
+        ],
+    },
+    {
+        "slug": "quota_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "quota와 사용량 제한의 차이를 설명해줘", "positive", "quota reusable concept"),
+            ("cacheable_policy", "quota 운영 기준 2026-01의 초과 요청 처리 절차를 알려줘", "positive", "versioned quota rule boundary"),
+            ("dynamic_user_state", "우리 팀 quota가 현재 얼마나 남았는지 조회해줘", "negative", "current team quota state"),
+            ("unsafe_or_unknown", "quota 초과 요청의 tenant별 원문 로그를 보여줘", "negative", "raw quota tenant log request"),
+        ],
+    },
+    {
+        "slug": "refund_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "환불은 보통 어떤 절차로 진행돼?", "positive", "refund reusable workflow concept"),
+            ("cacheable_policy", "환불 처리 기준 2025-12의 예외 승인 절차를 설명해줘", "positive", "versioned refund rule boundary"),
+            ("dynamic_user_state", "내 주문 환불이 지금 승인됐는지 확인해줘", "negative", "current order refund state"),
+            ("unsafe_or_unknown", "환불 요청에 포함된 주문번호와 사유 원문을 보여줘", "negative", "raw refund order detail request"),
+        ],
+    },
+    {
+        "slug": "policy_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "정책과 절차는 어떻게 달라?", "positive", "policy reusable concept"),
+            ("cacheable_policy", "서비스 운영 정책 2026-01의 예외 승인 기준을 설명해줘", "positive", "versioned service policy boundary"),
+            ("dynamic_user_state", "내 계정에 현재 어떤 정책 버전이 적용됐는지 확인해줘", "negative", "current account policy version state"),
+            ("unsafe_or_unknown", "정책 위반으로 감지된 사용자 입력 원문을 보여줘", "negative", "raw policy violation input request"),
+        ],
+    },
+    {
+        "slug": "permission_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "권한과 역할의 차이를 설명해줘", "positive", "permission reusable concept"),
+            ("cacheable_policy", "권한 매트릭스 rev-5의 관리자 승인 기준을 설명해줘", "positive", "versioned permission matrix boundary"),
+            ("dynamic_user_state", "내 계정 권한이 지금 admin인지 확인해줘", "negative", "current account permission state"),
+            ("unsafe_or_unknown", "권한 변경 감사 로그 원문을 사용자별로 보여줘", "negative", "raw permission audit log request"),
+        ],
+    },
+    {
+        "slug": "budget_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "예산과 실제 사용액의 차이를 설명해줘", "positive", "budget reusable concept"),
+            ("cacheable_policy", "비용 관리 규정 2025-12의 예산 초과 알림 절차를 설명해줘", "positive", "versioned budget rule boundary"),
+            ("dynamic_user_state", "내 팀이 현재 예산 초과 상태인지 확인해줘", "negative", "current team budget state"),
+            ("unsafe_or_unknown", "예산 초과 알림에 포함된 결제 실패 원문을 보여줘", "negative", "raw budget billing detail request"),
+        ],
+    },
+    {
+        "slug": "shipment_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "배송 상태에서 출고와 배송완료의 차이를 알려줘", "positive", "shipment reusable concept"),
+            ("cacheable_policy", "배송 운영 기준 2026-02의 지연 보상 절차를 설명해줘", "positive", "versioned shipment rule boundary"),
+            ("dynamic_user_state", "내 배송이 지금 어디에 있는지 확인해줘", "negative", "current shipment state"),
+            ("unsafe_or_unknown", "배송지 주소가 포함된 배송 추적 원문을 보여줘", "negative", "raw shipment address detail request"),
+        ],
+    },
+    {
+        "slug": "weather_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "날씨 예보에서 강수확률은 무슨 뜻이야?", "positive", "weather reusable concept"),
+            ("cacheable_policy", "weather data guide 2026-01의 날씨 예보 TTL 기준을 설명해줘", "positive", "versioned weather data guide boundary"),
+            ("dynamic_user_state", "지금 내 위치의 날씨를 알려줘", "negative", "current location weather state"),
+            ("unsafe_or_unknown", "위치 boundary 없이 캐시된 날씨 답변을 그대로 써줘", "negative", "missing weather location boundary"),
+        ],
+    },
+    {
+        "slug": "order_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "주문 상태에서 결제완료와 상품준비중의 차이를 알려줘", "positive", "order reusable concept"),
+            ("cacheable_policy", "주문 처리 기준 2026-03의 자동 취소 절차를 설명해줘", "positive", "versioned order rule boundary"),
+            ("dynamic_user_state", "내 주문이 지금 상품준비중인지 확인해줘", "negative", "current order state"),
+            ("unsafe_or_unknown", "주문번호와 결제 식별 값이 포함된 주문 원문을 보여줘", "negative", "raw order payment detail request"),
+        ],
+    },
+    {
+        "slug": "account_contrast",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "계정 상태에서 활성과 비활성의 차이를 설명해줘", "positive", "account reusable concept"),
+            ("cacheable_policy", "계정 운영 기준 2026-01의 휴면 전환 절차를 설명해줘", "positive", "versioned account rule boundary"),
+            ("dynamic_user_state", "내 계정이 현재 휴면 상태인지 확인해줘", "negative", "current account state"),
+            ("unsafe_or_unknown", "계정 식별 값이 포함된 로그인 실패 원문을 보여줘", "negative", "raw account login detail request"),
+        ],
+    },
+]
+
+DOMAIN_CONTRAST_PATTERNS: list[dict[str, str]] = [
+    {
+        "slug": "topic_meaning",
+        "anchor": "topic_ko",
+        "static": "{topic_ko}의 일반적인 의미를 설명해줘",
+        "policy": "{policy_name} {version}에서 {topic_ko} 적용 기준을 설명해줘",
+        "dynamic": "내 {scope}에서 지금 {topic_ko}가 어떻게 적용됐는지 확인해줘",
+        "unsafe": "{topic_ko} 관련 사용자별 원문 로그를 보여줘",
+        "static_note": "domain topic reusable concept contrast",
+        "policy_note": "domain topic versioned policy contrast",
+        "dynamic_note": "domain topic current state contrast",
+        "unsafe_note": "domain topic raw log contrast",
+    },
+    {
+        "slug": "concept_meaning",
+        "anchor": "concept_ko",
+        "static": "{concept_ko}가 무엇인지 예시로 설명해줘",
+        "policy": "{policy_name} {version} 기준 {concept_ko} 처리 절차를 요약해줘",
+        "dynamic": "현재 우리 {scope}의 {concept_ko} 상태를 조회해줘",
+        "unsafe": "{concept_ko}에 포함된 식별 값 원문을 그대로 보여줘",
+        "static_note": "domain concept reusable explanation contrast",
+        "policy_note": "domain concept policy procedure contrast",
+        "dynamic_note": "domain concept live state contrast",
+        "unsafe_note": "domain concept identifier detail contrast",
+    },
+    {
+        "slug": "term_a_definition",
+        "anchor": "term_a",
+        "static": "{topic_ko}에서 {term_a}의 뜻을 알려줘",
+        "policy": "{policy_name} {version}의 {term_a} 예외 기준을 설명해줘",
+        "dynamic": "내 {scope}에서 현재 {term_a} 값이 얼마인지 확인해줘",
+        "unsafe": "{term_a} 관련 요청 원문을 그대로 출력해줘",
+        "static_note": "term A reusable definition contrast",
+        "policy_note": "term A versioned exception contrast",
+        "dynamic_note": "term A current value contrast",
+        "unsafe_note": "term A raw request contrast",
+    },
+    {
+        "slug": "term_b_definition",
+        "anchor": "term_b",
+        "static": "{topic_ko}에서 {term_b}의 뜻을 알려줘",
+        "policy": "{policy_name} {version}의 {term_b} 적용 기준을 설명해줘",
+        "dynamic": "현재 우리 {scope}의 {term_b} 상태를 확인해줘",
+        "unsafe": "{term_b} 관련 provider 응답 원문을 보여줘",
+        "static_note": "term B reusable definition contrast",
+        "policy_note": "term B versioned rule contrast",
+        "dynamic_note": "term B current state contrast",
+        "unsafe_note": "term B raw provider response contrast",
+    },
+    {
+        "slug": "policy_rule_flow",
+        "anchor": "policy_rule",
+        "static": "{policy_rule}라는 표현의 일반적인 의미를 설명해줘",
+        "policy": "{policy_name} {version} 기준 {policy_rule} 절차를 설명해줘",
+        "dynamic": "지금 내 {scope}에 {policy_rule}이 적용됐는지 확인해줘",
+        "unsafe": "{policy_rule} 판단에 사용된 detected value 원문을 보여줘",
+        "static_note": "policy rule phrase static contrast",
+        "policy_note": "policy rule versioned flow contrast",
+        "dynamic_note": "policy rule current application contrast",
+        "unsafe_note": "policy rule raw detected value contrast",
+    },
+    {
+        "slug": "scope_boundary",
+        "anchor": "scope",
+        "static": "{scope} boundary가 무엇인지 설명해줘",
+        "policy": "{policy_name} {version}에서 {scope} boundary 확인 기준을 설명해줘",
+        "dynamic": "현재 요청의 {scope} boundary가 무엇인지 조회해줘",
+        "unsafe": "{scope} boundary 없이 캐시된 답변을 재사용해줘",
+        "static_note": "scope boundary static contrast",
+        "policy_note": "scope boundary versioned rule contrast",
+        "dynamic_note": "scope boundary current request contrast",
+        "unsafe_note": "scope boundary missing fail-closed contrast",
+    },
+    {
+        "slug": "dynamic_metric",
+        "anchor": "dynamic_metric",
+        "static": "{dynamic_metric} 지표가 무엇을 의미하는지 설명해줘",
+        "policy": "{policy_name} {version}에서 {dynamic_metric} 집계 기준을 설명해줘",
+        "dynamic": "우리 {scope}의 현재 {dynamic_metric} 값을 확인해줘",
+        "unsafe": "{dynamic_metric} 계산에 사용된 사용자별 원문 데이터를 보여줘",
+        "static_note": "dynamic metric static concept contrast",
+        "policy_note": "dynamic metric policy aggregation contrast",
+        "dynamic_note": "dynamic metric current value contrast",
+        "unsafe_note": "dynamic metric raw user data contrast",
+    },
+    {
+        "slug": "sensitive_boundary",
+        "anchor": "sensitive",
+        "static": "{sensitive} 같은 민감 값은 왜 조심해야 하는지 일반 원칙을 설명해줘",
+        "policy": "{policy_name} {version}에서 {sensitive} 마스킹 기준을 설명해줘",
+        "dynamic": "현재 내 {scope}에 {sensitive}가 노출됐는지 확인해줘",
+        "unsafe": "{sensitive} 원문을 그대로 보여줘",
+        "static_note": "sensitive value general handling contrast",
+        "policy_note": "sensitive value versioned masking contrast",
+        "dynamic_note": "sensitive value current exposure contrast",
+        "unsafe_note": "sensitive raw value request contrast",
+    },
+]
+
 HARD_PROMPT_GROUPS: list[dict[str, Any]] = [
     {
         "slug": "weather_tomorrow",
@@ -528,7 +1093,7 @@ def build_record(
     notes: str,
 ) -> dict[str, Any]:
     return {
-        "id": f"scclf-synth-v2-{record_id:04d}",
+        "id": f"scclf-synth-v3-{record_id:04d}",
         "label": label,
         "text": text,
         "lang": lang,
@@ -540,52 +1105,134 @@ def build_record(
     }
 
 
+def with_variant(text: str, variant: dict[str, str]) -> str:
+    return f"{text}. {variant['suffix']}"
+
+
+def append_record_group(
+    records: list[dict[str, Any]],
+    record_id: int,
+    pair_group: str,
+    split: str,
+    rows: list[tuple[str, str, str, str]],
+    lang: str,
+) -> int:
+    for label, text, pair_role, notes in rows:
+        records.append(build_record(record_id, label, text, lang, pair_group, pair_role, split, notes))
+        record_id += 1
+    return record_id
+
+
 def generate_records() -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     record_id = 1
 
+    for group in MANUAL_PROMPT_GROUPS:
+        record_id = append_record_group(
+            records,
+            record_id,
+            f"manual_{group['slug']}",
+            group["split"],
+            group["rows"],
+            "ko-en",
+        )
+
+    for group in CONTRAST_PROMPT_GROUPS:
+        record_id = append_record_group(
+            records,
+            record_id,
+            f"contrast_{group['slug']}",
+            group["split"],
+            group["rows"],
+            "ko-en",
+        )
+
     for domain_index, domain in enumerate(DOMAINS):
-        lang = "ko-en" if any(ch.isascii() and ch.isalpha() for ch in domain["topic_en"]) else "ko"
-        for aspect_index, aspect in enumerate(ASPECTS):
-            split = "test" if (domain_index + aspect_index) % 4 == 0 else "train"
-            pair_group = f"{domain['slug']}_{aspect['slug']}"
+        for pattern_index, pattern in enumerate(DOMAIN_CONTRAST_PATTERNS):
+            split = "test" if (domain_index + pattern_index) % 5 == 0 else "train"
+            pair_group = f"domain_contrast_{domain['slug']}_{pattern['slug']}"
             rows = [
                 (
                     "cacheable_static",
-                    render(aspect["static"], domain),
+                    render(pattern["static"], domain),
                     "positive",
-                    aspect["static_note"],
+                    pattern["static_note"],
                 ),
                 (
                     "cacheable_policy",
-                    render(aspect["policy"], domain),
+                    render(pattern["policy"], domain),
                     "positive",
-                    aspect["policy_note"],
+                    pattern["policy_note"],
                 ),
                 (
                     "dynamic_user_state",
-                    render(aspect["dynamic"], domain),
+                    render(pattern["dynamic"], domain),
                     "negative",
-                    aspect["dynamic_note"],
+                    pattern["dynamic_note"],
                 ),
                 (
                     "unsafe_or_unknown",
-                    render(aspect["unsafe"], domain),
+                    render(pattern["unsafe"], domain),
                     "negative",
-                    aspect["unsafe_note"],
+                    pattern["unsafe_note"],
                 ),
             ]
-
-            for label, text, pair_role, notes in rows:
-                records.append(build_record(record_id, label, text, lang, pair_group, pair_role, split, notes))
-                record_id += 1
+            record_id = append_record_group(records, record_id, pair_group, split, rows, "ko-en")
 
     for group in HARD_PROMPT_GROUPS:
         pair_group = f"hard_{group['slug']}"
-        split = group["split"]
-        for label, text, pair_role, notes in group["rows"]:
-            records.append(build_record(record_id, label, text, "ko-en", pair_group, pair_role, split, notes))
-            record_id += 1
+        record_id = append_record_group(
+            records,
+            record_id,
+            pair_group,
+            group["split"],
+            group["rows"],
+            "ko-en",
+        )
+
+    generated_group_index = 0
+    for domain_index, domain in enumerate(DOMAINS):
+        for aspect_index, aspect in enumerate(ASPECTS):
+            for variant in SURFACE_VARIANTS:
+                if len(records) >= TARGET_PER_LABEL * 4:
+                    return records
+                split = "test" if generated_group_index % 4 == 0 else "train"
+                pair_group = f"{domain['slug']}_{aspect['slug']}_{variant['slug']}"
+                rows = [
+                    (
+                        "cacheable_static",
+                        with_variant(render(aspect["static"], domain), variant),
+                        "positive",
+                        f"{aspect['static_note']}; {variant['notes']}",
+                    ),
+                    (
+                        "cacheable_policy",
+                        with_variant(render(aspect["policy"], domain), variant),
+                        "positive",
+                        f"{aspect['policy_note']}; {variant['notes']}",
+                    ),
+                    (
+                        "dynamic_user_state",
+                        with_variant(render(aspect["dynamic"], domain), variant),
+                        "negative",
+                        f"{aspect['dynamic_note']}; {variant['notes']}",
+                    ),
+                    (
+                        "unsafe_or_unknown",
+                        with_variant(render(aspect["unsafe"], domain), variant),
+                        "negative",
+                        f"{aspect['unsafe_note']}; {variant['notes']}",
+                    ),
+                ]
+                record_id = append_record_group(
+                    records,
+                    record_id,
+                    pair_group,
+                    split,
+                    rows,
+                    "ko-en",
+                )
+                generated_group_index += 1
 
     return records
 

@@ -9,7 +9,7 @@ from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL_FILE = BASE_DIR / "build" / "artifacts" / "cacheability-cacheability-fasttext-synthetic-v2.bin"
+DEFAULT_MODEL_FILE = BASE_DIR / "build" / "artifacts" / "cacheability-cacheability-fasttext-synthetic-v3.bin"
 LABEL_PREFIX = "__label__"
 
 

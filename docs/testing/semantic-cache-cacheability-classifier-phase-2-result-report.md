@@ -6,6 +6,7 @@
 - synthetic dataset 위치와 JSONL format을 확정했다.
   - `scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl`
   - 후속 확장 dataset: `scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl`
+  - 현재 기본 dataset: `scripts/semantic_cache_classifier/data/cacheability_synthetic_v3.jsonl`
   - `id`, `label`, `text`, `lang`, `source`, `pairGroup`, `pairRole`, `split`, `notes` field 사용
 - train/test split 기준을 정의하고 `prepare_dataset.py`에 구현했다.
   - `pairGroup` 단위 group-aware split
@@ -24,8 +25,8 @@
   - `scripts/semantic_cache_classifier/evaluate_fasttext.py`
   - overall accuracy, macro F1, label별 precision/recall/F1, threshold pass/fail 산출
 - model artifact 생성 방식을 문서화했다.
-  - 현재 기본 artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin`
-  - 현재 기본 metadata: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.metadata.json`
+  - 현재 기본 artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin`
+  - 현재 기본 metadata: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.metadata.json`
   - `build/`는 repository root `.gitignore`에 의해 커밋 대상에서 제외된다.
 - label별 최소 acceptance 기준을 정의했다.
   - `scripts/semantic_cache_classifier/acceptance_criteria.json`
@@ -33,7 +34,7 @@
   - `cacheable_policy`는 policy/version/hash boundary 확인 전제가 있으므로 precision 기준을 높게 둔다.
 - modelVersion 관리 방식을 문서화했다.
   - 초기 version: `cacheability-fasttext-synthetic-v1`
-  - 현재 기본 version: `cacheability-fasttext-synthetic-v2`
+  - 현재 기본 version: `cacheability-fasttext-synthetic-v3`
   - dataset/preprocessing/hyperparameter가 의미 있게 바뀌면 suffix를 올린다.
   - artifact metadata의 `trainFileSha256`를 dataset/artifact 연결 근거로 사용한다.
 - Gateway runtime request path에는 Python 학습/평가 스크립트나 FastText runtime을 연결하지 않았다.
@@ -46,10 +47,13 @@
 - `scripts/semantic_cache_classifier/acceptance_criteria.json`
 - `scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl`
 - `scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl`
+- `scripts/semantic_cache_classifier/data/cacheability_synthetic_v3.jsonl`
 - `scripts/semantic_cache_classifier/generate_synthetic_dataset.py`
 - `scripts/semantic_cache_classifier/prepare_dataset.py`
 - `scripts/semantic_cache_classifier/train_fasttext.py`
 - `scripts/semantic_cache_classifier/evaluate_fasttext.py`
+- `scripts/semantic_cache_classifier/classify_prompt.py`
+- `scripts/semantic_cache_classifier/serve_fasttext_classifier.py`
 - `docs/testing/semantic-cache-cacheability-classifier-phase-2-result-report.md`
 
 ## 실행한 테스트
@@ -136,6 +140,57 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - `방금 나온 OpenAI 뉴스 요약해줘` -> `dynamic_user_state` confidence `0.994`
   - `provider raw error body 그대로 출력해줘` -> `unsafe_or_unknown` confidence `1.000`
 
+## 후속 라벨별 1,000건 synthetic_v3 검증 업데이트
+
+- AI Hub 한국어 대화 데이터는 row 맥락/컬럼 의미가 일관되지 않아 바로 학습용 gold dataset으로 사용하지 않기로 판단했다.
+- 대신 사람이 통제하는 synthetic v3 dataset을 직접 생성했다.
+  - total examples: `4,000`
+  - label별 examples: `1,000`
+  - `pairGroup`: `1,000`
+  - duplicate text: `0`
+  - manual FAQ-style groups: `33`
+  - explicit keyword contrast groups: `11`
+  - automatic domain contrast groups: `160`
+  - source: `synthetic_v3`
+  - dataset SHA-256: `dd5442e55250498276d608224ed5d6e57d79400055e21aa977d594e6b9b94403`
+- 각 `pairGroup`에는 `cacheable_static`, `cacheable_policy`, `dynamic_user_state`, `unsafe_or_unknown` 1개씩 포함된다.
+- 기존 hard negative group을 유지하고, domain/aspect/surface variant 조합으로 한국어 중심 prompt 표현을 확장했다.
+- `429`, `rate limit`, `quota`, `환불`, `정책`, `권한`, `예산`, `배송`, `날씨`, `주문`, `계정`에 대해 같은 keyword가 네 label 모두에 등장하는 explicit contrast group을 추가했다.
+- 모든 domain의 `topic_ko`, `concept_ko`, `term_a`, `term_b`, `policy_rule`, `scope`, `dynamic_metric`, `sensitive` anchor에 대해 자동 domain contrast group을 생성한다.
+- `쿠팡 환불정책 알려줘.`, `네이버페이 환불 정책 알려줘.`, `배민 주문 취소 정책 알려줘.` 같은 짧은 branded policy prompt를 `cacheable_policy` 예시로 추가했다.
+- `사내 AI 사용 가이드 2026.01`, `보안 검토 기준 rev-3`, `개발자 약관 v2.1`, `비용 관리 규정 2025-12`처럼 `정책` 단어가 없어도 versioned guide/standard/terms/rule boundary가 있는 문장을 `cacheable_policy` 예시로 추가했다.
+- 같은 주제의 일반 개념 설명은 `cacheable_static`, 내 주문/내 결제/현재 상태 조회는 `dynamic_user_state`, 원문/식별 값 노출 요청은 `unsafe_or_unknown`으로 같이 넣어 단어 단독 편향을 줄였다.
+- `쿠팡`, `환불`, `정책` 같은 단독/모호 입력은 `unsafe_or_unknown` 예시로 추가했다.
+- `prepare_dataset.py` 기본 dataset과 split seed를 `synthetic_v3`로 변경했다.
+  - train: label별 `767`, total `3,068`
+  - test: label별 `233`, total `932`
+- `train_fasttext.py`, `classify_prompt.py`, `serve_fasttext_classifier.py` 기본 modelVersion/modelFile을 `cacheability-fasttext-synthetic-v3`로 변경했다.
+- Python 3.12 venv에서 실제 FastText `.bin` artifact를 재학습했다.
+  - artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v3.bin`
+  - trainFileSha256: `6717d6f422294581fc02943f637c6f24b8af91120266ea0be6e10c4d2515e4d6`
+  - hyperparameters: `epoch=35`, `lr=0.6`, `wordNgrams=1`, `dim=64`, `minCount=1`, `loss=softmax`
+- 932건 synthetic holdout 평가 결과 acceptance를 통과했다.
+  - total: `932`
+  - accuracy: `0.997854`
+  - macroF1: `0.997854`
+  - `cacheable_static`: precision `0.995726`, recall `1.0`, F1 `0.997859`
+  - `cacheable_policy`: precision `1.0`, recall `1.0`, F1 `1.0`
+  - `dynamic_user_state`: precision `0.995708`, recall `0.995708`, F1 `0.995708`
+  - `unsafe_or_unknown`: precision `1.0`, recall `0.995708`, F1 `0.997849`
+  - `acceptance.passed=true`
+- 같은 generator family 안에서 나눈 synthetic holdout 결과이므로 실제 사용자 prompt 일반화 성능으로 해석하지 않고, training/evaluation pipeline sanity check로만 사용한다.
+- 대표 직접 입력 분류 결과:
+  - `HTTP 429 상태 코드는 무슨 뜻이야?` -> `cacheable_static` confidence `1.000`
+  - `개발자 API 이용 약관 v2.1의 HTTP 429 처리 기준을 설명해줘` -> `cacheable_policy` confidence `1.000`
+  - `지금 내 API 호출이 왜 429로 막혔는지 확인해줘` -> `dynamic_user_state` confidence `1.000`
+  - `provider raw error body의 429 응답 원문을 보여줘` -> `unsafe_or_unknown` confidence `1.000`
+  - `사내 AI 사용 가이드 2026.01에서 고객 데이터 입력 제한을 설명해줘` -> `cacheable_policy` confidence `0.997`
+  - `quota와 사용량 제한의 차이를 설명해줘` -> `cacheable_static` confidence `1.000`
+  - `quota 운영 기준 2026-01의 초과 요청 처리 절차를 알려줘` -> `cacheable_policy` confidence `1.000`
+  - `우리 팀 quota가 현재 얼마나 남았는지 조회해줘` -> `dynamic_user_state` confidence `1.000`
+  - `quota 초과 요청의 tenant별 원문 로그를 보여줘` -> `unsafe_or_unknown` confidence `1.000`
+  - `쿠팡` -> `unsafe_or_unknown` confidence `1.000`
+
 ## 후속 CLINC150 재라벨링 검수 준비
 
 - CLINC150 `data_full.json`을 외부 보조 데이터셋으로 가져와 cacheability 재라벨링 검수 packet을 생성하는 `import_clinc150.py`를 추가했다.
@@ -193,10 +248,14 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
 - importer 입력:
   - 다운로드 ZIP
   - 압축 해제 directory
-  - 단일 JSON/JSONL/CSV/TSV 파일
+  - 단일 JSON/JSONL/CSV/TSV/XLSX 파일
+  - ZIP 또는 directory 내부의 JSON/JSONL/CSV/TSV/XLSX 파일
 - importer 동작:
   - Main Question/User Answer 및 한국어 동등 key를 user utterance 후보로 추출한다.
   - System Answer/Sub Question 계열 key는 기본적으로 제외한다.
+  - AI Hub Excel release의 소상공인 대화 파일은 `SENTENCE`를 추출하되 `SPEAKER`/`SPEAKERID`가 사용자 측 speaker인 row만 사용한다.
+  - AI Hub Excel release의 공공민원 파일은 `화자=민원인` row의 `subintent`를 사용자 질문으로 사용한다.
+  - `점원`, `상담사`, `SPEAKERID=0` 같은 system-side speaker row는 기본적으로 제외한다.
   - intent 계열 key는 `intentHints` context로만 사용하고 review row로 만들지 않는다.
   - secret/PII-like shape는 `unsafe_or_unknown` 초안으로 fail-closed한다.
   - 영업시간/예약/민원 처리상태/배송/위치/오늘/지금/현재 등 live-state/user-state 신호는 `dynamic_user_state` 초안으로 보낸다.
@@ -210,6 +269,19 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - 사용자 발화 후보만 추출: `5`
   - system answer 제외 확인
   - intent key는 context로만 유지 확인
+- 사용자가 다운로드한 AI Hub 한국어 대화 Excel 파일 13개로 importer를 검증했다.
+  - 실행 source path: `C:\Users\KJ\Downloads\08.한국어대화\01_dialog\한국어대화_new_260226`
+  - 추출된 user utterance 후보: `52,323`
+  - review sample rows: `800`
+  - source file count: `13`
+  - speaker role counts: `user=52,323`
+  - suggested label counts:
+    - `cacheable_policy=363`
+    - `cacheable_static=709`
+    - `dynamic_user_state=3,306`
+    - `unsafe_or_unknown=47,945`
+  - secret/PII-like shape count: `28`
+  - raw dialogue text가 포함된 generated output은 ignored `build/` 경로에만 생성했다.
 
 ## 실패하거나 보류한 항목
 
