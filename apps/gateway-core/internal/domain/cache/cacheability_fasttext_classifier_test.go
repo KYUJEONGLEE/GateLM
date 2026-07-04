@@ -54,6 +54,41 @@ func TestFastTextSidecarCacheabilityClassifierClassifies(t *testing.T) {
 	}
 }
 
+func TestFastTextSidecarCacheabilityClassifierAllowsUnknownResponseFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"label":         string(CacheabilityLabelCacheableStatic),
+			"confidence":    0.96,
+			"reasonCode":    CacheabilityReasonFastTextSidecar,
+			"modelVersion":  "cacheability-fasttext-synthetic-v1",
+			"sidecarMillis": 3,
+		}); err != nil {
+			t.Fatalf("sidecar response encode failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	classifier, err := NewFastTextSidecarCacheabilityClassifier(FastTextSidecarCacheabilityClassifierConfig{
+		Endpoint:   server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("construct failed: %v", err)
+	}
+
+	result, err := classifier.Classify(context.Background(), CacheabilityClassificationRequest{NormalizedText: "비밀번호 재설정 방법 알려줘"})
+	if err != nil {
+		t.Fatalf("unknown sidecar response fields should be ignored: %v", err)
+	}
+	if err := result.Validate(); err != nil {
+		t.Fatalf("sidecar result must satisfy contract: %+v err=%v", result, err)
+	}
+	if result.Label != CacheabilityLabelCacheableStatic || result.Confidence != 0.96 {
+		t.Fatalf("sidecar result mismatch: %+v", result)
+	}
+}
+
 func TestFastTextSidecarCacheabilityClassifierFailureModes(t *testing.T) {
 	t.Run("missing endpoint", func(t *testing.T) {
 		_, err := NewFastTextSidecarCacheabilityClassifier(FastTextSidecarCacheabilityClassifierConfig{})

@@ -150,19 +150,14 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 	threshold := s.config.Threshold
 	if intentOK {
 		threshold = s.intentThreshold(intentMaterial)
+		result, err = s.store.Search(ctx, request.Boundary, queryVector, threshold, s.config.TopK)
 	}
-	result, err = s.store.Search(ctx, request.Boundary, queryVector, threshold, s.config.TopK)
 	result.QueryVector = queryVector
 	result.IntentMaterial = intentMaterial
 	result.EmbeddingInput = embeddingInput
 	if !intentOK {
-		if result.Hit {
-			result.Hit = false
-			result.MatchedEntry = nil
-			result.Matches = nil
-		}
 		result.Reason = firstSemanticReason(intentReason, result.Reason)
-		return result, result.Decision(true, providerName, s.config.PolicyVersion), err
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
 	result = s.applyHitPolicy(result, intentMaterial, threshold)
 	result = s.applyReranker(ctx, result, intentMaterial, threshold)

@@ -337,7 +337,6 @@ func (c FastTextSidecarCacheabilityClassifier) Classify(ctx context.Context, req
 
 	var sidecarResult fastTextSidecarResponse
 	decoder := json.NewDecoder(resp.Body)
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&sidecarResult); err != nil {
 		return CacheabilityClassifierResult{}, fmt.Errorf("%w: invalid fasttext sidecar JSON", ErrCacheabilityClassifierInvalidResult)
 	}

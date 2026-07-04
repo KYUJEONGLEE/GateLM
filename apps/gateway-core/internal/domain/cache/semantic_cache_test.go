@@ -459,7 +459,8 @@ func TestSemanticCacheServiceWithIntentPolicyDoesNotLetMaterializationMissBlockE
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)
 	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
-	service := NewSemanticCacheService(NewInMemorySemanticCacheStore(10), provider, SemanticCacheServiceConfig{
+	store := &countingTestSemanticCacheStore{delegate: NewInMemorySemanticCacheStore(10)}
+	service := NewSemanticCacheService(store, provider, SemanticCacheServiceConfig{
 		Enabled:       true,
 		Threshold:     0.92,
 		TopK:          3,
@@ -478,6 +479,9 @@ func TestSemanticCacheServiceWithIntentPolicyDoesNotLetMaterializationMissBlockE
 	}
 	if provider.calls != 1 {
 		t.Fatalf("intent materialization miss여도 embedding lookup은 수행되어야 함: calls=%d", provider.calls)
+	}
+	if store.searchCalls != 0 {
+		t.Fatalf("intent materialization miss이면 semantic store search는 수행하면 안 됨: calls=%d", store.searchCalls)
 	}
 	if len(result.QueryVector) == 0 {
 		t.Fatalf("embedding lookup 결과 vector가 남아야 함: %+v", result)
@@ -933,4 +937,20 @@ func (p *countingTestEmbeddingProvider) ProviderName() string {
 
 func (p *countingTestEmbeddingProvider) ModelName() string {
 	return p.delegate.ModelName()
+}
+
+type countingTestSemanticCacheStore struct {
+	delegate    SemanticCacheStore
+	searchCalls int
+	upsertCalls int
+}
+
+func (s *countingTestSemanticCacheStore) Search(ctx context.Context, boundary SemanticCacheBoundary, vector []float64, threshold float64, topK int) (SemanticCacheSearchResult, error) {
+	s.searchCalls++
+	return s.delegate.Search(ctx, boundary, vector, threshold, topK)
+}
+
+func (s *countingTestSemanticCacheStore) Upsert(ctx context.Context, entry SemanticCacheEntry) error {
+	s.upsertCalls++
+	return s.delegate.Upsert(ctx, entry)
 }
