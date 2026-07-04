@@ -7,8 +7,9 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 ALTER TABLE "provider_connections"
   ALTER COLUMN "projectId" DROP NOT NULL;
 
-CREATE UNIQUE INDEX "provider_connections_tenantId_provider_key"
-  ON "provider_connections"("tenantId", "provider");
+CREATE UNIQUE INDEX "provider_connections_tenantId_provider_tenant_scope_key"
+  ON "provider_connections"("tenantId", "provider")
+  WHERE "projectId" IS NULL;
 
 CREATE TABLE "application_provider_connections" (
   "id" UUID NOT NULL,

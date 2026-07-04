@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Application, Prisma } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
@@ -222,7 +227,7 @@ export class ApplicationsService {
     });
 
     if (providers.length !== providerConnectionIds.length) {
-      throw new ConflictException(
+      throw new BadRequestException(
         'Application providers must belong to the same tenant.',
       );
     }

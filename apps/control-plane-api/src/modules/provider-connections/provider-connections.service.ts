@@ -118,36 +118,46 @@ export class ProviderConnectionsService {
     const providerConfig = this.toJsonObject(dto.providerConfig);
     const optionalCredentialUpdate = this.toOptionalCredentialUpdate(dto);
 
-    const providerConnection = await this.prisma.providerConnection.upsert({
-      where: {
-        tenantId_provider: {
-          tenantId,
+    const providerConnection = await this.prisma.$transaction(async (tx) => {
+      const existingProvider = await tx.providerConnection.findFirst({
+        where: {
+          tenantId: tenant.id,
           provider: dto.provider,
+          projectId: null,
         },
-      },
-      create: {
-        tenantId: tenant.id,
-        projectId: null,
-        provider: dto.provider,
-        displayName: dto.displayName,
-        status: dto.status,
-        baseUrl: dto.baseUrl,
-        timeoutMs: dto.timeoutMs,
-        secretRef: dto.secretRef,
-        credentialPrefix: dto.credentialPrefix,
-        credentialLast4: dto.credentialLast4,
-        resolver: dto.resolver,
-        providerConfig,
-      },
-      update: {
-        displayName: dto.displayName,
-        status: dto.status,
-        baseUrl: dto.baseUrl,
-        timeoutMs: dto.timeoutMs,
-        resolver: dto.resolver,
-        providerConfig,
-        ...optionalCredentialUpdate,
-      },
+      });
+
+      if (existingProvider) {
+        return tx.providerConnection.update({
+          where: { id: existingProvider.id },
+          data: {
+            displayName: dto.displayName,
+            status: dto.status,
+            baseUrl: dto.baseUrl,
+            timeoutMs: dto.timeoutMs,
+            resolver: dto.resolver,
+            providerConfig,
+            ...optionalCredentialUpdate,
+          },
+        });
+      }
+
+      return tx.providerConnection.create({
+        data: {
+          tenantId: tenant.id,
+          projectId: null,
+          provider: dto.provider,
+          displayName: dto.displayName,
+          status: dto.status,
+          baseUrl: dto.baseUrl,
+          timeoutMs: dto.timeoutMs,
+          secretRef: dto.secretRef,
+          credentialPrefix: dto.credentialPrefix,
+          credentialLast4: dto.credentialLast4,
+          resolver: dto.resolver,
+          providerConfig,
+        },
+      });
     });
 
     return this.toProviderResponse(providerConnection);
@@ -252,21 +262,23 @@ export class ProviderConnectionsService {
       );
     }
 
-    await this.prisma.applicationProviderConnection.deleteMany({
-      where: { applicationId },
-    });
-
-    if (providers.length > 0) {
-      await this.prisma.applicationProviderConnection.createMany({
-        data: providers.map((provider) => ({
-          applicationId: application.id,
-          projectId: application.projectId,
-          providerConnectionId: provider.id,
-          tenantId: application.tenantId,
-        })),
-        skipDuplicates: true,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.applicationProviderConnection.deleteMany({
+        where: { applicationId },
       });
-    }
+
+      if (providers.length > 0) {
+        await tx.applicationProviderConnection.createMany({
+          data: providers.map((provider) => ({
+            applicationId: application.id,
+            projectId: application.projectId,
+            providerConnectionId: provider.id,
+            tenantId: application.tenantId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    });
 
     return this.listApplicationProviders(applicationId);
   }
@@ -362,12 +374,11 @@ export class ProviderConnectionsService {
     await this.getTenantOrThrow(tenantId);
 
     const providerKey = this.toProviderKeyOrThrow(provider);
-    const providerConnection = await this.prisma.providerConnection.findUnique({
+    const providerConnection = await this.prisma.providerConnection.findFirst({
       where: {
-        tenantId_provider: {
-          tenantId,
-          provider: providerKey,
-        },
+        tenantId,
+        provider: providerKey,
+        projectId: null,
       },
     });
 

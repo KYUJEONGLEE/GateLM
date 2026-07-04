@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import type { RequestLogBudgetScopeOption, RequestLogFilterState } from "./request-log-table";
 
@@ -28,6 +28,15 @@ export function RequestLogScopeFilterControls({
   const [selectedScopeType, setSelectedScopeType] =
     useState<RequestLogFilterState["budgetScopeType"]>(budgetScopeType);
   const [selectedScopeId, setSelectedScopeId] = useState(budgetScopeId);
+
+  useEffect(() => {
+    setSelectedScopeType(budgetScopeType);
+  }, [budgetScopeType]);
+
+  useEffect(() => {
+    setSelectedScopeId(budgetScopeId);
+  }, [budgetScopeId]);
+
   const visibleScopeOptions = useMemo(
     () =>
       budgetScopeOptions.filter(

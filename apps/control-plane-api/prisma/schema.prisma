@@ -165,7 +165,6 @@ model ProviderConnection {
   applicationProviderConnections ApplicationProviderConnection[]
 
   @@index([tenantId])
-  @@unique([tenantId, provider])
   @@unique([projectId, provider])
   @@map("provider_connections")
 }

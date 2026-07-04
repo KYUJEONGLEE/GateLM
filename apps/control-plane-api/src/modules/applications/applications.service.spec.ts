@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma, ResourceStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -115,7 +115,7 @@ describe('ApplicationsService', () => {
         name: 'Support Chat',
         providerConnectionIds: ['00000000-0000-4000-8000-000000000601'],
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.application.create).not.toHaveBeenCalled();
   });
