@@ -2,6 +2,7 @@ import { ConsoleShell } from "@/components/layout/console-shell";
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
 import {
   type RequestLogCreatedFilter,
+  type RequestLogBudgetScopeOption,
   type RequestLogFilterState,
   RequestLogTable,
   requestLogCreatedFilters,
@@ -64,10 +65,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     selectedDetail ?? (records ?? []).find((record) => record.requestId === selectedRequestId);
   const optionRecordsForFilters = optionRecords ?? records ?? [];
   const modelOptions = getModelOptions(optionRecordsForFilters, filters.model);
-  const providerOptions = getProviderOptions(optionRecordsForFilters, filters.provider);
-  const applicationOptions = getApplicationOptions(optionRecordsForFilters, filters.applicationId);
-  const budgetScopeIdOptions = getBudgetScopeIdOptions(optionRecordsForFilters, filters.budgetScopeId);
-  const resolvedByOptions = getResolvedByOptions(optionRecordsForFilters, filters.resolvedBy);
+  const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, filters);
   const displayRecords = (records ?? []).map(toDisplayModelRecord);
   const displaySelectedDetail = scopedSelectedDetail ? toDisplayModelRecord(scopedSelectedDetail) : undefined;
 
@@ -91,12 +89,9 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         }
         filters={filters}
         locale={locale}
-        applicationOptions={applicationOptions}
-        budgetScopeIdOptions={budgetScopeIdOptions}
+        budgetScopeOptions={budgetScopeOptions}
         modelOptions={modelOptions}
-        providerOptions={providerOptions}
         records={displayRecords}
-        resolvedByOptions={resolvedByOptions}
         selectedRequestId={displaySelectedDetail?.requestId}
         sourceState={records ? "ready" : "unavailable"}
         tenantId={tenantId}
@@ -259,66 +254,35 @@ function getModelOptions(records: InvocationLogRecord[], selectedModel: string) 
   return Array.from(options).sort((first, second) => first.localeCompare(second));
 }
 
-function getProviderOptions(records: InvocationLogRecord[], selectedProvider: string) {
-  const options = new Set<string>();
-
-  if (selectedProvider) {
-    options.add(selectedProvider);
-  }
-
-  records.forEach((record) => {
-    if (record.selectedProvider) {
-      options.add(record.selectedProvider);
-    }
-  });
-
-  return Array.from(options).sort((first, second) => first.localeCompare(second));
-}
-
-function getApplicationOptions(records: InvocationLogRecord[], selectedApplicationId: string) {
-  const options = new Set<string>();
-
-  if (selectedApplicationId) {
-    options.add(selectedApplicationId);
-  }
+function getBudgetScopeOptions(
+  records: InvocationLogRecord[],
+  filters: RequestLogFilterState
+): RequestLogBudgetScopeOption[] {
+  const options = new Map<string, RequestLogBudgetScopeOption>();
 
   records.forEach((record) => {
-    if (record.applicationId) {
-      options.add(record.applicationId);
+    const scopeType = normalizeBudgetScopeTypeFilter(record.budgetScope.budgetScopeType);
+    const scopeId = record.budgetScope.budgetScopeId;
+
+    if (!scopeType || !scopeId) {
+      return;
     }
+
+    options.set(`${scopeType}:${scopeId}`, {
+      budgetScopeId: scopeId,
+      budgetScopeType: scopeType
+    });
   });
 
-  return Array.from(options).sort((first, second) => first.localeCompare(second));
-}
-
-function getBudgetScopeIdOptions(records: InvocationLogRecord[], selectedBudgetScopeId: string) {
-  const options = new Set<string>();
-
-  if (selectedBudgetScopeId) {
-    options.add(selectedBudgetScopeId);
+  if (filters.budgetScopeId && filters.budgetScopeType) {
+    options.set(`${filters.budgetScopeType}:${filters.budgetScopeId}`, {
+      budgetScopeId: filters.budgetScopeId,
+      budgetScopeType: filters.budgetScopeType
+    });
   }
 
-  records.forEach((record) => {
-    if (record.budgetScope.budgetScopeId) {
-      options.add(record.budgetScope.budgetScopeId);
-    }
+  return Array.from(options.values()).sort((first, second) => {
+    const typeOrder = first.budgetScopeType.localeCompare(second.budgetScopeType);
+    return typeOrder || first.budgetScopeId.localeCompare(second.budgetScopeId);
   });
-
-  return Array.from(options).sort((first, second) => first.localeCompare(second));
-}
-
-function getResolvedByOptions(records: InvocationLogRecord[], selectedResolvedBy: string) {
-  const options = new Set<string>();
-
-  if (selectedResolvedBy) {
-    options.add(selectedResolvedBy);
-  }
-
-  records.forEach((record) => {
-    if (record.budgetScope.resolvedBy) {
-      options.add(record.budgetScope.resolvedBy);
-    }
-  });
-
-  return Array.from(options).sort((first, second) => first.localeCompare(second));
 }

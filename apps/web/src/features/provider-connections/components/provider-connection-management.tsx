@@ -2,7 +2,7 @@
 
 import { PlugZap, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -24,6 +24,13 @@ type ProviderConnectionManagementProps = {
 type SubmitState = {
   message: string;
   status: "error" | "idle" | "success";
+};
+
+type ProviderDiscoveryPreview = {
+  chatModels: string[];
+  discoveredAt: string;
+  selectedModels: string[];
+  skippedModelCount: number;
 };
 
 type ProviderResponsePayload = {
@@ -175,6 +182,7 @@ export function ProviderConnectionManagement({
   const [modelOptionsByProvider, setModelOptionsByProvider] = useState<Record<string, string[]>>(
     () => getInitialModelOptions(model.providers)
   );
+  const [discoveryByProvider, setDiscoveryByProvider] = useState<Record<string, ProviderDiscoveryPreview>>({});
   const [pendingAction, setPendingAction] = useState(false);
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
@@ -244,7 +252,8 @@ export function ProviderConnectionManagement({
     router.refresh();
   }
 
-  async function discoverModels(provider = formValues.provider) {
+  async function discoverModels(provider = formValues.provider, options: { applyToForm?: boolean } = {}) {
+    const applyToForm = options.applyToForm ?? true;
     const normalizedProvider = provider.trim();
     const providerRecord = providers.find((item) => item.provider === normalizedProvider);
     const baseValues = providerRecord ? getProviderFormValues(providerRecord) : null;
@@ -304,30 +313,109 @@ export function ProviderConnectionManagement({
       normalizeDiscoveredModelName(item.modelName)
     );
     const chatModels = filterChatCompletionModels(discoveredModels);
+    const existingSelectedModels = splitModelNames(baseValues.models).filter((modelName) =>
+      chatModels.includes(modelName)
+    );
     const skippedModelCount = discoveredModels.length - chatModels.length;
 
     setModelOptionsByProvider((current) => ({
       ...current,
       [normalizedProvider]: chatModels
     }));
-    setFormValues((current) => {
-      return {
-        ...baseValues,
-        adapterType: payload.discovery?.adapterType ?? current.adapterType,
-        baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
-        credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
-        models: chatModels.join(", "),
-        provider: normalizedProvider
-      };
-    });
+    setDiscoveryByProvider((current) => ({
+      ...current,
+      [normalizedProvider]: {
+        chatModels,
+        discoveredAt: payload.discovery?.discoveredAt ?? new Date().toISOString(),
+        selectedModels: existingSelectedModels,
+        skippedModelCount
+      }
+    }));
+    if (applyToForm) {
+      setFormValues((current) => {
+        return {
+          ...baseValues,
+          adapterType: payload.discovery?.adapterType ?? current.adapterType,
+          baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
+          credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
+          models: existingSelectedModels.join(", "),
+          provider: normalizedProvider
+        };
+      });
+    }
     setSubmitState({
       message:
         locale === "ko"
-          ? `${chatModels.length}개 chat 모델을 반영했습니다. 제외된 비채팅 모델: ${skippedModelCount}개.`
-          : `${chatModels.length} chat models applied. Excluded non-chat models: ${skippedModelCount}.`,
+          ? applyToForm
+            ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+            : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+          : applyToForm
+            ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
+            : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
       status: "success"
     });
     setDiscoveringProvider(null);
+  }
+
+  async function applyDiscoveredModelsToProvider(provider: ProviderConnectionRecord) {
+    const discovery = discoveryByProvider[provider.provider];
+
+    if (!discovery) {
+      return;
+    }
+
+    const values = {
+      ...getProviderFormValues(provider),
+      isEdit: true,
+      models: discovery.selectedModels.join(", ")
+    };
+
+    setPendingAction(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/provider-connections", {
+      body: JSON.stringify({
+        action: "upsert",
+        values
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
+
+    if (!response.ok || !payload.provider) {
+      setSubmitState({
+        message: payload.error ?? "Provider update failed.",
+        status: "error"
+      });
+      setPendingAction(false);
+      return;
+    }
+
+    const savedProvider = payload.provider;
+
+    setProviders((current) => [
+      ...current.filter((item) => item.provider !== savedProvider.provider),
+      savedProvider
+    ]);
+    setModelOptionsByProvider((current) => ({
+      ...current,
+      [savedProvider.provider]: discovery.chatModels
+    }));
+    if (formValues.provider === savedProvider.provider) {
+      setFormValues(getProviderFormValues(savedProvider));
+    }
+    setSubmitState({
+      message:
+        locale === "ko"
+          ? `${savedProvider.provider} 모델 목록을 저장했습니다.`
+          : `Saved discovered models for ${savedProvider.provider}.`,
+      status: "success"
+    });
+    setPendingAction(false);
+    router.refresh();
   }
 
   function editFromProvider(provider: ProviderConnectionRecord) {
@@ -396,6 +484,50 @@ export function ProviderConnectionManagement({
       ...current,
       models: checked ? availableModels.join(", ") : ""
     }));
+  }
+
+  function toggleDiscoveredModel(providerKey: string, modelName: string, checked: boolean) {
+    setDiscoveryByProvider((current) => {
+      const discovery = current[providerKey];
+
+      if (!discovery) {
+        return current;
+      }
+
+      const selectedModelSet = new Set(discovery.selectedModels);
+
+      if (checked) {
+        selectedModelSet.add(modelName);
+      } else {
+        selectedModelSet.delete(modelName);
+      }
+
+      return {
+        ...current,
+        [providerKey]: {
+          ...discovery,
+          selectedModels: discovery.chatModels.filter((item) => selectedModelSet.has(item))
+        }
+      };
+    });
+  }
+
+  function setAllDiscoveredModels(providerKey: string, checked: boolean) {
+    setDiscoveryByProvider((current) => {
+      const discovery = current[providerKey];
+
+      if (!discovery) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [providerKey]: {
+          ...discovery,
+          selectedModels: checked ? discovery.chatModels : []
+        }
+      };
+    });
   }
 
   return (
@@ -593,72 +725,146 @@ export function ProviderConnectionManagement({
                 </tr>
               </thead>
               <tbody>
-                {providers.map((provider) => (
-                  <tr key={provider.id}>
-                    <td>
-                      <strong className="provider-name">{provider.displayName}</strong>
-                      <span className="project-muted">{provider.provider}</span>
-                      <small className="project-muted">
-                        {text.models}: {formatProviderModels(provider.providerConfig)}
-                      </small>
-                    </td>
-                    <td>
-                      <Badge
-                        className="project-status-badge"
-                        data-status={provider.status}
-                        variant="outline"
-                      >
-                        {formatProviderStatus(provider.status)}
-                      </Badge>
-                    </td>
-                    <td>
-                      <span className="project-muted">{formatDateTime(provider.updatedAt)}</span>
-                      <small className="project-muted">
-                        {text.created}: {formatDateTime(provider.createdAt)}
-                      </small>
-                    </td>
-                    <td>
-                      <code className="project-code provider-id-mask" tabIndex={0}>
-                        <span aria-hidden="true" className="provider-id-mask-value">
-                          *****
-                        </span>
-                        <span className="provider-id-actual">{provider.id}</span>
-                      </code>
-                    </td>
-                    <td>
-                      <div className="project-row-actions">
-                        <Button
-                          disabled={pendingAction || discoveringProvider !== null}
-                          onClick={() => editFromProvider(provider)}
-                          type="button"
-                          variant="outline"
-                        >
-                          <Save aria-hidden="true" />
-                          {text.save}
-                        </Button>
-                        <Button
-                          disabled={
-                            pendingAction ||
-                            discoveringProvider !== null ||
-                            !isDiscoverSupportedProvider(
-                              getProviderFormValues(provider).adapterType
-                            )
-                          }
-                          onClick={() => {
-                            editFromProvider(provider);
-                            void discoverModels(provider.provider);
-                          }}
-                          type="button"
-                          variant="outline"
-                        >
-                          {discoveringProvider === provider.provider
-                            ? "..."
-                            : text.discoverModels}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {providers.map((provider) => {
+                  const discovery = discoveryByProvider[provider.provider];
+
+                  return (
+                    <Fragment key={provider.id}>
+                      <tr key={provider.id}>
+                        <td>
+                          <strong className="provider-name">{provider.displayName}</strong>
+                          <span className="project-muted">{provider.provider}</span>
+                          <small className="project-muted">
+                            {text.models}: {formatProviderModels(provider.providerConfig)}
+                          </small>
+                        </td>
+                        <td>
+                          <Badge
+                            className="project-status-badge"
+                            data-status={provider.status}
+                            variant="outline"
+                          >
+                            {formatProviderStatus(provider.status)}
+                          </Badge>
+                        </td>
+                        <td>
+                          <span className="project-muted">{formatDateTime(provider.updatedAt)}</span>
+                          <small className="project-muted">
+                            {text.created}: {formatDateTime(provider.createdAt)}
+                          </small>
+                        </td>
+                        <td>
+                          <code className="project-code provider-id-mask" tabIndex={0}>
+                            <span aria-hidden="true" className="provider-id-mask-value">
+                              *****
+                            </span>
+                            <span className="provider-id-actual">{provider.id}</span>
+                          </code>
+                        </td>
+                        <td>
+                          <div className="project-row-actions">
+                            <Button
+                              disabled={pendingAction || discoveringProvider !== null}
+                              onClick={() => editFromProvider(provider)}
+                              type="button"
+                              variant="outline"
+                            >
+                              <Save aria-hidden="true" />
+                              {text.save}
+                            </Button>
+                            <Button
+                              disabled={
+                                pendingAction ||
+                                discoveringProvider !== null ||
+                                !isDiscoverSupportedProvider(
+                                  getProviderFormValues(provider).adapterType
+                                )
+                              }
+                              onClick={() => void discoverModels(provider.provider, { applyToForm: false })}
+                              type="button"
+                              variant="outline"
+                            >
+                              {discoveringProvider === provider.provider
+                                ? "..."
+                                : text.discoverModels}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {discovery ? (
+                        <tr key={`${provider.id}-discovery`} className="provider-discovery-row">
+                          <td colSpan={5}>
+                            <div className="provider-discovery-panel">
+                              <div className="provider-model-selection-toolbar">
+                                <strong>
+                                  {locale === "ko"
+                                    ? `${discovery.selectedModels.length} / ${discovery.chatModels.length}개 선택`
+                                    : `${discovery.selectedModels.length} / ${discovery.chatModels.length} selected`}
+                                </strong>
+                                <span className="project-muted">
+                                  {locale === "ko"
+                                    ? `제외된 비채팅 모델 ${discovery.skippedModelCount}개 · ${formatDateTime(discovery.discoveredAt)}`
+                                    : `${discovery.skippedModelCount} non-chat models excluded · ${formatDateTime(discovery.discoveredAt)}`}
+                                </span>
+                                <div>
+                                  <button
+                                    onClick={() => setAllDiscoveredModels(provider.provider, true)}
+                                    type="button"
+                                  >
+                                    {locale === "ko" ? "전체 선택" : "Select all"}
+                                  </button>
+                                  <button
+                                    onClick={() => setAllDiscoveredModels(provider.provider, false)}
+                                    type="button"
+                                  >
+                                    {locale === "ko" ? "전체 해제" : "Clear"}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="provider-discovery-model-list">
+                                {discovery.chatModels.length > 0 ? (
+                                  discovery.chatModels.map((modelName) => (
+                                    <label key={modelName} className="provider-model-checkbox">
+                                      <input
+                                        checked={discovery.selectedModels.includes(modelName)}
+                                        onChange={(event) =>
+                                          toggleDiscoveredModel(
+                                            provider.provider,
+                                            modelName,
+                                            event.target.checked
+                                          )
+                                        }
+                                        type="checkbox"
+                                      />
+                                      <span>{modelName}</span>
+                                    </label>
+                                  ))
+                                ) : (
+                                  <span className="project-muted">
+                                    {locale === "ko"
+                                      ? "반영 가능한 chat 모델이 없습니다."
+                                      : "No chat models available to apply."}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="provider-discovery-actions">
+                                <Button
+                                  disabled={pendingAction || discovery.selectedModels.length === 0}
+                                  onClick={() => void applyDiscoveredModelsToProvider(provider)}
+                                  type="button"
+                                >
+                                  {locale === "ko"
+                                    ? "선택 모델 저장"
+                                    : "Save selected models"}
+                                </Button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

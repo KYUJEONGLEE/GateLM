@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
@@ -11,17 +11,15 @@ import {
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
+import { RequestLogScopeFilterControls } from "./request-log-scope-filter-controls";
 
 type RequestLogTableProps = {
-  applicationOptions: string[];
-  budgetScopeIdOptions: string[];
+  budgetScopeOptions: RequestLogBudgetScopeOption[];
   detailPanel?: ReactNode;
   filters: RequestLogFilterState;
   locale: Locale;
   modelOptions: string[];
-  providerOptions: string[];
   records: InvocationLogRecord[];
-  resolvedByOptions: string[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
   tenantId: string;
@@ -54,6 +52,11 @@ export type RequestLogFilterState = {
   status: "" | InvocationLogRecord["status"];
 };
 
+export type RequestLogBudgetScopeOption = {
+  budgetScopeId: string;
+  budgetScopeType: (typeof requestLogBudgetScopeTypeFilters)[number];
+};
+
 const requestLogText: Record<
   Locale,
   {
@@ -79,6 +82,7 @@ const requestLogText: Record<
     pageSummary: string;
     previousPage: string;
     providerLabel: string;
+    rangeEndLabel: string;
     searchLabel: string;
     searchPlaceholder: string;
     statusLabel: string;
@@ -114,6 +118,7 @@ const requestLogText: Record<
     pageSummary: "Showing {start}-{end} of {total}",
     previousPage: "Previous",
     providerLabel: "Provider",
+    rangeEndLabel: "End of logs in this range",
     searchLabel: "Search logs",
     searchPlaceholder: "Search by requestId",
     statusLabel: "Status",
@@ -148,6 +153,7 @@ const requestLogText: Record<
     pageSummary: "{total}개 중 {start}-{end}개 표시",
     previousPage: "이전",
     providerLabel: "Provider",
+    rangeEndLabel: "현재 범위의 마지막 로그",
     searchLabel: "로그 검색",
     searchPlaceholder: "requestId 검색",
     statusLabel: "상태",
@@ -157,15 +163,12 @@ const requestLogText: Record<
 };
 
 export function RequestLogTable({
-  applicationOptions,
-  budgetScopeIdOptions,
+  budgetScopeOptions,
   detailPanel,
   filters,
   locale,
   modelOptions,
-  providerOptions,
   records,
-  resolvedByOptions,
   selectedRequestId,
   sourceState,
   tenantId,
@@ -197,6 +200,104 @@ export function RequestLogTable({
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={detailPanel ? "open" : "closed"}>
           <div className="console-panel request-log-list-panel">
+            <form action={`/tenants/${tenantId}/request-logs`} className="request-log-search-panel">
+              <input name="page" type="hidden" value="1" />
+              <div className="request-log-search-shell">
+                <input
+                  aria-label={text.searchLabel}
+                  defaultValue={filters.requestId}
+                  name="searchRequestId"
+                  placeholder={text.searchPlaceholder}
+                  type="search"
+                />
+                <button aria-label={text.submitLabel} className="request-log-search-button" type="submit">
+                  <Search aria-hidden="true" size={18} strokeWidth={2.2} />
+                </button>
+              </div>
+
+              <div aria-label={text.filterLabel} className="request-log-filter-settings">
+                <label className="request-log-filter-control">
+                  <span>{text.statusLabel}</span>
+                  <select defaultValue={filters.status} name="status">
+                    <option value="">{text.allStatuses}</option>
+                    {requestLogStatusFilters.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control request-log-filter-control-model">
+                  <span>{text.modelLabel}</span>
+                  <select defaultValue={filters.model} name="model">
+                    <option value="">{text.allModels}</option>
+                    {modelOptions.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control request-log-filter-control-cache">
+                  <span>{text.cacheLabel}</span>
+                  <select defaultValue={filters.cacheStatus} name="cacheStatus">
+                    <option value="">{text.allCacheStatuses}</option>
+                    {requestLogCacheStatusFilters.map((cacheStatus) => (
+                      <option key={cacheStatus} value={cacheStatus}>
+                        {cacheStatus}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <RequestLogScopeFilterControls
+                  allBudgetScopeIds={text.allBudgetScopeIds}
+                  allBudgetScopeTypes={text.allBudgetScopeTypes}
+                  budgetScopeId={filters.budgetScopeId}
+                  budgetScopeIdLabel={text.budgetScopeIdLabel}
+                  budgetScopeOptions={budgetScopeOptions}
+                  budgetScopeType={filters.budgetScopeType}
+                  budgetScopeTypeLabel={text.budgetScopeTypeLabel}
+                  scopeTypeOptions={requestLogBudgetScopeTypeFilters}
+                />
+
+                <label className="request-log-filter-control">
+                  <span>{text.createdLabel}</span>
+                  <select defaultValue={filters.created} name="created">
+                    {requestLogCreatedFilters.map((created) => (
+                      <option key={created} value={created}>
+                        {text.createdOptions[created]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="request-log-pagination">
+                <Link
+                  aria-disabled={currentPage <= 1}
+                  aria-label={text.previousPage}
+                  className="request-log-page-link"
+                  data-disabled={currentPage <= 1}
+                  href={requestLogPageHref(tenantId, filters, currentPage - 1)}
+                >
+                  <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.4} />
+                </Link>
+                <span>{pageSummary}</span>
+                <Link
+                  aria-disabled={currentPage >= pageCount}
+                  aria-label={text.nextPage}
+                  className="request-log-page-link"
+                  data-disabled={currentPage >= pageCount}
+                  href={requestLogPageHref(tenantId, filters, currentPage + 1)}
+                >
+                  <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
+                </Link>
+              </div>
+            </form>
+
             <div className="table-wrap">
               <table className="data-table request-table">
                 <thead>
@@ -255,156 +356,9 @@ export function RequestLogTable({
                 </tbody>
               </table>
             </div>
-
-            <form
-              action={`/tenants/${tenantId}/request-logs`}
-              className="request-log-search-panel"
-            >
-              <input name="page" type="hidden" value="1" />
-              <div className="request-log-search-shell">
-                <input
-                  aria-label={text.searchLabel}
-                  defaultValue={filters.requestId}
-                  name="searchRequestId"
-                  placeholder={text.searchPlaceholder}
-                  type="search"
-                />
-                <button aria-label={text.submitLabel} className="request-log-search-button" type="submit">
-                  <Search aria-hidden="true" size={18} strokeWidth={2.2} />
-                </button>
-              </div>
-
-              <div aria-label={text.filterLabel} className="request-log-filter-settings">
-                <label className="request-log-filter-control">
-                  <span>{text.statusLabel}</span>
-                  <select defaultValue={filters.status} name="status">
-                    <option value="">{text.allStatuses}</option>
-                    {requestLogStatusFilters.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.modelLabel}</span>
-                  <select defaultValue={filters.model} name="model">
-                    <option value="">{text.allModels}</option>
-                    {modelOptions.map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.providerLabel}</span>
-                  <select defaultValue={filters.provider} name="provider">
-                    <option value="">{text.allProviders}</option>
-                    {providerOptions.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {provider}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.cacheLabel}</span>
-                  <select defaultValue={filters.cacheStatus} name="cacheStatus">
-                    <option value="">{text.allCacheStatuses}</option>
-                    {requestLogCacheStatusFilters.map((cacheStatus) => (
-                      <option key={cacheStatus} value={cacheStatus}>
-                        {cacheStatus}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.applicationLabel}</span>
-                  <select defaultValue={filters.applicationId} name="applicationId">
-                    <option value="">{text.allApplications}</option>
-                    {applicationOptions.map((applicationId) => (
-                      <option key={applicationId} value={applicationId}>
-                        {formatDisplayIdentifier(applicationId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.budgetScopeTypeLabel}</span>
-                  <select defaultValue={filters.budgetScopeType} name="budgetScopeType">
-                    <option value="">{text.allBudgetScopeTypes}</option>
-                    {requestLogBudgetScopeTypeFilters.map((scopeType) => (
-                      <option key={scopeType} value={scopeType}>
-                        {scopeType}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.budgetScopeIdLabel}</span>
-                  <select defaultValue={filters.budgetScopeId} name="budgetScopeId">
-                    <option value="">{text.allBudgetScopeIds}</option>
-                    {budgetScopeIdOptions.map((budgetScopeId) => (
-                      <option key={budgetScopeId} value={budgetScopeId}>
-                        {formatDisplayIdentifier(budgetScopeId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>Resolved by</span>
-                  <select defaultValue={filters.resolvedBy} name="resolvedBy">
-                    <option value="">{text.allResolvedBy}</option>
-                    {resolvedByOptions.map((resolvedBy) => (
-                      <option key={resolvedBy} value={resolvedBy}>
-                        {resolvedBy}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.createdLabel}</span>
-                  <select defaultValue={filters.created} name="created">
-                    {requestLogCreatedFilters.map((created) => (
-                      <option key={created} value={created}>
-                        {text.createdOptions[created]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="request-log-pagination">
-                <span>{pageSummary}</span>
-                <div>
-                  <Link
-                    aria-disabled={currentPage <= 1}
-                    className="request-log-page-link"
-                    data-disabled={currentPage <= 1}
-                    href={requestLogPageHref(tenantId, filters, currentPage - 1)}
-                  >
-                    {text.previousPage}
-                  </Link>
-                  <Link
-                    aria-disabled={currentPage >= pageCount}
-                    className="request-log-page-link"
-                    data-disabled={currentPage >= pageCount}
-                    href={requestLogPageHref(tenantId, filters, currentPage + 1)}
-                  >
-                    {text.nextPage}
-                  </Link>
-                </div>
-              </div>
-            </form>
+            <div className="request-log-list-end" role="status">
+              <span>{text.rangeEndLabel}</span>
+            </div>
           </div>
           {detailPanel}
         </section>

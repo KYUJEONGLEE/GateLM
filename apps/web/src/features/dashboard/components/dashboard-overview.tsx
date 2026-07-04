@@ -106,9 +106,9 @@ const dashboardText: Record<
     costByModel: "Cost by model",
     filter: {
       apply: "Apply",
-      budgetScopeId: "Budget scope",
+      budgetScopeId: "ID",
       budgetScopeType: "Scope type",
-      projectId: "Project ID",
+      projectId: "Project",
       reset: "Reset",
       resolvedBy: "Resolved by"
     },
@@ -165,9 +165,9 @@ const dashboardText: Record<
     costByModel: "모델별 비용",
     filter: {
       apply: "적용",
-      budgetScopeId: "Budget scope",
+      budgetScopeId: "ID",
       budgetScopeType: "Scope type",
-      projectId: "Project ID",
+      projectId: "Project",
       reset: "초기화",
       resolvedBy: "Resolved by"
     },
@@ -276,18 +276,22 @@ export function DashboardOverviewView({
       {activeTab === "overview" ? (
         <>
       <section className="dashboard-chart-grid" aria-label="Dashboard overview charts">
-        <Link
-          className="console-panel dashboard-chart-panel dashboard-chart-link"
-          href={dashboardHref(overview.filters.tenantId, filters, "requests")}
-        >
+        <article className="console-panel dashboard-chart-panel">
           <div className="panel-heading dashboard-chart-heading">
             <div className="dashboard-chart-title-row">
-              <h3>{text.charts.requestTrend}</h3>
+              <Link
+                className="dashboard-chart-title-link"
+                href={dashboardHref(overview.filters.tenantId, filters, "requests")}
+              >
+                <h3>{text.charts.requestTrend}</h3>
+              </Link>
               <strong>{formatInteger(overview.totalRequests)}</strong>
             </div>
-            <div className="dashboard-chart-legend">
-              <span data-color="blue">{text.charts.traffic}</span>
-              <span data-color="red">{text.charts.successful}</span>
+            <div className="dashboard-chart-actions">
+              <div className="dashboard-chart-legend">
+                <span data-color="blue">{text.charts.traffic}</span>
+                <span data-color="red">{text.charts.successful}</span>
+              </div>
             </div>
           </div>
           <LineTrendChart
@@ -299,7 +303,7 @@ export function DashboardOverviewView({
             secondaryLabel={text.charts.successful}
             secondaryValues={requestTrend.secondary}
           />
-        </Link>
+        </article>
 
         <Link
           className="console-panel dashboard-chart-panel dashboard-chart-link"
@@ -326,7 +330,6 @@ export function DashboardOverviewView({
           activeTab={activeTab}
           cacheShareRows={cacheShareRows}
           cacheTrend={cacheTrend}
-          filters={filters}
           modelShareRows={modelShareRows}
           overview={overview}
           rateLimitedRecords={rateLimitedRecords}
@@ -380,19 +383,19 @@ function DashboardTabs({
           );
         })}
       </div>
-      {activeTab === "overview" ? (
+      <div className="dashboard-filter-cluster">
         <RequestTrendRangeToggle
           activeTab={activeTab}
           filters={filters}
           tenantId={overview.filters.tenantId}
         />
-      ) : null}
-      <DashboardFilterBar
-        activeTab={activeTab}
-        filters={filters}
-        overview={overview}
-        text={text}
-      />
+        <DashboardFilterBar
+          activeTab={activeTab}
+          filters={filters}
+          overview={overview}
+          text={text}
+        />
+      </div>
     </section>
   );
 }
@@ -420,7 +423,7 @@ function DashboardFilterBar({
           aria-label={text.filter.projectId}
           defaultValue={filters.projectId}
           name="projectId"
-          placeholder="project id"
+          placeholder="Project"
         />
       </label>
       <label className="request-log-filter-control">
@@ -440,7 +443,7 @@ function DashboardFilterBar({
           aria-label={text.filter.budgetScopeId}
           defaultValue={filters.budgetScopeId}
           name="budgetScopeId"
-          placeholder="scope id"
+          placeholder="ID"
         />
       </label>
       <label className="request-log-filter-control">
@@ -448,7 +451,7 @@ function DashboardFilterBar({
           aria-label={text.filter.resolvedBy}
           defaultValue={filters.resolvedBy}
           name="resolvedBy"
-          placeholder="resolved by"
+          placeholder="Resolved by"
         />
       </label>
       <div className="dashboard-filter-actions">
@@ -495,7 +498,6 @@ function DashboardTabPanel({
   activeTab,
   cacheShareRows,
   cacheTrend,
-  filters,
   modelShareRows,
   overview,
   rateLimitedRecords,
@@ -507,7 +509,6 @@ function DashboardTabPanel({
   activeTab: Exclude<DashboardTab, "overview">;
   cacheShareRows: Array<{ color: string; label: string; value: number }>;
   cacheTrend: { primary: number[]; secondary: number[] };
-  filters: DashboardFilterState;
   modelShareRows: Array<{ color: string; label: string; value: number }>;
   overview: DashboardOverview;
   rateLimitedRecords: InvocationLogRecord[];
@@ -530,11 +531,6 @@ function DashboardTabPanel({
                 </div>
               </div>
             </div>
-            <RequestTrendRangeToggle
-              activeTab={activeTab}
-              filters={filters}
-              tenantId={overview.filters.tenantId}
-            />
             <LineTrendChart
               labels={trendLabels}
               primaryColor="#3b82f6"
@@ -605,15 +601,12 @@ function DashboardTabPanel({
           <article className="console-panel dashboard-chart-panel">
             <div className="panel-heading dashboard-chart-heading">
               <h3>{text.charts.cacheRequests}</h3>
-              <div className="dashboard-chart-legend">
-                <span data-color="blue">{text.charts.cacheRequests}</span>
-                <span data-color="red">{text.charts.cacheHits}</span>
+              <div className="dashboard-chart-actions">
+                <div className="dashboard-chart-legend">
+                  <span data-color="blue">{text.charts.cacheRequests}</span>
+                  <span data-color="red">{text.charts.cacheHits}</span>
+                </div>
               </div>
-              <RequestTrendRangeToggle
-                activeTab={activeTab}
-                filters={filters}
-                tenantId={overview.filters.tenantId}
-              />
             </div>
             <LineTrendChart
               labels={trendLabels}

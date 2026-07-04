@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Save, Trash2, Users } from "lucide-react";
+import { MoreHorizontal, Plus, Save, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +73,7 @@ const teamText: Record<
     remove: string;
     save: string;
     selectTeam: string;
+    cancel: string;
     status: string;
     team: string;
     title: string;
@@ -101,6 +102,7 @@ const teamText: Record<
     remove: "Remove",
     save: "Save",
     selectTeam: "Select team",
+    cancel: "Cancel",
     status: "Status",
     team: "Team",
     title: "Teams",
@@ -128,6 +130,7 @@ const teamText: Record<
     remove: "제거",
     save: "저장",
     selectTeam: "팀 선택",
+    cancel: "취소",
     status: "상태",
     team: "Team",
     title: "팀",
@@ -140,6 +143,8 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
   const text = teamText[locale];
   const [teams, setTeams] = useState<TeamRecord[]>(model.teams);
   const [createValues, setCreateValues] = useState<TeamFormValues>(emptyTeamForm);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [editingRows, setEditingRows] = useState<Record<string, TeamUpdateValues>>(() =>
     Object.fromEntries(model.teams.map((team) => [team.id, getTeamUpdateValues(team)]))
   );
@@ -191,6 +196,7 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
       [createdTeam.id]: getTeamUpdateValues(createdTeam)
     }));
     setCreateValues(emptyTeamForm);
+    setIsCreateModalOpen(false);
     setSubmitState({
       message: locale === "ko" ? "팀이 생성되었습니다." : "Team created.",
       status: "success"
@@ -245,6 +251,7 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
       message: locale === "ko" ? "팀이 수정되었습니다." : "Team updated.",
       status: "success"
     });
+    setExpandedTeamId(null);
     setPendingAction(null);
     router.refresh();
   }
@@ -282,58 +289,20 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
       <section className="team-section">
         <div className="team-section-header">
           <div>
-            <h3>{text.create}</h3>
-            <p>{text.createDescription}</p>
-          </div>
-        </div>
-        <div className="team-create-line">
-          <label className="policy-field">
-            <span>{text.name}</span>
-            <input
-              maxLength={120}
-              onChange={(event) =>
-                setCreateValues((current) => ({
-                  ...current,
-                  name: event.target.value
-                }))
-              }
-              type="text"
-              value={createValues.name}
-            />
-          </label>
-          <label className="policy-field">
-            <span>{text.description}</span>
-            <input
-              maxLength={500}
-              onChange={(event) =>
-                setCreateValues((current) => ({
-                  ...current,
-                  description: event.target.value
-                }))
-              }
-              type="text"
-              value={createValues.description}
-            />
-          </label>
-          <button
-            className="primary-button"
-            disabled={pendingAction !== null || createValues.name.trim().length === 0}
-            onClick={() => void submitCreateTeam()}
-            type="button"
-          >
-            <Plus aria-hidden="true" />
-            {pendingAction === "create" ? "..." : text.addTeam}
-          </button>
-        </div>
-      </section>
-
-      <section className="team-section">
-        <div className="team-section-header">
-          <div>
             <h3>{text.title}</h3>
             <p>{text.listDescription}</p>
           </div>
-          <span>{visibleTeams.length}</span>
+          <div className="team-section-header-action">
+            <button
+              className="primary-button"
+              disabled={pendingAction !== null}
+              onClick={() => setIsCreateModalOpen(true)}
+              type="button"
+            >
+              <Plus aria-hidden="true" />
+              {text.create}
+            </button>
+          </div>
         </div>
         {visibleTeams.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
@@ -341,93 +310,211 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
           <div className="team-list">
             {visibleTeams.map((team) => {
               const rowValues = editingRows[team.id] ?? getTeamUpdateValues(team);
+              const isExpanded = expandedTeamId === team.id;
 
               return (
-                <article className="team-row" key={team.id}>
-                  <div className="team-row-main">
-                    <label className="policy-field">
-                      <span>{text.name}</span>
-                      <input
-                        maxLength={120}
-                        onChange={(event) => updateRow(team.id, { name: event.target.value })}
-                        type="text"
-                        value={rowValues.name}
-                      />
-                    </label>
-                    <label className="policy-field team-description-field">
-                      <span>{text.description}</span>
-                      <textarea
-                        maxLength={500}
-                        onChange={(event) =>
-                          updateRow(team.id, { description: event.target.value })
-                        }
-                        value={rowValues.description}
-                      />
-                    </label>
-                    <label className="policy-field">
-                      <span>{text.status}</span>
-                      <select
-                        onChange={(event) =>
-                          updateRow(team.id, {
-                            status: event.target.value as TeamStatus
-                          })
-                        }
-                        value={rowValues.status}
-                      >
-                        {teamStatuses.map((status) => (
-                          <option key={status} value={status}>
-                            {formatTeamStatus(status)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="team-row-meta">
-                    <Badge
-                      className="project-status-badge"
-                      data-status={team.status}
-                      variant="outline"
-                    >
-                      {formatTeamStatus(team.status)}
-                    </Badge>
-                    <span>
-                      {text.projectCount}: <strong>{team.projectCount}</strong>
-                    </span>
-                    <span>
-                      {text.updated}: <strong>{formatDateTime(team.updatedAt)}</strong>
-                    </span>
-                  </div>
-                  <div className="team-row-actions">
-                    <Button
-                      disabled={pendingAction !== null}
-                      onClick={() => void submitUpdateTeam(team.id)}
-                      type="button"
-                      variant="outline"
-                    >
-                      <Save aria-hidden="true" />
-                      {pendingAction === `update:${team.id}` ? "..." : text.save}
-                    </Button>
-                    <Button
-                      disabled={pendingAction !== null}
-                      onClick={() =>
-                        void submitUpdateTeam(team.id, {
-                          ...rowValues,
-                          status: "ARCHIVED"
-                        })
+                <article className="team-row" data-expanded={isExpanded} key={team.id}>
+                  <div
+                    aria-expanded={isExpanded}
+                    className="team-row-summary"
+                    onClick={() => setExpandedTeamId(isExpanded ? null : team.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setExpandedTeamId(isExpanded ? null : team.id);
                       }
-                      type="button"
-                      variant="outline"
-                    >
-                      <Trash2 aria-hidden="true" />
-                      {text.delete}
-                    </Button>
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div>
+                      <span>{text.name}</span>
+                      <strong>{team.name}</strong>
+                    </div>
+                    <div>
+                      <span>{text.description}</span>
+                      <p>{nullableText(team.description, "-")}</p>
+                    </div>
+                    <div>
+                      <span>{text.status}</span>
+                      <Badge
+                        className="project-status-badge"
+                        data-status={team.status}
+                        variant="outline"
+                      >
+                        {formatTeamStatus(team.status)}
+                      </Badge>
+                    </div>
+                    <span className="team-row-more" aria-hidden="true">
+                      <MoreHorizontal aria-hidden="true" />
+                    </span>
                   </div>
+                  {isExpanded ? (
+                    <div className="team-row-detail">
+                      <dl className="team-row-detail-meta">
+                        {[
+                          [text.projectCount, String(team.projectCount)],
+                          [text.created, formatDateTime(team.createdAt)],
+                          [text.updated, formatDateTime(team.updatedAt)]
+                        ].map(([label, value]) => (
+                          <div key={label}>
+                            <dt>{label}</dt>
+                            <dd>{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <div className="team-row-main">
+                        <label className="policy-field team-name-field">
+                          <span>{text.name}</span>
+                          <input
+                            maxLength={120}
+                            onChange={(event) =>
+                              updateRow(team.id, { name: event.target.value })
+                            }
+                            type="text"
+                            value={rowValues.name}
+                          />
+                        </label>
+                        <label className="policy-field team-description-field">
+                          <span>{text.description}</span>
+                          <textarea
+                            maxLength={500}
+                            onChange={(event) =>
+                              updateRow(team.id, { description: event.target.value })
+                            }
+                            value={rowValues.description}
+                          />
+                        </label>
+                        <label className="policy-field team-status-field">
+                          <span>{text.status}</span>
+                          <select
+                            onChange={(event) =>
+                              updateRow(team.id, {
+                                status: event.target.value as TeamStatus
+                              })
+                            }
+                            value={rowValues.status}
+                          >
+                            {teamStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {formatTeamStatus(status)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="team-row-actions">
+                        <Button
+                          className="team-save-button"
+                          disabled={pendingAction !== null}
+                          onClick={() => void submitUpdateTeam(team.id)}
+                          type="button"
+                          variant="outline"
+                        >
+                          <Save aria-hidden="true" />
+                          {pendingAction === `update:${team.id}` ? "..." : text.save}
+                        </Button>
+                        <Button
+                          className="team-delete-button"
+                          disabled={pendingAction !== null}
+                          onClick={() =>
+                            void submitUpdateTeam(team.id, {
+                              ...rowValues,
+                              status: "ARCHIVED"
+                            })
+                          }
+                          type="button"
+                          variant="outline"
+                        >
+                          <Trash2 aria-hidden="true" />
+                          {text.delete}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
           </div>
         )}
       </section>
+
+      {isCreateModalOpen ? (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            if (pendingAction !== "create") {
+              setIsCreateModalOpen(false);
+            }
+          }}
+          role="presentation"
+        >
+          <section
+            aria-labelledby="team-create-title"
+            aria-modal="true"
+            className="modal-panel"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="panel-heading">
+              <div>
+                <p className="console-kicker">{text.management}</p>
+                <h3 id="team-create-title">{text.create}</h3>
+                <p>{text.createDescription}</p>
+              </div>
+            </div>
+            <div className="modal-form-grid">
+              <label className="policy-field">
+                <span>{text.name}</span>
+                <input
+                  autoFocus
+                  maxLength={120}
+                  onChange={(event) =>
+                    setCreateValues((current) => ({
+                      ...current,
+                      name: event.target.value
+                    }))
+                  }
+                  type="text"
+                  value={createValues.name}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.description}</span>
+                <input
+                  maxLength={500}
+                  onChange={(event) =>
+                    setCreateValues((current) => ({
+                      ...current,
+                      description: event.target.value
+                    }))
+                  }
+                  type="text"
+                  value={createValues.description}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <Button
+                disabled={pendingAction === "create"}
+                onClick={() => setIsCreateModalOpen(false)}
+                type="button"
+                variant="outline"
+              >
+                {text.cancel}
+              </Button>
+              <Button
+                disabled={pendingAction !== null || createValues.name.trim().length === 0}
+                onClick={() => void submitCreateTeam()}
+                type="button"
+              >
+                <Plus aria-hidden="true" />
+                {pendingAction === "create" ? "..." : text.create}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -597,6 +684,7 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
                 {text.assigned}: <strong>{formatDateTime(projectTeam.assignedAt)}</strong>
               </span>
               <Button
+                className="team-delete-button"
                 disabled={pendingAction !== null}
                 onClick={() => void submitDetachTeam(projectTeam.teamId)}
                 type="button"

@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, RefreshCw, Trash2 } from "lucide-react";
+import { Boxes, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -21,9 +21,11 @@ const catalogText: Record<
     allowed: string;
     capabilities: string;
     clear: string;
+    close: string;
     created: string;
     credential: string;
     deleteModel: string;
+    details: string;
     empty: string;
     execution: string;
     fallback: string;
@@ -44,7 +46,6 @@ const catalogText: Record<
     requestId: string;
     routing: string;
     route: string;
-    source: string;
     title: string;
   }
 > = {
@@ -53,9 +54,11 @@ const catalogText: Record<
     allowed: "Allowed",
     capabilities: "Capabilities",
     clear: "Clear",
+    close: "Close",
     created: "Created",
     credential: "Credential",
     deleteModel: "Remove",
+    details: "Details",
     empty: "No models returned from Gateway.",
     execution: "Execution",
     fallback: "Fallback",
@@ -76,7 +79,6 @@ const catalogText: Record<
     requestId: "Request ID",
     routing: "Routing",
     route: "Route",
-    source: "Source",
     title: "Model Catalog"
   },
   ko: {
@@ -84,9 +86,11 @@ const catalogText: Record<
     allowed: "허용",
     capabilities: "Capabilities",
     clear: "초기화",
+    close: "닫기",
     created: "생성",
     credential: "Credential",
     deleteModel: "삭제",
+    details: "상세",
     empty: "Gateway에서 반환된 모델이 없습니다.",
     execution: "Execution",
     fallback: "Fallback",
@@ -107,7 +111,6 @@ const catalogText: Record<
     requestId: "Request ID",
     routing: "Routing",
     route: "Route",
-    source: "출처",
     title: "Model Catalog"
   }
 };
@@ -119,6 +122,7 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
   const [capabilityFilter, setCapabilityFilter] = useState("all");
   const [removedModelKeys, setRemovedModelKeys] = useState<Set<string>>(() => new Set());
   const [deletingModelKey, setDeletingModelKey] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<ModelCatalogItem | null>(null);
   const [actionMessage, setActionMessage] = useState<{
     status: "error" | "success";
     text: string;
@@ -190,6 +194,7 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
     }
 
     setRemovedModelKeys((current) => new Set([...current, modelKey]));
+    setSelectedModel(null);
     setActionMessage({
       status: "success",
       text:
@@ -297,12 +302,8 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                 <tr>
                   <th>{text.model}</th>
                   <th>{text.provider}</th>
-                  <th>{text.execution}</th>
                   <th>{text.capabilities}</th>
-                  <th>{text.routing}</th>
                   <th>{text.allowed}</th>
-                  <th>{text.source}</th>
-                  <th>{text.created}</th>
                   <th />
                 </tr>
               </thead>
@@ -311,52 +312,22 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                   <tr key={`${getEffectiveProvider(item)}:${item.id}`}>
                     <td>
                       <strong className="provider-name">{item.id}</strong>
-                      <span className="project-muted">
-                        {text.object}: {item.object} / {text.ownedBy}: {item.ownedBy}
-                      </span>
                     </td>
                     <td>{nullableText(getEffectiveProvider(item) || text.noProvider)}</td>
                     <td>
-                      <ExecutionMetadata item={item} labels={text} />
-                    </td>
-                    <td>
                       <CapabilityList item={item} noCapabilityText={text.noCapability} />
-                      {item.alias ? <span className="project-muted">{text.alias}: {item.alias}</span> : null}
                     </td>
                     <td>
-                      <RoutingMetadata item={item} labels={text} />
+                      <AllowedBadge item={item} />
                     </td>
-                    <td>
-                      <Badge
-                        className="project-status-badge"
-                        data-status={
-                          item.allowed === false
-                            ? "DISABLED"
-                            : item.allowed === true
-                              ? "ACTIVE"
-                              : "ARCHIVED"
-                        }
-                        variant="outline"
-                      >
-                        {item.allowed === false ? "false" : item.allowed === true ? "true" : "-"}
-                      </Badge>
-                    </td>
-                    <td>{item.source}</td>
-                    <td>{item.createdAt ? formatDateTime(item.createdAt) : "-"}</td>
                     <td>
                       <Button
-                        disabled={
-                          deletingModelKey !== null ||
-                          !item.provider ||
-                          item.source === "gateway"
-                        }
-                        onClick={() => void deleteModel(item)}
-                        title={!item.provider || item.source === "gateway" ? text.removeUnavailable : undefined}
+                        aria-label={`${item.id} ${text.details}`}
+                        onClick={() => setSelectedModel(item)}
                         type="button"
                         variant="outline"
                       >
-                        <Trash2 aria-hidden="true" />
-                        {deletingModelKey === getCatalogModelKey(item) ? "..." : text.deleteModel}
+                        <MoreHorizontal aria-hidden="true" />
                       </Button>
                     </td>
                   </tr>
@@ -370,6 +341,86 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
           </p>
         )}
       </section>
+
+      {selectedModel ? (
+        <div className="modal-backdrop" onClick={() => setSelectedModel(null)} role="presentation">
+          <section
+            aria-labelledby="model-catalog-detail-title"
+            aria-modal="true"
+            className="modal-panel model-catalog-detail-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="panel-heading">
+              <div>
+                <p className="console-kicker">{text.details}</p>
+                <h3 id="model-catalog-detail-title">{selectedModel.id}</h3>
+              </div>
+              <Button onClick={() => setSelectedModel(null)} type="button" variant="outline">
+                {text.close}
+              </Button>
+            </div>
+
+            <dl className="policy-summary-list">
+              {[
+                [text.provider, nullableText(getEffectiveProvider(selectedModel) || text.noProvider)],
+                [text.object, nullableText(selectedModel.object)],
+                [text.ownedBy, nullableText(selectedModel.ownedBy)],
+                [text.created, selectedModel.createdAt ? formatDateTime(selectedModel.createdAt) : "-"],
+                [text.alias, nullableText(selectedModel.alias)],
+                [text.allowed, selectedModel.allowed === false ? "false" : selectedModel.allowed === true ? "true" : "-"]
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="model-catalog-detail-grid">
+              <article className="console-panel">
+                <div className="panel-heading">
+                  <h3>{text.execution}</h3>
+                </div>
+                <ExecutionMetadata item={selectedModel} labels={text} />
+              </article>
+              <article className="console-panel">
+                <div className="panel-heading">
+                  <h3>{text.capabilities}</h3>
+                </div>
+                <CapabilityList item={selectedModel} noCapabilityText={text.noCapability} />
+              </article>
+              <article className="console-panel">
+                <div className="panel-heading">
+                  <h3>{text.routing}</h3>
+                </div>
+                <RoutingMetadata item={selectedModel} labels={text} />
+              </article>
+            </div>
+
+            <div className="modal-actions">
+              <Button
+                disabled={
+                  deletingModelKey !== null ||
+                  !selectedModel.provider ||
+                  selectedModel.source === "gateway"
+                }
+                onClick={() => void deleteModel(selectedModel)}
+                title={
+                  !selectedModel.provider || selectedModel.source === "gateway"
+                    ? text.removeUnavailable
+                    : undefined
+                }
+                type="button"
+                variant="outline"
+              >
+                <Trash2 aria-hidden="true" />
+                {deletingModelKey === getCatalogModelKey(selectedModel) ? "..." : text.deleteModel}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <section className="console-panel">
         <div className="panel-heading">
@@ -414,6 +465,20 @@ function CapabilityList({
         </Badge>
       ))}
     </div>
+  );
+}
+
+function AllowedBadge({ item }: { item: ModelCatalogItem }) {
+  return (
+    <Badge
+      className="project-status-badge"
+      data-status={
+        item.allowed === false ? "DISABLED" : item.allowed === true ? "ACTIVE" : "ARCHIVED"
+      }
+      variant="outline"
+    >
+      {item.allowed === false ? "false" : item.allowed === true ? "true" : "-"}
+    </Badge>
   );
 }
 
