@@ -62,6 +62,26 @@ python scripts/semantic_cache_classifier/prepare_dataset.py
 python scripts/semantic_cache_classifier/train_fasttext.py --model-version cacheability-fasttext-synthetic-v1
 ```
 
+Windows local setup that has been verified:
+
+```powershell
+py -3.12 -m venv .tmp\semantic-cache-fasttext-venv
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel fasttext-wheel "numpy<2"
+```
+
+`fasttext-wheel==0.9.2` currently imports as `fasttext`. Keep `numpy<2` in this venv because FastText 0.9.2 prediction can fail with NumPy 2.x.
+
+The checked default training hyperparameters for the synthetic v1 dataset are:
+
+```text
+epoch=35
+lr=0.6
+wordNgrams=1
+dim=64
+minCount=1
+loss=softmax
+```
+
 Default artifact outputs:
 
 ```text

@@ -88,11 +88,19 @@ corepack pnpm run verify:v2-final
   - `@gatelm/control-plane-api` typecheck 실패: Prisma generated client에 `budgetLimitMode`, `budgetLimitUsd`, `budgetLimitPercent`, `totalBudgetUsd`, `Team`, `ProjectTeamAssignment` 등이 없는 상태에서 서비스 코드가 해당 필드를 참조한다.
   - `@gatelm/control-plane-api` tests 실패: 위 TypeScript compile error로 `applications.service.spec.ts`, `projects.service.spec.ts` suite가 실행 전 실패했다.
   - `@gatelm/web` typecheck 실패: `echarts/charts`, `echarts/components`, `echarts/core`, `echarts/renderers` module/type declaration을 찾지 못했다.
-  - `verify:v2-final` 내부 gateway-core Go tests는 통과했다.
+- `verify:v2-final` 내부 gateway-core Go tests는 통과했다.
+
+## 후속 sidecar 검증 업데이트
+
+- Python 3.12 venv에서 `fasttext-wheel`과 `numpy<2`를 사용해 실제 `.bin` artifact를 생성하고 sidecar load를 검증했다.
+- `serve_fasttext_classifier.py`를 로컬에서 띄운 뒤 UTF-8 JSON request로 `/classify`를 호출했다.
+  - `cacheable_static` synthetic 문장: `label=cacheable_static`, confidence 약 `0.976`
+  - `dynamic_user_state` synthetic 문장: `label=dynamic_user_state`, confidence 약 `0.989`
+- PowerShell inline literal로 한국어 JSON을 만들면 인코딩이 깨질 수 있어, manual 검증은 UTF-8 파일에서 문장을 읽거나 Python client에서 UTF-8 bytes로 보내는 방식이 안전하다.
 
 ## 실패하거나 보류한 항목
 
-- 실제 FastText `.bin` artifact 기반 sidecar manual verification은 현재 환경의 `fasttext_installed=False` 때문에 보류했다.
+- 기본 Anaconda Python 3.13 환경에는 `fasttext` package가 설치되어 있지 않다. 실제 sidecar manual verification은 Python 3.12 venv에서 진행했다.
 - `corepack pnpm run verify:v2-final`은 기존 workspace의 control-plane Prisma generated type 불일치와 web `echarts` dependency/type resolution 문제로 실패했다.
 - Phase 3 범위에 없는 외부 LLM API classifier는 추가하지 않았다.
 - Gateway runtime request path에서 `prepare_dataset.py`, `train_fasttext.py`, `evaluate_fasttext.py`를 호출하지 않았다.

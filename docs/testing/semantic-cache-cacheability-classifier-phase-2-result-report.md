@@ -79,9 +79,25 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - Node engine warning 출력: expected `>=22 <23`, current `v24.14.0`
 - Phase 2 새 파일 trailing whitespace 검사: 통과
 
+## 후속 학습 검증 업데이트
+
+- Python 3.12 venv에서 `fasttext-wheel` 설치와 실제 학습/평가를 추가로 검증했다.
+  - `py -3.12 -m venv .tmp\semantic-cache-fasttext-venv`
+  - `.tmp\semantic-cache-fasttext-venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel fasttext-wheel "numpy<2"`
+- `numpy<2`가 필요했다.
+  - `fasttext-wheel==0.9.2`와 NumPy 2.x 조합에서는 `model.predict()`가 `ValueError: Unable to avoid copy while creating an array as requested.`로 실패했다.
+  - venv 안에서 `numpy==1.26.4`로 낮춘 뒤 평가가 정상 실행됐다.
+- 기본 학습값 `lr=0.45`, `wordNgrams=2`는 holdout label 예측은 일부 맞지만 acceptance 기준을 통과하지 못했다.
+- `lr=0.6`, `wordNgrams=1` 조합으로 재학습한 artifact는 holdout acceptance를 통과했다.
+  - total: `12`
+  - accuracy: `1.0`
+  - macroF1: `1.0`
+  - label별 precision/recall/F1: 모두 `1.0`
+  - `acceptance.passed=true`
+
 ## 실패하거나 보류한 항목
 
-- `fasttext` Python package가 현재 환경에 설치되어 있지 않아 실제 FastText local train/evaluate run은 보류했다.
+- 기본 Anaconda Python 3.13 환경에는 `fasttext` package가 설치되어 있지 않다. 실제 학습/평가는 Python 3.12 venv에서 진행했다.
 - Phase 2 범위를 지키기 위해 Gateway live request path, FastText runtime adapter, demo evidence, sidecar, model loading integration은 진행하지 않았다.
 - Phase 1A/1B에서 추가된 Gateway classifier gate 동작은 변경하지 않았다.
 - Public API, DB schema, persisted Event schema, Dashboard Metrics contract는 변경하지 않았다.
