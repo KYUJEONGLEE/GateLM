@@ -17,6 +17,7 @@ import json
 import os
 import re
 import urllib.request
+from urllib.error import HTTPError
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -247,8 +248,18 @@ def download_if_needed(source_file: Path, source_url: str, should_download: bool
         raise SystemExit("HF token not found. Set HF_TOKEN after accepting access to beomi/KoAlpaca-RealQA.")
     source_file.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(source_url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(request) as response, source_file.open("wb") as handle:
-        handle.write(response.read())
+    try:
+        with urllib.request.urlopen(request) as response, source_file.open("wb") as handle:
+            handle.write(response.read())
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise SystemExit(
+                f"Hugging Face denied access to {DATASET_ID} with HTTP {exc.code}. "
+                "Accept the dataset conditions in the browser, then create a read token "
+                f"that has access to {DATASET_ID}. For fine-grained tokens, include this "
+                "dataset repository in the token's repository permissions."
+            ) from exc
+        raise
 
 
 def require_pyarrow() -> Any:
