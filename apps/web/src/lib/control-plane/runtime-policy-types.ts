@@ -1,3 +1,5 @@
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+
 export type RuntimePolicyDetector = {
   action: "redact" | "block";
   enabled: boolean;
@@ -249,12 +251,17 @@ export type RuntimePolicyModel = {
     loadError: string | null;
     summary: RuntimePolicyProviderCatalogSummary | null;
   };
+  providerConnections: {
+    available: ProviderConnectionRecord[];
+    loadError: string | null;
+    selectedIds: string[];
+  };
   routeTenantId: string;
   runtimeSnapshot: {
     loadError: string | null;
     snapshot: RuntimePolicySnapshot | null;
   };
-  source: "control-plane" | "fixture";
+  source: "control-plane" | "fixture" | "template";
 };
 
 export function getRuntimePolicyDraftValues(

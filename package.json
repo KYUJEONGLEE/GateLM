@@ -35,6 +35,10 @@
     "dev:web": "pnpm --filter @gatelm/web dev",
     "build:web": "pnpm --filter @gatelm/web build",
     "lint:web": "pnpm --filter @gatelm/web lint",
-    "typecheck:web": "pnpm --filter @gatelm/web typecheck"
+    "typecheck:web": "pnpm --filter @gatelm/web typecheck",
+    "dev:application": "pnpm --filter @gatelm/application dev",
+    "build:application": "pnpm --filter @gatelm/application build",
+    "lint:application": "pnpm --filter @gatelm/application lint",
+    "typecheck:application": "pnpm --filter @gatelm/application typecheck"
   }
 }

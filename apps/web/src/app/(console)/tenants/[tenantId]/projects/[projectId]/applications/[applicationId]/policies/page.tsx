@@ -1,0 +1,70 @@
+import { notFound } from "next/navigation";
+import { ConsoleShell } from "@/components/layout/console-shell";
+import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
+import { listAppTokensForApplication } from "@/lib/control-plane/app-tokens-client";
+import { getApplicationsModel } from "@/lib/control-plane/applications-client";
+import { getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getRuntimePolicyModelForApplication } from "@/lib/control-plane/runtime-policy-client";
+import { getRequestLocale } from "@/lib/i18n/server-locale";
+
+type ApplicationPoliciesPageProps = {
+  params: Promise<{
+    applicationId: string;
+    projectId: string;
+    tenantId: string;
+  }>;
+};
+
+export default async function ApplicationPoliciesPage({
+  params
+}: ApplicationPoliciesPageProps) {
+  const { applicationId, projectId, tenantId } = await params;
+  const locale = await getRequestLocale();
+  const projectsModel = await getProjectsModel(tenantId);
+  const project = projectsModel.projects.find((item) => item.id === projectId);
+
+  if (!project) {
+    notFound();
+  }
+
+  const applicationsModel = await getApplicationsModel(tenantId, project.id);
+  const application = applicationsModel.applications.find((item) => item.id === applicationId);
+
+  if (!application) {
+    notFound();
+  }
+
+  const model = await getRuntimePolicyModelForApplication(tenantId, application.id, project.id);
+  const appTokensResult = await listAppTokensForApplication(application.id);
+  const activeAppTokenCount = appTokensResult.ok
+    ? appTokensResult.data.filter((appToken) => isActiveAppToken(appToken.status, appToken.expiresAt))
+        .length
+    : 0;
+
+  return (
+    <ConsoleShell
+      activeManagementItem="project"
+      activeSection="management"
+      locale={locale}
+      tenantId={tenantId}
+    >
+      <RuntimePolicyEditor
+        appTokenReadiness={{
+          activeAppTokenCount,
+          applicationName: application.name,
+          loadError: appTokensResult.ok ? null : appTokensResult.error
+        }}
+        locale={locale}
+        model={model}
+      />
+    </ConsoleShell>
+  );
+}
+
+function isActiveAppToken(status: string, expiresAt: string | null) {
+  if (status !== "active") {
+    return false;
+  }
+
+  return !expiresAt || new Date(expiresAt).getTime() > Date.now();
+}

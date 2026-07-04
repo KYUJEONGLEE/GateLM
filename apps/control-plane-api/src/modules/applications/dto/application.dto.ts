@@ -1,6 +1,8 @@
 import { ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEnum,
   IsIn,
   IsInt,
@@ -50,6 +52,12 @@ export class CreateApplicationDto {
   @Min(0)
   @Max(100)
   budgetLimitPercent?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  providerConnectionIds?: string[];
 }
 
 export class UpdateApplicationDto {

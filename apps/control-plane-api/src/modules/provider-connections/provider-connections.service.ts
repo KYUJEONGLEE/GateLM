@@ -24,6 +24,7 @@ import {
   ProviderModelDiscoveryResponseDto,
   ProviderPresetResponseDto,
   ProviderResponseDto,
+  SetApplicationProvidersDto,
   UpsertProviderDto,
 } from './dto/provider-connection.dto';
 
@@ -109,6 +110,59 @@ export class ProviderConnectionsService {
     return this.toProviderResponse(providerConnection);
   }
 
+  async upsertTenantProvider(
+    tenantId: string,
+    dto: UpsertProviderDto,
+  ): Promise<ProviderResponseDto> {
+    const tenant = await this.getTenantOrThrow(tenantId);
+    const providerConfig = this.toJsonObject(dto.providerConfig);
+    const optionalCredentialUpdate = this.toOptionalCredentialUpdate(dto);
+
+    const providerConnection = await this.prisma.$transaction(async (tx) => {
+      const existingProvider = await tx.providerConnection.findFirst({
+        where: {
+          tenantId: tenant.id,
+          provider: dto.provider,
+          projectId: null,
+        },
+      });
+
+      if (existingProvider) {
+        return tx.providerConnection.update({
+          where: { id: existingProvider.id },
+          data: {
+            displayName: dto.displayName,
+            status: dto.status,
+            baseUrl: dto.baseUrl,
+            timeoutMs: dto.timeoutMs,
+            resolver: dto.resolver,
+            providerConfig,
+            ...optionalCredentialUpdate,
+          },
+        });
+      }
+
+      return tx.providerConnection.create({
+        data: {
+          tenantId: tenant.id,
+          projectId: null,
+          provider: dto.provider,
+          displayName: dto.displayName,
+          status: dto.status,
+          baseUrl: dto.baseUrl,
+          timeoutMs: dto.timeoutMs,
+          secretRef: dto.secretRef,
+          credentialPrefix: dto.credentialPrefix,
+          credentialLast4: dto.credentialLast4,
+          resolver: dto.resolver,
+          providerConfig,
+        },
+      });
+    });
+
+    return this.toProviderResponse(providerConnection);
+  }
+
   async listProviders(
     projectId: string,
     query: ListProvidersQueryDto,
@@ -133,6 +187,100 @@ export class ProviderConnectionsService {
         hasMore,
       },
     };
+  }
+
+  async listTenantProviders(
+    tenantId: string,
+    query: ListProvidersQueryDto,
+  ): Promise<ListEnvelope<ProviderResponseDto>> {
+    await this.getTenantOrThrow(tenantId);
+
+    const limit = query.limit ?? 50;
+    const providers = await this.prisma.providerConnection.findMany({
+      where: { tenantId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+    const hasMore = providers.length > limit;
+    const page = providers.slice(0, limit);
+
+    return {
+      data: page.map((provider) => this.toProviderResponse(provider)),
+      pagination: {
+        limit,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
+      },
+    };
+  }
+
+  async listApplicationProviders(
+    applicationId: string,
+  ): Promise<ListEnvelope<ProviderResponseDto>> {
+    await this.getApplicationOrThrow(applicationId);
+
+    const connections =
+      await this.prisma.applicationProviderConnection.findMany({
+        where: { applicationId },
+        include: {
+          providerConnection: true,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+
+    return {
+      data: connections.map((connection) =>
+        this.toProviderResponse(connection.providerConnection),
+      ),
+      pagination: {
+        limit: connections.length,
+        nextCursor: null,
+        hasMore: false,
+      },
+    };
+  }
+
+  async setApplicationProviders(
+    applicationId: string,
+    dto: SetApplicationProvidersDto,
+  ): Promise<ListEnvelope<ProviderResponseDto>> {
+    const application = await this.getApplicationOrThrow(applicationId);
+    const providerConnectionIds = [...new Set(dto.providerConnectionIds)];
+    const providers = providerConnectionIds.length
+      ? await this.prisma.providerConnection.findMany({
+          where: {
+            id: { in: providerConnectionIds },
+            tenantId: application.tenantId,
+          },
+        })
+      : [];
+
+    if (providers.length !== providerConnectionIds.length) {
+      throw new BadRequestException(
+        'Application provider connections must reference providers from the same tenant.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.applicationProviderConnection.deleteMany({
+        where: { applicationId },
+      });
+
+      if (providers.length > 0) {
+        await tx.applicationProviderConnection.createMany({
+          data: providers.map((provider) => ({
+            applicationId: application.id,
+            projectId: application.projectId,
+            providerConnectionId: provider.id,
+            tenantId: application.tenantId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    });
+
+    return this.listApplicationProviders(applicationId);
   }
 
   async listProviderPresets(
@@ -219,6 +367,28 @@ export class ProviderConnectionsService {
     };
   }
 
+  async discoverTenantProviderModels(
+    tenantId: string,
+    provider: string,
+  ): Promise<ProviderModelDiscoveryResponseDto> {
+    await this.getTenantOrThrow(tenantId);
+
+    const providerKey = this.toProviderKeyOrThrow(provider);
+    const providerConnection = await this.prisma.providerConnection.findFirst({
+      where: {
+        tenantId,
+        provider: providerKey,
+        projectId: null,
+      },
+    });
+
+    if (!providerConnection) {
+      throw new NotFoundException('Provider connection not found.');
+    }
+
+    return this.discoverProviderConnectionModels(providerConnection);
+  }
+
   private async getProjectOrThrow(
     projectId: string,
   ): Promise<{ id: string; tenantId: string }> {
@@ -232,6 +402,75 @@ export class ProviderConnectionsService {
     }
 
     return project;
+  }
+
+  private async discoverProviderConnectionModels(
+    providerConnection: ProviderConnection,
+  ): Promise<ProviderModelDiscoveryResponseDto> {
+    if (providerConnection.status === ProviderConnectionStatus.DISABLED) {
+      throw new BadRequestException(
+        'Provider model discovery requires an enabled provider connection.',
+      );
+    }
+
+    const adapterType = this.toAdapterType(providerConnection);
+    const credentialRequired = this.toCredentialRequired(
+      providerConnection,
+      adapterType,
+    );
+    const credential = credentialRequired
+      ? this.resolveProviderCredential(providerConnection)
+      : null;
+    const endpoint = this.toModelsEndpoint(providerConnection);
+    const payload = await this.fetchProviderModels({
+      adapterType,
+      credential,
+      endpoint,
+      providerConfig: this.toRecordOrNull(providerConnection.providerConfig),
+      timeoutMs: providerConnection.timeoutMs,
+    });
+    const models = this.toDiscoveryModels(providerConnection, payload);
+
+    return {
+      adapterType,
+      baseUrl: this.toSafeBaseUrl(providerConnection.baseUrl),
+      credentialRequired,
+      discoveredAt: new Date().toISOString(),
+      modelCount: models.length,
+      models,
+      provider: providerConnection.provider,
+      providerId: providerConnection.id,
+    };
+  }
+
+  private async getTenantOrThrow(
+    tenantId: string,
+  ): Promise<{ id: string }> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found.');
+    }
+
+    return tenant;
+  }
+
+  private async getApplicationOrThrow(
+    applicationId: string,
+  ): Promise<{ id: string; projectId: string; tenantId: string }> {
+    const application = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { id: true, projectId: true, tenantId: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Application not found.');
+    }
+
+    return application;
   }
 
   private toProviderKeyOrThrow(provider: string): string {

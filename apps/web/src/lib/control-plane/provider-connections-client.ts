@@ -3,6 +3,7 @@ import "server-only";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneBaseUrl,
+  getControlPlaneTenantId,
   getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
 import type {
@@ -89,8 +90,9 @@ export async function getProviderConnectionsModel(
 ): Promise<ProviderConnectionsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
+  const controlPlaneTenantId = getControlPlaneTenantId();
   const [listResult, presetResult] = await Promise.all([
-    listProviderConnections(controlPlaneProjectId),
+    listTenantProviderConnections(controlPlaneTenantId),
     listProviderPresets()
   ]);
   const providerPresets = presetResult.ok
@@ -131,11 +133,11 @@ export async function getProviderConnectionsModel(
 export async function upsertProviderConnection(
   values: ProviderConnectionFormValues
 ): Promise<ProviderRequestResult> {
-  const projectId = getControlPlaneProjectId();
+  const tenantId = getControlPlaneTenantId();
 
   try {
     const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers`,
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers`,
       {
         body: JSON.stringify(toProviderPayload(values)),
         cache: "no-store",
@@ -157,11 +159,11 @@ export async function upsertProviderConnection(
 }
 
 export async function discoverProviderModels(provider: string): Promise<ProviderDiscoveryResult> {
-  const projectId = getControlPlaneProjectId();
+  const tenantId = getControlPlaneTenantId();
 
   try {
     const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers/${encodeURIComponent(provider)}/discover-models`,
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(provider)}/discover-models`,
       {
         cache: "no-store",
         method: "POST"
@@ -178,12 +180,155 @@ export async function discoverProviderModels(provider: string): Promise<Provider
   }
 }
 
+export async function removeProviderModel({
+  modelName,
+  provider
+}: {
+  modelName: string;
+  provider: string;
+}): Promise<ProviderRequestResult> {
+  const listResult = await listTenantProviderConnections(getControlPlaneTenantId());
+
+  if (!listResult.ok) {
+    return listResult;
+  }
+
+  const providerConnection = listResult.data.find((item) => item.provider === provider);
+
+  if (!providerConnection) {
+    return {
+      error: "Provider connection not found.",
+      ok: false,
+      status: 404
+    };
+  }
+
+  const normalizedModelName = normalizeDiscoveredModelName(modelName);
+  const remainingModels = getProviderConfigModels(providerConnection.providerConfig).filter(
+    (item) => item !== normalizedModelName
+  );
+
+  if (remainingModels.length === getProviderConfigModels(providerConnection.providerConfig).length) {
+    return {
+      error: "Model is not registered on this provider connection.",
+      ok: false,
+      status: 404
+    };
+  }
+
+  return upsertProviderConnection({
+    adapterType: getProviderConfigString(
+      providerConnection.providerConfig,
+      "adapterType",
+      getDefaultProviderAdapterType(providerConnection)
+    ),
+    apiVersion: getProviderConfigString(providerConnection.providerConfig, "apiVersion", ""),
+    baseUrl: providerConnection.baseUrl,
+    credentialLast4: providerConnection.credentialPreview.last4 ?? "",
+    credentialPrefix: providerConnection.credentialPreview.prefix ?? "",
+    credentialRequired: getProviderConfigBoolean(
+      providerConnection.providerConfig,
+      "credentialRequired",
+      providerConnection.resolver !== "none"
+    ),
+    displayName: providerConnection.displayName,
+    failureMode: getProviderFailureMode(providerConnection.providerConfig),
+    isEdit: true,
+    models: remainingModels.join(", "),
+    modelsEndpointPath: getProviderConfigString(
+      providerConnection.providerConfig,
+      "modelsEndpointPath",
+      "/models"
+    ),
+    provider: providerConnection.provider,
+    requestFormat: getProviderRequestFormat(providerConnection),
+    resolver: providerConnection.resolver,
+    secretRef: "",
+    status: providerConnection.status,
+    timeoutMs: providerConnection.timeoutMs
+  });
+}
+
 export async function listProviderConnections(projectId: string): Promise<ProviderListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers?limit=50`,
       {
         cache: "no-store"
+      }
+    );
+
+    return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function listTenantProviderConnections(
+  tenantId: string
+): Promise<ProviderListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers?limit=50`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function listApplicationProviderConnections(
+  applicationId: string
+): Promise<ProviderListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/providers`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    return readProviderListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function setApplicationProviderConnections({
+  applicationId,
+  providerConnectionIds
+}: {
+  applicationId: string;
+  providerConnectionIds: string[];
+}): Promise<ProviderListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/providers`,
+      {
+        body: JSON.stringify({
+          providerConnectionIds
+        }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
       }
     );
 
@@ -292,6 +437,88 @@ function splitProviderModels(value: string) {
         .filter(Boolean)
     )
   );
+}
+
+function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
+  const models = providerConfig?.models;
+
+  return Array.isArray(models)
+    ? models
+        .filter((model): model is string => typeof model === "string" && model.trim().length > 0)
+        .map((model) => normalizeDiscoveredModelName(model))
+    : [];
+}
+
+function normalizeDiscoveredModelName(modelName: string) {
+  const normalized = modelName.trim();
+
+  if (normalized.startsWith("models/gemini-")) {
+    return normalized.slice("models/".length);
+  }
+
+  return normalized;
+}
+
+function getProviderConfigString(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: string
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function getProviderConfigBoolean(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: boolean
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function getProviderFailureMode(
+  providerConfig: Record<string, unknown> | null
+): ProviderConnectionFormValues["failureMode"] {
+  return providerConfig?.failureMode === "fail_open_to_fallback"
+    ? "fail_open_to_fallback"
+    : "fail_closed";
+}
+
+function getProviderRequestFormat(
+  providerConnection: ProviderConnectionRecord
+): ProviderConnectionFormValues["requestFormat"] {
+  const requestFormat = providerConnection.providerConfig?.requestFormat;
+
+  if (
+    requestFormat === "openai_chat_completions" ||
+    requestFormat === "anthropic_messages" ||
+    requestFormat === "mock_chat_completions"
+  ) {
+    return requestFormat;
+  }
+
+  const adapterType = getProviderConfigString(
+    providerConnection.providerConfig,
+    "adapterType",
+    getDefaultProviderAdapterType(providerConnection)
+  );
+
+  if (adapterType === "anthropic") {
+    return "anthropic_messages";
+  }
+
+  return adapterType === "mock" ? "mock_chat_completions" : "openai_chat_completions";
+}
+
+function getDefaultProviderAdapterType(providerConnection: ProviderConnectionRecord) {
+  if (providerConnection.provider === "mock") {
+    return "mock";
+  }
+
+  return providerConnection.provider === "claude" ? "anthropic" : "openai_compatible";
 }
 
 async function readProviderResponse(response: Response): Promise<ProviderRequestResult> {
@@ -680,7 +907,7 @@ function toProviderRecord(value: unknown): ProviderConnectionRecord | null {
   if (
     typeof record.id !== "string" ||
     typeof record.tenantId !== "string" ||
-    typeof record.projectId !== "string" ||
+    (record.projectId !== null && typeof record.projectId !== "string") ||
     typeof record.provider !== "string" ||
     typeof record.displayName !== "string" ||
     typeof record.baseUrl !== "string" ||
@@ -699,7 +926,7 @@ function toProviderRecord(value: unknown): ProviderConnectionRecord | null {
     credentialPreview: toCredentialPreview(record.credentialPreview),
     displayName: record.displayName,
     id: record.id,
-    projectId: record.projectId,
+    projectId: typeof record.projectId === "string" ? record.projectId : null,
     provider: record.provider,
     providerConfig: toRecordOrNull(record.providerConfig),
     resolver: record.resolver,

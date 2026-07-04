@@ -4,11 +4,14 @@ import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-co
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl,
+  getControlPlaneTenantId,
   getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
 import {
-  listProviderConnections
+  listApplicationProviderConnections,
+  listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
+import { getRuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type {
   RuntimePolicyConfig,
@@ -16,6 +19,7 @@ import type {
   RuntimePolicyHistoryDetailSummary,
   RuntimePolicyHistoryItem,
   RuntimePolicyModelConfig,
+  RuntimePolicyPricingRule,
   RuntimePolicyProviderCatalogSummary,
   RuntimePolicySnapshot,
   RuntimePolicyModel,
@@ -106,9 +110,17 @@ type ProviderCatalogResult =
 const RUNTIME_POLICY_DRAFT_CONFIG_VERSION = "draft";
 
 export async function getRuntimePolicyModel(routeTenantId: string): Promise<RuntimePolicyModel> {
-  const applicationId = getControlPlaneApplicationId();
+  return getRuntimePolicyModelForApplication(routeTenantId, getControlPlaneApplicationId());
+}
+
+export async function getRuntimePolicyModelForApplication(
+  routeTenantId: string,
+  applicationId: string,
+  projectId = getControlPlaneProjectId()
+): Promise<RuntimePolicyModel> {
+  void projectId;
+
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const controlPlaneProjectId = getControlPlaneProjectId();
   const fallbackConfig = getFixtureRuntimeConfig();
 
   const [
@@ -116,14 +128,20 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
     history,
     runtimeSnapshot,
     providerCatalog,
-    providerConnections
+    providerConnections,
+    tenantProviderConnections
   ] = await Promise.all([
     fetchActiveRuntimeConfig(applicationId),
     fetchRuntimeConfigHistory(applicationId),
     fetchActiveRuntimeSnapshot(applicationId),
     fetchActiveProviderCatalog(applicationId),
-    listProviderConnections(controlPlaneProjectId)
+    listApplicationProviderConnections(applicationId),
+    listTenantProviderConnections(getControlPlaneTenantId())
   ]);
+  const providerConnectionState = toProviderConnectionState(
+    tenantProviderConnections,
+    providerConnections
+  );
   const historyDetail =
     history.ok && history.data[0]
       ? await fetchRuntimeConfigHistoryDetail(applicationId, history.data[0].configVersion)
@@ -162,12 +180,48 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
         loadError: providerCatalog.ok ? null : providerCatalog.error,
         summary: providerCatalog.ok ? providerCatalog.data : null
       },
+      providerConnections: providerConnectionState,
       routeTenantId,
       runtimeSnapshot: {
         loadError: runtimeSnapshot.ok ? null : runtimeSnapshot.error,
         snapshot: runtimeSnapshot.ok ? runtimeSnapshot.data : null
       },
       source: "control-plane"
+    };
+  }
+
+  if (activeConfig.status === 404) {
+    const templateConfig = makeRuntimePolicyConfigTemplate(
+      fallbackConfig,
+      routeTenantId,
+      applicationId,
+      providerConnections.ok ? providerConnections.data : []
+    );
+
+    return {
+      activeConfig: templateConfig,
+      applicationId,
+      controlPlaneBaseUrl,
+      history: {
+        detail: null,
+        detailLoadError: null,
+        items: history.ok ? history.data : [],
+        loadError: history.ok ? null : history.error
+      },
+      loadError: activeConfig.error,
+      providerCatalog: {
+        canonicalLoadError: null,
+        canonicalVerified: null,
+        loadError: providerCatalog.ok ? null : providerCatalog.error,
+        summary: providerCatalog.ok ? providerCatalog.data : null
+      },
+      providerConnections: providerConnectionState,
+      routeTenantId,
+      runtimeSnapshot: {
+        loadError: runtimeSnapshot.ok ? null : runtimeSnapshot.error,
+        snapshot: runtimeSnapshot.ok ? runtimeSnapshot.data : null
+      },
+      source: "template"
     };
   }
 
@@ -188,6 +242,7 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
       loadError: activeConfig.error,
       summary: null
     },
+    providerConnections: providerConnectionState,
     routeTenantId,
     runtimeSnapshot: {
       loadError: activeConfig.error,
@@ -196,6 +251,36 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
     source: "fixture"
   };
 }
+
+function toProviderConnectionState(
+  tenantProviderConnections: ProviderListLikeResult,
+  applicationProviderConnections: ProviderListLikeResult
+): RuntimePolicyModel["providerConnections"] {
+  return {
+    available: tenantProviderConnections.ok ? tenantProviderConnections.data : [],
+    loadError: [
+      tenantProviderConnections.ok ? null : tenantProviderConnections.error,
+      applicationProviderConnections.ok ? null : applicationProviderConnections.error
+    ]
+      .filter(Boolean)
+      .join(" "),
+    selectedIds: applicationProviderConnections.ok
+      ? applicationProviderConnections.data.map((providerConnection) => providerConnection.id)
+      : []
+  };
+}
+
+type ProviderListLikeResult =
+  | {
+      data: ProviderConnectionRecord[];
+      ok: true;
+      status: number;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
 
 function mergeProviderConnectionCandidates(
   config: RuntimePolicyConfig,
@@ -287,6 +372,24 @@ function toRuntimePolicyModelConfig(
   };
 }
 
+function toRuntimePolicyPricingRule(
+  fallbackConfig: RuntimePolicyConfig,
+  provider: string,
+  model: string
+): RuntimePolicyPricingRule {
+  const fallbackRule = fallbackConfig.pricingRules.find(
+    (rule) => rule.provider === provider && rule.model === model
+  );
+
+  return {
+    completionTokenMicroUsd: fallbackRule?.completionTokenMicroUsd ?? 10,
+    model,
+    pricingVersion: fallbackRule?.pricingVersion ?? "default",
+    promptTokenMicroUsd: fallbackRule?.promptTokenMicroUsd ?? 10,
+    provider
+  };
+}
+
 function normalizeRuntimeProviderFailureMode(
   providerConfig: Record<string, unknown> | null
 ): RuntimePolicyProvider["failureMode"] {
@@ -327,20 +430,120 @@ export async function getRuntimePolicyConfigForApplication(
   return activeConfig.ok ? activeConfig.data : null;
 }
 
+export async function publishRuntimePolicyModelSelectionForApplication(
+  applicationId: string,
+  selectedModelKey: string
+): Promise<{ error?: string; ok: boolean }> {
+  const selected = parseRuntimePolicyModelKey(selectedModelKey);
+
+  if (!selected) {
+    return {
+      error: "Selected model is invalid.",
+      ok: false
+    };
+  }
+
+  const activeConfig = await fetchRuntimeConfigForModelSelection(applicationId);
+
+  if (!activeConfig) {
+    return {
+      error: "Runtime Policy model selection is not available for this application.",
+      ok: false
+    };
+  }
+
+  const selectedModel = activeConfig.models.find(
+    (model) => model.provider === selected.provider && model.model === selected.model
+  );
+
+  if (!selectedModel) {
+    return {
+      error: "Selected model is not available in Runtime Policy.",
+      ok: false
+    };
+  }
+
+  const draftValues = getRuntimePolicyDraftValues(activeConfig);
+  const nextValues: RuntimePolicyDraftValues = {
+    ...draftValues,
+    routingDefaultModel: selectedModel.model,
+    routingDefaultProvider: selectedModel.provider
+  };
+  const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
+  const draft = await writeRuntimeConfig("draft", nextValues, {
+    applicationId,
+    draftConfigVersion
+  });
+
+  if (!draft.ok) {
+    return {
+      error: draft.error,
+      ok: false
+    };
+  }
+
+  const published = await writeRuntimeConfig("publish", nextValues, {
+    applicationId,
+    draftConfigVersion,
+    publishedConfigVersion: createPublishedRuntimeConfigVersion()
+  });
+
+  return published.ok
+    ? { ok: true }
+    : {
+        error: published.error,
+        ok: false
+      };
+}
+
+async function fetchRuntimeConfigForModelSelection(
+  applicationId: string
+): Promise<RuntimePolicyConfig | null> {
+  const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
+
+  if (targetActiveConfig.ok) {
+    return targetActiveConfig.data;
+  }
+
+  if (targetActiveConfig.status !== 404) {
+    return null;
+  }
+
+  const providerConnections = await listApplicationProviderConnections(applicationId);
+
+  if (!providerConnections.ok) {
+    return null;
+  }
+
+  return makeRuntimePolicyConfigTemplate(
+    getFixtureRuntimeConfig(),
+    getControlPlaneTenantId(),
+    applicationId,
+    providerConnections.data
+  );
+}
+
 export async function saveRuntimePolicyDraft(
-  values: RuntimePolicyDraftValues
+  values: RuntimePolicyDraftValues,
+  applicationId?: string
 ): Promise<ControlPlaneRequestResult> {
+  const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
+
   return writeRuntimeConfig("draft", values, {
-    draftConfigVersion: RUNTIME_POLICY_DRAFT_CONFIG_VERSION
+    applicationId: targetApplicationId,
+    draftConfigVersion: getRuntimePolicyDraftConfigVersion(values, targetApplicationId)
   });
 }
 
 export async function publishRuntimePolicy(
-  values: RuntimePolicyDraftValues
+  values: RuntimePolicyDraftValues,
+  applicationId?: string
 ): Promise<ControlPlaneRequestResult> {
-  const draftConfigVersion = RUNTIME_POLICY_DRAFT_CONFIG_VERSION;
+  const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
+  const draftConfigVersion = getRuntimePolicyDraftConfigVersion(values, targetApplicationId);
   const publishedConfigVersion = createPublishedRuntimeConfigVersion();
   const draft = await writeRuntimeConfig("draft", values, {
+    applicationId: targetApplicationId,
     draftConfigVersion
   });
 
@@ -349,16 +552,16 @@ export async function publishRuntimePolicy(
   }
 
   return writeRuntimeConfig("publish", values, {
+    applicationId: targetApplicationId,
     draftConfigVersion,
     publishedConfigVersion
   });
 }
 
 export async function rollbackRuntimePolicy(
-  targetConfigVersion: string
+  targetConfigVersion: string,
+  applicationId = getControlPlaneApplicationId()
 ): Promise<ControlPlaneRequestResult> {
-  const applicationId = getControlPlaneApplicationId();
-
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/rollback`,
@@ -386,6 +589,91 @@ export async function rollbackRuntimePolicy(
 
 function getFixtureRuntimeConfig() {
   return (runtimeConfigFixture as RuntimeConfigFixture).runtimeConfig;
+}
+
+function makeRuntimePolicyConfigTemplate(
+  fallbackConfig: RuntimePolicyConfig,
+  routeTenantId: string,
+  applicationId: string,
+  providerConnections: ProviderConnectionRecord[]
+): RuntimePolicyConfig {
+  const now = new Date().toISOString();
+  const providers = providerConnections.map((providerConnection) =>
+    toRuntimePolicyProvider(
+      providerConnection,
+      getProviderConfigModels(providerConnection.providerConfig)
+    )
+  );
+  const models = providerConnections.flatMap((providerConnection) =>
+    getProviderConfigModels(providerConnection.providerConfig).map((modelName) =>
+      toRuntimePolicyModelConfig(providerConnection, modelName)
+    )
+  );
+  const pricingRules = models.map((model) =>
+    toRuntimePolicyPricingRule(fallbackConfig, model.provider, model.model)
+  );
+  const mergedConfig = mergeProviderConnectionCandidates(
+    {
+      ...fallbackConfig,
+      applicationId,
+      configHash: "",
+      configVersion: createApplicationRuntimeDraftVersion(applicationId),
+      effectiveAt: now,
+      generatedAt: now,
+      models,
+      pricingRules,
+      providers,
+      publishState: "draft",
+      publishedAt: "",
+      tenantId: routeTenantId
+    },
+    []
+  );
+  const preferredModel =
+    mergedConfig.models.find((model) => model.status === "active") ?? mergedConfig.models[0];
+
+  if (!preferredModel) {
+    return {
+      ...mergedConfig,
+      routingPolicy: {
+        ...mergedConfig.routingPolicy,
+        defaultModel: "",
+        defaultProvider: "",
+        fallbackModel: "",
+        fallbackProvider: "",
+        lowCostModel: "",
+        lowCostProvider: ""
+      }
+    };
+  }
+
+  return {
+    ...mergedConfig,
+    routingPolicy: {
+      ...mergedConfig.routingPolicy,
+      defaultModel: preferredModel.model,
+      defaultProvider: preferredModel.provider,
+      fallbackModel: preferredModel.model,
+      fallbackProvider: preferredModel.provider,
+      lowCostModel: preferredModel.model,
+      lowCostProvider: preferredModel.provider
+    }
+  };
+}
+
+function getRuntimePolicyDraftConfigVersion(
+  values: RuntimePolicyDraftValues,
+  applicationId: string
+) {
+  if (values.configVersion === RUNTIME_POLICY_DRAFT_CONFIG_VERSION) {
+    return values.configVersion;
+  }
+
+  if (values.configVersion.startsWith("draft_")) {
+    return values.configVersion;
+  }
+
+  return `draft_${applicationId.replaceAll("-", "_")}`;
 }
 
 async function fetchActiveRuntimeConfig(
@@ -517,11 +805,12 @@ async function writeRuntimeConfig(
   mode: "draft" | "publish",
   values: RuntimePolicyDraftValues,
   options: {
+    applicationId?: string;
     draftConfigVersion?: string;
     publishedConfigVersion?: string;
   } = {}
 ): Promise<ControlPlaneRequestResult> {
-  const applicationId = getControlPlaneApplicationId();
+  const applicationId = options.applicationId ?? getControlPlaneApplicationId();
   const endpoint = mode === "draft" ? "draft" : "publish";
   const body =
     mode === "draft"
@@ -557,6 +846,24 @@ async function writeRuntimeConfig(
 
 function createPublishedRuntimeConfigVersion() {
   return `runtime_config_${Date.now()}`;
+}
+
+function createApplicationRuntimeDraftVersion(applicationId: string) {
+  return `draft_${applicationId.replaceAll("-", "_")}_${Date.now()}`;
+}
+
+function parseRuntimePolicyModelKey(value: string) {
+  const [provider, ...modelParts] = value.split("::");
+  const model = modelParts.join("::");
+
+  if (!provider?.trim() || !model.trim()) {
+    return null;
+  }
+
+  return {
+    model: model.trim(),
+    provider: provider.trim()
+  };
 }
 
 function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string) {
@@ -935,6 +1242,35 @@ function getErrorMessage(payload: unknown, status: number) {
 
     if (typeof message === "string") {
       return message;
+    }
+
+    if (Array.isArray(message)) {
+      const messages = message
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean);
+
+      if (messages.length > 0) {
+        return messages.join(" ");
+      }
+    }
+
+    if (record.error && typeof record.error === "object") {
+      const nested = record.error as Record<string, unknown>;
+      const nestedMessage = nested.message;
+
+      if (typeof nestedMessage === "string") {
+        return nestedMessage;
+      }
+
+      if (Array.isArray(nestedMessage)) {
+        const messages = nestedMessage
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean);
+
+        if (messages.length > 0) {
+          return messages.join(" ");
+        }
+      }
     }
   }
 
