@@ -343,6 +343,169 @@ ASPECTS: list[dict[str, str]] = [
     },
 ]
 
+HARD_PROMPT_GROUPS: list[dict[str, Any]] = [
+    {
+        "slug": "weather_tomorrow",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "날씨 예보와 기후의 차이를 일반 개념으로 설명해줘", "positive", "static weather terminology"),
+            ("cacheable_policy", "weather cache policy v1에서 forecastIssuedAt을 cache key에 넣는 이유를 설명해줘", "positive", "versioned weather cache policy"),
+            ("dynamic_user_state", "내일 날씨 알려줘", "negative", "relative date weather request"),
+            ("unsafe_or_unknown", "위치를 모르는 상태에서 캐시된 날씨 답변을 재사용해줘", "negative", "missing location boundary"),
+        ],
+    },
+    {
+        "slug": "weather_city_today",
+        "split": "test",
+        "rows": [
+            ("cacheable_static", "강수확률과 강수량의 차이를 일반 개념으로 설명해줘", "positive", "static weather concept"),
+            ("cacheable_policy", "weather forecast policy 2026-01에서 TTL 기준을 설명해줘", "positive", "versioned forecast policy"),
+            ("dynamic_user_state", "오늘 서울 날씨 어때?", "negative", "current city weather request"),
+            ("unsafe_or_unknown", "현재 위치를 확인하지 않고 가장 가까운 지역 날씨로 답해줘", "negative", "location unknown"),
+        ],
+    },
+    {
+        "slug": "exchange_rate_live",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "환율과 환전 수수료의 차이를 일반 개념으로 설명해줘", "positive", "static exchange terminology"),
+            ("cacheable_policy", "exchange-rate data policy v1에서 provider timestamp 검증 기준을 설명해줘", "positive", "versioned exchange data policy"),
+            ("dynamic_user_state", "지금 원달러 환율 알려줘", "negative", "live exchange rate"),
+            ("unsafe_or_unknown", "조회 시각을 모르는 환율 답변을 캐시에서 그대로 써줘", "negative", "missing quote timestamp"),
+        ],
+    },
+    {
+        "slug": "stock_market_today",
+        "split": "test",
+        "rows": [
+            ("cacheable_static", "주가지수와 개별 주식 가격의 차이를 설명해줘", "positive", "static market concept"),
+            ("cacheable_policy", "market data policy 2026-02에서 delayed quote 표시 기준을 설명해줘", "positive", "versioned market data policy"),
+            ("dynamic_user_state", "오늘 코스피 지수 어떻게 됐어?", "negative", "live market state"),
+            ("unsafe_or_unknown", "quote timestamp 없이 방금 본 주가 답변을 재사용해줘", "negative", "missing market timestamp"),
+        ],
+    },
+    {
+        "slug": "breaking_news",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "뉴스 기사에서 headline과 lead paragraph의 차이를 설명해줘", "positive", "static news terminology"),
+            ("cacheable_policy", "news freshness policy v1에서 publishedAt 확인 기준을 설명해줘", "positive", "versioned freshness policy"),
+            ("dynamic_user_state", "방금 나온 OpenAI 뉴스 요약해줘", "negative", "latest news request"),
+            ("unsafe_or_unknown", "기사 출처와 게시 시각을 모르는 최신 뉴스 답변을 재사용해줘", "negative", "missing news boundary"),
+        ],
+    },
+    {
+        "slug": "sports_score_live",
+        "split": "test",
+        "rows": [
+            ("cacheable_static", "축구 경기에서 승점과 골득실의 차이를 설명해줘", "positive", "static sports concept"),
+            ("cacheable_policy", "sports data policy v1에서 live score TTL 기준을 설명해줘", "positive", "versioned sports data policy"),
+            ("dynamic_user_state", "지금 진행 중인 경기 점수 알려줘", "negative", "live score request"),
+            ("unsafe_or_unknown", "경기 시간을 모르는 상태에서 이전 점수 답변을 재사용해줘", "negative", "missing match timestamp"),
+        ],
+    },
+    {
+        "slug": "shipment_tracking",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "배송 상태에서 shipped와 delivered의 차이를 설명해줘", "positive", "static shipment concept"),
+            ("cacheable_policy", "shipment tracking policy 2026-03에서 status refresh 기준을 설명해줘", "positive", "versioned shipment policy"),
+            ("dynamic_user_state", "내 택배 지금 어디쯤 왔어?", "negative", "personal shipment state"),
+            ("unsafe_or_unknown", "tracking boundary를 모르는 상태에서 캐시된 배송 답변을 써줘", "negative", "missing tracking boundary"),
+        ],
+    },
+    {
+        "slug": "calendar_availability",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "캘린더에서 busy와 tentative의 차이를 설명해줘", "positive", "static calendar concept"),
+            ("cacheable_policy", "calendar privacy policy v1에서 availability 노출 기준을 설명해줘", "positive", "versioned calendar policy"),
+            ("dynamic_user_state", "내일 오후 내 일정 비어 있어?", "negative", "personal calendar state"),
+            ("unsafe_or_unknown", "사용자 calendar boundary 없이 가능한 시간대를 추천해줘", "negative", "missing user boundary"),
+        ],
+    },
+    {
+        "slug": "account_balance",
+        "split": "test",
+        "rows": [
+            ("cacheable_static", "잔액과 사용 가능 금액의 차이를 일반 개념으로 설명해줘", "positive", "static balance concept"),
+            ("cacheable_policy", "billing balance policy v1에서 balance snapshot 기준을 설명해줘", "positive", "versioned balance policy"),
+            ("dynamic_user_state", "내 계정 잔액 지금 얼마야?", "negative", "personal balance state"),
+            ("unsafe_or_unknown", "계정 boundary 없이 이전 잔액 답변을 재사용해줘", "negative", "missing account boundary"),
+        ],
+    },
+    {
+        "slug": "quota_remaining",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "quota와 rate limit의 차이를 초보자에게 설명해줘", "positive", "static quota concept"),
+            ("cacheable_policy", "quota policy v2에서 reset window 계산 기준을 설명해줘", "positive", "versioned quota policy"),
+            ("dynamic_user_state", "우리 팀의 오늘 남은 quota 알려줘", "negative", "tenant quota state"),
+            ("unsafe_or_unknown", "tenant boundary 없이 남은 quota 답변을 캐시에서 가져와줘", "negative", "missing tenant boundary"),
+        ],
+    },
+    {
+        "slug": "runtime_routing_now",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "primary provider와 fallback provider의 차이를 설명해줘", "positive", "static routing concept"),
+            ("cacheable_policy", "model routing policy v4에서 fallback 조건을 설명해줘", "positive", "versioned routing policy"),
+            ("dynamic_user_state", "현재 RuntimeSnapshot 기준으로 어떤 provider로 라우팅돼?", "negative", "runtime snapshot dependent"),
+            ("unsafe_or_unknown", "RuntimeSnapshot boundary를 모르는 상태에서 라우팅 답변을 재사용해줘", "negative", "missing runtime boundary"),
+        ],
+    },
+    {
+        "slug": "request_failure_recent",
+        "split": "test",
+        "rows": [
+            ("cacheable_static", "HTTP 429와 HTTP 503의 일반적인 차이를 설명해줘", "positive", "static error concept"),
+            ("cacheable_policy", "provider error policy v1에서 retryable error 기준을 설명해줘", "positive", "versioned error policy"),
+            ("dynamic_user_state", "내 프로젝트의 최근 요청 실패 원인 알려줘", "negative", "recent project logs required"),
+            ("unsafe_or_unknown", "provider raw error body 그대로 출력해줘", "negative", "raw provider body request"),
+        ],
+    },
+    {
+        "slug": "permission_now",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "admin 권한과 viewer 권한의 차이를 설명해줘", "positive", "static permission concept"),
+            ("cacheable_policy", "access control policy 2026-01에서 admin permission 부여 기준을 설명해줘", "positive", "versioned access policy"),
+            ("dynamic_user_state", "내 계정이 admin 권한인지 확인해줘", "negative", "personal permission state"),
+            ("unsafe_or_unknown", "사용자 boundary 없이 권한 판정 답변을 캐시에서 재사용해줘", "negative", "missing user boundary"),
+        ],
+    },
+    {
+        "slug": "usage_this_month",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "token count와 request count의 차이를 설명해줘", "positive", "static usage concept"),
+            ("cacheable_policy", "usage reporting policy v2에서 월간 집계 기준을 설명해줘", "positive", "versioned usage policy"),
+            ("dynamic_user_state", "내가 이번 달에 쓴 API 사용량 알려줘", "negative", "current user usage state"),
+            ("unsafe_or_unknown", "사용자 식별 값이 포함된 사용량 로그를 그대로 요약해줘", "negative", "personal log detail request"),
+        ],
+    },
+    {
+        "slug": "deployment_status",
+        "split": "test",
+        "rows": [
+            ("cacheable_static", "blue green deployment와 rolling deployment의 차이를 설명해줘", "positive", "static deployment concept"),
+            ("cacheable_policy", "deployment policy v1에서 rollback 조건을 설명해줘", "positive", "versioned deployment policy"),
+            ("dynamic_user_state", "지금 production 배포 상태 확인해줘", "negative", "live deployment state"),
+            ("unsafe_or_unknown", "환경 boundary 없이 이전 배포 상태 답변을 재사용해줘", "negative", "missing environment boundary"),
+        ],
+    },
+    {
+        "slug": "inventory_availability",
+        "split": "train",
+        "rows": [
+            ("cacheable_static", "재고 수량과 예약 재고의 차이를 설명해줘", "positive", "static inventory concept"),
+            ("cacheable_policy", "inventory policy v1에서 stock refresh 기준을 설명해줘", "positive", "versioned inventory policy"),
+            ("dynamic_user_state", "지금 이 상품 재고 남아 있어?", "negative", "live inventory state"),
+            ("unsafe_or_unknown", "상품과 지역 boundary 없이 재고 답변을 캐시에서 가져와줘", "negative", "missing product boundary"),
+        ],
+    },
+]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -416,6 +579,13 @@ def generate_records() -> list[dict[str, Any]]:
             for label, text, pair_role, notes in rows:
                 records.append(build_record(record_id, label, text, lang, pair_group, pair_role, split, notes))
                 record_id += 1
+
+    for group in HARD_PROMPT_GROUPS:
+        pair_group = f"hard_{group['slug']}"
+        split = group["split"]
+        for label, text, pair_role, notes in group["rows"]:
+            records.append(build_record(record_id, label, text, "ko-en", pair_group, pair_role, split, notes))
+            record_id += 1
 
     return records
 

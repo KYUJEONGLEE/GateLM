@@ -16,7 +16,7 @@
   - 총 40개 synthetic example
   - 총 20개 positive/negative `pairGroup`
   - train 28개, test 12개
-  - 후속 확장 dataset은 총 320개 synthetic example, 80개 `pairGroup`, train 240개, test 80개로 확장했다.
+  - 후속 확장 dataset은 총 384개 synthetic example, 96개 `pairGroup`, train 280개, test 104개로 확장했다.
 - Python 기반 FastText supervised classifier 학습 스크립트를 추가했다.
   - `scripts/semantic_cache_classifier/train_fasttext.py`
   - model artifact와 metadata JSON을 `build/artifacts/` 아래 생성
@@ -104,26 +104,37 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
 
 - `generate_synthetic_dataset.py`를 추가해 재현 가능한 synthetic dataset 생성을 지원했다.
 - `cacheability_synthetic_v2.jsonl`을 생성했다.
-  - total examples: `320`
-  - `pairGroup`: `80`
+  - total examples: `384`
+  - `pairGroup`: `96`
   - 각 `pairGroup`에는 `cacheable_static`, `cacheable_policy`, `dynamic_user_state`, `unsafe_or_unknown` 1개씩 포함된다.
   - explicit split은 aspect가 train/test에 한쪽으로 몰리지 않도록 `(domain_index + aspect_index) % 4 == 0` 기준으로 test를 배정한다.
+  - time-sensitive/live-state/user-state/boundary-missing hard negative group을 추가했다.
+    - weather, exchange rate, stock market, breaking news, sports score, shipment, calendar, account balance, quota, runtime routing, recent failure, permission, monthly usage, deployment status, inventory availability
 - `prepare_dataset.py` 기본 dataset과 split seed를 `synthetic_v2`로 변경했다.
-  - dataset SHA-256: `1c0e4dc4781bcf4cc12c8908c6f736411795c4ea5255d6a0cda58f5a382a10a7`
-  - train: label별 `60`, total `240`
-  - test: label별 `20`, total `80`
+  - dataset SHA-256: `8392b32e21b969e9ed62e518f539c681910d05295153655bed16f9ebb5a7513a`
+  - train: label별 `70`, total `280`
+  - test: label별 `26`, total `104`
 - `train_fasttext.py`와 `serve_fasttext_classifier.py` 기본 modelVersion을 `cacheability-fasttext-synthetic-v2`로 변경했다.
 - Python 3.12 venv에서 실제 FastText `.bin` artifact를 재학습했다.
   - artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin`
-  - trainFileSha256: `cab18cb89c5e1ba0fc8091476a7919bcada1e8fc50492f078cf2fb780c30489f`
+  - trainFileSha256: `4dcd7ad515b912ec7d8ecd33637e5568911c9f75045813cb10a43ef4b4f14141`
   - hyperparameters: `epoch=35`, `lr=0.6`, `wordNgrams=1`, `dim=64`, `minCount=1`, `loss=softmax`
-- 80건 holdout 평가 결과 acceptance를 통과했다.
-  - total: `80`
-  - accuracy: `1.0`
-  - macroF1: `1.0`
-  - label별 precision/recall/F1: 모두 `1.0`
-  - confusion matrix: 각 label `20/20` 정답
+- 104건 holdout 평가 결과 acceptance를 통과했다.
+  - total: `104`
+  - accuracy: `0.990385`
+  - macroF1: `0.990381`
+  - `cacheable_static`: precision `1.0`, recall `1.0`, F1 `1.0`
+  - `cacheable_policy`: precision `1.0`, recall `1.0`, F1 `1.0`
+  - `dynamic_user_state`: precision `0.962963`, recall `1.0`, F1 `0.981132`
+  - `unsafe_or_unknown`: precision `1.0`, recall `0.961538`, F1 `0.980392`
   - `acceptance.passed=true`
+- 대표 hard negative 직접 분류 결과가 dynamic/unsafe로 개선됐다.
+  - `내일 날씨 알려줘` -> `dynamic_user_state` confidence `1.000`
+  - `오늘 서울 날씨 어때?` -> `dynamic_user_state` confidence `0.997`
+  - `지금 원달러 환율 알려줘` -> `dynamic_user_state` confidence `0.998`
+  - `오늘 코스피 지수 어떻게 됐어?` -> `dynamic_user_state` confidence `0.999`
+  - `방금 나온 OpenAI 뉴스 요약해줘` -> `dynamic_user_state` confidence `0.994`
+  - `provider raw error body 그대로 출력해줘` -> `unsafe_or_unknown` confidence `1.000`
 
 ## 실패하거나 보류한 항목
 

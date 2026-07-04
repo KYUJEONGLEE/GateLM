@@ -40,7 +40,7 @@ The current `synthetic_v2` dataset is generated from sanitized templates:
 python scripts/semantic_cache_classifier/generate_synthetic_dataset.py
 ```
 
-It produces 320 examples across 80 `pairGroup` values. Each group contains one example for each label so train/test splits remain balanced by label while still avoiding pair leakage.
+It produces 384 examples across 96 `pairGroup` values. Each group contains one example for each label so train/test splits remain balanced by label while still avoiding pair leakage. The dataset includes hard negative groups for time-sensitive, live-state, user-state, and boundary-missing prompts such as weather, exchange rates, stock prices, breaking news, quota, routing, permissions, and raw provider errors.
 
 ## Split Rule
 
