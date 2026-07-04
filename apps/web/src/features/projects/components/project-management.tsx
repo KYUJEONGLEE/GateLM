@@ -4,6 +4,7 @@ import { Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import type {
   ProjectRecord,
@@ -136,9 +137,9 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{text.fixtureFallback} {model.loadError}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="console-panel">
@@ -279,9 +280,9 @@ export function ProjectDetailManagement({
       </section>
 
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="console-panel project-detail-panel">
@@ -417,9 +418,9 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
   return (
     <main className="console-content management-line-content project-delete-content">
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="console-panel project-detail-panel">

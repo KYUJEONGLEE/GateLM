@@ -2,6 +2,7 @@
 
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -102,24 +103,24 @@ export function GatewayHealthOverview({ locale, model }: GatewayHealthOverviewPr
       </section>
 
       {model.healthz.loadError ? (
-        <p className="policy-alert" data-status="error">
-          /healthz: {model.healthz.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>/healthz: {model.healthz.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {model.readyz.loadError ? (
-        <p className="policy-alert" data-status="error">
-          /readyz: {model.readyz.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>/readyz: {model.readyz.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {model.controlPlane.healthz.loadError ? (
-        <p className="policy-alert" data-status="error">
-          {text.controlPlane} /healthz: {model.controlPlane.healthz.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{text.controlPlane} /healthz: {model.controlPlane.healthz.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {model.controlPlane.readyz.loadError ? (
-        <p className="policy-alert" data-status="error">
-          {text.controlPlane} /readyz: {model.controlPlane.readyz.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{text.controlPlane} /readyz: {model.controlPlane.readyz.loadError}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="metric-grid">

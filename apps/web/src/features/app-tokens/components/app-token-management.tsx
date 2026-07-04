@@ -3,6 +3,7 @@
 import { Ban, Copy, EyeOff, Plus, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -309,14 +310,14 @@ export function AppTokenManagement({ locale, model }: AppTokenManagementProps) {
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{text.fixtureFallback} {model.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       {oneTimeSecret ? (

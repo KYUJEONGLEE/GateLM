@@ -2,7 +2,9 @@
 
 import { Save, UploadCloud } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -41,6 +43,11 @@ type SubmitState =
     };
 
 type PolicySection = "general" | "cache";
+
+type RoutingProviderOption = {
+  provider: string;
+  providerId: string;
+};
 
 const hiddenPolicySectionStyle = { display: "none" } as const;
 
@@ -300,6 +307,21 @@ export function RuntimePolicyEditor({
     () => groupModelsByProvider(draftValues.models),
     [draftValues.models]
   );
+  const routingProviderOptions = useMemo(
+    () =>
+      getRoutingProviderOptions(model.activeConfig.providers, draftValues.models, [
+        draftValues.routingDefaultProvider,
+        draftValues.routingLowCostProvider,
+        draftValues.routingFallbackProvider
+      ]),
+    [
+      draftValues.models,
+      draftValues.routingDefaultProvider,
+      draftValues.routingFallbackProvider,
+      draftValues.routingLowCostProvider,
+      model.activeConfig.providers
+    ]
+  );
 
   function updateRoutingProvider(
     route: "default" | "fallback" | "lowCost",
@@ -494,14 +516,16 @@ export function RuntimePolicyEditor({
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.fixtureFallback} {model.loadError}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {model.source === "template" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.templateFallback}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{text.templateFallback}</AlertDescription>
+        </Alert>
       ) : null}
       {!hasActiveAppToken ? (
         <div className="policy-alert runtime-credential-alert" data-status="error">
@@ -520,9 +544,9 @@ export function RuntimePolicyEditor({
         </div>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
@@ -549,20 +573,19 @@ export function RuntimePolicyEditor({
             <h3>{text.budget}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.budgetEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  budgetEnabled: event.target.checked,
-                  budgetEnforcementMode: event.target.checked
+                  budgetEnabled: checked,
+                  budgetEnforcementMode: checked
                     ? current.budgetEnforcementMode === "disabled"
                       ? "warn"
                       : current.budgetEnforcementMode
                     : "disabled"
                 }))
               }
-              type="checkbox"
             />
             <span>{text.enabled}</span>
           </label>
@@ -608,15 +631,14 @@ export function RuntimePolicyEditor({
             <h3>{text.rateLimit}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.rateLimitEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  rateLimitEnabled: event.target.checked
+                  rateLimitEnabled: checked
                 }))
               }
-              type="checkbox"
             />
             <span>{text.enabled}</span>
           </label>
@@ -671,15 +693,14 @@ export function RuntimePolicyEditor({
             <h3>{text.promptCapture}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.promptCaptureEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  promptCaptureEnabled: event.target.checked
+                  promptCaptureEnabled: checked
                 }))
               }
-              type="checkbox"
             />
             <span>{text.promptCaptureEnabled}</span>
           </label>
@@ -712,7 +733,7 @@ export function RuntimePolicyEditor({
               onModelChange={(modelName) => updateRoutingModel("default", modelName)}
               onProviderChange={(provider) => updateRoutingProvider("default", provider)}
               provider={draftValues.routingDefaultProvider}
-              providerOptions={providerOptions}
+              providerOptions={routingProviderOptions}
               selectedModel={draftValues.routingDefaultModel}
             />
             <RoutingPairEditor
@@ -721,7 +742,7 @@ export function RuntimePolicyEditor({
               onModelChange={(modelName) => updateRoutingModel("lowCost", modelName)}
               onProviderChange={(provider) => updateRoutingProvider("lowCost", provider)}
               provider={draftValues.routingLowCostProvider}
-              providerOptions={providerOptions}
+              providerOptions={routingProviderOptions}
               selectedModel={draftValues.routingLowCostModel}
             />
             <RoutingPairEditor
@@ -730,7 +751,7 @@ export function RuntimePolicyEditor({
               onModelChange={(modelName) => updateRoutingModel("fallback", modelName)}
               onProviderChange={(provider) => updateRoutingProvider("fallback", provider)}
               provider={draftValues.routingFallbackProvider}
-              providerOptions={providerOptions}
+              providerOptions={routingProviderOptions}
               selectedModel={draftValues.routingFallbackModel}
             />
           </div>
@@ -765,15 +786,14 @@ export function RuntimePolicyEditor({
             <h3>{text.cache}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.cacheEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  cacheEnabled: event.target.checked
+                  cacheEnabled: checked
                 }))
               }
-              type="checkbox"
             />
             <span>{text.cacheEnabled}</span>
           </label>
@@ -799,7 +819,7 @@ export function RuntimePolicyEditor({
             <h3>{text.semanticCache}</h3>
           </div>
           <label aria-disabled="true" className="policy-toggle-row">
-            <input checked={draftValues.cacheEnabled} disabled readOnly type="checkbox" />
+            <Switch checked={draftValues.cacheEnabled} disabled readOnly />
             <span>
               {draftValues.cacheEnabled
                 ? text.semanticCacheEvidenceOnly
@@ -861,9 +881,9 @@ export function RuntimePolicyEditor({
                   <h3>{text.runtimeSnapshot}</h3>
                 </div>
                 {model.runtimeSnapshot.loadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.runtimeSnapshot.loadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.runtimeSnapshot.snapshot ? (
                   <RuntimeSnapshotDetail snapshot={model.runtimeSnapshot.snapshot} text={text} />
@@ -882,14 +902,14 @@ export function RuntimePolicyEditor({
                   <h3>{text.providerCatalog}</h3>
                 </div>
                 {model.providerCatalog.loadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.providerCatalog.loadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.providerCatalog.loadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.providerCatalog.canonicalLoadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.providerCatalog.canonicalLoadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.providerCatalog.canonicalLoadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.providerCatalog.summary ? (
                   <dl className="policy-summary-list">
@@ -946,9 +966,9 @@ export function RuntimePolicyEditor({
                   <h3>{text.history}</h3>
                 </div>
                 {model.history.loadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.history.loadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.history.loadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.history.items.length > 0 ? (
                   <RuntimeHistoryTable
@@ -1175,17 +1195,24 @@ function RoutingPairEditor({
   onModelChange: (model: string) => void;
   onProviderChange: (provider: string) => void;
   provider: string;
-  providerOptions: RuntimePolicyProvider[];
+  providerOptions: RoutingProviderOption[];
   selectedModel: string;
 }) {
   const modelOptions = modelOptionsByProvider.get(provider) ?? [];
+  const hasProviderOptions = providerOptions.length > 0;
 
   return (
     <fieldset className="policy-routing-pair">
       <legend>{label}</legend>
       <label className="policy-field">
         <span>Provider</span>
-        <select onChange={(event) => onProviderChange(event.target.value)} value={provider}>
+        <select
+          aria-label={`${label} Provider`}
+          disabled={!hasProviderOptions}
+          onChange={(event) => onProviderChange(event.target.value)}
+          value={hasProviderOptions ? provider : ""}
+        >
+          {!hasProviderOptions ? <option value="">No providers</option> : null}
           {providerOptions.map((option) => (
             <option key={option.providerId} value={option.provider}>
               {option.provider}
@@ -1195,7 +1222,13 @@ function RoutingPairEditor({
       </label>
       <label className="policy-field">
         <span>Model</span>
-        <select onChange={(event) => onModelChange(event.target.value)} value={selectedModel}>
+        <select
+          aria-label={`${label} Model`}
+          disabled={modelOptions.length === 0}
+          onChange={(event) => onModelChange(event.target.value)}
+          value={modelOptions.length === 0 ? "" : selectedModel}
+        >
+          {modelOptions.length === 0 ? <option value="">No models</option> : null}
           {modelOptions.map((option) => (
             <option key={`${option.provider}:${option.model}`} value={option.model}>
               {option.model}
@@ -1249,16 +1282,15 @@ function DetectorEditor({
   return (
     <div className="policy-detector-row">
       <label className="policy-toggle-row">
-        <input
+        <Switch
           checked={isMandatory || detector.enabled}
           disabled={isMandatory}
-          onChange={(event) =>
+          onCheckedChange={(checked) =>
             onChange({
               ...detector,
-              enabled: event.target.checked
+              enabled: checked
             })
           }
-          type="checkbox"
         />
         <span>{labels.enabled}</span>
       </label>
@@ -1328,4 +1360,47 @@ function groupModelsByProvider(models: RuntimePolicyModelConfig[]) {
   }
 
   return groups;
+}
+
+function getRoutingProviderOptions(
+  providers: RuntimePolicyProvider[],
+  models: RuntimePolicyModelConfig[],
+  selectedProviders: string[]
+): RoutingProviderOption[] {
+  const providerOptions = new Map<string, RoutingProviderOption>();
+
+  for (const provider of providers) {
+    const providerName = provider.provider.trim();
+
+    if (providerName) {
+      providerOptions.set(providerName, {
+        provider: providerName,
+        providerId: provider.providerId || `provider-${providerName}`
+      });
+    }
+  }
+
+  for (const model of models) {
+    const providerName = model.provider.trim();
+
+    if (providerName && !providerOptions.has(providerName)) {
+      providerOptions.set(providerName, {
+        provider: providerName,
+        providerId: `model-provider-${providerName}`
+      });
+    }
+  }
+
+  for (const provider of selectedProviders) {
+    const providerName = provider.trim();
+
+    if (providerName && !providerOptions.has(providerName)) {
+      providerOptions.set(providerName, {
+        provider: providerName,
+        providerId: `selected-provider-${providerName}`
+      });
+    }
+  }
+
+  return Array.from(providerOptions.values());
 }

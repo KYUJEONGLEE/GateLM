@@ -3,6 +3,7 @@
 import { MoreHorizontal, Plus, Save, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -276,14 +277,16 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.fixtureFallback} {model.loadError}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="team-section">
@@ -651,14 +654,16 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
         </div>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.fixtureFallback} {model.loadError}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       {attachedTeams.length === 0 ? (

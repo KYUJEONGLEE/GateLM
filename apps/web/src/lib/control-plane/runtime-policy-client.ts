@@ -400,7 +400,10 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const activeConfig = await fetchActiveRuntimeConfig(getControlPlaneApplicationId());
+  const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
+  const activeConfig = targetActiveConfig.ok
+    ? targetActiveConfig
+    : await fetchActiveRuntimeConfig(getControlPlaneApplicationId());
 
   if (!activeConfig.ok) {
     return {

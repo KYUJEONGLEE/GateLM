@@ -4,6 +4,7 @@ import { Plus, Save, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -391,14 +392,14 @@ export function ApplicationManagement({
   return (
     <main className="console-content management-line-content application-management-content">
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{text.fixtureFallback} {model.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {!isCreateModalOpen && submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
       <section className="application-budget-summary" aria-label={text.budgetSummary}>
         <span>
@@ -593,9 +594,9 @@ export function ApplicationManagement({
             </div>
 
             {submitState.message ? (
-              <p className="policy-alert" data-status={submitState.status}>
-                {submitState.message}
-              </p>
+              <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+                <AlertDescription>{submitState.message}</AlertDescription>
+              </Alert>
             ) : null}
 
             {oneTimeAppToken ? (

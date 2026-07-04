@@ -1,9 +1,24 @@
 "use client";
 
-import { Menu, Settings as SettingsIcon } from "lucide-react";
+import {
+  Activity,
+  Database,
+  FolderKanban,
+  LayoutDashboard,
+  Menu,
+  Plug,
+  ScrollText,
+  Settings as SettingsIcon,
+  Users
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -20,6 +35,24 @@ export type ManagementNavItem =
   | "provider"
   | "teams";
 export type AnalyticsNavItem = "health" | "request-logs";
+
+const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
+  analytics: Activity,
+  dashboard: LayoutDashboard,
+  management: FolderKanban
+};
+
+const childIcons: Record<AnalyticsNavItem | ManagementNavItem, typeof LayoutDashboard> = {
+  "api-keys": SettingsIcon,
+  "app-tokens": SettingsIcon,
+  health: Activity,
+  "model-catalog": Database,
+  policies: ScrollText,
+  project: FolderKanban,
+  provider: Plug,
+  "request-logs": ScrollText,
+  teams: Users
+};
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
@@ -178,7 +211,6 @@ export function ConsoleShell({
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
-  const [isTenantSettingsOpen, setIsTenantSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
   useEffect(() => {
@@ -250,6 +282,7 @@ export function ConsoleShell({
   function renderSubnavItems(children: ChildNavigationItem[]) {
     return children.map((child) => {
       const childLabel = child.labels[locale];
+      const ChildIcon = childIcons[child.item];
 
       if (child.disabled || !child.path) {
         return (
@@ -259,7 +292,8 @@ export function ConsoleShell({
             data-disabled="true"
             key={child.item}
           >
-            {childLabel}
+            <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
+            <span>{childLabel}</span>
             <small>{text.planned}</small>
           </span>
         );
@@ -274,7 +308,8 @@ export function ConsoleShell({
           key={child.item}
           onClick={closeMobileNavigation}
         >
-          {childLabel}
+          <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
+          <span>{childLabel}</span>
         </Link>
       );
     });
@@ -333,6 +368,7 @@ export function ConsoleShell({
         <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {
             const label = item.labels[locale];
+            const SectionIcon = sectionIcons[item.section];
 
             if (!item.path) {
               if (item.children) {
@@ -347,6 +383,7 @@ export function ConsoleShell({
                       onClick={() => toggleSection(item.section)}
                       type="button"
                     >
+                      <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                       <span>{label}</span>
                     </button>
 
@@ -367,6 +404,7 @@ export function ConsoleShell({
                   data-disabled="true"
                   key={item.section}
                 >
+                  <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                   <span>{label}</span>
                   {item.planned ? <small>{text.planned}</small> : null}
                 </span>
@@ -382,6 +420,7 @@ export function ConsoleShell({
                   href={item.path(tenantId)}
                   onClick={closeMobileNavigation}
                 >
+                  <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                   <span>{label}</span>
                 </Link>
 
@@ -414,46 +453,47 @@ export function ConsoleShell({
           })}
         </div>
         <div className="console-sidebar-tenant-wrap" aria-hidden={isSidebarCollapsed}>
-          {isTenantSettingsOpen ? (
-            <div className="console-sidebar-settings-popover" aria-label={text.settings}>
-              <div className="console-sidebar-settings-row">
-                <span>{text.language}</span>
-                <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-              </div>
-              <div className="console-sidebar-settings-row">
-                <span>{text.theme}</span>
-                <div className="theme-segmented-control" data-density="compact">
-                  <button
-                    data-active={theme === "light"}
-                    onClick={() => selectTheme("light")}
-                    type="button"
-                  >
-                    {text.light}
-                  </button>
-                  <button
-                    data-active={theme === "dark"}
-                    onClick={() => selectTheme("dark")}
-                    type="button"
-                  >
-                    {text.dark}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
           <div className="console-sidebar-tenant">
             <strong>{tenantLabel}</strong>
-            <button
-              aria-expanded={isTenantSettingsOpen}
-              aria-label={text.settings}
-              className="console-sidebar-settings-button"
-              data-open={isTenantSettingsOpen}
-              onClick={() => setIsTenantSettingsOpen((current) => !current)}
-              title={text.settings}
-              type="button"
-            >
-              <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={text.settings}
+                className="console-sidebar-settings-button"
+                title={text.settings}
+              >
+                <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                aria-label={text.settings}
+                className="console-sidebar-settings-popover"
+                sideOffset={8}
+              >
+                <div className="console-sidebar-settings-row">
+                  <span>{text.language}</span>
+                  <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+                </div>
+                <div className="console-sidebar-settings-row">
+                  <span>{text.theme}</span>
+                  <div className="theme-segmented-control" data-density="compact">
+                    <button
+                      data-active={theme === "light"}
+                      onClick={() => selectTheme("light")}
+                      type="button"
+                    >
+                      {text.light}
+                    </button>
+                    <button
+                      data-active={theme === "dark"}
+                      onClick={() => selectTheme("dark")}
+                      type="button"
+                    >
+                      {text.dark}
+                    </button>
+                  </div>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </aside>

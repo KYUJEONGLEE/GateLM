@@ -3,6 +3,7 @@
 import { PlugZap, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -540,19 +541,21 @@ export function ProviderConnectionManagement({
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.fixtureFallback} {model.loadError}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {model.providerPresets.source === "fallback" && model.providerPresets.loadError ? (
-        <p className="policy-alert" data-status="warning">
-          {model.providerPresets.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{model.providerPresets.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="console-panel provider-line-panel">

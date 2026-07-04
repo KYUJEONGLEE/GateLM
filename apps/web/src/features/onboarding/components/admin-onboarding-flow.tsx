@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { AdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import {
@@ -539,9 +540,9 @@ function ApiKeyIssueReview({
   return (
     <section className="credential-list-state" aria-label="API Key issue state">
       {issueState.error ? (
-        <p className="policy-alert" data-status="error">
-          {issueState.error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{issueState.error}</AlertDescription>
+        </Alert>
       ) : null}
       <div className="secret-placeholder secret-placeholder-action">
         <span>{issueState.status === "saving" ? text.savingProject : text.issueApiKeyPending}</span>

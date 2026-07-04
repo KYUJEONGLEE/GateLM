@@ -3,6 +3,7 @@
 import { Boxes, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ModelCatalogItem, ModelCatalogModel } from "@/lib/gateway/model-catalog-types";
@@ -216,19 +217,21 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
       </section>
 
       {model.loadError ? (
-        <p className="policy-alert" data-status="error">
-          {text.gatewayUnavailable}: {model.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>
+            {text.gatewayUnavailable}: {model.loadError}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {model.controlPlaneLoadError ? (
-        <p className="policy-alert" data-status="warning">
-          Control Plane catalog: {model.controlPlaneLoadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>Control Plane catalog: {model.controlPlaneLoadError}</AlertDescription>
+        </Alert>
       ) : null}
       {actionMessage ? (
-        <p className="policy-alert" data-status={actionMessage.status}>
-          {actionMessage.text}
-        </p>
+        <Alert variant={actionMessage.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{actionMessage.text}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="metric-grid model-catalog-metrics">
