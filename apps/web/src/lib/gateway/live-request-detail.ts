@@ -61,14 +61,6 @@ type GatewayRequestDetailResponse = {
       truncated?: boolean;
       visibility?: "admin_request_detail";
     };
-    responseCapture?: {
-      capturedResponse?: string | null;
-      enabled?: boolean;
-      maxChars?: number;
-      mode?: "disabled" | "raw_full";
-      truncated?: boolean;
-      visibility?: "admin_request_detail";
-    };
     projectId?: string;
     provider?: string;
     providerCalled?: boolean;
@@ -269,7 +261,6 @@ function toInvocationRecord(data: NonNullable<GatewayRequestDetailResponse["data
       maskingAction: data.safetySummary?.maskingAction ?? maskingAction
     },
     promptCapture: normalizePromptCapture(data.promptCapture),
-    responseCapture: normalizeResponseCapture(data.responseCapture),
     httpStatus: data.httpStatus ?? 0,
     errorCode: data.error?.errorCode ?? null,
     errorMessage: data.error?.errorMessage ?? null,
@@ -289,19 +280,6 @@ function normalizePromptCapture(
 ) {
   return {
     capturedPrompt: value?.capturedPrompt ?? null,
-    enabled: value?.enabled ?? false,
-    maxChars: value?.maxChars ?? 8000,
-    mode: value?.mode ?? "disabled",
-    truncated: value?.truncated ?? false,
-    visibility: value?.visibility ?? "admin_request_detail"
-  } as const;
-}
-
-function normalizeResponseCapture(
-  value: NonNullable<GatewayRequestDetailResponse["data"]>["responseCapture"]
-) {
-  return {
-    capturedResponse: value?.capturedResponse ?? null,
     enabled: value?.enabled ?? false,
     maxChars: value?.maxChars ?? 8000,
     mode: value?.mode ?? "disabled",

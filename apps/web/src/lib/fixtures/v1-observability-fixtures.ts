@@ -80,15 +80,6 @@ export type PromptCapture = {
   visibility: "admin_request_detail";
 };
 
-export type ResponseCapture = {
-  capturedResponse: string | null;
-  enabled: boolean;
-  maxChars: number;
-  mode: "disabled" | "raw_full";
-  truncated: boolean;
-  visibility: "admin_request_detail";
-};
-
 export type InvocationLogRecord = {
   requestId: string;
   traceId: string;
@@ -154,7 +145,6 @@ export type InvocationLogRecord = {
     maskingAction: string | null;
   };
   promptCapture?: PromptCapture;
-  responseCapture?: ResponseCapture;
   httpStatus: number;
   errorCode: string | null;
   errorMessage: string | null;

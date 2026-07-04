@@ -64,12 +64,6 @@ export type RuntimePolicyPromptCapturePolicy = {
   mode: "disabled" | "log_safe_full";
 };
 
-export type RuntimePolicyResponseCapturePolicy = {
-  enabled: boolean;
-  maxChars: number;
-  mode: "disabled" | "raw_full";
-};
-
 export type RuntimePolicyConfig = {
   applicationId: string;
   budgetPolicy?: RuntimePolicyBudgetPolicy;
@@ -85,7 +79,6 @@ export type RuntimePolicyConfig = {
   models: RuntimePolicyModelConfig[];
   pricingRules: RuntimePolicyPricingRule[];
   promptCapturePolicy?: RuntimePolicyPromptCapturePolicy;
-  responseCapturePolicy?: RuntimePolicyResponseCapturePolicy;
   providers: RuntimePolicyProvider[];
   publishState: string;
   publishedAt: string;
@@ -161,7 +154,6 @@ export type RuntimePolicySnapshot = {
       semanticCacheMode: string;
     };
     promptCapture?: RuntimePolicyPromptCapturePolicy;
-    responseCapture?: RuntimePolicyResponseCapturePolicy;
     fallback: {
       allowedReasons?: string[];
       enabled: boolean;
@@ -229,8 +221,6 @@ export type RuntimePolicyDraftValues = {
   pricingRules: RuntimePolicyPricingRule[];
   promptCaptureEnabled: boolean;
   promptCaptureMaxChars: number;
-  responseCaptureEnabled: boolean;
-  responseCaptureMaxChars: number;
   rateLimitEnabled: boolean;
   rateLimitLimit: number;
   routingDefaultModel: string;
@@ -273,8 +263,6 @@ export function getRuntimePolicyDraftValues(
   const budgetPolicy = config.budgetPolicy ?? getDefaultRuntimePolicyBudgetPolicy();
   const promptCapturePolicy =
     config.promptCapturePolicy ?? getDefaultRuntimePolicyPromptCapturePolicy();
-  const responseCapturePolicy =
-    config.responseCapturePolicy ?? getDefaultRuntimePolicyResponseCapturePolicy();
 
   return {
     budgetEnabled: budgetPolicy.enabled,
@@ -294,8 +282,6 @@ export function getRuntimePolicyDraftValues(
     })),
     promptCaptureEnabled: promptCapturePolicy.enabled,
     promptCaptureMaxChars: promptCapturePolicy.maxChars,
-    responseCaptureEnabled: responseCapturePolicy.enabled,
-    responseCaptureMaxChars: responseCapturePolicy.maxChars,
     rateLimitEnabled: config.rateLimit.enabled,
     rateLimitLimit: config.rateLimit.limit,
     routingDefaultModel: config.routingPolicy.defaultModel,
@@ -317,14 +303,6 @@ export function getDefaultRuntimePolicyBudgetPolicy(): RuntimePolicyBudgetPolicy
 }
 
 export function getDefaultRuntimePolicyPromptCapturePolicy(): RuntimePolicyPromptCapturePolicy {
-  return {
-    enabled: false,
-    maxChars: 8000,
-    mode: "disabled"
-  };
-}
-
-export function getDefaultRuntimePolicyResponseCapturePolicy(): RuntimePolicyResponseCapturePolicy {
   return {
     enabled: false,
     maxChars: 8000,

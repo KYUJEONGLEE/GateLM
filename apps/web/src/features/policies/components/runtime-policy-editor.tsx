@@ -76,10 +76,6 @@ const policyText: Record<
     promptCapture: string;
     promptCaptureEnabled: string;
     promptCaptureMaxChars: string;
-    responseCapture: string;
-    responseCaptureEnabled: string;
-    responseCaptureHint: string;
-    responseCaptureMaxChars: string;
     promptPrice: string;
     provider: string;
     providerCount: string;
@@ -145,11 +141,6 @@ const policyText: Record<
     promptCapture: "Prompt capture",
     promptCaptureEnabled: "Log-safe capture",
     promptCaptureMaxChars: "Max characters",
-    responseCapture: "Response capture",
-    responseCaptureEnabled: "Raw response capture",
-    responseCaptureHint:
-      "Stores the assistant response returned through the Gateway only when enabled.",
-    responseCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
     providerCount: "Providers",
@@ -215,11 +206,6 @@ const policyText: Record<
     promptCapture: "프롬프트 캡처",
     promptCaptureEnabled: "로그 안전 캡처",
     promptCaptureMaxChars: "최대 글자 수",
-    responseCapture: "Response capture",
-    responseCaptureEnabled: "Raw response capture",
-    responseCaptureHint:
-      "Stores the assistant response returned through the Gateway only when enabled.",
-    responseCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
     providerCount: "Providers",
@@ -605,41 +591,6 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
           style={generalSectionStyle}
         >
           <div className="panel-heading">
-            <h3>{text.responseCapture}</h3>
-          </div>
-          <label className="policy-toggle-row">
-            <input
-              checked={draftValues.responseCaptureEnabled}
-              onChange={(event) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  responseCaptureEnabled: event.target.checked
-                }))
-              }
-              type="checkbox"
-            />
-            <span>{text.responseCaptureEnabled}</span>
-          </label>
-          <p className="project-muted">{text.responseCaptureHint}</p>
-          <PolicyNumberField
-            label={text.responseCaptureMaxChars}
-            max={20000}
-            min={1}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                responseCaptureMaxChars: value
-              }))
-            }
-            value={draftValues.responseCaptureMaxChars}
-          />
-        </article>
-
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
             <h3>{text.routing}</h3>
           </div>
           <div className="policy-routing-grid">
@@ -996,14 +947,6 @@ function RuntimeSnapshotDetail({
             {formatEnabled(snapshot.policies.promptCapture?.enabled ?? false)} /{" "}
             {snapshot.policies.promptCapture?.mode ?? "disabled"} / max{" "}
             {snapshot.policies.promptCapture?.maxChars ?? 8000}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.responseCapture}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.responseCapture?.enabled ?? false)} /{" "}
-            {snapshot.policies.responseCapture?.mode ?? "disabled"} / max{" "}
-            {snapshot.policies.responseCapture?.maxChars ?? 8000}
           </dd>
         </div>
         <div>
