@@ -18,8 +18,15 @@ import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type RuntimePolicyEditorProps = {
+  appTokenReadiness?: RuntimePolicyAppTokenReadiness;
   locale: Locale;
   model: RuntimePolicyModel;
+};
+
+type RuntimePolicyAppTokenReadiness = {
+  activeAppTokenCount: number;
+  applicationName: string;
+  loadError: string | null;
 };
 
 type SubmitState =
@@ -41,6 +48,9 @@ const policyText: Record<
   Locale,
   {
     activeConfig: string;
+    activeAppTokenMissing: string;
+    appTokenIssueFailed: string;
+    appTokenIssued: string;
     budget: string;
     budgetEnforcement: string;
     budgetWarning: string;
@@ -90,6 +100,8 @@ const policyText: Record<
     routingAdvanced: string;
     runtimeSnapshot: string;
     saveDraft: string;
+    issueAppToken: string;
+    issuingAppToken: string;
     shortPrompt: string;
     snapshotState: string;
     snapshotVersion: string;
@@ -98,12 +110,18 @@ const policyText: Record<
     semanticCacheEvidenceOnly: string;
     semanticCacheNote: string;
     streaming: string;
+    templateFallback: string;
     title: string;
     tokens: string;
   }
 > = {
   en: {
     activeConfig: "Active config",
+    activeAppTokenMissing:
+      "Runtime policy save and publish require an active App Token for this application.",
+    appTokenIssueFailed: "App Token issue failed.",
+    appTokenIssued:
+      "Active App Token prepared. The token plaintext is not displayed on this policy screen.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetWarning: "Warning threshold",
@@ -155,6 +173,8 @@ const policyText: Record<
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Save draft",
+    issueAppToken: "Issue App Token",
+    issuingAppToken: "Issuing...",
     shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -164,11 +184,18 @@ const policyText: Record<
     semanticCacheNote:
       "Current Control Plane derives semantic cache evidence mode from the cache policy. It is not a live response path.",
     streaming: "Streaming",
+    templateFallback:
+      "This application does not have an active policy yet. Configure and publish this policy to enable the Gateway path.",
     title: "Policies",
     tokens: "Context tokens"
   },
   ko: {
     activeConfig: "Active config",
+    activeAppTokenMissing:
+      "Runtime policy 저장과 게시에는 이 애플리케이션의 active App Token이 필요합니다.",
+    appTokenIssueFailed: "App Token 발급에 실패했습니다.",
+    appTokenIssued:
+      "Active App Token이 준비되었습니다. 이 정책 화면에서는 token 원문을 표시하지 않습니다.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetWarning: "Warning threshold",
@@ -220,6 +247,8 @@ const policyText: Record<
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Draft 저장",
+    issueAppToken: "App Token 발급",
+    issuingAppToken: "발급 중...",
     shortPrompt: "Short prompt 기준",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -229,13 +258,22 @@ const policyText: Record<
     semanticCacheNote:
       "현재 Control Plane은 cache policy에서 semantic cache evidence mode를 파생합니다. 실시간 응답 경로는 아닙니다.",
     streaming: "Streaming",
+    templateFallback:
+      "이 애플리케이션에는 아직 활성 정책이 없습니다. 정책을 설정하고 게시하면 Gateway 경로에 적용됩니다.",
     title: "정책",
     tokens: "Context tokens"
   }
 };
 
-export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps) {
+export function RuntimePolicyEditor({
+  appTokenReadiness,
+  locale,
+  model
+}: RuntimePolicyEditorProps) {
   const text = policyText[locale];
+  const [activeAppTokenCount, setActiveAppTokenCount] = useState(
+    appTokenReadiness?.activeAppTokenCount ?? 1
+  );
   const [draftValues, setDraftValues] = useState<RuntimePolicyDraftValues>(() =>
     getRuntimePolicyDraftValues(model.activeConfig)
   );
@@ -245,6 +283,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
   });
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>("general");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isIssuingAppToken, setIsIssuingAppToken] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   const displayConfig =
@@ -255,6 +294,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     activePolicySection === "general" ? undefined : hiddenPolicySectionStyle;
   const cacheSectionStyle =
     activePolicySection === "cache" ? undefined : hiddenPolicySectionStyle;
+  const hasActiveAppToken = activeAppTokenCount > 0;
   const providerOptions = model.activeConfig.providers;
   const modelOptionsByProvider = useMemo(
     () => groupModelsByProvider(draftValues.models),
@@ -298,12 +338,21 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
   }
 
   async function submitPolicy(action: "save-draft" | "publish") {
+    if (!hasActiveAppToken) {
+      setSubmitState({
+        message: text.activeAppTokenMissing,
+        status: "error"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitState({ message: "", status: "idle" });
 
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
         action,
+        applicationId: model.applicationId,
         values: draftValues
       }),
       headers: {
@@ -334,6 +383,47 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     setIsSubmitting(false);
   }
 
+  async function issueRuntimeAppToken() {
+    setIsIssuingAppToken(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/app-tokens", {
+      body: JSON.stringify({
+        action: "issue",
+        values: {
+          applicationId: model.applicationId,
+          displayName: `${appTokenReadiness?.applicationName ?? "Application"} Runtime App Token`,
+          expiresAt: "",
+          scopes: "gateway:invoke"
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      appToken?: unknown;
+      error?: string;
+    };
+
+    if (!response.ok || !payload.appToken) {
+      setSubmitState({
+        message: payload.error ?? text.appTokenIssueFailed,
+        status: "error"
+      });
+      setIsIssuingAppToken(false);
+      return;
+    }
+
+    setActiveAppTokenCount((current) => Math.max(1, current + 1));
+    setSubmitState({
+      message: text.appTokenIssued,
+      status: "success"
+    });
+    setIsIssuingAppToken(false);
+  }
+
   async function rollbackPolicy(targetConfigVersion: string) {
     setRollbackTarget(targetConfigVersion);
     setSubmitState({ message: "", status: "idle" });
@@ -341,6 +431,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
         action: "rollback",
+        applicationId: model.applicationId,
         targetConfigVersion
       }),
       headers: {
@@ -383,7 +474,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             {text.details}
           </Button>
           <Button
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hasActiveAppToken}
             onClick={() => void submitPolicy("save-draft")}
             type="button"
             variant="outline"
@@ -392,7 +483,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             {text.saveDraft}
           </Button>
           <Button
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hasActiveAppToken}
             onClick={() => void submitPolicy("publish")}
             type="button"
           >
@@ -406,6 +497,27 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
         <p className="policy-alert" data-status="warning">
           {text.fixtureFallback} {model.loadError}
         </p>
+      ) : null}
+      {model.source === "template" ? (
+        <p className="policy-alert" data-status="warning">
+          {text.templateFallback}
+        </p>
+      ) : null}
+      {!hasActiveAppToken ? (
+        <div className="policy-alert runtime-credential-alert" data-status="error">
+          <span>
+            {text.activeAppTokenMissing}
+            {appTokenReadiness?.loadError ? ` ${appTokenReadiness.loadError}` : ""}
+          </span>
+          <Button
+            disabled={isIssuingAppToken}
+            onClick={() => void issueRuntimeAppToken()}
+            type="button"
+            variant="outline"
+          >
+            {isIssuingAppToken ? text.issuingAppToken : text.issueAppToken}
+          </Button>
+        </div>
       ) : null}
       {submitState.message ? (
         <p className="policy-alert" data-status={submitState.status}>

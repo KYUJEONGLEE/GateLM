@@ -1,7 +1,7 @@
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { ApplicationManagement } from "@/features/applications/components/application-management";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
-import { getRuntimePolicyModel } from "@/lib/control-plane/runtime-policy-client";
+import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ApplicationsPageProps = {
@@ -14,7 +14,13 @@ export default async function ApplicationsPage({ params }: ApplicationsPageProps
   const { tenantId } = await params;
   const locale = await getRequestLocale();
   const model = await getApplicationsModel(tenantId);
-  const runtimePolicyModel = await getRuntimePolicyModel(tenantId);
+  const runtimeConfigEntries = await Promise.all(
+    model.applications.map(async (application) => [
+      application.id,
+      await getRuntimePolicyConfigForApplication(application.id)
+    ] as const)
+  );
+  const runtimeConfig = runtimeConfigEntries.find(([, config]) => config !== null)?.[1] ?? null;
 
   return (
     <ConsoleShell
@@ -26,7 +32,22 @@ export default async function ApplicationsPage({ params }: ApplicationsPageProps
       <ApplicationManagement
         locale={locale}
         model={model}
-        modelOptions={runtimePolicyModel.activeConfig.models}
+        modelOptions={runtimeConfig?.models ?? []}
+        policySummariesByApplicationId={Object.fromEntries(
+          runtimeConfigEntries.map(([applicationId, config]) => [
+            applicationId,
+            config
+              ? {
+                  defaultModel: config.routingPolicy.defaultModel,
+                  defaultProvider: config.routingPolicy.defaultProvider,
+                  modelCount: config.models.length,
+                  publishedAt: config.publishedAt,
+                  publishState: config.publishState
+                }
+              : null
+          ])
+        )}
+        tenantId={tenantId}
       />
     </ConsoleShell>
   );

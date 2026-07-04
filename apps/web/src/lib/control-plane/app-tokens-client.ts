@@ -61,7 +61,7 @@ type AppTokenRevokeResult =
 export async function getAppTokensModel(routeTenantId: string): Promise<AppTokensModel> {
   const controlPlaneApplicationId = getControlPlaneApplicationId();
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const listResult = await listAppTokens(controlPlaneApplicationId);
+  const listResult = await listAppTokensForApplication(controlPlaneApplicationId);
 
   if (listResult.ok) {
     return {
@@ -152,7 +152,9 @@ export async function revokeAppToken(appTokenId: string): Promise<AppTokenRevoke
   }
 }
 
-async function listAppTokens(applicationId: string): Promise<AppTokenListResult> {
+export async function listAppTokensForApplication(
+  applicationId: string
+): Promise<AppTokenListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/app-tokens?limit=50`,

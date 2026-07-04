@@ -89,14 +89,6 @@ const navigationItems: Array<{
         },
         item: "model-catalog",
         path: (tenantId) => `/tenants/${tenantId}/model-catalog`
-      },
-      {
-        labels: {
-          en: "Policies",
-          ko: "정책"
-        },
-        item: "policies",
-        path: (tenantId) => `/tenants/${tenantId}/policies`
       }
     ],
     section: "management"

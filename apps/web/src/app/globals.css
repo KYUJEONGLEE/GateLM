@@ -1513,6 +1513,17 @@ select {
   color: var(--warning-text);
 }
 
+.runtime-credential-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtime-credential-alert > span {
+  min-width: 0;
+}
+
 .policy-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1815,6 +1826,19 @@ select {
   align-items: end;
 }
 
+.project-detail-form {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, 130px)
+    minmax(170px, 210px)
+    minmax(108px, 116px)
+    minmax(108px, 116px);
+  align-items: end;
+  gap: 6px;
+  min-width: 0;
+  max-width: 590px;
+}
+
 .project-detail-panel {
   display: grid;
   gap: 22px;
@@ -1832,6 +1856,8 @@ select {
 
 .project-detail-actions {
   display: flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
   gap: 10px;
   justify-content: flex-end;
 }
@@ -1848,6 +1874,25 @@ select {
   height: 16px;
 }
 
+.project-detail-section-heading {
+  align-self: center;
+}
+
+.project-detail-section-heading h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.project-detail-general-content {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+
 .project-danger-button {
   border-color: var(--danger-border);
   color: var(--danger);
@@ -1858,8 +1903,36 @@ select {
   border-color: var(--danger-border);
 }
 
+.project-delete-actions .project-danger-button {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.project-delete-actions .project-danger-button:hover:not(:disabled) {
+  background: var(--danger-text);
+  border-color: var(--danger-text);
+  color: #fff;
+}
+
 .project-table {
   min-width: 1060px;
+}
+
+.project-clickable-row {
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.project-clickable-row:hover {
+  background: var(--surface-subtle);
+}
+
+.project-clickable-row:focus-visible {
+  outline: 2px solid rgba(16, 163, 127, 0.32);
+  outline-offset: -2px;
 }
 
 .project-table-field {
@@ -1964,6 +2037,32 @@ select {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.application-policy-cell {
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.application-policy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.application-policy-link:hover {
+  color: var(--accent-strong);
+}
+
+.application-policy-link svg {
+  width: 14px;
+  height: 14px;
 }
 
 .applications-panel-heading {
@@ -2444,6 +2543,45 @@ select {
 
 .management-line-content .project-detail-section > :not(.panel-heading) {
   grid-column: 2;
+}
+
+.management-line-content .project-detail-section > .project-detail-section-heading {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+
+.management-line-content .project-detail-section > .project-detail-general-content,
+.management-line-content .project-detail-section > .project-detail-actions {
+  grid-column: 2;
+}
+
+.management-line-content .project-detail-panel > .project-detail-section {
+  grid-column: 1 / -1;
+}
+
+.management-line-content .project-detail-panel .project-detail-form {
+  width: min(100%, 590px);
+}
+
+.management-line-content .project-detail-panel .project-delete-section {
+  align-items: center;
+}
+
+.management-line-content .project-detail-panel .project-delete-actions {
+  grid-column: 2;
+  justify-content: flex-start;
+}
+
+.project-detail-content {
+  padding-bottom: 0;
+}
+
+.project-detail-content .project-detail-panel {
+  padding-bottom: 0;
+}
+
+.project-delete-content {
+  padding-top: 0;
 }
 
 .management-line-content .applications-panel-heading,
@@ -4714,6 +4852,66 @@ select {
   color: #737373;
 }
 
+.application-settings-back {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  color: #171717;
+  font-size: 13px;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.application-settings-back:hover {
+  border-color: #171717;
+}
+
+.application-settings-panel {
+  display: grid;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.application-settings-row {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.application-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.application-settings-row span {
+  color: #737373;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.application-settings-row strong {
+  min-width: 0;
+  color: #171717;
+  font-size: 14px;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.application-settings-row em {
+  color: #171717;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+}
+
 @media (max-width: 900px) {
   .application-launcher-shell {
     padding: 28px 18px;
@@ -4733,6 +4931,11 @@ select {
 
   .application-card {
     min-height: 144px;
+  }
+
+  .application-settings-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 
@@ -6241,6 +6444,17 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .management-line-content .model-catalog-actions,
   .management-line-content .team-section-header-with-actions > .team-attach-controls {
     justify-self: stretch;
+  }
+
+  .management-line-content .project-detail-panel .project-detail-form {
+    grid-template-columns: 1fr;
+    width: 100%;
+    max-width: none;
+  }
+
+  .management-line-content .project-detail-panel .project-delete-actions {
+    grid-column: 1;
+    justify-content: stretch;
   }
 
   .management-line-content > .model-catalog-metrics {

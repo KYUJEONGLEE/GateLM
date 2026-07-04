@@ -17,6 +17,7 @@ import type {
   RuntimePolicyHistoryDetailSummary,
   RuntimePolicyHistoryItem,
   RuntimePolicyModelConfig,
+  RuntimePolicyPricingRule,
   RuntimePolicyProviderCatalogSummary,
   RuntimePolicySnapshot,
   RuntimePolicyModel,
@@ -107,9 +108,15 @@ type ProviderCatalogResult =
 const RUNTIME_POLICY_DRAFT_CONFIG_VERSION = "draft";
 
 export async function getRuntimePolicyModel(routeTenantId: string): Promise<RuntimePolicyModel> {
-  const applicationId = getControlPlaneApplicationId();
+  return getRuntimePolicyModelForApplication(routeTenantId, getControlPlaneApplicationId());
+}
+
+export async function getRuntimePolicyModelForApplication(
+  routeTenantId: string,
+  applicationId: string,
+  projectId = getControlPlaneProjectId()
+): Promise<RuntimePolicyModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const controlPlaneProjectId = getControlPlaneProjectId();
   const fallbackConfig = getFixtureRuntimeConfig();
 
   const [
@@ -123,7 +130,7 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
     fetchRuntimeConfigHistory(applicationId),
     fetchActiveRuntimeSnapshot(applicationId),
     fetchActiveProviderCatalog(applicationId),
-    listProviderConnections(controlPlaneProjectId)
+    listProviderConnections(projectId)
   ]);
   const historyDetail =
     history.ok && history.data[0]
@@ -169,6 +176,40 @@ export async function getRuntimePolicyModel(routeTenantId: string): Promise<Runt
         snapshot: runtimeSnapshot.ok ? runtimeSnapshot.data : null
       },
       source: "control-plane"
+    };
+  }
+
+  if (activeConfig.status === 404) {
+    const templateConfig = makeRuntimePolicyConfigTemplate(
+      fallbackConfig,
+      routeTenantId,
+      applicationId,
+      providerConnections.ok ? providerConnections.data : []
+    );
+
+    return {
+      activeConfig: templateConfig,
+      applicationId,
+      controlPlaneBaseUrl,
+      history: {
+        detail: null,
+        detailLoadError: null,
+        items: history.ok ? history.data : [],
+        loadError: history.ok ? null : history.error
+      },
+      loadError: activeConfig.error,
+      providerCatalog: {
+        canonicalLoadError: null,
+        canonicalVerified: null,
+        loadError: providerCatalog.ok ? null : providerCatalog.error,
+        summary: providerCatalog.ok ? providerCatalog.data : null
+      },
+      routeTenantId,
+      runtimeSnapshot: {
+        loadError: runtimeSnapshot.ok ? null : runtimeSnapshot.error,
+        snapshot: runtimeSnapshot.ok ? runtimeSnapshot.data : null
+      },
+      source: "template"
     };
   }
 
@@ -288,6 +329,24 @@ function toRuntimePolicyModelConfig(
   };
 }
 
+function toRuntimePolicyPricingRule(
+  fallbackConfig: RuntimePolicyConfig,
+  provider: string,
+  model: string
+): RuntimePolicyPricingRule {
+  const fallbackRule = fallbackConfig.pricingRules.find(
+    (rule) => rule.provider === provider && rule.model === model
+  );
+
+  return {
+    completionTokenMicroUsd: fallbackRule?.completionTokenMicroUsd ?? 10,
+    model,
+    pricingVersion: fallbackRule?.pricingVersion ?? "default",
+    promptTokenMicroUsd: fallbackRule?.promptTokenMicroUsd ?? 10,
+    provider
+  };
+}
+
 function normalizeRuntimeProviderFailureMode(
   providerConfig: Record<string, unknown> | null
 ): RuntimePolicyProvider["failureMode"] {
@@ -395,19 +454,26 @@ export async function publishRuntimePolicyModelSelectionForApplication(
 }
 
 export async function saveRuntimePolicyDraft(
-  values: RuntimePolicyDraftValues
+  values: RuntimePolicyDraftValues,
+  applicationId?: string
 ): Promise<ControlPlaneRequestResult> {
+  const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
+
   return writeRuntimeConfig("draft", values, {
-    draftConfigVersion: RUNTIME_POLICY_DRAFT_CONFIG_VERSION
+    applicationId: targetApplicationId,
+    draftConfigVersion: getRuntimePolicyDraftConfigVersion(values, targetApplicationId)
   });
 }
 
 export async function publishRuntimePolicy(
-  values: RuntimePolicyDraftValues
+  values: RuntimePolicyDraftValues,
+  applicationId?: string
 ): Promise<ControlPlaneRequestResult> {
-  const draftConfigVersion = RUNTIME_POLICY_DRAFT_CONFIG_VERSION;
+  const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
+  const draftConfigVersion = getRuntimePolicyDraftConfigVersion(values, targetApplicationId);
   const publishedConfigVersion = createPublishedRuntimeConfigVersion();
   const draft = await writeRuntimeConfig("draft", values, {
+    applicationId: targetApplicationId,
     draftConfigVersion
   });
 
@@ -416,16 +482,16 @@ export async function publishRuntimePolicy(
   }
 
   return writeRuntimeConfig("publish", values, {
+    applicationId: targetApplicationId,
     draftConfigVersion,
     publishedConfigVersion
   });
 }
 
 export async function rollbackRuntimePolicy(
-  targetConfigVersion: string
+  targetConfigVersion: string,
+  applicationId = getControlPlaneApplicationId()
 ): Promise<ControlPlaneRequestResult> {
-  const applicationId = getControlPlaneApplicationId();
-
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/rollback`,
@@ -453,6 +519,80 @@ export async function rollbackRuntimePolicy(
 
 function getFixtureRuntimeConfig() {
   return (runtimeConfigFixture as RuntimeConfigFixture).runtimeConfig;
+}
+
+function makeRuntimePolicyConfigTemplate(
+  fallbackConfig: RuntimePolicyConfig,
+  routeTenantId: string,
+  applicationId: string,
+  providerConnections: ProviderConnectionRecord[]
+): RuntimePolicyConfig {
+  const now = new Date().toISOString();
+  const providers = providerConnections.map((providerConnection) =>
+    toRuntimePolicyProvider(
+      providerConnection,
+      getProviderConfigModels(providerConnection.providerConfig)
+    )
+  );
+  const models = providerConnections.flatMap((providerConnection) =>
+    getProviderConfigModels(providerConnection.providerConfig).map((modelName) =>
+      toRuntimePolicyModelConfig(providerConnection, modelName)
+    )
+  );
+  const pricingRules = models.map((model) =>
+    toRuntimePolicyPricingRule(fallbackConfig, model.provider, model.model)
+  );
+  const mergedConfig = mergeProviderConnectionCandidates(
+    {
+      ...fallbackConfig,
+      applicationId,
+      configHash: "",
+      configVersion: createApplicationRuntimeDraftVersion(applicationId),
+      effectiveAt: now,
+      generatedAt: now,
+      models,
+      pricingRules,
+      providers,
+      publishState: "draft",
+      publishedAt: "",
+      tenantId: routeTenantId
+    },
+    []
+  );
+  const preferredModel =
+    mergedConfig.models.find((model) => model.status === "active") ?? mergedConfig.models[0];
+
+  if (!preferredModel) {
+    return mergedConfig;
+  }
+
+  return {
+    ...mergedConfig,
+    routingPolicy: {
+      ...mergedConfig.routingPolicy,
+      defaultModel: preferredModel.model,
+      defaultProvider: preferredModel.provider,
+      fallbackModel: preferredModel.model,
+      fallbackProvider: preferredModel.provider,
+      lowCostModel: preferredModel.model,
+      lowCostProvider: preferredModel.provider
+    }
+  };
+}
+
+function getRuntimePolicyDraftConfigVersion(
+  values: RuntimePolicyDraftValues,
+  applicationId: string
+) {
+  if (values.configVersion === RUNTIME_POLICY_DRAFT_CONFIG_VERSION) {
+    return values.configVersion;
+  }
+
+  if (values.configVersion.startsWith("draft_")) {
+    return values.configVersion;
+  }
+
+  return `draft_${applicationId.replaceAll("-", "_")}`;
 }
 
 async function fetchActiveRuntimeConfig(
@@ -1021,6 +1161,35 @@ function getErrorMessage(payload: unknown, status: number) {
 
     if (typeof message === "string") {
       return message;
+    }
+
+    if (Array.isArray(message)) {
+      const messages = message
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean);
+
+      if (messages.length > 0) {
+        return messages.join(" ");
+      }
+    }
+
+    if (record.error && typeof record.error === "object") {
+      const nested = record.error as Record<string, unknown>;
+      const nestedMessage = nested.message;
+
+      if (typeof nestedMessage === "string") {
+        return nestedMessage;
+      }
+
+      if (Array.isArray(nestedMessage)) {
+        const messages = nestedMessage
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean);
+
+        if (messages.length > 0) {
+          return messages.join(" ");
+        }
+      }
     }
   }
 

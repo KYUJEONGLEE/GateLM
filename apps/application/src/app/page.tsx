@@ -26,6 +26,17 @@ export default async function ApplicationPage() {
             </span>
             <span className="application-card-status">{text.open}</span>
           </Link>
+
+          <Link className="application-card application-card-active" href="/settings">
+            <span className="application-card-icon" aria-hidden="true">
+              S
+            </span>
+            <span className="application-card-content">
+              <strong>{text.settings.title}</strong>
+              <small>{text.settings.description}</small>
+            </span>
+            <span className="application-card-status">{text.open}</span>
+          </Link>
         </div>
       </section>
     </main>
@@ -41,6 +52,10 @@ const copy = {
     eyebrow: "Applications",
     gridLabel: "Available applications",
     open: "Open",
+    settings: {
+      description: "Gateway credential and endpoint status.",
+      title: "Settings"
+    },
     title: "Choose an application"
   },
   ko: {
@@ -51,6 +66,10 @@ const copy = {
     eyebrow: "Applications",
     gridLabel: "사용 가능한 애플리케이션",
     open: "열기",
+    settings: {
+      description: "Gateway credential과 endpoint 상태",
+      title: "Settings"
+    },
     title: "애플리케이션 선택"
   }
 };

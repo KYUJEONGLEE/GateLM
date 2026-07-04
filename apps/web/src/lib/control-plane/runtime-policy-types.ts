@@ -254,7 +254,7 @@ export type RuntimePolicyModel = {
     loadError: string | null;
     snapshot: RuntimePolicySnapshot | null;
   };
-  source: "control-plane" | "fixture";
+  source: "control-plane" | "fixture" | "template";
 };
 
 export function getRuntimePolicyDraftValues(

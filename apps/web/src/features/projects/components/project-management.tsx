@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -22,15 +22,7 @@ type ProjectManagementProps = {
 type ProjectDetailManagementProps = {
   locale: Locale;
   project: ProjectRecord;
-  runtimeSettings: ProjectRuntimeSettings | null;
   tenantId: string;
-};
-
-export type ProjectRuntimeSettings = {
-  cacheEnabled: boolean;
-  cacheType: string;
-  publishState: string;
-  safetyMode: string;
 };
 
 type SubmitState = {
@@ -48,8 +40,6 @@ const projectStatuses: ProjectStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
 const projectText: Record<
   Locale,
   {
-    cache: string;
-    cacheType: string;
     createProject: string;
     created: string;
     description: string;
@@ -57,26 +47,23 @@ const projectText: Record<
     empty: string;
     fixtureFallback: string;
     detailSaved: string;
+    general: string;
     management: string;
     name: string;
     project: string;
     projectId: string;
-    publishState: string;
-    runtimeSettings: string;
     save: string;
     delete: string;
+    deleteConfirm: string;
     totalBudget: string;
     deleted: string;
     source: string;
     status: string;
-    safetyMode: string;
     title: string;
     updated: string;
   }
 > = {
   en: {
-    cache: "Cache",
-    cacheType: "Cache type",
     createProject: "Create Project",
     created: "Created",
     description: "Description",
@@ -84,25 +71,22 @@ const projectText: Record<
     empty: "No projects found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
     detailSaved: "Project saved.",
+    general: "General",
     management: "management",
     name: "Name",
     project: "Project",
     projectId: "Project ID",
-    publishState: "Publish state",
-    runtimeSettings: "Runtime settings",
     save: "Save",
     delete: "Delete",
+    deleteConfirm: "Delete this project? This action cannot be undone.",
     totalBudget: "Project budget",
     deleted: "Project deleted.",
     source: "Source",
     status: "Status",
-    safetyMode: "Safety mode",
     title: "Projects",
     updated: "Updated"
   },
   ko: {
-    cache: "Cache",
-    cacheType: "Cache type",
     createProject: "Create Project",
     created: "생성",
     description: "설명",
@@ -110,27 +94,31 @@ const projectText: Record<
     empty: "프로젝트가 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
     detailSaved: "Project가 저장되었습니다.",
+    general: "일반",
     management: "관리",
     name: "이름",
     project: "Project",
     projectId: "Project ID",
-    publishState: "Publish state",
-    runtimeSettings: "Runtime 설정",
     save: "저장",
     delete: "삭제",
+    deleteConfirm: "이 Project를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
     totalBudget: "프로젝트 예산",
     deleted: "Project가 삭제되었습니다.",
     source: "출처",
     status: "상태",
-    safetyMode: "Safety mode",
     title: "프로젝트",
     updated: "수정"
   }
 };
 
 export function ProjectManagement({ locale, model }: ProjectManagementProps) {
+  const router = useRouter();
   const text = projectText[locale];
   const projects = model.projects.filter((project) => project.status !== "ARCHIVED");
+
+  function openProject(projectId: string) {
+    router.push(`/tenants/${model.routeTenantId}/projects/${projectId}`);
+  }
 
   return (
     <main className="console-content management-line-content">
@@ -169,12 +157,23 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
                   <th>{text.totalBudget}</th>
                   <th>{text.status}</th>
                   <th>{text.updated}</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
                 {projects.map((project) => (
-                  <tr key={project.id}>
+                  <tr
+                    className="project-clickable-row"
+                    key={project.id}
+                    onClick={() => openProject(project.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openProject(project.id);
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
+                  >
                     <td>
                       <strong className="provider-name">{project.name}</strong>
                     </td>
@@ -195,15 +194,6 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
                         {text.created}: {formatDateTime(project.createdAt)}
                       </small>
                     </td>
-                    <td>
-                      <Link
-                        className="secondary-button"
-                        href={`/tenants/${model.routeTenantId}/projects/${project.id}`}
-                      >
-                        <Pencil aria-hidden="true" />
-                        {text.edit}
-                      </Link>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -217,14 +207,12 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
 
 export function ProjectDetailManagement({
   locale,
-  project,
-  runtimeSettings,
-  tenantId
+  project
 }: ProjectDetailManagementProps) {
   const router = useRouter();
   const text = projectText[locale];
   const [values, setValues] = useState<ProjectUpdateValues>(() => getProjectUpdateValues(project));
-  const [pendingAction, setPendingAction] = useState<"delete" | "save" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"save" | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
@@ -281,8 +269,121 @@ export function ProjectDetailManagement({
     router.refresh();
   }
 
+  return (
+    <main className="console-content management-line-content project-detail-content">
+      <section className="dashboard-hero">
+        <div>
+          <p className="console-kicker">{text.project}</p>
+          <h2>{project.name}</h2>
+        </div>
+      </section>
+
+      {submitState.message ? (
+        <p className="policy-alert" data-status={submitState.status}>
+          {submitState.message}
+        </p>
+      ) : null}
+
+      <section className="console-panel project-detail-panel">
+        <div className="project-detail-section">
+          <div className="project-detail-section-heading">
+            <h3>{text.general}</h3>
+          </div>
+          <div className="project-detail-general-content">
+            <div className="project-detail-form">
+              <label className="policy-field">
+                <span>{text.name}</span>
+                <input
+                  maxLength={120}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      name: event.target.value
+                    }))
+                  }
+                  type="text"
+                  value={values.name}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.description}</span>
+                <input
+                  maxLength={500}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      description: event.target.value
+                    }))
+                  }
+                  type="text"
+                  value={values.description}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.totalBudget}</span>
+                <input
+                  min={0}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      totalBudgetUsd: Number(event.target.value)
+                    }))
+                  }
+                  step="0.01"
+                  type="number"
+                  value={values.totalBudgetUsd}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.status}</span>
+                <select
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      status: event.target.value as ProjectStatus
+                    }))
+                  }
+                  value={values.status}
+                >
+                  {projectStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {formatProjectStatus(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="project-detail-actions">
+              <button
+                className="primary-button"
+                disabled={pendingAction !== null}
+                onClick={() => void saveProjectDetail()}
+                type="button"
+              >
+                <Save aria-hidden="true" />
+                {pendingAction === "save" ? "..." : text.save}
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+  );
+}
+
+export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDetailManagementProps) {
+  const router = useRouter();
+  const text = projectText[locale];
+  const [submitState, setSubmitState] = useState<SubmitState>({ message: "", status: "idle" });
+  const [isDeleting, setIsDeleting] = useState(false);
+
   async function deleteProject() {
-    setPendingAction("delete");
+    if (!window.confirm(text.deleteConfirm)) {
+      return;
+    }
+
+    setIsDeleting(true);
     setSubmitState({ message: "", status: "idle" });
 
     const response = await fetch("/api/control-plane/projects", {
@@ -305,27 +406,16 @@ export function ProjectDetailManagement({
         message: payload.error ?? "Project delete failed.",
         status: "error"
       });
-      setPendingAction(null);
+      setIsDeleting(false);
       return;
     }
 
-    setSubmitState({
-      message: text.deleted,
-      status: "success"
-    });
     router.push(`/tenants/${tenantId}/projects`);
     router.refresh();
   }
 
   return (
-    <main className="console-content management-line-content">
-      <section className="dashboard-hero">
-        <div>
-          <p className="console-kicker">{text.project}</p>
-          <h2>{project.name}</h2>
-        </div>
-      </section>
-
+    <main className="console-content management-line-content project-delete-content">
       {submitState.message ? (
         <p className="policy-alert" data-status={submitState.status}>
           {submitState.message}
@@ -333,126 +423,23 @@ export function ProjectDetailManagement({
       ) : null}
 
       <section className="console-panel project-detail-panel">
-        <div className="project-detail-section">
-          <div className="panel-heading">
-            <h3>{text.edit}</h3>
+        <div className="project-detail-section project-delete-section">
+          <div className="project-detail-section-heading">
+            <h3>{text.delete}</h3>
           </div>
-          <div className="project-create-form">
-            <label className="policy-field">
-              <span>{text.name}</span>
-              <input
-                maxLength={120}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    name: event.target.value
-                  }))
-                }
-                type="text"
-                value={values.name}
-              />
-            </label>
-            <label className="policy-field">
-              <span>{text.description}</span>
-              <input
-                maxLength={500}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    description: event.target.value
-                  }))
-                }
-                type="text"
-                value={values.description}
-              />
-            </label>
-            <label className="policy-field">
-              <span>{text.totalBudget}</span>
-              <input
-                min={0}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    totalBudgetUsd: Number(event.target.value)
-                  }))
-                }
-                step="0.01"
-                type="number"
-                value={values.totalBudgetUsd}
-              />
-            </label>
-            <label className="policy-field">
-              <span>{text.status}</span>
-              <select
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    status: event.target.value as ProjectStatus
-                  }))
-                }
-                value={values.status}
-              >
-                {projectStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {formatProjectStatus(status)}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="project-detail-actions project-delete-actions">
+            <button
+              className="secondary-button project-danger-button"
+              disabled={isDeleting || project.status === "ARCHIVED"}
+              onClick={() => void deleteProject()}
+              type="button"
+            >
+              <Trash2 aria-hidden="true" />
+              {isDeleting ? "..." : text.delete}
+            </button>
           </div>
         </div>
-
-        {runtimeSettings ? (
-          <div className="project-detail-section">
-            <div className="panel-heading">
-              <h3>{text.runtimeSettings}</h3>
-            </div>
-            <div className="project-create-form">
-              <label className="policy-field">
-                <span>{text.publishState}</span>
-                <input disabled readOnly type="text" value={runtimeSettings.publishState} />
-              </label>
-              <label className="policy-field">
-                <span>{text.cache}</span>
-                <input
-                  disabled
-                  readOnly
-                  type="text"
-                  value={runtimeSettings.cacheEnabled ? "enabled" : "disabled"}
-                />
-              </label>
-              <label className="policy-field">
-                <span>{text.cacheType}</span>
-                <input disabled readOnly type="text" value={runtimeSettings.cacheType} />
-              </label>
-              <label className="policy-field">
-                <span>{text.safetyMode}</span>
-                <input disabled readOnly type="text" value={runtimeSettings.safetyMode} />
-              </label>
-            </div>
-          </div>
-        ) : null}
       </section>
-      <div className="project-detail-actions">
-        <button
-          className="secondary-button project-danger-button"
-          disabled={pendingAction !== null || project.status === "ARCHIVED"}
-          onClick={() => void deleteProject()}
-          type="button"
-        >
-          <Trash2 aria-hidden="true" />
-          {pendingAction === "delete" ? "..." : text.delete}
-        </button>
-        <button
-          className="primary-button"
-          disabled={pendingAction !== null}
-          onClick={() => void saveProjectDetail()}
-          type="button"
-        >
-          <Save aria-hidden="true" />
-          {pendingAction === "save" ? "..." : text.save}
-        </button>
-      </div>
     </main>
   );
 }

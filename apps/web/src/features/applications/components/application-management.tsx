@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Settings, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,17 @@ type ApplicationManagementProps = {
   locale: Locale;
   model: ApplicationsModel;
   modelOptions?: RuntimePolicyModelConfig[];
+  policySummariesByApplicationId?: Record<string, ApplicationPolicySummary | null>;
   projectBudgetUsd?: number;
+  tenantId: string;
+};
+
+type ApplicationPolicySummary = {
+  defaultModel: string;
+  defaultProvider: string;
+  modelCount: number;
+  publishedAt: string;
+  publishState: string;
 };
 
 type SubmitState = {
@@ -71,6 +82,10 @@ const applicationText: Record<
     modelUnavailable: string;
     name: string;
     policyWarning: string;
+    policy: string;
+    policyConfigure: string;
+    policyMissing: string;
+    policyPublished: string;
     save: string;
     source: string;
     status: string;
@@ -99,6 +114,10 @@ const applicationText: Record<
     model: "Model",
     modelUnavailable: "No runtime models are available.",
     name: "Name",
+    policy: "Policy",
+    policyConfigure: "Configure policy",
+    policyMissing: "No active policy",
+    policyPublished: "Published",
     policyWarning: "Application was created, but the selected model policy was not applied.",
     save: "Save",
     source: "Source",
@@ -127,6 +146,10 @@ const applicationText: Record<
     model: "모델",
     modelUnavailable: "사용 가능한 Runtime 모델이 없습니다.",
     name: "이름",
+    policy: "정책",
+    policyConfigure: "정책 설정",
+    policyMissing: "활성 정책 없음",
+    policyPublished: "Published",
     policyWarning: "애플리케이션은 생성되었지만 선택한 모델 정책은 적용되지 않았습니다.",
     save: "저장",
     source: "출처",
@@ -141,7 +164,9 @@ export function ApplicationManagement({
   locale,
   model,
   modelOptions = [],
-  projectBudgetUsd = 100
+  policySummariesByApplicationId = {},
+  projectBudgetUsd = 100,
+  tenantId
 }: ApplicationManagementProps) {
   const router = useRouter();
   const text = applicationText[locale];
@@ -364,7 +389,7 @@ export function ApplicationManagement({
   }
 
   return (
-    <main className="console-content management-line-content">
+    <main className="console-content management-line-content application-management-content">
       {model.source === "fixture" ? (
         <p className="policy-alert" data-status="warning">
           {text.fixtureFallback} {model.loadError}
@@ -404,6 +429,7 @@ export function ApplicationManagement({
                   <th>{text.description}</th>
                   <th>{text.budget}</th>
                   <th>{text.status}</th>
+                  <th>{text.policy}</th>
                   <th>{text.updated}</th>
                   <th>{text.applicationId}</th>
                   <th />
@@ -413,6 +439,8 @@ export function ApplicationManagement({
                 {applications.map((application) => {
                   const rowValues =
                     editingRows[application.id] ?? getApplicationUpdateValues(application);
+                  const policySummary = policySummariesByApplicationId[application.id] ?? null;
+                  const policyHref = `/tenants/${tenantId}/projects/${model.controlPlaneProjectId}/applications/${application.id}/policies`;
 
                   return (
                     <tr key={application.id}>
@@ -479,6 +507,32 @@ export function ApplicationManagement({
                               ))}
                             </select>
                           </label>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="application-policy-cell">
+                          <Badge
+                            className="project-status-badge"
+                            data-status={policySummary ? "ACTIVE" : "DISABLED"}
+                            variant="outline"
+                          >
+                            {policySummary ? text.policyPublished : text.policyMissing}
+                          </Badge>
+                          {policySummary ? (
+                            <small className="project-muted">
+                              {policySummary.defaultProvider}:{policySummary.defaultModel}
+                            </small>
+                          ) : null}
+                          {policySummary ? (
+                            <small className="project-muted">
+                              {policySummary.modelCount} models ·{" "}
+                              {formatDateTime(policySummary.publishedAt)}
+                            </small>
+                          ) : null}
+                          <Link className="application-policy-link" href={policyHref}>
+                            <Settings aria-hidden="true" />
+                            {text.policyConfigure}
+                          </Link>
                         </div>
                       </td>
                       <td>
