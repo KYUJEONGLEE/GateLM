@@ -75,6 +75,10 @@ type Config struct {
 	AsyncLogWorkerCount      int
 	AsyncLogWriteTimeout     time.Duration
 	AsyncLogShutdownTimeout  time.Duration
+	PromptCaptureEnabled     bool
+	PromptCaptureMaxChars    int
+	ResponseCaptureEnabled   bool
+	ResponseCaptureMaxChars  int
 	SemanticCache            SemanticCacheConfig
 }
 
@@ -170,6 +174,10 @@ func LoadWithError() (Config, error) {
 		AsyncLogWorkerCount:      envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
 		AsyncLogWriteTimeout:     envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
 		AsyncLogShutdownTimeout:  envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
+		PromptCaptureEnabled:     envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
+		PromptCaptureMaxChars:    envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
+		ResponseCaptureEnabled:   envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
+		ResponseCaptureMaxChars:  envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:            semanticCache,
 	}
 	return cfg, err

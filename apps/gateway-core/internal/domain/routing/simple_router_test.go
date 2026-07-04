@@ -512,7 +512,7 @@ func TestSimpleRouterClassifiesRoutingCategory(t *testing.T) {
 		{name: "RT-CATEGORY-009 select update delete words stay general", prompt: "Please select a plan, update my profile, and delete the old address", category: CategoryGeneral},
 		{name: "RT-CATEGORY-010 bug without code context stays general", prompt: "I found a bug in my order status page", category: CategoryGeneral},
 		{name: "RT-CATEGORY-011 SQL pattern is code", prompt: "select * from users where id = 1", category: CategoryCode},
-		{name: "RT-CATEGORY-012 long prompt only uses classifier prefix", prompt: strings.Repeat("hello ", 420) + "```go\nconst value = 1\n```", category: CategoryGeneral},
+		{name: "RT-CATEGORY-012 long prompt scans classifier head and tail", prompt: strings.Repeat("hello ", 420) + "```go\nconst value = 1\n```", category: CategoryCode},
 	}
 
 	for _, tc := range cases {
