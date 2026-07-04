@@ -115,6 +115,9 @@ const policyText: Record<
     routing: string;
     routingAdvanced: string;
     runtimeSnapshot: string;
+    responseCapture: string;
+    responseCaptureHint: string;
+    responseCaptureMaxChars: string;
     saveDraft: string;
     saveProviders: string;
     savingProviders: string;
@@ -197,6 +200,10 @@ const policyText: Record<
     routing: "Routing",
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
+    responseCapture: "Response capture",
+    responseCaptureHint:
+      "Backend policy is preserved for publish, but raw response content is not displayed in this console.",
+    responseCaptureMaxChars: "Max characters",
     saveDraft: "Save draft",
     saveProviders: "Save providers",
     savingProviders: "Saving...",
@@ -280,6 +287,10 @@ const policyText: Record<
     routing: "Routing",
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
+    responseCapture: "응답 캡처",
+    responseCaptureHint:
+      "백엔드 정책은 게시 시 보존하지만, 이 콘솔에서는 raw response 원문을 표시하지 않습니다.",
+    responseCaptureMaxChars: "최대 글자 수",
     saveDraft: "Draft 저장",
     saveProviders: "Provider 저장",
     savingProviders: "저장 중...",
@@ -736,6 +747,28 @@ export function RuntimePolicyEditor({
               );
             })}
           </div>
+        </article>
+
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
+          <div className="panel-heading">
+            <h3>{text.responseCapture}</h3>
+          </div>
+          <label aria-disabled="true" className="policy-toggle-row">
+            <Switch checked={draftValues.responseCaptureEnabled} disabled readOnly />
+            <span>
+              {draftValues.responseCaptureEnabled ? text.enabled : text.semanticCacheDisabled}
+            </span>
+          </label>
+          <p className="project-muted">{text.responseCaptureHint}</p>
+          <dl className="policy-summary-list">
+            <div>
+              <dt>{text.responseCaptureMaxChars}</dt>
+              <dd>{draftValues.responseCaptureMaxChars}</dd>
+            </div>
+          </dl>
         </article>
 
         <article
