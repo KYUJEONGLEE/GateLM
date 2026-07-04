@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from collections.abc import Mapping
 
 from fastapi.testclient import TestClient
 
@@ -17,6 +18,7 @@ from app.services.ai_safety_detector import AiSafetyDetectorService
 SYNTHETIC_EMAIL = "alex@example.test"
 SYNTHETIC_SECRET = "syntheticSecretValue1234567890abcdef"
 SYNTHETIC_ACCOUNT_NUMBER = "syntheticAccountNumber123456"
+TEST_PERSON_LABEL_MAP = {"person_name": "person_name"}
 
 
 class AiSafetyRouteTests(unittest.TestCase):
@@ -32,7 +34,7 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(SYNTHETIC_EMAIL) + len(SYNTHETIC_EMAIL),
                     "word": SYNTHETIC_EMAIL,
                 }
-            ]
+            ],
         )
         client = TestClient(app)
 
@@ -66,7 +68,7 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(SYNTHETIC_SECRET) + len(SYNTHETIC_SECRET),
                     "word": SYNTHETIC_SECRET,
                 }
-            ]
+            ],
         )
         client = TestClient(app)
 
@@ -128,12 +130,12 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["model"]["modelId"], "openai/privacy-filter")
         self.assertEqual(body["outcome"], "passed")
 
-    def test_detect_runs_default_and_koelectra_detectors_together(self) -> None:
+    def test_detect_runs_default_and_verified_koelectra_detectors_together(self) -> None:
         synthetic_email = "koelectra-sidecar@example.test"
-        synthetic_org = "SyntheticOrgToken"
+        synthetic_phone = "010-1234-5678"
         synthetic_resident_number = "syntheticResidentNumberToken"
         prompt = (
-            f"Contact {synthetic_email} for {synthetic_org} and validate resident "
+            f"Contact {synthetic_email} or {synthetic_phone} and validate resident "
             f"registration number {synthetic_resident_number}."
         )
         app = create_app()
@@ -154,11 +156,11 @@ class AiSafetyRouteTests(unittest.TestCase):
                 KOELECTRA_PRIVACY_NER_MODEL,
                 lambda _text: [
                     {
-                        "entity_group": "ORG-B",
+                        "entity_group": "PHN-B",
                         "score": 0.95,
-                        "start": prompt.index(synthetic_org),
-                        "end": prompt.index(synthetic_org) + len(synthetic_org),
-                        "word": synthetic_org,
+                        "start": prompt.index(synthetic_phone),
+                        "end": prompt.index(synthetic_phone) + len(synthetic_phone),
+                        "word": synthetic_phone,
                     },
                     {
                         "entity_group": "RRN-B",
@@ -182,19 +184,19 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(
             body["redactedPrompt"],
             (
-                "Contact [EMAIL_1] for [ORGANIZATION_1] "
+                "Contact [EMAIL_1] or [PHONE_NUMBER_1] "
                 "and validate resident registration "
                 "number [RESIDENT_REGISTRATION_NUMBER_REDACTED]."
             ),
         )
         self.assertEqual(
             body["detectorSummary"]["detectorCategories"],
-            ["email", "organization_name", "resident_registration_number"],
+            ["email", "phone_number", "resident_registration_number"],
         )
         detection_sources = {detection["source"] for detection in body["detections"]}
         self.assertEqual(detection_sources, {"openai_privacy_filter", "koelectra_privacy_ner"})
         self.assertNotIn(synthetic_email, body_text)
-        self.assertNotIn(synthetic_org, body_text)
+        self.assertNotIn(synthetic_phone, body_text)
         self.assertNotIn(synthetic_resident_number, body_text)
         self.assertNotIn("word", body_text)
         self.assertNotIn("start", body_text)
@@ -221,7 +223,8 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(agent_name) + len(agent_name),
                     "word": agent_name,
                 },
-            ]
+            ],
+            label_map=TEST_PERSON_LABEL_MAP,
         )
         client = TestClient(app)
 
@@ -263,7 +266,8 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(interviewer_name) + len(interviewer_name),
                     "word": interviewer_name,
                 },
-            ]
+            ],
+            label_map=TEST_PERSON_LABEL_MAP,
         )
         client = TestClient(app)
 
@@ -287,7 +291,7 @@ class AiSafetyRouteTests(unittest.TestCase):
     def test_detect_returns_relationship_preserving_role_placeholders(self) -> None:
         owner_name = "\uae40\ubbfc\uc218"
         approver_name = "\uc774\uc724\uc9c0"
-        prompt = f"{owner_name}\uc758 \ud300\uc7a5 {approver_name}\uac00 \uc2b9\uc778\ud588\ub2e4."
+        prompt = f"\uace0\uac1d {owner_name}\uc758 \ud300\uc7a5 {approver_name}\uac00 \uc2b9\uc778\ud588\ub2e4."
         app = create_app()
         app.state.ai_safety_detector_service = service_with_classifier(
             lambda _text: [
@@ -305,7 +309,8 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(approver_name) + len(approver_name),
                     "word": approver_name,
                 },
-            ]
+            ],
+            label_map=TEST_PERSON_LABEL_MAP,
         )
         client = TestClient(app)
 
@@ -317,7 +322,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["outcome"], "redacted")
         self.assertEqual(
             body["redactedPrompt"],
-            "[PERSON_1]\uc758 [ROLE:\ud300\uc7a5] [PERSON_2]\uac00 \uc2b9\uc778\ud588\ub2e4.",
+            "[CUSTOMER_1]\uc758 [ROLE:\ud300\uc7a5] [PERSON_1]\uac00 \uc2b9\uc778\ud588\ub2e4.",
         )
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
         self.assertNotIn(owner_name, body_text)
@@ -330,8 +335,8 @@ class AiSafetyRouteTests(unittest.TestCase):
         full_name = "\uc774\uc724\uc9c0"
         alias = "\uc724\uc9c0"
         prompt = (
-            f"{full_name}\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
-            f"{alias}\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4."
+            f"\uace0\uac1d {full_name}\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
+            f"\uace0\uac1d {alias}\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4."
         )
         alias_start = prompt.index(f"{alias}\ub2d8")
         app = create_app()
@@ -351,7 +356,8 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": alias_start + len(alias),
                     "word": alias,
                 },
-            ]
+            ],
+            label_map=TEST_PERSON_LABEL_MAP,
         )
         client = TestClient(app)
 
@@ -364,8 +370,8 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(
             body["redactedPrompt"],
             (
-                "[PERSON_1]\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
-                "[PERSON_1]\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4."
+                "[CUSTOMER_1]\ub294 \ud68c\uc758\uc5d0 \ucc38\uc11d\ud588\ub2e4. "
+                "[CUSTOMER_1]\ub2d8\uc740 \ubc1c\ud45c\ub97c \ub9e1\uc558\ub2e4."
             ),
         )
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
@@ -379,7 +385,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         sender_name = "\uc774\uc724\uc9c0"
         recipient_name = "\uae40\ubbfc\uc218"
         prompt = (
-            f"{sender_name}\uac00 {recipient_name}\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
+            f"\uace0\uac1d {sender_name}\uac00 \uace0\uac1d {recipient_name}\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
             "\uadf8\ub140\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
         )
         app = create_app()
@@ -399,7 +405,8 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(recipient_name) + len(recipient_name),
                     "word": recipient_name,
                 },
-            ]
+            ],
+            label_map=TEST_PERSON_LABEL_MAP,
         )
         client = TestClient(app)
 
@@ -412,8 +419,8 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(
             body["redactedPrompt"],
             (
-                "[PERSON_1]\uac00 [PERSON_2]\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
-                "[PERSON_1]\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
+                "[CUSTOMER_1]\uac00 [CUSTOMER_2]\uc5d0\uac8c \uba54\uc77c\uc744 \ubcf4\ub0c8\ub2e4. "
+                "[CUSTOMER_1]\ub294 \ub2f5\uc7a5\uc744 \uae30\ub2e4\ub838\ub2e4."
             ),
         )
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
@@ -427,7 +434,7 @@ class AiSafetyRouteTests(unittest.TestCase):
     def test_detect_preserves_structure_around_overextended_pii_spans(self) -> None:
         name_with_honorific = "\uc774\uc724\uc9c0\ub2d8"
         email_with_copula = "yoonji@example.com\uc785\ub2c8\ub2e4"
-        prompt = f"{name_with_honorific}\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 {email_with_copula}."
+        prompt = f"\uace0\uac1d {name_with_honorific}\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 {email_with_copula}."
         app = create_app()
         app.state.ai_safety_detector_service = service_with_classifier(
             lambda _text: [
@@ -445,7 +452,7 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(email_with_copula) + len(email_with_copula),
                     "word": email_with_copula,
                 },
-            ]
+            ],
         )
         client = TestClient(app)
 
@@ -457,7 +464,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["outcome"], "redacted")
         self.assertEqual(
             body["redactedPrompt"],
-            "[PERSON_1]\ub2d8\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 [EMAIL_1]\uc785\ub2c8\ub2e4.",
+            "[CUSTOMER_1]\ub2d8\uc758 \uc774\uba54\uc77c \uc8fc\uc18c\ub294 [EMAIL_1]\uc785\ub2c8\ub2e4.",
         )
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email", "person_name"])
         self.assertNotIn("\uc774\uc724\uc9c0", body_text)
@@ -471,7 +478,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         second_name = "\uae40\ubbfc\uc218"
         first_span = f"{first_name}\ub294"
         second_span = f"{second_name}\ub97c"
-        prompt = f"{first_span} {second_span} \ub9cc\ub0ac\ub2e4."
+        prompt = f"\uace0\uac1d {first_span} \uace0\uac1d {second_span} \ub9cc\ub0ac\ub2e4."
         app = create_app()
         app.state.ai_safety_detector_service = service_with_classifier(
             lambda _text: [
@@ -489,7 +496,8 @@ class AiSafetyRouteTests(unittest.TestCase):
                     "end": prompt.index(second_span) + len(second_span),
                     "word": second_span,
                 },
-            ]
+            ],
+            label_map=TEST_PERSON_LABEL_MAP,
         )
         client = TestClient(app)
 
@@ -499,7 +507,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         body = response.json()
         body_text = json.dumps(body, sort_keys=True)
         self.assertEqual(body["outcome"], "redacted")
-        self.assertEqual(body["redactedPrompt"], "[PERSON_1]\ub294 [PERSON_2]\ub97c \ub9cc\ub0ac\ub2e4.")
+        self.assertEqual(body["redactedPrompt"], "[CUSTOMER_1]\ub294 [CUSTOMER_2]\ub97c \ub9cc\ub0ac\ub2e4.")
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
         self.assertNotIn(first_name, body_text)
         self.assertNotIn(second_name, body_text)
@@ -540,7 +548,7 @@ class AiSafetyRouteTests(unittest.TestCase):
     def test_detect_preserves_boundaries_after_overextended_korean_person_names(self) -> None:
         first_span = "\uc774\uc724\uc9c0\ub2d8\uaed8\uc11c\ub294"
         second_span = "\uae40\ubbfc\uc218\ud300\uc7a5\ub2d8"
-        prompt = f"{first_span} \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. {second_span}\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4."
+        prompt = f"\uace0\uac1d {first_span} \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. {second_span}\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4."
         app = create_app()
         app.state.ai_safety_detector_service = service_with_classifier(
             lambda _text: [
@@ -570,12 +578,43 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["outcome"], "redacted")
         self.assertEqual(
             body["redactedPrompt"],
-            "[PERSON_1]\ub2d8\uaed8\uc11c\ub294 \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. "
-            "[PERSON_2]\ud300\uc7a5\ub2d8\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4.",
+            "[CUSTOMER_1]\ub2d8\uaed8\uc11c\ub294 \uc624\ub298 \ucc38\uc11d\ud569\ub2c8\ub2e4. "
+            "[PERSON_1]\ud300\uc7a5\ub2d8\ub3c4 \ucc38\uc11d\ud569\ub2c8\ub2e4.",
         )
         self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
         self.assertNotIn("\uc774\uc724\uc9c0", body_text)
         self.assertNotIn("\uae40\ubbfc\uc218", body_text)
+        self.assertNotIn("word", body_text)
+        self.assertNotIn("start", body_text)
+        self.assertNotIn("end", body_text)
+
+    def test_detect_applies_role_coreference_from_rule_person_name_without_calling_ml_classifier(self) -> None:
+        raw_name = "Alex Kim"
+        prompt = f"customer_name={raw_name}. He waited for support."
+        classifier_calls = 0
+
+        def classifier(_text: str) -> list[object]:
+            nonlocal classifier_calls
+            classifier_calls += 1
+            return []
+
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(classifier)
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertEqual(
+            body["redactedPrompt"],
+            "[CUSTOMER_1]. [CUSTOMER_1] waited for support.",
+        )
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
+        self.assertNotIn(raw_name, body_text)
         self.assertNotIn("word", body_text)
         self.assertNotIn("start", body_text)
         self.assertNotIn("end", body_text)
@@ -640,7 +679,7 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["redactedPrompt"], prompt)
         self.assertEqual(body["detectorSummary"]["detectorCategories"], [])
 
-    def test_detect_calls_ml_classifier_for_person_candidate_context(self) -> None:
+    def test_detect_does_not_call_ml_classifier_for_bare_person_candidate(self) -> None:
         raw_name = "Alex Benchmark"
         prompt = f"Please review {raw_name} before the support handoff."
         classifier_calls = 0
@@ -667,20 +706,17 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
         body_text = json.dumps(body, sort_keys=True)
-        self.assertEqual(classifier_calls, 1)
-        self.assertEqual(body["outcome"], "redacted")
-        self.assertEqual(
-            body["redactedPrompt"],
-            "Please review [PERSON_1] before the support handoff.",
-        )
-        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["person_name"])
-        self.assertNotIn(raw_name, body_text)
+        self.assertEqual(classifier_calls, 0)
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], [])
+        self.assertIn(raw_name, body_text)
 
-    def test_detect_sends_only_candidate_windows_to_ml_for_long_prompt(self) -> None:
+    def test_detect_uses_context_bound_person_rule_for_long_prompt_without_calling_ml(self) -> None:
         raw_name = "Alex Benchmark"
         prefix = "Routine release coordination and service readiness notes. " * 18
         suffix = " Documentation review and rollout checklist follow-up. " * 18
-        prompt = f"{prefix}Applicant {raw_name} needs review before handoff.{suffix}"
+        prompt = f"{prefix}applicant {raw_name} needs review before handoff.{suffix}"
         classifier_inputs: list[str] = []
 
         def classifier(text: str) -> list[object]:
@@ -705,13 +741,156 @@ class AiSafetyRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
         body_text = json.dumps(body, sort_keys=True)
-        self.assertEqual(len(classifier_inputs), 1)
-        self.assertLess(len(classifier_inputs[0]), len(prompt))
-        self.assertIn(raw_name, classifier_inputs[0])
-        self.assertNotEqual(classifier_inputs[0], prompt)
+        self.assertEqual(classifier_inputs, [])
         self.assertEqual(body["outcome"], "redacted")
         self.assertIn("[APPLICANT_1] needs review before handoff.", body["redactedPrompt"])
         self.assertNotIn(raw_name, body_text)
+
+    def test_detect_allows_non_real_example_secret_while_preserving_detection_summary(self) -> None:
+        prompt = f"Example secret format for docs: secret_key={SYNTHETIC_SECRET}."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["secret"])
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 1)
+        self.assertEqual(body["detections"][0]["detectorType"], "secret")
+        self.assertEqual(body["detections"][0]["action"], "allow")
+
+    def test_detect_allows_synthetic_placeholder_despite_negated_production_context(self) -> None:
+        prompt = f"Unit test uses synthetic secret placeholder secret_key={SYNTHETIC_SECRET} with no production data exposure."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["secret"])
+        self.assertEqual(body["detections"][0]["action"], "allow")
+
+    def test_detect_only_allows_non_real_signal_and_keeps_real_email_redaction(self) -> None:
+        prompt = (
+            f"Example secret format for docs: secret_key={SYNTHETIC_SECRET}. "
+            f"Contact {SYNTHETIC_EMAIL} for review."
+        )
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertIn(f"secret_key={SYNTHETIC_SECRET}", body["redactedPrompt"])
+        self.assertIn("[EMAIL_1]", body["redactedPrompt"])
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email", "secret"])
+        self.assertEqual(body["detectorSummary"]["detectedCount"], 2)
+        actions_by_type = {detection["detectorType"]: detection["action"] for detection in body["detections"]}
+        self.assertEqual(actions_by_type["secret"], "allow")
+        self.assertEqual(actions_by_type["email"], "redact")
+        self.assertNotIn(SYNTHETIC_EMAIL, body_text)
+
+    def test_detect_redacts_block_default_signal_in_internal_review_context(self) -> None:
+        prompt = f"Support review note: redact secret_key={SYNTHETIC_SECRET} before filing."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "redacted")
+        self.assertIn("[SECRET_REDACTED]", body["redactedPrompt"])
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["secret"])
+        self.assertEqual(body["detections"][0]["action"], "redact")
+        self.assertNotIn(SYNTHETIC_SECRET, body_text)
+
+    def test_detect_blocks_redact_default_signal_in_external_share_context(self) -> None:
+        prompt = f"External share request: send customer email {SYNTHETIC_EMAIL} to a contractor."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        body_text = json.dumps(body, sort_keys=True)
+        self.assertEqual(body["outcome"], "blocked")
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["email"])
+        self.assertEqual(body["detections"][0]["action"], "block")
+        self.assertNotIn(SYNTHETIC_EMAIL, body_text)
+
+    def test_detect_keeps_explicit_non_real_allow_ahead_of_action_context(self) -> None:
+        prompt = f"Bulk export docs example only: secret_key={SYNTHETIC_SECRET}."
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "passed")
+        self.assertEqual(body["redactedPrompt"], prompt)
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["secret"])
+        self.assertEqual(body["detections"][0]["action"], "allow")
+
+    def test_detect_does_not_treat_sample_inside_bank_name_as_non_real_context(self) -> None:
+        prompt = "계좌는 account number 123-456-789012 샘플은행이야"
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "blocked")
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["account_number"])
+        self.assertEqual(body["detections"][0]["action"], "block")
+
+    def test_detect_blocks_passport_number_without_colon_separator(self) -> None:
+        prompt = "여권번호 필드는 passport number M12345678입니다"
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "blocked")
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["passport_number"])
+        self.assertEqual(body["detections"][0]["action"], "block")
+
+    def test_detect_blocks_driver_license_without_colon_separator(self) -> None:
+        prompt = "면허번호는 driver license 12-34-123456-78입니다"
+        app = create_app()
+        app.state.ai_safety_detector_service = service_with_classifier(lambda _text: [])
+        client = TestClient(app)
+
+        response = client.post("/internal/ai-safety/v1/detect", json=payload(prompt, locale="ko-KR"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["outcome"], "blocked")
+        self.assertEqual(body["detectorSummary"]["detectorCategories"], ["driver_license"])
+        self.assertEqual(body["detections"][0]["action"], "block")
 
     def test_validation_error_does_not_echo_prompt(self) -> None:
         prompt = f"Contact {SYNTHETIC_EMAIL}."
@@ -732,11 +911,23 @@ def service_with_classifier(
     classifier: object,
     *,
     model_name: str = "openai/privacy-filter",
+    label_map: Mapping[str, str] | None = None,
 ) -> AiSafetyDetectorService:
-    return service_with_classifiers((model_name, classifier))
+    return AiSafetyDetectorService(
+        adapters=(
+            PrivacyFilterAdapter(  # type: ignore[arg-type]
+                classifier=classifier,
+                model_name=model_name,
+                source=source_for_model(model_name),
+                label_map=label_map,
+            ),
+        ),
+    )
 
 
-def service_with_classifiers(*model_classifiers: tuple[str, object]) -> AiSafetyDetectorService:
+def service_with_classifiers(
+    *model_classifiers: tuple[str, object],
+) -> AiSafetyDetectorService:
     return AiSafetyDetectorService(
         adapters=tuple(
             PrivacyFilterAdapter(  # type: ignore[arg-type]
@@ -762,7 +953,3 @@ def payload(prompt_text: str, *, locale: str = "en-US") -> dict[str, object]:
             "returnConfidence": True,
         },
     }
-
-
-if __name__ == "__main__":
-    unittest.main()

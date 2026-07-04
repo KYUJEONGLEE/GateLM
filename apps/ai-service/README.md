@@ -53,17 +53,18 @@ python -m pip install -e ".[ml,test]"
 
 `PrivacyFilterAdapter` lazy-loads `transformers.pipeline(task="token-classification")` and is not wired into the default evaluator unless it is explicitly injected. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
 
-The primary sidecar detector model defaults to `openai/privacy-filter`. For local Korean privacy NER experiments, keep the primary model and add KoELECTRA as an additional detector:
+The primary sidecar detector model defaults to `openai/privacy-filter`. For lightweight local Korean privacy NER experiments, keep the primary model and add the quantized KoELECTRA ONNX artifact as an additional detector:
 
 ```bash
 AI_SERVICE_TRANSFORMERS_OFFLINE=1
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/huggingface/models/openai--privacy-filter
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/huggingface/models/amoeba04--koelectra-small-v3-privacy-ner
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized
 ```
 
-Both models are loaded through local Transformers pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/huggingface/models` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
+Both models are loaded through local ONNX Runtime pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/onnx` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
-KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`.
+KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`. The `amoeba04--koelectra-small-v3-privacy-ner-quantized` local artifact keeps the same public model identity and sanitized source as the non-quantized KoELECTRA detector.
 
 ## AI Safety Detector Sidecar
 
@@ -92,15 +93,15 @@ Example request shape:
 }
 ```
 
-Run locally with ML dependencies installed:
+Run locally with ONNX dependencies installed:
 
 ```bash
 cd apps/ai-service
-python -m pip install -e ".[ml,test]"
+python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
-AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=transformers \
-AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/huggingface/models/openai--privacy-filter \
-AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/huggingface/models/amoeba04--koelectra-small-v3-privacy-ner \
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
 python -m app.main
 ```
 
@@ -112,6 +113,7 @@ python -m pip install -e ".[onnx,test]"
 AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
 AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
 python -m app.main
 ```
 

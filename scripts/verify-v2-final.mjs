@@ -12,6 +12,8 @@ const skipDirs = new Set([
   ".git",
   ".next",
   ".turbo",
+  ".tmp",
+  ".venv",
   "coverage",
   "dist",
   "node_modules",

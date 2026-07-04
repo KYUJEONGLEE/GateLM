@@ -5,6 +5,7 @@ import unittest
 from app.domain.safety.decision import BLOCK_REASON_SENSITIVE_DATA_BLOCKED
 from app.domain.safety.detections import Detection, safety_signals_from_detections
 from app.domain.safety.policy import build_safety_decision
+from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import SafetyDetector
 
 
@@ -103,6 +104,37 @@ class DetectionPipelineTests(unittest.TestCase):
 
         self.assertEqual(signals, [])
 
+    def test_default_confidence_thresholds_are_type_specific(self) -> None:
+        account_marker = "SYNTHETIC_ACCOUNT_0001"
+        person_marker = "Alex Kim"
+        prompt = f"Check {account_marker} and notify {person_marker}."
+        detections = [
+            Detection(
+                detector_type="account_number",
+                source="koelectra_privacy_ner",
+                start=prompt.index(account_marker),
+                end=prompt.index(account_marker) + len(account_marker),
+                confidence=0.55,
+            ),
+            Detection(
+                detector_type="person_name",
+                source="koelectra_privacy_ner",
+                start=prompt.index(person_marker),
+                end=prompt.index(person_marker) + len(person_marker),
+                confidence=0.80,
+            ),
+        ]
+
+        signals = safety_signals_from_detections(
+            detections,
+            {
+                "account_number": detector("account_number", "block", "[ACCOUNT_NUMBER_REDACTED]"),
+                "person_name": detector("person_name", "redact", "[PERSON_NAME_REDACTED]"),
+            },
+        )
+
+        self.assertEqual([signal.detector_type for signal in signals], ["account_number"])
+
     def test_overlapping_block_span_keeps_structural_detection(self) -> None:
         raw_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.synthetic_signature_1234567890"
         prompt = f"Authorization: Bearer {raw_token}"
@@ -148,6 +180,39 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertEqual(decision.detected_count, 1)
         self.assertIn("[AUTHORIZATION_HEADER_REDACTED]", decision.redacted_prompt_preview or "")
         self.assertNotIn(raw_token, decision.redacted_prompt_preview or "")
+
+    def test_account_number_priority_wins_over_legacy_bank_account_overlap(self) -> None:
+        account_number = "123-456-789012"
+        prompt = f"account number {account_number}"
+        account_start = prompt.index(account_number)
+        account_signals = safety_signals_from_detections(
+            [
+                Detection(
+                    detector_type="account_number",
+                    source="openai_privacy_filter",
+                    start=account_start,
+                    end=account_start + len(account_number),
+                    confidence=0.99,
+                )
+            ],
+            {"account_number": detector("account_number", "block", "[ACCOUNT_NUMBER_REDACTED]")},
+        )
+        bank_signal = SafetySignal(
+            detector_type="bank_account",
+            start=0,
+            end=len(prompt),
+            action="block",
+            placeholder="[BANK_ACCOUNT_REDACTED]",
+            priority=14,
+        )
+
+        decision = build_safety_decision(
+            prompt_text=prompt,
+            signals=[bank_signal, *account_signals],
+            security_policy_hash="hash_security_policy_test",
+        )
+
+        self.assertEqual(decision.detected_types, ("account_number",))
 
     def test_model_split_spans_preserve_spaces_and_merge_email_parts(self) -> None:
         raw_name = "Alice"

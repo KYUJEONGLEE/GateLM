@@ -3,12 +3,16 @@ from __future__ import annotations
 import ipaddress
 import re
 from dataclasses import dataclass
-from re import Pattern
+from re import Match, Pattern
 from typing import Protocol
 
 from app.domain.safety.detections import Detection, safety_signals_from_detections
 from app.domain.safety.decision import SafetyDecision
-from app.domain.safety.policy import build_safety_decision, enabled_detector_map
+from app.domain.safety.policy import (
+    BUSINESS_ROLE_LABELS,
+    build_safety_decision,
+    enabled_detector_map,
+)
 from app.domain.safety.signals import SafetySignal
 from app.schemas.safety import RemoteSafetyContext, RemoteSafetyInput, SafetyDetector
 
@@ -46,17 +50,20 @@ class RegexDetector:
     priority: int
 
     def detect(self, prompt_text: str, config: SafetyDetector) -> list[SafetySignal]:
-        return [
-            SafetySignal(
-                detector_type=self.detector_type,
-                start=match.start(),
-                end=match.end(),
-                action=config.action,
-                placeholder=config.placeholder,
-                priority=self.priority,
+        signals: list[SafetySignal] = []
+        for match in self.pattern.finditer(prompt_text):
+            start, end = _match_value_span(match)
+            signals.append(
+                SafetySignal(
+                    detector_type=self.detector_type,
+                    start=start,
+                    end=end,
+                    action=config.action,
+                    placeholder=config.placeholder,
+                    priority=self.priority,
+                )
             )
-            for match in self.pattern.finditer(prompt_text)
-        ]
+        return signals
 
 
 @dataclass(frozen=True)
@@ -145,6 +152,31 @@ class HeuristicSafetyEvaluator:
         )
 
 
+PERSON_CONTEXT_LABEL_PATTERN = (
+    r"name|customer[_ -]?name|contact[_ -]?name|applicant|candidate|"
+    r"customer|client|patient|manager|interviewer|doctor|agent|support[_ -]?agent|"
+    r"\uc774\ub984|\uace0\uac1d|\uace0\uac1d\uba85|\ub2f4\ub2f9\uc790|\ud658\uc790|"
+    r"\uc9c0\uc6d0\uc790|\uc9c0\uc6d0\uc790\uba85|\uba74\uc811\uad00|\uba74\uc811\uad00\uba85|"
+    r"\uc694\uccad\uc790|\uc2b9\uc778\uc790|\uac80\ud1a0\uc790|\uad00\ub9ac\uc790|"
+    r"\uc0c1\ub2f4\uc6d0|\uc0c1\ub2f4\uc0ac|\ud300\uc7a5"
+)
+PERSON_CONTEXT_VALUE_PATTERN = (
+    r"[\uac00-\ud7a3]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}"
+)
+KOREAN_PERSON_ROLE_SUFFIX_PARTICLE_PATTERN = (
+    r"\uaed8\uc11c\ub294|\uc5d0\uac8c|\uaed8|\uc740|\ub294|\uc774|\uac00|"
+    r"\uc744|\ub97c|\uc758|\ub3c4|\ub9cc|\uc73c\ub85c|\ub85c"
+)
+
+
+def _business_role_suffix_pattern() -> str:
+    return "|".join(
+        re.escape(role)
+        for role in sorted(BUSINESS_ROLE_LABELS, key=len, reverse=True)
+        if any("\uac00" <= char <= "\ud7a3" for char in role)
+    )
+
+
 def default_detectors() -> list[PromptDetector]:
     return [
         RegexDetector(
@@ -215,14 +247,31 @@ def default_detectors() -> list[PromptDetector]:
             10,
         ),
         RegexDetector(
+            "secret",
+            re.compile(
+                r"\b(?:secret|secret[_-]?key|client[_-]?secret)\b"
+                r"\s*[:=]\s*['\"]?"
+                r"(?P<value>"
+                r"(?=[A-Za-z0-9_.-]{12,}(?:['\"\s,;}]|$))"
+                r"(?=[A-Za-z0-9_.-]*[A-Za-z])"
+                r"(?=[A-Za-z0-9_.-]*\d)"
+                r"[A-Za-z0-9_.-]+"
+                r")",
+                re.IGNORECASE,
+            ),
+            10,
+        ),
+        RegexDetector(
             "api_key",
             re.compile(
-                r"\b(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|id[_-]?token|secret[_-]?key|client[_-]?secret|provider[_-]?key)"
+                r"\b(?:api[_-]?key|api[_-]?token|access[_-]?token|refresh[_-]?token|id[_-]?token|provider[_-]?key)"
                 r"\s*[:=]\s*['\"]?"
+                r"(?P<value>"
                 r"(?=[A-Za-z0-9_.-]{32,}(?:['\"\s,;}]|$))"
                 r"(?=[A-Za-z0-9_.-]*[A-Za-z])"
                 r"(?=[A-Za-z0-9_.-]*\d)"
-                r"[A-Za-z0-9_.-]+",
+                r"[A-Za-z0-9_.-]+"
+                r")",
                 re.IGNORECASE,
             ),
             10,
@@ -240,6 +289,31 @@ def default_detectors() -> list[PromptDetector]:
         CreditCardDetector(
             "credit_card",
             CREDIT_CARD_CANDIDATE_PATTERN,
+            13,
+        ),
+        RegexDetector(
+            "bank_account",
+            re.compile(
+                r"\b(?:bank[_ -]?account|bank[_ -]?account[_ -]?number|bank-account|bank[_ -]?account[_ -]?candidate)\b"
+                r"\s*(?:candidate|value|number)?\s*[:=]?\s*['\"]?"
+                r"(?P<value>(?:\d{2,6}[- ]?){2,5}\d{2,6})",
+                re.IGNORECASE,
+            ),
+            12,
+        ),
+        RegexDetector(
+            "account_number",
+            re.compile(
+                r"(?<!bank )(?<!bank-)(?<!bank_)\b(?:"
+                r"account[_ -]?number|account[_ -]?no|acct[_ -]?number|"
+                r"account-number|account[_ -]?number[_ -]?candidate|"
+                r"\uacc4\uc88c(?:\ubc88\ud638)?|\uc785\uae08\s*\uacc4\uc88c|"
+                r"\ud658\ubd88\s*\ubc1b\uc744\s*\uacc4\uc88c|\uae09\uc5ec\s*\uacc4\uc88c"
+                r")\b"
+                r"\s*[:=]?\s*['\"]?"
+                r"(?P<value>(?:\d{2,6}[- ]?){2,5}\d{2,6})",
+                re.IGNORECASE,
+            ),
             13,
         ),
         RegexDetector(
@@ -267,7 +341,7 @@ def default_detectors() -> list[PromptDetector]:
         RegexDetector(
             "passport_number",
             re.compile(
-                r"\b(?:passport[_ -]?(?:no|number)|passport[_ -]?id)\s*[:=]\s*['\"]?[A-Z][A-Z0-9]{7,8}\b"
+                r"\b(?:passport[_ -]?(?:no|number)|passport[_ -]?id)\s*(?::|=)?\s*['\"]?[A-Z][A-Z0-9]{7,8}(?![A-Z0-9])"
                 r"|"
                 r"(?:여권번호)\s*[:=]?\s*['\"]?[A-Z][A-Z0-9]{7,8}\b",
                 re.IGNORECASE,
@@ -277,8 +351,8 @@ def default_detectors() -> list[PromptDetector]:
         RegexDetector(
             "driver_license",
             re.compile(
-                r"\b(?:driver[_ -]?license(?:[_ -]?(?:no|number))?)\s*[:=]\s*['\"]?"
-                r"(?:\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}|\d{12})\b"
+                r"\b(?:driver[_ -]?license(?:[_ -]?(?:no|number))?)\s*(?::|=)?\s*['\"]?"
+                r"(?:\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}|\d{12})(?!\d)"
                 r"|"
                 r"(?:운전면허번호)\s*[:=]?\s*['\"]?(?:\d{2}[- ]?\d{2}[- ]?\d{6}[- ]?\d{2}|\d{12})\b",
                 re.IGNORECASE,
@@ -296,14 +370,89 @@ def default_detectors() -> list[PromptDetector]:
             30,
         ),
         RegexDetector(
+            "private_date",
+            re.compile(
+                r"\b(?:private[_ -]?date|event[_ -]?date|appointment[_ -]?date|"
+                r"meeting[_ -]?date|date|"
+                r"\uc0dd\ub144\uc6d4\uc77c|\uc0dd\uc77c|\ub0a0\uc9dc|\ud68c\uc758\s*\ub0a0\uc9dc)"
+                r"\b\s*[:=]?\s*['\"]?"
+                r"(?P<value>\d{4}[-./]\d{1,2}[-./]\d{1,2})",
+                re.IGNORECASE,
+            ),
+            30,
+        ),
+        RegexDetector(
+            "private_url",
+            re.compile(
+                r"\b(?:private[_ -]?url|reset[_ -]?url|invite[_ -]?url|callback[_ -]?url|url|link)"
+                r"\b\s*[:=]?\s*['\"]?"
+                r"(?P<value>https?://[^\s'\"<>]+)",
+                re.IGNORECASE,
+            ),
+            30,
+        ),
+        RegexDetector(
+            "person_name",
+            re.compile(
+                rf"\b(?i:(?:{PERSON_CONTEXT_LABEL_PATTERN}))\b"
+                rf"\s*(?::|=|(?i:\bis\b|\bwas\b|\bnamed\b))?\s*['\"]?"
+                rf"(?P<value>{PERSON_CONTEXT_VALUE_PATTERN})",
+            ),
+            31,
+        ),
+        RegexDetector(
             "person_name",
             re.compile(
                 r"\b(?:name|customer[_ -]?name|contact[_ -]?name|manager|이름|성명|고객명|담당자)\b"
                 r"\s*[:=]\s*['\"]?"
-                r"(?:[가-힣]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})",
+                r"(?P<value>[가-힣]{2,5}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})",
                 re.IGNORECASE,
             ),
             31,
+        ),
+        RegexDetector(
+            "person_name",
+            re.compile(
+                rf"(?P<value>[\uac00-\ud7a3]{{2,5}}"
+                rf"(?<![\uc740\ub294\uc774\uac00\uc744\ub97c\uc758\uc5d0\uaed8])\s*"
+                rf"(?:{_business_role_suffix_pattern()})(?:\ub2d8)?"
+                rf"(?:{KOREAN_PERSON_ROLE_SUFFIX_PARTICLE_PATTERN})?)"
+            ),
+            31,
+        ),
+        RegexDetector(
+            "organization_name",
+            re.compile(
+                r"\b(?i:(?:organization(?:[_ -]?name|-name)?|org(?:anization)?[_ -]?name|"
+                r"company(?:[_ -]?name)?|employer|vendor|tenant|workspace|"
+                r"\ud68c\uc0ac\uba85|\uac70\ub798\ucc98|\uc870\uc9c1\uba85))"
+                r"\b\s*(?:(?i:(?:candidate|value|marker|field|slot|placeholder))\s+)?"
+                r"(?::|=|(?i:\bis\b|\bwas\b|\bnamed\b))?\s*['\"]?"
+                r"(?P<value>[A-Z][A-Za-z0-9&.,'-]*(?:\s+[A-Z][A-Za-z0-9&.,'-]*){0,4})",
+            ),
+            36,
+        ),
+        RegexDetector(
+            "confidential_business_context",
+            re.compile(
+                r"\bSYNTHETIC_CONFIDENTIAL_BUSINESS_CONTEXT\b|"
+                r"\bSYNTHETIC_CONFIDENTIAL_METRIC_VALUE\b|"
+                r"\b(?:unreleased|confidential|internal)\s+"
+                r"(?:revenue|pricing|roadmap|policy|metric|forecast)\b",
+                re.IGNORECASE,
+            ),
+            18,
+        ),
+        RegexDetector(
+            "sensitive_health_context",
+            re.compile(
+                r"\bSYNTHETIC_SENSITIVE_HEALTH_CONTEXT\b|"
+                r"\bSYNTHETIC_HEALTH_CONTEXT\b|"
+                r"\b(?:patient|medical|health|diagnosis|medicine|mental\s+health)\s+"
+                r"(?:record|condition|context|history|note)\b",
+                re.IGNORECASE,
+            ),
+            18,
         ),
         RegexDetector(
             "customer_id",
@@ -364,7 +513,12 @@ def default_detectors() -> list[PromptDetector]:
         ),
         RegexDetector(
             "email",
-            re.compile(r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+            re.compile(
+                r"(?<![A-Z0-9._%+\-])"
+                r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}"
+                r"(?![A-Z0-9_%+\-]|\.[A-Z0-9])",
+                re.IGNORECASE,
+            ),
             50,
         ),
     ]
@@ -382,3 +536,9 @@ def passes_luhn_check(digits: str) -> bool:
         total += value
         double_next = not double_next
     return total % 10 == 0
+
+
+def _match_value_span(match: Match[str]) -> tuple[int, int]:
+    if "value" in match.re.groupindex:
+        return match.start("value"), match.end("value")
+    return match.start(), match.end()
