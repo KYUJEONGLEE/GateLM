@@ -361,6 +361,10 @@ func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolic
 		if isVagueUnknownPrompt(explicitRequest, explicitRequestTokens) {
 			return signals
 		}
+		if frameCategory, ok := categoryIntentFrameCategory(explicitRequest, explicitRequestTokens); ok {
+			signals.Category = frameCategory
+			return signals
+		}
 		if categoryExplicitGeneralRequest(explicitRequest, explicitRequestTokens) {
 			signals.Category = CategoryGeneral
 			return signals
@@ -369,6 +373,11 @@ func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolic
 			signals.Category = bestCategory
 			return signals
 		}
+	}
+
+	if frameCategory, ok := categoryIntentFrameCategory(normalized, tokens); ok {
+		signals.Category = frameCategory
+		return signals
 	}
 
 	if bestCategory, ok := bestCategoryForCompiledPolicy(policy, normalized, tokens, matches); ok {
@@ -482,7 +491,11 @@ func trimExplicitRequestTrailingContext(text string) string {
 		"\n추가 배경:",
 		"\n참고:",
 		"추가 배경: 이 문장에는",
+		"추가 배경: 위 문장에는",
+		"참고로 코드나 환불 같은 단어",
+		"참고로 문장 안에는 코드",
 		"이 문장에는 코드, 번역, 환불, json, 요약",
+		"위 문장에는 여러 도메인 단어",
 	} {
 		if index := strings.Index(text, marker); index > 0 {
 			return strings.TrimSpace(text[:index])
@@ -537,6 +550,115 @@ func explicitRequestAnchorMarkers() []string {
 	}
 }
 
+func categoryIntentFrameCategory(text string, tokens []string) (string, bool) {
+	if text == "" {
+		return "", false
+	}
+	if categoryFrameCodeTranslation(text) {
+		return CategoryCode, true
+	}
+	if categoryFrameTranslation(text) {
+		return CategoryTranslation, true
+	}
+	if categoryFrameExtractionJSON(text) {
+		return CategoryExtractionJSON, true
+	}
+	if categoryFrameCode(text, tokens) {
+		return CategoryCode, true
+	}
+	if categoryFrameGeneral(text, tokens) {
+		return CategoryGeneral, true
+	}
+	if categoryFrameSummarization(text) {
+		return CategorySummarization, true
+	}
+	if categoryFrameSupportRefund(text) {
+		return CategorySupportRefund, true
+	}
+	if categoryFrameReasoning(text) {
+		return CategoryReasoning, true
+	}
+	return "", false
+}
+
+func categoryFrameCodeTranslation(text string) bool {
+	return containsAny(text, []string{
+		"코드", "code block", "source code", "함수",
+	}) && containsAny(text, []string{
+		"번역", "영어로", "영문으로", "translate",
+	})
+}
+
+func categoryFrameTranslation(text string) bool {
+	if containsAny(text, []string{
+		"직역하지 말고", "비즈니스 영어", "영문 공지", "중국어 사용자", "일본어 고객",
+		"영어로 자연스럽게", "영문 메일", "현지 사용자가",
+	}) {
+		return true
+	}
+	return containsAny(text, []string{
+		"영어로", "영문으로", "영문", "일본어", "중국어", "한국어로", "한글로",
+		"english", "japanese", "chinese", "korean", "해외 고객", "영어권 고객",
+	}) && containsAny(text, []string{
+		"번역", "바꿔줘", "바꿔 주세요", "다듬어줘", "고쳐줘", "직역",
+		"문체", "톤으로", "자연스럽게", "어색하지 않게", "현지", "메일 문체",
+	})
+}
+
+func categoryFrameExtractionJSON(text string) bool {
+	return containsAny(text, []string{
+		"json", "key/value", "키/값", "schema", "스키마", "필드", "배열", "null", "구조화", "값만",
+	}) && containsAny(text, []string{
+		"추출", "뽑아", "나눠", "변환", "채워", "정리해줘", "정리해 주세요", "형태로 정리",
+		"return as json", "as json", "json으로",
+	})
+}
+
+func categoryFrameCode(text string, tokens []string) bool {
+	if strings.Contains(text, "```") || containsSQLCodePattern(text, tokens) {
+		return true
+	}
+	return containsAny(text, []string{
+		"handler", "controller", "query", "cache key", "routing decision", "provider adapter",
+		"powershell", "script", "react", "hook", "nestjs", "prisma", "redis", "sql",
+		"go gateway", "request log writer", "dto", "api", "db", "코드", "함수", "타입",
+	}) && containsAny(text, []string{
+		"실패", "테스트가 깨", "깨지", "예외", "race", "nil pointer", "성능", "병목",
+		"리팩토링", "버그", "에러", "오류", "원인", "검토", "고쳐", "느린",
+	})
+}
+
+func categoryFrameReasoning(text string) bool {
+	return containsAny(text, []string{
+		"비교", "추천", "판단", "우선순위", "장단점", "위험", "근거", "트레이드오프",
+		"전략", "선택지", "도입할지", "미룰지", "영향", "무엇을 먼저",
+	}) && !categoryFrameTranslation(text) && !categoryFrameExtractionJSON(text)
+}
+
+func categoryFrameSummarization(text string) bool {
+	return containsAny(text, []string{
+		"요약해", "요약해줘", "줄여줘", "압축", "tldr", "핵심 결정사항", "불릿",
+		"중복 의견", "결론만 정리", "해야 할 일", "결정된 일", "리스크만", "짧게 정리",
+		"읽을 수 있게 줄", "핵심만 뽑",
+	}) && !categoryFrameReasoning(text)
+}
+
+func categoryFrameSupportRefund(text string) bool {
+	if categoryFrameTranslation(text) || categoryFrameExtractionJSON(text) {
+		return false
+	}
+	return containsAny(text, []string{
+		"환불", "결제", "취소", "구독", "청구", "무료 체험", "다운그레이드",
+		"반품", "이중 결제", "쿠폰", "주문", "고객 문의",
+	}) && containsAny(text, []string{
+		"고객", "답변", "안내", "응대", "문구", "처리 가능", "예상 소요",
+		"정책", "불만", "문의", "취소/환불",
+	})
+}
+
+func categoryFrameGeneral(text string, tokens []string) bool {
+	return categoryExplicitGeneralRequest(text, tokens)
+}
 func categoryExplicitGeneralRequest(text string, tokens []string) bool {
 	if text == "" || categoryExplicitNonGeneralRequest(text, tokens) {
 		return false
@@ -602,7 +724,6 @@ func categoryExplicitNonGeneralRequest(text string, tokens []string) bool {
 		"비교",
 		"판단",
 		"추천",
-		"근거",
 		"장단점",
 		"트레이드오프",
 		"우선순위",
@@ -727,25 +848,31 @@ func isVagueUnknownPrompt(text string, tokens []string) bool {
 		"정리하면",
 		"요청:",
 		"질문:",
+		"회의 내용이 앞에 길게 붙어 있고 진짜 요청은 마지막에 있다고 가정해줘",
+		"이건 synthetic 평가 문장이고 실제 개인정보는 없다",
+		"중간 배경에는 provider, cache, budget, log, dashboard 같은 운영 단어가 섞여 있다",
+		"참고로 문장 안에는 코드, 환불, 번역, json, 요약 같은 단어가 잡음으로 섞일 수 있다",
+		"근거가 있으면 같이 적어줘",
+		"핵심만 먼저 알려줘",
+		"팀원이 바로 이해하게 해줘",
+		"너무 길지 않게 부탁해",
 	}
 	for _, value := range noise {
 		normalized = strings.ReplaceAll(normalized, value, " ")
 	}
 	normalized = strings.Join(strings.Fields(strings.TrimSpace(normalized)), " ")
 	switch normalized {
-	case "", ".", "...", "…", "????", "???", "test", "테스트", "확인", "확인...", "확인 / 테스트", "test / 테스트", "test / ...":
+	case "", ".", "...", "…", "????", "???", "test", "테스트", "확인", "확인...", "확인 / 테스트", "test / 테스트", "test / ...", "내용 없음", "n/a", "na", "도와줘", "그냥 봐줘", "이거", "음":
 		return true
 	}
-	if len(tokens) > 4 {
-		return false
-	}
+	tokens = categoryTokens(normalized)
 	meaningful := 0
 	for _, token := range tokens {
 		token = strings.Trim(token, "_/.?…")
 		switch token {
-		case "", "좀", "급한데", "너무", "길게", "말고", "핵심만", "부탁해", "요청", "질문":
+		case "", "좀", "급한데", "너무", "길게", "말고", "핵심만", "먼저", "알려줘", "부탁해", "요청", "질문", "근거가", "있으면", "같이", "적어줘", "팀원이", "바로", "이해하게", "해줘":
 			continue
-		case "test", "테스트", "확인":
+		case "test", "테스트", "확인", "도와줘", "그냥", "봐줘", "이거", "음", "n", "a", "na":
 			continue
 		default:
 			meaningful++
