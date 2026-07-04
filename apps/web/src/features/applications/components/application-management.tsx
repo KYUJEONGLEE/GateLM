@@ -364,7 +364,7 @@ export function ApplicationManagement({
   }
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       {model.source === "fixture" ? (
         <p className="policy-alert" data-status="warning">
           {text.fixtureFallback} {model.loadError}

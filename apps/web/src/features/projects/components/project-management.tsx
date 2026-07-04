@@ -133,7 +133,7 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
   const projects = model.projects.filter((project) => project.status !== "ARCHIVED");
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">{text.management}</p>
@@ -318,7 +318,7 @@ export function ProjectDetailManagement({
   }
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">{text.project}</p>

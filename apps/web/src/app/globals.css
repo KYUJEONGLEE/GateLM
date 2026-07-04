@@ -2134,6 +2134,177 @@ select {
   text-align: right;
 }
 
+.management-line-content > .console-panel,
+.management-line-content > .provider-line-panel,
+.management-line-content > .credential-line-panel {
+  display: grid;
+  grid-template-columns: 195px minmax(0, 1fr);
+  column-gap: 40px;
+  row-gap: 16px;
+  align-items: start;
+  width: min(100%, 1120px);
+  padding: 28px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.management-line-content > .console-panel > .panel-heading,
+.management-line-content > .provider-line-panel > .panel-heading,
+.management-line-content > .credential-line-panel > .panel-heading {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+
+.management-line-content > .console-panel > :not(.panel-heading),
+.management-line-content > .provider-line-panel > :not(.panel-heading),
+.management-line-content > .credential-line-panel > :not(.panel-heading) {
+  grid-column: 2;
+  width: 100%;
+}
+
+.management-line-content .panel-heading h3,
+.management-line-content .team-section-header h3 {
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.management-line-content .panel-heading p,
+.management-line-content .team-section-header p {
+  max-width: 520px;
+}
+
+.management-line-content .project-detail-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.management-line-content .project-detail-section {
+  display: grid;
+  grid-template-columns: 195px minmax(0, 1fr);
+  column-gap: 40px;
+  row-gap: 16px;
+  padding: 0 0 28px;
+}
+
+.management-line-content .project-detail-section + .project-detail-section {
+  padding-top: 28px;
+}
+
+.management-line-content .project-detail-section:last-child {
+  padding-bottom: 0;
+}
+
+.management-line-content .project-detail-section > .panel-heading {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+
+.management-line-content .project-detail-section > :not(.panel-heading) {
+  grid-column: 2;
+}
+
+.management-line-content .applications-panel-heading,
+.management-line-content .model-catalog-toolbar {
+  display: contents;
+}
+
+.management-line-content .applications-panel-heading > .panel-heading,
+.management-line-content .model-catalog-toolbar > .panel-heading {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+
+.management-line-content .applications-panel-heading > .primary-button,
+.management-line-content .model-catalog-actions {
+  grid-column: 2;
+  justify-self: end;
+  margin-bottom: 8px;
+}
+
+.management-line-content > .team-section {
+  display: grid;
+  grid-template-columns: 195px minmax(0, 1fr);
+  column-gap: 40px;
+  row-gap: 16px;
+  align-items: start;
+  width: min(100%, 1120px);
+  padding: 28px 0;
+  border-top: 1px solid var(--border);
+}
+
+.management-line-content > .team-section:first-of-type {
+  border-top: 1px solid var(--border);
+}
+
+.management-line-content > .team-section > .team-section-header {
+  grid-column: 1;
+  margin: 0;
+}
+
+.management-line-content > .team-section > :not(.team-section-header) {
+  grid-column: 2;
+}
+
+.management-line-content .team-section-header {
+  display: block;
+}
+
+.management-line-content .team-section-header > span {
+  display: block;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.management-line-content .team-section-header-with-actions {
+  display: contents;
+}
+
+.management-line-content .team-section-header-with-actions > div {
+  grid-column: 1;
+}
+
+.management-line-content .team-section-header-with-actions > .team-attach-controls {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.management-line-content > .application-budget-summary {
+  width: min(100%, 1120px);
+  padding: 16px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.management-line-content > .model-catalog-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  width: min(100%, 1120px);
+  padding: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.management-line-content > .model-catalog-metrics .metric-card {
+  padding: 18px 20px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.management-line-content > .model-catalog-metrics .metric-card:last-child {
+  border-right: 0;
+}
+
 .project-empty {
   margin: 0;
   color: var(--text-muted);
@@ -5569,6 +5740,56 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
 }
 
 @media (max-width: 760px) {
+  .management-line-content > .console-panel,
+  .management-line-content > .provider-line-panel,
+  .management-line-content > .credential-line-panel,
+  .management-line-content > .team-section,
+  .management-line-content .project-detail-section {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    width: 100%;
+    padding: 22px 0;
+  }
+
+  .management-line-content > .console-panel > .panel-heading,
+  .management-line-content > .console-panel > :not(.panel-heading),
+  .management-line-content > .provider-line-panel > .panel-heading,
+  .management-line-content > .provider-line-panel > :not(.panel-heading),
+  .management-line-content > .credential-line-panel > .panel-heading,
+  .management-line-content > .credential-line-panel > :not(.panel-heading),
+  .management-line-content > .team-section > .team-section-header,
+  .management-line-content > .team-section > :not(.team-section-header),
+  .management-line-content .project-detail-section > .panel-heading,
+  .management-line-content .project-detail-section > :not(.panel-heading),
+  .management-line-content .applications-panel-heading > .panel-heading,
+  .management-line-content .applications-panel-heading > .primary-button,
+  .management-line-content .model-catalog-toolbar > .panel-heading,
+  .management-line-content .model-catalog-actions,
+  .management-line-content .team-section-header-with-actions > div,
+  .management-line-content .team-section-header-with-actions > .team-attach-controls {
+    grid-column: 1;
+  }
+
+  .management-line-content .applications-panel-heading > .primary-button,
+  .management-line-content .model-catalog-actions,
+  .management-line-content .team-section-header-with-actions > .team-attach-controls {
+    justify-self: stretch;
+  }
+
+  .management-line-content > .model-catalog-metrics {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .management-line-content > .model-catalog-metrics .metric-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .management-line-content > .model-catalog-metrics .metric-card:last-child {
+    border-bottom: 0;
+  }
+
   .policy-settings-list > .policy-editor-panel {
     grid-template-columns: 1fr;
     gap: 14px;

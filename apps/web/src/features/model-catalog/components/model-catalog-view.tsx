@@ -202,7 +202,7 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
   }
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">{text.management}</p>

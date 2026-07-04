@@ -260,7 +260,7 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
   }
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">{text.management}</p>
@@ -530,7 +530,7 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
   }
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="team-section">
         <div className="team-section-header team-section-header-with-actions">
           <div>
