@@ -20,6 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type DashboardOverviewProps = {
   activeTab?: DashboardTab;
+  applicationNames?: Record<string, string>;
   applicationTokenRecords?: InvocationLogRecord[];
   detailPanel?: ReactNode;
   filters: DashboardFilterState;
@@ -228,6 +229,7 @@ type DashboardCopy = (typeof dashboardText)[Locale];
 
 export function DashboardOverviewView({
   activeTab = "overview",
+  applicationNames = {},
   applicationTokenRecords = [],
   detailPanel,
   filters,
@@ -255,7 +257,10 @@ export function DashboardOverviewView({
   );
   const modelShareRows = getTopModelShareRows(overview);
   const cacheShareRows = getCacheShareRows(overview);
-  const applicationTokenShareRows = getApplicationTokenShareRows(applicationTokenRecords);
+  const applicationTokenShareRows = getApplicationTokenShareRows(
+    applicationTokenRecords,
+    applicationNames
+  );
 
   return (
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
@@ -1325,7 +1330,10 @@ function getCacheShareRows(overview: DashboardOverview) {
       ];
 }
 
-function getApplicationTokenShareRows(records: InvocationLogRecord[]) {
+function getApplicationTokenShareRows(
+  records: InvocationLogRecord[],
+  applicationNames: Record<string, string>
+) {
   const tokenByApplication = new Map<string, number>();
 
   for (const record of records) {
@@ -1341,7 +1349,7 @@ function getApplicationTokenShareRows(records: InvocationLogRecord[]) {
     .sort((left, right) => right[1] - left[1]);
   const topRows = sortedRows.slice(0, 4).map(([applicationId, totalTokens], index) => ({
     color: chartColors[index] ?? chartColors[0],
-    label: formatDisplayIdentifier(applicationId),
+    label: applicationNames[applicationId] ?? formatDisplayIdentifier(applicationId),
     value: totalTokens
   }));
   const otherTokens = sortedRows.slice(4).reduce((sum, [, totalTokens]) => sum + totalTokens, 0);
