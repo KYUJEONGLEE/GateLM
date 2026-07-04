@@ -27,6 +27,10 @@ const (
 	PromptCaptureModeDisabled    = "disabled"
 	PromptCaptureModeLogSafeFull = "log_safe_full"
 	PromptCaptureDefaultMaxChars = 8000
+
+	ResponseCaptureModeDisabled    = "disabled"
+	ResponseCaptureModeRawFull     = "raw_full"
+	ResponseCaptureDefaultMaxChars = 8000
 )
 
 var (
@@ -36,6 +40,7 @@ var (
 	ErrInactiveConfig           = errors.New("runtime config is not active")
 	ErrMissingRuntimeHash       = errors.New("runtime config hash is missing")
 	ErrInvalidPromptCapture     = errors.New("runtime config prompt capture policy is invalid")
+	ErrInvalidResponseCapture   = errors.New("runtime config response capture policy is invalid")
 	ErrInvalidSafetyPolicy      = errors.New("runtime config safety policy is invalid")
 )
 
@@ -64,12 +69,13 @@ type ActiveConfig struct {
 	AppTokenID        string
 	AppTokenStatus    string
 
-	RateLimit     ratelimit.Config
-	BudgetPolicy  budget.Policy
-	SafetyPolicy  SafetyPolicy
-	RoutingPolicy RoutingPolicy
-	CachePolicy   CachePolicy
-	PromptCapture PromptCapturePolicy
+	RateLimit       ratelimit.Config
+	BudgetPolicy    budget.Policy
+	SafetyPolicy    SafetyPolicy
+	RoutingPolicy   RoutingPolicy
+	CachePolicy     CachePolicy
+	PromptCapture   PromptCapturePolicy
+	ResponseCapture ResponseCapturePolicy
 }
 
 type ExecutionSnapshot struct {
@@ -80,12 +86,13 @@ type ExecutionSnapshot struct {
 	BudgetScope   budget.Scope
 	Snapshot      RuntimeSnapshotProvenance
 
-	RateLimit     ratelimit.Config
-	BudgetPolicy  budget.Policy
-	SafetyPolicy  SafetyPolicy
-	RoutingPolicy RoutingPolicy
-	CachePolicy   CachePolicy
-	PromptCapture PromptCapturePolicy
+	RateLimit       ratelimit.Config
+	BudgetPolicy    budget.Policy
+	SafetyPolicy    SafetyPolicy
+	RoutingPolicy   RoutingPolicy
+	CachePolicy     CachePolicy
+	PromptCapture   PromptCapturePolicy
+	ResponseCapture ResponseCapturePolicy
 }
 
 type RuntimeSnapshotProvenance struct {
@@ -148,6 +155,12 @@ type PromptCapturePolicy struct {
 	MaxChars int
 }
 
+type ResponseCapturePolicy struct {
+	Enabled  bool
+	Mode     string
+	MaxChars int
+}
+
 func (c ActiveConfig) Normalize() ActiveConfig {
 	c.ConfigVersion = strings.TrimSpace(c.ConfigVersion)
 	c.ConfigHash = strings.TrimSpace(c.ConfigHash)
@@ -177,6 +190,7 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
 	c.CachePolicy.CachePolicyHash = strings.TrimSpace(c.CachePolicy.CachePolicyHash)
 	c.PromptCapture = NormalizePromptCapturePolicy(c.PromptCapture)
+	c.ResponseCapture = NormalizeResponseCapturePolicy(c.ResponseCapture)
 	return c
 }
 
@@ -205,6 +219,9 @@ func (c ActiveConfig) ValidateActive() error {
 	if !IsValidPromptCapturePolicy(c.PromptCapture) {
 		return ErrInvalidPromptCapture
 	}
+	if !IsValidResponseCapturePolicy(c.ResponseCapture) {
+		return ErrInvalidResponseCapture
+	}
 	return nil
 }
 
@@ -218,18 +235,19 @@ func (c ActiveConfig) MatchesScope(tenantID string, projectID string, applicatio
 func (c ActiveConfig) ExecutionSnapshot() ExecutionSnapshot {
 	c = c.Normalize()
 	return ExecutionSnapshot{
-		ConfigHash:    c.ConfigHash,
-		TenantID:      c.TenantID,
-		ProjectID:     c.ProjectID,
-		ApplicationID: c.ApplicationID,
-		BudgetScope:   budget.DefaultScope(c.ApplicationID),
-		Snapshot:      c.Snapshot,
-		RateLimit:     c.RateLimit,
-		BudgetPolicy:  c.BudgetPolicy,
-		SafetyPolicy:  c.SafetyPolicy,
-		RoutingPolicy: c.RoutingPolicy,
-		CachePolicy:   c.CachePolicy,
-		PromptCapture: c.PromptCapture,
+		ConfigHash:      c.ConfigHash,
+		TenantID:        c.TenantID,
+		ProjectID:       c.ProjectID,
+		ApplicationID:   c.ApplicationID,
+		BudgetScope:     budget.DefaultScope(c.ApplicationID),
+		Snapshot:        c.Snapshot,
+		RateLimit:       c.RateLimit,
+		BudgetPolicy:    c.BudgetPolicy,
+		SafetyPolicy:    c.SafetyPolicy,
+		RoutingPolicy:   c.RoutingPolicy,
+		CachePolicy:     c.CachePolicy,
+		PromptCapture:   c.PromptCapture,
+		ResponseCapture: c.ResponseCapture,
 	}
 }
 
@@ -254,6 +272,7 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.CachePolicy.Type = strings.TrimSpace(s.CachePolicy.Type)
 	s.CachePolicy.CachePolicyHash = strings.TrimSpace(s.CachePolicy.CachePolicyHash)
 	s.PromptCapture = NormalizePromptCapturePolicy(s.PromptCapture)
+	s.ResponseCapture = NormalizeResponseCapturePolicy(s.ResponseCapture)
 	s.Snapshot = s.Snapshot.Normalize(ActiveConfig{
 		ConfigHash:    s.ConfigHash,
 		SafetyPolicy:  s.SafetyPolicy,
@@ -301,6 +320,45 @@ func IsValidPromptCapturePolicy(policy PromptCapturePolicy) bool {
 	return policy.Mode == PromptCaptureModeLogSafeFull
 }
 
+func DefaultResponseCapturePolicy() ResponseCapturePolicy {
+	return ResponseCapturePolicy{
+		Enabled:  false,
+		Mode:     ResponseCaptureModeDisabled,
+		MaxChars: ResponseCaptureDefaultMaxChars,
+	}
+}
+
+func NormalizeResponseCapturePolicy(policy ResponseCapturePolicy) ResponseCapturePolicy {
+	policy.Mode = strings.TrimSpace(policy.Mode)
+	if policy.MaxChars <= 0 {
+		policy.MaxChars = ResponseCaptureDefaultMaxChars
+	}
+	if !policy.Enabled {
+		policy.Mode = ResponseCaptureModeDisabled
+		return policy
+	}
+	if policy.Mode == "" {
+		policy.Mode = ResponseCaptureModeRawFull
+	}
+	return policy
+}
+
+func ResponseCaptureAllowsRawCapture(policy ResponseCapturePolicy) bool {
+	policy = NormalizeResponseCapturePolicy(policy)
+	return policy.Enabled && policy.Mode == ResponseCaptureModeRawFull
+}
+
+func IsValidResponseCapturePolicy(policy ResponseCapturePolicy) bool {
+	policy = NormalizeResponseCapturePolicy(policy)
+	if policy.MaxChars <= 0 {
+		return false
+	}
+	if !policy.Enabled {
+		return policy.Mode == ResponseCaptureModeDisabled
+	}
+	return policy.Mode == ResponseCaptureModeRawFull
+}
+
 func (s ExecutionSnapshot) Validate() error {
 	s = s.Normalize(time.Time{}, "")
 	if s.TenantID == "" || s.ProjectID == "" || s.ApplicationID == "" {
@@ -314,6 +372,9 @@ func (s ExecutionSnapshot) Validate() error {
 	}
 	if !IsValidPromptCapturePolicy(s.PromptCapture) {
 		return ErrInvalidPromptCapture
+	}
+	if !IsValidResponseCapturePolicy(s.ResponseCapture) {
+		return ErrInvalidResponseCapture
 	}
 	return nil
 }

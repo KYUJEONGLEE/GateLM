@@ -190,12 +190,16 @@ type TerminalLogInput struct {
 	RedactedPromptForHash   string
 	PromptCapturePolicy     runtimeconfig.PromptCapturePolicy
 	CapturedPrompt          string
+	ResponseCapturePolicy   runtimeconfig.ResponseCapturePolicy
+	CapturedResponse        string
 	DomainOutcomes          DomainOutcomes
 	StartedAt               time.Time
 	CompletedAt             time.Time
 }
 
 const PromptCaptureVisibilityAdminRequestDetail = "admin_request_detail"
+
+const ResponseCaptureVisibilityAdminRequestDetail = "admin_request_detail"
 
 type PromptCaptureFields struct {
 	Enabled        bool   `json:"enabled"`
@@ -204,6 +208,15 @@ type PromptCaptureFields struct {
 	CapturedPrompt string `json:"capturedPrompt"`
 	Truncated      bool   `json:"truncated"`
 	MaxChars       int    `json:"maxChars"`
+}
+
+type ResponseCaptureFields struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	Visibility       string `json:"visibility"`
+	CapturedResponse string `json:"capturedResponse"`
+	Truncated        bool   `json:"truncated"`
+	MaxChars         int    `json:"maxChars"`
 }
 
 type TerminalLogWriter interface {
@@ -338,6 +351,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if promptCapture, ok := BuildPromptCaptureFields(input.PromptCapturePolicy, input.CapturedPrompt); ok {
 		metadata["promptCapture"] = promptCapture
 	}
+	if responseCapture, ok := BuildResponseCaptureFields(input.ResponseCapturePolicy, input.CapturedResponse); ok {
+		metadata["responseCapture"] = responseCapture
+	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
 	metadata["providerCalled"] = terminalProviderCalled(input)
 
@@ -465,6 +481,27 @@ func BuildPromptCaptureFields(policy runtimeconfig.PromptCapturePolicy, logSafeP
 		CapturedPrompt: truncatedPrompt,
 		Truncated:      truncated,
 		MaxChars:       policy.MaxChars,
+	}, true
+}
+
+func BuildResponseCaptureFields(policy runtimeconfig.ResponseCapturePolicy, rawResponse string) (ResponseCaptureFields, bool) {
+	policy = runtimeconfig.NormalizeResponseCapturePolicy(policy)
+	if !runtimeconfig.ResponseCaptureAllowsRawCapture(policy) {
+		return ResponseCaptureFields{}, false
+	}
+	rawResponse = strings.TrimSpace(rawResponse)
+	if rawResponse == "" {
+		return ResponseCaptureFields{}, false
+	}
+
+	truncatedResponse, truncated := truncateRunes(rawResponse, policy.MaxChars)
+	return ResponseCaptureFields{
+		Enabled:          true,
+		Mode:             policy.Mode,
+		Visibility:       ResponseCaptureVisibilityAdminRequestDetail,
+		CapturedResponse: truncatedResponse,
+		Truncated:        truncated,
+		MaxChars:         policy.MaxChars,
 	}, true
 }
 

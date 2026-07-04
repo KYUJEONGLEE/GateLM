@@ -265,6 +265,7 @@ type requestDetailDataResponse struct {
 	Masking         maskingResponse                    `json:"masking"`
 	SafetySummary   safetySummaryResponse              `json:"safetySummary"`
 	PromptCapture   promptCaptureResponse              `json:"promptCapture"`
+	ResponseCapture responseCaptureResponse            `json:"responseCapture"`
 	Error           detailErrorResponse                `json:"error"`
 	CreatedAt       time.Time                          `json:"createdAt"`
 	CompletedAt     *time.Time                         `json:"completedAt"`
@@ -367,6 +368,15 @@ type promptCaptureResponse struct {
 	CapturedPrompt *string `json:"capturedPrompt"`
 	Truncated      bool    `json:"truncated"`
 	MaxChars       int     `json:"maxChars"`
+}
+
+type responseCaptureResponse struct {
+	Enabled          bool    `json:"enabled"`
+	Mode             string  `json:"mode"`
+	Visibility       string  `json:"visibility"`
+	CapturedResponse *string `json:"capturedResponse"`
+	Truncated        bool    `json:"truncated"`
+	MaxChars         int     `json:"maxChars"`
 }
 
 type detailErrorResponse struct {
@@ -701,7 +711,8 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			MandatoryProtectedTypes: append([]string(nil), detail.SafetySummary.MandatoryProtectedTypes...),
 			MaskingAction:           detail.SafetySummary.MaskingAction,
 		},
-		PromptCapture: promptCaptureResponseFromDomain(detail.PromptCapture),
+		PromptCapture:   promptCaptureResponseFromDomain(detail.PromptCapture),
+		ResponseCapture: responseCaptureResponseFromDomain(detail.ResponseCapture),
 		Error: detailErrorResponse{
 			ErrorCode:    stringPointerOrNil(detail.Error.ErrorCode),
 			ErrorMessage: stringPointerOrNil(detail.Error.ErrorMessage),
@@ -975,6 +986,30 @@ func promptCaptureResponseFromDomain(fields invocationlog.PromptCaptureFields) p
 		CapturedPrompt: capturedPrompt,
 		Truncated:      fields.Truncated,
 		MaxChars:       fields.MaxChars,
+	}
+}
+
+func responseCaptureResponseFromDomain(fields invocationlog.ResponseCaptureFields) responseCaptureResponse {
+	if strings.TrimSpace(fields.Mode) == "" {
+		fields.Mode = runtimeconfig.ResponseCaptureModeDisabled
+	}
+	if strings.TrimSpace(fields.Visibility) == "" {
+		fields.Visibility = invocationlog.ResponseCaptureVisibilityAdminRequestDetail
+	}
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
+	}
+	var capturedResponse *string
+	if fields.Enabled && strings.TrimSpace(fields.CapturedResponse) != "" {
+		capturedResponse = stringPointerOrNil(fields.CapturedResponse)
+	}
+	return responseCaptureResponse{
+		Enabled:          fields.Enabled,
+		Mode:             fields.Mode,
+		Visibility:       fields.Visibility,
+		CapturedResponse: capturedResponse,
+		Truncated:        fields.Truncated,
+		MaxChars:         fields.MaxChars,
 	}
 }
 

@@ -141,6 +141,70 @@ func TestBuildTerminalLogStoresLogSafePromptCaptureWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildTerminalLogStoresRawResponseCaptureWhenEnabled(t *testing.T) {
+	startedAt := time.Date(2026, 7, 3, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:     "request_response_capture",
+		ApplicationID: "app_demo",
+		Status:        StatusSuccess,
+		HTTPStatus:    200,
+		ResponseCapturePolicy: runtimeconfig.ResponseCapturePolicy{
+			Enabled:  true,
+			Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+			MaxChars: 8,
+		},
+		CapturedResponse: "Mock response",
+		StartedAt:        startedAt,
+		CompletedAt:      startedAt.Add(10 * time.Millisecond),
+	})
+
+	capture, ok := log.Metadata["responseCapture"].(ResponseCaptureFields)
+	if !ok {
+		t.Fatalf("expected response capture metadata, got %+v", log.Metadata["responseCapture"])
+	}
+	if !capture.Enabled ||
+		capture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
+		capture.Visibility != ResponseCaptureVisibilityAdminRequestDetail ||
+		capture.CapturedResponse != "Mock res" ||
+		!capture.Truncated ||
+		capture.MaxChars != 8 {
+		t.Fatalf("unexpected response capture metadata: %+v", capture)
+	}
+}
+
+func TestBuildTerminalLogSkipsResponseCaptureWhenDisabledOrEmpty(t *testing.T) {
+	startedAt := time.Date(2026, 7, 3, 1, 2, 3, 0, time.UTC)
+	disabled := BuildTerminalLog(TerminalLogInput{
+		RequestID:        "request_response_capture_disabled",
+		ApplicationID:    "app_demo",
+		Status:           StatusSuccess,
+		HTTPStatus:       200,
+		CapturedResponse: "Mock response",
+		StartedAt:        startedAt,
+		CompletedAt:      startedAt.Add(10 * time.Millisecond),
+	})
+	if _, exists := disabled.Metadata["responseCapture"]; exists {
+		t.Fatalf("disabled response capture must not be stored: %+v", disabled.Metadata)
+	}
+
+	empty := BuildTerminalLog(TerminalLogInput{
+		RequestID:     "request_response_capture_empty",
+		ApplicationID: "app_demo",
+		Status:        StatusSuccess,
+		HTTPStatus:    200,
+		ResponseCapturePolicy: runtimeconfig.ResponseCapturePolicy{
+			Enabled:  true,
+			Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+			MaxChars: 8000,
+		},
+		StartedAt:   startedAt,
+		CompletedAt: startedAt.Add(10 * time.Millisecond),
+	})
+	if _, exists := empty.Metadata["responseCapture"]; exists {
+		t.Fatalf("empty response capture must not be stored: %+v", empty.Metadata)
+	}
+}
+
 func TestBuildTerminalLogSkipsPromptCaptureBeforeMaskingOrWhenDisabled(t *testing.T) {
 	startedAt := time.Date(2026, 7, 3, 1, 2, 3, 0, time.UTC)
 	disabled := BuildTerminalLog(TerminalLogInput{

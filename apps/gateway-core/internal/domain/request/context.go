@@ -58,6 +58,8 @@ type RuntimeContext struct {
 	HasCachePolicy     bool
 	PromptCapture      runtimeconfig.PromptCapturePolicy
 	HasPromptCapture   bool
+	ResponseCapture    runtimeconfig.ResponseCapturePolicy
+	HasResponseCapture bool
 }
 
 type GovernanceContext struct {

@@ -22,6 +22,8 @@
     "v2:claude:terminal-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/claude-terminal-smoke.ps1",
     "v2:request-log:consistency": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-request-log-outcome-consistency.ps1",
     "v2:async-log:dashboard-evidence": "node scripts/dev/v2-async-log-dashboard-evidence.mjs",
+    "v2:observability:stack-evidence": "node scripts/dev/v2-observability-stack-evidence.mjs",
+    "v2:routing:blind100-evidence": "node scripts/dev/v2-routing-blind-100-evidence.mjs",
     "v2:k6:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-k6-smoke.ps1",
     "v2:release:evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-release-evidence.ps1",
     "v2:final:hardening": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-final-hardening.ps1",
