@@ -586,11 +586,9 @@ export function ProviderConnectionManagement({
               <thead>
                 <tr>
                   <th>{text.provider}</th>
-                  <th>{text.baseUrl}</th>
                   <th>{text.status}</th>
                   <th>{text.credential}</th>
                   <th>{text.updated}</th>
-                  <th>{text.providerId}</th>
                   <th />
                 </tr>
               </thead>
@@ -600,17 +598,8 @@ export function ProviderConnectionManagement({
                     <td>
                       <strong className="provider-name">{provider.displayName}</strong>
                       <span className="project-muted">{provider.provider}</span>
-                    </td>
-                    <td>
-                      <code className="project-code">{provider.baseUrl}</code>
-                      <small className="project-muted">
-                        {text.timeoutMs}: {provider.timeoutMs} / {text.resolver}: {provider.resolver}
-                      </small>
                       <small className="project-muted">
                         {text.models}: {formatProviderModels(provider.providerConfig)}
-                      </small>
-                      <small className="project-muted">
-                        {text.providerConfig}: {formatProviderConfig(provider.providerConfig)}
                       </small>
                     </td>
                     <td>
@@ -635,9 +624,6 @@ export function ProviderConnectionManagement({
                       <small className="project-muted">
                         {text.created}: {formatDateTime(provider.createdAt)}
                       </small>
-                    </td>
-                    <td>
-                      <code className="project-code">{provider.id}</code>
                     </td>
                     <td>
                       <div className="project-row-actions">
@@ -960,23 +946,4 @@ function formatProviderModels(providerConfig: Record<string, unknown> | null) {
   const models = getProviderConfigModels(providerConfig);
 
   return models.length > 0 ? models.join(", ") : "none";
-}
-
-function formatProviderConfig(providerConfig: Record<string, unknown> | null) {
-  if (!providerConfig) {
-    return "default";
-  }
-
-  const adapterType = getProviderConfigString(providerConfig, "adapterType", "default");
-  const credentialRequired = getProviderConfigBoolean(
-    providerConfig,
-    "credentialRequired",
-    true
-  );
-  const requestFormat = getProviderConfigString(providerConfig, "requestFormat", "default");
-  const failureMode = getProviderConfigFailureMode(providerConfig);
-
-  return `${adapterType} / ${requestFormat} / credential ${
-    credentialRequired ? "required" : "not_required"
-  } / ${failureMode}`;
 }
