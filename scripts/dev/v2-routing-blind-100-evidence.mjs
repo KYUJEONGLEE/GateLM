@@ -780,6 +780,10 @@ from (
     },
   );
 
+  if (result.error) {
+    throw new Error(`Postgres log query failed to execute: ${result.error.message}`);
+  }
+
   if (result.status !== 0) {
     const stderr = String(result.stderr || "").trim();
     throw new Error(`Postgres log query failed: ${stderr || `exit ${result.status}`}`);
