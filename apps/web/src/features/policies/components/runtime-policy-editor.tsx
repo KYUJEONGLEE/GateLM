@@ -4,6 +4,7 @@ import { Save, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
@@ -23,6 +24,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type RuntimePolicyEditorProps = {
   appTokenReadiness?: RuntimePolicyAppTokenReadiness;
+  breadcrumbItems?: BreadcrumbItem[];
   locale: Locale;
   model: RuntimePolicyModel;
 };
@@ -301,6 +303,7 @@ const policyText: Record<
 
 export function RuntimePolicyEditor({
   appTokenReadiness,
+  breadcrumbItems,
   locale,
   model
 }: RuntimePolicyEditorProps) {
@@ -598,6 +601,7 @@ export function RuntimePolicyEditor({
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
+          {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
           <p className="console-kicker">management</p>
           <h2>{text.title}</h2>
         </div>
