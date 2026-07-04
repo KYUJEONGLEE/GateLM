@@ -15,7 +15,7 @@ from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_DATASET = BASE_DIR / "data" / "cacheability_synthetic_v1.jsonl"
+DEFAULT_DATASET = BASE_DIR / "data" / "cacheability_synthetic_v2.jsonl"
 DEFAULT_OUTPUT_DIR = BASE_DIR / "build"
 
 LABELS = {
@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET, help="Input JSONL dataset.")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Output directory for FastText split files.")
-    parser.add_argument("--seed", default="cacheability-synthetic-v1", help="Stable seed used when split is not explicit.")
+    parser.add_argument("--seed", default="cacheability-synthetic-v2", help="Stable seed used when split is not explicit.")
     parser.add_argument("--test-ratio", type=float, default=0.25, help="Fallback group-aware test split ratio.")
     parser.add_argument("--min-per-label-split", type=int, default=2, help="Minimum examples per label in each split.")
     return parser.parse_args()

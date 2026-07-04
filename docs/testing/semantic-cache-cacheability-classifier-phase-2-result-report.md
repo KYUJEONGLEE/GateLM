@@ -5,6 +5,7 @@
 - Phase 2 범위에 맞춰 offline synthetic dataset과 FastText 학습/평가 tooling을 추가했다.
 - synthetic dataset 위치와 JSONL format을 확정했다.
   - `scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl`
+  - 후속 확장 dataset: `scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl`
   - `id`, `label`, `text`, `lang`, `source`, `pairGroup`, `pairRole`, `split`, `notes` field 사용
 - train/test split 기준을 정의하고 `prepare_dataset.py`에 구현했다.
   - `pairGroup` 단위 group-aware split
@@ -15,6 +16,7 @@
   - 총 40개 synthetic example
   - 총 20개 positive/negative `pairGroup`
   - train 28개, test 12개
+  - 후속 확장 dataset은 총 320개 synthetic example, 80개 `pairGroup`, train 240개, test 80개로 확장했다.
 - Python 기반 FastText supervised classifier 학습 스크립트를 추가했다.
   - `scripts/semantic_cache_classifier/train_fasttext.py`
   - model artifact와 metadata JSON을 `build/artifacts/` 아래 생성
@@ -22,8 +24,8 @@
   - `scripts/semantic_cache_classifier/evaluate_fasttext.py`
   - overall accuracy, macro F1, label별 precision/recall/F1, threshold pass/fail 산출
 - model artifact 생성 방식을 문서화했다.
-  - 기본 artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin`
-  - 기본 metadata: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.metadata.json`
+  - 현재 기본 artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin`
+  - 현재 기본 metadata: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.metadata.json`
   - `build/`는 repository root `.gitignore`에 의해 커밋 대상에서 제외된다.
 - label별 최소 acceptance 기준을 정의했다.
   - `scripts/semantic_cache_classifier/acceptance_criteria.json`
@@ -31,6 +33,7 @@
   - `cacheable_policy`는 policy/version/hash boundary 확인 전제가 있으므로 precision 기준을 높게 둔다.
 - modelVersion 관리 방식을 문서화했다.
   - 초기 version: `cacheability-fasttext-synthetic-v1`
+  - 현재 기본 version: `cacheability-fasttext-synthetic-v2`
   - dataset/preprocessing/hyperparameter가 의미 있게 바뀌면 suffix를 올린다.
   - artifact metadata의 `trainFileSha256`를 dataset/artifact 연결 근거로 사용한다.
 - Gateway runtime request path에는 Python 학습/평가 스크립트나 FastText runtime을 연결하지 않았다.
@@ -42,6 +45,8 @@
 - `scripts/semantic_cache_classifier/README.md`
 - `scripts/semantic_cache_classifier/acceptance_criteria.json`
 - `scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl`
+- `scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl`
+- `scripts/semantic_cache_classifier/generate_synthetic_dataset.py`
 - `scripts/semantic_cache_classifier/prepare_dataset.py`
 - `scripts/semantic_cache_classifier/train_fasttext.py`
 - `scripts/semantic_cache_classifier/evaluate_fasttext.py`
@@ -93,6 +98,31 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - accuracy: `1.0`
   - macroF1: `1.0`
   - label별 precision/recall/F1: 모두 `1.0`
+  - `acceptance.passed=true`
+
+## 후속 수백 건 synthetic_v2 검증 업데이트
+
+- `generate_synthetic_dataset.py`를 추가해 재현 가능한 synthetic dataset 생성을 지원했다.
+- `cacheability_synthetic_v2.jsonl`을 생성했다.
+  - total examples: `320`
+  - `pairGroup`: `80`
+  - 각 `pairGroup`에는 `cacheable_static`, `cacheable_policy`, `dynamic_user_state`, `unsafe_or_unknown` 1개씩 포함된다.
+  - explicit split은 aspect가 train/test에 한쪽으로 몰리지 않도록 `(domain_index + aspect_index) % 4 == 0` 기준으로 test를 배정한다.
+- `prepare_dataset.py` 기본 dataset과 split seed를 `synthetic_v2`로 변경했다.
+  - dataset SHA-256: `1c0e4dc4781bcf4cc12c8908c6f736411795c4ea5255d6a0cda58f5a382a10a7`
+  - train: label별 `60`, total `240`
+  - test: label별 `20`, total `80`
+- `train_fasttext.py`와 `serve_fasttext_classifier.py` 기본 modelVersion을 `cacheability-fasttext-synthetic-v2`로 변경했다.
+- Python 3.12 venv에서 실제 FastText `.bin` artifact를 재학습했다.
+  - artifact: `scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin`
+  - trainFileSha256: `cab18cb89c5e1ba0fc8091476a7919bcada1e8fc50492f078cf2fb780c30489f`
+  - hyperparameters: `epoch=35`, `lr=0.6`, `wordNgrams=1`, `dim=64`, `minCount=1`, `loss=softmax`
+- 80건 holdout 평가 결과 acceptance를 통과했다.
+  - total: `80`
+  - accuracy: `1.0`
+  - macroF1: `1.0`
+  - label별 precision/recall/F1: 모두 `1.0`
+  - confusion matrix: 각 label `20/20` 정답
   - `acceptance.passed=true`
 
 ## 실패하거나 보류한 항목

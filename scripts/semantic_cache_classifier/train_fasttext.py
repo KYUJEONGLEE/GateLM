@@ -16,7 +16,7 @@ from typing import Any
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_TRAIN_FILE = BASE_DIR / "build" / "cacheability.train.txt"
 DEFAULT_OUTPUT_DIR = BASE_DIR / "build" / "artifacts"
-DEFAULT_MODEL_VERSION = "cacheability-fasttext-synthetic-v1"
+DEFAULT_MODEL_VERSION = "cacheability-fasttext-synthetic-v2"
 
 LABELS = [
     "cacheable_static",

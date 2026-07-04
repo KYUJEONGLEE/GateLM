@@ -9,7 +9,7 @@ The scripts in this directory are not part of the Gateway live request path. Gat
 Canonical synthetic dataset:
 
 ```text
-scripts/semantic_cache_classifier/data/cacheability_synthetic_v1.jsonl
+scripts/semantic_cache_classifier/data/cacheability_synthetic_v2.jsonl
 ```
 
 Each line is one JSON object with the following fields:
@@ -33,6 +33,14 @@ __label__cacheable_static synthetic text...
 ```
 
 The dataset intentionally includes the same keywords across cacheable and non-cacheable labels. This is required so the model learns cacheability risk instead of simple keyword matching.
+
+The current `synthetic_v2` dataset is generated from sanitized templates:
+
+```powershell
+python scripts/semantic_cache_classifier/generate_synthetic_dataset.py
+```
+
+It produces 320 examples across 80 `pairGroup` values. Each group contains one example for each label so train/test splits remain balanced by label while still avoiding pair leakage.
 
 ## Split Rule
 
@@ -59,7 +67,7 @@ Training command:
 
 ```powershell
 python scripts/semantic_cache_classifier/prepare_dataset.py
-python scripts/semantic_cache_classifier/train_fasttext.py --model-version cacheability-fasttext-synthetic-v1
+python scripts/semantic_cache_classifier/train_fasttext.py --model-version cacheability-fasttext-synthetic-v2
 ```
 
 Windows local setup that has been verified:
@@ -71,7 +79,7 @@ py -3.12 -m venv .tmp\semantic-cache-fasttext-venv
 
 `fasttext-wheel==0.9.2` currently imports as `fasttext`. Keep `numpy<2` in this venv because FastText 0.9.2 prediction can fail with NumPy 2.x.
 
-The checked default training hyperparameters for the synthetic v1 dataset are:
+The checked default training hyperparameters for the synthetic v2 dataset are:
 
 ```text
 epoch=35
@@ -85,8 +93,8 @@ loss=softmax
 Default artifact outputs:
 
 ```text
-scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin
-scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.metadata.json
+scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin
+scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.metadata.json
 ```
 
 The metadata file records:
@@ -104,7 +112,7 @@ Evaluation command:
 
 ```powershell
 python scripts/semantic_cache_classifier/evaluate_fasttext.py `
-  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin `
+  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin `
   --fail-on-threshold
 ```
 
@@ -116,8 +124,8 @@ Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The 
 
 ```powershell
 python scripts/semantic_cache_classifier/serve_fasttext_classifier.py `
-  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v1.bin `
-  --model-version cacheability-fasttext-synthetic-v1 `
+  --model-file scripts/semantic_cache_classifier/build/artifacts/cacheability-cacheability-fasttext-synthetic-v2.bin `
+  --model-version cacheability-fasttext-synthetic-v2 `
   --host 127.0.0.1 `
   --port 8765
 ```
@@ -146,15 +154,15 @@ The high-risk labels `dynamic_user_state` and `unsafe_or_unknown` use stricter r
 
 ## Model Version
 
-Initial model version:
+Current default model version:
 
 ```text
-cacheability-fasttext-synthetic-v1
+cacheability-fasttext-synthetic-v2
 ```
 
 Versioning rules:
 
 - Increment the suffix when the committed dataset, labels, preprocessing, or training hyperparameters change materially.
 - Keep the model artifact metadata next to the `.bin` artifact.
-- Treat `datasetSha256` and `trainFileSha256` in metadata as the reproducibility link between dataset and artifact.
+- Treat `datasetSha256` in the generated dataset manifest and `trainFileSha256` in model metadata as the reproducibility link between dataset and artifact.
 - Do not introduce a public API, DB field, Event field, or Metrics label solely for model versioning in Phase 2.

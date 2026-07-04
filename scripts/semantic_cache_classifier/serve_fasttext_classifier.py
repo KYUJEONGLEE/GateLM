@@ -12,8 +12,8 @@ from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL_FILE = BASE_DIR / "build" / "artifacts" / "cacheability-cacheability-fasttext-synthetic-v1.bin"
-DEFAULT_MODEL_VERSION = "cacheability-fasttext-synthetic-v1"
+DEFAULT_MODEL_FILE = BASE_DIR / "build" / "artifacts" / "cacheability-cacheability-fasttext-synthetic-v2.bin"
+DEFAULT_MODEL_VERSION = "cacheability-fasttext-synthetic-v2"
 LABEL_PREFIX = "__label__"
 
 
