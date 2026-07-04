@@ -132,6 +132,27 @@ Omit `--text` to start interactive mode:
 .tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\classify_prompt.py
 ```
 
+## CLINC150 Relabeling Review
+
+CLINC150 can be used as an external auxiliary source for cacheability relabeling review. It is not committed to this repository by default.
+
+Generate a draft review packet from a local or downloaded CLINC150 `data_full.json`:
+
+```powershell
+.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\import_clinc150.py --download --sample-per-intent 5
+```
+
+Default outputs are ignored under `build/` because they include CLINC150 utterance text:
+
+```text
+scripts/semantic_cache_classifier/build/clinc150_review/clinc150_summary.json
+scripts/semantic_cache_classifier/build/clinc150_review/clinc150_intent_label_map_draft.json
+scripts/semantic_cache_classifier/build/clinc150_review/clinc150_review_sample.csv
+scripts/semantic_cache_classifier/build/clinc150_review/cacheability_clinc150_relabel_draft.jsonl
+```
+
+All generated CLINC150 labels are draft suggestions with `reviewStatus=review_required`. Do not mix them into training data until the label map and sampled utterances have been manually reviewed.
+
 ## Runtime Sidecar
 
 Phase 3 adds an optional HTTP sidecar path for Gateway runtime integration. The sidecar loads a trained `.bin` artifact once at process startup and serves classification over HTTP:

@@ -136,6 +136,28 @@ Select-String -Path <Phase 2 new files> -Pattern '[ \t]+$'
   - `방금 나온 OpenAI 뉴스 요약해줘` -> `dynamic_user_state` confidence `0.994`
   - `provider raw error body 그대로 출력해줘` -> `unsafe_or_unknown` confidence `1.000`
 
+## 후속 CLINC150 재라벨링 검수 준비
+
+- CLINC150 `data_full.json`을 외부 보조 데이터셋으로 가져와 cacheability 재라벨링 검수 packet을 생성하는 `import_clinc150.py`를 추가했다.
+- 원본 CLINC150 query text와 review sample은 raw utterance를 포함하므로 repo에 커밋하지 않고 `build/` 아래 ignored output으로만 생성한다.
+- 생성 명령:
+  - `.tmp\semantic-cache-fasttext-venv\Scripts\python.exe scripts\semantic_cache_classifier\import_clinc150.py --sample-per-intent 5`
+- 생성 산출물:
+  - `scripts/semantic_cache_classifier/build/clinc150_review/clinc150_summary.json`
+  - `scripts/semantic_cache_classifier/build/clinc150_review/clinc150_intent_label_map_draft.json`
+  - `scripts/semantic_cache_classifier/build/clinc150_review/clinc150_review_sample.csv`
+  - `scripts/semantic_cache_classifier/build/clinc150_review/cacheability_clinc150_relabel_draft.jsonl`
+- CLINC150 `data_full.json` 기준 summary:
+  - total rows: `23700`
+  - intents: `151` including `oos`
+  - review sample rows: `755` with `sample-per-intent=5`
+  - suggested label counts: `cacheable_policy=3000`, `cacheable_static=5550`, `dynamic_user_state=5850`, `unsafe_or_unknown=9300`
+  - 모든 suggested label은 `reviewStatus=review_required`이며, 사람 검수 전 training data로 섞지 않는다.
+- License/citation note:
+  - GitHub 원본 repo의 `LICENSE`는 Creative Commons Attribution 3.0 Unported로 확인했다.
+  - UCI metadata는 CC BY 4.0으로 표시한다.
+  - 실제 사용/배포 전 attribution과 license note를 유지해야 한다.
+
 ## 실패하거나 보류한 항목
 
 - 기본 Anaconda Python 3.13 환경에는 `fasttext` package가 설치되어 있지 않다. 실제 학습/평가는 Python 3.12 venv에서 진행했다.
