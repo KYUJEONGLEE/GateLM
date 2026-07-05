@@ -131,16 +131,17 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 }
 
 async function getDashboardApplicationNames(routeTenantId: string, projectId: string) {
+  const projectsResult = projectId ? null : await getProjectsModel(routeTenantId);
   const projectIds = projectId
     ? [projectId]
-    : (await getProjectsModel(routeTenantId)).projects.map((project) => project.id);
+    : (projectsResult?.projects ?? []).map((project) => project.id);
   const applicationModels = await Promise.all(
     projectIds.map((targetProjectId) => getApplicationsModel(routeTenantId, targetProjectId))
   );
 
   return Object.fromEntries(
     applicationModels.flatMap((model) =>
-      model.applications.map((application) => [application.id, application.name])
+      (model?.applications ?? []).map((application) => [application.id, application.name])
     )
   );
 }

@@ -80,6 +80,7 @@ const policyText: Record<
     detectorType: string;
     close: string;
     details: string;
+    disabled: string;
     enabled: string;
     fallbackRoute: string;
     fixtureFallback: string;
@@ -162,6 +163,7 @@ const policyText: Record<
     detectorType: "Detector",
     close: "Close",
     details: "Details",
+    disabled: "Disabled",
     enabled: "Enabled",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
@@ -249,6 +251,7 @@ const policyText: Record<
     detectorType: "Detector",
     close: "닫기",
     details: "상세보기",
+    disabled: "비활성화",
     enabled: "사용",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
@@ -759,7 +762,7 @@ export function RuntimePolicyEditor({
           <label aria-disabled="true" className="policy-toggle-row">
             <Switch checked={draftValues.responseCaptureEnabled} disabled readOnly />
             <span>
-              {draftValues.responseCaptureEnabled ? text.enabled : text.semanticCacheDisabled}
+              {draftValues.responseCaptureEnabled ? text.enabled : text.disabled}
             </span>
           </label>
           <p className="project-muted">{text.responseCaptureHint}</p>

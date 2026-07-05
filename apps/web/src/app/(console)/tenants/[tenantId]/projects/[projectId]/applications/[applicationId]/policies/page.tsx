@@ -64,7 +64,6 @@ export default async function ApplicationPoliciesPage({
             label: project.name
           },
           {
-            href: `/tenants/${tenantId}/projects/${project.id}`,
             label: application.name
           },
           {
