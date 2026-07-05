@@ -108,7 +108,7 @@ func (r *Resolver) GetCatalog(ctx context.Context, ref providercatalog.Reference
 	r.flights[ref] = f
 	r.mu.Unlock()
 
-	r.refresh(ctx, ref, scope, f)
+	go r.refresh(context.Background(), ref, scope, f)
 	return waitForFlight(ctx, f)
 }
 

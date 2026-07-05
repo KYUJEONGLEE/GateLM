@@ -84,6 +84,63 @@ func TestProviderSingleflightsColdMiss(t *testing.T) {
 	}
 }
 
+func TestProviderColdMissCancellationDoesNotPoisonSharedFlight(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	block := make(chan struct{})
+	delegate := newFakeSnapshotProvider(snapshotVersion(1))
+	delegate.block = block
+	delegate.started = make(chan int, 1)
+	provider := NewProvider(delegate, Config{
+		FreshTTL: time.Minute,
+		StaleTTL: time.Minute,
+		Now:      func() time.Time { return now },
+	})
+
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := provider.GetExecutionSnapshot(firstCtx, "tenant", "project", "app")
+		firstErr <- err
+	}()
+
+	<-delegate.started
+	cancelFirst()
+	select {
+	case err := <-firstErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected first caller cancellation, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first caller cancellation")
+	}
+
+	type result struct {
+		snapshot runtimeconfig.ExecutionSnapshot
+		err      error
+	}
+	second := make(chan result, 1)
+	go func() {
+		snapshot, err := provider.GetExecutionSnapshot(context.Background(), "tenant", "project", "app")
+		second <- result{snapshot: snapshot, err: err}
+	}()
+
+	close(block)
+	select {
+	case got := <-second:
+		if got.err != nil {
+			t.Fatalf("second caller should not receive first caller cancellation: %v", got.err)
+		}
+		if got.snapshot.Snapshot.RuntimeSnapshotVersion != 1 {
+			t.Fatalf("expected version 1, got %d", got.snapshot.Snapshot.RuntimeSnapshotVersion)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for second caller")
+	}
+	if delegate.callCount() != 1 {
+		t.Fatalf("expected original background flight to fill cache once, got %d delegate calls", delegate.callCount())
+	}
+}
+
 func TestProviderReturnsStaleSnapshotWhileRefreshing(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	delegate := newFakeSnapshotProvider(snapshotVersion(1), snapshotVersion(2))

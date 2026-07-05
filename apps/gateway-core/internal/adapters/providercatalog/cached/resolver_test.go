@@ -86,6 +86,64 @@ func TestResolverSingleflightsColdMiss(t *testing.T) {
 	}
 }
 
+func TestResolverColdMissCancellationDoesNotPoisonSharedFlight(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	ref := catalogRef(1)
+	block := make(chan struct{})
+	delegate := newFakeCatalogResolver(catalogFixture("first"))
+	delegate.block = block
+	delegate.started = make(chan int, 1)
+	resolver := NewResolver(delegate, Config{
+		FreshTTL: time.Minute,
+		StaleTTL: time.Minute,
+		Now:      func() time.Time { return now },
+	})
+
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := resolver.GetCatalog(firstCtx, ref, catalogScope())
+		firstErr <- err
+	}()
+
+	<-delegate.started
+	cancelFirst()
+	select {
+	case err := <-firstErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected first caller cancellation, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first caller cancellation")
+	}
+
+	type result struct {
+		catalog providercatalog.Catalog
+		err     error
+	}
+	second := make(chan result, 1)
+	go func() {
+		catalog, err := resolver.GetCatalog(context.Background(), ref, catalogScope())
+		second <- result{catalog: catalog, err: err}
+	}()
+
+	close(block)
+	select {
+	case got := <-second:
+		if got.err != nil {
+			t.Fatalf("second caller should not receive first caller cancellation: %v", got.err)
+		}
+		if providerDisplayName(t, got.catalog) != "first" {
+			t.Fatalf("expected first catalog, got %q", providerDisplayName(t, got.catalog))
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for second caller")
+	}
+	if delegate.callCount() != 1 {
+		t.Fatalf("expected original background flight to fill cache once, got %d delegate calls", delegate.callCount())
+	}
+}
+
 func TestResolverReturnsStaleCatalogWhileRefreshing(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	ref := catalogRef(1)

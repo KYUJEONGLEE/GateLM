@@ -114,7 +114,7 @@ func (p *Provider) GetExecutionSnapshot(ctx context.Context, tenantID string, pr
 	p.flights[key] = f
 	p.mu.Unlock()
 
-	p.refresh(ctx, key, f)
+	go p.refresh(context.Background(), key, f)
 	return waitForFlight(ctx, f)
 }
 
