@@ -35,6 +35,7 @@ const (
 	CacheabilityReasonDynamicStub        = "stub_dynamic_user_state"
 	CacheabilityReasonUnknownStub        = "stub_unsafe_or_unknown"
 	CacheabilityReasonFastTextSidecar    = "fasttext_sidecar"
+	CacheabilityReasonRuleStaticGuidance = "rule_static_guidance"
 
 	CacheabilityReasonClassifierMissing           = "classifier_missing"
 	CacheabilityReasonClassifierError             = "classifier_error"
@@ -206,6 +207,9 @@ func (DeterministicStubCacheabilityClassifier) Classify(ctx context.Context, req
 			ModelVersion: CacheabilityClassifierStubModelVersion,
 		}, nil
 	}
+	if result, ok := cacheabilityRuleStaticGuidanceResult(text, request.PromptCategory, CacheabilityClassifierStubModelVersion); ok {
+		return result, nil
+	}
 	if cacheabilityStubLooksPolicy(text) {
 		return CacheabilityClassifierResult{
 			Label:        CacheabilityLabelCacheablePolicy,
@@ -233,8 +237,8 @@ func (DeterministicStubCacheabilityClassifier) Classify(ctx context.Context, req
 func cacheabilityStubLooksDynamicUserState(text string) bool {
 	return containsAny(text,
 		"my account", "my usage", "my order", "my invoice", "my permission", "current balance",
-		"latest", "real-time", "realtime", "today", "now", "session", "file", "tool result",
-		"내 계정", "내 사용량", "내 주문", "내 결제", "내 권한", "현재", "최신", "오늘", "지금", "파일", "도구 결과",
+		"latest", "real-time", "realtime", "today", "now", "this month", "current month", "session", "file", "tool result",
+		"내 계정", "내 사용량", "내 주문", "내 결제", "내 권한", "현재", "최신", "오늘", "지금", "이번 달", "당월", "파일", "도구 결과",
 	)
 }
 
@@ -247,6 +251,53 @@ func cacheabilityStubLooksStatic(text string) bool {
 		"how to", "what is", "explain", "guide", "faq", "reset password", "refund",
 		"방법", "절차", "설명", "가이드", "도움말", "비밀번호", "재설정", "환불",
 	)
+}
+
+func cacheabilityRuleStaticGuidanceResult(text string, promptCategory string, modelVersion string) (CacheabilityClassifierResult, bool) {
+	category := strings.TrimSpace(strings.ToLower(promptCategory))
+	if category != "" && category != SemanticCacheCategoryGeneral {
+		return CacheabilityClassifierResult{}, false
+	}
+	text = normalizeSemanticText(text)
+	if text == "" || cacheabilityStubLooksDynamicUserState(text) || !cacheabilityLooksStrictStaticGuidance(text) {
+		return CacheabilityClassifierResult{}, false
+	}
+	return CacheabilityClassifierResult{
+		Label:        CacheabilityLabelCacheableStatic,
+		Confidence:   0.95,
+		ReasonCode:   CacheabilityReasonRuleStaticGuidance,
+		ModelVersion: strings.TrimSpace(modelVersion),
+	}.Normalize(), true
+}
+
+func cacheabilityLooksStrictStaticGuidance(text string) bool {
+	if containsAny(text,
+		"rps", "requests per second", "초당 요청 수", "초당 요청수",
+		"tps", "transactions per second", "초당 트랜잭션",
+		"latency", "레이턴시", "지연 시간",
+		"throughput", "처리량",
+		"error rate", "에러율", "오류율", "실패율",
+		"rps tps 차이", "rps와 tps 차이", "rps랑 tps 차이", "rps vs tps",
+		"help center", "도움말 센터", "헬프센터", "고객센터 어디", "지원 문의 어디",
+		"invoice", "billing invoice", "receipt", "청구서 어디", "청구서 메뉴", "인보이스 어디", "영수증 어디",
+		"payment method", "billing card", "결제수단 어디", "결제 수단 어디", "카드 변경 어디", "카드 등록 어디",
+		"invite member", "invite teammate", "team invite", "팀원 초대", "멤버 초대", "사용자 초대", "동료 초대",
+		"project settings", "project configuration", "프로젝트 설정", "프로젝트 세팅",
+		"api docs", "developer docs", "api reference", "api 문서", "개발자 문서", "api 레퍼런스",
+		"status page", "service status", "system status", "상태 페이지", "서비스 상태", "장애 공지", "장애 현황",
+		"release notes", "changelog", "what's new", "릴리즈 노트", "업데이트 내역", "변경사항", "배포 노트",
+		"notification settings", "email notification", "알림 설정", "이메일 알림",
+		"role permissions", "permission settings", "권한 설정", "역할 변경", "멤버 권한",
+		"pricing page", "plan page", "billing plan", "요금제 어디", "요금제 확인", "가격표 어디", "플랜 확인",
+		"data export", "export data", "데이터 내보내기", "내보내기 메뉴",
+	) {
+		return true
+	}
+	if containsAny(text, "사용량", "이용량", "api usage", "usage") &&
+		containsAny(text, "어디", "위치", "메뉴", "화면", "확인 방법", "확인하는 방법", "보는 방법", "where", "screen", "page") {
+		return true
+	}
+	return false
 }
 
 type FastTextSidecarCacheabilityClassifierConfig struct {
@@ -344,10 +395,16 @@ func (c FastTextSidecarCacheabilityClassifier) Classify(ctx context.Context, req
 	if sidecarResult.Confidence != nil {
 		confidence = *sidecarResult.Confidence
 	}
-	return CacheabilityClassifierResult{
+	result := CacheabilityClassifierResult{
 		Label:        CacheabilityLabel(sidecarResult.Label),
 		Confidence:   confidence,
 		ReasonCode:   sidecarResult.ReasonCode,
 		ModelVersion: sidecarResult.ModelVersion,
-	}.Normalize(), nil
+	}.Normalize()
+	if !result.Passes(DefaultCacheabilityClassifierMinConfidence) {
+		if override, ok := cacheabilityRuleStaticGuidanceResult(text, request.PromptCategory, result.ModelVersion); ok {
+			return override, nil
+		}
+	}
+	return result, nil
 }

@@ -14,11 +14,11 @@ func TestSemanticCacheRerankerOffKeepsExistingHit(t *testing.T) {
 	boundary := testSemanticBoundary(t, nil)
 	service, _, _ := newSemanticRerankerTestService(t, boundary, nil)
 
-	storeSemanticRerankerEntry(t, ctx, service, boundary, "비밀번호 재설정 방법 알려줘", "request-reranker-off")
+	storeSemanticRerankerEntry(t, ctx, service, boundary, "사용량 메뉴 위치 알려줘", "request-reranker-off")
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "패스워드 초기화는 어떻게 해?",
+		NormalizedText: "API 사용량 확인 화면은 어디야?",
 	})
 	if err != nil {
 		t.Fatalf("reranker off search 실패: %v", err)
@@ -46,11 +46,11 @@ func TestSemanticCacheRerankerRejectsPolicyAcceptedCandidate(t *testing.T) {
 	}
 	service, _, _ := newSemanticRerankerTestService(t, boundary, reranker)
 
-	storeSemanticRerankerEntry(t, ctx, service, boundary, "비밀번호 재설정 방법 알려줘", "request-reranker-reject")
+	storeSemanticRerankerEntry(t, ctx, service, boundary, "사용량 메뉴 위치 알려줘", "request-reranker-reject")
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "비밀번호 재설정 방법 알려줘",
+		NormalizedText: "사용량 메뉴 위치 알려줘",
 	})
 	if err != nil {
 		t.Fatalf("reranker reject search 실패: %v", err)
@@ -84,11 +84,11 @@ func TestSemanticCacheRerankerAcceptsAfterPolicyAndThresholdPass(t *testing.T) {
 	}
 	service, _, _ := newSemanticRerankerTestService(t, boundary, reranker)
 
-	storeSemanticRerankerEntry(t, ctx, service, boundary, "비밀번호 재설정 방법 알려줘", "request-reranker-accept")
+	storeSemanticRerankerEntry(t, ctx, service, boundary, "사용량 메뉴 위치 알려줘", "request-reranker-accept")
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "비밀번호 재설정 방법 알려줘",
+		NormalizedText: "사용량 메뉴 위치 알려줘",
 	})
 	if err != nil {
 		t.Fatalf("reranker accept search 실패: %v", err)
@@ -107,11 +107,11 @@ func TestSemanticCacheRerankerFailureFallsBackToMiss(t *testing.T) {
 	reranker := &deterministicTestSemanticCacheReranker{err: errors.New("reranker unavailable")}
 	service, _, _ := newSemanticRerankerTestService(t, boundary, reranker)
 
-	storeSemanticRerankerEntry(t, ctx, service, boundary, "비밀번호 재설정 방법 알려줘", "request-reranker-failure")
+	storeSemanticRerankerEntry(t, ctx, service, boundary, "사용량 메뉴 위치 알려줘", "request-reranker-failure")
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "비밀번호 재설정 방법 알려줘",
+		NormalizedText: "사용량 메뉴 위치 알려줘",
 	})
 	if err != nil {
 		t.Fatalf("reranker failure는 main request error로 전파되면 안 됨: %v", err)
@@ -193,11 +193,11 @@ func TestSemanticCacheRerankerRequestDoesNotCarryRawPromptOrSecrets(t *testing.T
 	}
 	service, _, _ := newSemanticRerankerTestService(t, boundary, reranker)
 
-	storeSemanticRerankerEntry(t, ctx, service, boundary, "비밀번호 재설정 방법 알려줘", "request-reranker-safe-material")
+	storeSemanticRerankerEntry(t, ctx, service, boundary, "사용량 메뉴 위치 알려줘", "request-reranker-safe-material")
 
 	_, _, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "패스워드 초기화는 어떻게 해?",
+		NormalizedText: "API 사용량 확인 화면은 어디야?",
 	})
 	if err != nil {
 		t.Fatalf("reranker leakage 검증 search 실패: %v", err)
@@ -211,8 +211,8 @@ func TestSemanticCacheRerankerRequestDoesNotCarryRawPromptOrSecrets(t *testing.T
 	}
 	serialized := string(payload)
 	for _, forbidden := range []string{
-		"비밀번호 재설정 방법 알려줘",
-		"패스워드 초기화는 어떻게 해?",
+		"사용량 메뉴 위치 알려줘",
+		"API 사용량 확인 화면은 어디야?",
 		"OPENAI_API_KEY",
 		"glm_app_token",
 		"Authorization",

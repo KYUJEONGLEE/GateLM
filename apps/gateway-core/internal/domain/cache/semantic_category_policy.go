@@ -90,3 +90,13 @@ func semanticCategoryContains(categories []string, category string) bool {
 	}
 	return false
 }
+
+func semanticStringContains(values []string, value string) bool {
+	value = strings.TrimSpace(value)
+	for _, candidate := range values {
+		if strings.TrimSpace(candidate) == value {
+			return true
+		}
+	}
+	return false
+}

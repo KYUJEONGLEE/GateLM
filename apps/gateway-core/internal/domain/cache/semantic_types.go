@@ -74,6 +74,17 @@ type SemanticCacheSearchResult struct {
 }
 
 type SemanticCacheDecision struct {
+	LookupAllowed               bool
+	StoreAllowed                bool
+	ReturnedFromCache           bool
+	DenyReason                  string
+	BypassReason                string
+	CandidateHash               string
+	Category                    string
+	CanonicalIntent             string
+	RequiredSlotsHash           string
+	SimilarityScore             float64
+	Threshold                   float64
 	Enabled                     bool
 	Outcome                     string
 	CacheType                   string
@@ -148,17 +159,36 @@ func (e SemanticCacheEntry) Clone() SemanticCacheEntry {
 func (r SemanticCacheSearchResult) Decision(enabled bool, embeddingProvider string, policyVersion string) SemanticCacheDecision {
 	outcome := SemanticCacheOutcomeMiss
 	cacheType := SemanticCacheTypeSemantic
+	lookupAllowed := enabled
+	storeAllowed := r.Reason == SemanticCacheReasonStored || r.Reason == SemanticCacheReasonStoreAllowed
 	if !enabled {
 		outcome = SemanticCacheOutcomeBypassed
 		cacheType = SemanticCacheTypeNone
+		lookupAllowed = false
 	} else if r.Hit {
 		outcome = SemanticCacheOutcomeHit
 	}
 	matchedRequestID := ""
+	candidateHash := ""
 	if r.MatchedEntry != nil {
 		matchedRequestID = r.MatchedEntry.RequestID
+		candidateHash = semanticDecisionCandidateHash(firstSemanticReason(r.MatchedEntry.RequestID, r.MatchedEntry.EntryID))
 	}
+	reason := strings.TrimSpace(r.Reason)
+	denyReason, bypassReason := semanticDecisionReasonKinds(reason)
+	intentMaterial := r.IntentMaterial.Normalize()
 	return SemanticCacheDecision{
+		LookupAllowed:               semanticDecisionLookupAllowed(lookupAllowed, denyReason, bypassReason),
+		StoreAllowed:                storeAllowed,
+		ReturnedFromCache:           r.Hit,
+		DenyReason:                  denyReason,
+		BypassReason:                bypassReason,
+		CandidateHash:               candidateHash,
+		Category:                    intentMaterial.Category,
+		CanonicalIntent:             intentMaterial.CanonicalIntent,
+		RequiredSlotsHash:           intentMaterial.RequiredSlotsHash,
+		SimilarityScore:             r.Similarity,
+		Threshold:                   r.Threshold,
 		Enabled:                     enabled,
 		Outcome:                     outcome,
 		CacheType:                   cacheType,
@@ -167,7 +197,7 @@ func (r SemanticCacheSearchResult) Decision(enabled bool, embeddingProvider stri
 		SemanticMatchedRequestID:    matchedRequestID,
 		SemanticCacheThreshold:      r.Threshold,
 		SemanticCachePolicyVersion:  strings.TrimSpace(policyVersion),
-		SemanticCacheDecisionReason: strings.TrimSpace(r.Reason),
+		SemanticCacheDecisionReason: reason,
 		EmbeddingProvider:           strings.TrimSpace(embeddingProvider),
 		NormalizationVersion:        strings.TrimSpace(r.EmbeddingInput.NormalizationVersion),
 		RerankerApplied:             r.RerankerApplied,
@@ -176,4 +206,69 @@ func (r SemanticCacheSearchResult) Decision(enabled bool, embeddingProvider stri
 		RerankerThreshold:           r.RerankerThreshold,
 		RerankerDecisionReason:      strings.TrimSpace(r.RerankerDecisionReason),
 	}
+}
+
+func semanticDecisionLookupAllowed(enabled bool, denyReason string, bypassReason string) bool {
+	if !enabled || strings.TrimSpace(bypassReason) != "" {
+		return false
+	}
+	switch strings.TrimSpace(denyReason) {
+	case "",
+		SemanticCacheReasonIntentMismatch,
+		SemanticCacheReasonSlotsUnavailable,
+		SemanticCacheReasonSlotsMismatch,
+		SemanticCacheReasonHardNegative,
+		SemanticCacheReasonNoBoundaryMatch,
+		SemanticCacheReasonThresholdMiss,
+		SemanticCacheReasonEmbeddingFailure:
+		return true
+	case SemanticCacheReasonCategoryDenied,
+		SemanticCacheReasonAccountAccessDenied,
+		SemanticCacheReasonSupportRefundDenied,
+		SemanticCacheReasonDynamicUserStateDenied,
+		SemanticCacheReasonPayloadUnsafe,
+		SemanticCacheReasonEmbeddingInputUnavailable,
+		SemanticCacheReasonEmbeddingInputTooLong,
+		SemanticCacheReasonEmbeddingInputCodeLike,
+		SemanticCacheReasonIntentPolicyUnavailable,
+		SemanticCacheReasonIntentUnavailable,
+		SemanticCacheReasonIntentMaterialMissing,
+		SemanticCacheReasonInvalidBoundary,
+		SemanticCacheReasonInvalidVector:
+		return false
+	default:
+		return false
+	}
+}
+
+func semanticDecisionReasonKinds(reason string) (string, string) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" || reason == SemanticCacheReasonHit || reason == SemanticCacheReasonStored || reason == SemanticCacheReasonStoreAllowed {
+		return "", ""
+	}
+	switch reason {
+	case SemanticCacheReasonDisabled,
+		SemanticCacheReasonStreamBypass,
+		SemanticCacheReasonFallbackStoreBypass,
+		SemanticCacheReasonProviderErrorStoreBypass,
+		SemanticCacheReasonStoreSkipped,
+		SemanticCacheReasonScopeDenied,
+		SemanticCacheReasonTenantDenied,
+		SemanticCacheReasonApplicationDenied,
+		SemanticCacheReasonCategoryScopeDenied,
+		SemanticCacheReasonCandidateOnly,
+		SemanticCacheReasonShadowWouldHit,
+		SemanticCacheReasonShadowWouldMiss:
+		return "", reason
+	default:
+		return reason, ""
+	}
+}
+
+func semanticDecisionCandidateHash(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return "sha256:" + sha256Hex([]byte(value))
 }

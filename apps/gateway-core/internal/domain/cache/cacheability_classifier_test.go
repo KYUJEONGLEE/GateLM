@@ -131,6 +131,35 @@ func TestDeterministicStubCacheabilityClassifier(t *testing.T) {
 			wantLabel: CacheabilityLabelDynamicUserState,
 		},
 		{
+			name:      "dynamic monthly usage stays denied",
+			text:      "이번 달 사용량 알려줘",
+			wantLabel: CacheabilityLabelDynamicUserState,
+		},
+		{
+			name:      "strict static usage location",
+			text:      "사용량은 어디서 확인해?",
+			wantLabel: CacheabilityLabelCacheableStatic,
+			wantPass:  true,
+		},
+		{
+			name:      "strict static rps definition",
+			text:      "RPS 뜻이 뭐야?",
+			wantLabel: CacheabilityLabelCacheableStatic,
+			wantPass:  true,
+		},
+		{
+			name:      "strict static help center location",
+			text:      "도움말 센터는 어디서 봐?",
+			wantLabel: CacheabilityLabelCacheableStatic,
+			wantPass:  true,
+		},
+		{
+			name:      "strict static does not override non general category",
+			text:      "RPS 뜻이 뭐야?",
+			wantLabel: CacheabilityLabelUnsafeOrUnknown,
+			wantPass:  false,
+		},
+		{
 			name:      "unknown",
 			text:      "compose a custom reply",
 			wantLabel: CacheabilityLabelUnsafeOrUnknown,
@@ -144,14 +173,20 @@ func TestDeterministicStubCacheabilityClassifier(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			category := SemanticCacheCategoryGeneral
+			if tc.name == "strict static does not override non general category" {
+				category = SemanticCacheCategoryCode
+			}
 			first, err := classifier.Classify(context.Background(), CacheabilityClassificationRequest{
 				NormalizedText: tc.text,
+				PromptCategory: category,
 			})
 			if err != nil {
 				t.Fatalf("stub classification failed: %v", err)
 			}
 			second, err := classifier.Classify(context.Background(), CacheabilityClassificationRequest{
 				NormalizedText: tc.text,
+				PromptCategory: category,
 			})
 			if err != nil {
 				t.Fatalf("stub classification retry failed: %v", err)

@@ -17,9 +17,9 @@ const (
 	SemanticCacheProviderOutcomeError                 = "error"
 	SemanticCacheReasonStoreAllowed                   = "store_allowed"
 	SemanticCacheReasonResponseNotCacheable           = "response_not_cacheable"
-	SemanticCacheReasonDynamicUserState               = "dynamic_user_state"
-	SemanticCacheReasonFallbackResponse               = "fallback_response"
-	SemanticCacheReasonStreamingResponse              = "streaming_response"
+	SemanticCacheReasonDynamicUserState               = "dynamic_user_state_denied"
+	SemanticCacheReasonFallbackResponse               = "fallback_store_bypass"
+	SemanticCacheReasonStreamingResponse              = "stream_bypass"
 	SemanticCacheReasonProviderError                  = "provider_error"
 )
 
@@ -78,27 +78,12 @@ func DefaultSemanticCacheStorePolicy() SemanticCacheStorePolicy {
 				RequiresForbiddenPayloadGuard: true,
 				RequiresProviderSuccess:       true,
 				DenyFallback:                  true,
-				DenyStream:                    true,
 			},
 			SemanticCacheCategoryAccountAccess: {
-				Mode:                          SemanticCacheStoreModeStrictStore,
-				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityStaticGuidance},
-				RequiresIntent:                true,
-				RequiresRequiredSlots:         true,
-				RequiresForbiddenPayloadGuard: true,
-				RequiresProviderSuccess:       true,
-				DenyFallback:                  true,
-				DenyStream:                    true,
+				Mode: SemanticCacheStoreModeDisabled,
 			},
 			SemanticCacheCategorySupportRefund: {
-				Mode:                          SemanticCacheStoreModeStrictStore,
-				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityPolicySummary},
-				RequiresIntent:                true,
-				RequiresRequiredSlots:         true,
-				RequiresForbiddenPayloadGuard: true,
-				RequiresProviderSuccess:       true,
-				DenyFallback:                  true,
-				DenyStream:                    true,
+				Mode: SemanticCacheStoreModeDisabled,
 			},
 			SemanticCacheCategoryCode: {
 				Mode: SemanticCacheStoreModeDisabled,
@@ -152,7 +137,7 @@ func (p SemanticCacheStorePolicy) EvaluatePreIntent(material SemanticCacheStoreM
 	decision := semanticCacheStoreDecision(material)
 	mode := p.categoryPolicy(material.Category)
 	if mode.Mode == SemanticCacheStoreModeDisabled {
-		decision.Reason = SemanticCacheReasonCategoryDisabled
+		decision.Reason = semanticCacheCategoryDenyReason(material.Category)
 		return decision
 	}
 	if mode.DenyStream && material.Stream {
@@ -164,7 +149,7 @@ func (p SemanticCacheStorePolicy) EvaluatePreIntent(material SemanticCacheStoreM
 		return decision
 	}
 	if mode.RequiresProviderSuccess && material.ProviderOutcome != SemanticCacheProviderOutcomeSuccess {
-		decision.Reason = SemanticCacheReasonProviderError
+		decision.Reason = SemanticCacheReasonProviderErrorStoreBypass
 		return decision
 	}
 	if mode.RequiresForbiddenPayloadGuard && material.ContainsForbiddenPayload {
@@ -315,6 +300,17 @@ func semanticCacheStoreDecision(material SemanticCacheStoreMaterial) SemanticCac
 		RequiredSlotsHash:         material.RequiredSlotsHash,
 		ResponseCacheabilityClass: material.ResponseCacheabilityClass,
 		StorePolicyVersion:        material.StorePolicyVersion,
+	}
+}
+
+func semanticCacheCategoryDenyReason(category string) string {
+	switch canonicalIntentCategory(category) {
+	case SemanticCacheCategoryAccountAccess:
+		return SemanticCacheReasonAccountAccessDenied
+	case SemanticCacheCategorySupportRefund:
+		return SemanticCacheReasonSupportRefundDenied
+	default:
+		return SemanticCacheReasonCategoryDenied
 	}
 }
 

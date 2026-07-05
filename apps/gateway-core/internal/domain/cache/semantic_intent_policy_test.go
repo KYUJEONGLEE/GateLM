@@ -63,8 +63,80 @@ func TestSemanticCacheHitPolicyMaterializesCommonStaticGuidanceIntents(t *testin
 		wantSlots  map[string]string
 	}{
 		{
+			name:       "usage location Korean short",
+			text:       "사용량은 어디서 확인해?",
+			wantIntent: "usage.monthly_usage_check",
+			wantSlots: map[string]string{
+				"usageObject":     "api_usage",
+				"usageAnswerType": "static_guidance",
+			},
+		},
+		{
+			name:       "usage location Korean screen",
+			text:       "API 사용량 확인 화면은 어디야?",
+			wantIntent: "usage.monthly_usage_check",
+			wantSlots: map[string]string{
+				"usageObject":     "api_usage",
+				"usageAnswerType": "static_guidance",
+			},
+		},
+		{
 			name:       "RPS definition Korean",
 			text:       "RPS 뜻 알려줘",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition Korean explain",
+			text:       "RPS 뜻 설명해줘",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition Korean meaning explain",
+			text:       "RPS 의미 설명해줘",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition Korean josa meaning",
+			text:       "RPS의 뜻이 뭐야?",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition Korean concept noun phrase",
+			text:       "RPS의 개념",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition Korean subject particle",
+			text:       "RPS가 뭐야?",
+			wantIntent: "performance.rps_definition",
+			wantSlots: map[string]string{
+				"performanceConcept":    "rps",
+				"performanceAnswerType": "definition",
+			},
+		},
+		{
+			name:       "RPS definition Korean topic particle polite",
+			text:       "RPS는 뭔가요?",
 			wantIntent: "performance.rps_definition",
 			wantSlots: map[string]string{
 				"performanceConcept":    "rps",
@@ -268,6 +340,22 @@ func TestSemanticCacheHitPolicyMaterializesCommonStaticGuidanceIntents(t *testin
 	}
 }
 
+func TestSemanticCacheHitPolicyDoesNotCollapseMultiConceptDefinitionToSingleIntent(t *testing.T) {
+	policy := testSemanticHitPolicy(t)
+
+	for _, text := range []string{
+		"RPS와 TPS의 뜻 알려줘",
+		"RPS랑 TPS 개념 설명해줘",
+	} {
+		t.Run(text, func(t *testing.T) {
+			material, decision := policy.Materialize(SemanticCacheCategoryGeneral, text)
+			if !material.IsZero() || decision.Allowed || decision.Reason != SemanticCacheReasonIntentUnavailable {
+				t.Fatalf("복수 성능 개념 질문은 단일 definition intent로 접으면 안 됨: material=%+v decision=%+v", material, decision)
+			}
+		})
+	}
+}
+
 func TestSemanticCacheHitPolicyKeepsOperationalRPSQuestionsOutOfDefinitionIntent(t *testing.T) {
 	policy := testSemanticHitPolicy(t)
 
@@ -315,8 +403,8 @@ func TestSemanticCacheHitPolicySeparatesCommonStaticGuidanceIntents(t *testing.T
 	profileSettings := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "내 프로필 설정 어디야?")
 	securitySettings := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "2단계 인증 설정 어디서 해?")
 	decision = policy.Evaluate(securitySettings, profileSettings, 0.99, policy.DefaultThreshold)
-	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonIntentMismatch {
-		t.Fatalf("프로필 설정과 보안 설정은 별도 static guidance여야 함: %+v", decision)
+	if decision.ProviderBypassAllowed || decision.Reason != SemanticCacheReasonAccountAccessDenied {
+		t.Fatalf("account_access 설정 안내는 semantic cached response 반환 금지여야 함: %+v", decision)
 	}
 }
 
@@ -332,8 +420,8 @@ func TestSemanticCacheHitPolicyRejectsSupportRefundHardNegative(t *testing.T) {
 	}
 
 	hitDecision := policy.Evaluate(cancel, refund, 0.99, 0.92)
-	if hitDecision.ProviderBypassAllowed || hitDecision.Reason != SemanticCacheReasonHardNegative {
-		t.Fatalf("support_refund hard negative는 similarity가 높아도 hit 금지여야 함: %+v", hitDecision)
+	if hitDecision.ProviderBypassAllowed || hitDecision.Reason != SemanticCacheReasonSupportRefundDenied {
+		t.Fatalf("support_refund는 hard negative 이전에 기본 deny되어야 함: %+v", hitDecision)
 	}
 }
 
@@ -344,9 +432,9 @@ func TestSemanticCacheHitPolicyUsesCategoryThresholdsFromKoreanPolicy(t *testing
 		t.Fatalf("defaultThreshold는 보수 기본값으로 유지되어야 함: got=%f", policy.DefaultThreshold)
 	}
 	cases := map[string]float64{
-		SemanticCacheCategoryAccountAccess: 0.50,
-		SemanticCacheCategoryGeneral:       0.50,
-		SemanticCacheCategorySupportRefund: 0.70,
+		SemanticCacheCategoryAccountAccess: 0.92,
+		SemanticCacheCategoryGeneral:       0.92,
+		SemanticCacheCategorySupportRefund: 0.92,
 		SemanticCacheCategoryTranslation:   0.92,
 		SemanticCacheCategoryCode:          0.92,
 		SemanticCacheCategoryUnknown:       0.92,
@@ -365,13 +453,12 @@ func TestSemanticCacheHitPolicyAppliesCategoryThresholdAfterIntentGuards(t *test
 
 	passwordReset := mustMaterializeText(t, policy, SemanticCacheCategoryAccountAccess, "비밀번호 재설정 방법 알려줘")
 	passwordInit := mustMaterializeText(t, policy, SemanticCacheCategoryAccountAccess, "패스워드 초기화는 어떻게 해?")
-	assertPolicyDecision(t, policy.Evaluate(passwordInit, passwordReset, 0.49, policy.DefaultThreshold), false, SemanticCacheReasonThresholdMiss)
-	assertPolicyDecision(t, policy.Evaluate(passwordInit, passwordReset, 0.50, policy.DefaultThreshold), true, SemanticCacheReasonHit)
+	assertPolicyDecision(t, policy.Evaluate(passwordInit, passwordReset, 0.99, policy.DefaultThreshold), false, SemanticCacheReasonAccountAccessDenied)
 
 	usageMenu := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "사용량 메뉴 위치 알려줘")
 	usageStats := mustMaterializeText(t, policy, SemanticCacheCategoryGeneral, "API 사용량 확인 화면은 어디야?")
-	assertPolicyDecision(t, policy.Evaluate(usageStats, usageMenu, 0.49, policy.DefaultThreshold), false, SemanticCacheReasonThresholdMiss)
-	assertPolicyDecision(t, policy.Evaluate(usageStats, usageMenu, 0.50, policy.DefaultThreshold), true, SemanticCacheReasonHit)
+	assertPolicyDecision(t, policy.Evaluate(usageStats, usageMenu, 0.91, policy.DefaultThreshold), false, SemanticCacheReasonThresholdMiss)
+	assertPolicyDecision(t, policy.Evaluate(usageStats, usageMenu, 0.92, policy.DefaultThreshold), true, SemanticCacheReasonHit)
 
 	dynamicUsage, dynamicDecision := policy.Materialize(SemanticCacheCategoryGeneral, "내 이번 달 사용량 보여줘")
 	if !dynamicUsage.IsZero() || dynamicDecision.Allowed || dynamicDecision.Reason != SemanticCacheReasonIntentUnavailable {
@@ -380,13 +467,12 @@ func TestSemanticCacheHitPolicyAppliesCategoryThresholdAfterIntentGuards(t *test
 
 	shippingRefund := mustMaterializeText(t, policy, SemanticCacheCategorySupportRefund, "배송비도 환불되나요?")
 	returnShippingRefund := mustMaterializeText(t, policy, SemanticCacheCategorySupportRefund, "반품하면 배송비도 돌려받나요?")
-	assertPolicyDecision(t, policy.Evaluate(returnShippingRefund, shippingRefund, 0.69, policy.DefaultThreshold), false, SemanticCacheReasonThresholdMiss)
-	assertPolicyDecision(t, policy.Evaluate(returnShippingRefund, shippingRefund, 0.70, policy.DefaultThreshold), true, SemanticCacheReasonHit)
+	assertPolicyDecision(t, policy.Evaluate(returnShippingRefund, shippingRefund, 0.99, policy.DefaultThreshold), false, SemanticCacheReasonSupportRefundDenied)
 
 	orderCancel := mustMaterializeText(t, policy, SemanticCacheCategorySupportRefund, "주문 취소하고 싶어요")
 	hardNegative := policy.Evaluate(orderCancel, shippingRefund, 0.99, policy.DefaultThreshold)
-	if hardNegative.ProviderBypassAllowed || hardNegative.Reason != SemanticCacheReasonHardNegative {
-		t.Fatalf("support_refund hard negative는 categoryThreshold보다 높아도 hit 금지여야 함: %+v", hardNegative)
+	if hardNegative.ProviderBypassAllowed || hardNegative.Reason != SemanticCacheReasonSupportRefundDenied {
+		t.Fatalf("support_refund는 categoryThreshold보다 높아도 기본 deny되어야 함: %+v", hardNegative)
 	}
 }
 
@@ -394,8 +480,8 @@ func TestSemanticCacheIntentEvalCasesMatchHitPolicyContract(t *testing.T) {
 	policy := testSemanticHitPolicy(t)
 	dataset := loadSemanticIntentEvalDataset(t)
 	categoryPolicy := NewSemanticCacheCategoryPolicy(
-		[]string{SemanticCacheCategoryGeneral, SemanticCacheCategoryAccountAccess, SemanticCacheCategorySupportRefund},
-		[]string{SemanticCacheCategoryCode, SemanticCacheCategoryTranslation, SemanticCacheCategoryUnknown},
+		[]string{SemanticCacheCategoryGeneral},
+		[]string{SemanticCacheCategoryAccountAccess, SemanticCacheCategorySupportRefund, SemanticCacheCategoryCode, SemanticCacheCategoryTranslation, SemanticCacheCategoryUnknown},
 	)
 
 	for _, tc := range dataset.Cases {
@@ -414,6 +500,12 @@ func TestSemanticCacheIntentEvalCasesMatchHitPolicyContract(t *testing.T) {
 				}
 
 				decision := policy.Evaluate(second, first, 0.99, policy.DefaultThreshold)
+				if denyReason := semanticEvalCaseDenyReason(tc); denyReason != "" {
+					if decision.ProviderBypassAllowed || decision.Reason != denyReason {
+						t.Fatalf("deny-first eval case는 high similarity여도 hit 금지여야 함: wantReason=%s decision=%+v", denyReason, decision)
+					}
+					return
+				}
 				if !decision.ProviderBypassAllowed || decision.Outcome != SemanticCacheOutcomeHit || decision.Reason != SemanticCacheReasonHit {
 					t.Fatalf("positive eval case는 high similarity에서 hit 후보여야 함: %+v", decision)
 				}
@@ -428,6 +520,12 @@ func TestSemanticCacheIntentEvalCasesMatchHitPolicyContract(t *testing.T) {
 					t.Fatalf("negative eval case secondCanonicalIntent 불일치: expected=%q material=%+v", tc.SecondCanonicalIntent, second)
 				}
 				decision := policy.Evaluate(second, first, 0.99, policy.DefaultThreshold)
+				if denyReason := semanticEvalCaseDenyReason(tc); denyReason != "" {
+					if decision.ProviderBypassAllowed || decision.Reason != denyReason {
+						t.Fatalf("deny-first negative eval case reason 불일치: wantReason=%s decision=%+v", denyReason, decision)
+					}
+					return
+				}
 				if decision.ProviderBypassAllowed || decision.Allowed || decision.Outcome != SemanticCacheOutcomeMiss {
 					t.Fatalf("negative eval case는 high similarity여도 miss여야 함: %+v", decision)
 				}
@@ -490,6 +588,22 @@ func TestSemanticCacheIntentEvalCasesDriveServiceHitAndMissWithoutOpenAI(t *test
 			if err != nil {
 				t.Fatalf("eval case store 실패: %v", err)
 			}
+			if denyReason := semanticEvalCaseDenyReason(tc); denyReason != "" {
+				if storeDecision.SemanticCacheDecisionReason != denyReason {
+					t.Fatalf("deny-first eval case store reason 불일치: want=%s decision=%+v", denyReason, storeDecision)
+				}
+				result, decision, err := service.Search(context.Background(), SemanticCacheLookupRequest{
+					Boundary:       boundary,
+					NormalizedText: tc.Second,
+				})
+				if err != nil {
+					t.Fatalf("deny-first eval case search 실패: %v", err)
+				}
+				if result.Hit || decision.SemanticCacheHit || decision.SemanticCacheDecisionReason != denyReason {
+					t.Fatalf("deny-first eval case는 service search에서 hit 금지여야 함: want=%s result=%+v decision=%+v", denyReason, result, decision)
+				}
+				return
+			}
 			if storeDecision.SemanticCacheDecisionReason != SemanticCacheReasonStored {
 				t.Fatalf("eval case store decision 불일치: %+v", storeDecision)
 			}
@@ -537,7 +651,7 @@ func TestSemanticCacheIntentEvalCasesHaveShadowReportLabels(t *testing.T) {
 			if tc.ExpectedCanonicalIntent == "" {
 				t.Fatalf("expectedCanonicalIntent label이 필요함: %+v", tc)
 			}
-			if *tc.ExpectedSemanticHit != semanticEvalCaseExpectedHitFromDecision(tc.ExpectedDecision) {
+			if *tc.ExpectedSemanticHit != semanticEvalCaseExpectedHit(tc) {
 				t.Fatalf("expectedSemanticHit과 expectedDecision이 불일치함: %+v", tc)
 			}
 		})
@@ -607,14 +721,14 @@ func TestSemanticCacheHitPolicyReportsSlotsUnavailableForIncompleteMaterial(t *t
 	policy := testSemanticHitPolicy(t)
 	request := SemanticCacheIntentMaterial{
 		Category:                SemanticCacheCategoryGeneral,
-		CanonicalIntent:         "account.password_reset",
+		CanonicalIntent:         "usage.monthly_usage_check",
 		CanonicalizationVersion: policy.CanonicalizationVersion,
 		SynonymPolicyVersion:    policy.SynonymPolicyVersion,
 	}
 	cached := NewSemanticCacheIntentMaterial(
 		SemanticCacheCategoryGeneral,
-		"account.password_reset",
-		map[string]string{"accountAction": "password_reset"},
+		"usage.monthly_usage_check",
+		map[string]string{"usageObject": "api_usage", "usageAnswerType": "static_guidance"},
 		nil,
 		policy.CanonicalizationVersion,
 		policy.SynonymPolicyVersion,
@@ -904,6 +1018,31 @@ func semanticEvalCaseExpectedHitFromDecision(decision string) bool {
 	}
 }
 
+func semanticEvalCaseDenyReason(tc semanticIntentEvalCase) string {
+	switch CanonicalSemanticCacheCategory(tc.Category) {
+	case SemanticCacheCategoryAccountAccess:
+		return SemanticCacheReasonAccountAccessDenied
+	case SemanticCacheCategorySupportRefund:
+		return SemanticCacheReasonSupportRefundDenied
+	case SemanticCacheCategoryCode,
+		SemanticCacheCategoryTranslation,
+		SemanticCacheCategoryReasoning,
+		SemanticCacheCategorySensitive,
+		SemanticCacheCategoryToolCall,
+		SemanticCacheCategoryUnknown:
+		return SemanticCacheReasonCategoryDenied
+	default:
+		return ""
+	}
+}
+
+func semanticEvalCaseExpectedHit(tc semanticIntentEvalCase) bool {
+	if semanticEvalCaseDenyReason(tc) != "" {
+		return false
+	}
+	return semanticEvalCaseExpectedHitFromDecision(tc.ExpectedDecision)
+}
+
 func semanticIntentEvalCaseToShadowReportCase(policy *SemanticCacheHitPolicy, tc semanticIntentEvalCase) SemanticCacheShadowEvalCase {
 	expectedHit := false
 	if tc.ExpectedSemanticHit != nil {
@@ -918,6 +1057,17 @@ func semanticIntentEvalCaseToShadowReportCase(policy *SemanticCacheHitPolicy, tc
 		SemanticCacheEnabled:       true,
 		SemanticCachePolicyVersion: policy.PolicyVersion,
 		SemanticReturnedFromCache:  false,
+	}
+	if denyReason := semanticEvalCaseDenyReason(tc); denyReason != "" {
+		reportCase.SemanticCacheWouldMiss = true
+		reportCase.SemanticDecisionReason = denyReason
+		if material := evalCaseIntentMaterial(policy, tc); !material.IsZero() {
+			decision := policy.Evaluate(material, material, 0.99, policy.DefaultThreshold)
+			reportCase.SemanticCacheThreshold = decision.CategoryThreshold
+			reportCase.SemanticCanonicalIntent = decision.CanonicalIntent
+			reportCase.SemanticRequiredSlotsHash = decision.RequiredSlotsHash
+		}
+		return reportCase
 	}
 	if tc.ExpectedDecision == "bypass" {
 		material := evalCaseIntentMaterial(policy, tc)

@@ -100,10 +100,10 @@ func TestSemanticCacheConfigDefaults(t *testing.T) {
 	if cfg.IntentPolicyPath != "" {
 		t.Fatalf("intent policy path 기본값은 비어 있어야 함: got %q", cfg.IntentPolicyPath)
 	}
-	if strings.Join(cfg.AllowCategories, ",") != "general,support_refund" {
+	if strings.Join(cfg.AllowCategories, ",") != "general" {
 		t.Fatalf("allow category 기본값 불일치: got %v", cfg.AllowCategories)
 	}
-	if strings.Join(cfg.DenyCategories, ",") != "code,translation,summarization,extraction_json,reasoning,sensitive,tool_call,unknown" {
+	if strings.Join(cfg.DenyCategories, ",") != "account_access,support_refund,code,translation,summarization,extraction_json,reasoning,sensitive,tool_call,unknown" {
 		t.Fatalf("deny category 기본값 불일치: got %v", cfg.DenyCategories)
 	}
 	if len(cfg.AllowedTenantIDs) != 0 || len(cfg.AllowedApplicationIDs) != 0 || len(cfg.AllowedCategories) != 0 {
@@ -137,10 +137,10 @@ func TestSemanticCacheConfigDefaultCategoriesUseRoutingContract(t *testing.T) {
 		t.Fatalf("기본 Semantic Cache config는 에러 없이 로드되어야 함: %v", err)
 	}
 
-	if got := strings.Join(cfg.AllowCategories, ","); got != "general,support_refund" {
+	if got := strings.Join(cfg.AllowCategories, ","); got != "general" {
 		t.Fatalf("SC-CATEGORY-001 allow categories는 routing category 기준이어야 함: got %q", got)
 	}
-	if got := strings.Join(cfg.DenyCategories, ","); got != "code,translation,summarization,extraction_json,reasoning,sensitive,tool_call,unknown" {
+	if got := strings.Join(cfg.DenyCategories, ","); got != "account_access,support_refund,code,translation,summarization,extraction_json,reasoning,sensitive,tool_call,unknown" {
 		t.Fatalf("SC-CATEGORY-001 deny categories는 위험 category를 차단해야 함: got %q", got)
 	}
 }
