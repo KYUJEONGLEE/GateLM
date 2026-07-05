@@ -110,6 +110,65 @@ budgetScopeId = applicationId
 
 Gateway는 client-provided budget scope를 신뢰하지 않는다. `client_provided` 같은 source 값은 v2.0.0 계약에 넣지 않는다. Request Log/Detail/Dashboard에는 위 resolved source와 최종 resolved budget scope만 남긴다.
 
+### 3.5 Control Plane Auth And Organization Onboarding
+
+Control Plane auth/onboarding public entrypoint는 `admin/v1/*` 관리 API와 분리된 `/api/auth/*` namespace를 사용한다.
+
+Required public API seams:
+
+```text
+POST /api/auth/signup
+POST /api/auth/email/verify
+POST /api/auth/organizations
+POST /api/auth/login
+POST /api/auth/logout
+GET /api/auth/me
+GET /api/auth/google/start
+GET /api/auth/google/callback
+```
+
+Session contract:
+
+- Login state is represented by an `httpOnly` cookie.
+- Session storage is DB-backed opaque session.
+- Cookie contains only a random session token.
+- DB stores only `sessionTokenHash`, never the plaintext session token.
+- Session kind values are `onboarding` and `full`.
+- `logout` revokes the current DB session.
+
+Email/password signup flow:
+
+```text
+signup -> email verification -> organization creation -> full session
+```
+
+- `POST /api/auth/signup` creates a user and an email verification code row, but does not create a tenant or tenant membership.
+- Email verification uses a 6 digit code.
+- DB stores only the verification `codeHash`, never the plaintext code.
+- The signup response must not include verification code/token plaintext.
+- `POST /api/auth/email/verify` marks the user email as verified and issues an onboarding session cookie.
+- `POST /api/auth/organizations` consumes an onboarding session, creates the tenant, creates a `tenant_memberships` row with `role=tenant_admin`, and replaces the onboarding session with a full session.
+
+Google OAuth flow:
+
+- Google OAuth uses authorization-code flow through `GET /api/auth/google/start` and `GET /api/auth/google/callback`.
+- Google access token and refresh token must not be stored in DB, API response, logs, fixtures, or metrics labels.
+- If Google profile `email_verified=true`, the local user email is considered verified.
+- OAuth account linkage stores provider identity metadata such as provider name and provider subject, not external access credentials.
+- If the Google user has no tenant membership, the callback creates an onboarding session rather than a full session.
+
+Control Plane auth DB boundary:
+
+```text
+users
+email_verification_codes
+auth_sessions
+oauth_accounts
+tenant_memberships
+```
+
+The UI may display `Owner/Admin`, but the canonical DB/API role for the first organization creator is `tenant_admin`.
+
 ## 4. Employee Chat Boundary
 
 Employee Chat은 별도 예외 경로가 아니라 Application boundary 안의 surface로 취급한다.

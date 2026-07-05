@@ -4,6 +4,7 @@ import {
   Activity,
   Database,
   FolderKanban,
+  House,
   LayoutDashboard,
   Menu,
   Plug,
@@ -160,6 +161,7 @@ const shellText: Record<
     collapseNavigation: string;
     expandNavigation: string;
     language: string;
+    landing: string;
     settings: string;
     light: string;
     dark: string;
@@ -173,6 +175,7 @@ const shellText: Record<
     expandNavigation: "Expand navigation",
     dark: "Dark",
     language: "Console language",
+    landing: "Landing",
     light: "Light",
     planned: "planned",
     settings: "Tenant settings",
@@ -180,6 +183,7 @@ const shellText: Record<
     theme: "Theme"
   },
   ko: {
+    landing: "랜딩",
     collapseNavigation: "내비게이션 닫기",
     expandNavigation: "내비게이션 열기",
     dark: "다크",
@@ -337,6 +341,15 @@ export function ConsoleShell({
             <strong>GateLM</strong>
           </span>
         </Link>
+        <Link
+          aria-label={text.landing}
+          className="console-mobile-landing-link"
+          href="/?view=landing"
+          title={text.landing}
+        >
+          <House aria-hidden="true" size={17} strokeWidth={2.4} />
+          <span>{text.landing}</span>
+        </Link>
       </header>
       <button
         aria-label={text.collapseNavigation}
@@ -364,6 +377,16 @@ export function ConsoleShell({
             <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
           </button>
         </div>
+
+        <Link
+          className="console-landing-link"
+          href="/?view=landing"
+          onClick={closeMobileNavigation}
+          title={text.landing}
+        >
+          <House aria-hidden="true" size={16} strokeWidth={2.4} />
+          <span>{text.landing}</span>
+        </Link>
 
         <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {

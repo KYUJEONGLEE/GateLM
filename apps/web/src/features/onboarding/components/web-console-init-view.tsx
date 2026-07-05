@@ -4,6 +4,7 @@ import {
   Building2,
   CheckCircle2,
   Crown,
+  House,
   KeyRound,
   LogIn,
   MailCheck,
@@ -13,7 +14,6 @@ import {
   X
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { Locale } from "@/lib/i18n/locale";
@@ -45,6 +45,8 @@ const initText: Record<
       googleLogin: string;
       login: string;
       loginSubmit: string;
+      onboarding: string;
+      requestLogs: string;
       signup: string;
       signupSubmit: string;
     };
@@ -60,6 +62,9 @@ const initText: Record<
       readyTitle: string;
       signupTitle: string;
       verificationCode: string;
+    };
+    console: {
+      title: string;
     };
     hero: {
       eyebrow: string;
@@ -94,6 +99,32 @@ const initText: Record<
       title: string;
       body: string;
     };
+    features: {
+      title: string;
+      body: string;
+      items: Array<{
+        title: string;
+        body: string;
+      }>;
+    };
+    policies: {
+      title: string;
+      body: string;
+      items: Array<{
+        title: string;
+        body: string;
+      }>;
+    };
+    workflow: {
+      title: string;
+      body: string;
+      steps: string[];
+    };
+    bottomCta: {
+      title: string;
+      body: string;
+      action: string;
+    };
   }
 > = {
   en: {
@@ -103,6 +134,8 @@ const initText: Record<
       googleLogin: "Continue with Google",
       login: "Login",
       loginSubmit: "Login",
+      onboarding: "Management",
+      requestLogs: "Request logs",
       signup: "Sign up",
       signupSubmit: "Continue"
     },
@@ -118,6 +151,9 @@ const initText: Record<
       readyTitle: "Owner/Admin granted",
       signupTitle: "Create an organization account",
       verificationCode: "Verification code"
+    },
+    console: {
+      title: "Web Console"
     },
     hero: {
       body:
@@ -162,6 +198,65 @@ const initText: Record<
         "GateLM lets administrators control cost and security policy from one console while preserving the LLM workflows employees and services already use.",
       eyebrow: "About GateLM",
       title: "Do not block AI usage. Make it operational."
+    },
+    features: {
+      title: "Manage cost, models, and security policy from one Gateway.",
+      body:
+        "Provider calls, API keys, logs, and budget policy are standardized at the gateway layer instead of being scattered across services.",
+      items: [
+        {
+          title: "Unified API",
+          body: "Connect multiple providers and models through one OpenAI-compatible gateway surface."
+        },
+        {
+          title: "Spend Tracking",
+          body: "Track tokens and cost by tenant, project, application, and budget scope."
+        },
+        {
+          title: "Smart Cache",
+          body: "Answer repeated requests through exact cache paths and reduce provider spend."
+        },
+        {
+          title: "Model Access",
+          body: "Control which teams can use each provider, model, and budget boundary."
+        }
+      ]
+    },
+    policies: {
+      title: "Change operating policy in the console without redeploying code.",
+      body:
+        "Administrators can separate budget, rate limit, masking, and routing policy by scope and publish controlled runtime snapshots.",
+      items: [
+        {
+          title: "Budget Policy",
+          body: "Set budget thresholds and block runaway spend before it reaches providers."
+        },
+        {
+          title: "Security Policy",
+          body: "Apply request-side masking and keep sensitive evidence sanitized."
+        },
+        {
+          title: "Routing Policy",
+          body: "Select models by cost, latency, provider health, and application context."
+        }
+      ]
+    },
+    workflow: {
+      title: "Keep the customer UI. Route only the LLM request through GateLM.",
+      body:
+        "Employees keep using the product surfaces they already know while customer servers call the GateLM Gateway with scoped application credentials.",
+      steps: [
+        "An Owner/Admin creates a tenant, project, and application.",
+        "Provider credentials and GateLM application tokens are registered.",
+        "The customer server calls the Gateway instead of calling providers directly.",
+        "Dashboard, request logs, and policy events show the outcome in one place."
+      ]
+    },
+    bottomCta: {
+      action: "Open console",
+      body:
+        "GateLM adds an operating layer for LLM usage without changing the employee experience.",
+      title: "Operations gets control. Employees keep their workflow."
     }
   },
   ko: {
@@ -171,6 +266,8 @@ const initText: Record<
       googleLogin: "Google로 계속하기",
       login: "로그인",
       loginSubmit: "로그인",
+      onboarding: "관리",
+      requestLogs: "요청 로그",
       signup: "회원가입",
       signupSubmit: "계속",
     },
@@ -187,13 +284,16 @@ const initText: Record<
       signupTitle: "기업 계정 만들기",
       verificationCode: "인증 코드"
     },
+    console: {
+      title: "웹 콘솔"
+    },
     hero: {
       body:
         "고객사의 기존 서비스와 사내 UI를 유지한 채 모든 LLM 요청을 하나의 Gateway로 통과시켜 비용, 정책, 로그, 보안을 운영 레벨에서 관리합니다.",
       chips: ["Cost Control", "Policy", "Gateway API"],
       eyebrow: "B2B LLMOps Gateway for enterprise teams",
       title: "기업의 LLM 사용을",
-      titleAccent: "운영 가능한 Gateway로 전환합니다."
+      titleAccent: "운영 가능한 Gateway로\n전환합니다."
     },
     language: "콘솔 언어",
     nav: {
@@ -230,52 +330,282 @@ const initText: Record<
         "GateLM은 직원과 서비스가 이미 사용하던 LLM 흐름을 유지하면서 관리자가 비용과 보안 정책을 한 곳에서 제어하도록 돕는 B2B LLMOps Gateway입니다.",
       eyebrow: "About GateLM",
       title: "기업의 AI 사용을 막지 않고, 운영 가능한 형태로 바꿉니다."
+    },
+    features: {
+      title: "Gateway 한 곳에서 비용, 모델, 보안 정책을 관리합니다.",
+      body:
+        "서비스마다 흩어진 Provider 호출, API Key, 로그, 예산 정책을 Gateway 계층에서 표준화합니다.",
+      items: [
+        {
+          title: "Unified API",
+          body: "OpenAI 호환 API 하나로 여러 Provider와 모델을 연결합니다."
+        },
+        {
+          title: "Spend Tracking",
+          body: "테넌트, 프로젝트, 애플리케이션, budget scope 단위로 토큰과 비용을 추적합니다."
+        },
+        {
+          title: "Smart Cache",
+          body: "반복 요청은 exact cache 경로로 응답해 Provider 호출 비용을 줄입니다."
+        },
+        {
+          title: "Model Access",
+          body: "팀과 서비스가 사용할 수 있는 Provider, 모델, 예산 경계를 제어합니다."
+        }
+      ]
+    },
+    policies: {
+      title: "운영 정책은 코드 배포 없이 콘솔에서 변경합니다.",
+      body:
+        "관리자는 예산, rate limit, masking, routing 정책을 scope별로 분리하고 RuntimeSnapshot으로 publish할 수 있습니다.",
+      items: [
+        {
+          title: "Budget Policy",
+          body: "예산 임계값을 설정해 과금 급증을 Provider 호출 전에 차단합니다."
+        },
+        {
+          title: "Security Policy",
+          body: "request-side masking을 적용하고 민감한 evidence는 sanitized 형태로 유지합니다."
+        },
+        {
+          title: "Routing Policy",
+          body: "비용, 지연 시간, Provider 상태, 애플리케이션 맥락에 따라 모델을 선택합니다."
+        }
+      ]
+    },
+    workflow: {
+      title: "고객 UI는 그대로 두고, LLM 요청만 GateLM으로 보냅니다.",
+      body:
+        "직원은 익숙한 제품 화면을 계속 사용하고, 고객 서버는 scope가 정해진 application credential로 GateLM Gateway를 호출합니다.",
+      steps: [
+        "Owner/Admin이 tenant, project, application을 생성합니다.",
+        "Provider credential과 GateLM application token을 등록합니다.",
+        "고객 서버가 Provider 직접 호출 대신 Gateway를 호출합니다.",
+        "Dashboard, request log, policy event에서 결과를 한 곳에 확인합니다."
+      ]
+    },
+    bottomCta: {
+      action: "콘솔 열기",
+      body:
+        "GateLM은 직원 경험을 바꾸지 않고 LLM 사용을 운영 가능한 레이어로 묶습니다.",
+      title: "운영자는 통제하고, 직원은 하던 대로 사용합니다."
     }
   }
 };
 
+const consoleInitText: Record<
+  Locale,
+  {
+    actions: {
+      chat: string;
+      dashboard: string;
+      landing: string;
+      onboarding: string;
+      requestLogs: string;
+    };
+    language: string;
+    title: string;
+  }
+> = {
+  en: {
+    actions: {
+      chat: "Gateway request",
+      dashboard: "Dashboard",
+      landing: "Landing",
+      onboarding: "Management",
+      requestLogs: "Request logs"
+    },
+    language: "Console language",
+    title: "Web Console"
+  },
+  ko: {
+    actions: {
+      landing: "랜딩",
+      chat: "Gateway 요청",
+      dashboard: "대시보드",
+      onboarding: "관리",
+      requestLogs: "요청 로그"
+    },
+    language: "콘솔 언어",
+    title: "웹 콘솔"
+  }
+};
+
 export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
-  const router = useRouter();
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
+  const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auth") === "organization") {
+      window.history.replaceState(null, "", "/");
+      setIsConsoleOpen(true);
+      return;
+    }
+    if (params.get("view") === "landing") {
+      window.history.replaceState(null, "", "/");
+      setIsConsoleOpen(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function restoreSession() {
+      try {
+        const response = await fetch("/api/auth/me", {
+          credentials: "include"
+        });
+
+        if (!response.ok || !isMounted) {
+          return;
+        }
+
+        const body = (await response.json()) as {
+          data?: {
+            session?: {
+              kind?: string;
+            };
+          };
+        };
+
+        if (
+          body.data?.session?.kind === "full" ||
+          body.data?.session?.kind === "onboarding"
+        ) {
+          setIsConsoleOpen(true);
+        }
+      } catch {
+        // Anonymous visitors should still see the landing page.
+      }
+    }
+
+    void restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   function openAuthPanel(mode: AuthMode) {
+    setAuthError(null);
+    setAuthNotice(null);
     setAuthMode(mode);
+    if (mode === "signup") {
+      setSignupStep("account");
+    }
     setIsAuthPanelOpen(true);
   }
 
   function closeAuthPanel() {
     setIsAuthPanelOpen(false);
+    setAuthError(null);
+    setAuthNotice(null);
   }
 
-  function redirectHome() {
+  function completeAuth() {
     setIsAuthPanelOpen(false);
+    setAuthError(null);
+    setAuthNotice(null);
     setSignupStep("account");
-    router.push("/");
+    window.history.replaceState(null, "", "/");
+    setIsConsoleOpen(true);
   }
 
-  function submitLogin(event: FormEvent<HTMLFormElement>) {
+  async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    redirectHome();
+    const formData = new FormData(event.currentTarget);
+
+    await runAuthAction(async () => {
+      await postAuth("login", {
+        email: readFormString(formData, "email"),
+        password: readFormString(formData, "password")
+      });
+      completeAuth();
+    });
   }
 
-  function continueSignup(event: FormEvent<HTMLFormElement>) {
+  async function continueSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const currentIndex = signupStepOrder.indexOf(signupStep);
-    const nextStep = signupStepOrder[currentIndex + 1];
+    const formData = new FormData(event.currentTarget);
 
-    if (!nextStep) {
-      redirectHome();
+    if (signupStep === "ready") {
+      completeAuth();
       return;
     }
 
-    setSignupStep(nextStep);
+    await runAuthAction(async () => {
+      if (signupStep === "account") {
+        const email = readFormString(formData, "email");
+        const result = await postAuth("signup", {
+          email,
+          name: readFormString(formData, "name"),
+          password: readFormString(formData, "password")
+        });
+        setSignupEmail(email);
+        if (result.data?.verificationRequired === false) {
+          setAuthNotice("Email verified in local development. Create your organization.");
+          setSignupStep("organization");
+          return;
+        }
+        setAuthNotice("Verification code sent. Check your email.");
+        setSignupStep("verify");
+        return;
+      }
+
+      if (signupStep === "verify") {
+        await postAuth("email/verify", {
+          code: readFormString(formData, "verificationCode"),
+          email: signupEmail
+        });
+        setAuthNotice("Email verified. Create your organization.");
+        setSignupStep("organization");
+        return;
+      }
+
+      await postAuth("organizations", {
+        organizationName: readFormString(formData, "organization")
+      });
+      setAuthNotice(null);
+      setSignupStep("ready");
+    });
+  }
+
+  async function runAuthAction(action: () => Promise<void>) {
+    setAuthError(null);
+    setIsAuthSubmitting(true);
+
+    try {
+      await action();
+    } catch (error) {
+      setAuthNotice(null);
+      setAuthError(extractAuthErrorMessage(error));
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  }
+
+  function startGoogleLogin() {
+    window.location.assign("/api/auth/google/start");
+  }
+
+  function returnToLanding() {
+    window.history.replaceState(null, "", "/");
+    setIsConsoleOpen(false);
+  }
+
+  if (isConsoleOpen) {
+    return <ConsoleInitPanel locale={locale} onReturnToLanding={returnToLanding} />;
   }
 
   return (
@@ -312,7 +642,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         </div>
       </nav>
 
-      <section className="landing-hero" id="gateway">
+      <section className="landing-hero">
         <GatewayScene text={text.scene} />
         <div className="landing-hero-copy">
           <p className="landing-eyebrow">{text.hero.eyebrow}</p>
@@ -326,16 +656,6 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
             <span>{text.hero.titleAccent}</span>
           </h1>
           <p>{text.hero.body}</p>
-          <div className="landing-hero-actions">
-            <button className="landing-cta" onClick={() => openAuthPanel("login")} type="button">
-              <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
-              <span>{text.actions.login}</span>
-            </button>
-            <button className="landing-secondary-cta" onClick={() => openAuthPanel("signup")} type="button">
-              <UserPlus aria-hidden="true" size={18} strokeWidth={2.4} />
-              <span>{text.actions.signup}</span>
-            </button>
-          </div>
         </div>
       </section>
 
@@ -364,6 +684,20 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
             <span>{text.actions.chat}</span>
           </Link>
         </div>
+      </section>
+
+      <LandingFeatureSection text={text.features} />
+      <LandingPolicySection text={text.policies} />
+      <LandingWorkflowSection text={text.workflow} />
+      <section className="landing-section landing-bottom-cta">
+        <div>
+          <h2>{text.bottomCta.title}</h2>
+          <p>{text.bottomCta.body}</p>
+        </div>
+        <button className="landing-cta" onClick={() => openAuthPanel("login")} type="button">
+          <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
+          <span>{text.bottomCta.action}</span>
+        </button>
       </section>
 
       {isAuthPanelOpen ? (
@@ -403,7 +737,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
               <button
                 aria-selected={authMode === "signup"}
                 data-active={authMode === "signup"}
-                onClick={() => setAuthMode("signup")}
+                onClick={() => {
+                  setAuthMode("signup");
+                  setSignupStep("account");
+                }}
                 role="tab"
                 type="button"
               >
@@ -411,23 +748,82 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
               </button>
             </div>
 
+            {authError ? (
+              <p className="landing-auth-message landing-auth-message-error" role="alert">
+                {authError}
+              </p>
+            ) : null}
+            {authNotice ? (
+              <p className="landing-auth-message landing-auth-message-success">
+                {authNotice}
+              </p>
+            ) : null}
+
             {authMode === "login" ? (
               <LoginForm
+                isSubmitting={isAuthSubmitting}
                 text={text}
-                onGoogleLogin={redirectHome}
+                onGoogleLogin={startGoogleLogin}
                 onSubmit={submitLogin}
               />
             ) : (
               <SignupFlow
+                isSubmitting={isAuthSubmitting}
                 signupStep={signupStep}
                 text={text}
-                onGoogleLogin={redirectHome}
+                onGoogleLogin={startGoogleLogin}
                 onSubmit={continueSignup}
               />
             )}
           </section>
         </div>
       ) : null}
+    </main>
+  );
+}
+
+function ConsoleInitPanel({
+  locale,
+  onReturnToLanding
+}: {
+  locale: Locale;
+  onReturnToLanding: () => void;
+}) {
+  const text = consoleInitText[locale];
+
+  return (
+    <main className="init-shell">
+      <section className="init-panel" aria-labelledby="init-title">
+        <div>
+          <div className="init-heading-row">
+            <p className="init-label">GateLM</p>
+            <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+          </div>
+          <h1 id="init-title">{text.title}</h1>
+          <div className="init-actions">
+            <button
+              className="primary-link init-landing-button"
+              onClick={onReturnToLanding}
+              type="button"
+            >
+              <House aria-hidden="true" size={16} strokeWidth={2.4} />
+              <span>{text.actions.landing}</span>
+            </button>
+            <Link className="primary-link" href="/application">
+              {text.actions.chat}
+            </Link>
+            <Link className="primary-link" href={`/tenants/${defaultTenantId}/onboarding`}>
+              {text.actions.onboarding}
+            </Link>
+            <Link className="primary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
+              {text.actions.dashboard}
+            </Link>
+            <Link className="back-link" href={`/tenants/${defaultTenantId}/request-logs`}>
+              {text.actions.requestLogs}
+            </Link>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
@@ -473,17 +869,137 @@ function GatewayScene({ text }: { text: (typeof initText)[Locale]["scene"] }) {
   );
 }
 
+type AuthPostResponse = {
+  data?: {
+    session?: {
+      kind?: string;
+    };
+    verificationRequired?: boolean;
+  };
+  error?: {
+    message?: string;
+  };
+};
+
+async function postAuth(path: string, payload: Record<string, string>) {
+  const response = await fetch(`/api/auth/${path}`, {
+    body: JSON.stringify(payload),
+    credentials: "include",
+    headers: {
+      "content-type": "application/json"
+    },
+    method: "POST"
+  });
+  const body = (await response.json().catch(() => null)) as AuthPostResponse | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error?.message ?? "Authentication request failed.");
+  }
+
+  return body ?? {};
+}
+
+function readFormString(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function extractAuthErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Authentication request failed.";
+}
+
+function LandingFeatureSection({
+  text
+}: {
+  text: (typeof initText)[Locale]["features"];
+}) {
+  return (
+    <section className="landing-section" id="gateway">
+      <div className="landing-section-heading">
+        <h2>{text.title}</h2>
+        <p>{text.body}</p>
+      </div>
+      <div className="landing-feature-grid">
+        {text.items.map((item) => (
+          <article className="landing-feature-card" key={item.title}>
+            <strong>{item.title}</strong>
+            <p>{item.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LandingPolicySection({
+  text
+}: {
+  text: (typeof initText)[Locale]["policies"];
+}) {
+  return (
+    <section className="landing-section landing-policy-showcase" id="policies">
+      <div className="landing-section-heading">
+        <h2>{text.title}</h2>
+        <p>{text.body}</p>
+      </div>
+      <div className="landing-policy-grid">
+        {text.items.map((item) => (
+          <article className="landing-policy-card" key={item.title}>
+            <span aria-hidden="true" />
+            <strong>{item.title}</strong>
+            <p>{item.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LandingWorkflowSection({
+  text
+}: {
+  text: (typeof initText)[Locale]["workflow"];
+}) {
+  return (
+    <section className="landing-section landing-workflow-section">
+      <div>
+        <h2>{text.title}</h2>
+        <p>{text.body}</p>
+      </div>
+      <ol className="landing-workflow-list">
+        {text.steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function LoginForm({
+  isSubmitting,
   onGoogleLogin,
   onSubmit,
   text
 }: {
+  isSubmitting: boolean;
   onGoogleLogin: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   text: (typeof initText)[Locale];
 }) {
   return (
     <form className="landing-auth-form" onSubmit={onSubmit}>
+      <button
+        className="landing-google-button"
+        disabled={isSubmitting}
+        onClick={onGoogleLogin}
+        type="button"
+      >
+        <GoogleMark />
+        <strong>{text.actions.googleLogin}</strong>
+      </button>
+      <div className="landing-auth-divider" role="separator">
+        <span>or</span>
+      </div>
       <label>
         <span>{text.auth.email}</span>
         <input autoComplete="email" name="email" required type="email" />
@@ -492,26 +1008,24 @@ function LoginForm({
         <span>{text.auth.password}</span>
         <input autoComplete="current-password" name="password" required type="password" />
       </label>
-      <button className="landing-auth-submit" type="submit">
+      <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
         <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
         <span>{text.actions.loginSubmit}</span>
-      </button>
-      <button className="landing-google-button" onClick={onGoogleLogin} type="button">
-        <span aria-hidden="true">G</span>
-        <strong>{text.actions.googleLogin}</strong>
       </button>
     </form>
   );
 }
 
 function SignupFlow({
+  isSubmitting,
   onGoogleLogin,
   onSubmit,
   signupStep,
   text
 }: {
+  isSubmitting: boolean;
   onGoogleLogin: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   signupStep: SignupStepId;
   text: (typeof initText)[Locale];
 }) {
@@ -585,7 +1099,7 @@ function SignupFlow({
         </div>
       ) : null}
 
-      <button className="landing-auth-submit" type="submit">
+      <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
         {isReadyStep ? (
           <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
         ) : (
@@ -593,10 +1107,40 @@ function SignupFlow({
         )}
         <span>{isReadyStep ? text.actions.loginSubmit : text.actions.signupSubmit}</span>
       </button>
-      <button className="landing-google-button" onClick={onGoogleLogin} type="button">
-        <span aria-hidden="true">G</span>
+      <button
+        className="landing-google-button"
+        disabled={isSubmitting}
+        onClick={onGoogleLogin}
+        type="button"
+      >
+        <GoogleMark />
         <strong>{text.actions.googleLogin}</strong>
       </button>
     </form>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <span className="landing-google-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path
+          d="M21.6 12.23c0-.76-.07-1.49-.2-2.19H12v4.15h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.32 2.98-7.49Z"
+          fill="#4285f4"
+        />
+        <path
+          d="M12 22c2.7 0 4.97-.9 6.62-2.44l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.12H3.06v2.59A9.99 9.99 0 0 0 12 22Z"
+          fill="#34a853"
+        />
+        <path
+          d="M6.4 13.89a6.01 6.01 0 0 1 0-3.78V7.52H3.06a10 10 0 0 0 0 8.96l3.34-2.59Z"
+          fill="#fbbc05"
+        />
+        <path
+          d="M12 5.99c1.47 0 2.8.51 3.84 1.5l2.86-2.86A9.58 9.58 0 0 0 12 2 9.99 9.99 0 0 0 3.06 7.52l3.34 2.59C7.19 7.75 9.4 5.99 12 5.99Z"
+          fill="#ea4335"
+        />
+      </svg>
+    </span>
   );
 }
