@@ -101,5 +101,5 @@ where provider = any($1::text[])
   and model = any($2::text[])
   and effective_from <= $3::timestamptz
   and (effective_to is null or effective_to > $3::timestamptz)
-order by effective_from desc, created_at desc
+order by array_position($1::text[], provider) asc, array_position($2::text[], model) asc, effective_from desc, created_at desc
 limit 1`

@@ -3071,6 +3071,11 @@ func (h *ChatCompletionsHandler) applyProviderUsageCost(ctx context.Context, req
 	if h == nil || h.CostCalculator == nil || reqCtx == nil {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	} else {
+		ctx = context.WithoutCancel(ctx)
+	}
 	result, err := h.CostCalculator.Calculate(ctx, costing.Request{
 		ProviderKeys:     providerPricingKeys(reqCtx, target),
 		ModelKeys:        modelPricingKeys(reqCtx, target),

@@ -146,9 +146,9 @@ func (c *Calculator) Calculate(ctx context.Context, req Request) (Result, error)
 	}
 	if lookup.EffectiveAt.IsZero() {
 		if c.now != nil {
-			lookup.EffectiveAt = c.now()
+			lookup.EffectiveAt = c.now().UTC()
 		} else {
-			lookup.EffectiveAt = time.Now()
+			lookup.EffectiveAt = time.Now().UTC()
 		}
 	}
 
