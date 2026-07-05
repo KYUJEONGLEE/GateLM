@@ -64,6 +64,10 @@ export class RuntimeConfigBudgetPolicyDto {
   @Min(0)
   @Max(100)
   warningThresholdPercent?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  restrictHighQualityOnBudgetRisk?: boolean;
 }
 
 export class RuntimeConfigCachePolicyDto {
@@ -466,6 +470,7 @@ export interface RuntimeConfigBudgetPolicyResponseDto {
   enabled: boolean;
   enforcementMode: 'warn' | 'block' | 'disabled';
   warningThresholdPercent: number;
+  restrictHighQualityOnBudgetRisk: boolean;
 }
 
 export interface RuntimeConfigSafetyDetectorResponseDto {
@@ -720,6 +725,7 @@ export interface RuntimeSnapshotBudgetPolicyDto {
   enabled: boolean;
   enforcementMode: 'warn' | 'block' | 'disabled';
   warningThresholdPercent: number;
+  restrictHighQualityOnBudgetRisk: boolean;
 }
 
 export interface RuntimeSnapshotFallbackPolicyDto {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -328,39 +329,41 @@ type DashboardPerformance struct {
 }
 
 type DashboardOverviewFields struct {
-	TotalRequests         int64
-	SuccessfulRequests    int64
-	FailedRequests        int64
-	BlockedRequests       int64
-	RateLimitedRequests   int64
-	CancelledRequests     int64
-	CacheHitRequests      int64
-	CacheEligibleRequests int64
-	CacheHitRate          *float64
-	FallbackSuccessCount  int64
-	PromptTokens          int64
-	CompletionTokens      int64
-	TotalTokens           int64
-	TotalCostMicroUSD     int64
-	TotalCostUSD          string
-	SavedCostMicroUSD     int64
-	SavedCostUSD          string
-	AverageLatencyMs      *float64
-	P95LatencyMs          *float64
-	AverageResponseTimeMs *float64
-	MaskingActionCounts   map[string]int64
-	RoutingCountByModel   []RoutingCountByModel
-	StatusCounts          map[string]int64
-	SafetyOutcomeCounts   map[string]int64
-	CacheOutcomeCounts    map[string]int64
-	FallbackOutcomeCounts map[string]int64
-	ProjectBreakdown      []ProjectBreakdown
-	ApplicationBreakdown  []ApplicationBreakdown
-	CostByModel           []CostByModel
-	BudgetScopeBreakdown  []BudgetScopeBreakdown
-	DataFreshness         DashboardDataFreshness
-	QueryBudget           DashboardQueryBudget
-	Performance           DashboardPerformance
+	TotalRequests            int64
+	SuccessfulRequests       int64
+	FailedRequests           int64
+	BlockedRequests          int64
+	RateLimitedRequests      int64
+	CancelledRequests        int64
+	CacheHitRequests         int64
+	CacheEligibleRequests    int64
+	CacheHitRate             *float64
+	FallbackSuccessCount     int64
+	PromptTokens             int64
+	CompletionTokens         int64
+	TotalTokens              int64
+	TotalCostMicroUSD        int64
+	TotalCostUSD             string
+	SavedCostMicroUSD        int64
+	SavedCostUSD             string
+	AverageLatencyMs         *float64
+	P95LatencyMs             *float64
+	AverageResponseTimeMs    *float64
+	MaskingActionCounts      map[string]int64
+	RoutingCountByModel      []RoutingCountByModel
+	StatusCounts             map[string]int64
+	SafetyOutcomeCounts      map[string]int64
+	CacheOutcomeCounts       map[string]int64
+	FallbackOutcomeCounts    map[string]int64
+	BudgetOutcomeCounts      map[string]int64
+	BudgetDowngradedRequests int64
+	ProjectBreakdown         []ProjectBreakdown
+	ApplicationBreakdown     []ApplicationBreakdown
+	CostByModel              []CostByModel
+	BudgetScopeBreakdown     []BudgetScopeBreakdown
+	DataFreshness            DashboardDataFreshness
+	QueryBudget              DashboardQueryBudget
+	Performance              DashboardPerformance
 }
 
 type DashboardOverviewAggregate struct {
@@ -390,6 +393,8 @@ type DashboardOverviewAggregate struct {
 	SafetyOutcomeCounts         map[string]int64
 	CacheOutcomeCounts          map[string]int64
 	FallbackOutcomeCounts       map[string]int64
+	BudgetOutcomeCounts         map[string]int64
+	BudgetDowngradedRequests    int64
 	ProjectBreakdown            []ProjectBreakdown
 	ApplicationBreakdown        []ApplicationBreakdown
 	CostByModel                 []CostByModel
@@ -772,6 +777,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		SafetyOutcomeCounts:   defaultSafetyOutcomeCounts(),
 		CacheOutcomeCounts:    defaultCacheOutcomeCounts(),
 		FallbackOutcomeCounts: defaultFallbackOutcomeCounts(),
+		BudgetOutcomeCounts:   defaultBudgetOutcomeCounts(),
 	}
 	routingCounts := map[dashboardModelKey]int64{}
 	costCounts := map[dashboardModelKey]CostByModel{}
@@ -790,6 +796,10 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		incrementCount(aggregate.SafetyOutcomeCounts, domainOutcomes.Safety.Outcome)
 		incrementCount(aggregate.CacheOutcomeCounts, domainOutcomes.Cache.Outcome)
 		incrementCount(aggregate.FallbackOutcomeCounts, domainOutcomes.Fallback.Outcome)
+		incrementCount(aggregate.BudgetOutcomeCounts, domainOutcomes.Budget.Outcome)
+		if strings.TrimSpace(log.RoutingReason) == routing.ReasonBudgetHighQualityDowngrade {
+			aggregate.BudgetDowngradedRequests++
+		}
 		if isSuccessfulStatus(terminalStatus) {
 			aggregate.SuccessfulRequests++
 		}
@@ -910,35 +920,37 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) DashboardOverviewFields {
 	generatedAt := generatedAtOrNow(aggregate.GeneratedAt)
 	overview := DashboardOverviewFields{
-		TotalRequests:         aggregate.TotalRequests,
-		SuccessfulRequests:    aggregate.SuccessfulRequests,
-		FailedRequests:        aggregate.FailedRequests,
-		BlockedRequests:       aggregate.BlockedRequests,
-		RateLimitedRequests:   aggregate.RateLimitedRequests,
-		CancelledRequests:     aggregate.CancelledRequests,
-		CacheHitRequests:      aggregate.CacheHitRequests,
-		CacheEligibleRequests: aggregate.CacheEligibleRequests,
-		FallbackSuccessCount:  aggregate.FallbackSuccessCount,
-		PromptTokens:          aggregate.PromptTokens,
-		CompletionTokens:      aggregate.CompletionTokens,
-		TotalTokens:           aggregate.TotalTokens,
-		TotalCostMicroUSD:     aggregate.TotalCostMicroUSD,
-		TotalCostUSD:          FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
-		SavedCostMicroUSD:     aggregate.SavedCostMicroUSD,
-		SavedCostUSD:          FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
-		AverageLatencyMs:      aggregate.AverageLatencyMs,
-		P95LatencyMs:          aggregate.P95LatencyMs,
-		AverageResponseTimeMs: aggregate.AverageLatencyMs,
-		MaskingActionCounts:   mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
-		RoutingCountByModel:   append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
-		StatusCounts:          mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
-		SafetyOutcomeCounts:   mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
-		CacheOutcomeCounts:    mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
-		FallbackOutcomeCounts: mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
-		ProjectBreakdown:      normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
-		ApplicationBreakdown:  normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
-		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
-		BudgetScopeBreakdown:  normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
+		TotalRequests:            aggregate.TotalRequests,
+		SuccessfulRequests:       aggregate.SuccessfulRequests,
+		FailedRequests:           aggregate.FailedRequests,
+		BlockedRequests:          aggregate.BlockedRequests,
+		RateLimitedRequests:      aggregate.RateLimitedRequests,
+		CancelledRequests:        aggregate.CancelledRequests,
+		CacheHitRequests:         aggregate.CacheHitRequests,
+		CacheEligibleRequests:    aggregate.CacheEligibleRequests,
+		FallbackSuccessCount:     aggregate.FallbackSuccessCount,
+		PromptTokens:             aggregate.PromptTokens,
+		CompletionTokens:         aggregate.CompletionTokens,
+		TotalTokens:              aggregate.TotalTokens,
+		TotalCostMicroUSD:        aggregate.TotalCostMicroUSD,
+		TotalCostUSD:             FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
+		SavedCostMicroUSD:        aggregate.SavedCostMicroUSD,
+		SavedCostUSD:             FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
+		AverageLatencyMs:         aggregate.AverageLatencyMs,
+		P95LatencyMs:             aggregate.P95LatencyMs,
+		AverageResponseTimeMs:    aggregate.AverageLatencyMs,
+		MaskingActionCounts:      mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
+		RoutingCountByModel:      append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
+		StatusCounts:             mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
+		SafetyOutcomeCounts:      mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
+		CacheOutcomeCounts:       mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
+		FallbackOutcomeCounts:    mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
+		BudgetOutcomeCounts:      mergeDefaultCounts(defaultBudgetOutcomeCounts(), aggregate.BudgetOutcomeCounts),
+		BudgetDowngradedRequests: aggregate.BudgetDowngradedRequests,
+		ProjectBreakdown:         normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
+		ApplicationBreakdown:     normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
+		CostByModel:              normalizedCostByModel(aggregate.CostByModel),
+		BudgetScopeBreakdown:     normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
 		DataFreshness: DashboardDataFreshness{
 			Source:           "postgresql_request_log",
 			RecordCount:      aggregate.TotalRequests,
@@ -1115,6 +1127,16 @@ func defaultFallbackOutcomeCounts() map[string]int64 {
 	}
 }
 
+func defaultBudgetOutcomeCounts() map[string]int64 {
+	return map[string]int64{
+		budget.OutcomeAllowed:    0,
+		budget.OutcomeWarned:     0,
+		budget.OutcomeDegraded:   0,
+		budget.OutcomeBlocked:    0,
+		budget.OutcomeNotUsed:    0,
+		budget.OutcomeNotChecked: 0,
+	}
+}
 func mergeDefaultCounts(defaults map[string]int64, values map[string]int64) map[string]int64 {
 	merged := make(map[string]int64, len(defaults)+len(values))
 	for key, value := range defaults {

@@ -13,17 +13,21 @@ const (
 
 	OutcomeAllowed    = "allowed"
 	OutcomeWarned     = "warned"
+	OutcomeDegraded   = "degraded"
 	OutcomeBlocked    = "blocked"
 	OutcomeNotUsed    = "not_used"
 	OutcomeNotChecked = "not_checked"
 
 	DefaultWarningThresholdPercent = 80
+
+	DefaultRestrictHighQualityOnBudgetRisk = true
 )
 
 type Policy struct {
-	Enabled                 bool
-	EnforcementMode         string
-	WarningThresholdPercent int
+	Enabled                         bool
+	EnforcementMode                 string
+	WarningThresholdPercent         int
+	RestrictHighQualityOnBudgetRisk *bool
 }
 
 type Request struct {
@@ -42,6 +46,11 @@ type Decision struct {
 	Policy                  Policy
 	WarningThresholdPercent int
 	Reason                  string
+	UsageKnown              bool
+	LimitMicroUSD           int64
+	UsedMicroUSD            int64
+	RemainingMicroUSD       int64
+	UsagePercent            float64
 }
 
 type Checker interface {
@@ -68,12 +77,16 @@ func (AllowChecker) Check(_ context.Context, req Request) (Decision, error) {
 
 func NormalizePolicy(policy Policy) Policy {
 	mode := strings.TrimSpace(policy.EnforcementMode)
-	if !policy.Enabled && mode == "" && policy.WarningThresholdPercent == 0 {
+	if !policy.Enabled && mode == "" && policy.WarningThresholdPercent == 0 && policy.RestrictHighQualityOnBudgetRisk == nil {
 		return Policy{
-			Enabled:                 false,
-			EnforcementMode:         EnforcementModeDisabled,
-			WarningThresholdPercent: DefaultWarningThresholdPercent,
+			Enabled:                         false,
+			EnforcementMode:                 EnforcementModeDisabled,
+			WarningThresholdPercent:         DefaultWarningThresholdPercent,
+			RestrictHighQualityOnBudgetRisk: boolPointer(DefaultRestrictHighQualityOnBudgetRisk),
 		}
+	}
+	if policy.RestrictHighQualityOnBudgetRisk == nil {
+		policy.RestrictHighQualityOnBudgetRisk = boolPointer(DefaultRestrictHighQualityOnBudgetRisk)
 	}
 
 	switch mode {
@@ -123,6 +136,9 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 	case OutcomeWarned:
 		decision.Outcome = OutcomeWarned
 		decision.Allowed = true
+	case OutcomeDegraded:
+		decision.Outcome = OutcomeDegraded
+		decision.Allowed = true
 	case OutcomeAllowed:
 		decision.Outcome = OutcomeAllowed
 		decision.Allowed = true
@@ -143,6 +159,22 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 	return decision
 }
 
+func RestrictsHighQuality(decision *Decision) bool {
+	if decision == nil {
+		return false
+	}
+	policy := NormalizePolicy(decision.Policy)
+	if policy.RestrictHighQualityOnBudgetRisk == nil || !*policy.RestrictHighQualityOnBudgetRisk {
+		return false
+	}
+	switch strings.TrimSpace(decision.Outcome) {
+	case OutcomeWarned, OutcomeDegraded, OutcomeBlocked:
+		return true
+	default:
+		return false
+	}
+}
+
 func (d *Decision) Clone() *Decision {
 	if d == nil {
 		return nil
@@ -154,5 +186,10 @@ func (d *Decision) Clone() *Decision {
 func isZeroPolicy(policy Policy) bool {
 	return !policy.Enabled &&
 		strings.TrimSpace(policy.EnforcementMode) == "" &&
-		policy.WarningThresholdPercent == 0
+		policy.WarningThresholdPercent == 0 &&
+		policy.RestrictHighQualityOnBudgetRisk == nil
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }

@@ -8,9 +8,10 @@ import (
 )
 
 type Request struct {
-	RequestedModel string
-	PromptText     string
-	Config         *SimpleRouterConfig
+	RequestedModel        string
+	PromptText            string
+	Config                *SimpleRouterConfig
+	HighQualityRestricted bool
 }
 
 type Decision struct {
@@ -81,6 +82,7 @@ const (
 
 	PolicyVariantDefault                = "default"
 	PolicyVariantProviderHealthFallback = "provider_health_fallback"
+	PolicyVariantBudgetQualityGuard     = "budget_quality_guard"
 
 	RoutingConfidenceHigh   = "high"
 	RoutingConfidenceMedium = "medium"
@@ -155,7 +157,7 @@ func canonicalCapability(value string) string {
 func canonicalPolicyVariant(value string) string {
 	value = strings.TrimSpace(value)
 	switch value {
-	case PolicyVariantDefault, PolicyVariantProviderHealthFallback:
+	case PolicyVariantDefault, PolicyVariantProviderHealthFallback, PolicyVariantBudgetQualityGuard:
 		return value
 	default:
 		return PolicyVariantDefault

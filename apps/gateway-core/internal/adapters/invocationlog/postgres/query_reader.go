@@ -123,6 +123,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var cacheHitRequests int64
 	var cacheEligibleRequests int64
 	var fallbackSuccessRequests int64
+	var budgetDowngradedRequests int64
 	var promptTokens int64
 	var completionTokens int64
 	var totalTokens int64
@@ -139,6 +140,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var safetyOutcomeCountsJSON []byte
 	var cacheOutcomeCountsJSON []byte
 	var fallbackOutcomeCountsJSON []byte
+	var budgetOutcomeCountsJSON []byte
 	var routingCountByModelJSON []byte
 	var costByModelJSON []byte
 	var projectBreakdownJSON []byte
@@ -155,6 +157,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&cacheHitRequests,
 		&cacheEligibleRequests,
 		&fallbackSuccessRequests,
+		&budgetDowngradedRequests,
 		&promptTokens,
 		&completionTokens,
 		&totalTokens,
@@ -171,6 +174,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&safetyOutcomeCountsJSON,
 		&cacheOutcomeCountsJSON,
 		&fallbackOutcomeCountsJSON,
+		&budgetOutcomeCountsJSON,
 		&routingCountByModelJSON,
 		&costByModelJSON,
 		&projectBreakdownJSON,
@@ -198,6 +202,10 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		return invocationlog.DashboardOverviewFields{}, err
 	}
 	fallbackOutcomeCounts, err := decodeInt64MapJSON(fallbackOutcomeCountsJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	budgetOutcomeCounts, err := decodeInt64MapJSON(budgetOutcomeCountsJSON)
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
@@ -245,6 +253,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		CacheHitRequests:            cacheHitRequests,
 		CacheEligibleRequests:       cacheEligibleRequests,
 		FallbackSuccessCount:        fallbackSuccessRequests,
+		BudgetDowngradedRequests:    budgetDowngradedRequests,
 		PromptTokens:                promptTokens,
 		CompletionTokens:            completionTokens,
 		TotalTokens:                 totalTokens,
@@ -262,6 +271,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		SafetyOutcomeCounts:         safetyOutcomeCounts,
 		CacheOutcomeCounts:          cacheOutcomeCounts,
 		FallbackOutcomeCounts:       fallbackOutcomeCounts,
+		BudgetOutcomeCounts:         budgetOutcomeCounts,
 		ProjectBreakdown:            projectBreakdown,
 		ApplicationBreakdown:        applicationBreakdown,
 		CostByModel:                 costByModel,
@@ -361,6 +371,7 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 	safetyOutcomeSQL := metadataOutcomeSQL("safety", `case coalesce(nullif(masking_action, ''), 'none') when 'blocked' then 'blocked' when 'redacted' then 'redacted' else 'passed' end`)
 	cacheOutcomeSQL := metadataOutcomeSQL("cache", `case coalesce(nullif(cache_status, ''), 'bypass') when 'hit' then 'hit' when 'miss' then 'miss' when 'error' then 'error' when 'bypass' then 'bypassed' else 'not_used' end`)
 	fallbackOutcomeSQL := metadataOutcomeSQL("fallback", `'not_called'`)
+	budgetOutcomeSQL := metadataOutcomeSQL("budget", `'not_checked'`)
 
 	query := fmt.Sprintf(`
 with filtered as (
@@ -382,6 +393,7 @@ with filtered as (
     %s as safety_outcome,
     %s as cache_outcome,
     %s as fallback_outcome,
+    %s as budget_outcome,
     masking_action,
     provider,
     model,
@@ -405,6 +417,7 @@ select
   count(*) filter (where cache_outcome = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
   count(*) filter (where cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_eligible_requests,
   count(*) filter (where fallback_outcome = 'success')::bigint as fallback_success_requests,
+  count(*) filter (where routing_reason = 'budget_downgraded_from_high_quality')::bigint as budget_downgraded_requests,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
@@ -456,6 +469,14 @@ select
       group by 1
     ) fallback_rollup
   ), '{}'::jsonb) as fallback_outcome_counts,
+  coalesce((
+    select jsonb_object_agg(budget_outcome_key, request_count)
+    from (
+      select coalesce(nullif(budget_outcome, ''), 'not_checked') as budget_outcome_key, count(*)::bigint as request_count
+      from filtered
+      group by 1
+    ) budget_outcome_rollup
+  ), '{}'::jsonb) as budget_outcome_counts,
   coalesce((
     select jsonb_agg(jsonb_build_object(
       'selectedProvider', selected_provider_key,
@@ -553,7 +574,7 @@ select
     where budget_scope_id is not null and budget_scope_id <> ''
   ), '[]'::jsonb) as budget_scope_breakdown,
   max(created_at) as last_log_created_at
-from filtered`, terminalStatusSQL, safetyOutcomeSQL, cacheOutcomeSQL, fallbackOutcomeSQL, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
+from filtered`, terminalStatusSQL, safetyOutcomeSQL, cacheOutcomeSQL, fallbackOutcomeSQL, budgetOutcomeSQL, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
 
 	return query, args
 }

@@ -286,6 +286,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(1),
 			int64(3),
 			int64(1),
+			int64(2),
 			int64(13),
 			int64(20),
 			int64(33),
@@ -302,6 +303,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			[]byte(`{"passed":4,"redacted":1,"blocked":1}`),
 			[]byte(`{"hit":1,"miss":2,"bypassed":3}`),
 			[]byte(`{"success":1,"not_called":5}`),
+			[]byte(`{"allowed":3,"warned":1,"degraded":2}`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
 			[]byte(`[{"projectId":"project_demo","requestCount":6,"promptTokens":13,"completionTokens":20,"totalTokens":33,"costMicroUsd":100}]`),
@@ -341,6 +343,9 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	}
 	if overview.SafetyOutcomeCounts["blocked"] != 1 || overview.CacheOutcomeCounts["hit"] != 1 || overview.FallbackOutcomeCounts["success"] != 1 {
 		t.Fatalf("unexpected outcome counts: safety=%+v cache=%+v fallback=%+v", overview.SafetyOutcomeCounts, overview.CacheOutcomeCounts, overview.FallbackOutcomeCounts)
+	}
+	if overview.BudgetOutcomeCounts["degraded"] != 2 || overview.BudgetOutcomeCounts["warned"] != 1 || overview.BudgetDowngradedRequests != 2 {
+		t.Fatalf("unexpected budget outcome counts: counts=%+v downgraded=%d", overview.BudgetOutcomeCounts, overview.BudgetDowngradedRequests)
 	}
 	if overview.Performance.P95GatewayInternalLatencyMs == nil || !floatEquals(*overview.Performance.P95GatewayInternalLatencyMs, 20) ||
 		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {

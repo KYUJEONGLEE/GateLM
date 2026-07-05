@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -155,5 +156,73 @@ func TestStagePassesRuntimeRoutingPolicyToRouter(t *testing.T) {
 	}
 	if router.request.Config.HighQualityProvider != "mock-premium" || router.request.Config.HighQualityModel != "mock-smart" {
 		t.Fatalf("high quality route must not use fallback model as primary route: %#v", router.request.Config)
+	}
+}
+
+func TestStagePassesBudgetHighQualityRestrictionToRouter(t *testing.T) {
+	router := &fakeRouter{
+		decision: routing.Decision{
+			RequestedModel:   "auto",
+			SelectedProvider: "mock",
+			SelectedModel:    "mock-balanced",
+			RoutingReason:    routing.ReasonBudgetHighQualityDowngrade,
+			PolicyHash:       "route_p0_v1",
+		},
+	}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{
+			RequestedModel: "auto",
+			PromptText:     "Fix this TypeScript function error.",
+		},
+		Governance: request.GovernanceContext{
+			BudgetDecision: &budget.Decision{Allowed: true, Outcome: budget.OutcomeWarned},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if !router.request.HighQualityRestricted {
+		t.Fatal("expected budget warning to restrict high quality routes")
+	}
+}
+
+func TestStageDoesNotRestrictHighQualityWhenBudgetPolicyDisablesQualityGuard(t *testing.T) {
+	restrictHighQuality := false
+	router := &fakeRouter{
+		decision: routing.Decision{
+			RequestedModel:   "auto",
+			SelectedProvider: "mock-premium",
+			SelectedModel:    "mock-smart",
+			RoutingReason:    routing.ReasonCodeHighQuality,
+			PolicyHash:       "route_p0_v1",
+		},
+	}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{
+			RequestedModel: "auto",
+			PromptText:     "Fix this TypeScript function error.",
+		},
+		Governance: request.GovernanceContext{
+			BudgetDecision: &budget.Decision{
+				Allowed: true,
+				Outcome: budget.OutcomeWarned,
+				Policy: budget.Policy{
+					Enabled:                         true,
+					EnforcementMode:                 budget.EnforcementModeWarn,
+					WarningThresholdPercent:         80,
+					RestrictHighQualityOnBudgetRisk: &restrictHighQuality,
+				},
+			},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if router.request.HighQualityRestricted {
+		t.Fatal("expected disabled budget quality guard to keep high quality routes unrestricted")
 	}
 }

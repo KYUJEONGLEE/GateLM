@@ -1500,6 +1500,8 @@ export class RuntimeConfigsService {
       warningThresholdPercent:
         dto?.warningThresholdPercent ??
         DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+      restrictHighQualityOnBudgetRisk:
+        dto?.restrictHighQualityOnBudgetRisk ?? true,
     };
   }
 
@@ -1848,6 +1850,8 @@ export class RuntimeConfigsService {
           enforcementMode: document.budgetPolicy.enforcementMode,
           warningThresholdPercent:
             document.budgetPolicy.warningThresholdPercent,
+          restrictHighQualityOnBudgetRisk:
+            document.budgetPolicy.restrictHighQualityOnBudgetRisk,
         },
         fallback: {
           enabled: true,
@@ -2417,6 +2421,8 @@ export class RuntimeConfigsService {
         enforcementMode: document.budgetPolicy.enforcementMode,
         warningThresholdPercent:
           document.budgetPolicy.warningThresholdPercent,
+        restrictHighQualityOnBudgetRisk:
+          document.budgetPolicy.restrictHighQualityOnBudgetRisk,
       },
       cachePolicy: {
         enabled: document.cachePolicy.enabled,
@@ -2538,6 +2544,7 @@ export class RuntimeConfigsService {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+      restrictHighQualityOnBudgetRisk: true,
     };
   }
 
@@ -2553,6 +2560,7 @@ export class RuntimeConfigsService {
       Number.isInteger(budgetPolicy.warningThresholdPercent) &&
       budgetPolicy.warningThresholdPercent >= 0 &&
       budgetPolicy.warningThresholdPercent <= 100 &&
+      typeof budgetPolicy.restrictHighQualityOnBudgetRisk === 'boolean' &&
       (budgetPolicy.enabled
         ? budgetPolicy.enforcementMode !== 'disabled'
         : budgetPolicy.enforcementMode === 'disabled')
@@ -2617,6 +2625,12 @@ export class RuntimeConfigsService {
     )
       ? candidate.warningThresholdPercent
       : DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT;
+    const restrictHighQualityOnBudgetRisk = Object.prototype.hasOwnProperty.call(
+      candidate,
+      'restrictHighQualityOnBudgetRisk',
+    )
+      ? candidate.restrictHighQualityOnBudgetRisk
+      : true;
     const normalized: RuntimeConfigBudgetPolicyResponseDto = {
       enabled:
         candidate.enabled as RuntimeConfigBudgetPolicyResponseDto['enabled'],
@@ -2624,6 +2638,8 @@ export class RuntimeConfigsService {
         candidate.enforcementMode as RuntimeConfigBudgetPolicyResponseDto['enforcementMode'],
       warningThresholdPercent:
         warningThresholdPercent as RuntimeConfigBudgetPolicyResponseDto['warningThresholdPercent'],
+      restrictHighQualityOnBudgetRisk:
+        restrictHighQualityOnBudgetRisk as RuntimeConfigBudgetPolicyResponseDto['restrictHighQualityOnBudgetRisk'],
     };
 
     if (!this.isExecutableBudgetPolicy(normalized)) {

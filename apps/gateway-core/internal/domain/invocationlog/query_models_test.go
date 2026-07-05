@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -150,8 +151,8 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 				ResolvedBy: budget.ResolvedByControlPlaneRule,
 			},
 			PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
-			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
-			MaskingAction: "none", CreatedAt: createdAt,
+			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: routing.ReasonBudgetHighQualityDowngrade,
+			MaskingAction: "none", DomainOutcomes: DomainOutcomes{Budget: BudgetOutcome{Outcome: budget.OutcomeWarned}}, CreatedAt: createdAt,
 		},
 		{
 			Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
@@ -198,7 +199,10 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if overview.MaskingActionCounts["none"] != 4 || overview.MaskingActionCounts["redacted"] != 1 || overview.MaskingActionCounts["blocked"] != 1 {
 		t.Fatalf("unexpected masking counts: %+v", overview.MaskingActionCounts)
 	}
-	if len(overview.RoutingCountByModel) != 2 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
+	if overview.BudgetOutcomeCounts[budget.OutcomeWarned] != 1 || overview.BudgetDowngradedRequests != 1 {
+		t.Fatalf("unexpected budget outcome counts: counts=%+v downgraded=%d", overview.BudgetOutcomeCounts, overview.BudgetDowngradedRequests)
+	}
+	if len(overview.RoutingCountByModel) != 3 || overview.RoutingCountByModel[1].RoutingReason != routing.ReasonBudgetHighQualityDowngrade {
 		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
 	}
 	if len(overview.CostByModel) != 2 || overview.CostByModel[0].SelectedModel != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {

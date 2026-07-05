@@ -74,7 +74,8 @@
     "budget": {
       "enabled": true,
       "enforcementMode": "block",
-      "warningThresholdPercent": 80
+      "warningThresholdPercent": 80,
+      "restrictHighQualityOnBudgetRisk": true
     },
     "fallback": {
       "enabled": true,

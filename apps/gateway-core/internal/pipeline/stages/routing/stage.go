@@ -3,6 +3,7 @@ package routingstage
 import (
 	"context"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/request"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 )
@@ -27,8 +28,9 @@ func (s Stage) Name() string {
 
 func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	routeReq := routing.Request{
-		RequestedModel: gatewayCtx.Request.RequestedModel,
-		PromptText:     gatewayCtx.Request.PromptText,
+		RequestedModel:        gatewayCtx.Request.RequestedModel,
+		PromptText:            gatewayCtx.Request.PromptText,
+		HighQualityRestricted: budget.RestrictsHighQuality(gatewayCtx.Governance.BudgetDecision),
 	}
 	if gatewayCtx.Runtime.HasRoutingPolicy {
 		config := gatewayCtx.Runtime.RoutingPolicy.SimpleRouterConfig()
