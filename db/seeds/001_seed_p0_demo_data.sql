@@ -372,6 +372,138 @@ insert into model_pricing_rules (
   'p0-demo',
   '2024-01-01 00:00:00+00',
   'p0_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000804',
+  'openai-main',
+  'gpt-4o-mini',
+  'USD',
+  150000,
+  600000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000805',
+  'openai-main',
+  'gpt-4o',
+  'USD',
+  2500000,
+  10000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000806',
+  'openai',
+  'gpt-4o-mini',
+  'USD',
+  150000,
+  600000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000807',
+  'openai',
+  'gpt-4o',
+  'USD',
+  2500000,
+  10000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000808',
+  'gemini',
+  'gemini-1.5-flash',
+  'USD',
+  75000,
+  300000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000809',
+  'gemini',
+  'gemini-1.5-pro',
+  'USD',
+  1250000,
+  5000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000810',
+  'claude',
+  'claude-3-5-haiku-latest',
+  'USD',
+  800000,
+  4000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000811',
+  'claude',
+  'claude-3-5-sonnet-latest',
+  'USD',
+  3000000,
+  15000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000812',
+  'anthropic',
+  'claude-3-5-haiku-latest',
+  'USD',
+  800000,
+  4000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000813',
+  'anthropic',
+  'claude-3-5-sonnet-latest',
+  'USD',
+  3000000,
+  15000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000814',
+  'claude-main',
+  'claude-3-5-haiku-latest',
+  'USD',
+  800000,
+  4000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000815',
+  'claude-main',
+  'claude-3-5-sonnet-latest',
+  'USD',
+  3000000,
+  15000000,
+  '2026-07-foundation-demo-v1',
+  '2026-07-01 00:00:00+00',
+  'foundation_demo_seed'
 )
 on conflict (id) do update set
   provider = excluded.provider,

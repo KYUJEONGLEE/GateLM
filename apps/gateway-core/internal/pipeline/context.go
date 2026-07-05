@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
@@ -118,6 +119,7 @@ type RequestContext struct {
 	TotalTokens       int
 	CostMicroUSD      int64
 	SavedCostMicroUSD int64
+	CostingResult     costing.Result
 	LatencyMs         int64
 
 	Status           string

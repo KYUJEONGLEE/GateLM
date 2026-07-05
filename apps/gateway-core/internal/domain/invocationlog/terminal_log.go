@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -55,6 +56,7 @@ type TerminalLog struct {
 	TotalTokens       int
 	CostMicroUSD      int64
 	SavedCostMicroUSD int64
+	CostingResult     costing.Result
 	LatencyMs         int64
 	ProviderLatencyMs *int64
 
@@ -152,6 +154,7 @@ type TerminalLogInput struct {
 	TotalTokens       int
 	CostMicroUSD      int64
 	SavedCostMicroUSD int64
+	CostingResult     costing.Result
 	LatencyMs         int64
 	ProviderLatencyMs *int64
 
@@ -384,6 +387,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	}
 	metadata["fallbackOccurred"] = input.FallbackOccurred
 	metadata["providerCalled"] = terminalProviderCalled(input)
+	if costingMetadata := input.CostingResult.Metadata(); len(costingMetadata) > 0 {
+		metadata["costing"] = costingMetadata
+	}
 
 	rateLimitDecision := input.RateLimitDecision.Clone()
 	budgetDecision := input.BudgetDecision.Clone()
@@ -429,6 +435,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		TotalTokens:       input.TotalTokens,
 		CostMicroUSD:      input.CostMicroUSD,
 		SavedCostMicroUSD: input.SavedCostMicroUSD,
+		CostingResult:     input.CostingResult,
 		LatencyMs:         latencyMs,
 		ProviderLatencyMs: input.ProviderLatencyMs,
 

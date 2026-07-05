@@ -19,6 +19,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -65,6 +66,10 @@ type SemanticCacheService interface {
 	Upsert(ctx context.Context, request cachekey.SemanticCacheStoreRequest) (cachekey.SemanticCacheDecision, error)
 }
 
+type CostCalculator interface {
+	Calculate(ctx context.Context, req costing.Request) (costing.Result, error)
+}
+
 type CacheabilityClassifier interface {
 	Classify(ctx context.Context, request cachekey.CacheabilityClassificationRequest) (cachekey.CacheabilityClassifierResult, error)
 }
@@ -86,6 +91,7 @@ type ChatCompletionsHandler struct {
 	PreProviderPipeline                  GatewayPipeline
 	AuthFailureLogWriter                 invocationlog.AuthFailureLogWriter
 	TerminalLogWriter                    invocationlog.TerminalLogWriter
+	CostCalculator                       CostCalculator
 	MaskingEngine                        MaskingEngine
 	MetricsRegistry                      *metrics.Registry
 	ExactCacheStore                      ports.CacheStore
@@ -341,6 +347,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	reqCtx.Status = "success"
 	reqCtx.HTTPStatus = http.StatusOK
 	reqCtx.SavedCostMicroUSD = 0
+	h.applyProviderUsageCost(r.Context(), reqCtx, target)
 	if exactCachePolicyAllowsLookup(reqCtx) && (reqCtx.CacheStatus == "" || reqCtx.CacheStatus == cachestage.CacheStatusBypass) {
 		reqCtx.CacheStatus = cachestage.CacheStatusMiss
 		reqCtx.CacheType = cachestage.CacheTypeExact
@@ -836,6 +843,15 @@ func (h *ChatCompletionsHandler) handleProviderFailure(w http.ResponseWriter, r 
 	reqCtx.ErrorStage = ""
 	reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 	reqCtx.SavedCostMicroUSD = 0
+	reqCtx.SelectedProvider = fallbackTarget.ProviderName
+	reqCtx.SelectedProviderID = fallbackTarget.ProviderID
+	reqCtx.SelectedProviderCatalogKey = firstNonEmpty(fallbackTarget.ProviderName, reqCtx.SelectedProviderCatalogKey)
+	reqCtx.SelectedModel = fallbackTarget.ModelID
+	reqCtx.SelectedModelID = fallbackTarget.ModelID
+	reqCtx.ProviderCatalogContentHash = firstNonEmpty(fallbackTarget.CatalogHash, reqCtx.ProviderCatalogContentHash)
+	reqCtx.Provider = fallbackTarget.ProviderName
+	reqCtx.Model = fallbackTarget.ModelID
+	h.applyProviderUsageCost(r.Context(), reqCtx, fallbackTarget)
 	reqCtx.FallbackOccurred = true
 	skipExactCacheStore(reqCtx, "fallback_response_store_bypassed")
 	h.markSemanticCacheBypass(reqCtx, cachekey.SemanticCacheReasonFallbackStoreBypass, h.semanticPromptCategory(reqCtx))
@@ -893,6 +909,7 @@ func (h *ChatCompletionsHandler) handleStreamingProvider(w http.ResponseWriter, 
 		reqCtx.ErrorMessage = ""
 		reqCtx.ErrorStage = ""
 		reqCtx.SavedCostMicroUSD = 0
+		h.applyProviderUsageCost(r.Context(), reqCtx, target)
 		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
 		cacheCtx := context.WithoutCancel(r.Context())
 		h.writeExactCache(cacheCtx, reqCtx, cacheableResp)
@@ -1082,6 +1099,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		reqCtx.ErrorStage = ""
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 		reqCtx.SavedCostMicroUSD = 0
+		h.applyProviderUsageCost(r.Context(), reqCtx, fallbackTarget)
 		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
 		return
 	}
@@ -3049,6 +3067,72 @@ func attachGateLMMetadata(resp *provider.ChatCompletionResponse, reqCtx *pipelin
 	}
 }
 
+func (h *ChatCompletionsHandler) applyProviderUsageCost(ctx context.Context, reqCtx *pipeline.RequestContext, target providerCallTarget) {
+	if h == nil || h.CostCalculator == nil || reqCtx == nil {
+		return
+	}
+	result, err := h.CostCalculator.Calculate(ctx, costing.Request{
+		ProviderKeys:     providerPricingKeys(reqCtx, target),
+		ModelKeys:        modelPricingKeys(reqCtx, target),
+		PromptTokens:     reqCtx.PromptTokens,
+		CompletionTokens: reqCtx.CompletionTokens,
+		TotalTokens:      reqCtx.TotalTokens,
+		CompletedAt:      time.Now().UTC(),
+	})
+	reqCtx.CostingResult = result
+	reqCtx.CostMicroUSD = result.CostMicroUSD
+	if err != nil {
+		log.Printf("cost calculation failed request_id=%s provider=%s model=%s cost_source=%s cause=%q",
+			sanitizeLogValue(reqCtx.RequestID),
+			sanitizeLogValue(firstNonEmpty(result.PricingProvider, reqCtx.SelectedProvider, target.ProviderName)),
+			sanitizeLogValue(firstNonEmpty(result.PricingModel, reqCtx.SelectedModel, target.ModelID)),
+			sanitizeLogValue(result.CostSource),
+			sanitizeLogValue(err.Error()),
+		)
+	}
+}
+
+func providerPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTarget) []string {
+	if reqCtx == nil {
+		return uniqueNonEmpty(target.ProviderName, target.ProviderID, target.AdapterType, target.ExecutionConfig.ProviderName, target.ExecutionConfig.ProviderID, target.ExecutionConfig.AdapterType)
+	}
+	return uniqueNonEmpty(
+		target.ProviderName,
+		target.ProviderID,
+		target.AdapterType,
+		target.ExecutionConfig.ProviderName,
+		target.ExecutionConfig.ProviderID,
+		target.ExecutionConfig.AdapterType,
+		reqCtx.SelectedProvider,
+		reqCtx.SelectedProviderID,
+		reqCtx.SelectedProviderCatalogKey,
+		reqCtx.Provider,
+	)
+}
+
+func modelPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTarget) []string {
+	if reqCtx == nil {
+		return uniqueNonEmpty(target.ModelID, target.ModelName)
+	}
+	return uniqueNonEmpty(target.ModelID, target.ModelName, reqCtx.SelectedModelID, reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
+}
+
+func uniqueNonEmpty(values ...string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
 func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID string) provider.ChatCompletionRequest {
 	req := chatReq
 	req.RequestID = strings.TrimSpace(requestID)
@@ -3259,6 +3343,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		TotalTokens:                 reqCtx.TotalTokens,
 		CostMicroUSD:                reqCtx.CostMicroUSD,
 		SavedCostMicroUSD:           reqCtx.SavedCostMicroUSD,
+		CostingResult:               reqCtx.CostingResult,
 		LatencyMs:                   reqCtx.LatencyMs,
 		ProviderLatencyMs:           providerLatencyMs,
 		Status:                      reqCtx.Status,

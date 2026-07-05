@@ -19,6 +19,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -182,6 +183,66 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerCalculatesCostFromProviderUsage(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	calculator := &recordingCostCalculator{result: costing.Result{
+		CostMicroUSD:              2,
+		Currency:                  costing.CurrencyUSD,
+		PricingRuleID:             "price_mock_balanced_v1",
+		PricingVersion:            "pricing_test_v1",
+		PricingProvider:           "mock",
+		PricingModel:              "mock-balanced",
+		InputMicroUSDPer1MTokens:  100_000,
+		OutputMicroUSDPer1MTokens: 400_000,
+		TokenCountSource:          costing.TokenCountSourceProviderUsage,
+		CostSource:                costing.CostSourcePricingCatalog,
+		PromptTokens:              4,
+		CompletionTokens:          3,
+		TotalTokens:               7,
+	}}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+		CostCalculator:    calculator,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	resp := decodeChatCompletionResponse(t, rr)
+	if calculator.calls != 1 {
+		t.Fatalf("expected one cost calculation, got %d", calculator.calls)
+	}
+	if calculator.lastRequest.PromptTokens != 4 || calculator.lastRequest.CompletionTokens != 3 || calculator.lastRequest.TotalTokens != 7 {
+		t.Fatalf("unexpected cost calculator usage request: %+v", calculator.lastRequest)
+	}
+	if !containsString(calculator.lastRequest.ProviderKeys, "mock") || !containsString(calculator.lastRequest.ModelKeys, "mock-balanced") {
+		t.Fatalf("unexpected pricing lookup keys: %+v", calculator.lastRequest)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.CostMicroUSD != 2 || rr.Header().Get("X-GateLM-Estimated-Cost-Usd") != "0.000002" || resp.GateLM.EstimatedCostUSD != "0.000002" {
+		t.Fatalf("unexpected calculated cost: log=%d header=%q gate_lm=%q", logged.CostMicroUSD, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
+	}
+	metadata, ok := logged.Metadata["costing"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing costing metadata: %+v", logged.Metadata)
+	}
+	if metadata["pricingRuleId"] != "price_mock_balanced_v1" || metadata["costSource"] != costing.CostSourcePricingCatalog {
+		t.Fatalf("unexpected costing metadata: %+v", metadata)
+	}
+}
 func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{
@@ -326,8 +387,8 @@ func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testi
 	streamingAdapter := &streamingProviderAdapter{
 		events: []provider.ChatCompletionStreamEvent{
 			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
-			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"안녕하세요. "},"finish_reason":null}]}`),
-			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"실제 provider streaming입니다."},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"?덈뀞?섏꽭?? "},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"?ㅼ젣 provider streaming?낅땲??"},"finish_reason":null}]}`),
 			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":5,"total_tokens":9}}`),
 		},
 	}
@@ -352,7 +413,7 @@ func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testi
 		t.Fatalf("expected event-stream content type, got %q", got)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "data:") || !strings.Contains(body, "실제 provider streaming") || !strings.Contains(body, "data: [DONE]") {
+	if !strings.Contains(body, "data:") || !strings.Contains(body, "?ㅼ젣 provider streaming") || !strings.Contains(body, "data: [DONE]") {
 		t.Fatalf("expected SSE chunks and done marker, got %q", body)
 	}
 	if strings.Count(body, "data:") < 3 {
@@ -412,7 +473,7 @@ func TestChatCompletionsHandlerRelaysLocalMockProviderStream(t *testing.T) {
 
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}` + "\n\n"))
-		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"로컬 mock streaming 응답입니다."},"finish_reason":null}]}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"濡쒖뺄 mock streaming ?묐떟?낅땲??"},"finish_reason":null}]}` + "\n\n"))
 		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}}` + "\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
@@ -427,7 +488,7 @@ func TestChatCompletionsHandlerRelaysLocalMockProviderStream(t *testing.T) {
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("로컬 mock streaming을 확인해줘.")))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("濡쒖뺄 mock streaming???뺤씤?댁쨾.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
@@ -441,7 +502,7 @@ func TestChatCompletionsHandlerRelaysLocalMockProviderStream(t *testing.T) {
 	}
 	body := rr.Body.String()
 	if !strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") ||
-		!strings.Contains(body, "로컬 mock streaming 응답입니다.") ||
+		!strings.Contains(body, "濡쒖뺄 mock streaming ?묐떟?낅땲??") ||
 		!strings.Contains(body, "data: [DONE]") {
 		t.Fatalf("expected relayed local mock SSE stream, headers=%v body=%q", rr.Header(), body)
 	}
@@ -460,13 +521,13 @@ func TestChatCompletionsHandlerRelaysLocalMockProviderStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal terminal log: %v", err)
 	}
-	if strings.Contains(string(loggedJSON), "로컬 mock streaming 응답입니다.") {
+	if strings.Contains(string(loggedJSON), "濡쒖뺄 mock streaming ?묐떟?낅땲??") {
 		t.Fatalf("terminal log must not store local mock streamed chunk content: %s", string(loggedJSON))
 	}
 }
 
 func TestChatCompletionsHandlerStreamingPreservesResponseWhitespace(t *testing.T) {
-	content := "첫 줄\n\n```go\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n```\n끝  두칸"
+	content := "泥?以?n\n```go\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n```\n?? ?먯뭏"
 	contentJSON, err := json.Marshal(content)
 	if err != nil {
 		t.Fatalf("marshal content: %v", err)
@@ -566,7 +627,7 @@ func TestChatCompletionsHandlerStreamingUnsupportedFailsBeforeProviderCall(t *te
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("스트리밍 지원 여부를 확인해줘.")))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("?ㅽ듃由щ컢 吏???щ?瑜??뺤씤?댁쨾.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
@@ -593,7 +654,7 @@ func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupte
 	logWriter := &recordingTerminalLogWriter{}
 	streamingAdapter := &streamingProviderAdapter{
 		events: []provider.ChatCompletionStreamEvent{
-			streamEvent(t, `{"id":"chatcmpl_interrupted","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"부분 응답"},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_interrupted","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"遺遺??묐떟"},"finish_reason":null}]}`),
 		},
 		nextErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic stream failure")),
 	}
@@ -605,7 +666,7 @@ func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupte
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("중간 실패를 재현해줘.")))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("以묎컙 ?ㅽ뙣瑜??ы쁽?댁쨾.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
@@ -614,7 +675,7 @@ func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupte
 	if rr.Code != http.StatusOK {
 		t.Fatalf("stream already started, response status should remain 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "부분 응답") || strings.Contains(rr.Body.String(), "data: [DONE]") {
+	if !strings.Contains(rr.Body.String(), "遺遺??묐떟") || strings.Contains(rr.Body.String(), "data: [DONE]") {
 		t.Fatalf("expected partial stream without done marker, got %q", rr.Body.String())
 	}
 	if streamingAdapter.closeCalls != 1 {
@@ -635,7 +696,7 @@ func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupte
 	if err != nil {
 		t.Fatalf("marshal terminal log: %v", err)
 	}
-	if strings.Contains(string(loggedJSON), "부분 응답") {
+	if strings.Contains(string(loggedJSON), "遺遺??묐떟") {
 		t.Fatalf("terminal log must not store streamed chunk content: %s", string(loggedJSON))
 	}
 }
@@ -668,7 +729,7 @@ func TestChatCompletionsHandlerStreamingFallbackResolveCancellationRecordsCancel
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback resolve 취소를 재현해줘.")))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback resolve 痍⑥냼瑜??ы쁽?댁쨾.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
@@ -715,7 +776,7 @@ func TestChatCompletionsHandlerStreamingFallbackOpenCancellationRecordsCancelled
 	}
 	withTestAuth(&handler)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback open 취소를 재현해줘.")))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback open 痍⑥냼瑜??ы쁽?댁쨾.")))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
@@ -3090,6 +3151,31 @@ func (a countingProviderAdapter) ListModels(ctx context.Context, config provider
 func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	(*a.calls)++
 	return &provider.ChatCompletionResponse{}, nil
+}
+
+type recordingCostCalculator struct {
+	calls       int
+	lastRequest costing.Request
+	result      costing.Result
+	err         error
+}
+
+func (c *recordingCostCalculator) Calculate(ctx context.Context, req costing.Request) (costing.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return costing.Result{}, err
+	}
+	c.calls++
+	c.lastRequest = req
+	return c.result, c.err
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 type recordingProviderAdapter struct {

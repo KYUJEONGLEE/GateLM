@@ -17,6 +17,7 @@ import (
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
+	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
@@ -28,6 +29,7 @@ import (
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
@@ -128,10 +130,12 @@ func main() {
 		terminalLogWriter = asyncTerminalLogWriter
 	}
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
+	costCalculator := costing.NewCalculator(postgrespricing.NewReader(postgresPool))
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
 		app.WithInvocationLogReader(invocationLogReader),
+		app.WithCostCalculator(costCalculator),
 		app.WithMetrics(metricsRegistry),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
