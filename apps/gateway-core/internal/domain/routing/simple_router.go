@@ -57,6 +57,7 @@ type SimpleRouter struct {
 	policyHash          string
 	shortPromptMaxChars int
 	candidateStatuses   []RouteCandidateStatus
+	classifier          RuleBasedCategoryClassifier
 }
 
 func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
@@ -71,6 +72,7 @@ func NewSimpleRouter(config SimpleRouterConfig) *SimpleRouter {
 		policyHash:          normalized.PolicyHash,
 		shortPromptMaxChars: normalized.ShortPromptMaxChars,
 		candidateStatuses:   append([]RouteCandidateStatus(nil), normalized.CandidateStatuses...),
+		classifier:          NewRuleBasedCategoryClassifier(),
 	}
 }
 
@@ -154,7 +156,12 @@ func mergeSimpleRouterConfig(base SimpleRouterConfig, override SimpleRouterConfi
 
 func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, error) {
 	config := SimpleRouterConfig{}
+	classifier := NewRuleBasedCategoryClassifier()
 	if r != nil {
+		classifier = r.classifier
+		if classifier.compiled.policy.Rules == nil {
+			classifier = NewRuleBasedCategoryClassifier()
+		}
 		config = SimpleRouterConfig{
 			DefaultProvider:     r.defaultProvider,
 			DefaultModel:        r.defaultModel,
@@ -176,7 +183,7 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if requestedModel == "" {
 		requestedModel = config.DefaultModel
 	}
-	category := NewRuleBasedCategoryClassifier().Classify(req.PromptText)
+	category := classifier.Classify(req.PromptText)
 	capability := capabilityForCategory(category)
 
 	decision := Decision{

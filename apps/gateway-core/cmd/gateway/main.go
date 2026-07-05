@@ -284,7 +284,31 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			TTLSeconds:      int(cfg.ExactCacheTTL.Seconds()),
 			CachePolicyHash: cfg.CachePolicyHash,
 		},
+		PromptCapture: runtimeconfig.PromptCapturePolicy{
+			Enabled:  cfg.PromptCaptureEnabled,
+			Mode:     staticPromptCaptureMode(cfg.PromptCaptureEnabled),
+			MaxChars: cfg.PromptCaptureMaxChars,
+		},
+		ResponseCapture: runtimeconfig.ResponseCapturePolicy{
+			Enabled:  cfg.ResponseCaptureEnabled,
+			Mode:     staticResponseCaptureMode(cfg.ResponseCaptureEnabled),
+			MaxChars: cfg.ResponseCaptureMaxChars,
+		},
 	}
+}
+
+func staticPromptCaptureMode(enabled bool) string {
+	if enabled {
+		return runtimeconfig.PromptCaptureModeLogSafeFull
+	}
+	return runtimeconfig.PromptCaptureModeDisabled
+}
+
+func staticResponseCaptureMode(enabled bool) string {
+	if enabled {
+		return runtimeconfig.ResponseCaptureModeRawFull
+	}
+	return runtimeconfig.ResponseCaptureModeDisabled
 }
 
 func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {

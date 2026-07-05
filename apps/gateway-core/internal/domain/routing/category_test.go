@@ -135,15 +135,20 @@ func TestDefaultCategoryPolicyReturnsClone(t *testing.T) {
 	}
 }
 
-func TestRuleBasedCategoryClassifierScansBoundedPromptPrefix(t *testing.T) {
+func TestRuleBasedCategoryClassifierScansBoundedHeadAndTail(t *testing.T) {
 	classifier := NewRuleBasedCategoryClassifier()
 
-	if actual := classifier.Classify("환불 " + strings.Repeat("가", maxCategoryScanBytes)); actual != CategorySupportRefund {
-		t.Fatalf("expected prefix keyword to classify support refund, got %s", actual)
+	if actual := classifier.Classify("refund " + strings.Repeat("a", maxCategoryScanBytes)); actual != CategorySupportRefund {
+		t.Fatalf("expected head keyword to classify support refund, got %s", actual)
 	}
 
-	if actual := classifier.Classify(strings.Repeat("a", maxCategoryScanBytes+100) + " refund"); actual != CategoryGeneral {
-		t.Fatalf("expected keyword beyond scan prefix to be ignored, got %s", actual)
+	if actual := classifier.Classify(strings.Repeat("a", maxCategoryScanBytes+100) + " refund request"); actual != CategorySupportRefund {
+		t.Fatalf("expected tail keyword to classify support refund, got %s", actual)
+	}
+
+	middleOnly := strings.Repeat("a", maxCategoryScanBytes/2+200) + " refund request " + strings.Repeat("b", maxCategoryScanBytes/2+200)
+	if actual := classifier.Classify(middleOnly); actual != CategoryGeneral {
+		t.Fatalf("expected middle-only keyword outside head/tail scan to be ignored, got %s", actual)
 	}
 }
 
@@ -158,7 +163,7 @@ func TestCategoryScanPrefixKeepsUTF8Boundary(t *testing.T) {
 	}
 }
 
-func TestRuleBasedCategoryClassifierWeightsLeadingIntentOverLaterContext(t *testing.T) {
+func TestRuleBasedCategoryClassifierBoostsExplicitRequestIntent(t *testing.T) {
 	classifier := NewRuleBasedCategoryClassifier()
 
 	tests := []struct {
@@ -167,18 +172,18 @@ func TestRuleBasedCategoryClassifierWeightsLeadingIntentOverLaterContext(t *test
 		expected string
 	}{
 		{
-			name:     "summarization beats later technical context",
-			prompt:   "Summarize the release notes into three bullets. Background mentions Go handler code, JSON fields, and refund policy only as context.",
+			name:     "translation beats noisy technical context",
+			prompt:   strings.Repeat("Go handler SQL request log code background. ", 40) + "마지막 요청: translate this notice into English.",
+			expected: CategoryTranslation,
+		},
+		{
+			name:     "summarization beats noisy implementation context",
+			prompt:   strings.Repeat("TypeScript function JSON refund policy code. ", 40) + "최종 요청: summarize the meeting notes into three bullets.",
 			expected: CategorySummarization,
 		},
 		{
-			name:     "reasoning beats later implementation context",
-			prompt:   "Compare the rollout options and recommend the safest order. Background mentions TypeScript code and translation copy only as context.",
-			expected: CategoryReasoning,
-		},
-		{
-			name:     "extraction beats later translation context",
-			prompt:   "Extract the invoice amount and status as JSON. Background mentions English copy and refund wording only as context.",
+			name:     "extraction beats noisy translation context",
+			prompt:   strings.Repeat("English copy refund wording translation background. ", 40) + "결론적으로 return as JSON with invoice amount and status.",
 			expected: CategoryExtractionJSON,
 		},
 	}
@@ -192,11 +197,57 @@ func TestRuleBasedCategoryClassifierWeightsLeadingIntentOverLaterContext(t *test
 	}
 }
 
-func TestCategoryPrimaryIntentUsesEarliestSeparator(t *testing.T) {
-	prompt := normalizeCategoryText("Compare the rollout options? Summarize the release notes. Background mentions code.")
+func TestCategoryExplicitRequestTextUsesLastMarker(t *testing.T) {
+	prompt := normalizeCategoryText("Background mentions code and refund. 마지막 요청: translate this notice into English.")
 
-	if actual := categoryPrimaryIntentText(prompt); actual != "compare the rollout options" {
-		t.Fatalf("expected earliest separator to end primary intent, got %q", actual)
+	actual := categoryExplicitRequestText(prompt)
+	if !strings.Contains(actual, "translate this notice into english") {
+		t.Fatalf("expected explicit request window to include final request, got %q", actual)
+	}
+}
+
+func TestRuleBasedCategoryClassifierUsesExplicitRequestBeforeBackground(t *testing.T) {
+	classifier := NewRuleBasedCategoryClassifier()
+
+	tests := []struct {
+		name     string
+		prompt   string
+		expected string
+	}{
+		{
+			name:     "general explanation is not hijacked by background code words",
+			prompt:   strings.Repeat("Go handler SQL API request log code background. ", 30) + "Final request: explain what GateLM Gateway does for a non-developer.",
+			expected: CategoryGeneral,
+		},
+		{
+			name:     "explicit code repair still routes to code",
+			prompt:   strings.Repeat("refund translation JSON meeting background. ", 30) + "Final request: find the bug in this Go Gateway handler code.",
+			expected: CategoryCode,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if actual := classifier.Classify(tt.prompt); actual != tt.expected {
+				t.Fatalf("expected %s, got %s", tt.expected, actual)
+			}
+		})
+	}
+}
+
+func TestCategoryPhraseMatcherBuildsFailureLinksFromSourceState(t *testing.T) {
+	matcher := newCategoryPhraseMatcher()
+	seen := map[string]struct{}{}
+	matcher.Add(CategoryCode, categoryPhraseStrong, "abcd", seen)
+	matcher.Add(CategoryTranslation, categoryPhraseStrong, "bcd", seen)
+	matcher.Build()
+
+	matches := matcher.Match("abcd")
+	if got := matches.Category(CategoryCode).Strong; got != 1 {
+		t.Fatalf("expected code phrase to match once, got %d", got)
+	}
+	if got := matches.Category(CategoryTranslation).Strong; got != 1 {
+		t.Fatalf("expected suffix phrase through failure link to match once, got %d", got)
 	}
 }
 
