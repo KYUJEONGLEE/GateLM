@@ -27,7 +27,7 @@ AI Safety Lab은 아래 질문에 답하기 위한 문서와 근거를 모은다
 | Sidecar output | Sidecar가 `redactedPrompt`까지 만들어 반환한다. |
 | First ML adapter | 첫 구현은 `transformers.pipeline()` adapter로 한다. |
 | Confidence thresholds | 계약에는 고정하지 않고 `evaluation-plan.md`의 기준값으로만 둔다. |
-| Schema scope | `safety-detection`, `safety-summary`, `detector-sidecar-response`, `eval-case` 4개 schema부터 둔다. |
+| Schema scope | `safety-detection`, `safety-summary`, `detector-sidecar-response`, `eval-case`, `master-eval-case` schema를 둔다. |
 | Sidecar version | `contractVersion="ai-safety-detector.v1"` |
 | Sidecar path candidate | `POST /internal/ai-safety/v1/detect` |
 | Confidence visibility | Lab/eval response에는 허용, Gateway/API/UI summary에는 기본 비노출 |
@@ -65,7 +65,7 @@ Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 | `implementation-plan.md` | 첨부 PII detector 메모 기반 구현 계획 |
 | `evaluation-plan.md` | 기존 safety eval 방식과 새 PII detector 평가 계획 |
 | `resource-latency-benchmark.md` | local sidecar 리소스/지연시간 벤치마크 측정 프로토콜과 리포트 템플릿 |
-| `fixtures/` | 향후 synthetic safety eval fixture 위치 |
+| `fixtures/` | synthetic safety eval fixture 위치. `master-safety-eval-corpus.jsonl`은 Gateway/detector 기대값을 한 케이스에 함께 둔다. |
 | `schemas/` | AI Safety Lab 전용 JSON Schema 위치 |
 
 Schema scope:
@@ -75,7 +75,24 @@ schemas/safety-detection.schema.json
 schemas/safety-summary.schema.json
 schemas/detector-sidecar-response.schema.json
 schemas/eval-case.schema.json
+schemas/master-eval-case.schema.json
 ```
+
+Master corpus:
+
+```text
+fixtures/master-safety-eval-corpus.jsonl
+```
+
+`master-safety-eval-corpus.jsonl`은 하나의 synthetic inputTemplate을 기준으로
+`expectations.gateway`, `expectations.detector`를 분리한다.
+Runner는 평가 목적에 맞는 expectation만 읽는다. 기존 `privacy-filter-synthetic-eval-corpus.jsonl`은
+호환용 Lab fixture로 남긴다.
+
+Master corpus is the eval dataset, not the always-on contract test payload. It
+contains 1000 synthetic shadow-eval cases for detector and Gateway behavior.
+Cross-service tests should use small representative sidecar responses instead
+of turning the eval corpus into hot-path payload.
 
 ## 4. Current Main Path
 
@@ -123,5 +140,6 @@ Gateway safety stage
 1. `contracts.md`에서 detector type, action, summary, failure 정책의 틀을 확정한다.
 2. `detector-sidecar-contract.md`에서 `ai-safety-detector.v1` request/response shape를 관리한다.
 3. `evaluation-plan.md`에서 synthetic corpus와 report shape를 정한다.
-4. `schemas/`의 4개 schema로 Lab draft output을 검증한다.
-5. `implementation-plan.md` 순서대로 regex baseline, ML sidecar shadow, enforce promotion을 진행한다.
+4. `master-safety-eval-corpus.jsonl`의 target-specific expectation을 기준으로 runner별 평가 대상을 고른다.
+5. `schemas/`의 Lab draft schema로 output과 corpus shape를 검증한다.
+6. `implementation-plan.md` 순서대로 regex baseline, ML sidecar shadow, enforce promotion을 진행한다.

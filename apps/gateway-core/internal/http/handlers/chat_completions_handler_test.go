@@ -1648,8 +1648,9 @@ func TestChatCompletionsHandlerKeepsEntityScopeAcrossRequestMessages(t *testing.
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
-	if logWriter.logs[0].RedactedPromptPreview != expected {
-		t.Fatalf("expected request-scoped log preview %q, got %q", expected, logWriter.logs[0].RedactedPromptPreview)
+	expectedPreview := "Primary contact is [EMAIL_1].\nEmail [EMAIL_2], then [EMAIL_1]."
+	if logWriter.logs[0].RedactedPromptPreview != expectedPreview {
+		t.Fatalf("expected request-scoped log preview %q, got %q", expectedPreview, logWriter.logs[0].RedactedPromptPreview)
 	}
 }
 
@@ -1709,8 +1710,9 @@ func TestChatCompletionsHandlerKeepsFirstPersonRoleAcrossRequestMessages(t *test
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
-	if logWriter.logs[0].RedactedPromptPreview != expected {
-		t.Fatalf("expected role-aware log preview %q, got %q", expected, logWriter.logs[0].RedactedPromptPreview)
+	expectedPreview := "customer_name=[CUSTOMER_1]\npatient_name=[CUSTOMER_1]"
+	if logWriter.logs[0].RedactedPromptPreview != expectedPreview {
+		t.Fatalf("expected role-aware log preview %q, got %q", expectedPreview, logWriter.logs[0].RedactedPromptPreview)
 	}
 }
 

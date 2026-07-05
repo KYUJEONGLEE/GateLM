@@ -1,8 +1,12 @@
 "use client";
 
 import { Save, UploadCloud } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -18,8 +22,15 @@ import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type RuntimePolicyEditorProps = {
+  appTokenReadiness?: RuntimePolicyAppTokenReadiness;
   locale: Locale;
   model: RuntimePolicyModel;
+};
+
+type RuntimePolicyAppTokenReadiness = {
+  activeAppTokenCount: number;
+  applicationName: string;
+  loadError: string | null;
 };
 
 type SubmitState =
@@ -35,12 +46,23 @@ type SubmitState =
 
 type PolicySection = "general" | "cache";
 
+type RoutingProviderOption = {
+  provider: string;
+  providerId: string;
+};
+
 const hiddenPolicySectionStyle = { display: "none" } as const;
 
 const policyText: Record<
   Locale,
   {
     activeConfig: string;
+    activeAppTokenMissing: string;
+    applicationProviders: string;
+    applicationProvidersHint: string;
+    applicationProvidersSaved: string;
+    appTokenIssueFailed: string;
+    appTokenIssued: string;
     budget: string;
     budgetEnforcement: string;
     budgetWarning: string;
@@ -69,6 +91,7 @@ const policyText: Record<
     mode: string;
     model: string;
     models: string;
+    noProviderModels: string;
     placeholder: string;
     policyDetails: string;
     pricing: string;
@@ -78,6 +101,7 @@ const policyText: Record<
     promptCaptureMaxChars: string;
     promptPrice: string;
     provider: string;
+    providerConnectionMissing: string;
     providerCount: string;
     providerCatalog: string;
     publish: string;
@@ -90,6 +114,10 @@ const policyText: Record<
     routingAdvanced: string;
     runtimeSnapshot: string;
     saveDraft: string;
+    saveProviders: string;
+    savingProviders: string;
+    issueAppToken: string;
+    issuingAppToken: string;
     shortPrompt: string;
     snapshotState: string;
     snapshotVersion: string;
@@ -98,12 +126,22 @@ const policyText: Record<
     semanticCacheEvidenceOnly: string;
     semanticCacheNote: string;
     streaming: string;
+    templateFallback: string;
     title: string;
     tokens: string;
   }
 > = {
   en: {
     activeConfig: "Active config",
+    activeAppTokenMissing:
+      "Runtime policy save and publish require an active App Token for this application.",
+    applicationProviders: "Application providers",
+    applicationProvidersHint:
+      "Select the providers this application can use. Routing only shows models from connected providers.",
+    applicationProvidersSaved: "Application provider connections saved.",
+    appTokenIssueFailed: "App Token issue failed.",
+    appTokenIssued:
+      "Active App Token prepared. The token plaintext is not displayed on this policy screen.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetWarning: "Warning threshold",
@@ -134,6 +172,7 @@ const policyText: Record<
     mode: "Mode",
     model: "Model",
     models: "Models",
+    noProviderModels: "No configured models",
     placeholder: "Placeholder",
     policyDetails: "Policy details",
     pricing: "Pricing rules",
@@ -143,6 +182,8 @@ const policyText: Record<
     promptCaptureMaxChars: "Max characters",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
+    providerConnectionMissing:
+      "Connect at least one provider with configured models before saving or publishing this policy.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
     publish: "Publish active config",
@@ -155,6 +196,10 @@ const policyText: Record<
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Save draft",
+    saveProviders: "Save providers",
+    savingProviders: "Saving...",
+    issueAppToken: "Issue App Token",
+    issuingAppToken: "Issuing...",
     shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -164,11 +209,22 @@ const policyText: Record<
     semanticCacheNote:
       "Current Control Plane derives semantic cache evidence mode from the cache policy. It is not a live response path.",
     streaming: "Streaming",
+    templateFallback:
+      "This application does not have an active policy yet. Configure and publish this policy to enable the Gateway path.",
     title: "Policies",
     tokens: "Context tokens"
   },
   ko: {
     activeConfig: "Active config",
+    activeAppTokenMissing:
+      "Runtime policy 저장과 게시에는 이 애플리케이션의 active App Token이 필요합니다.",
+    applicationProviders: "Application providers",
+    applicationProvidersHint:
+      "이 애플리케이션이 사용할 provider를 선택합니다. Routing은 연결된 provider의 model만 표시합니다.",
+    applicationProvidersSaved: "Application provider 연결을 저장했습니다.",
+    appTokenIssueFailed: "App Token 발급에 실패했습니다.",
+    appTokenIssued:
+      "Active App Token이 준비되었습니다. 이 정책 화면에서는 token 원문을 표시하지 않습니다.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetWarning: "Warning threshold",
@@ -199,6 +255,7 @@ const policyText: Record<
     mode: "모드",
     model: "Model",
     models: "Models",
+    noProviderModels: "설정된 model 없음",
     placeholder: "Placeholder",
     policyDetails: "정책 상세",
     pricing: "Pricing rules",
@@ -208,6 +265,8 @@ const policyText: Record<
     promptCaptureMaxChars: "최대 글자 수",
     promptPrice: "Prompt micro USD",
     provider: "Provider",
+    providerConnectionMissing:
+      "정책을 저장하거나 게시하려면 model이 설정된 provider를 하나 이상 연결해야 합니다.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
     publish: "Active config 게시",
@@ -220,6 +279,10 @@ const policyText: Record<
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
     saveDraft: "Draft 저장",
+    saveProviders: "Provider 저장",
+    savingProviders: "저장 중...",
+    issueAppToken: "App Token 발급",
+    issuingAppToken: "발급 중...",
     shortPrompt: "Short prompt 기준",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -229,13 +292,23 @@ const policyText: Record<
     semanticCacheNote:
       "현재 Control Plane은 cache policy에서 semantic cache evidence mode를 파생합니다. 실시간 응답 경로는 아닙니다.",
     streaming: "Streaming",
+    templateFallback:
+      "이 애플리케이션에는 아직 활성 정책이 없습니다. 정책을 설정하고 게시하면 Gateway 경로에 적용됩니다.",
     title: "정책",
     tokens: "Context tokens"
   }
 };
 
-export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps) {
+export function RuntimePolicyEditor({
+  appTokenReadiness,
+  locale,
+  model
+}: RuntimePolicyEditorProps) {
+  const router = useRouter();
   const text = policyText[locale];
+  const [activeAppTokenCount, setActiveAppTokenCount] = useState(
+    appTokenReadiness?.activeAppTokenCount ?? 1
+  );
   const [draftValues, setDraftValues] = useState<RuntimePolicyDraftValues>(() =>
     getRuntimePolicyDraftValues(model.activeConfig)
   );
@@ -245,8 +318,21 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
   });
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>("general");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isIssuingAppToken, setIsIssuingAppToken] = useState(false);
+  const [isSavingProviders, setIsSavingProviders] = useState(false);
+  const [providerSelectionIds, setProviderSelectionIds] = useState<string[]>(
+    model.providerConnections.selectedIds
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
+  useEffect(() => {
+    setDraftValues(getRuntimePolicyDraftValues(model.activeConfig));
+    setProviderSelectionIds(model.providerConnections.selectedIds);
+  }, [
+    model.activeConfig,
+    model.applicationId,
+    model.providerConnections.selectedIds
+  ]);
   const displayConfig =
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
@@ -255,11 +341,89 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     activePolicySection === "general" ? undefined : hiddenPolicySectionStyle;
   const cacheSectionStyle =
     activePolicySection === "cache" ? undefined : hiddenPolicySectionStyle;
+  const hasActiveAppToken = activeAppTokenCount > 0;
   const providerOptions = model.activeConfig.providers;
+  const selectedProviderIdSet = useMemo(
+    () => new Set(providerSelectionIds),
+    [providerSelectionIds]
+  );
+  const hasProviderSelectionChanged = !haveSameStringSet(
+    providerSelectionIds,
+    model.providerConnections.selectedIds
+  );
   const modelOptionsByProvider = useMemo(
     () => groupModelsByProvider(draftValues.models),
     [draftValues.models]
   );
+  const routingProviderOptions = useMemo(
+    () =>
+      getRoutingProviderOptions(model.activeConfig.providers, draftValues.models, [
+        draftValues.routingDefaultProvider,
+        draftValues.routingLowCostProvider,
+        draftValues.routingFallbackProvider
+      ]),
+    [
+      draftValues.models,
+      draftValues.routingDefaultProvider,
+      draftValues.routingFallbackProvider,
+      draftValues.routingLowCostProvider,
+      model.activeConfig.providers
+    ]
+  );
+  const hasRoutingCandidates =
+    routingProviderOptions.length > 0 &&
+    Boolean(draftValues.routingDefaultProvider && draftValues.routingDefaultModel) &&
+    Boolean(draftValues.routingLowCostProvider && draftValues.routingLowCostModel) &&
+    Boolean(draftValues.routingFallbackProvider && draftValues.routingFallbackModel);
+
+  function toggleProviderSelection(providerConnection: ProviderConnectionRecord) {
+    const providerModels = getProviderConnectionModels(providerConnection);
+
+    if (providerModels.length === 0) {
+      return;
+    }
+
+    setProviderSelectionIds((current) =>
+      current.includes(providerConnection.id)
+        ? current.filter((providerConnectionId) => providerConnectionId !== providerConnection.id)
+        : [...current, providerConnection.id]
+    );
+  }
+
+  async function saveApplicationProviders() {
+    setIsSavingProviders(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/application-providers", {
+      body: JSON.stringify({
+        applicationId: model.applicationId,
+        providerConnectionIds: providerSelectionIds
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+
+    if (!response.ok) {
+      setSubmitState({
+        message: payload.error ?? "Application provider update failed.",
+        status: "error"
+      });
+      setIsSavingProviders(false);
+      return;
+    }
+
+    setSubmitState({
+      message: text.applicationProvidersSaved,
+      status: "success"
+    });
+    setIsSavingProviders(false);
+    router.refresh();
+  }
 
   function updateRoutingProvider(
     route: "default" | "fallback" | "lowCost",
@@ -298,12 +462,29 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
   }
 
   async function submitPolicy(action: "save-draft" | "publish") {
+    if (!hasActiveAppToken) {
+      setSubmitState({
+        message: text.activeAppTokenMissing,
+        status: "error"
+      });
+      return;
+    }
+
+    if (!hasRoutingCandidates) {
+      setSubmitState({
+        message: text.providerConnectionMissing,
+        status: "error"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitState({ message: "", status: "idle" });
 
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
         action,
+        applicationId: model.applicationId,
         values: draftValues
       }),
       headers: {
@@ -334,6 +515,47 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     setIsSubmitting(false);
   }
 
+  async function issueRuntimeAppToken() {
+    setIsIssuingAppToken(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/app-tokens", {
+      body: JSON.stringify({
+        action: "issue",
+        values: {
+          applicationId: model.applicationId,
+          displayName: `${appTokenReadiness?.applicationName ?? "Application"} Runtime App Token`,
+          expiresAt: "",
+          scopes: "gateway:invoke"
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      appToken?: unknown;
+      error?: string;
+    };
+
+    if (!response.ok || !payload.appToken) {
+      setSubmitState({
+        message: payload.error ?? text.appTokenIssueFailed,
+        status: "error"
+      });
+      setIsIssuingAppToken(false);
+      return;
+    }
+
+    setActiveAppTokenCount((current) => Math.max(1, current + 1));
+    setSubmitState({
+      message: text.appTokenIssued,
+      status: "success"
+    });
+    setIsIssuingAppToken(false);
+  }
+
   async function rollbackPolicy(targetConfigVersion: string) {
     setRollbackTarget(targetConfigVersion);
     setSubmitState({ message: "", status: "idle" });
@@ -341,6 +563,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
         action: "rollback",
+        applicationId: model.applicationId,
         targetConfigVersion
       }),
       headers: {
@@ -383,7 +606,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             {text.details}
           </Button>
           <Button
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hasActiveAppToken || !hasRoutingCandidates}
             onClick={() => void submitPolicy("save-draft")}
             type="button"
             variant="outline"
@@ -392,7 +615,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             {text.saveDraft}
           </Button>
           <Button
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hasActiveAppToken || !hasRoutingCandidates}
             onClick={() => void submitPolicy("publish")}
             type="button"
           >
@@ -403,14 +626,42 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>
+            {text.fixtureFallback} {model.loadError}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {model.source === "template" ? (
+        <Alert variant="warning">
+          <AlertDescription>{text.templateFallback}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!hasActiveAppToken ? (
+        <div className="policy-alert runtime-credential-alert" data-status="error">
+          <span>
+            {text.activeAppTokenMissing}
+            {appTokenReadiness?.loadError ? ` ${appTokenReadiness.loadError}` : ""}
+          </span>
+          <Button
+            disabled={isIssuingAppToken}
+            onClick={() => void issueRuntimeAppToken()}
+            type="button"
+            variant="outline"
+          >
+            {isIssuingAppToken ? text.issuingAppToken : text.issueAppToken}
+          </Button>
+        </div>
+      ) : null}
+      {!hasRoutingCandidates ? (
+        <div className="policy-alert runtime-credential-alert" data-status="error">
+          <span>{text.providerConnectionMissing}</span>
+        </div>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
@@ -430,6 +681,60 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
 
       <section className="policy-layout policy-settings-list">
         <article
+          className="console-panel policy-editor-panel wide-panel"
+          style={generalSectionStyle}
+        >
+          <div className="panel-heading">
+            <h3>{text.applicationProviders}</h3>
+            <Button
+              disabled={!hasProviderSelectionChanged || isSavingProviders}
+              onClick={() => void saveApplicationProviders()}
+              type="button"
+              variant="outline"
+            >
+              {isSavingProviders ? text.savingProviders : text.saveProviders}
+            </Button>
+          </div>
+          <p className="project-muted">{text.applicationProvidersHint}</p>
+          {model.providerConnections.loadError ? (
+            <p className="project-muted">{model.providerConnections.loadError}</p>
+          ) : null}
+          <div className="policy-provider-list">
+            {model.providerConnections.available.length === 0 ? (
+              <p className="project-muted">{text.providerConnectionMissing}</p>
+            ) : null}
+            {model.providerConnections.available.map((providerConnection) => {
+              const providerModels = getProviderConnectionModels(providerConnection);
+              const isSelectable = providerModels.length > 0;
+
+              return (
+                <label
+                  aria-disabled={!isSelectable}
+                  className="policy-provider-option"
+                  data-disabled={!isSelectable}
+                  key={providerConnection.id}
+                >
+                  <input
+                    checked={selectedProviderIdSet.has(providerConnection.id)}
+                    disabled={!isSelectable || isSavingProviders}
+                    onChange={() => toggleProviderSelection(providerConnection)}
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{providerConnection.displayName}</strong>
+                    <small>
+                      {providerConnection.provider}
+                      {" · "}
+                      {isSelectable ? providerModels.join(", ") : text.noProviderModels}
+                    </small>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </article>
+
+        <article
           className="console-panel policy-editor-panel"
           style={generalSectionStyle}
         >
@@ -437,20 +742,19 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             <h3>{text.budget}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.budgetEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  budgetEnabled: event.target.checked,
-                  budgetEnforcementMode: event.target.checked
+                  budgetEnabled: checked,
+                  budgetEnforcementMode: checked
                     ? current.budgetEnforcementMode === "disabled"
                       ? "warn"
                       : current.budgetEnforcementMode
                     : "disabled"
                 }))
               }
-              type="checkbox"
             />
             <span>{text.enabled}</span>
           </label>
@@ -496,15 +800,14 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             <h3>{text.rateLimit}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.rateLimitEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  rateLimitEnabled: event.target.checked
+                  rateLimitEnabled: checked
                 }))
               }
-              type="checkbox"
             />
             <span>{text.enabled}</span>
           </label>
@@ -559,15 +862,14 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             <h3>{text.promptCapture}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.promptCaptureEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  promptCaptureEnabled: event.target.checked
+                  promptCaptureEnabled: checked
                 }))
               }
-              type="checkbox"
             />
             <span>{text.promptCaptureEnabled}</span>
           </label>
@@ -600,7 +902,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
               onModelChange={(modelName) => updateRoutingModel("default", modelName)}
               onProviderChange={(provider) => updateRoutingProvider("default", provider)}
               provider={draftValues.routingDefaultProvider}
-              providerOptions={providerOptions}
+              providerOptions={routingProviderOptions}
               selectedModel={draftValues.routingDefaultModel}
             />
             <RoutingPairEditor
@@ -609,7 +911,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
               onModelChange={(modelName) => updateRoutingModel("lowCost", modelName)}
               onProviderChange={(provider) => updateRoutingProvider("lowCost", provider)}
               provider={draftValues.routingLowCostProvider}
-              providerOptions={providerOptions}
+              providerOptions={routingProviderOptions}
               selectedModel={draftValues.routingLowCostModel}
             />
             <RoutingPairEditor
@@ -618,7 +920,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
               onModelChange={(modelName) => updateRoutingModel("fallback", modelName)}
               onProviderChange={(provider) => updateRoutingProvider("fallback", provider)}
               provider={draftValues.routingFallbackProvider}
-              providerOptions={providerOptions}
+              providerOptions={routingProviderOptions}
               selectedModel={draftValues.routingFallbackModel}
             />
           </div>
@@ -653,15 +955,14 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             <h3>{text.cache}</h3>
           </div>
           <label className="policy-toggle-row">
-            <input
+            <Switch
               checked={draftValues.cacheEnabled}
-              onChange={(event) =>
+              onCheckedChange={(checked) =>
                 setDraftValues((current) => ({
                   ...current,
-                  cacheEnabled: event.target.checked
+                  cacheEnabled: checked
                 }))
               }
-              type="checkbox"
             />
             <span>{text.cacheEnabled}</span>
           </label>
@@ -687,7 +988,7 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
             <h3>{text.semanticCache}</h3>
           </div>
           <label aria-disabled="true" className="policy-toggle-row">
-            <input checked={draftValues.cacheEnabled} disabled readOnly type="checkbox" />
+            <Switch checked={draftValues.cacheEnabled} disabled readOnly />
             <span>
               {draftValues.cacheEnabled
                 ? text.semanticCacheEvidenceOnly
@@ -749,9 +1050,9 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
                   <h3>{text.runtimeSnapshot}</h3>
                 </div>
                 {model.runtimeSnapshot.loadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.runtimeSnapshot.loadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.runtimeSnapshot.snapshot ? (
                   <RuntimeSnapshotDetail snapshot={model.runtimeSnapshot.snapshot} text={text} />
@@ -770,14 +1071,14 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
                   <h3>{text.providerCatalog}</h3>
                 </div>
                 {model.providerCatalog.loadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.providerCatalog.loadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.providerCatalog.loadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.providerCatalog.canonicalLoadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.providerCatalog.canonicalLoadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.providerCatalog.canonicalLoadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.providerCatalog.summary ? (
                   <dl className="policy-summary-list">
@@ -834,9 +1135,9 @@ export function RuntimePolicyEditor({ locale, model }: RuntimePolicyEditorProps)
                   <h3>{text.history}</h3>
                 </div>
                 {model.history.loadError ? (
-                  <p className="policy-alert" data-status="warning">
-                    {model.history.loadError}
-                  </p>
+                  <Alert variant="warning">
+                    <AlertDescription>{model.history.loadError}</AlertDescription>
+                  </Alert>
                 ) : null}
                 {model.history.items.length > 0 ? (
                   <RuntimeHistoryTable
@@ -1063,17 +1364,24 @@ function RoutingPairEditor({
   onModelChange: (model: string) => void;
   onProviderChange: (provider: string) => void;
   provider: string;
-  providerOptions: RuntimePolicyProvider[];
+  providerOptions: RoutingProviderOption[];
   selectedModel: string;
 }) {
   const modelOptions = modelOptionsByProvider.get(provider) ?? [];
+  const hasProviderOptions = providerOptions.length > 0;
 
   return (
     <fieldset className="policy-routing-pair">
       <legend>{label}</legend>
       <label className="policy-field">
         <span>Provider</span>
-        <select onChange={(event) => onProviderChange(event.target.value)} value={provider}>
+        <select
+          aria-label={`${label} Provider`}
+          disabled={!hasProviderOptions}
+          onChange={(event) => onProviderChange(event.target.value)}
+          value={hasProviderOptions ? provider : ""}
+        >
+          {!hasProviderOptions ? <option value="">No providers</option> : null}
           {providerOptions.map((option) => (
             <option key={option.providerId} value={option.provider}>
               {option.provider}
@@ -1083,7 +1391,13 @@ function RoutingPairEditor({
       </label>
       <label className="policy-field">
         <span>Model</span>
-        <select onChange={(event) => onModelChange(event.target.value)} value={selectedModel}>
+        <select
+          aria-label={`${label} Model`}
+          disabled={modelOptions.length === 0}
+          onChange={(event) => onModelChange(event.target.value)}
+          value={modelOptions.length === 0 ? "" : selectedModel}
+        >
+          {modelOptions.length === 0 ? <option value="">No models</option> : null}
           {modelOptions.map((option) => (
             <option key={`${option.provider}:${option.model}`} value={option.model}>
               {option.model}
@@ -1137,16 +1451,15 @@ function DetectorEditor({
   return (
     <div className="policy-detector-row">
       <label className="policy-toggle-row">
-        <input
+        <Switch
           checked={isMandatory || detector.enabled}
           disabled={isMandatory}
-          onChange={(event) =>
+          onCheckedChange={(checked) =>
             onChange({
               ...detector,
-              enabled: event.target.checked
+              enabled: checked
             })
           }
-          type="checkbox"
         />
         <span>{labels.enabled}</span>
       </label>
@@ -1216,4 +1529,73 @@ function groupModelsByProvider(models: RuntimePolicyModelConfig[]) {
   }
 
   return groups;
+}
+
+function getRoutingProviderOptions(
+  providers: RuntimePolicyProvider[],
+  models: RuntimePolicyModelConfig[],
+  selectedProviders: string[]
+): RoutingProviderOption[] {
+  const providerOptions = new Map<string, RoutingProviderOption>();
+
+  for (const provider of providers) {
+    const providerName = provider.provider.trim();
+
+    if (providerName) {
+      providerOptions.set(providerName, {
+        provider: providerName,
+        providerId: provider.providerId || `provider-${providerName}`
+      });
+    }
+  }
+
+  for (const model of models) {
+    const providerName = model.provider.trim();
+
+    if (providerName && !providerOptions.has(providerName)) {
+      providerOptions.set(providerName, {
+        provider: providerName,
+        providerId: `model-provider-${providerName}`
+      });
+    }
+  }
+
+  for (const provider of selectedProviders) {
+    const providerName = provider.trim();
+
+    if (providerName && !providerOptions.has(providerName)) {
+      providerOptions.set(providerName, {
+        provider: providerName,
+        providerId: `selected-provider-${providerName}`
+      });
+    }
+  }
+
+  return Array.from(providerOptions.values());
+}
+
+function getProviderConnectionModels(providerConnection: ProviderConnectionRecord) {
+  const models = providerConnection.providerConfig?.models;
+
+  if (!Array.isArray(models)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      models
+        .map((model) => (typeof model === "string" ? model.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+}
+
+function haveSameStringSet(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const rightValues = new Set(right);
+
+  return left.every((value) => rightValues.has(value));
 }

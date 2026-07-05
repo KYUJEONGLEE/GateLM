@@ -8,6 +8,7 @@ import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-polic
 
 type RequestPayload = {
   action?: unknown;
+  applicationId?: unknown;
   targetConfigVersion?: unknown;
   values?: unknown;
 };
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid rollback target." }, { status: 400 });
     }
 
-    const result = await rollbackRuntimePolicy(payload.targetConfigVersion);
+    const applicationId = getOptionalApplicationId(payload.applicationId);
+    const result = await rollbackRuntimePolicy(payload.targetConfigVersion, applicationId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -52,8 +54,8 @@ export async function POST(request: Request) {
 
   const result =
     payload.action === "save-draft"
-      ? await saveRuntimePolicyDraft(payload.values)
-      : await publishRuntimePolicy(payload.values);
+      ? await saveRuntimePolicyDraft(payload.values, getOptionalApplicationId(payload.applicationId))
+      : await publishRuntimePolicy(payload.values, getOptionalApplicationId(payload.applicationId));
 
   if (!result.ok) {
     return NextResponse.json(
@@ -69,6 +71,10 @@ export async function POST(request: Request) {
     runtimeConfig: result.data,
     status: result.status
   });
+}
+
+function getOptionalApplicationId(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraftValues {

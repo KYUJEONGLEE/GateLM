@@ -1,8 +1,9 @@
 "use client";
 
-import { Boxes, RefreshCw } from "lucide-react";
+import { Boxes, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ModelCatalogItem, ModelCatalogModel } from "@/lib/gateway/model-catalog-types";
@@ -21,8 +22,11 @@ const catalogText: Record<
     allowed: string;
     capabilities: string;
     clear: string;
+    close: string;
     created: string;
     credential: string;
+    deleteModel: string;
+    details: string;
     empty: string;
     execution: string;
     fallback: string;
@@ -39,10 +43,10 @@ const catalogText: Record<
     ownedBy: string;
     provider: string;
     refresh: string;
+    removeUnavailable: string;
     requestId: string;
     routing: string;
     route: string;
-    source: string;
     title: string;
   }
 > = {
@@ -51,8 +55,11 @@ const catalogText: Record<
     allowed: "Allowed",
     capabilities: "Capabilities",
     clear: "Clear",
+    close: "Close",
     created: "Created",
     credential: "Credential",
+    deleteModel: "Remove",
+    details: "Details",
     empty: "No models returned from Gateway.",
     execution: "Execution",
     fallback: "Fallback",
@@ -69,10 +76,10 @@ const catalogText: Record<
     ownedBy: "Owned by",
     provider: "Provider",
     refresh: "Refresh",
+    removeUnavailable: "Only Control Plane provider models can be removed here.",
     requestId: "Request ID",
     routing: "Routing",
     route: "Route",
-    source: "Source",
     title: "Model Catalog"
   },
   ko: {
@@ -80,8 +87,11 @@ const catalogText: Record<
     allowed: "허용",
     capabilities: "Capabilities",
     clear: "초기화",
+    close: "닫기",
     created: "생성",
     credential: "Credential",
+    deleteModel: "삭제",
+    details: "상세",
     empty: "Gateway에서 반환된 모델이 없습니다.",
     execution: "Execution",
     fallback: "Fallback",
@@ -98,10 +108,10 @@ const catalogText: Record<
     ownedBy: "Owned by",
     provider: "Provider",
     refresh: "새로고침",
+    removeUnavailable: "Control Plane Provider에 등록된 모델만 여기서 삭제할 수 있습니다.",
     requestId: "Request ID",
     routing: "Routing",
     route: "Route",
-    source: "출처",
     title: "Model Catalog"
   }
 };
@@ -111,18 +121,29 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
   const text = catalogText[locale];
   const [providerFilter, setProviderFilter] = useState("all");
   const [capabilityFilter, setCapabilityFilter] = useState("all");
+  const [removedModelKeys, setRemovedModelKeys] = useState<Set<string>>(() => new Set());
+  const [deletingModelKey, setDeletingModelKey] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<ModelCatalogItem | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    status: "error" | "success";
+    text: string;
+  } | null>(null);
   const providerOptions = useMemo(() => getProviderOptions(model.models), [model.models]);
   const capabilityOptions = useMemo(() => getCapabilityOptions(model.models), [model.models]);
   const visibleModels = useMemo(
     () =>
       model.models.filter((item) => {
+        if (removedModelKeys.has(getCatalogModelKey(item))) {
+          return false;
+        }
+
         const providerMatches = providerFilter === "all" || getEffectiveProvider(item) === providerFilter;
         const capabilityMatches =
           capabilityFilter === "all" || item.capabilities.includes(capabilityFilter);
 
         return providerMatches && capabilityMatches;
       }),
-    [capabilityFilter, model.models, providerFilter]
+    [capabilityFilter, model.models, providerFilter, removedModelKeys]
   );
   const hasFilters = providerFilter !== "all" || capabilityFilter !== "all";
 
@@ -131,8 +152,63 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
     setCapabilityFilter("all");
   }
 
+  async function deleteModel(item: ModelCatalogItem) {
+    const provider = item.provider;
+    const modelKey = getCatalogModelKey(item);
+
+    if (!provider || item.source === "gateway") {
+      setActionMessage({
+        status: "error",
+        text: text.removeUnavailable
+      });
+      return;
+    }
+
+    setDeletingModelKey(modelKey);
+    setActionMessage(null);
+
+    const response = await fetch("/api/control-plane/provider-connections", {
+      body: JSON.stringify({
+        action: "remove-model",
+        values: {
+          modelName: item.id,
+          provider
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      status?: number;
+    };
+
+    if (!response.ok) {
+      setActionMessage({
+        status: "error",
+        text: payload.error ?? "Model removal failed."
+      });
+      setDeletingModelKey(null);
+      return;
+    }
+
+    setRemovedModelKeys((current) => new Set([...current, modelKey]));
+    setSelectedModel(null);
+    setActionMessage({
+      status: "success",
+      text:
+        locale === "ko"
+          ? "Provider 등록 모델에서 삭제했습니다. 활성 Runtime Catalog에는 publish 전까지 남아 있을 수 있습니다."
+          : "Removed from provider registration. Active Runtime Catalog may keep it until the next publish."
+    });
+    setDeletingModelKey(null);
+    router.refresh();
+  }
+
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">{text.management}</p>
@@ -141,14 +217,21 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
       </section>
 
       {model.loadError ? (
-        <p className="policy-alert" data-status="error">
-          {text.gatewayUnavailable}: {model.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>
+            {text.gatewayUnavailable}: {model.loadError}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {model.controlPlaneLoadError ? (
-        <p className="policy-alert" data-status="warning">
-          Control Plane catalog: {model.controlPlaneLoadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>Control Plane catalog: {model.controlPlaneLoadError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {actionMessage ? (
+        <Alert variant={actionMessage.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{actionMessage.text}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="metric-grid model-catalog-metrics">
@@ -222,12 +305,9 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                 <tr>
                   <th>{text.model}</th>
                   <th>{text.provider}</th>
-                  <th>{text.execution}</th>
                   <th>{text.capabilities}</th>
-                  <th>{text.routing}</th>
                   <th>{text.allowed}</th>
-                  <th>{text.source}</th>
-                  <th>{text.created}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -235,38 +315,24 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
                   <tr key={`${getEffectiveProvider(item)}:${item.id}`}>
                     <td>
                       <strong className="provider-name">{item.id}</strong>
-                      <span className="project-muted">
-                        {text.object}: {item.object} / {text.ownedBy}: {item.ownedBy}
-                      </span>
                     </td>
                     <td>{nullableText(getEffectiveProvider(item) || text.noProvider)}</td>
                     <td>
-                      <ExecutionMetadata item={item} labels={text} />
-                    </td>
-                    <td>
                       <CapabilityList item={item} noCapabilityText={text.noCapability} />
-                      {item.alias ? <span className="project-muted">{text.alias}: {item.alias}</span> : null}
                     </td>
                     <td>
-                      <RoutingMetadata item={item} labels={text} />
+                      <AllowedBadge item={item} />
                     </td>
                     <td>
-                      <Badge
-                        className="project-status-badge"
-                        data-status={
-                          item.allowed === false
-                            ? "DISABLED"
-                            : item.allowed === true
-                              ? "ACTIVE"
-                              : "ARCHIVED"
-                        }
+                      <Button
+                        aria-label={`${item.id} ${text.details}`}
+                        onClick={() => setSelectedModel(item)}
+                        type="button"
                         variant="outline"
                       >
-                        {item.allowed === false ? "false" : item.allowed === true ? "true" : "-"}
-                      </Badge>
+                        <MoreHorizontal aria-hidden="true" />
+                      </Button>
                     </td>
-                    <td>{item.source}</td>
-                    <td>{item.createdAt ? formatDateTime(item.createdAt) : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -278,6 +344,86 @@ export function ModelCatalogView({ locale, model }: ModelCatalogViewProps) {
           </p>
         )}
       </section>
+
+      {selectedModel ? (
+        <div className="modal-backdrop" onClick={() => setSelectedModel(null)} role="presentation">
+          <section
+            aria-labelledby="model-catalog-detail-title"
+            aria-modal="true"
+            className="modal-panel model-catalog-detail-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="panel-heading">
+              <div>
+                <p className="console-kicker">{text.details}</p>
+                <h3 id="model-catalog-detail-title">{selectedModel.id}</h3>
+              </div>
+              <Button onClick={() => setSelectedModel(null)} type="button" variant="outline">
+                {text.close}
+              </Button>
+            </div>
+
+            <dl className="policy-summary-list">
+              {[
+                [text.provider, nullableText(getEffectiveProvider(selectedModel) || text.noProvider)],
+                [text.object, nullableText(selectedModel.object)],
+                [text.ownedBy, nullableText(selectedModel.ownedBy)],
+                [text.created, selectedModel.createdAt ? formatDateTime(selectedModel.createdAt) : "-"],
+                [text.alias, nullableText(selectedModel.alias)],
+                [text.allowed, selectedModel.allowed === false ? "false" : selectedModel.allowed === true ? "true" : "-"]
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="model-catalog-detail-grid">
+              <article className="console-panel">
+                <div className="panel-heading">
+                  <h3>{text.execution}</h3>
+                </div>
+                <ExecutionMetadata item={selectedModel} labels={text} />
+              </article>
+              <article className="console-panel">
+                <div className="panel-heading">
+                  <h3>{text.capabilities}</h3>
+                </div>
+                <CapabilityList item={selectedModel} noCapabilityText={text.noCapability} />
+              </article>
+              <article className="console-panel">
+                <div className="panel-heading">
+                  <h3>{text.routing}</h3>
+                </div>
+                <RoutingMetadata item={selectedModel} labels={text} />
+              </article>
+            </div>
+
+            <div className="modal-actions">
+              <Button
+                disabled={
+                  deletingModelKey !== null ||
+                  !selectedModel.provider ||
+                  selectedModel.source === "gateway"
+                }
+                onClick={() => void deleteModel(selectedModel)}
+                title={
+                  !selectedModel.provider || selectedModel.source === "gateway"
+                    ? text.removeUnavailable
+                    : undefined
+                }
+                type="button"
+                variant="outline"
+              >
+                <Trash2 aria-hidden="true" />
+                {deletingModelKey === getCatalogModelKey(selectedModel) ? "..." : text.deleteModel}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <section className="console-panel">
         <div className="panel-heading">
@@ -322,6 +468,20 @@ function CapabilityList({
         </Badge>
       ))}
     </div>
+  );
+}
+
+function AllowedBadge({ item }: { item: ModelCatalogItem }) {
+  return (
+    <Badge
+      className="project-status-badge"
+      data-status={
+        item.allowed === false ? "DISABLED" : item.allowed === true ? "ACTIVE" : "ARCHIVED"
+      }
+      variant="outline"
+    >
+      {item.allowed === false ? "false" : item.allowed === true ? "true" : "-"}
+    </Badge>
   );
 }
 
@@ -399,4 +559,8 @@ function getCapabilityOptions(models: ModelCatalogItem[]) {
 
 function getEffectiveProvider(model: ModelCatalogItem) {
   return model.provider ?? model.ownedBy;
+}
+
+function getCatalogModelKey(model: ModelCatalogItem) {
+  return `${getEffectiveProvider(model)}:${model.id}`;
 }

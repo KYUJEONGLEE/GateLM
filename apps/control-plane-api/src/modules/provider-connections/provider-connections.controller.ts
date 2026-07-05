@@ -20,6 +20,7 @@ import {
   ProviderModelDiscoveryResponseDto,
   ProviderPresetResponseDto,
   ProviderResponseDto,
+  SetApplicationProvidersDto,
   UpsertProviderDto,
 } from './dto/provider-connection.dto';
 import { ProviderConnectionsService } from './provider-connections.service';
@@ -45,12 +46,55 @@ export class ProviderConnectionsController {
     };
   }
 
+  @Post('tenants/:tenantId/providers')
+  @HttpCode(HttpStatus.OK)
+  async upsertTenantProvider(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Body() body: UpsertProviderDto,
+  ): Promise<DataEnvelope<ProviderResponseDto>> {
+    return {
+      data: await this.providerConnectionsService.upsertTenantProvider(
+        tenantId,
+        body,
+      ),
+    };
+  }
+
   @Get('projects/:projectId/providers')
   async listProviders(
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query() query: ListProvidersQueryDto,
   ): Promise<ListEnvelope<ProviderResponseDto>> {
     return this.providerConnectionsService.listProviders(projectId, query);
+  }
+
+  @Get('tenants/:tenantId/providers')
+  async listTenantProviders(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Query() query: ListProvidersQueryDto,
+  ): Promise<ListEnvelope<ProviderResponseDto>> {
+    return this.providerConnectionsService.listTenantProviders(tenantId, query);
+  }
+
+  @Get('applications/:applicationId/providers')
+  async listApplicationProviders(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+  ): Promise<ListEnvelope<ProviderResponseDto>> {
+    return this.providerConnectionsService.listApplicationProviders(
+      applicationId,
+    );
+  }
+
+  @Post('applications/:applicationId/providers')
+  @HttpCode(HttpStatus.OK)
+  async setApplicationProviders(
+    @Param('applicationId', ParseUUIDPipe) applicationId: string,
+    @Body() body: SetApplicationProvidersDto,
+  ): Promise<ListEnvelope<ProviderResponseDto>> {
+    return this.providerConnectionsService.setApplicationProviders(
+      applicationId,
+      body,
+    );
   }
 
   @Get('provider-presets')
@@ -69,6 +113,20 @@ export class ProviderConnectionsController {
     return {
       data: await this.providerConnectionsService.discoverProviderModels(
         projectId,
+        provider,
+      ),
+    };
+  }
+
+  @Post('tenants/:tenantId/providers/:provider/discover-models')
+  @HttpCode(HttpStatus.OK)
+  async discoverTenantProviderModels(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('provider') provider: string,
+  ): Promise<DataEnvelope<ProviderModelDiscoveryResponseDto>> {
+    return {
+      data: await this.providerConnectionsService.discoverTenantProviderModels(
+        tenantId,
         provider,
       ),
     };

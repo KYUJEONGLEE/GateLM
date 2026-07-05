@@ -117,6 +117,37 @@ function Assert-ExpectedScripts {
     return $missingPhaseScripts
 }
 
+function Use-LocalVerifyToolchain {
+    $toolsDir = Join-Path $repoRoot ".cache/tools"
+    if (-not (Test-Path -LiteralPath $toolsDir)) {
+        return
+    }
+
+    $pathParts = @()
+    $nodeDir = Get-ChildItem -LiteralPath $toolsDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "node-v22.*-win-x64" -and (Test-Path -LiteralPath (Join-Path $_.FullName "node.exe")) } |
+        Sort-Object -Property Name -Descending |
+        Select-Object -First 1
+    if ($null -ne $nodeDir) {
+        $pathParts += $nodeDir.FullName
+    }
+
+    $goDir = Get-ChildItem -LiteralPath $toolsDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "go1.24.*" -and (Test-Path -LiteralPath (Join-Path $_.FullName "bin/go.exe")) } |
+        Sort-Object -Property Name -Descending |
+        Select-Object -First 1
+    if ($null -ne $goDir) {
+        $pathParts += (Join-Path $goDir.FullName "bin")
+    }
+
+    if ($pathParts.Count -eq 0) {
+        return
+    }
+
+    $env:PATH = (($pathParts + @($env:PATH)) -join [System.IO.Path]::PathSeparator)
+    Write-Host "local verify toolchain: $($pathParts -join ', ')"
+}
+
 function Get-ReportObject {
     param(
         [string[]]$MissingPhaseScripts,
@@ -149,6 +180,7 @@ function Get-ReportObject {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+Use-LocalVerifyToolchain
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if ([string]::IsNullOrWhiteSpace($ReportDir)) {
     $ReportDir = Join-Path $repoRoot "reports/e2e"

@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Application, Prisma } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
@@ -23,6 +28,10 @@ export class ApplicationsService {
     dto: CreateApplicationDto,
   ): Promise<ApplicationResponseDto> {
     const project = await this.getProjectOrThrow(projectId);
+    const providerConnectionIds = await this.getValidProviderConnectionIdsOrThrow(
+      project.tenantId,
+      dto.providerConnectionIds ?? [],
+    );
     const budgetValues = this.resolveCreateBudgetValues(dto);
     await this.assertApplicationBudgetCanFitProject({
       applicationId: null,
@@ -33,16 +42,32 @@ export class ApplicationsService {
       status: 'ACTIVE',
     });
 
-    const application = await this.prisma.application.create({
-      data: {
-        tenantId: project.tenantId,
-        projectId: project.id,
-        name: dto.name,
-        description: this.toNullableDescription(dto.description),
-        budgetLimitMode: budgetValues.budgetLimitMode,
-        budgetLimitUsd: budgetValues.budgetLimitUsd,
-        budgetLimitPercent: budgetValues.budgetLimitPercent,
-      },
+    const application = await this.prisma.$transaction(async (tx) => {
+      const createdApplication = await tx.application.create({
+        data: {
+          tenantId: project.tenantId,
+          projectId: project.id,
+          name: dto.name,
+          description: this.toNullableDescription(dto.description),
+          budgetLimitMode: budgetValues.budgetLimitMode,
+          budgetLimitUsd: budgetValues.budgetLimitUsd,
+          budgetLimitPercent: budgetValues.budgetLimitPercent,
+        },
+      });
+
+      if (providerConnectionIds.length > 0) {
+        await tx.applicationProviderConnection.createMany({
+          data: providerConnectionIds.map((providerConnectionId) => ({
+            applicationId: createdApplication.id,
+            projectId: createdApplication.projectId,
+            providerConnectionId,
+            tenantId: createdApplication.tenantId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return createdApplication;
     });
 
     return this.toApplicationResponse(
@@ -181,6 +206,33 @@ export class ApplicationsService {
     }
 
     return application;
+  }
+
+  private async getValidProviderConnectionIdsOrThrow(
+    tenantId: string,
+    rawProviderConnectionIds: string[],
+  ): Promise<string[]> {
+    const providerConnectionIds = [...new Set(rawProviderConnectionIds)];
+
+    if (providerConnectionIds.length === 0) {
+      return [];
+    }
+
+    const providers = await this.prisma.providerConnection.findMany({
+      where: {
+        id: { in: providerConnectionIds },
+        tenantId,
+      },
+      select: { id: true },
+    });
+
+    if (providers.length !== providerConnectionIds.length) {
+      throw new BadRequestException(
+        'Application providers must belong to the same tenant.',
+      );
+    }
+
+    return providerConnectionIds;
   }
 
   private toNullableDescription(value: string | undefined): string | null {

@@ -43,6 +43,7 @@ model Tenant {
   projects            Project[]
   applications        Application[]
   providerConnections ProviderConnection[]
+  applicationProviderConnections ApplicationProviderConnection[]
   apiKeys             GatewayApiKey[]
   appTokens           AppToken[]
   runtimeConfigs      RuntimeConfig[]
@@ -67,6 +68,7 @@ model Project {
   tenant              Tenant               @relation(fields: [tenantId], references: [id])
   applications        Application[]
   providerConnections ProviderConnection[]
+  applicationProviderConnections ApplicationProviderConnection[]
   apiKeys             GatewayApiKey[]
   appTokens           AppToken[]
   runtimeConfigs      RuntimeConfig[]
@@ -131,6 +133,7 @@ model Application {
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   project        Project         @relation(fields: [projectId], references: [id])
   appTokens      AppToken[]
+  providerConnections ApplicationProviderConnection[]
   runtimeConfigs RuntimeConfig[]
   runtimeSnapshots RuntimeSnapshot[]
   activeSnapshots  ActiveRuntimeSnapshot[]
@@ -143,7 +146,7 @@ model Application {
 model ProviderConnection {
   id                String                   @id @default(uuid()) @db.Uuid
   tenantId          String                   @db.Uuid
-  projectId         String                   @db.Uuid
+  projectId         String?                  @db.Uuid
   provider          String
   displayName       String
   status            ProviderConnectionStatus @default(ACTIVE)
@@ -157,12 +160,34 @@ model ProviderConnection {
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  project Project @relation(fields: [projectId], references: [id])
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+  applicationProviderConnections ApplicationProviderConnection[]
 
   @@index([tenantId])
   @@unique([projectId, provider])
   @@map("provider_connections")
+}
+
+model ApplicationProviderConnection {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @db.Uuid
+  projectId            String   @db.Uuid
+  applicationId        String   @db.Uuid
+  providerConnectionId String   @db.Uuid
+  createdAt            DateTime @default(now())
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id])
+  project            Project            @relation(fields: [projectId], references: [id])
+  application        Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  providerConnection ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([applicationId])
+  @@index([providerConnectionId])
+  @@unique([applicationId, providerConnectionId])
+  @@map("application_provider_connections")
 }
 
 model ProviderPreset {

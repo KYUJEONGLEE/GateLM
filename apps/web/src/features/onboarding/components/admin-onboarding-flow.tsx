@@ -2,10 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import type {
-  AdminOnboardingModel,
-  AdminProviderModel
-} from "@/lib/fixtures/v1-admin-fixtures";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { AdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import {
   formatDisplayIdentifier,
@@ -23,7 +21,6 @@ type AdminOnboardingFlowProps = {
 
 export type OnboardingStepId =
   | "project"
-  | "model-selection"
   | "runtime-config";
 
 type OnboardingStep = {
@@ -45,17 +42,6 @@ const onboardingSteps: OnboardingStep[] = [
       },
       ko: {
         label: "프로젝트"
-      }
-    }
-  },
-  {
-    id: "model-selection",
-    labels: {
-      en: {
-        label: "Model Selection"
-      },
-      ko: {
-        label: "모델 선택"
       }
     }
   },
@@ -126,9 +112,6 @@ type OnboardingDraft = {
   apiKeyDisplayName: string;
   cacheEnabled: string;
   cacheType: string;
-  defaultModel: string;
-  fallbackModel: string;
-  lowCostModel: string;
   projectName: string;
   projectTotalBudgetUsd: string;
   projectStatus: string;
@@ -483,14 +466,6 @@ function renderStepContent({
     );
   }
 
-  if (activeStepId === "model-selection") {
-    return (
-      <div className="onboarding-stack">
-        <ModelSelectionFields draft={draft} models={model.provider.models} onChange={updateDraft} />
-      </div>
-    );
-  }
-
   return (
     <div className="onboarding-stack">
       <OnboardingField
@@ -565,9 +540,9 @@ function ApiKeyIssueReview({
   return (
     <section className="credential-list-state" aria-label="API Key issue state">
       {issueState.error ? (
-        <p className="policy-alert" data-status="error">
-          {issueState.error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{issueState.error}</AlertDescription>
+        </Alert>
       ) : null}
       <div className="secret-placeholder secret-placeholder-action">
         <span>{issueState.status === "saving" ? text.savingProject : text.issueApiKeyPending}</span>
@@ -650,129 +625,6 @@ function ReadonlySummary({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
-function ModelSelectionFields({
-  draft,
-  models,
-  onChange
-}: {
-  draft: OnboardingDraft;
-  models: AdminProviderModel[];
-  onChange: (field: keyof OnboardingDraft, value: string) => void;
-}) {
-  if (models.length === 0) {
-    return <p className="empty-state">No registered models are available.</p>;
-  }
-
-  const options = models.map((model) => ({
-    label: `${model.displayName} (${model.provider}:${model.model})`,
-    value: getModelOptionValue(model.provider, model.model)
-  }));
-
-  return (
-    <section className="onboarding-model-list" aria-label="Registered model selection">
-      <div className="onboarding-form-row">
-        <ModelSelect
-          field="defaultModel"
-          label="Default model"
-          onChange={onChange}
-          options={options}
-          value={draft.defaultModel}
-        />
-        <ModelSelect
-          field="lowCostModel"
-          label="Low-cost model"
-          onChange={onChange}
-          options={options}
-          value={draft.lowCostModel}
-        />
-      </div>
-      <ModelSelect
-        field="fallbackModel"
-        label="Fallback model"
-        onChange={onChange}
-        options={options}
-        value={draft.fallbackModel}
-      />
-      <RegisteredModelTable models={models} />
-    </section>
-  );
-}
-
-function ModelSelect({
-  field,
-  label,
-  onChange,
-  options,
-  value
-}: {
-  field: "defaultModel" | "fallbackModel" | "lowCostModel";
-  label: string;
-  onChange: (field: keyof OnboardingDraft, value: string) => void;
-  options: Array<{ label: string; value: string }>;
-  value: string;
-}) {
-  return (
-    <label className="onboarding-field">
-      <span>{label}</span>
-      <select onChange={(event) => onChange(field, event.target.value)} required value={value}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function RegisteredModelTable({ models }: { models: AdminProviderModel[] }) {
-  return (
-    <div>
-      <div className="panel-heading">
-        <h4>Registered models</h4>
-      </div>
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Model</th>
-              <th>Provider</th>
-              <th>Status</th>
-              <th>Context</th>
-              <th>Modes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {models.map((model) => (
-              <tr key={`${model.provider}:${model.model}`}>
-                <td>
-                  <strong className="provider-name">{model.displayName}</strong>
-                  <span className="project-muted">{model.model}</span>
-                </td>
-                <td>{model.provider}</td>
-                <td>{model.status}</td>
-                <td>{model.contextWindowTokens.toLocaleString()} tokens</td>
-                <td>
-                  <span className="project-muted">
-                    streaming: {model.supportsStreaming ? "yes" : "no"}
-                  </span>
-                  <span className="project-muted">
-                    json: {model.supportsJsonMode ? "yes" : "no"}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function getModelOptionValue(provider: string, model: string) {
-  return `${provider}:${model}`;
-}
-
 function normalizeDraftProjectStatus(value: string): ProjectStatus {
   if (value === "DISABLED" || value === "disabled") {
     return "DISABLED";
@@ -815,18 +667,6 @@ function buildInitialDraft(model: AdminOnboardingModel): OnboardingDraft {
     apiKeyDisplayName: model.apiKey.listItem.displayName,
     cacheEnabled: model.runtimeConfig.cacheEnabled ? "enabled" : "disabled",
     cacheType: model.runtimeConfig.cacheType,
-    defaultModel: getModelOptionValue(
-      model.modelSelection.defaultProvider,
-      model.modelSelection.defaultModel
-    ),
-    fallbackModel: getModelOptionValue(
-      model.modelSelection.fallbackProvider,
-      model.modelSelection.fallbackModel
-    ),
-    lowCostModel: getModelOptionValue(
-      model.modelSelection.lowCostProvider,
-      model.modelSelection.lowCostModel
-    ),
     projectName: "",
     projectTotalBudgetUsd: "100",
     projectStatus: normalizeDraftProjectStatus(model.project.status),

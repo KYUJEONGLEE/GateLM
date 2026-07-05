@@ -3,11 +3,13 @@ from __future__ import annotations
 import threading
 import time
 import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from app.adapters.safety.heuristic_evaluator import HeuristicSafetyEvaluator
 from app.adapters.safety.privacy_filter_adapter import (
@@ -15,6 +17,7 @@ from app.adapters.safety.privacy_filter_adapter import (
     KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_SOURCE,
     PrivacyFilterAdapter,
+    _decode_openai_privacy_filter_spans,
     aggregation_strategy_for_model,
     normalize_label,
     public_model_id_for_model,
@@ -73,17 +76,105 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
 
         self.assertEqual(adapter.detect(prompt), [])
 
-    def test_adapter_can_feed_shadow_evaluator(self) -> None:
-        raw_name = "Alex Kim"
-        prompt = f"Draft a support reply for {raw_name}."
+    def test_openai_adapter_rejects_unsupported_and_person_model_labels(self) -> None:
+        organization_name = "Acme Synthetic"
+        person_name = "Alex Kim"
+        prompt = f"Review {organization_name} for the synthetic demo."
         adapter = PrivacyFilterAdapter(
             classifier=lambda _text: [
                 {
+                    "entity_group": "ORG",
+                    "score": 0.99,
+                    "start": prompt.index(organization_name),
+                    "end": prompt.index(organization_name) + len(organization_name),
+                },
+                {
                     "entity_group": "private_person",
+                    "score": 0.99,
+                    "start": 0,
+                    "end": len(person_name),
+                }
+            ],
+            model_name="openai/privacy-filter",
+        )
+
+        self.assertEqual(adapter.detect(prompt), [])
+
+    def test_koelectra_adapter_rejects_unverified_org_model_label(self) -> None:
+        organization_name = "Acme Synthetic"
+        prompt = f"Review {organization_name} for the synthetic demo."
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "ORG",
+                    "score": 0.91,
+                    "start": prompt.index(organization_name),
+                    "end": prompt.index(organization_name) + len(organization_name),
+                }
+            ],
+            model_name=KOELECTRA_PRIVACY_NER_MODEL,
+        )
+
+        self.assertEqual(adapter.detect(prompt), [])
+
+    def test_koelectra_adapter_accepts_verified_identity_model_labels(self) -> None:
+        marker = "900101-1234567"
+        prompt = f"Validate resident registration number {marker}."
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "RRN-B",
+                    "score": 0.91,
+                    "start": prompt.index(marker),
+                    "end": prompt.index(marker) + len(marker),
+                }
+            ],
+            model_name=KOELECTRA_PRIVACY_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(
+            [detection.detector_type for detection in detections],
+            ["resident_registration_number"],
+        )
+
+    def test_adapter_uses_type_specific_confidence_thresholds(self) -> None:
+        account_marker = "SYNTHETIC_ACCOUNT_0001"
+        person_marker = "Alex Kim"
+        prompt = f"Check {account_marker} and notify {person_marker}."
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "account_number",
+                    "score": 0.55,
+                    "start": prompt.index(account_marker),
+                    "end": prompt.index(account_marker) + len(account_marker),
+                },
+                {
+                    "entity_group": "private_person",
+                    "score": 0.80,
+                    "start": prompt.index(person_marker),
+                    "end": prompt.index(person_marker) + len(person_marker),
+                },
+            ]
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual([detection.detector_type for detection in detections], ["account_number"])
+
+    def test_adapter_can_feed_shadow_evaluator(self) -> None:
+        raw_email = "alex@example.test"
+        prompt = f"Draft a support reply for {raw_email}."
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "private_email",
                     "score": 0.94,
-                    "start": prompt.index(raw_name),
-                    "end": prompt.index(raw_name) + len(raw_name),
-                    "word": raw_name,
+                    "start": prompt.index(raw_email),
+                    "end": prompt.index(raw_email) + len(raw_email),
+                    "word": raw_email,
                 }
             ]
         )
@@ -91,14 +182,14 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
 
         decision = evaluator.evaluate(
             remote_context(),
-            remote_input(prompt, [detector("person_name", "redact", "[PERSON_NAME_REDACTED]")]),
+            remote_input(prompt, [detector("email", "redact", "[EMAIL_REDACTED]")]),
         )
 
         self.assertEqual(decision.action, "redacted")
-        self.assertEqual(decision.detected_types, ("person_name",))
+        self.assertEqual(decision.detected_types, ("email",))
         self.assertEqual(decision.detected_count, 1)
-        self.assertIn("[PERSON_1]", decision.redacted_prompt_preview or "")
-        self.assertNotIn(raw_name, decision.redacted_prompt_preview or "")
+        self.assertIn("[EMAIL_1]", decision.redacted_prompt_preview or "")
+        self.assertNotIn(raw_email, decision.redacted_prompt_preview or "")
 
     def test_label_normalization_strips_bio_prefix(self) -> None:
         self.assertEqual(normalize_label("B-PER"), "person_name")
@@ -130,6 +221,13 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
             KOELECTRA_PRIVACY_NER_SOURCE,
         )
         self.assertEqual(source_for_model("custom/example-token-classifier"), "huggingface_token_classifier")
+
+    def test_quantized_koelectra_onnx_path_keeps_public_detector_identity(self) -> None:
+        local_path = f"C:/models/onnx/{KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME}-quantized"
+
+        self.assertEqual(source_for_model(local_path), KOELECTRA_PRIVACY_NER_SOURCE)
+        self.assertEqual(public_model_id_for_model(local_path), KOELECTRA_PRIVACY_NER_MODEL)
+        self.assertEqual(aggregation_strategy_for_model(local_path), "none")
 
     def test_local_openai_privacy_filter_keeps_public_model_identity(self) -> None:
         local_path = "C:/models/openai--privacy-filter"
@@ -217,10 +315,49 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
             },
         )
 
-    def test_runtime_for_value_defaults_to_transformers_for_unknown_values(self) -> None:
+    def test_adapter_uses_direct_openai_privacy_filter_onnx_classifier_for_local_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_dir = Path(temp_dir) / "openai--privacy-filter"
+            (model_dir / "onnx").mkdir(parents=True)
+            (model_dir / "config.json").write_text('{"id2label": {"0": "O"}}', encoding="utf-8")
+            (model_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
+            (model_dir / "onnx" / "model_quantized.onnx").write_bytes(b"")
+
+            with mock.patch(
+                "app.adapters.safety.privacy_filter_adapter._OpenAIPrivacyFilterOnnxClassifier",
+                return_value="fake_openai_onnx_classifier",
+            ) as classifier_cls:
+                adapter = PrivacyFilterAdapter(model_name=str(model_dir), runtime="onnx")
+                classifier = adapter._load_classifier()
+
+        self.assertEqual(classifier, "fake_openai_onnx_classifier")
+        classifier_cls.assert_called_once_with(model_dir)
+
+    def test_openai_privacy_filter_onnx_decoder_merges_bioes_spans(self) -> None:
+        decoded = _decode_openai_privacy_filter_spans(
+            id_to_label={
+                0: "O",
+                1: "B-private_email",
+                2: "I-private_email",
+                3: "E-private_email",
+                4: "S-secret",
+            },
+            predicted_ids=[0, 1, 2, 3, 0, 4],
+            confidences=[1.0, 0.9, 0.8, 0.7, 1.0, 0.6],
+            offsets=[(0, 4), (5, 10), (10, 15), (15, 20), (20, 21), (22, 28)],
+        )
+
+        self.assertEqual(len(decoded), 2)
+        self.assertEqual(decoded[0]["entity_group"], "private_email")
+        self.assertEqual(decoded[0]["start"], 5)
+        self.assertEqual(decoded[0]["end"], 20)
+        self.assertAlmostEqual(float(decoded[0]["score"]), 0.8)
+        self.assertEqual(decoded[1], {"entity_group": "secret", "score": 0.6, "start": 22, "end": 28})
+
+    def test_runtime_for_value_defaults_to_onnx_for_unknown_values(self) -> None:
         self.assertEqual(runtime_for_value("onnx"), "onnx")
         self.assertEqual(runtime_for_value("TRANSFORMERS"), "transformers")
-        self.assertEqual(runtime_for_value("bad-runtime"), "transformers")
+        self.assertEqual(runtime_for_value("bad-runtime"), "onnx")
 
     def test_adapter_derives_source_from_local_onnx_model_path(self) -> None:
         adapter = PrivacyFilterAdapter(

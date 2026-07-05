@@ -68,7 +68,16 @@ export function DashboardLineEChart({
         axisPointer: {
           type: "line"
         },
+        backgroundColor: "rgba(17, 24, 39, 0.96)",
+        borderColor: "rgba(255, 255, 255, 0.08)",
+        borderWidth: 1,
         confine: true,
+        extraCssText: "box-shadow: 0 14px 30px rgba(15, 23, 42, 0.24); border-radius: 8px;",
+        textStyle: {
+          color: "#f8fafc",
+          fontSize: 12,
+          fontWeight: 800
+        },
         trigger: "axis",
         valueFormatter: (value: unknown) => formatInteger(Number(value ?? 0))
       },
@@ -114,8 +123,13 @@ export function DashboardLineEChart({
       },
       series: series.map((row) => ({
         data: row.data,
+        blur: {
+          lineStyle: {
+            opacity: 1
+          }
+        },
         emphasis: {
-          focus: "series"
+          focus: "none"
         },
         lineStyle: {
           width: 3
@@ -169,7 +183,11 @@ export function DashboardPieEChart({
         top: "center"
       },
       tooltip: {
+        backgroundColor: "rgba(17, 24, 39, 0.96)",
+        borderColor: "rgba(255, 255, 255, 0.08)",
+        borderWidth: 1,
         confine: true,
+        extraCssText: "box-shadow: 0 14px 30px rgba(15, 23, 42, 0.24); border-radius: 8px;",
         formatter: (params: unknown) => {
           const item = Array.isArray(params) ? params[0] : params;
           if (!isTooltipRecord(item)) {
@@ -177,6 +195,11 @@ export function DashboardPieEChart({
           }
 
           return `${String(item.name)}<br/>${formatInteger(Number(item.value ?? 0))} (${formatPercent(Number(item.percent ?? 0) / 100)})`;
+        },
+        textStyle: {
+          color: "#f8fafc",
+          fontSize: 12,
+          fontWeight: 800
         },
         trigger: "item"
       },
@@ -188,8 +211,7 @@ export function DashboardPieEChart({
             value: row.value
           })),
           emphasis: {
-            scale: true,
-            scaleSize: 5
+            scale: false
           },
           label: {
             show: false
@@ -229,7 +251,7 @@ function DashboardEChart({
 
     const chart = echarts.init(node, undefined, {
       renderer: "canvas",
-      useDirtyRect: true
+      useDirtyRect: false
     });
     chartRef.current = chart;
 

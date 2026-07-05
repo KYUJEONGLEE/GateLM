@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
@@ -11,17 +11,15 @@ import {
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
+import { RequestLogScopeFilterControls } from "./request-log-scope-filter-controls";
 
 type RequestLogTableProps = {
-  applicationOptions: string[];
-  budgetScopeIdOptions: string[];
+  budgetScopeOptions: RequestLogBudgetScopeOption[];
   detailPanel?: ReactNode;
   filters: RequestLogFilterState;
   locale: Locale;
   modelOptions: string[];
-  providerOptions: string[];
   records: InvocationLogRecord[];
-  resolvedByOptions: string[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
   tenantId: string;
@@ -47,10 +45,16 @@ export type RequestLogFilterState = {
   cacheStatus: "" | (typeof requestLogCacheStatusFilters)[number];
   created: RequestLogCreatedFilter;
   model: string;
+  page: number;
   provider: string;
   requestId: string;
   resolvedBy: string;
   status: "" | InvocationLogRecord["status"];
+};
+
+export type RequestLogBudgetScopeOption = {
+  budgetScopeId: string;
+  budgetScopeType: (typeof requestLogBudgetScopeTypeFilters)[number];
 };
 
 const requestLogText: Record<
@@ -74,7 +78,11 @@ const requestLogText: Record<
     filterLabel: string;
     kicker: string;
     modelLabel: string;
+    nextPage: string;
+    pageSummary: string;
+    previousPage: string;
     providerLabel: string;
+    rangeEndLabel: string;
     searchLabel: string;
     searchPlaceholder: string;
     statusLabel: string;
@@ -106,7 +114,11 @@ const requestLogText: Record<
     filterLabel: "Log filters",
     kicker: "analytics",
     modelLabel: "Model",
+    nextPage: "Next",
+    pageSummary: "Showing {start}-{end} of {total}",
+    previousPage: "Previous",
     providerLabel: "Provider",
+    rangeEndLabel: "End of logs in this range",
     searchLabel: "Search logs",
     searchPlaceholder: "Search by requestId",
     statusLabel: "Status",
@@ -137,7 +149,11 @@ const requestLogText: Record<
     filterLabel: "로그 필터",
     kicker: "분석",
     modelLabel: "모델",
+    nextPage: "다음",
+    pageSummary: "{total}개 중 {start}-{end}개 표시",
+    previousPage: "이전",
     providerLabel: "Provider",
+    rangeEndLabel: "현재 범위의 마지막 로그",
     searchLabel: "로그 검색",
     searchPlaceholder: "requestId 검색",
     statusLabel: "상태",
@@ -147,21 +163,30 @@ const requestLogText: Record<
 };
 
 export function RequestLogTable({
-  applicationOptions,
-  budgetScopeIdOptions,
+  budgetScopeOptions,
   detailPanel,
   filters,
   locale,
   modelOptions,
-  providerOptions,
   records,
-  resolvedByOptions,
   selectedRequestId,
   sourceState,
   tenantId,
   timezone
 }: RequestLogTableProps) {
   const text = requestLogText[locale];
+  const pageSize = 20;
+  const totalRecords = records.length;
+  const pageCount = Math.max(1, Math.ceil(totalRecords / pageSize));
+  const currentPage = Math.min(Math.max(filters.page, 1), pageCount);
+  const pageStartIndex = (currentPage - 1) * pageSize;
+  const pageRecords = records.slice(pageStartIndex, pageStartIndex + pageSize);
+  const displayStart = totalRecords === 0 ? 0 : pageStartIndex + 1;
+  const displayEnd = Math.min(pageStartIndex + pageSize, totalRecords);
+  const pageSummary = text.pageSummary
+    .replace("{start}", String(displayStart))
+    .replace("{end}", String(displayEnd))
+    .replace("{total}", String(totalRecords));
 
   return (
     <main className="console-content">
@@ -175,7 +200,8 @@ export function RequestLogTable({
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={detailPanel ? "open" : "closed"}>
           <div className="console-panel request-log-list-panel">
-            <form action={`/tenants/${tenantId}/request-logs`} className="request-log-filter-bar">
+            <form action={`/tenants/${tenantId}/request-logs`} className="request-log-search-panel">
+              <input name="page" type="hidden" value="1" />
               <div className="request-log-search-shell">
                 <input
                   aria-label={text.searchLabel}
@@ -202,7 +228,7 @@ export function RequestLogTable({
                   </select>
                 </label>
 
-                <label className="request-log-filter-control">
+                <label className="request-log-filter-control request-log-filter-control-model">
                   <span>{text.modelLabel}</span>
                   <select defaultValue={filters.model} name="model">
                     <option value="">{text.allModels}</option>
@@ -214,19 +240,7 @@ export function RequestLogTable({
                   </select>
                 </label>
 
-                <label className="request-log-filter-control">
-                  <span>{text.providerLabel}</span>
-                  <select defaultValue={filters.provider} name="provider">
-                    <option value="">{text.allProviders}</option>
-                    {providerOptions.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {provider}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
+                <label className="request-log-filter-control request-log-filter-control-cache">
                   <span>{text.cacheLabel}</span>
                   <select defaultValue={filters.cacheStatus} name="cacheStatus">
                     <option value="">{text.allCacheStatuses}</option>
@@ -238,53 +252,16 @@ export function RequestLogTable({
                   </select>
                 </label>
 
-                <label className="request-log-filter-control">
-                  <span>{text.applicationLabel}</span>
-                  <select defaultValue={filters.applicationId} name="applicationId">
-                    <option value="">{text.allApplications}</option>
-                    {applicationOptions.map((applicationId) => (
-                      <option key={applicationId} value={applicationId}>
-                        {formatDisplayIdentifier(applicationId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.budgetScopeTypeLabel}</span>
-                  <select defaultValue={filters.budgetScopeType} name="budgetScopeType">
-                    <option value="">{text.allBudgetScopeTypes}</option>
-                    {requestLogBudgetScopeTypeFilters.map((scopeType) => (
-                      <option key={scopeType} value={scopeType}>
-                        {scopeType}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>{text.budgetScopeIdLabel}</span>
-                  <select defaultValue={filters.budgetScopeId} name="budgetScopeId">
-                    <option value="">{text.allBudgetScopeIds}</option>
-                    {budgetScopeIdOptions.map((budgetScopeId) => (
-                      <option key={budgetScopeId} value={budgetScopeId}>
-                        {formatDisplayIdentifier(budgetScopeId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="request-log-filter-control">
-                  <span>Resolved by</span>
-                  <select defaultValue={filters.resolvedBy} name="resolvedBy">
-                    <option value="">{text.allResolvedBy}</option>
-                    {resolvedByOptions.map((resolvedBy) => (
-                      <option key={resolvedBy} value={resolvedBy}>
-                        {resolvedBy}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <RequestLogScopeFilterControls
+                  allBudgetScopeIds={text.allBudgetScopeIds}
+                  allBudgetScopeTypes={text.allBudgetScopeTypes}
+                  budgetScopeId={filters.budgetScopeId}
+                  budgetScopeIdLabel={text.budgetScopeIdLabel}
+                  budgetScopeOptions={budgetScopeOptions}
+                  budgetScopeType={filters.budgetScopeType}
+                  budgetScopeTypeLabel={text.budgetScopeTypeLabel}
+                  scopeTypeOptions={requestLogBudgetScopeTypeFilters}
+                />
 
                 <label className="request-log-filter-control">
                   <span>{text.createdLabel}</span>
@@ -296,6 +273,28 @@ export function RequestLogTable({
                     ))}
                   </select>
                 </label>
+              </div>
+
+              <div className="request-log-pagination">
+                <Link
+                  aria-disabled={currentPage <= 1}
+                  aria-label={text.previousPage}
+                  className="request-log-page-link"
+                  data-disabled={currentPage <= 1}
+                  href={requestLogPageHref(tenantId, filters, currentPage - 1)}
+                >
+                  <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.4} />
+                </Link>
+                <span>{pageSummary}</span>
+                <Link
+                  aria-disabled={currentPage >= pageCount}
+                  aria-label={text.nextPage}
+                  className="request-log-page-link"
+                  data-disabled={currentPage >= pageCount}
+                  href={requestLogPageHref(tenantId, filters, currentPage + 1)}
+                >
+                  <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
+                </Link>
               </div>
             </form>
 
@@ -324,7 +323,7 @@ export function RequestLogTable({
                       <td colSpan={8}>No Gateway request logs found for the current range.</td>
                     </tr>
                   ) : null}
-                  {records.map((record) => {
+                  {pageRecords.map((record) => {
                     const isSelected = selectedRequestId === record.requestId;
 
                     return (
@@ -357,6 +356,9 @@ export function RequestLogTable({
                 </tbody>
               </table>
             </div>
+            <div className="request-log-list-end" role="status">
+              <span>{text.rangeEndLabel}</span>
+            </div>
           </div>
           {detailPanel}
         </section>
@@ -378,12 +380,40 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
   if (filters.model) {
     query.set("model", filters.model);
   }
+  if (filters.page > 1) {
+    query.set("page", String(filters.page));
+  }
   appendRequestLogQuery(query, "provider", filters.provider);
   appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
   }
   query.set("requestId", requestId);
+
+  return `/tenants/${tenantId}/request-logs?${query.toString()}`;
+}
+
+function requestLogPageHref(
+  tenantId: string,
+  filters: RequestLogFilterState,
+  page: number
+) {
+  const query = new URLSearchParams();
+  appendRequestLogQuery(query, "applicationId", filters.applicationId);
+  appendRequestLogQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendRequestLogQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
+  appendRequestLogQuery(query, "model", filters.model);
+  appendRequestLogQuery(query, "provider", filters.provider);
+  appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
+  appendRequestLogQuery(query, "searchRequestId", filters.requestId);
+  appendRequestLogQuery(query, "status", filters.status);
+  if (filters.created !== "24h") {
+    query.set("created", filters.created);
+  }
+  if (page > 1) {
+    query.set("page", String(page));
+  }
 
   return `/tenants/${tenantId}/request-logs?${query.toString()}`;
 }

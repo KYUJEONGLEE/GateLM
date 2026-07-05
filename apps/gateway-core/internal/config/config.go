@@ -70,6 +70,7 @@ type Config struct {
 	RateLimitEnabled         bool
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
+	AISafetySidecar          AISafetySidecarConfig
 	AsyncLogEnabled          bool
 	AsyncLogQueueSize        int
 	AsyncLogWorkerCount      int
@@ -80,6 +81,15 @@ type Config struct {
 	ResponseCaptureEnabled   bool
 	ResponseCaptureMaxChars  int
 	SemanticCache            SemanticCacheConfig
+}
+
+type AISafetySidecarConfig struct {
+	Enabled     bool
+	EndpointURL string
+	Timeout     time.Duration
+	ModelID     string
+	DetectorSet string
+	Locale      string
 }
 
 type SemanticCacheConfig struct {
@@ -169,16 +179,24 @@ func LoadWithError() (Config, error) {
 		RateLimitEnabled:         envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:      envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:           envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
-		AsyncLogEnabled:          envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
-		AsyncLogQueueSize:        envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
-		AsyncLogWorkerCount:      envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
-		AsyncLogWriteTimeout:     envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
-		AsyncLogShutdownTimeout:  envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
-		PromptCaptureEnabled:     envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
-		PromptCaptureMaxChars:    envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
-		ResponseCaptureEnabled:   envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
-		ResponseCaptureMaxChars:  envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
-		SemanticCache:            semanticCache,
+		AISafetySidecar: AISafetySidecarConfig{
+			Enabled:     envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
+			EndpointURL: envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
+			Timeout:     envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 300),
+			ModelID:     envString("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter"),
+			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
+			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
+		},
+		AsyncLogEnabled:         envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
+		AsyncLogQueueSize:       envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
+		AsyncLogWorkerCount:     envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
+		AsyncLogWriteTimeout:    envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
+		AsyncLogShutdownTimeout: envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
+		PromptCaptureEnabled:    envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
+		PromptCaptureMaxChars:   envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
+		ResponseCaptureEnabled:  envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
+		ResponseCaptureMaxChars: envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
+		SemanticCache:           semanticCache,
 	}
 	return cfg, err
 }
