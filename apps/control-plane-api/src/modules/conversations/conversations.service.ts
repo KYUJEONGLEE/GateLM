@@ -400,7 +400,7 @@ function redactPhoneNumbers(value: string): string {
   let index = 0;
 
   return value.replace(
-    /(?<!\w)(?:\+?\d[\d .-]{7,}\d)(?!\w)/g,
+    /(?<!\w)(?:\+?\d{1,3}[ .-]?)?(?:\(?\d{2,4}\)?[ .-]?\d{3,4}[ .-]?\d{4})(?!\w)/g,
     () => `[PHONE_NUMBER_${++index}]`,
   );
 }

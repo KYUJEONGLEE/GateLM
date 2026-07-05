@@ -5,7 +5,10 @@ import {
   ConversationEntity,
   ConversationsRepository,
 } from './conversations.repository';
-import { ConversationsService } from './conversations.service';
+import {
+  ConversationsService,
+  sanitizeLogSafeContent,
+} from './conversations.service';
 
 describe('ConversationsService', () => {
   const tenantId = '00000000-0000-4000-8000-000000000100';
@@ -177,6 +180,16 @@ describe('ConversationsService', () => {
     expect(JSON.stringify(result)).not.toContain('minji.kim@example.test');
     expect(JSON.stringify(result)).not.toContain('abcdefgh');
     expect(repository.listRetainedCalls).toBe(0);
+  });
+
+  it('redacts phone numbers without masking ISO dates as phone numbers', () => {
+    const result = sanitizeLogSafeContent(
+      'Schedule follow-up on 2026-07-05 and call 010-0000-1234.',
+    );
+
+    expect(result).toContain('2026-07-05');
+    expect(result).toContain('[PHONE_NUMBER_1]');
+    expect(result).not.toContain('010-0000-1234');
   });
 
   it('assembles previous retained safe messages in sequence order when retention is enabled', async () => {
