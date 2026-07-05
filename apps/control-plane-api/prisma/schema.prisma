@@ -51,8 +51,103 @@ model Tenant {
   activeSnapshots     ActiveRuntimeSnapshot[]
   teams               Team[]
   projectTeamAssignments ProjectTeamAssignment[]
+  tenantMemberships   TenantMembership[]
 
   @@map("tenants")
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String
+  name            String?
+  passwordHash    String?
+  authProvider    String    @default("local")
+  status          String    @default("pending_email_verification")
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  emailVerificationCodes EmailVerificationCode[]
+  authSessions           AuthSession[]
+  oauthAccounts          OAuthAccount[]
+  tenantMemberships      TenantMembership[]
+
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+model EmailVerificationCode {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @db.Uuid
+  codeHash           String
+  failedAttemptCount Int       @default(0)
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+  @@index([expiresAt])
+  @@map("email_verification_codes")
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  sessionTokenHash String
+  kind             String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionTokenHash])
+  @@index([userId, kind, revokedAt])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model OAuthAccount {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  provider        String
+  providerSubject String
+  email           String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@index([email])
+  @@map("oauth_accounts")
+}
+
+model TenantMembership {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String    @db.Uuid
+  role      String
+  status    String    @default("active")
+  joinedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([userId, status])
+  @@index([tenantId, role, status])
+  @@map("tenant_memberships")
 }
 
 model Project {
