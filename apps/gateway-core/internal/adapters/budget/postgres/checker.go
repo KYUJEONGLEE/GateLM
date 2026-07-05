@@ -71,6 +71,7 @@ func (c *Checker) Check(ctx context.Context, req budget.Request) (budget.Decisio
 		scope.ID,
 		monthStart,
 		policy.WarningThresholdPercent,
+		scopeUUIDArgument(scope),
 	).Scan(&limitMicroUSD, &warningThresholdPercent, &usedMicroUSD); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			base.Outcome = budget.OutcomeNotChecked
@@ -119,6 +120,36 @@ func (c *Checker) Check(ctx context.Context, req budget.Request) (budget.Decisio
 	}
 	return budget.NormalizeDecision(decision, normalizedReq), nil
 }
+
+func scopeUUIDArgument(scope budget.Scope) any {
+	switch strings.TrimSpace(scope.Type) {
+	case budget.ScopeTypeApplication, budget.ScopeTypeProject:
+		if isValidUUID(scope.ID) {
+			return strings.TrimSpace(scope.ID)
+		}
+	}
+	return nil
+}
+
+func isValidUUID(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 36 {
+		return false
+	}
+	for index, char := range value {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 func monthStartUTC(now time.Time) time.Time {
 	if now.IsZero() {
 		now = time.Now()
@@ -152,7 +183,7 @@ with quota_candidates as (
   join projects p on p.id = a."projectId" and p."tenantId" = a."tenantId"
   where $2 = 'application'
     and a."tenantId" = $1::uuid
-    and a.id::text = $3
+    and a.id = $6::uuid
     and a.status = 'ACTIVE'
     and p.status = 'ACTIVE'
   union all
@@ -163,7 +194,7 @@ with quota_candidates as (
   from projects p
   where $2 = 'project'
     and p."tenantId" = $1::uuid
-    and p.id::text = $3
+    and p.id = $6::uuid
     and p.status = 'ACTIVE'
 ), active_quota as (
   select limit_micro_usd, warning_threshold_percent
