@@ -53,6 +53,7 @@ export interface EmailVerificationCode {
   id: string;
   userId: string;
   codeHash: string;
+  failedAttemptCount: number;
   expiresAt: Date;
   consumedAt: Date | null;
   createdAt: Date;
@@ -127,6 +128,10 @@ export interface AuthRepository {
     providerSubject: string,
   ): Promise<OAuthAccountWithUser | null>;
   findUserByEmail(email: string): Promise<AuthUser | null>;
+  recordVerificationCodeFailure(
+    id: string,
+    input: { consumedAt: Date | null },
+  ): Promise<void>;
   revokeSession(id: string, revokedAt: Date): Promise<void>;
   updateUserEmailVerified(userId: string, verifiedAt: Date): Promise<AuthUser>;
   updateUserLastLogin(userId: string, lastLoginAt: Date): Promise<void>;

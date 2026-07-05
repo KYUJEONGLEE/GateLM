@@ -8,6 +8,8 @@ import { EmailSender, VerificationEmailMessage } from './email-sender';
 
 type SmtpSocket = Socket | TLSSocket;
 
+const SMTP_TIMEOUT_MS = 10_000;
+
 interface SmtpConfig {
   from: string;
   host: string;
@@ -267,14 +269,50 @@ class SmtpConnection {
     this.lineQueue = [];
 
     const tlsSocket = await new Promise<TLSSocket>((resolve, reject) => {
+      let settled = false;
       const socket = connectTls(
         {
           servername: this.config.host,
           socket: this.socket,
         },
-        () => resolve(socket),
+        onConnect,
       );
-      socket.once('error', reject);
+      socket.setTimeout(SMTP_TIMEOUT_MS);
+      socket.once('timeout', onTimeout);
+      socket.once('error', onError);
+
+      function cleanup(): void {
+        socket.off('timeout', onTimeout);
+        socket.off('error', onError);
+      }
+
+      function onConnect(): void {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(socket);
+      }
+
+      function onTimeout(): void {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        socket.destroy();
+        reject(new Error('SMTP connection timed out.'));
+      }
+
+      function onError(error: Error): void {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(error);
+      }
     });
 
     this.socket = tlsSocket;
@@ -283,12 +321,15 @@ class SmtpConnection {
 
   private attachSocket(socket: SmtpSocket): void {
     socket.setEncoding('utf8');
+    socket.setTimeout(SMTP_TIMEOUT_MS);
+    socket.on('timeout', this.handleTimeout);
     socket.on('data', this.handleData);
     socket.on('end', this.handleEnd);
     socket.on('error', this.handleError);
   }
 
   private detachSocket(socket: SmtpSocket): void {
+    socket.off('timeout', this.handleTimeout);
     socket.off('data', this.handleData);
     socket.off('end', this.handleEnd);
     socket.off('error', this.handleError);
@@ -314,6 +355,12 @@ class SmtpConnection {
     this.fail(error);
   };
 
+  private readonly handleTimeout = (): void => {
+    const error = new Error('SMTP connection timed out.');
+    this.fail(error);
+    this.socket.destroy(error);
+  };
+
   private pushLine(line: string): void {
     if (this.waiter) {
       const waiter = this.waiter;
@@ -337,6 +384,7 @@ class SmtpConnection {
 
 async function connectSocket(config: SmtpConfig): Promise<SmtpSocket> {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const socket = config.secure
       ? connectTls(
           {
@@ -344,17 +392,52 @@ async function connectSocket(config: SmtpConfig): Promise<SmtpSocket> {
             port: config.port,
             servername: config.host,
           },
-          () => resolve(socket),
+          onConnect,
         )
       : connectTcp(
           {
             host: config.host,
             port: config.port,
           },
-          () => resolve(socket),
+          onConnect,
         );
 
-    socket.once('error', reject);
+    socket.setTimeout(SMTP_TIMEOUT_MS);
+    socket.once('timeout', onTimeout);
+    socket.once('error', onError);
+
+    function cleanup(): void {
+      socket.off('timeout', onTimeout);
+      socket.off('error', onError);
+    }
+
+    function onConnect(): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(socket);
+    }
+
+    function onTimeout(): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      socket.destroy();
+      reject(new Error('SMTP connection timed out.'));
+    }
+
+    function onError(error: Error): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    }
   });
 }
 

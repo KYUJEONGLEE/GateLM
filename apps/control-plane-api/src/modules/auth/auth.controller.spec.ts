@@ -209,6 +209,34 @@ describe('Auth HTTP API', () => {
     );
   });
 
+  it('expires an email verification code after repeated invalid attempts', async () => {
+    const agent = request.agent(app.getHttpServer());
+
+    await agent.post('/api/auth/signup').send({
+      email: 'limited@example.com',
+      name: 'Limited User',
+      password: 'correct-horse-battery-staple',
+    });
+    const code = emailSender.sent[0]?.code;
+    const invalidCode = code === '000000' ? '000001' : '000000';
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await agent
+        .post('/api/auth/email/verify')
+        .send({ code: invalidCode, email: 'limited@example.com' })
+        .expect(401);
+    }
+
+    const verificationCode = repository.dump().emailVerificationCodes[0];
+    expect(verificationCode?.failedAttemptCount).toBe(5);
+    expect(verificationCode?.consumedAt).toBeInstanceOf(Date);
+
+    await agent
+      .post('/api/auth/email/verify')
+      .send({ code, email: 'limited@example.com' })
+      .expect(401);
+  });
+
   it('logs in with email and password using an httpOnly full session cookie', async () => {
     const agent = request.agent(app.getHttpServer());
 

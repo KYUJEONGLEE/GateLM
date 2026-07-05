@@ -170,6 +170,7 @@ export function createInMemoryAuthRepository(): AuthRepository & {
         consumedAt: null,
         createdAt: now(),
         expiresAt: input.expiresAt,
+        failedAttemptCount: 0,
         id: id(),
         userId: input.userId,
       };
@@ -240,6 +241,14 @@ export function createInMemoryAuthRepository(): AuthRepository & {
           (item) => item.email === email && item.deletedAt === null,
         ) ?? null
       );
+    },
+
+    async recordVerificationCodeFailure(codeId, input) {
+      const code = state.emailVerificationCodes.find((item) => item.id === codeId);
+      if (code) {
+        code.failedAttemptCount += 1;
+        code.consumedAt = input.consumedAt;
+      }
     },
 
     async revokeSession(sessionId, revokedAt) {

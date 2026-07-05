@@ -479,6 +479,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           };
         };
 
+        if (!isMounted) {
+          return;
+        }
+
         if (
           body.data?.session?.kind === "full" ||
           body.data?.session?.kind === "onboarding"
@@ -524,6 +528,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAuthSubmitting) {
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
 
     await runAuthAction(async () => {
@@ -537,6 +545,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
 
   async function continueSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAuthSubmitting) {
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
 
     if (signupStep === "ready") {

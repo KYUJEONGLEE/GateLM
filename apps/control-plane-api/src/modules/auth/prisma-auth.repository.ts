@@ -224,6 +224,21 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
+  async recordVerificationCodeFailure(
+    id: string,
+    input: { consumedAt: Date | null },
+  ): Promise<void> {
+    await this.prisma.emailVerificationCode.update({
+      data: {
+        consumedAt: input.consumedAt ?? undefined,
+        failedAttemptCount: {
+          increment: 1,
+        },
+      },
+      where: { id },
+    });
+  }
+
   async revokeSession(id: string, revokedAt: Date): Promise<void> {
     await this.prisma.authSession.update({
       data: { revokedAt },

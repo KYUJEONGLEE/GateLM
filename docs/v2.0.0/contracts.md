@@ -146,6 +146,8 @@ signup -> email verification -> organization creation -> full session
 - Email verification uses a 6 digit code.
 - DB stores only the verification `codeHash`, never the plaintext code.
 - The signup response must not include verification code/token plaintext.
+- Email verification rejects repeated invalid code attempts and invalidates the open code after 5 failed attempts.
+- Verification failure tracking stores only a numeric failed attempt count and must not store attempted plaintext codes.
 - `POST /api/auth/email/verify` marks the user email as verified and issues an onboarding session cookie.
 - `POST /api/auth/organizations` consumes an onboarding session, creates the tenant, creates a `tenant_memberships` row with `role=tenant_admin`, and replaces the onboarding session with a full session.
 

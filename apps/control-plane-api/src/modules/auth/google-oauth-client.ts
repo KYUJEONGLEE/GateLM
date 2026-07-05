@@ -29,6 +29,8 @@ interface GoogleUserInfoResponse {
   sub?: string;
 }
 
+const GOOGLE_OAUTH_TIMEOUT_MS = 10_000;
+
 @Injectable()
 export class GoogleOAuthHttpClient implements GoogleOAuthClient {
   constructor(private readonly config: ConfigService) {}
@@ -71,6 +73,7 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
         'content-type': 'application/x-www-form-urlencoded',
       },
       method: 'POST',
+      signal: AbortSignal.timeout(GOOGLE_OAUTH_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -90,6 +93,7 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
       headers: {
         authorization: `Bearer ${accessToken}`,
       },
+      signal: AbortSignal.timeout(GOOGLE_OAUTH_TIMEOUT_MS),
     });
 
     if (!response.ok) {

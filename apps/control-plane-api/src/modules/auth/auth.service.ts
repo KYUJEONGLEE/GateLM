@@ -52,6 +52,8 @@ interface PublicMembership {
   userId: string;
 }
 
+const MAX_EMAIL_VERIFICATION_FAILURES = 5;
+
 export interface SessionIssue {
   expiresAt: Date;
   kind: AuthSessionKind;
@@ -137,7 +139,18 @@ export class AuthService {
     const now = new Date();
     const verificationCode =
       await this.repository.findLatestOpenVerificationCode(user.id, now);
-    if (!verificationCode || verificationCode.codeHash !== hashSecret(dto.code)) {
+    if (!verificationCode) {
+      throw new UnauthorizedException('Invalid verification code.');
+    }
+    if (verificationCode.codeHash !== hashSecret(dto.code)) {
+      const nextFailedAttemptCount = verificationCode.failedAttemptCount + 1;
+      await this.repository.recordVerificationCodeFailure(verificationCode.id, {
+        consumedAt:
+          nextFailedAttemptCount >= MAX_EMAIL_VERIFICATION_FAILURES
+            ? now
+            : null,
+      });
+
       throw new UnauthorizedException('Invalid verification code.');
     }
 

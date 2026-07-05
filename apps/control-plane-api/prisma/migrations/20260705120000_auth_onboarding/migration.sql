@@ -26,6 +26,7 @@ CREATE TABLE "email_verification_codes" (
   "id" UUID NOT NULL,
   "userId" UUID NOT NULL,
   "codeHash" TEXT NOT NULL,
+  "failedAttemptCount" INTEGER NOT NULL DEFAULT 0,
   "expiresAt" TIMESTAMP(3) NOT NULL,
   "consumedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
