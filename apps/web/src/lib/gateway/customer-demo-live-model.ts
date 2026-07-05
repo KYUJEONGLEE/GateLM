@@ -138,6 +138,8 @@ function buildLiveScenario(
   return {
     assistantMessage: "Ready to send.",
     cacheStatus: template.cacheStatus,
+    contextRetentionEnabled: false,
+    conversationId: null,
     description: template.description,
     detectedTypes: template.detectedTypes,
     httpStatus: template.httpStatus,

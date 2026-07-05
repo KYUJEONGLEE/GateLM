@@ -284,6 +284,8 @@ function buildExchange({
   return {
     assistantMessage: config.assistantMessage,
     cacheStatus: record.cacheStatus,
+    contextRetentionEnabled: false,
+    conversationId: null,
     description: config.description,
     detectedTypes: record.maskingDetectedTypes ?? [],
     httpStatus: record.httpStatus,

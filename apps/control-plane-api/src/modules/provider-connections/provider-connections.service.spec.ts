@@ -486,6 +486,44 @@ describe('ProviderConnectionsService', () => {
     );
   });
 
+  it('ignores malformed upstream provider model records without throwing', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000918';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'http://mock-provider:8090/v1',
+        provider: 'mock',
+        providerConfig: {
+          adapterType: 'mock',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          { object: 'model' },
+          { id: 12345, object: 'model' },
+          { id: '   ', object: 'model' },
+          null,
+          { id: 'mock-balanced', object: 'model' },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'mock');
+
+    expect(result.modelCount).toBe(1);
+    expect(result.models.map((model) => model.modelName)).toEqual([
+      'mock-balanced',
+    ]);
+  });
+
   it('normalizes provider model created timestamps in milliseconds', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000908';
