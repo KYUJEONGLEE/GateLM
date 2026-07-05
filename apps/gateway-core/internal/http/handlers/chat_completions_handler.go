@@ -3076,6 +3076,9 @@ func (h *ChatCompletionsHandler) applyProviderUsageCost(ctx context.Context, req
 	} else {
 		ctx = context.WithoutCancel(ctx)
 	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	result, err := h.CostCalculator.Calculate(ctx, costing.Request{
 		ProviderKeys:     providerPricingKeys(reqCtx, target),
 		ModelKeys:        modelPricingKeys(reqCtx, target),
