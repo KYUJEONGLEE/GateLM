@@ -513,9 +513,9 @@ select
         coalesce(sum(total_tokens), 0)::bigint as total_tokens,
         coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
       from filtered
+      where project_id is not null and project_id <> ''
       group by 1
     ) project_rollup
-    where project_id is not null and project_id <> ''
   ), '[]'::jsonb) as project_breakdown,
   coalesce((
     select jsonb_agg(jsonb_build_object(

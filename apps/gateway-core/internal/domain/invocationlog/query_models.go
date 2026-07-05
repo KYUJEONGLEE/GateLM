@@ -912,6 +912,10 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 
 func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) DashboardOverviewFields {
 	generatedAt := generatedAtOrNow(aggregate.GeneratedAt)
+	teamBudgetScopeBreakdown := aggregate.TeamBudgetScopeBreakdown
+	if len(teamBudgetScopeBreakdown) == 0 {
+		teamBudgetScopeBreakdown = teamBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown)
+	}
 	overview := DashboardOverviewFields{
 		TotalRequests:            aggregate.TotalRequests,
 		SuccessfulRequests:       aggregate.SuccessfulRequests,
@@ -942,7 +946,7 @@ func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) D
 		ApplicationBreakdown:     normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
 		CostByModel:              normalizedCostByModel(aggregate.CostByModel),
 		BudgetScopeBreakdown:     normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
-		TeamBudgetScopeBreakdown: normalizedBudgetScopeBreakdowns(firstNonEmptyBudgetScopeBreakdowns(aggregate.TeamBudgetScopeBreakdown, teamBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown))),
+		TeamBudgetScopeBreakdown: normalizedBudgetScopeBreakdowns(teamBudgetScopeBreakdown),
 		DataFreshness: DashboardDataFreshness{
 			Source:           "postgresql_request_log",
 			RecordCount:      aggregate.TotalRequests,
@@ -1304,13 +1308,6 @@ func teamBudgetScopeBreakdowns(items []BudgetScopeBreakdown) []BudgetScopeBreakd
 		}
 	}
 	return teams
-}
-
-func firstNonEmptyBudgetScopeBreakdowns(primary []BudgetScopeBreakdown, fallback []BudgetScopeBreakdown) []BudgetScopeBreakdown {
-	if len(primary) > 0 {
-		return primary
-	}
-	return fallback
 }
 
 func generatedAtOrNow(generatedAt time.Time) time.Time {
