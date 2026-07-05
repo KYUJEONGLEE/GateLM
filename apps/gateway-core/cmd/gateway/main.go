@@ -24,6 +24,7 @@ import (
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
+	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
@@ -147,19 +148,14 @@ func main() {
 		gatewayCredentials := postgresauth.NewStore(postgresPool)
 		routerOptions = append(routerOptions, app.WithGatewayAuth(gatewayCredentials, gatewayCredentials))
 	}
+	rateLimiter, err := buildRateLimiter(cfg, postgresPool, redisClient)
+	if err != nil {
+		log.Fatalf("gateway-core rate limiter configuration failed: %v", err)
+	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
-		ratelimitstage.NewStage(
-			postgresratelimit.NewLimiter(postgresPool),
-			ratelimit.Config{
-				Enabled:       cfg.RateLimitEnabled,
-				Scope:         ratelimit.ScopeApplication,
-				Algorithm:     ratelimit.AlgorithmFixedWindow,
-				WindowSeconds: cfg.RateLimitWindowSecs,
-				Limit:         cfg.RateLimitLimit,
-			},
-		),
+		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)
 
 	routerOptions = append(routerOptions, app.WithRuntimePolicyPipeline(runtimePolicyPipeline))
@@ -206,6 +202,43 @@ func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvide
 
 	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),
 		staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+}
+
+func buildRateLimiter(cfg config.Config, postgresPool *pgxpool.Pool, redisClient redisratelimit.Client) (ratelimit.Limiter, error) {
+	backend := strings.TrimSpace(strings.ToLower(cfg.RateLimitBackend))
+	if backend == "" {
+		backend = config.RateLimitBackendRedis
+	}
+
+	switch backend {
+	case config.RateLimitBackendPostgres:
+		return postgresratelimit.NewLimiter(postgresPool), nil
+	case config.RateLimitBackendRedis:
+		if redisClient == nil {
+			return nil, fmt.Errorf("redis rate limit backend requires redis client")
+		}
+		return redisratelimit.NewLimiterWithKeyPrefix(redisClient, cfg.RateLimitRedisKeyPrefix), nil
+	default:
+		return nil, fmt.Errorf("unsupported rate limit backend %q", cfg.RateLimitBackend)
+	}
+}
+
+func buildRateLimitStageConfig(cfg config.Config) ratelimit.Config {
+	algorithm := strings.TrimSpace(strings.ToLower(cfg.RateLimitAlgorithm))
+	if algorithm == "" {
+		if strings.EqualFold(strings.TrimSpace(cfg.RateLimitBackend), config.RateLimitBackendPostgres) {
+			algorithm = ratelimit.AlgorithmFixedWindow
+		} else {
+			algorithm = ratelimit.AlgorithmTokenBucket
+		}
+	}
+	return ratelimit.Config{
+		Enabled:       cfg.RateLimitEnabled,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     algorithm,
+		WindowSeconds: cfg.RateLimitWindowSecs,
+		Limit:         cfg.RateLimitLimit,
+	}
 }
 
 func isStrictRuntimeSnapshotMode(cfg config.Config) bool {
@@ -263,7 +296,7 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		RateLimit: ratelimit.Config{
 			Enabled:       cfg.RateLimitEnabled,
 			Scope:         ratelimit.ScopeApplication,
-			Algorithm:     ratelimit.AlgorithmFixedWindow,
+			Algorithm:     buildRateLimitStageConfig(cfg).Algorithm,
 			WindowSeconds: cfg.RateLimitWindowSecs,
 			Limit:         cfg.RateLimitLimit,
 		},
