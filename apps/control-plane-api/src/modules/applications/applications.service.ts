@@ -135,12 +135,18 @@ export class ApplicationsService {
     ) {
       current = await this.getApplicationEntityOrThrow(applicationId);
       budgetValues = this.resolveUpdateBudgetValues(current, dto);
-      const projectForBudgetAudit = await this.getProjectOrThrow(
-        current.projectId,
-      );
-      projectBudgetUsdForAudit = this.toProjectBudgetUsd(
-        projectForBudgetAudit.totalBudgetUsd,
-      );
+      if (
+        dto.budgetLimitMode !== undefined ||
+        dto.budgetLimitUsd !== undefined ||
+        dto.budgetLimitPercent !== undefined
+      ) {
+        const projectForBudgetAudit = await this.getProjectOrThrow(
+          current.projectId,
+        );
+        projectBudgetUsdForAudit = this.toProjectBudgetUsd(
+          projectForBudgetAudit.totalBudgetUsd,
+        );
+      }
 
       await this.assertApplicationBudgetCanFitProject({
         applicationId,

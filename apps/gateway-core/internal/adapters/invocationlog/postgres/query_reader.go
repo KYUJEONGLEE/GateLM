@@ -355,7 +355,8 @@ func (r *QueryReader) queryCostReportBuckets(ctx context.Context, filter invocat
 	defer rows.Close()
 
 	buckets := []invocationlog.CostReportBucket{}
-	var lastLogCreatedAt *time.Time
+	var maxLastLog time.Time
+	var hasLastLog bool
 	for rows.Next() {
 		var bucket invocationlog.CostReportBucket
 		var lastLog sql.NullTime
@@ -377,14 +378,19 @@ func (r *QueryReader) queryCostReportBuckets(ctx context.Context, filter invocat
 		bucket.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(bucket.SavedCostMicroUSD)
 		if lastLog.Valid {
 			last := lastLog.Time.UTC()
-			if lastLogCreatedAt == nil || last.After(*lastLogCreatedAt) {
-				lastLogCreatedAt = &last
+			if !hasLastLog || last.After(maxLastLog) {
+				maxLastLog = last
+				hasLastLog = true
 			}
 		}
 		buckets = append(buckets, bucket)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
+	}
+	var lastLogCreatedAt *time.Time
+	if hasLastLog {
+		lastLogCreatedAt = &maxLastLog
 	}
 	return buckets, lastLogCreatedAt, nil
 }
