@@ -214,6 +214,40 @@ func TestSimpleRouterRoutesCodeCategoryToHighQualityModel(t *testing.T) {
 	}))
 }
 
+func TestSimpleRouterDowngradesHighQualityWhenBudgetRestricted(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock-default",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		HighQualityProvider: "mock-premium",
+		HighQualityModel:    "mock-smart",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+		CandidateStatuses: []RouteCandidateStatus{
+			{Provider: "mock-default", Model: "mock-balanced", Status: RouteCandidateAvailable, FallbackPriority: 10},
+			{Provider: "mock-cheap", Model: "mock-fast", Status: RouteCandidateAvailable, FallbackPriority: 20},
+			{Provider: "mock-premium", Model: "mock-smart", Status: RouteCandidateAvailable, FallbackPriority: 30},
+		},
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel:        "auto",
+		PromptText:            "Fix this TypeScript function error.",
+		HighQualityRestricted: true,
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-default", "mock-balanced", ReasonBudgetHighQualityDowngrade, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryCode,
+		Tier:          TierBalanced,
+		Capability:    CapabilityCode,
+		PolicyVariant: PolicyVariantBudgetQualityGuard,
+	}))
+}
 func TestSimpleRouterRoutesTranslationCategoryToBalancedModel(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",

@@ -10,17 +10,18 @@ const (
 	DefaultPolicyHash          = "route_p0_v1"
 	DefaultShortPromptMaxChars = 300
 
-	ReasonShortPromptLowCost     = "short_prompt_low_cost"
-	ReasonDefaultBalanced        = "default_balanced"
-	ReasonPinned                 = "pinned"
-	ReasonCodeHighQuality        = "category_code_high_quality"
-	ReasonTranslationBalanced    = "category_translation_balanced"
-	ReasonSummarizationBalanced  = "category_summarization_balanced"
-	ReasonExtractionJSONBalanced = "category_extraction_json_balanced"
-	ReasonSupportRefundLowCost   = "category_support_refund_low_cost"
-	ReasonReasoningHighQuality   = "category_reasoning_high_quality"
-	ReasonAmbiguousBalanced      = "category_ambiguous_balanced"
-	ReasonProviderHealthFallback = "provider_health_fallback"
+	ReasonShortPromptLowCost         = "short_prompt_low_cost"
+	ReasonDefaultBalanced            = "default_balanced"
+	ReasonPinned                     = "pinned"
+	ReasonCodeHighQuality            = "category_code_high_quality"
+	ReasonTranslationBalanced        = "category_translation_balanced"
+	ReasonSummarizationBalanced      = "category_summarization_balanced"
+	ReasonExtractionJSONBalanced     = "category_extraction_json_balanced"
+	ReasonSupportRefundLowCost       = "category_support_refund_low_cost"
+	ReasonReasoningHighQuality       = "category_reasoning_high_quality"
+	ReasonAmbiguousBalanced          = "category_ambiguous_balanced"
+	ReasonProviderHealthFallback     = "provider_health_fallback"
+	ReasonBudgetHighQualityDowngrade = "budget_downgraded_from_high_quality"
 
 	RouteCandidateAvailable   = "available"
 	RouteCandidateDegraded    = "degraded"
@@ -200,7 +201,14 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if strings.EqualFold(requestedModel, "auto") {
 		selectedProvider, selectedModel, tier, reason := autoRouteForCategory(category, diagnostics, req.PromptText, config)
 		policyVariant := PolicyVariantDefault
-		selectedProvider, selectedModel, tier, reason, policyVariant = applyCandidateStatusFallback(selectedProvider, selectedModel, tier, reason, config)
+		if req.HighQualityRestricted {
+			selectedProvider, selectedModel, tier, reason, policyVariant = applyHighQualityBudgetGuard(selectedProvider, selectedModel, tier, reason, config)
+		}
+		var fallbackVariant string
+		selectedProvider, selectedModel, tier, reason, fallbackVariant = applyCandidateStatusFallback(selectedProvider, selectedModel, tier, reason, config)
+		if fallbackVariant != PolicyVariantDefault {
+			policyVariant = fallbackVariant
+		}
 		decision.SelectedProvider = selectedProvider
 		decision.SelectedProviderCatalogKey = selectedProvider
 		decision.SelectedModel = selectedModel
@@ -272,6 +280,17 @@ func routeDiagnosticsForCategory(category string, diagnostics CategoryDiagnostic
 		}
 	}
 	return diagnostics
+}
+
+func applyHighQualityBudgetGuard(provider string, model string, tier string, reason string, config SimpleRouterConfig) (string, string, string, string, string) {
+	if canonicalTier(tier) != TierHighQuality {
+		return provider, model, tier, reason, PolicyVariantDefault
+	}
+	fallback, ok := bestAvailableRouteCandidate(provider, model, config)
+	if !ok {
+		return provider, model, tier, reason, PolicyVariantDefault
+	}
+	return fallback.Provider, fallback.Model, fallback.Tier, ReasonBudgetHighQualityDowngrade, PolicyVariantBudgetQualityGuard
 }
 
 func applyCandidateStatusFallback(provider string, model string, tier string, reason string, config SimpleRouterConfig) (string, string, string, string, string) {

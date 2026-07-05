@@ -62,10 +62,15 @@ type RateLimitOutcome struct {
 }
 
 type BudgetOutcome struct {
-	Outcome         string `json:"outcome"`
-	BudgetScopeType string `json:"budgetScopeType"`
-	BudgetScopeID   string `json:"budgetScopeId"`
-	ResolvedBy      string `json:"resolvedBy"`
+	Outcome           string   `json:"outcome"`
+	BudgetScopeType   string   `json:"budgetScopeType"`
+	BudgetScopeID     string   `json:"budgetScopeId"`
+	ResolvedBy        string   `json:"resolvedBy"`
+	Reason            *string  `json:"reason,omitempty"`
+	LimitMicroUSD     *int64   `json:"limitMicroUsd,omitempty"`
+	UsedMicroUSD      *int64   `json:"usedMicroUsd,omitempty"`
+	RemainingMicroUSD *int64   `json:"remainingMicroUsd,omitempty"`
+	UsagePercent      *float64 `json:"usagePercent,omitempty"`
 }
 
 type SafetyOutcome struct {
@@ -324,13 +329,18 @@ func rateLimitOutcome(decision *ratelimit.Decision) RateLimitOutcome {
 func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.Decision) BudgetOutcome {
 	normalized := budget.NormalizeScope(scope, applicationID)
 	outcome := budget.OutcomeNotChecked
+	var reason *string
+	var limitMicroUSD *int64
+	var usedMicroUSD *int64
+	var remainingMicroUSD *int64
+	var usagePercent *float64
 	if decision != nil {
 		decisionScope := budget.NormalizeScope(decision.Scope, applicationID)
 		if strings.TrimSpace(decisionScope.ID) != "" {
 			normalized = decisionScope
 		}
 		switch strings.TrimSpace(decision.Outcome) {
-		case budget.OutcomeAllowed, budget.OutcomeWarned, budget.OutcomeBlocked, budget.OutcomeNotUsed, budget.OutcomeNotChecked:
+		case budget.OutcomeAllowed, budget.OutcomeWarned, budget.OutcomeDegraded, budget.OutcomeBlocked, budget.OutcomeNotUsed, budget.OutcomeNotChecked:
 			outcome = strings.TrimSpace(decision.Outcome)
 		default:
 			if decision.Allowed {
@@ -338,6 +348,17 @@ func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.De
 			} else {
 				outcome = budget.OutcomeBlocked
 			}
+		}
+		reason = stringPointer(decision.Reason)
+		if decision.UsageKnown {
+			limitValue := decision.LimitMicroUSD
+			usedValue := decision.UsedMicroUSD
+			remainingValue := decision.RemainingMicroUSD
+			usageValue := decision.UsagePercent
+			limitMicroUSD = &limitValue
+			usedMicroUSD = &usedValue
+			remainingMicroUSD = &remainingValue
+			usagePercent = &usageValue
 		}
 	}
 	if strings.TrimSpace(normalized.ID) == "" {
@@ -350,13 +371,17 @@ func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.De
 		normalized.ResolvedBy = budget.ResolvedByDefaultApplication
 	}
 	return BudgetOutcome{
-		Outcome:         outcome,
-		BudgetScopeType: normalized.Type,
-		BudgetScopeID:   normalized.ID,
-		ResolvedBy:      normalized.ResolvedBy,
+		Outcome:           outcome,
+		BudgetScopeType:   normalized.Type,
+		BudgetScopeID:     normalized.ID,
+		ResolvedBy:        normalized.ResolvedBy,
+		Reason:            reason,
+		LimitMicroUSD:     limitMicroUSD,
+		UsedMicroUSD:      usedMicroUSD,
+		RemainingMicroUSD: remainingMicroUSD,
+		UsagePercent:      usagePercent,
 	}
 }
-
 func safetyOutcome(log TerminalLog) SafetyOutcome {
 	action := strings.TrimSpace(log.MaskingAction)
 	if action == "" {

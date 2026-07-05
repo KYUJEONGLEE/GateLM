@@ -1,4 +1,4 @@
-﻿generator client {
+generator client {
   provider = "prisma-client-js"
 }
 
@@ -362,6 +362,44 @@ model AppToken {
   @@index([applicationId])
   @@index([prefix])
   @@map("app_tokens")
+}
+
+model BudgetLedgerEntry {
+  requestId        String    @id @map("request_id")
+  tenantId         String    @map("tenant_id") @db.Uuid
+  projectId        String    @map("project_id") @db.Uuid
+  applicationId    String?   @map("application_id") @db.Uuid
+  budgetScopeType  String    @map("budget_scope_type")
+  budgetScopeId    String    @map("budget_scope_id")
+  monthStart       DateTime  @map("month_start") @db.Date
+  costMicroUsd     BigInt    @default(0) @map("cost_micro_usd")
+  source           String    @default("request_log")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  completedAt      DateTime? @map("completed_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, budgetScopeType, budgetScopeId, monthStart])
+  @@index([tenantId, projectId, monthStart])
+  @@index([tenantId, applicationId, monthStart])
+  @@map("budget_ledger_entries")
+}
+
+model BudgetQuota {
+  id                      String   @id @default(uuid()) @db.Uuid
+  tenantId                String   @map("tenant_id") @db.Uuid
+  budgetScopeType         String   @map("budget_scope_type")
+  budgetScopeId           String   @map("budget_scope_id")
+  monthStart              DateTime @map("month_start") @db.Date
+  limitMicroUsd           BigInt   @map("limit_micro_usd")
+  warningThresholdPercent Int      @default(80) @map("warning_threshold_percent")
+  status                  String   @default("active")
+  source                  String   @default("manual")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, budgetScopeType, budgetScopeId, monthStart])
+  @@index([tenantId, monthStart, status])
+  @@map("budget_quotas")
 }
 
 model RuntimeConfig {

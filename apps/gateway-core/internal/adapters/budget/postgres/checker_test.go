@@ -66,9 +66,12 @@ func TestCheckerWarnsWhenUsageReachesThreshold(t *testing.T) {
 	if !decision.Allowed || decision.Outcome != budget.OutcomeWarned || decision.Reason != "warning_threshold_reached" {
 		t.Fatalf("unexpected warning decision: %#v", decision)
 	}
+	if !decision.UsageKnown || decision.LimitMicroUSD != 1000 || decision.UsedMicroUSD != 850 || decision.RemainingMicroUSD != 150 {
+		t.Fatalf("expected usage snapshot to be carried, got %#v", decision)
+	}
 }
 
-func TestCheckerBlocksWhenQuotaExceededInBlockMode(t *testing.T) {
+func TestCheckerDegradesHighQualityWhenQuotaExceededInBlockMode(t *testing.T) {
 	db := &fakeBudgetQueryer{row: fakeBudgetRow{
 		limitMicroUSD:           1000,
 		warningThresholdPercent: 80,
@@ -79,14 +82,14 @@ func TestCheckerBlocksWhenQuotaExceededInBlockMode(t *testing.T) {
 	decision, err := checker.Check(context.Background(), enabledBudgetRequest())
 
 	if err != nil {
-		t.Fatalf("expected blocked decision without checker error, got %v", err)
+		t.Fatalf("expected degraded decision without checker error, got %v", err)
 	}
-	if decision.Allowed || decision.Outcome != budget.OutcomeBlocked || decision.Reason != "quota_exceeded" {
-		t.Fatalf("unexpected blocked decision: %#v", decision)
+	if !decision.Allowed || decision.Outcome != budget.OutcomeDegraded || decision.Reason != "quota_exceeded_quality_guard" {
+		t.Fatalf("unexpected degraded decision: %#v", decision)
 	}
 }
 
-func TestCheckerDoesNotBlockQuotaExceededInWarnMode(t *testing.T) {
+func TestCheckerDegradesHighQualityWhenQuotaExceededInWarnMode(t *testing.T) {
 	db := &fakeBudgetQueryer{row: fakeBudgetRow{
 		limitMicroUSD:           1000,
 		warningThresholdPercent: 80,
@@ -98,10 +101,10 @@ func TestCheckerDoesNotBlockQuotaExceededInWarnMode(t *testing.T) {
 	decision, err := NewChecker(db).Check(context.Background(), req)
 
 	if err != nil {
-		t.Fatalf("expected warn-only decision without checker error, got %v", err)
+		t.Fatalf("expected degraded decision without checker error, got %v", err)
 	}
-	if !decision.Allowed || decision.Outcome != budget.OutcomeWarned || decision.Reason != "quota_exceeded_warn_only" {
-		t.Fatalf("unexpected warn-only decision: %#v", decision)
+	if !decision.Allowed || decision.Outcome != budget.OutcomeDegraded || decision.Reason != "quota_exceeded_quality_guard" {
+		t.Fatalf("unexpected degraded decision: %#v", decision)
 	}
 }
 

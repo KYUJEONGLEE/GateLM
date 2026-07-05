@@ -13,6 +13,7 @@ const (
 
 	OutcomeAllowed    = "allowed"
 	OutcomeWarned     = "warned"
+	OutcomeDegraded   = "degraded"
 	OutcomeBlocked    = "blocked"
 	OutcomeNotUsed    = "not_used"
 	OutcomeNotChecked = "not_checked"
@@ -42,6 +43,11 @@ type Decision struct {
 	Policy                  Policy
 	WarningThresholdPercent int
 	Reason                  string
+	UsageKnown              bool
+	LimitMicroUSD           int64
+	UsedMicroUSD            int64
+	RemainingMicroUSD       int64
+	UsagePercent            float64
 }
 
 type Checker interface {
@@ -123,6 +129,9 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 	case OutcomeWarned:
 		decision.Outcome = OutcomeWarned
 		decision.Allowed = true
+	case OutcomeDegraded:
+		decision.Outcome = OutcomeDegraded
+		decision.Allowed = true
 	case OutcomeAllowed:
 		decision.Outcome = OutcomeAllowed
 		decision.Allowed = true
@@ -141,6 +150,18 @@ func NormalizeDecision(decision Decision, req Request) Decision {
 		decision.Allowed = true
 	}
 	return decision
+}
+
+func RestrictsHighQuality(decision *Decision) bool {
+	if decision == nil {
+		return false
+	}
+	switch strings.TrimSpace(decision.Outcome) {
+	case OutcomeWarned, OutcomeDegraded, OutcomeBlocked:
+		return true
+	default:
+		return false
+	}
 }
 
 func (d *Decision) Clone() *Decision {
