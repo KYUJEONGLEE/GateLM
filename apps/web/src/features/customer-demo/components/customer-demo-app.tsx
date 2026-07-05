@@ -19,6 +19,7 @@ import {
   type CustomerDemoModel
 } from "@/lib/gateway/customer-demo-client";
 import type { Locale } from "@/lib/i18n/locale";
+import { MarkdownMessage } from "./markdown-message";
 
 type CustomerDemoAppProps = {
   locale: Locale;
@@ -435,7 +436,11 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                   </span>
                 ) : null}
                 <div className="customer-chat-message-body">
-                  <p>{message.body}</p>
+                  {message.side === "incoming" ? (
+                    <MarkdownMessage content={message.body} />
+                  ) : (
+                    <p>{message.body}</p>
+                  )}
                 </div>
               </article>
             ))}
