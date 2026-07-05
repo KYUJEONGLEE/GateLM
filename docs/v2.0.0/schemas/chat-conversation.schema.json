@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/v2.0.0/chat-conversation.schema.json",
+  "title": "GateLM v2 Chat Conversation Context",
+  "description": "Schema for Application-bound chat conversation metadata, retained safe messages, and sliding-window context assembly. It must not contain raw prompts, raw responses, credentials, Authorization headers, provider keys, provider raw error bodies, or actual secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "conversation",
+    "messages",
+    "contextAssembly"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "gatelm.chat-conversation.v2.0.0"
+    },
+    "conversation": {
+      "$ref": "#/$defs/conversation"
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chatMessage"
+      }
+    },
+    "contextAssembly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "contextRetentionEnabled",
+        "maxPreviousUserTurns",
+        "maxPreviousChars",
+        "gatewayMessages"
+      ],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "const": "sliding_window"
+        },
+        "contextRetentionEnabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "maxPreviousUserTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "maxPreviousChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8000
+        },
+        "gatewayMessages": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/gatewayMessage"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tenantId",
+        "projectId",
+        "applicationId",
+        "status",
+        "contextRetentionEnabled",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "applicationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endUserId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "archived",
+            "deleted"
+          ]
+        },
+        "contextRetentionEnabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "deletedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "chatMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "conversationId",
+        "tenantId",
+        "projectId",
+        "applicationId",
+        "role",
+        "safeContent",
+        "contentPolicy",
+        "sequence",
+        "createdAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conversationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "applicationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant"
+          ]
+        },
+        "safeContent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Only log-safe redacted content is allowed. Null is required when contentPolicy is not_retained."
+        },
+        "contentPolicy": {
+          "type": "string",
+          "enum": [
+            "retained",
+            "not_retained"
+          ]
+        },
+        "requestId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Correlation only. It must not be used as a metrics label."
+        },
+        "parentMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "gatewayMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "content"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "system",
+            "user",
+            "assistant"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "description": "System text or safe redacted message content only."
+        }
+      }
+    }
+  }
+}

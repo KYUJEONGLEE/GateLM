@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  createChatConversation,
+  createChatConversationMessage,
+  updateChatConversation
+} from "@/lib/control-plane/conversations-client";
+import type { GatewayContextMessage } from "@/lib/control-plane/conversations-types";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
 import type {
@@ -17,6 +23,8 @@ type GatewayCallResult = {
   headers: Headers;
   httpStatus: number;
   latencyMs: number;
+  contextRetentionEnabled: boolean;
+  conversationId: string | null;
   requestBody: CustomerDemoRequest["body"];
   requestHeaders: CustomerDemoHeader[];
   requestId: string;
@@ -43,6 +51,13 @@ type GatewaySseDataResult = {
 
 type ProviderFailureMode = "error" | "timeout";
 
+type ConversationGatewayContext = {
+  contextRetentionEnabled: boolean;
+  conversationId: string;
+  messages: GatewayContextMessage[];
+  userMessageId: string | null;
+};
+
 const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Request-Id",
   "X-GateLM-Cache-Status",
@@ -56,6 +71,8 @@ const RESPONSE_HEADER_NAMES = [
 
 const SAFE_PROMPT =
   "Write a concise support reply for a delayed shipment. Keep it under three sentences.";
+const APPLICATION_END_USER_ID = "customer_user_demo_live";
+const DEFAULT_SYSTEM_MESSAGE = "You are a helpful customer support assistant.";
 
 const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
   safe: {
@@ -123,7 +140,9 @@ export async function POST(request: Request) {
       scenarioId,
       payload.stream,
       payload.message,
-      payload.surface
+      payload.surface,
+      payload.conversationId,
+      payload.contextRetentionEnabled
     );
 
     return NextResponse.json({
@@ -207,6 +226,8 @@ function streamLiveScenario({
 
 async function readRequestPayload(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as {
+    contextRetentionEnabled?: unknown;
+    conversationId?: unknown;
     message?: unknown;
     scenarioId?: unknown;
     stream?: unknown;
@@ -216,6 +237,14 @@ async function readRequestPayload(request: Request) {
 
   return {
     message: normalizeUserMessage(payload.message),
+    contextRetentionEnabled:
+      typeof payload.contextRetentionEnabled === "boolean"
+        ? payload.contextRetentionEnabled
+        : undefined,
+    conversationId:
+      typeof payload.conversationId === "string" && payload.conversationId.trim()
+        ? payload.conversationId.trim()
+        : null,
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
     stream: payload.stream === true,
     surface: normalizeCustomerDemoSurface(payload.surface),
@@ -245,11 +274,13 @@ async function executeLiveScenario(
   scenarioId: CustomerDemoScenarioId,
   stream: boolean,
   message: string | undefined,
-  surface: CustomerDemoSurface
+  surface: CustomerDemoSurface,
+  conversationId: string | null,
+  contextRetentionEnabled: boolean | undefined
 ) {
   if (scenarioId === "cache-hit") {
-    await callGateway("cache-hit", "warmup", { message, surface });
-    return callGateway("cache-hit", "hit", { message, stream, surface });
+    await callGateway("cache-hit", "warmup", { contextRetentionEnabled, conversationId, message, surface });
+    return callGateway("cache-hit", "hit", { contextRetentionEnabled, conversationId, message, stream, surface });
   }
 
   if (scenarioId === "rate-limited") {
@@ -258,7 +289,13 @@ async function executeLiveScenario(
 
     // Keep the demo bounded; rate limit evidence should come from a low-limit demo config.
     for (let index = 0; index < rateLimitMaxAttempts; index += 1) {
-      latestResult = await callGateway("rate-limited", String(index + 1), { message, stream, surface });
+      latestResult = await callGateway("rate-limited", String(index + 1), {
+        contextRetentionEnabled,
+        conversationId,
+        message,
+        stream,
+        surface
+      });
 
       if (latestResult.httpStatus === 429) {
         return latestResult;
@@ -278,7 +315,13 @@ async function executeLiveScenario(
     return executeProviderFailureScenario(scenarioId, "error");
   }
 
-  return callGateway(scenarioId, "1", { message, stream, surface });
+  return callGateway(scenarioId, "1", {
+    contextRetentionEnabled,
+    conversationId,
+    message,
+    stream,
+    surface
+  });
 }
 
 async function executeProviderFailureScenario(
@@ -299,11 +342,23 @@ async function executeProviderFailureScenario(
 async function callGateway(
   scenarioId: CustomerDemoScenarioId,
   requestIdSuffix: string,
-  options: { message?: string; stream?: boolean; surface?: CustomerDemoSurface } = {}
+  options: {
+    contextRetentionEnabled?: boolean;
+    conversationId?: string | null;
+    message?: string;
+    stream?: boolean;
+    surface?: CustomerDemoSurface;
+  } = {}
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig();
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
+  const conversationContext = await prepareConversationGatewayContext({
+    definition,
+    message: options.message,
+    options,
+    requestId
+  });
   const requestBody = buildGatewayRequestBody(
     definition,
     scenarioId,
@@ -311,7 +366,8 @@ async function callGateway(
     options.message,
     options.surface ?? "demo",
     config.applicationChatModel,
-    config.applicationChatMaxTokens
+    config.applicationChatMaxTokens,
+    conversationContext?.messages
   );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
@@ -330,8 +386,18 @@ async function callGateway(
 
   const responseText = await response.text();
 
+  const body = buildGatewayResponseBody(response, responseText, requestBody.stream);
+  await retainAssistantMessage({
+    body,
+    conversationContext,
+    requestId,
+    status: response.status
+  });
+
   return {
-    body: buildGatewayResponseBody(response, responseText, requestBody.stream),
+    body,
+    contextRetentionEnabled: conversationContext?.contextRetentionEnabled ?? false,
+    conversationId: conversationContext?.conversationId ?? options.conversationId ?? null,
     headers: response.headers,
     httpStatus: response.status,
     latencyMs: Date.now() - startedAt,
@@ -345,12 +411,24 @@ async function callGateway(
 async function callGatewayStreaming(
   scenarioId: CustomerDemoScenarioId,
   requestIdSuffix: string,
-  options: { message?: string; stream?: boolean; surface?: CustomerDemoSurface },
+  options: {
+    contextRetentionEnabled?: boolean;
+    conversationId?: string | null;
+    message?: string;
+    stream?: boolean;
+    surface?: CustomerDemoSurface;
+  },
   onDelta: (content: string) => void
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig();
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
+  const conversationContext = await prepareConversationGatewayContext({
+    definition,
+    message: options.message,
+    options,
+    requestId
+  });
   const requestBody = buildGatewayRequestBody(
     definition,
     scenarioId,
@@ -358,7 +436,8 @@ async function callGatewayStreaming(
     options.message,
     options.surface ?? "application",
     config.applicationChatModel,
-    config.applicationChatMaxTokens
+    config.applicationChatMaxTokens,
+    conversationContext?.messages
   );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
@@ -377,9 +456,18 @@ async function callGatewayStreaming(
 
   if (!response.body || !isEventStreamResponse(response)) {
     const responseText = await response.text();
+    const body = buildGatewayResponseBody(response, responseText, requestBody.stream);
+    await retainAssistantMessage({
+      body,
+      conversationContext,
+      requestId,
+      status: response.status
+    });
 
     return {
-      body: buildGatewayResponseBody(response, responseText, requestBody.stream),
+      body,
+      contextRetentionEnabled: conversationContext?.contextRetentionEnabled ?? false,
+      conversationId: conversationContext?.conversationId ?? options.conversationId ?? null,
       headers: response.headers,
       httpStatus: response.status,
       latencyMs: Date.now() - startedAt,
@@ -392,9 +480,18 @@ async function callGatewayStreaming(
 
   const summary = await readGatewaySseStream(response, onDelta);
   const body = buildGatewayStreamingResponseBody(summary);
+  await retainAssistantMessage({
+    assistantContent: summary.assistantContent,
+    body,
+    conversationContext,
+    requestId,
+    status: response.status
+  });
 
   return {
     body,
+    contextRetentionEnabled: conversationContext?.contextRetentionEnabled ?? false,
+    conversationId: conversationContext?.conversationId ?? options.conversationId ?? null,
     headers: response.headers,
     httpStatus: response.status,
     latencyMs: Date.now() - startedAt,
@@ -417,14 +514,15 @@ function buildGatewayRequestBody(
   message: string | undefined,
   surface: CustomerDemoSurface,
   applicationChatModel: string,
-  applicationChatMaxTokens: number
+  applicationChatMaxTokens: number,
+  contextMessages?: GatewayContextMessage[]
 ): CustomerDemoRequest["body"] {
   return {
     model: surface === "application" ? applicationChatModel : "auto",
-    messages: [
+    messages: contextMessages ?? [
       {
         role: "system",
-        content: "You are a helpful customer support assistant."
+        content: DEFAULT_SYSTEM_MESSAGE
       },
       {
         role: "user",
@@ -448,6 +546,140 @@ function buildGatewayRequestBody(
       responseMetadata: true
     }
   };
+}
+
+async function prepareConversationGatewayContext({
+  definition,
+  message,
+  options,
+  requestId
+}: {
+  definition: LiveScenarioDefinition;
+  message: string | undefined;
+  options: {
+    contextRetentionEnabled?: boolean;
+    conversationId?: string | null;
+    surface?: CustomerDemoSurface;
+  };
+  requestId: string;
+}): Promise<ConversationGatewayContext | null> {
+  if ((options.surface ?? "demo") !== "application") {
+    return null;
+  }
+
+  const contextRetentionEnabled = options.contextRetentionEnabled ?? false;
+  const model = getCustomerDemoLiveModel();
+  const conversation =
+    options.conversationId
+      ? await updateExistingConversation({
+          contextRetentionEnabled,
+          conversationId: options.conversationId
+        })
+      : await createApplicationConversation({
+          contextRetentionEnabled
+        });
+
+  const messageResult = await createChatConversationMessage({
+    applicationId: model.applicationId,
+    content: message ?? definition.gatewayPrompt,
+    conversationId: conversation.id,
+    projectId: model.projectId,
+    requestId,
+    role: "user",
+    systemMessage: DEFAULT_SYSTEM_MESSAGE,
+    tenantId: model.tenantId
+  });
+
+  if (!messageResult.ok) {
+    throw new Error(messageResult.error);
+  }
+
+  return {
+    contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
+    conversationId: conversation.id,
+    messages: messageResult.data.context.messages,
+    userMessageId: messageResult.data.message.id
+  };
+}
+
+async function createApplicationConversation({
+  contextRetentionEnabled
+}: {
+  contextRetentionEnabled: boolean;
+}): Promise<{ contextRetentionEnabled: boolean; id: string }> {
+  const model = getCustomerDemoLiveModel();
+  const conversation = await createChatConversation({
+    applicationId: model.applicationId,
+    contextRetentionEnabled,
+    endUserId: APPLICATION_END_USER_ID,
+    projectId: model.projectId,
+    tenantId: model.tenantId
+  });
+
+  if (!conversation.ok) {
+    throw new Error(conversation.error);
+  }
+
+  return conversation.data;
+}
+
+async function updateExistingConversation({
+  contextRetentionEnabled,
+  conversationId
+}: {
+  contextRetentionEnabled: boolean;
+  conversationId: string;
+}): Promise<{ contextRetentionEnabled: boolean; id: string }> {
+  const model = getCustomerDemoLiveModel();
+  const conversation = await updateChatConversation({
+    applicationId: model.applicationId,
+    contextRetentionEnabled,
+    conversationId,
+    projectId: model.projectId,
+    tenantId: model.tenantId
+  });
+
+  if (!conversation.ok) {
+    throw new Error(conversation.error);
+  }
+
+  return conversation.data;
+}
+
+async function retainAssistantMessage({
+  assistantContent,
+  body,
+  conversationContext,
+  requestId,
+  status
+}: {
+  assistantContent?: string;
+  body: JsonRecord;
+  conversationContext: ConversationGatewayContext | null;
+  requestId: string;
+  status: number;
+}) {
+  if (!conversationContext || status < 200 || status >= 300) {
+    return;
+  }
+
+  const content = assistantContent ?? getAssistantContent(body);
+
+  if (!content) {
+    return;
+  }
+
+  const model = getCustomerDemoLiveModel();
+  await createChatConversationMessage({
+    applicationId: model.applicationId,
+    content,
+    conversationId: conversationContext.conversationId,
+    parentMessageId: conversationContext.userMessageId ?? undefined,
+    projectId: model.projectId,
+    requestId,
+    role: "assistant",
+    tenantId: model.tenantId
+  }).catch(() => undefined);
 }
 
 async function configureProviderFailureControl(mode: ProviderFailureMode) {
@@ -845,6 +1077,8 @@ function buildLiveExchange({
   return {
     assistantMessage,
     cacheStatus,
+    contextRetentionEnabled: gatewayResult.contextRetentionEnabled,
+    conversationId: gatewayResult.conversationId,
     description: displayScenario.description,
     detectedTypes: LIVE_SCENARIOS[actualScenarioId].detectedTypes,
     httpStatus: gatewayResult.httpStatus,

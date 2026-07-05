@@ -55,6 +55,9 @@ const customerDemoText: Record<
     language: string;
     sidebar: {
       application: string;
+      contextMemory?: string;
+      contextOff?: string;
+      contextOn?: string;
       current: string;
       dark: string;
       language: string;
@@ -88,6 +91,9 @@ const customerDemoText: Record<
     language: "Console language",
     sidebar: {
       application: "Application",
+      contextMemory: "Context memory",
+      contextOff: "Off",
+      contextOn: "On",
       current: "Current conversation",
       dark: "Dark",
       language: "Language",
@@ -151,6 +157,8 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [contextRetentionEnabled, setContextRetentionEnabled] = useState(false);
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
   const requestInFlight = useRef(false);
@@ -195,16 +203,32 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     });
   }, [messages, isLoading]);
 
-  const startNewChat = useCallback(() => {
+  const startNewChat = useCallback(async () => {
     if (requestInFlight.current) {
       return;
     }
 
-    setExchange(buildInitialExchange(model));
-    setInputValue("");
-    setLoadError(null);
-    setMessages([]);
-  }, [model]);
+    requestInFlight.current = true;
+    setIsLoading(true);
+
+    try {
+      const conversation = await client.createConversation({
+        contextRetentionEnabled
+      });
+
+      setConversationId(conversation.id);
+      setContextRetentionEnabled(conversation.contextRetentionEnabled);
+      setExchange(buildInitialExchange(model));
+      setInputValue("");
+      setLoadError(null);
+      setMessages([]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : text.error);
+    } finally {
+      requestInFlight.current = false;
+      setIsLoading(false);
+    }
+  }, [client, contextRetentionEnabled, model, text.error]);
 
   const toggleSidebar = useCallback(() => {
     setIsUserSettingsOpen(false);
@@ -216,6 +240,30 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
   }
+
+  const updateContextRetention = useCallback((enabled: boolean) => {
+    const previousValue = contextRetentionEnabled;
+
+    setContextRetentionEnabled(enabled);
+    setLoadError(null);
+
+    if (!conversationId) {
+      return;
+    }
+
+    void client
+      .updateConversation(conversationId, {
+        contextRetentionEnabled: enabled
+      })
+      .then((conversation) => {
+        setConversationId(conversation.id);
+        setContextRetentionEnabled(conversation.contextRetentionEnabled);
+      })
+      .catch((error) => {
+        setContextRetentionEnabled(previousValue);
+        setLoadError(error instanceof Error ? error.message : text.error);
+      });
+  }, [client, contextRetentionEnabled, conversationId, text.error]);
 
   const sendUserMessage = useCallback(async (
     options: { stream?: boolean } = {}
@@ -257,6 +305,8 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         ? await client.sendChatCompletionStream(
             "safe",
             {
+              contextRetentionEnabled,
+              conversationId,
               message,
               stream: true
             },
@@ -288,11 +338,15 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             }
           )
         : await client.sendChatCompletion("safe", {
+            contextRetentionEnabled,
+            conversationId,
             message,
             stream: false
           });
 
       setExchange(nextExchange);
+      setConversationId(nextExchange.conversationId ?? conversationId);
+      setContextRetentionEnabled(nextExchange.contextRetentionEnabled);
       setMessages((current) => {
         if (streamedAssistantMessage && current.some((item) => item.id === assistantMessageId)) {
           return current;
@@ -326,7 +380,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         inputRef.current?.focus({ preventScroll: true });
       });
     }
-  }, [client, inputValue, model, text.error]);
+  }, [client, contextRetentionEnabled, conversationId, inputValue, model, text.error]);
 
   return (
     <main className="customer-demo-shell customer-chat-shell" data-sidebar-open={isSidebarOpen}>
@@ -355,7 +409,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
           <button
             className="customer-chat-new-button"
             disabled={isLoading}
-            onClick={startNewChat}
+            onClick={() => void startNewChat()}
             type="button"
           >
             <MessageSquarePlus size={16} strokeWidth={2} />
@@ -394,6 +448,22 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                     {text.sidebar.dark}
                   </button>
                 </div>
+              </div>
+              <div className="customer-chat-settings-row">
+                <span>{text.sidebar.contextMemory ?? "Context memory"}</span>
+                <label className="customer-chat-context-toggle">
+                  <input
+                    checked={contextRetentionEnabled}
+                    disabled={isLoading}
+                    onChange={(event) => updateContextRetention(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    {contextRetentionEnabled
+                      ? (text.sidebar.contextOn ?? "On")
+                      : (text.sidebar.contextOff ?? "Off")}
+                  </span>
+                </label>
               </div>
             </div>
           ) : null}
@@ -548,6 +618,8 @@ function buildPendingExchange(
     ...scenario,
     assistantMessage: "Ready to send.",
     cacheStatus: "pending",
+    contextRetentionEnabled: false,
+    conversationId: null,
     httpStatus: 0,
     latencyMs: 0,
     providerCall: "skipped",
@@ -582,6 +654,8 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
   return {
     assistantMessage: "No customer demo scenario is configured.",
     cacheStatus: "not-configured",
+    contextRetentionEnabled: false,
+    conversationId: null,
     description: "Customer demo scenarios are not available for this tenant application.",
     detectedTypes: [],
     httpStatus: 0,

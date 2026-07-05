@@ -1,7 +1,9 @@
-import { ResourceStatus } from '@prisma/client';
+﻿import { ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,6 +23,33 @@ export class CreateTenantDto {
   @MinLength(1)
   @MaxLength(120)
   name!: string;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  totalBudgetUsd?: number;
+}
+
+export class UpdateTenantDto {
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @IsEnum(ResourceStatus)
+  status?: ResourceStatus;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  totalBudgetUsd?: number;
 }
 
 export class ListTenantsQueryDto {
@@ -40,6 +69,7 @@ export interface TenantResponseDto {
   id: string;
   name: string;
   status: ResourceStatus;
+  totalBudgetUsd: number;
   createdAt: string;
   updatedAt: string;
 }

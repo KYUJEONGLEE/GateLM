@@ -141,6 +141,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var fallbackOutcomeCountsJSON []byte
 	var routingCountByModelJSON []byte
 	var costByModelJSON []byte
+	var projectBreakdownJSON []byte
 	var applicationBreakdownJSON []byte
 	var budgetScopeBreakdownJSON []byte
 	var lastLogCreatedAt sql.NullTime
@@ -172,6 +173,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&fallbackOutcomeCountsJSON,
 		&routingCountByModelJSON,
 		&costByModelJSON,
+		&projectBreakdownJSON,
 		&applicationBreakdownJSON,
 		&budgetScopeBreakdownJSON,
 		&lastLogCreatedAt,
@@ -204,6 +206,10 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		return invocationlog.DashboardOverviewFields{}, err
 	}
 	costByModel, err := decodeCostByModelJSON(costByModelJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	projectBreakdown, err := decodeProjectBreakdownJSON(projectBreakdownJSON)
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
@@ -256,6 +262,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		SafetyOutcomeCounts:         safetyOutcomeCounts,
 		CacheOutcomeCounts:          cacheOutcomeCounts,
 		FallbackOutcomeCounts:       fallbackOutcomeCounts,
+		ProjectBreakdown:            projectBreakdown,
 		ApplicationBreakdown:        applicationBreakdown,
 		CostByModel:                 costByModel,
 		BudgetScopeBreakdown:        budgetScopeBreakdown,
@@ -359,6 +366,7 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 with filtered as (
   select
     request_id,
+    project_id::text as project_id,
     application_id::text,
     %s as terminal_status,
     prompt_tokens,
@@ -486,6 +494,28 @@ select
     ) cost_rollup
     where selected_provider_key is not null and selected_model_key is not null
   ), '[]'::jsonb) as cost_by_model,
+  coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'projectId', project_id,
+      'requestCount', request_count,
+      'promptTokens', prompt_tokens,
+      'completionTokens', completion_tokens,
+      'totalTokens', total_tokens,
+      'costMicroUsd', cost_micro_usd
+    ) order by cost_micro_usd desc, project_id)
+    from (
+      select
+        project_id,
+        count(*)::bigint as request_count,
+        coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+        coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+        coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+        coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
+      from filtered
+      where project_id is not null and project_id <> ''
+      group by 1
+    ) project_rollup
+  ), '[]'::jsonb) as project_breakdown,
   coalesce((
     select jsonb_agg(jsonb_build_object(
       'applicationId', application_id,
@@ -1082,6 +1112,41 @@ func decodeCostByModelJSON(raw []byte) ([]invocationlog.CostByModel, error) {
 		return []invocationlog.CostByModel{}, nil
 	}
 	return values, nil
+}
+
+func decodeProjectBreakdownJSON(raw []byte) ([]invocationlog.ProjectBreakdown, error) {
+	if len(raw) == 0 || (len(raw) == 4 && raw[0] == 'n' && raw[1] == 'u' && raw[2] == 'l' && raw[3] == 'l') {
+		return []invocationlog.ProjectBreakdown{}, nil
+	}
+	var rows []struct {
+		ProjectID        string `json:"projectId"`
+		RequestCount     int64  `json:"requestCount"`
+		PromptTokens     int64  `json:"promptTokens"`
+		CompletionTokens int64  `json:"completionTokens"`
+		TotalTokens      int64  `json:"totalTokens"`
+		CostMicroUSD     int64  `json:"costMicroUsd"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		return []invocationlog.ProjectBreakdown{}, nil
+	}
+	items := make([]invocationlog.ProjectBreakdown, 0, len(rows))
+	for _, row := range rows {
+		if strings.TrimSpace(row.ProjectID) == "" {
+			continue
+		}
+		items = append(items, invocationlog.ProjectBreakdown{
+			ProjectID:        row.ProjectID,
+			RequestCount:     row.RequestCount,
+			PromptTokens:     row.PromptTokens,
+			CompletionTokens: row.CompletionTokens,
+			TotalTokens:      row.TotalTokens,
+			CostMicroUSD:     row.CostMicroUSD,
+		})
+	}
+	return items, nil
 }
 
 func decodeApplicationBreakdownJSON(raw []byte) ([]invocationlog.ApplicationBreakdown, error) {

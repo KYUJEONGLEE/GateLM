@@ -8,6 +8,7 @@ import { ApplicationsModule } from './modules/applications/applications.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { AppTokensModule } from './modules/app-tokens/app-tokens.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
@@ -30,6 +31,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ApiKeysModule,
     AppTokensModule,
     AuthModule,
+    ConversationsModule,
     RuntimeConfigsModule,
     TeamsModule,
     HealthModule,

@@ -74,6 +74,41 @@ func TestStageUsesRuntimeRateLimitConfigWhenLoaded(t *testing.T) {
 	}
 }
 
+func TestStageUsesGatewayAlgorithmWithRuntimeQuota(t *testing.T) {
+	limiter := &fakeLimiter{
+		decision: ratelimit.Decision{
+			Allowed: true,
+			Reason:  ratelimit.ReasonWithinLimit,
+		},
+	}
+	stage := NewStage(limiter, ratelimit.Config{
+		Enabled:       true,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     ratelimit.AlgorithmTokenBucket,
+		WindowSeconds: 60,
+		Limit:         60,
+	})
+	gatewayCtx := testGatewayContext()
+	gatewayCtx.Runtime.RateLimitConfig = ratelimit.Config{
+		Enabled:       true,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     ratelimit.AlgorithmFixedWindow,
+		WindowSeconds: 30,
+		Limit:         7,
+	}
+	gatewayCtx.Runtime.HasRateLimitConfig = true
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected runtime config request to pass, got %v", err)
+	}
+
+	if limiter.request.Config.Algorithm != ratelimit.AlgorithmTokenBucket ||
+		limiter.request.Config.Limit != 7 ||
+		limiter.request.Config.WindowSeconds != 30 {
+		t.Fatalf("expected gateway algorithm with runtime quota, got %#v", limiter.request.Config)
+	}
+}
+
 func TestStagePassesProjectScopedRuntimeRateLimitConfig(t *testing.T) {
 	limiter := &fakeLimiter{
 		decision: ratelimit.Decision{

@@ -1,4 +1,4 @@
-import {
+﻿import {
   CredentialStatus,
   Prisma,
   PrismaClient,
@@ -357,11 +357,13 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       update: {
         name: 'Demo Tenant',
         status: ResourceStatus.ACTIVE,
+        totalBudgetUsd: 1000,
       },
       create: {
         id: DEMO_TENANT_ID,
         name: 'Demo Tenant',
         status: ResourceStatus.ACTIVE,
+        totalBudgetUsd: 1000,
       },
     });
 
@@ -372,12 +374,14 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         name: 'Customer Support',
         description: null,
         status: ResourceStatus.ACTIVE,
+        totalBudgetUsd: 100,
       },
       create: {
         id: DEMO_PROJECT_ID,
         tenantId: DEMO_TENANT_ID,
         name: 'Customer Support',
         status: ResourceStatus.ACTIVE,
+        totalBudgetUsd: 100,
       },
     });
 
@@ -389,6 +393,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         name: 'Customer Demo App',
         description: null,
         status: ResourceStatus.ACTIVE,
+        budgetLimitMode: 'FIXED',
+        budgetLimitUsd: 100,
+        budgetLimitPercent: null,
       },
       create: {
         id: DEMO_APPLICATION_ID,
@@ -396,6 +403,9 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         projectId: DEMO_PROJECT_ID,
         name: 'Customer Demo App',
         status: ResourceStatus.ACTIVE,
+        budgetLimitMode: 'FIXED',
+        budgetLimitUsd: 100,
+        budgetLimitPercent: null,
       },
     });
 

@@ -18,6 +18,11 @@ const (
 	SemanticCacheClassifierTypeNoop      = cachekey.CacheabilityClassifierTypeNoop
 	SemanticCacheClassifierTypeStub      = cachekey.CacheabilityClassifierTypeStub
 	SemanticCacheClassifierTypeFastText  = cachekey.CacheabilityClassifierTypeFastText
+
+	RateLimitBackendPostgres      = "postgres"
+	RateLimitBackendRedis         = "redis"
+	RateLimitAlgorithmFixedWindow = "fixed_window"
+	RateLimitAlgorithmTokenBucket = "token_bucket"
 )
 
 type Config struct {
@@ -72,6 +77,9 @@ type Config struct {
 	RateLimitEnabled         bool
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
+	RateLimitBackend         string
+	RateLimitAlgorithm       string
+	RateLimitRedisKeyPrefix  string
 	AISafetySidecar          AISafetySidecarConfig
 	AsyncLogEnabled          bool
 	AsyncLogQueueSize        int
@@ -143,6 +151,8 @@ func Load() Config {
 
 func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
+	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
+	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
 	cfg := Config{
 		Port:                envString("GATEWAY_PORT", "8080"),
 		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
@@ -203,6 +213,9 @@ func LoadWithError() (Config, error) {
 		RateLimitEnabled:         envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:      envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:           envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
+		RateLimitBackend:         rateLimitBackend,
+		RateLimitAlgorithm:       rateLimitAlgorithm,
+		RateLimitRedisKeyPrefix:  strings.TrimSpace(envString("GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX", "")),
 		AISafetySidecar: AISafetySidecarConfig{
 			Enabled:     envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
 			EndpointURL: envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
@@ -222,7 +235,52 @@ func LoadWithError() (Config, error) {
 		ResponseCaptureMaxChars: envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
 		SemanticCache:           semanticCache,
 	}
-	return cfg, err
+	if err != nil {
+		return cfg, err
+	}
+	if err := validateRateLimitConfig(cfg); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func normalizeRateLimitBackend(value string) string {
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	if normalized == "" {
+		return RateLimitBackendRedis
+	}
+	return normalized
+}
+
+func normalizeRateLimitAlgorithm(value string, backend string) string {
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	if normalized == "" {
+		if backend == RateLimitBackendPostgres {
+			return RateLimitAlgorithmFixedWindow
+		}
+		return RateLimitAlgorithmTokenBucket
+	}
+	return normalized
+}
+
+func validateRateLimitConfig(cfg Config) error {
+	switch cfg.RateLimitBackend {
+	case RateLimitBackendPostgres, RateLimitBackendRedis:
+	default:
+		return fmt.Errorf("unsupported gateway rate limit backend %q", cfg.RateLimitBackend)
+	}
+
+	switch cfg.RateLimitAlgorithm {
+	case RateLimitAlgorithmFixedWindow, RateLimitAlgorithmTokenBucket:
+	default:
+		return fmt.Errorf("unsupported gateway rate limit algorithm %q", cfg.RateLimitAlgorithm)
+	}
+
+	if cfg.RateLimitAlgorithm == RateLimitAlgorithmTokenBucket && cfg.RateLimitBackend != RateLimitBackendRedis {
+		return fmt.Errorf("token bucket requires redis backend, got %q", cfg.RateLimitBackend)
+	}
+
+	return nil
 }
 
 func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {

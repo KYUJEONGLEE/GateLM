@@ -142,20 +142,29 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	logs := []LlmInvocationLog{
 		{
 			Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			ProjectID:     "project_alpha",
 			ApplicationID: "app_demo",
-			PromptTokens:  10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
+			BudgetScope: budget.Scope{
+				Type:       budget.ScopeTypeTeam,
+				ID:         "team_demo",
+				ResolvedBy: budget.ResolvedByControlPlaneRule,
+			},
+			PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
 			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
 			MaskingAction: "none", CreatedAt: createdAt,
 		},
 		{
 			Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
+			ProjectID:         "project_alpha",
 			ApplicationID:     "app_demo",
+			BudgetScope:       budget.Scope{Type: budget.ScopeTypeTeam, ID: "team_demo", ResolvedBy: budget.ResolvedByControlPlaneRule},
 			SavedCostMicroUSD: 50, LatencyMs: 20, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
 			MaskingAction: "none", CreatedAt: createdAt.Add(time.Second),
 		},
 		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "blocked", CreatedAt: createdAt.Add(2 * time.Second)},
 		{
 			Status: StatusFailed, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			ProjectID:    "project_beta",
 			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, SelectedProvider: "mock", SelectedModel: "mock-balanced",
 			MaskingAction: "redacted", CreatedAt: createdAt.Add(3 * time.Second),
 		},
@@ -195,7 +204,10 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if len(overview.CostByModel) != 2 || overview.CostByModel[0].SelectedModel != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
 	}
-	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].RequestCount != 2 {
+	if len(overview.ProjectBreakdown) != 2 || overview.ProjectBreakdown[0].ProjectID != "project_alpha" || overview.ProjectBreakdown[0].RequestCount != 2 || overview.ProjectBreakdown[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected project breakdown: %+v", overview.ProjectBreakdown)
+	}
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.Type != budget.ScopeTypeTeam || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.BudgetScopeBreakdown[0].RequestCount != 2 {
 		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
 	}
 	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {

@@ -46,7 +46,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	startedAt := time.Now()
 	config := s.config
 	if gatewayCtx.Runtime.HasRateLimitConfig {
-		config = gatewayCtx.Runtime.RateLimitConfig
+		config = mergeRuntimeRateLimitConfig(s.config, gatewayCtx.Runtime.RateLimitConfig)
 	}
 	rateLimitReq := ratelimit.Request{
 		TenantID:      gatewayCtx.Identity.TenantID,
@@ -88,4 +88,11 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		gatewayCtx.SetError(500, "internal_error", "Gateway rate limit check failed.", StageName)
 		return gatewayerrors.InternalError(StageName, "Gateway rate limit check failed.", nil)
 	}
+}
+
+func mergeRuntimeRateLimitConfig(defaultConfig ratelimit.Config, runtimeConfig ratelimit.Config) ratelimit.Config {
+	config := runtimeConfig
+	// RuntimeSnapshot v2 carries quota policy, while deployment config owns the algorithm until the contract grows that field.
+	config.Algorithm = defaultConfig.Algorithm
+	return ratelimit.NormalizeConfig(config)
 }

@@ -9,6 +9,7 @@ const (
 	ScopeApplication     = "application"
 	ScopeProject         = "project"
 	AlgorithmFixedWindow = "fixed_window"
+	AlgorithmTokenBucket = "token_bucket"
 
 	ReasonWithinLimit       = "within_limit"
 	ReasonLimitExceeded     = "limit_exceeded"

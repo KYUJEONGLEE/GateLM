@@ -762,11 +762,11 @@ export class ProviderConnectionsService {
 
     const record = value as ProviderModelRecord;
 
-    if (typeof record.id !== 'string' || record.id.trim().length === 0) {
+    const modelName = typeof record?.id === 'string' ? record.id.trim() : '';
+
+    if (!modelName) {
       return null;
     }
-
-    const modelName = record.id.trim();
 
     return {
       createdAt: this.toUnixTimestampIsoString(record.created_at ?? record.created),

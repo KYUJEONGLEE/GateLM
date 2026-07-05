@@ -1,0 +1,76 @@
+{
+  "contractVersion": "gatelm.chat-conversation.v2.0.0",
+  "conversation": {
+    "id": "conversation_demo_001",
+    "tenantId": "tenant_demo_001",
+    "projectId": "project_demo_001",
+    "applicationId": "app_employee_chat_001",
+    "endUserId": "employee_demo_user",
+    "title": "Support reply draft",
+    "status": "active",
+    "contextRetentionEnabled": false,
+    "createdAt": "2026-07-05T01:00:00Z",
+    "updatedAt": "2026-07-05T01:02:00Z",
+    "deletedAt": null
+  },
+  "messages": [
+    {
+      "id": "chat_message_demo_001",
+      "conversationId": "conversation_demo_001",
+      "tenantId": "tenant_demo_001",
+      "projectId": "project_demo_001",
+      "applicationId": "app_employee_chat_001",
+      "role": "user",
+      "safeContent": null,
+      "contentPolicy": "not_retained",
+      "requestId": "req_chat_demo_001",
+      "parentMessageId": null,
+      "sequence": 1,
+      "createdAt": "2026-07-05T01:00:05Z"
+    },
+    {
+      "id": "chat_message_demo_002",
+      "conversationId": "conversation_demo_001",
+      "tenantId": "tenant_demo_001",
+      "projectId": "project_demo_001",
+      "applicationId": "app_employee_chat_001",
+      "role": "assistant",
+      "safeContent": null,
+      "contentPolicy": "not_retained",
+      "requestId": "req_chat_demo_001",
+      "parentMessageId": "chat_message_demo_001",
+      "sequence": 2,
+      "createdAt": "2026-07-05T01:00:08Z"
+    },
+    {
+      "id": "chat_message_demo_003",
+      "conversationId": "conversation_demo_001",
+      "tenantId": "tenant_demo_001",
+      "projectId": "project_demo_001",
+      "applicationId": "app_employee_chat_001",
+      "role": "user",
+      "safeContent": null,
+      "contentPolicy": "not_retained",
+      "requestId": "req_chat_demo_002",
+      "parentMessageId": null,
+      "sequence": 3,
+      "createdAt": "2026-07-05T01:02:00Z"
+    }
+  ],
+  "contextAssembly": {
+    "strategy": "sliding_window",
+    "contextRetentionEnabled": false,
+    "maxPreviousUserTurns": 10,
+    "maxPreviousChars": 8000,
+    "gatewayMessages": [
+      {
+        "role": "system",
+        "content": "You are a helpful customer support assistant."
+      },
+      {
+        "role": "user",
+        "content": "Continue with a shorter version."
+      }
+    ]
+  }
+}
