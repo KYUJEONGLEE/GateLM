@@ -15,6 +15,11 @@ export type CustomerDemoHeader = {
   value: string;
 };
 
+export type CustomerDemoConversation = {
+  contextRetentionEnabled: boolean;
+  id: string;
+};
+
 export type CustomerDemoRequest = {
   endpoint: string;
   method: "POST";
@@ -22,7 +27,7 @@ export type CustomerDemoRequest = {
   body: {
     model: string;
     messages: Array<{
-      role: "system" | "user";
+      role: "assistant" | "system" | "user";
       content: string;
     }>;
     max_tokens?: number;
@@ -50,6 +55,8 @@ export type CustomerDemoResponse = {
 export type CustomerDemoExchange = {
   assistantMessage: string;
   cacheStatus: string;
+  contextRetentionEnabled: boolean;
+  conversationId: string | null;
   description: string;
   detectedTypes: string[];
   httpStatus: number;
@@ -81,17 +88,34 @@ export type CustomerDemoModel = {
 };
 
 export interface GatewayChatClient {
+  createConversation(options?: {
+    contextRetentionEnabled?: boolean;
+  }): Promise<CustomerDemoConversation>;
   sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
-    options?: { message?: string; stream?: boolean }
+    options?: {
+      contextRetentionEnabled?: boolean;
+      conversationId?: string | null;
+      message?: string;
+      stream?: boolean;
+    }
   ): Promise<CustomerDemoExchange>;
   sendChatCompletionStream(
     scenarioId: CustomerDemoScenarioId,
-    options: { message?: string; stream?: boolean },
+    options: {
+      contextRetentionEnabled?: boolean;
+      conversationId?: string | null;
+      message?: string;
+      stream?: boolean;
+    },
     handlers: {
       onDelta: (content: string) => void;
     }
   ): Promise<CustomerDemoExchange>;
+  updateConversation(
+    conversationId: string,
+    options: { contextRetentionEnabled?: boolean }
+  ): Promise<CustomerDemoConversation>;
 }
 
 export class FixtureGatewayChatClient implements GatewayChatClient {
@@ -101,9 +125,23 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
   }
 
+  async createConversation(
+    options: { contextRetentionEnabled?: boolean } = {}
+  ): Promise<CustomerDemoConversation> {
+    return {
+      contextRetentionEnabled: options.contextRetentionEnabled ?? false,
+      id: `fixture-conversation-${Date.now()}`
+    };
+  }
+
   async sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
-    options: { message?: string; stream?: boolean } = {}
+    options: {
+      contextRetentionEnabled?: boolean;
+      conversationId?: string | null;
+      message?: string;
+      stream?: boolean;
+    } = {}
   ): Promise<CustomerDemoExchange> {
     const scenario = this.scenarioMap.get(scenarioId);
 
@@ -114,6 +152,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     return options.stream
       ? {
           ...scenario,
+          contextRetentionEnabled: options.contextRetentionEnabled ?? scenario.contextRetentionEnabled,
+          conversationId: options.conversationId ?? scenario.conversationId,
           request: {
             ...scenario.request,
             body: {
@@ -128,12 +168,21 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
             requested: true
           }
         }
-      : scenario;
+      : {
+          ...scenario,
+          contextRetentionEnabled: options.contextRetentionEnabled ?? scenario.contextRetentionEnabled,
+          conversationId: options.conversationId ?? scenario.conversationId
+        };
   }
 
   async sendChatCompletionStream(
     scenarioId: CustomerDemoScenarioId,
-    options: { message?: string; stream?: boolean } = {},
+    options: {
+      contextRetentionEnabled?: boolean;
+      conversationId?: string | null;
+      message?: string;
+      stream?: boolean;
+    } = {},
     handlers: { onDelta: (content: string) => void }
   ): Promise<CustomerDemoExchange> {
     const exchange = await this.sendChatCompletion(scenarioId, {
@@ -147,6 +196,16 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
 
     return exchange;
   }
+
+  async updateConversation(
+    conversationId: string,
+    options: { contextRetentionEnabled?: boolean }
+  ): Promise<CustomerDemoConversation> {
+    return {
+      contextRetentionEnabled: options.contextRetentionEnabled ?? false,
+      id: conversationId
+    };
+  }
 }
 
 export class RouteGatewayChatClient implements GatewayChatClient {
@@ -157,7 +216,12 @@ export class RouteGatewayChatClient implements GatewayChatClient {
 
   async sendChatCompletion(
     scenarioId: CustomerDemoScenarioId,
-    options: { message?: string; stream?: boolean } = {}
+    options: {
+      contextRetentionEnabled?: boolean;
+      conversationId?: string | null;
+      message?: string;
+      stream?: boolean;
+    } = {}
   ): Promise<CustomerDemoExchange> {
     const response = await fetch("/api/customer-demo/chat", {
       method: "POST",
@@ -166,6 +230,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
       },
       body: JSON.stringify({
         message: options.message,
+        contextRetentionEnabled: options.contextRetentionEnabled,
+        conversationId: options.conversationId,
         scenarioId,
         surface: this.surface,
         stream: options.stream === true,
@@ -186,7 +252,12 @@ export class RouteGatewayChatClient implements GatewayChatClient {
 
   async sendChatCompletionStream(
     scenarioId: CustomerDemoScenarioId,
-    options: { message?: string; stream?: boolean } = {},
+    options: {
+      contextRetentionEnabled?: boolean;
+      conversationId?: string | null;
+      message?: string;
+      stream?: boolean;
+    } = {},
     handlers: { onDelta: (content: string) => void }
   ): Promise<CustomerDemoExchange> {
     const response = await fetch("/api/customer-demo/chat", {
@@ -196,6 +267,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
       },
       body: JSON.stringify({
         message: options.message,
+        contextRetentionEnabled: options.contextRetentionEnabled,
+        conversationId: options.conversationId,
         scenarioId,
         surface: this.surface,
         stream: true,
@@ -288,6 +361,58 @@ export class RouteGatewayChatClient implements GatewayChatClient {
     }
 
     return finalExchange;
+  }
+
+  async createConversation(
+    options: { contextRetentionEnabled?: boolean } = {}
+  ): Promise<CustomerDemoConversation> {
+    const response = await fetch("/api/customer-demo/conversations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contextRetentionEnabled: options.contextRetentionEnabled,
+        tenantId: this.tenantId
+      })
+    });
+    const payload = (await response.json()) as {
+      conversation?: CustomerDemoConversation;
+      error?: string;
+    };
+
+    if (!response.ok || !payload.conversation) {
+      throw new Error(payload.error ?? "Conversation create failed.");
+    }
+
+    return payload.conversation;
+  }
+
+  async updateConversation(
+    conversationId: string,
+    options: { contextRetentionEnabled?: boolean }
+  ): Promise<CustomerDemoConversation> {
+    const response = await fetch("/api/customer-demo/conversations", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contextRetentionEnabled: options.contextRetentionEnabled,
+        conversationId,
+        tenantId: this.tenantId
+      })
+    });
+    const payload = (await response.json()) as {
+      conversation?: CustomerDemoConversation;
+      error?: string;
+    };
+
+    if (!response.ok || !payload.conversation) {
+      throw new Error(payload.error ?? "Conversation update failed.");
+    }
+
+    return payload.conversation;
   }
 }
 

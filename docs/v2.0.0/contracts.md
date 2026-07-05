@@ -201,6 +201,65 @@ Employee Browser
 | Employee UI | response, requestId, simple status | raw token, detector detail, raw prompt/response, policy internals |
 | Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance, opt-in log-safe captured prompt | raw secret, raw prompt/response, provider raw error body |
 
+### 4.1 Chat Conversation And Session Context
+
+Chat conversations are an Application-boundary convenience for Employee Chat and Customer Demo Chat. They are not a raw transcript store and must not be used to persist raw prompt, raw response, raw detected value, raw prompt fragment, API Key, App Token, Provider Key, Authorization header, provider raw error body, or actual secret.
+
+Conversation identity:
+
+```text
+tenantId
+projectId
+applicationId
+conversationId
+```
+
+The Gateway runtime identity remains `tenantId/projectId/applicationId`. `conversationId`, `sessionId`, and `requestId` are high-cardinality correlation values and must not be used as metrics labels.
+
+Conversation records:
+
+- `conversations` stores Application-scoped chat container metadata only.
+- Required scope fields are `tenantId`, `projectId`, and `applicationId`.
+- User attribution may use `endUserId` or `userId`; it is not a Gateway RuntimeSnapshot lookup key.
+- New conversations default to `contextRetentionEnabled=false`.
+- `contextRetentionEnabled=true` allows retained safe messages from the same conversation to be assembled into the next Gateway request.
+- `contextRetentionEnabled=false` means previous conversation messages must never be included in the next Gateway request.
+- When retention is not explicitly enabled, the API must behave as retention off.
+- Soft delete uses metadata such as `status` and `deletedAt`; physical deletion is not required for the MVP.
+
+Chat message records:
+
+- `chat_messages` stores sanitized message material only.
+- `safeContent` is nullable and may contain only request-side-masked, log-safe, redacted content.
+- `rawContent`, `rawPrompt`, and `rawResponse` columns must not be created.
+- `contentPolicy=retained` means `safeContent` may be used for future context if it is non-null.
+- `contentPolicy=not_retained` means `safeContent` must be null or absent and the message must be excluded from future context assembly.
+- Assistant messages must follow the same log-safe/redacted retention policy; raw provider response bodies must not be stored.
+
+Sliding window context assembly:
+
+- The MVP context memory strategy is sliding window only.
+- Summary memory, pinned facts, and semantic retrieval are out of v2.0.0 MVP scope unless a later contract adds them.
+- When `contextRetentionEnabled=true`, the next Gateway request may include previous retained messages from the same conversation.
+- When `contextRetentionEnabled=false`, the next Gateway request includes only the system message and the current safe user message.
+- Previous context uses only DB-stored `safeContent`.
+- Messages with `safeContent=null` or `contentPolicy=not_retained` are excluded.
+- Messages are ordered by `sequence` ascending in the Gateway `messages` payload.
+- The default sliding window limit is the most recent 10 retained user turns or 8,000 previous-message characters, whichever limit is reached first.
+- The current user message is request-side-masked/redacted before it is added to the Gateway payload.
+
+Gateway call boundary:
+
+```text
+Employee Browser
+-> Web BFF / Server-side boundary
+-> Conversation context assembly
+-> Gateway
+-> Provider Adapter
+```
+
+Employee Chat UI must not call Providers directly. Browser code must not store or expose App Token, API Key, Provider Key, Authorization header, or actual secret. Gateway credentials stay server-side.
+
 ## 5. RuntimeConfig And RuntimeSnapshot
 
 ### 5.1 Concepts

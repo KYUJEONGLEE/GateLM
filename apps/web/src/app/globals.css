@@ -5432,6 +5432,29 @@ select {
   box-shadow: none;
 }
 
+.customer-chat-context-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: #171717;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.customer-chat-context-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #171717;
+  cursor: pointer;
+}
+
+.customer-chat-context-toggle input:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .customer-chat-user-card {
   display: flex;
   align-items: center;
@@ -5976,6 +5999,14 @@ html[data-theme="dark"] .customer-chat-tools button {
   background: #212121;
   border-color: #3a3a3a;
   color: #ececec;
+}
+
+html[data-theme="dark"] .customer-chat-context-toggle {
+  color: #ececec;
+}
+
+html[data-theme="dark"] .customer-chat-context-toggle input {
+  accent-color: #ececec;
 }
 
 html[data-theme="dark"] .customer-chat-settings-row .language-option {
