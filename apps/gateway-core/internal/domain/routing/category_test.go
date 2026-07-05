@@ -235,6 +235,22 @@ func TestRuleBasedCategoryClassifierUsesExplicitRequestBeforeBackground(t *testi
 	}
 }
 
+func TestCategoryPhraseMatcherBuildsFailureLinksFromSourceState(t *testing.T) {
+	matcher := newCategoryPhraseMatcher()
+	seen := map[string]struct{}{}
+	matcher.Add(CategoryCode, categoryPhraseStrong, "abcd", seen)
+	matcher.Add(CategoryTranslation, categoryPhraseStrong, "bcd", seen)
+	matcher.Build()
+
+	matches := matcher.Match("abcd")
+	if got := matches.Category(CategoryCode).Strong; got != 1 {
+		t.Fatalf("expected code phrase to match once, got %d", got)
+	}
+	if got := matches.Category(CategoryTranslation).Strong; got != 1 {
+		t.Fatalf("expected suffix phrase through failure link to match once, got %d", got)
+	}
+}
+
 func TestCategoryEvalCasesFromFixture(t *testing.T) {
 	payload, err := os.ReadFile("testdata/category_eval_cases.json")
 	if err != nil {

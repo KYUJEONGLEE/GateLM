@@ -237,8 +237,7 @@ func (m *categoryPhraseMatcher) Build() {
 		for r, next := range m.nodes[state].Next {
 			fail := m.nodes[state].Fail
 			for fail != 0 {
-				if fallback, ok := m.nodes[fail].Next[r]; ok {
-					fail = fallback
+				if _, ok := m.nodes[fail].Next[r]; ok {
 					break
 				}
 				fail = m.nodes[fail].Fail

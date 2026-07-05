@@ -83,6 +83,14 @@ async function startGateway(options, segment) {
 
 async function stopGateway(child) {
   if (!child || child.exitCode !== null) return;
+  if (process.platform === "win32" && child.pid) {
+    try {
+      await execFileAsync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+      return;
+    } catch {
+      // Fall through to the normal signal path if taskkill is unavailable.
+    }
+  }
   child.kill("SIGTERM");
   await Promise.race([new Promise((r) => child.once("exit", r)), sleep(7000).then(() => { if (child.exitCode === null) child.kill("SIGKILL"); })]);
 }

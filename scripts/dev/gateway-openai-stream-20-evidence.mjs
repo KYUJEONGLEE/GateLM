@@ -163,6 +163,14 @@ async function startGateway() {
 
 async function stopGateway(child) {
   if (!child || child.exitCode !== null) return;
+  if (process.platform === "win32" && child.pid) {
+    try {
+      await execFileAsync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+      return;
+    } catch {
+      // Fall through to the normal signal path if taskkill is unavailable.
+    }
+  }
   child.kill("SIGTERM");
   await Promise.race([
     new Promise((resolve) => child.once("exit", resolve)),
@@ -322,7 +330,12 @@ function parseSSEBuffer(buffer) {
   while ((idx = buffer.indexOf("\n\n")) >= 0) {
     const raw = buffer.slice(0, idx);
     buffer = buffer.slice(idx + 2);
-    const dataLines = raw.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart());
+    const dataLines = raw.split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => {
+        const value = line.slice(5);
+        return value.startsWith(" ") ? value.slice(1) : value;
+      });
     if (dataLines.length > 0) events.push(dataLines.join("\n"));
   }
   return { events, remainder: buffer };
