@@ -1,6 +1,6 @@
 # GateLM Self-host Backup And Restore
 
-This guide covers PostgreSQL backup and restore for the v2.1.0 self-host Docker Compose bundle.
+Status: draft. This guide covers PostgreSQL backup and restore for the intended self-host Docker Compose bundle. `v0.1.0` does not declare self-hosting as a verified production support path.
 
 Run all commands from:
 
@@ -19,7 +19,7 @@ Back up PostgreSQL for:
 - Request Log and dashboard source data
 - Gateway rate limit counters
 
-Redis is runtime cache/state. For v2.1.0 MVP, PostgreSQL is the critical durable backup target.
+Redis is runtime cache/state. For the current draft, PostgreSQL is the critical durable backup target.
 
 ## Before You Start
 

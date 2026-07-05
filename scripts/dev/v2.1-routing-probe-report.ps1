@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Dataset = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl",
+    [string]$Dataset = "docs/drafts/gateway-v2.1.0/fixtures/routing-random-probe.fixture.jsonl",
     [string]$ReportDir = "reports/routing-probe",
     [int]$LatencyIterations = 20,
     [Parameter(ValueFromRemainingArguments = $true)]

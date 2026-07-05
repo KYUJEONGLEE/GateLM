@@ -4,7 +4,7 @@
 
 현재 초점은 request-side PII detector, local detector sidecar, sanitized detector summary, redaction/block policy, 그리고 evaluation evidence다.
 
-이 문서는 기존 `docs/v2.0.0` 계약을 대체하지 않는다. 기존 GateLM 계약과 충돌하는 경우 기존 공식 계약과 보안 규칙을 우선한다.
+이 문서는 `specs/gateway/v2.0.0` 계약을 대체하지 않는다. 기존 GateLM 계약과 충돌하는 경우 현재 공식 계약과 보안 규칙을 우선한다.
 
 ## 1. Purpose
 

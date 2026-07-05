@@ -1,6 +1,6 @@
 # GateLM Folder Structure
 
-> v1.0.0 범위 안내: 이 문서는 장기 폴더 구조와 확장 후보를 포함한다. 현재 구현 범위는 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 우선한다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
+> v1.0.0 범위 안내: 이 문서는 장기 폴더 구조와 확장 후보를 포함한다. 현재 구현 범위는 `docs/archive/v1.0.0/contracts.md`와 `docs/archive/v1.0.0/implementation-plan.md`를 우선한다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 

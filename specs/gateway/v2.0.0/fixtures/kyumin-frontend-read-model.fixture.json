@@ -1,0 +1,718 @@
+{
+  "schemaVersion": "gatelm.kyumin.frontend-read-model.v2.0.0",
+  "owner": "kyumin",
+  "sourceContract": "specs/gateway/v2.0.0/contracts.md",
+  "notes": [
+    "fixture for Product Experience and Demo frontend read models.",
+    "All values are synthetic placeholders and do not contain secrets or real personal data."
+  ],
+  "readModels": {
+    "employeeChat": {
+      "modelKind": "employeeChat",
+      "identity": {
+        "tenantId": "tenant_demo_org",
+        "projectId": "project_demo_ai",
+        "applicationId": "app_employee_chat"
+      },
+      "applicationDisplayName": "Employee Chat",
+      "requestId": "req_demo_success_001",
+      "terminalStatus": "success",
+      "httpStatus": 200,
+      "simpleStatus": "completed",
+      "assistantMessage": "Synthetic answer delivered through the Gateway path.",
+      "streaming": {
+        "enabled": true,
+        "outcome": "completed"
+      },
+      "generatedAt": "2026-06-29T00:00:10Z"
+    },
+    "requestLogList": {
+      "modelKind": "requestLogList",
+      "items": [
+        {
+          "requestId": "req_demo_success_001",
+          "traceId": "trace_demo_001",
+          "startedAt": "2026-06-29T00:00:00Z",
+          "completedAt": "2026-06-29T00:00:10Z",
+          "identity": {
+            "tenantId": "tenant_demo_org",
+            "projectId": "project_demo_ai",
+            "applicationId": "app_employee_chat"
+          },
+          "budgetScope": {
+            "budgetScopeType": "application",
+            "budgetScopeId": "app_employee_chat",
+            "resolvedBy": "default_application",
+            "displayName": "Employee Chat"
+          },
+          "terminalStatus": "success",
+          "httpStatus": 200,
+          "errorCode": null,
+          "runtimeSnapshot": {
+            "runtimeSnapshotId": "snapshot_demo_20260629_001",
+            "runtimeSnapshotVersion": 1,
+            "contentHash": "sha256:runtime-snapshot-demo",
+            "runtimeState": "snapshot_active",
+            "publishedAt": "2026-06-29T00:00:00Z",
+            "publishedBy": "operator_demo",
+            "gatewayInstanceId": "gateway_demo_001",
+            "legacyHashes": {
+              "configHash": "sha256:config-demo",
+              "securityPolicyHash": "sha256:security-policy-demo",
+              "routingPolicyHash": "sha256:routing-policy-demo"
+            }
+          },
+          "outcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "passed",
+              "code": null
+            },
+            "routing": {
+              "outcome": "selected",
+              "reason": "auto_demo_low_latency"
+            },
+            "cache": {
+              "outcome": "miss",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "success",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_needed",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "completed",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          }
+        }
+      ],
+      "freshness": {
+        "lastIngestedAt": "2026-06-29T00:00:11Z",
+        "lastAggregatedAt": "2026-06-29T00:00:15Z",
+        "source": "observability-read-model",
+        "isStale": false
+      },
+      "queryBudget": {
+        "state": "ok",
+        "defaultTimeRangeApplied": true,
+        "defaultGrainApplied": true,
+        "message": null
+      }
+    },
+    "requestDetail": {
+      "modelKind": "requestDetail",
+      "request": {
+        "requestId": "req_demo_success_001",
+        "traceId": "trace_demo_001",
+        "startedAt": "2026-06-29T00:00:00Z",
+        "completedAt": "2026-06-29T00:00:10Z",
+        "identity": {
+          "tenantId": "tenant_demo_org",
+          "projectId": "project_demo_ai",
+          "applicationId": "app_employee_chat"
+        },
+        "budgetScope": {
+          "budgetScopeType": "application",
+          "budgetScopeId": "app_employee_chat",
+          "resolvedBy": "default_application",
+          "displayName": "Employee Chat"
+        },
+        "terminalStatus": "success",
+        "httpStatus": 200,
+        "errorCode": null,
+        "runtimeSnapshot": {
+          "runtimeSnapshotId": "snapshot_demo_20260629_001",
+          "runtimeSnapshotVersion": 1,
+          "contentHash": "sha256:runtime-snapshot-demo",
+          "runtimeState": "snapshot_active",
+          "publishedAt": "2026-06-29T00:00:00Z",
+          "publishedBy": "operator_demo",
+          "gatewayInstanceId": "gateway_demo_001",
+          "legacyHashes": {
+            "configHash": "sha256:config-demo",
+            "securityPolicyHash": "sha256:security-policy-demo",
+            "routingPolicyHash": "sha256:routing-policy-demo"
+          }
+        },
+        "outcomes": {
+          "auth": {
+            "outcome": "passed",
+            "code": null
+          },
+          "runtime": {
+            "outcome": "snapshot_active",
+            "code": null
+          },
+          "rateLimit": {
+            "outcome": "allowed",
+            "code": null
+          },
+          "budget": {
+            "outcome": "allowed",
+            "code": null
+          },
+          "safety": {
+            "outcome": "passed",
+            "code": null
+          },
+          "routing": {
+            "outcome": "selected",
+            "reason": "auto_demo_low_latency"
+          },
+          "cache": {
+            "outcome": "miss",
+            "reusedRequestId": null
+          },
+          "provider": {
+            "outcome": "success",
+            "code": null
+          },
+          "fallback": {
+            "outcome": "not_needed",
+            "code": null
+          },
+          "streaming": {
+            "outcome": "completed",
+            "code": null
+          },
+          "logging": {
+            "outcome": "written",
+            "code": null
+          }
+        }
+      },
+      "routing": {
+        "requestedModel": "auto",
+        "selectedProvider": "provider_demo_primary",
+        "selectedModel": "model_demo_fast",
+        "routingReason": "auto_demo_low_latency"
+      },
+      "usage": {
+        "promptTokens": 24,
+        "completionTokens": 36,
+        "totalTokens": 60,
+        "costMicroUsd": 120,
+        "savedCostMicroUsd": 0,
+        "gatewayLatencyMs": 74,
+        "providerLatencyMs": 420
+      },
+      "safety": {
+        "maskingAction": "none",
+        "detectorTypes": [],
+        "detectedCount": 0,
+        "redactedPreview": null
+      },
+      "freshness": {
+        "lastIngestedAt": "2026-06-29T00:00:11Z",
+        "lastAggregatedAt": "2026-06-29T00:00:15Z",
+        "source": "request-detail-read-model",
+        "isStale": false
+      }
+    },
+    "dashboardOverview": {
+      "modelKind": "dashboardOverview",
+      "identity": {
+        "tenantId": "tenant_demo_org",
+        "projectId": "project_demo_ai",
+        "applicationId": "app_employee_chat"
+      },
+      "grain": "application",
+      "timeRange": {
+        "from": "2026-06-29T00:00:00Z",
+        "to": "2026-06-29T01:00:00Z"
+      },
+      "freshness": {
+        "lastIngestedAt": "2026-06-29T00:00:11Z",
+        "lastAggregatedAt": "2026-06-29T00:00:15Z",
+        "source": "dashboard-read-model",
+        "isStale": false
+      },
+      "queryBudget": {
+        "state": "ok",
+        "defaultTimeRangeApplied": true,
+        "defaultGrainApplied": true,
+        "message": null
+      },
+      "totals": {
+        "requestCount": 8,
+        "successCount": 5,
+        "blockedCount": 1,
+        "rateLimitedCount": 1,
+        "failedCount": 0,
+        "cancelledCount": 1,
+        "cacheHitCount": 1,
+        "fallbackSuccessCount": 1,
+        "costMicroUsd": 720,
+        "savedCostMicroUsd": 120
+      },
+      "breakdowns": [
+        {
+          "key": "app_employee_chat",
+          "label": "Employee Chat",
+          "requestCount": 8,
+          "terminalStatusCounts": {
+            "success": 5,
+            "blocked": 1,
+            "rate_limited": 1,
+            "failed": 0,
+            "cancelled": 1
+          }
+        }
+      ]
+    },
+    "demoScenarioRunner": {
+      "modelKind": "demoScenarioRunner",
+      "scenarios": [
+        {
+          "scenarioId": "safe_request",
+          "label": "Safe request",
+          "expectedTerminalStatus": "success",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "passed",
+              "code": null
+            },
+            "routing": {
+              "outcome": "selected",
+              "reason": "auto_demo_low_latency"
+            },
+            "cache": {
+              "outcome": "miss",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "success",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_needed",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "exact_cache_hit",
+          "label": "Exact cache hit",
+          "expectedTerminalStatus": "success",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "passed",
+              "code": null
+            },
+            "routing": {
+              "outcome": "skipped",
+              "reason": "exact_cache_hit"
+            },
+            "cache": {
+              "outcome": "hit",
+              "reusedRequestId": "req_demo_success_001"
+            },
+            "provider": {
+              "outcome": "not_called",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_needed",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "redaction",
+          "label": "Redaction",
+          "expectedTerminalStatus": "success",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "redacted",
+              "code": null
+            },
+            "routing": {
+              "outcome": "selected",
+              "reason": "auto_demo_safety_passed"
+            },
+            "cache": {
+              "outcome": "miss",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "success",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_needed",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "safety_block",
+          "label": "Safety block",
+          "expectedTerminalStatus": "blocked",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "not_checked",
+              "code": null
+            },
+            "safety": {
+              "outcome": "blocked",
+              "code": "sensitive_data_blocked"
+            },
+            "routing": {
+              "outcome": "not_checked",
+              "reason": null
+            },
+            "cache": {
+              "outcome": "bypassed",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "not_called",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_called",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "rate_limit",
+          "label": "Rate limit",
+          "expectedTerminalStatus": "rate_limited",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "rate_limited",
+              "code": "rate_limited"
+            },
+            "budget": {
+              "outcome": "not_checked",
+              "code": null
+            },
+            "safety": {
+              "outcome": "not_checked",
+              "code": null
+            },
+            "routing": {
+              "outcome": "not_checked",
+              "reason": null
+            },
+            "cache": {
+              "outcome": "bypassed",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "not_called",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_called",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "provider_timeout",
+          "label": "Provider timeout",
+          "expectedTerminalStatus": "failed",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "passed",
+              "code": null
+            },
+            "routing": {
+              "outcome": "selected",
+              "reason": "auto_demo_primary"
+            },
+            "cache": {
+              "outcome": "miss",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "timeout",
+              "code": "provider_timeout"
+            },
+            "fallback": {
+              "outcome": "disabled",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "provider_error_mock_fallback",
+          "label": "Provider error plus mock fallback",
+          "expectedTerminalStatus": "success",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "passed",
+              "code": null
+            },
+            "routing": {
+              "outcome": "selected",
+              "reason": "auto_demo_primary"
+            },
+            "cache": {
+              "outcome": "miss",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "error",
+              "code": "provider_error"
+            },
+            "fallback": {
+              "outcome": "success",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "not_streaming",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        },
+        {
+          "scenarioId": "streaming_thin_slice",
+          "label": "Streaming thin slice",
+          "expectedTerminalStatus": "success",
+          "expectedOutcomes": {
+            "auth": {
+              "outcome": "passed",
+              "code": null
+            },
+            "runtime": {
+              "outcome": "snapshot_active",
+              "code": null
+            },
+            "rateLimit": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "budget": {
+              "outcome": "allowed",
+              "code": null
+            },
+            "safety": {
+              "outcome": "passed",
+              "code": null
+            },
+            "routing": {
+              "outcome": "selected",
+              "reason": "auto_demo_streaming"
+            },
+            "cache": {
+              "outcome": "miss",
+              "reusedRequestId": null
+            },
+            "provider": {
+              "outcome": "success",
+              "code": null
+            },
+            "fallback": {
+              "outcome": "not_needed",
+              "code": null
+            },
+            "streaming": {
+              "outcome": "completed",
+              "code": null
+            },
+            "logging": {
+              "outcome": "written",
+              "code": null
+            }
+          },
+          "enabled": true
+        }
+      ],
+      "sandboxMode": {
+        "enabled": false,
+        "requiresSafetyPrecheck": true,
+        "requiresStrongRateLimit": true
+      },
+      "emergencyStop": {
+        "enabled": true,
+        "status": "ready"
+      }
+    }
+  }
+}

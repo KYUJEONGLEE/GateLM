@@ -1,6 +1,6 @@
 # GateLM DB Schema
 
-> v1.0.0 범위 안내: 이 문서는 장기 DB 설계를 포함한다. 현재 구현할 DB 범위와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `필수`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 DB 계획은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다.
+> v1.0.0 범위 안내: 이 문서는 장기 DB 설계를 포함한다. 현재 구현할 DB 범위와 우선 계약은 `docs/archive/v1.0.0/contracts.md`와 `docs/archive/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `필수`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 DB 계획은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다.
 
 ## 문서 목적
 
@@ -2326,7 +2326,7 @@ create extension if not exists pgcrypto;
 
 # 12. v1.0.0 구현 우선순위
 
-현재 v1.0.0 DB 범위는 `docs/v1.0.0/contracts.md`를 우선한다. 과거 P0 DB 계획은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다. 이 장기 DB 문서의 `P0`, `MVP`, `필수` 표현이 v1.0.0 계약과 충돌하면 v1.0.0 계약을 우선한다.
+현재 v1.0.0 DB 범위는 `docs/archive/v1.0.0/contracts.md`를 우선한다. 과거 P0 DB 계획은 `docs/archive/p0/p0-db-migration-plan.md`에서 참고한다. 이 장기 DB 문서의 `P0`, `MVP`, `필수` 표현이 v1.0.0 계약과 충돌하면 v1.0.0 계약을 우선한다.
 
 ## 12.1 v1.0.0에서 우선 만들 테이블
 

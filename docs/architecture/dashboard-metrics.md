@@ -1,6 +1,6 @@
 # GateLM Dashboard Metrics
 
-> v1.0.0 범위 안내: 이 문서는 장기 Dashboard/Analytics 지표를 포함한다. 현재 Dashboard/Observability 범위는 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 우선한다. v1.0.0은 PostgreSQL request log와 Prometheus metrics를 기준으로 데모/측정을 수행하고, Redpanda/ClickHouse는 v2 evidence path로 둔다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
+> v1.0.0 범위 안내: 이 문서는 장기 Dashboard/Analytics 지표를 포함한다. 현재 Dashboard/Observability 범위는 `docs/archive/v1.0.0/contracts.md`와 `docs/archive/v1.0.0/implementation-plan.md`를 우선한다. v1.0.0은 PostgreSQL request log와 Prometheus metrics를 기준으로 데모/측정을 수행하고, Redpanda/ClickHouse는 v2 evidence path로 둔다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 

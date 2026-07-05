@@ -1,0 +1,98 @@
+{
+  "fixtureName": "v1-gateway-context-safe-success",
+  "fixtureVersion": "2026-06-27.v1",
+  "owner": "gateway-data-plane-governance",
+  "producer": "이지섭",
+  "consumers": ["이규정"],
+  "sourceOfTruth": [
+    "docs/archive/v1.0.0/contracts.md",
+    "docs/archive/v1.0.0/schemas/gateway-context.schema.json"
+  ],
+  "notes": [
+    "This fixture is a terminal GatewayContext snapshot handed to InvocationLogWriter.",
+    "startedAt maps to Invocation Log createdAt; time.completedAt maps to Invocation Log completedAt.",
+    "No raw prompt, raw response, plaintext credential, authorization header, or raw sensitive value is included."
+  ],
+  "gatewayContext": {
+    "request": {
+      "requestId": "request_v1_demo_safe_success_001",
+      "traceId": "trace_v1_demo_safe_success_001",
+      "startedAt": "2026-06-27T02:00:03.000Z",
+      "endpoint": "/v1/chat/completions",
+      "method": "POST",
+      "source": "customer_demo_app",
+      "stream": false,
+      "requestBodyHash": "hash_request_body_safe_success_001"
+    },
+    "identity": {
+      "tenantId": "tenant_demo_acme",
+      "projectId": "project_customer_support",
+      "applicationId": "app_customer_demo",
+      "apiKeyId": "api_key_demo_primary",
+      "appTokenId": "app_token_demo_customer_app",
+      "endUserId": "customer_user_demo_001",
+      "featureId": "support-reply"
+    },
+    "runtime": {
+      "configHash": "hash_runtime_config_v1_demo",
+      "securityPolicyHash": "hash_security_policy_v1_demo",
+      "routingPolicyHash": "hash_routing_policy_v1_demo"
+    },
+    "governance": {
+      "rateLimitDecision": {
+        "allowed": true,
+        "scope": "application",
+        "scopeId": "app_customer_demo",
+        "limit": 60,
+        "remaining": 59,
+        "windowSeconds": 60,
+        "windowStart": "2026-06-27T02:00:00.000Z",
+        "resetAt": "2026-06-27T02:01:00.000Z",
+        "retryAfterSeconds": 0,
+        "reason": "within_limit",
+        "durationMs": 7
+      }
+    },
+    "safety": {
+      "maskingAction": "none",
+      "maskingDetectedTypes": [],
+      "maskingDetectedCount": 0,
+      "redactedPromptPreview": "Write a short customer support reply about a refund policy.",
+      "promptHash": "hash_redacted_prompt_safe_success_001"
+    },
+    "routing": {
+      "requestedProvider": null,
+      "requestedModel": "auto",
+      "selectedProvider": "mock",
+      "selectedModel": "mock-fast",
+      "routingReason": "short_prompt_low_cost"
+    },
+    "cache": {
+      "cacheStatus": "miss",
+      "cacheType": "exact",
+      "cacheKeyHash": "hash_exact_cache_safe_success_001",
+      "cacheHitRequestId": null
+    },
+    "usage": {
+      "promptTokens": 36,
+      "completionTokens": 54,
+      "totalTokens": 90,
+      "costMicroUsd": 120,
+      "savedCostMicroUsd": 0
+    },
+    "latency": {
+      "latencyMs": 612,
+      "providerLatencyMs": 440
+    },
+    "status": {
+      "status": "success",
+      "httpStatus": 200,
+      "errorCode": null,
+      "errorMessage": null,
+      "errorStage": null
+    },
+    "time": {
+      "completedAt": "2026-06-27T02:00:03.612Z"
+    }
+  }
+}

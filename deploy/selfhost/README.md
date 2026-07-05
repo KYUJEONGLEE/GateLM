@@ -1,20 +1,20 @@
 # GateLM Self-host Compose Bundle
 
-This bundle is the v2.1.0 single-node Docker Compose path.
+Status: draft. This bundle explores the future single-node Docker Compose path, but `v0.1.0` does not declare self-hosting as a verified production support path. Use it for internal review until release images, migrations, seed, and smoke evidence are explicitly published.
 
 It runs these services:
 
 | Service | Image |
 |---|---|
-| Web Console | `gatelm/web:2.1.0` |
-| Control Plane API | `gatelm/control-plane-api:2.1.0` |
-| Gateway Core | `gatelm/gateway-core:2.1.0` |
-| AI Service | `gatelm/ai-service:2.1.0` |
+| Web Console | `gatelm/web:<published-release-tag>` |
+| Control Plane API | `gatelm/control-plane-api:<published-release-tag>` |
+| Gateway Core | `gatelm/gateway-core:<published-release-tag>` |
+| AI Service | `gatelm/ai-service:<published-release-tag>` |
 | PostgreSQL | `postgres:16` |
 | Redis | `redis:7-alpine` |
 | Mock Provider | `python:3.12-alpine` |
 
-The app services use `image:` references only. Customers do not need to build from source or mount the source repository.
+The intended app services use `image:` references only. Until images are published and verified, customers should not treat this as a supported install path.
 
 ## Quick Start
 

@@ -24,7 +24,7 @@ hit =
 
 중요 전제:
 
-- `docs/v2.0.0/contracts.md` 기준으로 Semantic Cache는 v2.0.0 core response path가 아니라 Safety/Evaluation evidence track이다.
+- `specs/gateway/v2.0.0/contracts.md` 기준으로 Semantic Cache는 v2.0.0 core response path가 아니라 Safety/Evaluation evidence track이다.
 - production 전환 전까지는 shadow/candidate evaluation을 우선한다.
 - raw prompt, raw response, raw detected value, raw prompt fragment, API Key, App Token, Provider Key, Authorization header, provider raw error body, actual secret은 저장하거나 log/detail/metric label에 남기지 않는다.
 - LLM judge 실시간 호출은 이번 MVP 구현 범위에서 제외한다.

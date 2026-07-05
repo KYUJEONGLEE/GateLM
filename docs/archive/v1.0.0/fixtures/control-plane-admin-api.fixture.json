@@ -1,0 +1,318 @@
+{
+  "fixtureName": "v1-control-plane-admin-api",
+  "fixtureVersion": "2026-06-27.v1",
+  "owner": "control-plane-runtime-policy",
+  "producer": "jaehyeok",
+  "consumers": [
+    "product-experience-demo",
+    "gateway-data-plane-governance"
+  ],
+  "sourceOfTruth": [
+    "docs/archive/v1.0.0/contracts.md",
+    "docs/archive/v1.0.0/implementation-plan.md",
+    "docs/archive/v1.0.0/schemas/control-plane-admin-api.schema.json",
+    "docs/archive/v1.0.0/schemas/runtime-config.schema.json",
+    "docs/archive/v1.0.0/schemas/credential-lifecycle.schema.json"
+  ],
+  "notes": [
+    "This is a route catalog contract, not a full OpenAPI document.",
+    "Request and response DTO names must map to NestJS DTO classes during implementation.",
+    "Credential issue and rotate responses may contain plaintext only once."
+  ],
+  "adminApi": {
+    "schemaVersion": "gatelm.control-plane-admin-api.v1",
+    "basePath": "/admin/v1",
+    "auth": {
+      "required": true,
+      "mode": "demo_admin_placeholder"
+    },
+    "commonErrorResponse": {
+      "shape": {
+        "error": {
+          "message": "Control Plane request failed.",
+          "code": "validation_error",
+          "requestId": "request_admin_demo_001"
+        }
+      },
+      "codes": [
+        "validation_error",
+        "not_found",
+        "conflict",
+        "unauthorized",
+        "forbidden",
+        "internal_error"
+      ]
+    },
+    "endpoints": [
+      {
+        "operationId": "createProject",
+        "method": "POST",
+        "path": "/admin/v1/tenants/{tenantId}/projects",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "CreateProjectRequest",
+        "responseContract": "ProjectResponse",
+        "successStatus": 201,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Creates a project under an existing tenant."]
+      },
+      {
+        "operationId": "listProjects",
+        "method": "GET",
+        "path": "/admin/v1/tenants/{tenantId}/projects",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "ListProjectsQuery",
+        "responseContract": "ProjectListResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": ["Returns projects visible to the Web Console."]
+      },
+      {
+        "operationId": "updateProject",
+        "method": "PATCH",
+        "path": "/admin/v1/projects/{projectId}",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "UpdateProjectRequest",
+        "responseContract": "ProjectResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Updates project display fields and status."]
+      },
+      {
+        "operationId": "createApplication",
+        "method": "POST",
+        "path": "/admin/v1/projects/{projectId}/applications",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "CreateApplicationRequest",
+        "responseContract": "ApplicationResponse",
+        "successStatus": 201,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Creates an application used as the rate limit scope."]
+      },
+      {
+        "operationId": "listApplications",
+        "method": "GET",
+        "path": "/admin/v1/projects/{projectId}/applications",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "ListApplicationsQuery",
+        "responseContract": "ApplicationListResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": ["Lists applications under a project."]
+      },
+      {
+        "operationId": "updateApplication",
+        "method": "PATCH",
+        "path": "/admin/v1/applications/{applicationId}",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "UpdateApplicationRequest",
+        "responseContract": "ApplicationResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Updates application status and display fields."]
+      },
+      {
+        "operationId": "upsertProvider",
+        "method": "POST",
+        "path": "/admin/v1/projects/{projectId}/providers",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "UpsertProviderRequest",
+        "responseContract": "ProviderResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Stores provider config and secretRef without returning raw provider credentials."]
+      },
+      {
+        "operationId": "listProviders",
+        "method": "GET",
+        "path": "/admin/v1/projects/{projectId}/providers",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "ListProvidersQuery",
+        "responseContract": "ProviderListResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": ["Returns provider config with credentialPreview only."]
+      },
+      {
+        "operationId": "issueApiKey",
+        "method": "POST",
+        "path": "/admin/v1/projects/{projectId}/api-keys",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "IssueApiKeyRequest",
+        "responseContract": "OneTimeApiKeyResponse",
+        "successStatus": 201,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": [
+          "Plaintext API Key appears only in this response.",
+          "projectId path parameter is the binding input; tenantId/projectId are resolved by DB lookup."
+        ]
+      },
+      {
+        "operationId": "listApiKeys",
+        "method": "GET",
+        "path": "/admin/v1/projects/{projectId}/api-keys",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "ListApiKeysQuery",
+        "responseContract": "ApiKeyListResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": ["List response must not include plaintext or secretHash."]
+      },
+      {
+        "operationId": "rotateApiKey",
+        "method": "POST",
+        "path": "/admin/v1/api-keys/{apiKeyId}/rotate",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "RotateApiKeyRequest",
+        "responseContract": "OneTimeApiKeyResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": [
+          "Previous API Key status becomes revoked.",
+          "Only active and unexpired API Keys may be rotated.",
+          "Revoked, disabled, expired, or already-expired API Keys fail with 409 conflict."
+        ]
+      },
+      {
+        "operationId": "revokeApiKey",
+        "method": "POST",
+        "path": "/admin/v1/api-keys/{apiKeyId}/revoke",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "RevokeApiKeyRequest",
+        "responseContract": "CredentialRevokedResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": [
+          "Gateway must reject revoked API Keys as invalid_api_key.",
+          "Revoke is a final disposal command and may target active, disabled, expired, or revoked API Keys.",
+          "If the API Key is already revoked, Control Plane must not update DB state and must return the existing revokedAt."
+        ]
+      },
+      {
+        "operationId": "issueAppToken",
+        "method": "POST",
+        "path": "/admin/v1/applications/{applicationId}/app-tokens",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "IssueAppTokenRequest",
+        "responseContract": "OneTimeAppTokenResponse",
+        "successStatus": 201,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": [
+          "Plaintext App Token appears only in this response.",
+          "applicationId path parameter is the binding input; tenantId/projectId/applicationId are resolved by DB lookup."
+        ]
+      },
+      {
+        "operationId": "listAppTokens",
+        "method": "GET",
+        "path": "/admin/v1/applications/{applicationId}/app-tokens",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "ListAppTokensQuery",
+        "responseContract": "AppTokenListResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": ["List response must not include plaintext or secretHash."]
+      },
+      {
+        "operationId": "rotateAppToken",
+        "method": "POST",
+        "path": "/admin/v1/app-tokens/{appTokenId}/rotate",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "RotateAppTokenRequest",
+        "responseContract": "OneTimeAppTokenResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": [
+          "Previous App Token status becomes revoked.",
+          "Only active and unexpired App Tokens may be rotated.",
+          "Revoked, disabled, expired, or already-expired App Tokens fail with 409 conflict."
+        ]
+      },
+      {
+        "operationId": "revokeAppToken",
+        "method": "POST",
+        "path": "/admin/v1/app-tokens/{appTokenId}/revoke",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "RevokeAppTokenRequest",
+        "responseContract": "CredentialRevokedResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": [
+          "Gateway must reject revoked App Tokens as invalid_app_token.",
+          "Revoke is a final disposal command and may target active, disabled, expired, or revoked App Tokens.",
+          "If the App Token is already revoked, Control Plane must not update DB state and must return the existing revokedAt."
+        ]
+      },
+      {
+        "operationId": "getActiveRuntimeConfig",
+        "method": "GET",
+        "path": "/admin/v1/applications/{applicationId}/runtime-config/active",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "gateway-data-plane-governance",
+        "requestContract": "GetActiveRuntimeConfigQuery",
+        "responseContract": "ActiveRuntimeConfigResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": true,
+        "notes": ["Response body must conform to runtime-config.schema.json runtimeConfig."]
+      },
+      {
+        "operationId": "upsertRuntimeConfigDraft",
+        "method": "POST",
+        "path": "/admin/v1/applications/{applicationId}/runtime-config/draft",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "UpsertRuntimeConfigDraftRequest",
+        "responseContract": "RuntimeConfigDraftResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Creates or updates a draft without changing the active config."]
+      },
+      {
+        "operationId": "publishRuntimeConfig",
+        "method": "POST",
+        "path": "/admin/v1/applications/{applicationId}/runtime-config/publish",
+        "owner": "control-plane-runtime-policy",
+        "consumer": "product-experience-demo",
+        "requestContract": "PublishRuntimeConfigRequest",
+        "responseContract": "ActiveRuntimeConfigResponse",
+        "successStatus": 200,
+        "authRequired": true,
+        "idempotency": false,
+        "notes": ["Publishes a new active configVersion and configHash."]
+      }
+    ]
+  }
+}

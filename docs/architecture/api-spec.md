@@ -1,8 +1,8 @@
 # GateLM API Spec
 
-> Credential Lifecycle v1 override: for API Key/App Token issue, list, rotate, revoke, and Gateway credential error behavior, `docs/v1.0.0/contracts.md`, `docs/v1.0.0/fixtures/credential-lifecycle.fixture.json`, and `docs/v1.0.0/schemas/credential-lifecycle.schema.json` are the source of truth. In v1, revoke is idempotent: already revoked credentials return 200 with the existing `revokedAt`, not 409. Rotate is allowed only for active and unexpired credentials; invalid rotate states return 409 conflict.
+> Credential Lifecycle v1 override: for API Key/App Token issue, list, rotate, revoke, and Gateway credential error behavior, `docs/archive/v1.0.0/contracts.md`, `docs/archive/v1.0.0/fixtures/credential-lifecycle.fixture.json`, and `docs/archive/v1.0.0/schemas/credential-lifecycle.schema.json` are the source of truth. In v1, revoke is idempotent: already revoked credentials return 200 with the existing `revokedAt`, not 409. Rotate is allowed only for active and unexpired credentials; invalid rotate states return 409 conflict.
 
-> v1.0.0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
+> v1.0.0 범위 안내: 이 문서는 장기 API 계약을 포함한다. 현재 구현 목표와 우선 계약은 `docs/archive/v1.0.0/contracts.md`와 `docs/archive/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 문서 목적
 
@@ -481,7 +481,7 @@ allow, block, warn, mask, route, fallback
 |---|---|---:|---|
 | POST | `/internal/v1/safety/evaluate` | Internal service call | Optional RemoteSafetyEngine shadow/evaluation endpoint. Not required for v1 smoke and not authoritative for Gateway production blocking. |
 
-Request/response schema, versioning, fallback behavior, and sanitized error handling are defined in `docs/v1.0.0/remote-safety-engine-contract.md`.
+Request/response schema, versioning, fallback behavior, and sanitized error handling are defined in `docs/archive/v1.0.0/remote-safety-engine-contract.md`.
 
 ## 3.14 Health
 
@@ -1690,7 +1690,7 @@ Error Response:
 
 ## 8.8 DELETE `/api/app-tokens/:appTokenId`
 
-> v1.0.0 Credential Lifecycle override: App Token revoke is idempotent. If the token is already revoked, return 200 with the existing `revokedAt` and do not update DB state. The older `409 already revoked` wording in this architecture draft is superseded by `docs/v1.0.0/contracts.md` and the credential-lifecycle fixture/schema.
+> v1.0.0 Credential Lifecycle override: App Token revoke is idempotent. If the token is already revoked, return 200 with the existing `revokedAt` and do not update DB state. The older `409 already revoked` wording in this architecture draft is superseded by `docs/archive/v1.0.0/contracts.md` and the credential-lifecycle fixture/schema.
 
 App Token을 폐기한다. Hard delete가 아니라 revoke 처리한다.
 
@@ -1921,7 +1921,7 @@ Error Response:
 
 ## 9.6 DELETE `/api/api-keys/:apiKeyId`
 
-> v1.0.0 Credential Lifecycle override: API Key revoke is idempotent. If the key is already revoked, return 200 with the existing `revokedAt` and do not update DB state. The older `409 already revoked` wording in this architecture draft is superseded by `docs/v1.0.0/contracts.md` and the credential-lifecycle fixture/schema.
+> v1.0.0 Credential Lifecycle override: API Key revoke is idempotent. If the key is already revoked, return 200 with the existing `revokedAt` and do not update DB state. The older `409 already revoked` wording in this architecture draft is superseded by `docs/archive/v1.0.0/contracts.md` and the credential-lifecycle fixture/schema.
 
 인증: Project Admin
 
@@ -3485,7 +3485,7 @@ Error Response:
 ## 14.3 GET `/api/llm-requests/:requestId`
 
 Detail Drawer에 필요한 단일 요청 상세를 조회한다.
-v1.0.0 response shape은 `docs/v1.0.0/contracts.md`의 Request Detail / Invocation Log 계약을 우선한다. 과거 P0 response shape은 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
+v1.0.0 response shape은 `docs/archive/v1.0.0/contracts.md`의 Request Detail / Invocation Log 계약을 우선한다. 과거 P0 response shape은 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
 
 인증: Project Member
 

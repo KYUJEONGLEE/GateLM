@@ -8,11 +8,11 @@
 
 기존 계약과 충돌하면 아래 문서를 우선한다.
 
-1. `docs/v2.0.0/contracts.md`
-2. `docs/v2.0.0/schemas/*.schema.json`
-3. `docs/v2.0.0/fixtures/*.fixture.json`
-4. `docs/v2.0.0/implementation-plan.md`
-5. `docs/v2.0.0/implementation-tasks.md`
+1. `specs/gateway/v2.0.0/contracts.md`
+2. `specs/gateway/v2.0.0/schemas/*.schema.json`
+3. `specs/gateway/v2.0.0/fixtures/*.fixture.json`
+4. `docs/releases/v0.1.0.md`
+5. archive/draft가 아닌 현재 공개 문서
 6. `docs/policies/cost-policy.md`
 
 ### 1.1 돈의 흐름과 용어
@@ -355,7 +355,7 @@ apps/web/src/lib/gateway/live-request-detail.ts
 - 실제 provider 가격 seed 확정
 - 대시보드 UI 변경
 
-첫 구현 PR로 넘어갈 때는 `docs/v2.0.0/contracts.md`와 schema 변경 필요 여부를 다시 확인한다.
+첫 구현 PR로 넘어갈 때는 `specs/gateway/v2.0.0/contracts.md`와 schema 변경 필요 여부를 다시 확인한다.
 
 ## 10. 일반 PR 계획
 

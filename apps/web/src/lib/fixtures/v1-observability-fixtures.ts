@@ -1,5 +1,5 @@
-import dashboardOverviewFixture from "../../../../../docs/v1.0.0/fixtures/dashboard-overview.fixture.json";
-import invocationLogFixture from "../../../../../docs/v1.0.0/fixtures/invocation-log.fixture.json";
+import dashboardOverviewFixture from "../../../../../docs/archive/v1.0.0/fixtures/dashboard-overview.fixture.json";
+import invocationLogFixture from "../../../../../docs/archive/v1.0.0/fixtures/invocation-log.fixture.json";
 
 export type LegacyRuntimeHashes = {
   configHash: string;

@@ -1,6 +1,6 @@
 # GateLM Architecture
 
-> v1.0.0 범위 안내: 이 문서는 장기 아키텍처 기준을 포함한다. 현재 구현 목표와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
+> 상태 안내: 이 문서는 장기 아키텍처와 과거 v1/P0 표현이 섞여 있는 reference 문서다. 현재 Gateway 계약의 Source Of Truth는 `specs/gateway/v2.0.0/contracts.md`이며, 공개 아키텍처 진입점은 `docs/architecture/README.md`다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2`, `v1.0.0` 표현이 현재 계약과 충돌하면 현재 계약과 release readiness 문서를 우선한다.
 
 ## 문서 목적
 

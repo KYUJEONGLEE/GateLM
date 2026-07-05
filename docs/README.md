@@ -1,137 +1,98 @@
 # GateLM Documentation Guide
 
-이 문서는 팀원과 구현 에이전트가 GateLM 작업을 시작할 때 가장 먼저 읽는 문서다.
+이 문서는 GateLM의 문서 지도이자 권위 수준을 설명하는 진입점이다. 작업을 시작할 때는 이 문서를 먼저 읽고, 계약/API/DB/Event/Metrics/Security-sensitive field 판단은 `specs/`의 계약 문서를 우선한다.
 
-GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비용, 정책, 로그, 관측을 중앙에서 관리하게 해주는 B2B LLM Gateway다.
+## 현재 버전 체계
 
-현재 구현 목표는 **v2.0.0 organization-based LLMOps Gateway MVP**다.
+| 구분 | 값 | 의미 |
+|---|---|---|
+| Latest GitHub Release | `v0.0.1` | 현재 공개 release |
+| Next release target | `v0.1.0` | Organization-Based Gateway MVP release readiness |
+| Gateway spec version | `v2.0.0` | Gateway 계약, schema, fixture version |
+| Legacy milestone | `v1.0.0` | historical milestone, 현재 product release가 아님 |
+| Future/draft track | `v2.1.0` | self-host/evaluation draft, 현재 계약을 대체하지 않음 |
 
----
+`v2.0.0`과 `v2.1.0`은 GitHub Release 번호가 아니라 계약/계획 문서의 version label이다.
 
-## 1. Reading Order And Source Of Truth
+## Source Of Truth
 
-작업을 시작할 때는 먼저 `docs/README.md`를 읽는다.
+문서끼리 충돌하면 아래 순서로 판단한다.
 
-문서끼리 충돌하면 아래 Source Of Truth 순서로 판단한다.
+1. `specs/gateway/v2.0.0/contracts.md`
+2. `specs/gateway/v2.0.0/schemas/*.schema.json`
+3. `specs/gateway/v2.0.0/fixtures/*.fixture.json`
+4. 현재 release readiness 문서: `docs/releases/v0.1.0.md`
+5. archive/draft 문서가 아닌 현재 공개 문서
 
-1. `docs/v2.0.0/contracts.md`
-2. `docs/v2.0.0/schemas/*.schema.json`
-3. `docs/v2.0.0/fixtures/*.fixture.json`
-4. `docs/v2.0.0/implementation-plan.md`
-5. `docs/v2.0.0/implementation-tasks.md`
+계약 변경이 필요하면 README나 release note에 끼워 넣지 않는다. 별도 contract/spec 변경으로 분리한다.
 
-`contracts.md`는 API, DB, Event, Metrics, Security-sensitive field 판단의 최우선 기준이다.
+## 문서 권위 수준
 
-`implementation-plan.md`는 200줄 안팎의 상위 구현 계획서다.
+| 위치 | 권위 | 용도 |
+|---|---|---|
+| `README.md` | public entry | 처음 온 사람이 프로젝트 정체성과 현재 상태를 이해하는 입구 |
+| `docs/` | public docs | 사람이 읽는 개발/운영/구성/로드맵 문서 |
+| `specs/gateway/v2.0.0/` | authoritative spec | Gateway 계약, JSON Schema, fixture |
+| `docs/releases/` | release readiness | release note, verification result, known gaps |
+| `docs/archive/` | historical only | 과거 milestone, old planning, RC checklist, legacy contract |
+| `docs/drafts/` | future/draft only | 아직 current release 계약이 아닌 future material |
+| `.codex/local/` | local harness | Codex와 사용자 사이의 로컬 작업 메모, 커밋 대상 아님 |
 
-`implementation-tasks.md`는 실제 PR별 작업 위치와 검증 기준을 담은 코딩용 계획서다.
+## 공개 문서
 
-아래 3개 문서는 `implementation-tasks.md`를 실행 가능한 단위로 보강하는 실행 보조 문서다. 공식 계약이나 schema를 새로 확정하지 않으며, 충돌하면 Source Of Truth 순서를 따른다.
+| 문서 | 설명 |
+|---|---|
+| `docs/getting-started.md` | 로컬 실행과 기본 검증 |
+| `docs/architecture/README.md` | 현재 아키텍처와 main request path |
+| `docs/configuration.md` | 환경 변수, provider credential, RuntimeSnapshot mode |
+| `docs/development.md` | 브랜치, 계약 변경, 검증 규칙 |
+| `docs/deployment.md` | 로컬, self-host draft, AWS/SaaS positioning |
+| `docs/roadmap.md` | release cadence와 향후 기준 |
+| `docs/releases/v0.1.0.md` | `v0.1.0` release readiness 초안 |
 
-- `docs/v2.0.0/implementation-pr-packets.md`: PR별 실행 패킷
-- `docs/v2.0.0/acceptance-test-matrix.md`: PR별 acceptance/evidence matrix
-- `docs/v2.0.0/db-migration-plan.md`: DB migration 호환성 계획
-- `docs/v2.0.0/exact-cache-routing-aware-contract.md`: Exact Cache / Routing 팀 공유용 계약 요약
+## Spec
 
-Reference / Draft 문서는 구현 판단의 보조 자료로만 사용한다.
+현재 Gateway 계약은 아래에서 관리한다.
 
-- `docs/v2.0.0/p0-legacy-field-cleanup.md`: legacy field cleanup 참고 문서
-- `docs/v2.0.0/p0-contract-decisions.md`: 공식 계약이 아닌 팀 검토 목록
+| 문서 | 설명 |
+|---|---|
+| `specs/gateway/v2.0.0/contracts.md` | Gateway v2.0.0 계약 기준 |
+| `specs/gateway/v2.0.0/schemas/` | JSON Schema |
+| `specs/gateway/v2.0.0/fixtures/` | Schema fixture |
 
-v2.1.0 고도화/evidence 계약은 v2.0.0 계약을 대체하지 않는 보조 계약이다.
+Spec 문서의 Provider/Model field는 DB enum 또는 code enum 고정 근거로 사용하지 않는다. Provider와 Model은 catalog/config data로 유지한다.
 
-- `docs/v2.1.0/category-evaluation-dataset-contract.md`: Advanced Routing 카테고리 평가셋 evidence 계약
-- `docs/v2.1.0/routing-performance-test-scenario.md`: Advanced Routing 정확도/레이턴시/비용 절감 evidence 시나리오
-- `docs/v2.1.0/routing-random-probe.md`: Advanced Routing 임의 입력 분류 분포 관찰 시나리오
+## Archive
 
-위 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
+| 위치 | 설명 |
+|---|---|
+| `docs/archive/v1.0.0/` | 잘못 제품 release처럼 보일 수 있던 legacy milestone 문서 |
+| `docs/archive/gateway-v2.0.0-planning/` | v2.0.0 구현 계획, PR packet, RC checklist 등 historical planning |
+| `docs/archive/p0/` | 초기 P0 기록 |
 
----
+Archive 문서는 배경 이해와 의사결정 추적에만 사용한다. 현재 계약과 충돌하면 `specs/gateway/v2.0.0/contracts.md`를 우선한다.
 
-## 2. Supporting References
+## Draft
 
-작업 범위에 따라 아래 문서를 추가로 확인한다.
+`docs/drafts/gateway-v2.1.0/`는 self-host packaging, advanced routing/evaluation, production image 계획을 담은 draft 영역이다. 현재 `v0.1.0` release나 Gateway v2.0.0 계약을 대체하지 않는다.
 
-- 작업 범위에 해당하는 schema/fixture
-- 작업 범위에 해당하는 app/module 문서
-- `docs/architecture/*`
-- `docs/policies/*`
-- `docs/archive/*`
+Draft 문서의 후보 표현을 공식 API, DB, Event, Metrics, Schema field로 바로 승격하지 않는다.
 
-역할별 토론 문서는 working draft다.
+## 검증
 
-최종 합의된 내용만 `contracts.md`, schema/fixture, implementation docs로 승격한다.
+문서, schema, fixture, entry document, Node/pnpm baseline을 바꾸면 아래 검증을 우선 실행한다.
 
----
-
-## 3. v2.0.0 Goal
-
-v2.0.0 목표는 v1.0.0 baseline을 깨지 않으면서 조직 기반 LLMOps Gateway MVP를 완성하는 것이다.
-
-핵심 흐름:
-
-```text
-Customer App / Employee Chat
--> Gateway
--> RuntimeSnapshot policy
--> budget / safety / routing / exact cache
--> Actual Provider or Mock fallback
--> Request Log / Detail / Dashboard / Metrics / k6 evidence
+```powershell
+git diff --check
+corepack pnpm run verify:v2-docs
+corepack pnpm run verify:v2-final
 ```
 
-v2.0.0에서 반드시 설명 가능해야 하는 것:
+영향 범위에 따라 typecheck, smoke, Go test를 추가한다. 실행하지 못한 검증은 release note나 PR 본문에 이유와 남은 위험을 적는다.
 
-- 어떤 tenant/project/application 요청인지
-- 어떤 RuntimeSnapshot이 실제 적용됐는지
-- 어떤 budget scope로 비용과 쿼터가 귀속됐는지
-- safety, budget, routing, exact cache, provider, fallback, streaming 결과가 무엇인지
-- Actual Provider가 성공했는지, Mock fallback이 사용됐는지
-- Request Detail, Dashboard, Metrics, k6가 같은 outcome을 보고 있는지
+## Forbidden Data
 
----
-
-## 4. v2.0.0 Main Scope
-
-| Area | Main path |
-|---|---|
-| Control Plane | RuntimeConfig validation/publish, RuntimeSnapshot, Provider/Model catalog, `credentialRef`, budget policy source |
-| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, routing, routing-aware exact cache, provider, fallback, streaming, logging outcomes |
-| Product Experience | Admin/Developer/Employee surfaces, Employee Chat through Application boundary, Request Detail, Dashboard, Demo Scenario Runner |
-| Safety | request-side safety outcome and sanitized evidence |
-| Observability | Gateway-produced outcomes, Request Log/Detail read model, Dashboard aggregate, metrics label guard, k6/query profile |
-| Provider | Actual Provider 1+ and model 2+ through Provider Adapter, with Mock fallback |
-
----
-
-## 5. Non-Goals For v2.0.0 Core
-
-- raw prompt/raw response storage opt-in
-- Semantic Cache live response path
-- token-level streaming logging
-- response-side safety scan main path
-- Employee Chat Provider direct call
-- Web Console user request Provider proxy
-- `department` budget scope
-- provider/model DB enum locking
-- mandatory ClickHouse/Redpanda adoption
-
----
-
-## 6. Team Ownership
-
-| Owner | Bounded context | Main output |
-|---|---|---|
-| 김규민 | Product Experience & Demo | Employee Chat, Request Detail UI, Dashboard UX, Demo Scenario Runner |
-| 재혁님 | Control Plane & Runtime Policy | RuntimeSnapshot publish path, Provider/Model catalog, `credentialRef`, budget policy source |
-| 이지섭 | Gateway Data Plane & Governance | Gateway pipeline, outcomes, Provider Adapter boundary, Mock fallback |
-| 이윤지 | AI Safety & Evaluation Lab | request-side safety outcome, sanitized detector summary, Semantic Cache evidence |
-| 이규정 | Observability, Data Platform & Performance | Request Log/Detail read model, Dashboard aggregate, metrics guard, k6/query profile |
-
----
-
-## 7. Security Rules
-
-아래 값은 DB, log, fixture, API response, metric label, UI에 평문으로 남기지 않는다.
+아래 값은 DB, log, fixture, API response, metric label, UI, release evidence에 평문으로 남기지 않는다.
 
 - raw prompt
 - raw response
@@ -143,39 +104,3 @@ v2.0.0에서 반드시 설명 가능해야 하는 것:
 - Authorization header
 - provider raw error body
 - actual secret
-
-실제 secret이나 개인정보처럼 보이는 값은 seed, test, snapshot, fixture에도 넣지 않는다.
-
----
-
-## 8. Implementation Docs
-
-| Document | Purpose |
-|---|---|
-| `docs/v2.0.0/contracts.md` | 공식 계약 기준 |
-| `docs/v2.0.0/implementation-plan.md` | 상위 구현 계획 |
-| `docs/v2.0.0/implementation-tasks.md` | PR별 실제 작업 계획 |
-| `docs/v2.0.0/implementation-pr-packets.md` | PR별 실행 패킷 |
-| `docs/v2.0.0/acceptance-test-matrix.md` | PR별 acceptance/evidence matrix |
-| `docs/v2.0.0/db-migration-plan.md` | DB migration 호환성 계획 |
-| `docs/v2.0.0/schemas/` | JSON Schema |
-| `docs/v2.0.0/fixtures/` | 최소 fixture |
-| `docs/v2.0.0/p0-legacy-field-cleanup.md` | legacy field cleanup 기준 참고 문서 |
-| `docs/v2.0.0/p0-contract-decisions.md` | 공식 계약 전 팀 검토 목록 |
-| `docs/v2.1.0/category-evaluation-dataset-contract.md` | Advanced Routing 카테고리 평가셋 evidence 계약 |
-| `docs/v2.1.0/routing-performance-test-scenario.md` | Advanced Routing 정확도/레이턴시/비용 절감 evidence 시나리오 |
-| `docs/v2.1.0/routing-random-probe.md` | Advanced Routing 임의 입력 분류 분포 관찰 시나리오 |
-| `docs/archive/` | 과거 P0/v1 기록 |
-
-과거 문서는 배경 이해에만 사용한다. v2 계약과 충돌하면 v2 계약을 우선한다.
-
-## 9. Required Verification
-
-v2 문서, schema, fixture, entry 문서, Node/pnpm 기준을 바꾸면 아래 검증을 먼저 실행한다.
-
-```powershell
-corepack pnpm run verify:v2-docs
-corepack pnpm run verify:v2-final
-```
-
-이 검증은 `contracts.md` 우선순위, schema/fixture pairing, fixture validation, forbidden sensitive value shape, Provider/Model enum lock 방지, RuntimeSnapshot lookup key guardrail을 확인한다.

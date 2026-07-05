@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const outputPath = path.resolve(
-  "docs/v2.1.0/fixtures/category-evaluation-challenge.fixture.jsonl",
+  "docs/drafts/gateway-v2.1.0/fixtures/category-evaluation-challenge.fixture.jsonl",
 );
 
 const datasetVersion = "category_eval_2026_07_03_ko_1000_challenge_synthetic";

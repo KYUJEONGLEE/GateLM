@@ -17,20 +17,53 @@ const requiredTopLevelSchemaFields = [
 ];
 
 const sourceOfTruthDocs = [
-  "docs/v2.0.0/contracts.md",
-  "docs/v2.0.0/schemas/*.schema.json",
-  "docs/v2.0.0/fixtures/*.fixture.json",
-  "docs/v2.0.0/implementation-plan.md",
-  "docs/v2.0.0/implementation-tasks.md",
+  "specs/gateway/v2.0.0/contracts.md",
+  "specs/gateway/v2.0.0/schemas/*.schema.json",
+  "specs/gateway/v2.0.0/fixtures/*.fixture.json",
+  "docs/releases/v0.1.0.md",
 ];
 
-const executionDocs = [
-  "docs/v2.0.0/implementation-pr-packets.md",
-  "docs/v2.0.0/acceptance-test-matrix.md",
-  "docs/v2.0.0/db-migration-plan.md",
+const requiredPublicDocs = [
+  "README.md",
+  "docs/README.md",
+  "docs/getting-started.md",
+  "docs/architecture/README.md",
+  "docs/configuration.md",
+  "docs/development.md",
+  "docs/deployment.md",
+  "docs/roadmap.md",
+  "docs/releases/README.md",
+  "docs/releases/v0.1.0.md",
+  "specs/README.md",
+  "specs/gateway/v2.0.0/README.md",
+];
+
+const archiveDocs = [
+  "docs/archive/README.md",
+  "docs/archive/v1.0.0/contracts.md",
+  "docs/archive/gateway-v2.0.0-planning/implementation-plan.md",
+  "docs/archive/gateway-v2.0.0-planning/implementation-tasks.md",
+  "docs/archive/gateway-v2.0.0-planning/acceptance-test-matrix.md",
+  "docs/archive/gateway-v2.0.0-planning/db-migration-plan.md",
+];
+
+const draftDocs = [
+  "docs/drafts/README.md",
+  "docs/drafts/gateway-v2.1.0/README.md",
+  "docs/drafts/gateway-v2.1.0/contracts.md",
 ];
 
 const entryDocs = ["AGENTS.md", "README.md", "docs/README.md"];
+
+const entryDocRequiredRefs = {
+  "AGENTS.md": sourceOfTruthDocs,
+  "docs/README.md": sourceOfTruthDocs,
+  "README.md": [
+    "docs/README.md",
+    "docs/releases/v0.1.0.md",
+    "specs/gateway/v2.0.0",
+  ],
+};
 
 const sensitiveKeyPattern =
   /(rawPrompt|rawResponse|rawDetectedValue|rawPromptFragment|apiKey|appToken|providerKey|authorizationHeader|providerRawErrorBody|actualSecret)/i;
@@ -127,16 +160,17 @@ function assertRuntimeBaseline() {
 function assertEntryDocs() {
   for (const doc of entryDocs) {
     assertExists(doc);
-    for (const source of sourceOfTruthDocs) {
-      assertIncludes(doc, source);
+    for (const expectedRef of entryDocRequiredRefs[doc]) {
+      assertIncludes(doc, expectedRef);
     }
   }
 
-  for (const doc of entryDocs) {
-    for (const executionDoc of executionDocs) {
-      assertIncludes(doc, executionDoc);
-    }
-  }
+  assertIncludes("AGENTS.md", "docs/archive/gateway-v2.0.0-planning/");
+  assertIncludes("AGENTS.md", "docs/archive/v1.0.0/");
+  assertIncludes("AGENTS.md", "docs/drafts/gateway-v2.1.0/");
+  assertIncludes("docs/README.md", "docs/archive/gateway-v2.0.0-planning/");
+  assertIncludes("docs/README.md", "docs/archive/v1.0.0/");
+  assertIncludes("docs/README.md", "docs/drafts/gateway-v2.1.0/");
 }
 
 function assertCiGate() {
@@ -385,20 +419,20 @@ function scanFixtureForSensitiveValues(value, relativePath, jsonPath = "$") {
 }
 
 function assertSchemaFixturePairs() {
-  const schemaFiles = listJsonFiles("docs/v2.0.0/schemas", ".schema.json");
-  const fixtureFiles = listJsonFiles("docs/v2.0.0/fixtures", ".fixture.json");
+  const schemaFiles = listJsonFiles("specs/gateway/v2.0.0/schemas", ".schema.json");
+  const fixtureFiles = listJsonFiles("specs/gateway/v2.0.0/fixtures", ".fixture.json");
   const schemaBases = new Set(schemaFiles.map((file) => baseName(file, ".schema.json")));
   const fixtureBases = new Set(fixtureFiles.map((file) => baseName(file, ".fixture.json")));
 
   for (const schemaBase of schemaBases) {
     if (!fixtureBases.has(schemaBase)) {
-      fail(`docs/v2.0.0/fixtures/${schemaBase}.fixture.json: missing fixture for schema`);
+      fail(`specs/gateway/v2.0.0/fixtures/${schemaBase}.fixture.json: missing fixture for schema`);
     }
   }
 
   for (const fixtureBase of fixtureBases) {
     if (!schemaBases.has(fixtureBase)) {
-      fail(`docs/v2.0.0/schemas/${fixtureBase}.schema.json: missing schema for fixture`);
+      fail(`specs/gateway/v2.0.0/schemas/${fixtureBase}.schema.json: missing schema for fixture`);
     }
   }
 
@@ -409,7 +443,7 @@ function assertSchemaFixturePairs() {
     assertSchemaShape(schema, schemaFile);
     walkSchemaForProviderModelEnums(schema, schemaFile);
 
-    const fixtureFile = `docs/v2.0.0/fixtures/${baseName(schemaFile, ".schema.json")}.fixture.json`;
+    const fixtureFile = `specs/gateway/v2.0.0/fixtures/${baseName(schemaFile, ".schema.json")}.fixture.json`;
     if (!existsSync(toAbsolute(fixtureFile))) continue;
 
     const fixture = readJson(fixtureFile);
@@ -426,7 +460,7 @@ function assertSchemaFixturePairs() {
 }
 
 function assertRuntimeSnapshotGuardrails() {
-  const runtimeSnapshot = readJson("docs/v2.0.0/fixtures/runtime-snapshot.fixture.json");
+  const runtimeSnapshot = readJson("specs/gateway/v2.0.0/fixtures/runtime-snapshot.fixture.json");
   if (!runtimeSnapshot) return;
 
   if ("budgetScopeType" in runtimeSnapshot.lookupKey || "budgetScopeId" in runtimeSnapshot.lookupKey) {
@@ -441,10 +475,12 @@ function assertRuntimeSnapshotGuardrails() {
 }
 
 function main() {
-  for (const doc of [...sourceOfTruthDocs, ...executionDocs]) {
-    if (!doc.includes("*")) {
-      assertExists(doc);
-    }
+  for (const doc of sourceOfTruthDocs) {
+    if (!doc.includes("*")) assertExists(doc);
+  }
+
+  for (const doc of [...requiredPublicDocs, ...archiveDocs, ...draftDocs]) {
+    assertExists(doc);
   }
 
   assertRuntimeBaseline();

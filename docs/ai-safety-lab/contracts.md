@@ -4,7 +4,7 @@
 
 이 문서는 AI Safety Lab의 PII detector / token-classification / sidecar safety 작업을 위한 Lab draft 계약 틀이다.
 
-아직 기존 `docs/v2.0.0/contracts.md`보다 우선하는 공식 GateLM 제품 계약이 아니다. API route, DB column, Event field, Metrics label을 새로 확정하려면 기존 공식 계약과 schema/fixture를 먼저 확인한다.
+아직 기존 `specs/gateway/v2.0.0/contracts.md`보다 우선하는 공식 GateLM 제품 계약이 아니다. API route, DB column, Event field, Metrics label을 새로 확정하려면 기존 공식 계약과 schema/fixture를 먼저 확인한다.
 
 ## 2. Non-Override Rule
 

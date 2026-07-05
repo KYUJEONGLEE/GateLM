@@ -238,7 +238,7 @@ function toDashboardOverview(
     producer: "gateway-data-plane-governance",
     consumers: ["product-experience-demo"],
     sourceOfTruth: [
-      "docs/v1.0.0/contracts.md",
+      "docs/archive/v1.0.0/contracts.md",
       "GET /api/dashboard/overview"
     ],
     range: {

@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Dataset = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl",
+    [string]$Dataset = "docs/drafts/gateway-v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl",
     [string]$ReportDir = "reports/routing-eval",
     [int]$LatencyIterations = 100,
     [double]$MinAccuracy = 0,

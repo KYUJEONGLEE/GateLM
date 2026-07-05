@@ -1,6 +1,6 @@
 # GateLM Master Spec
 
-> v1.0.0 범위 안내: 이 문서는 제품 전체 방향과 장기 후보를 포함한다. 현재 구현 목표와 우선 계약은 `docs/v1.0.0/contracts.md`와 `docs/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
+> v1.0.0 범위 안내: 이 문서는 제품 전체 방향과 장기 후보를 포함한다. 현재 구현 목표와 우선 계약은 `docs/archive/v1.0.0/contracts.md`와 `docs/archive/v1.0.0/implementation-plan.md`를 따른다. 이 문서의 `P0`, `MVP`, `1차 구현`, `P1/P2` 표현이 v1.0.0 문서와 충돌하면 v1.0.0 문서를 우선한다. 과거 P0 기준은 `docs/archive/p0/*`에서 참고한다.
 
 ## 1. 프로젝트 한 줄 설명
 

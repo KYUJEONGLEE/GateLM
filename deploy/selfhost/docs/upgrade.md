@@ -39,7 +39,7 @@ The backup file may contain customer metadata and request log metadata. Store it
 Edit `.env`:
 
 ```text
-GATELM_IMAGE_TAG=2.1.0
+GATELM_IMAGE_TAG=unpublished-draft
 ```
 
 Change it to the target version:
@@ -121,11 +121,11 @@ If migrations ran and the application is not healthy, restore from the backup cr
 
 ## Version Compatibility
 
-For v2.1.0 MVP:
+For the current self-host draft:
 
-- single-node Docker Compose is the supported self-host shape
+- single-node Docker Compose is the intended self-host shape
 - PostgreSQL is the source of truth for Control Plane and Gateway logs
 - Redis is used by Gateway runtime features
-- source-code builds are not required on customer servers
+- source-code builds should not be required on customer servers after release images are published
 
 Keep `docker-compose.yml`, scripts, migrations, and image tags from the same release bundle.

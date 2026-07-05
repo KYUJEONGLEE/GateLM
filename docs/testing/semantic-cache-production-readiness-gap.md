@@ -7,14 +7,14 @@
 기준 문서:
 
 - `docs/README.md`
-- `docs/v2.0.0/contracts.md`
+- `specs/gateway/v2.0.0/contracts.md`
 - `docs/testing/semantic-cache-production-hit-policy.md`
 - `docs/testing/semantic-cache-intent-slot-taxonomy.md`
 - `apps/gateway-core/internal/domain/cache/testdata/semantic_cache_intent_eval_cases.json`
 
 중요한 전제:
 
-- `docs/v2.0.0/contracts.md` 기준으로 Semantic Cache는 v2.0.0 core response path가 아니라 Safety/Evaluation evidence track이다.
+- `specs/gateway/v2.0.0/contracts.md` 기준으로 Semantic Cache는 v2.0.0 core response path가 아니라 Safety/Evaluation evidence track이다.
 - 따라서 현재 구현은 production-ready cache hit 정책이 아니라 MVP/실험 경로로 봐야 한다.
 - production 기준에서는 `semanticSimilarity >= threshold`만으로 이전 응답을 재사용하면 안 된다.
 

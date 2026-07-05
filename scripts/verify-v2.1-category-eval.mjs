@@ -4,8 +4,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const defaultRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const schemaPath = "docs/v2.1.0/schemas/category-evaluation-record.schema.json";
-const fixturePath = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl";
+const schemaPath = "docs/drafts/gateway-v2.1.0/schemas/category-evaluation-record.schema.json";
+const fixturePath = "docs/drafts/gateway-v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl";
 
 const requiredTopLevelSchemaFields = [
   "$schema",

@@ -1,6 +1,6 @@
 # GateLM Self-host Install Guide
 
-This guide is for a customer-managed single-node GateLM v2.1.0 Docker Compose installation.
+Status: draft. This guide describes the intended customer-managed single-node Docker Compose path, but `v0.1.0` does not declare self-hosting as a verified production support path.
 
 Run all commands from:
 
@@ -14,10 +14,10 @@ The self-host bundle runs:
 
 | Service | Image |
 |---|---|
-| Web Console | `gatelm/web:2.1.0` |
-| Control Plane API | `gatelm/control-plane-api:2.1.0` |
-| Gateway Core | `gatelm/gateway-core:2.1.0` |
-| AI Service | `gatelm/ai-service:2.1.0` |
+| Web Console | `gatelm/web:<published-release-tag>` |
+| Control Plane API | `gatelm/control-plane-api:<published-release-tag>` |
+| Gateway Core | `gatelm/gateway-core:<published-release-tag>` |
+| AI Service | `gatelm/ai-service:<published-release-tag>` |
 | PostgreSQL | `postgres:16` |
 | Redis | `redis:7-alpine` |
 | Mock Provider | `python:3.12-alpine` |
@@ -30,7 +30,7 @@ The app images are pulled from a registry. Customers do not need to build source
 - Docker Engine with Docker Compose v2
 - `bash`
 - `curl`
-- Access to the image registry that hosts `gatelm/<service>:2.1.0`
+- Access to the image registry that hosts `gatelm/<service>:<published-release-tag>`
 
 Check Docker:
 
@@ -77,7 +77,7 @@ Minimum values to review:
 | Variable | Purpose |
 |---|---|
 | `GATELM_IMAGE_REGISTRY` | Image registry namespace, default `gatelm` |
-| `GATELM_IMAGE_TAG` | Image version, default `2.1.0` |
+| `GATELM_IMAGE_TAG` | Image version. The draft `.env.example` uses `unpublished-draft`; replace it with a published release image tag after images exist. |
 | `GATELM_PUBLIC_DOMAIN` | Public hostname |
 | `GATELM_PUBLIC_BASE_URL` | Public Web Console base URL |
 | `POSTGRES_USER` | PostgreSQL username |

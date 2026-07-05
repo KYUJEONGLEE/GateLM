@@ -1,6 +1,6 @@
 # GateLM 민감정보 마스킹 정책
 
-> v1.0.0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 safety 계약은 `docs/v1.0.0/contracts.md`를 우선한다. v1.0.0 `sensitive_data_blocked`는 HTTP 403으로 고정한다. 이 문서의 422 예시는 v2 정책 검증 또는 custom detector validation 문맥으로만 본다. raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 v1.0.0에서도 낮추지 않는다.
+> v1.0.0 범위 안내: 이 문서는 장기 민감정보 정책 확장 기준을 포함한다. 현재 safety 계약은 `docs/archive/v1.0.0/contracts.md`를 우선한다. v1.0.0 `sensitive_data_blocked`는 HTTP 403으로 고정한다. 이 문서의 422 예시는 v2 정책 검증 또는 custom detector validation 문맥으로만 본다. raw prompt/response/secret 저장 금지와 Provider 호출 전 마스킹/차단 원칙은 v1.0.0에서도 낮추지 않는다.
 
 ## 문서 목적
 
@@ -142,8 +142,8 @@ sampleHash = HMAC-SHA256(tenant_salt, normalized_sensitive_value)
 민감정보 감지/마스킹 구현은 아래 순서를 따른다.
 
 ```text
-docs/v1.0.0/contracts.md
--> docs/v1.0.0/implementation-plan.md
+docs/archive/v1.0.0/contracts.md
+-> docs/archive/v1.0.0/implementation-plan.md
 -> docs/archive/p0/p0-log-event-payload.md
 -> docs/architecture/gateway-flow.md
 -> docs/policies/pii-masking-policy.md
@@ -158,8 +158,8 @@ docs/v1.0.0/contracts.md
 
 충돌 시 기준:
 
-1. v1.0.0 범위와 action/status는 `docs/v1.0.0/contracts.md`를 따른다.
-2. v1.0.0 구현 계획은 `docs/v1.0.0/implementation-plan.md`를 따른다.
+1. v1.0.0 범위와 action/status는 `docs/archive/v1.0.0/contracts.md`를 따른다.
+2. v1.0.0 구현 계획은 `docs/archive/v1.0.0/implementation-plan.md`를 따른다.
 3. 과거 P0 로그 필드는 `docs/archive/p0/p0-log-event-payload.md`에서 참고한다.
 4. Gateway stage 순서는 `docs/architecture/gateway-flow.md`를 따른다.
 5. 민감정보 detector, action, masking 세부 기준은 이 문서를 따른다.

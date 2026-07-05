@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/schemas/v2.0.0/safety-domain-outcome.schema.json",
+  "title": "GateLM v2 Safety Domain Outcome",
+  "description": "Supporting schema for the AI Safety & Evaluation Lab slice of the v2 gateway outcome. This describes only the safety domain outcome and is not a standalone API, DB, Event, or Metrics contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "outcome"
+  ],
+  "properties": {
+    "outcome": {
+      "description": "Contracted v2 safety domain outcome. Values follow specs/gateway/v2.0.0/contracts.md section 6.4.",
+      "enum": [
+        "passed",
+        "redacted",
+        "blocked",
+        "not_checked"
+      ]
+    },
+    "detectorSummary": {
+      "description": "field for sanitized detector summary only. It must not contain raw detected values, raw offsets, raw prompt fragments, raw prompt, raw response, credentials, or Authorization header values.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detectedCount"
+      ],
+      "properties": {
+        "detectedCount": {
+          "description": "count of detections after safety evaluation. This is a count only, not raw detected content.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "detectorCategories": {
+          "description": "low-cardinality detector category summary. Category values are intentionally strings and not fixed provider/model-style enums, but they must be sanitized labels only. Example GateLM-normalized labels include email, person_name, postal_address, and organization_name.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        },
+        "policyAllowedTypes": {
+          "description": "Detector types seen but allowed by RuntimeSnapshot policy. Type labels only; raw detected values, offsets, and prompt fragments are forbidden.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        },
+        "mandatoryProtectedTypes": {
+          "description": "High-risk detector types protected regardless of optional PII masking state. Type labels only.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_\\-]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "policyBasis": {
+      "description": "provenance hint for the published RuntimeSnapshot policy basis used by safety. Full RuntimeSnapshot body and full policy body must not be copied here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeSnapshotId",
+        "runtimeSnapshotVersion",
+        "securityPolicyHash"
+      ],
+      "properties": {
+        "runtimeSnapshotId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSnapshotVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "securityPolicyHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 Generated at: 2026-06-22T18:02:01+00:00
 
-Note: This manifest records the original bundle layout. The current repository stores current implementation contracts under `docs/v1.0.0/`, active references under `docs/architecture/`, `docs/policies/`, and `docs/reference/`, and historical P0 documents under `docs/archive/p0/`.
+Note: This manifest records the original bundle layout. The current repository stores current implementation contracts under `docs/archive/v1.0.0/`, active references under `docs/architecture/`, `docs/policies/`, and `docs/reference/`, and historical P0 documents under `docs/archive/p0/`.
 
 ## Current repository docs
 

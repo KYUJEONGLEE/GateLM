@@ -27,11 +27,11 @@
 
 | Document | Used For |
 |---|---|
-| `docs/v1.0.0/fixtures/safety-eval-corpus.jsonl` | synthetic corpus 구조와 expected safety decision 형식 |
-| `docs/v1.0.0/schemas/safety-eval-corpus.schema.json` | eval case field shape |
-| `docs/v1.0.0/checks/rule-quality-report.md` | report structure, quality claim boundary, raw value handling |
-| `docs/v1.0.0/remote-safety-engine-contract.md` | optional shadow/evaluation service behavior |
-| `docs/v2.0.0/acceptance-test-matrix.md` | safety redact/block acceptance와 provider/cache bypass expectation |
+| `docs/archive/v1.0.0/fixtures/safety-eval-corpus.jsonl` | synthetic corpus 구조와 expected safety decision 형식 |
+| `docs/archive/v1.0.0/schemas/safety-eval-corpus.schema.json` | eval case field shape |
+| `docs/archive/v1.0.0/checks/rule-quality-report.md` | report structure, quality claim boundary, raw value handling |
+| `docs/archive/v1.0.0/remote-safety-engine-contract.md` | optional shadow/evaluation service behavior |
+| `docs/archive/gateway-v2.0.0-planning/acceptance-test-matrix.md` | historical safety redact/block acceptance와 provider/cache bypass expectation |
 | `docs/policies/pii-masking-policy.md` | detector/action/redaction/storage security 기준 |
 | `docs/ai-safety-lab/schemas/*.schema.json` | Lab draft schema validation |
 | 첨부 PII detector 메모 | ML sidecar, confidence, latency, POC 질문 |

@@ -1,4 +1,4 @@
-import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
+import runtimeConfigFixture from "../../../../../docs/archive/v1.0.0/fixtures/runtime-config.fixture.json";
 import type {
   CustomerDemoExchange,
   CustomerDemoModel,
