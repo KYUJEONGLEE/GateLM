@@ -18,6 +18,7 @@ import (
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
+	cachedprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/cached"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
@@ -25,6 +26,7 @@ import (
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
@@ -196,8 +198,21 @@ func main() {
 func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvider, providercatalog.Resolver) {
 	if strings.TrimSpace(cfg.ControlPlaneBaseURL) != "" {
 		client := &http.Client{Timeout: cfg.ControlPlaneTimeout}
-		return controlplaneruntimeconfig.NewProvider(cfg.ControlPlaneBaseURL, client),
-			controlplaneprovidercatalog.NewResolver(cfg.ControlPlaneBaseURL, client)
+		var snapshotProvider runtimeconfig.SnapshotProvider = controlplaneruntimeconfig.NewProvider(cfg.ControlPlaneBaseURL, client)
+		if cfg.RuntimeSnapshotCache.Enabled {
+			snapshotProvider = cachedruntimeconfig.NewProvider(snapshotProvider, cachedruntimeconfig.Config{
+				FreshTTL: cfg.RuntimeSnapshotCache.TTL,
+				StaleTTL: cfg.RuntimeSnapshotCache.StaleTTL,
+			})
+		}
+		var catalogResolver providercatalog.Resolver = controlplaneprovidercatalog.NewResolver(cfg.ControlPlaneBaseURL, client)
+		if cfg.ProviderCatalogCache.Enabled {
+			catalogResolver = cachedprovidercatalog.NewResolver(catalogResolver, cachedprovidercatalog.Config{
+				FreshTTL: cfg.ProviderCatalogCache.TTL,
+				StaleTTL: cfg.ProviderCatalogCache.StaleTTL,
+			})
+		}
+		return snapshotProvider, catalogResolver
 	}
 
 	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),

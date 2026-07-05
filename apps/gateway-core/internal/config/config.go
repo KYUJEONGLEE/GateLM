@@ -32,6 +32,8 @@ type Config struct {
 	ControlPlaneBaseURL      string
 	ControlPlaneTimeout      time.Duration
 	RuntimeSnapshotMode      string
+	RuntimeSnapshotCache     RuntimeSnapshotCacheConfig
+	ProviderCatalogCache     ProviderCatalogCacheConfig
 	AuthSource               string
 	MockProviderBaseURL      string
 	DefaultProvider          string
@@ -100,6 +102,18 @@ type AISafetySidecarConfig struct {
 	Locale      string
 }
 
+type RuntimeSnapshotCacheConfig struct {
+	Enabled  bool
+	TTL      time.Duration
+	StaleTTL time.Duration
+}
+
+type ProviderCatalogCacheConfig struct {
+	Enabled  bool
+	TTL      time.Duration
+	StaleTTL time.Duration
+}
+
 type SemanticCacheConfig struct {
 	Enabled                 bool
 	Mode                    string
@@ -140,12 +154,22 @@ func LoadWithError() (Config, error) {
 	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
 	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
 	cfg := Config{
-		Port:                     envString("GATEWAY_PORT", "8080"),
-		DatabaseURL:              envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
-		RedisURL:                 envString("REDIS_URL", "redis://localhost:6379"),
-		ControlPlaneBaseURL:      envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
-		ControlPlaneTimeout:      envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
-		RuntimeSnapshotMode:      envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
+		Port:                envString("GATEWAY_PORT", "8080"),
+		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
+		RedisURL:            envString("REDIS_URL", "redis://localhost:6379"),
+		ControlPlaneBaseURL: envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
+		ControlPlaneTimeout: envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
+		RuntimeSnapshotMode: envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
+		RuntimeSnapshotCache: RuntimeSnapshotCacheConfig{
+			Enabled:  envBool("GATEWAY_RUNTIME_SNAPSHOT_CACHE_ENABLED", true),
+			TTL:      envDurationMillis("GATEWAY_RUNTIME_SNAPSHOT_CACHE_TTL_MS", 5000),
+			StaleTTL: envDurationMillis("GATEWAY_RUNTIME_SNAPSHOT_CACHE_STALE_TTL_MS", 60000),
+		},
+		ProviderCatalogCache: ProviderCatalogCacheConfig{
+			Enabled:  envBool("GATEWAY_PROVIDER_CATALOG_CACHE_ENABLED", true),
+			TTL:      envDurationMillis("GATEWAY_PROVIDER_CATALOG_CACHE_TTL_MS", 5000),
+			StaleTTL: envDurationMillis("GATEWAY_PROVIDER_CATALOG_CACHE_STALE_TTL_MS", 60000),
+		},
 		AuthSource:               envString("GATEWAY_AUTH_SOURCE", "database"),
 		MockProviderBaseURL:      envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:          envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
