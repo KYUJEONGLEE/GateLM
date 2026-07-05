@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+﻿import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, ResourceStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -6,6 +6,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { TenantsService } from './tenants.service';
 
 describe('TenantsService', () => {
+  const tenantId = '00000000-0000-4000-8000-000000000101';
   const createdAt = new Date('2026-07-01T00:00:00.000Z');
 
   function createService(): {
@@ -14,6 +15,8 @@ describe('TenantsService', () => {
       tenant: {
         create: jest.Mock;
         findMany: jest.Mock;
+        findUnique: jest.Mock;
+        update: jest.Mock;
       };
     };
   } {
@@ -21,6 +24,8 @@ describe('TenantsService', () => {
       tenant: {
         create: jest.fn(),
         findMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
     };
 
@@ -35,6 +40,7 @@ describe('TenantsService', () => {
       id,
       name: `Tenant ${id}`,
       status: ResourceStatus.ACTIVE,
+      totalBudgetUsd: new Prisma.Decimal(1000),
       createdAt,
       updatedAt: createdAt,
     };
@@ -42,19 +48,18 @@ describe('TenantsService', () => {
 
   it('creates an active tenant without exposing secrets', async () => {
     const { service, prisma } = createService();
-    prisma.tenant.create.mockResolvedValue(
-      tenant('00000000-0000-4000-8000-000000000101'),
-    );
+    prisma.tenant.create.mockResolvedValue(tenant(tenantId));
 
     const result = await service.createTenant({ name: 'Acme Corp' });
 
     expect(prisma.tenant.create).toHaveBeenCalledWith({
-      data: { name: 'Acme Corp' },
+      data: { name: 'Acme Corp', totalBudgetUsd: 1000 },
     });
     expect(result).toEqual({
-      id: '00000000-0000-4000-8000-000000000101',
-      name: 'Tenant 00000000-0000-4000-8000-000000000101',
+      id: tenantId,
+      name: `Tenant ${tenantId}`,
       status: ResourceStatus.ACTIVE,
+      totalBudgetUsd: 1000,
       createdAt: createdAt.toISOString(),
       updatedAt: createdAt.toISOString(),
     });
@@ -81,6 +86,42 @@ describe('TenantsService', () => {
       nextCursor: '00000000-0000-4000-8000-000000000102',
       hasMore: true,
     });
+  });
+
+  it('rejects tenant budget lower than active project allocations', async () => {
+    const { service, prisma } = createService();
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      projects: [
+        { totalBudgetUsd: new Prisma.Decimal(80) },
+        { totalBudgetUsd: new Prisma.Decimal(30) },
+      ],
+    });
+
+    await expect(
+      service.updateTenant(tenantId, { totalBudgetUsd: 100 }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('updates tenant budget when it can cover active project allocations', async () => {
+    const { service, prisma } = createService();
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      projects: [{ totalBudgetUsd: new Prisma.Decimal(80) }],
+    });
+    prisma.tenant.update.mockResolvedValue({
+      ...tenant(tenantId),
+      totalBudgetUsd: new Prisma.Decimal(120),
+    });
+
+    const result = await service.updateTenant(tenantId, { totalBudgetUsd: 120 });
+
+    expect(prisma.tenant.update).toHaveBeenCalledWith({
+      where: { id: tenantId },
+      data: { totalBudgetUsd: 120 },
+    });
+    expect(result.totalBudgetUsd).toBe(120);
   });
 
   it('maps invalid cursor pagination failures to bad request', async () => {

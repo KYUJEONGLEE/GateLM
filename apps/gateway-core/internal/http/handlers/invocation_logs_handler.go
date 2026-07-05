@@ -129,7 +129,9 @@ type dashboardTotalsResponse struct {
 	MaskingActionCounts   map[string]int64               `json:"maskingActionCounts"`
 	RoutingCountByModel   []routingCountByModelResponse  `json:"routingCountByModel"`
 	StatusCounts          map[string]int64               `json:"statusCounts"`
+	CostByProject         []projectBreakdownResponse     `json:"costByProject"`
 	CostByModel           []costByModelResponse          `json:"costByModel"`
+	CostByBudgetScope     []budgetScopeBreakdownResponse `json:"costByBudgetScope"`
 	BudgetScopeBreakdown  []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
 }
 
@@ -163,6 +165,7 @@ type dashboardPerformanceResponse struct {
 }
 
 type dashboardBreakdownsResponse struct {
+	ByProject         []projectBreakdownResponse       `json:"byProject"`
 	ByApplication     []applicationBreakdownResponse   `json:"byApplication"`
 	ByBudgetScope     []budgetScopeBreakdownResponse   `json:"byBudgetScope"`
 	ByProviderModel   []providerModelBreakdownResponse `json:"byProviderModel"`
@@ -170,6 +173,16 @@ type dashboardBreakdownsResponse struct {
 	ByCacheOutcome    []outcomeBreakdownResponse       `json:"byCacheOutcome"`
 	ByFallbackOutcome []outcomeBreakdownResponse       `json:"byFallbackOutcome"`
 	ByTerminalStatus  []outcomeBreakdownResponse       `json:"byTerminalStatus"`
+}
+
+type projectBreakdownResponse struct {
+	ProjectID        string `json:"projectId"`
+	RequestCount     int64  `json:"requestCount"`
+	PromptTokens     int64  `json:"promptTokens"`
+	CompletionTokens int64  `json:"completionTokens"`
+	TotalTokens      int64  `json:"totalTokens"`
+	CostMicroUSD     int64  `json:"costMicroUsd"`
+	CostUSD          string `json:"costUsd"`
 }
 
 type applicationBreakdownResponse struct {
@@ -620,7 +633,9 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 			MaskingActionCounts:   copyInt64Map(overview.MaskingActionCounts),
 			RoutingCountByModel:   routingCountByModelResponses(overview.RoutingCountByModel),
 			StatusCounts:          copyInt64Map(overview.StatusCounts),
+			CostByProject:         projectBreakdownResponses(overview.ProjectBreakdown),
 			CostByModel:           costByModelResponses(overview.CostByModel),
+			CostByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 			BudgetScopeBreakdown:  budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 		},
 		DataFreshness: dashboardDataFreshnessResponse{
@@ -794,6 +809,7 @@ func outcomeResponseWithReason(outcome string, reason *string) outcomeResponse {
 
 func dashboardBreakdowns(overview invocationlog.DashboardOverviewFields) dashboardBreakdownsResponse {
 	return dashboardBreakdownsResponse{
+		ByProject:         projectBreakdownResponses(overview.ProjectBreakdown),
 		ByApplication:     applicationBreakdownResponses(overview.ApplicationBreakdown),
 		ByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 		ByProviderModel:   providerModelBreakdownResponses(overview.CostByModel, overview.Performance.P95ProviderLatencyMs),
@@ -802,6 +818,22 @@ func dashboardBreakdowns(overview invocationlog.DashboardOverviewFields) dashboa
 		ByFallbackOutcome: outcomeBreakdownResponses(overview.FallbackOutcomeCounts),
 		ByTerminalStatus:  outcomeBreakdownResponses(overview.StatusCounts),
 	}
+}
+
+func projectBreakdownResponses(items []invocationlog.ProjectBreakdown) []projectBreakdownResponse {
+	responses := make([]projectBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, projectBreakdownResponse{
+			ProjectID:        item.ProjectID,
+			RequestCount:     item.RequestCount,
+			PromptTokens:     item.PromptTokens,
+			CompletionTokens: item.CompletionTokens,
+			TotalTokens:      item.TotalTokens,
+			CostMicroUSD:     item.CostMicroUSD,
+			CostUSD:          item.CostUSD,
+		})
+	}
+	return responses
 }
 
 func applicationBreakdownResponses(items []invocationlog.ApplicationBreakdown) []applicationBreakdownResponse {

@@ -1,4 +1,4 @@
-generator client {
+﻿generator client {
   provider = "prisma-client-js"
 }
 
@@ -37,6 +37,7 @@ model Tenant {
   id        String         @id @default(uuid()) @db.Uuid
   name      String
   status    ResourceStatus @default(ACTIVE)
+  totalBudgetUsd Decimal? @default(1000) @db.Decimal(12, 2)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
@@ -185,8 +186,6 @@ model Team {
   name        String
   description String?
   status      ResourceStatus @default(ACTIVE)
-  monthlyBudgetUsd Decimal? @db.Decimal(12, 2)
-  budgetWarningThresholdPercent Int @default(80)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 

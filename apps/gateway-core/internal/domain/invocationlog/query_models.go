@@ -278,6 +278,15 @@ type ApplicationBreakdown struct {
 	CostUSD       string
 }
 
+type ProjectBreakdown struct {
+	ProjectID        string
+	RequestCount     int64
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	CostMicroUSD     int64
+	CostUSD          string
+}
 type CostByModel struct {
 	SelectedProvider string
 	SelectedModel    string
@@ -345,6 +354,7 @@ type DashboardOverviewFields struct {
 	SafetyOutcomeCounts   map[string]int64
 	CacheOutcomeCounts    map[string]int64
 	FallbackOutcomeCounts map[string]int64
+	ProjectBreakdown      []ProjectBreakdown
 	ApplicationBreakdown  []ApplicationBreakdown
 	CostByModel           []CostByModel
 	BudgetScopeBreakdown  []BudgetScopeBreakdown
@@ -380,6 +390,7 @@ type DashboardOverviewAggregate struct {
 	SafetyOutcomeCounts         map[string]int64
 	CacheOutcomeCounts          map[string]int64
 	FallbackOutcomeCounts       map[string]int64
+	ProjectBreakdown            []ProjectBreakdown
 	ApplicationBreakdown        []ApplicationBreakdown
 	CostByModel                 []CostByModel
 	BudgetScopeBreakdown        []BudgetScopeBreakdown
@@ -401,6 +412,10 @@ type budgetScopeKey struct {
 
 type applicationKey struct {
 	applicationID string
+}
+
+type projectKey struct {
+	projectID string
 }
 
 func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, error) {
@@ -762,6 +777,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	costCounts := map[dashboardModelKey]CostByModel{}
 	budgetCounts := map[budgetScopeKey]BudgetScopeBreakdown{}
 	applicationCounts := map[applicationKey]ApplicationBreakdown{}
+	projectCounts := map[projectKey]ProjectBreakdown{}
 
 	for _, log := range logs {
 		resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, log.ApplicationID)
@@ -823,6 +839,17 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 			applicationItem.CostMicroUSD += log.CostMicroUSD
 			applicationCounts[appKey] = applicationItem
 		}
+		if log.ProjectID != "" {
+			projectKey := projectKey{projectID: log.ProjectID}
+			projectItem := projectCounts[projectKey]
+			projectItem.ProjectID = log.ProjectID
+			projectItem.RequestCount++
+			projectItem.PromptTokens += log.PromptTokens
+			projectItem.CompletionTokens += log.CompletionTokens
+			projectItem.TotalTokens += log.TotalTokens
+			projectItem.CostMicroUSD += log.CostMicroUSD
+			projectCounts[projectKey] = projectItem
+		}
 		if isLatencyEligibleStatus(terminalStatus) {
 			latencies = append(latencies, log.LatencyMs)
 			gatewayInternalLatencies = append(gatewayInternalLatencies, latencySummary.GatewayInternalLatencyMs)
@@ -875,6 +902,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	aggregate.CostByModel = costCountsFromMap(costCounts)
 	aggregate.BudgetScopeBreakdown = budgetScopeBreakdownsFromMap(budgetCounts)
 	aggregate.ApplicationBreakdown = applicationBreakdownsFromMap(applicationCounts)
+	aggregate.ProjectBreakdown = projectBreakdownsFromMap(projectCounts)
 
 	return BuildDashboardOverviewFromAggregate(aggregate)
 }
@@ -907,6 +935,7 @@ func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) D
 		SafetyOutcomeCounts:   mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
 		CacheOutcomeCounts:    mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
 		FallbackOutcomeCounts: mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
+		ProjectBreakdown:      normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
 		ApplicationBreakdown:  normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
 		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
 		BudgetScopeBreakdown:  normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
@@ -1181,6 +1210,33 @@ func applicationBreakdownsFromMap(counts map[applicationKey]ApplicationBreakdown
 		items = append(items, item)
 	}
 	return normalizedApplicationBreakdowns(items)
+}
+
+func projectBreakdownsFromMap(counts map[projectKey]ProjectBreakdown) []ProjectBreakdown {
+	items := make([]ProjectBreakdown, 0, len(counts))
+	for _, item := range counts {
+		items = append(items, item)
+	}
+	return normalizedProjectBreakdowns(items)
+}
+
+func normalizedProjectBreakdowns(items []ProjectBreakdown) []ProjectBreakdown {
+	normalized := make([]ProjectBreakdown, 0, len(items))
+	for _, item := range items {
+		item.ProjectID = strings.TrimSpace(item.ProjectID)
+		if item.ProjectID == "" {
+			continue
+		}
+		item.CostUSD = FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		normalized = append(normalized, item)
+	}
+	sort.Slice(normalized, func(i int, j int) bool {
+		if normalized[i].CostMicroUSD != normalized[j].CostMicroUSD {
+			return normalized[i].CostMicroUSD > normalized[j].CostMicroUSD
+		}
+		return normalized[i].ProjectID < normalized[j].ProjectID
+	})
+	return normalized
 }
 
 func normalizedApplicationBreakdowns(items []ApplicationBreakdown) []ApplicationBreakdown {

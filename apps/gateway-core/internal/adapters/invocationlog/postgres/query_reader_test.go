@@ -304,8 +304,9 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			[]byte(`{"success":1,"not_called":5}`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			[]byte(`[{"projectId":"project_demo","requestCount":6,"promptTokens":13,"completionTokens":20,"totalTokens":33,"costMicroUsd":100}]`),
 			[]byte(`[{"applicationId":"app_demo","requestCount":6,"costMicroUsd":100}]`),
-			[]byte(`[{"budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application","requestCount":6,"costMicroUsd":100}]`),
+			[]byte(`[{"budgetScopeType":"team","budgetScopeId":"team_demo","resolvedBy":"control_plane_rule","requestCount":6,"costMicroUsd":100}]`),
 			sql.NullTime{Time: lastLogCreatedAt, Valid: true},
 		}},
 	}
@@ -345,6 +346,9 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {
 		t.Fatalf("unexpected performance split: %+v", overview.Performance)
 	}
+	if len(overview.ProjectBreakdown) != 1 || overview.ProjectBreakdown[0].ProjectID != "project_demo" || overview.ProjectBreakdown[0].TotalTokens != 33 || overview.ProjectBreakdown[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected project breakdown: %+v", overview.ProjectBreakdown)
+	}
 	if len(overview.ApplicationBreakdown) != 1 || overview.ApplicationBreakdown[0].ApplicationID != "app_demo" {
 		t.Fatalf("unexpected application breakdown: %+v", overview.ApplicationBreakdown)
 	}
@@ -354,7 +358,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if len(overview.CostByModel) != 1 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
 	}
-	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
 	}
 	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
@@ -377,6 +381,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"fallback_outcome_counts",
 		"routing_count_by_model",
 		"cost_by_model",
+		"project_breakdown",
 		"application_breakdown",
 		"budget_scope_breakdown",
 	} {
