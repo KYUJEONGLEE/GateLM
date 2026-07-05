@@ -185,6 +185,49 @@ describe('RuntimeConfigsService', () => {
     expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
   });
 
+  it('accepts optional v2 safety detector categories in draft configs', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const optionalDetectorTypes = [
+      'email',
+      'phone_number',
+      'person_name',
+      'postal_address',
+      'organization_name',
+    ] as const;
+
+    const result = await service.upsertDraft(applicationId, {
+      safetyPolicy: {
+        detectors: optionalDetectorTypes.map((type) => ({
+          type,
+          enabled: true,
+          action: 'redact',
+          placeholder: `[${type.toUpperCase()}_REDACTED]`,
+        })),
+      },
+    });
+
+    expect(
+      result.runtimeConfig.safetyPolicy.detectors.map(
+        (detector) => detector.type,
+      ),
+    ).toEqual([...optionalDetectorTypes]);
+    expect(result.runtimeConfig.safetyPolicy.detectors).toEqual(
+      optionalDetectorTypes.map((type) =>
+        expect.objectContaining({
+          type,
+          enabled: true,
+          action: 'redact',
+        }),
+      ),
+    );
+  });
+
   it('keeps optional high-quality routing model in the runtime policy', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma, {
