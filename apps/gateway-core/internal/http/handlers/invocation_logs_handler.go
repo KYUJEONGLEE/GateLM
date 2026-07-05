@@ -105,36 +105,34 @@ type dashboardFilterResponse struct {
 }
 
 type dashboardTotalsResponse struct {
-	TotalRequests            int64                          `json:"totalRequests"`
-	SuccessfulRequests       int64                          `json:"successfulRequests"`
-	FailedRequests           int64                          `json:"failedRequests"`
-	BlockedRequests          int64                          `json:"blockedRequests"`
-	RateLimitedRequests      int64                          `json:"rateLimitedRequests"`
-	CancelledRequests        int64                          `json:"cancelledRequests"`
-	CacheHitRequests         int64                          `json:"cacheHitRequests"`
-	CacheEligibleRequests    int64                          `json:"cacheEligibleRequests"`
-	CacheHitRate             *float64                       `json:"cacheHitRate"`
-	ExactCacheHitRate        *float64                       `json:"exactCacheHitRate"`
-	FallbackSuccessCount     int64                          `json:"fallbackSuccessCount"`
-	PromptTokens             int64                          `json:"promptTokens"`
-	CompletionTokens         int64                          `json:"completionTokens"`
-	TotalTokens              int64                          `json:"totalTokens"`
-	TotalCostMicroUSD        int64                          `json:"totalCostMicroUsd"`
-	TotalCostUSD             string                         `json:"totalCostUsd"`
-	SavedCostMicroUSD        int64                          `json:"savedCostMicroUsd"`
-	SavedCostUSD             string                         `json:"savedCostUsd"`
-	AverageLatencyMs         *float64                       `json:"averageLatencyMs"`
-	P95LatencyMs             *float64                       `json:"p95LatencyMs"`
-	AverageResponseTimeMs    *float64                       `json:"averageResponseTimeMs"`
-	MaskingActionCounts      map[string]int64               `json:"maskingActionCounts"`
-	RoutingCountByModel      []routingCountByModelResponse  `json:"routingCountByModel"`
-	StatusCounts             map[string]int64               `json:"statusCounts"`
-	CostByProject            []projectBreakdownResponse     `json:"costByProject"`
-	CostByModel              []costByModelResponse          `json:"costByModel"`
-	CostByBudgetScope        []budgetScopeBreakdownResponse `json:"costByBudgetScope"`
-	CostByTeamBudgetScope    []budgetScopeBreakdownResponse `json:"costByTeamBudgetScope"`
-	BudgetScopeBreakdown     []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
-	TeamBudgetScopeBreakdown []budgetScopeBreakdownResponse `json:"teamBudgetScopeBreakdown"`
+	TotalRequests         int64                          `json:"totalRequests"`
+	SuccessfulRequests    int64                          `json:"successfulRequests"`
+	FailedRequests        int64                          `json:"failedRequests"`
+	BlockedRequests       int64                          `json:"blockedRequests"`
+	RateLimitedRequests   int64                          `json:"rateLimitedRequests"`
+	CancelledRequests     int64                          `json:"cancelledRequests"`
+	CacheHitRequests      int64                          `json:"cacheHitRequests"`
+	CacheEligibleRequests int64                          `json:"cacheEligibleRequests"`
+	CacheHitRate          *float64                       `json:"cacheHitRate"`
+	ExactCacheHitRate     *float64                       `json:"exactCacheHitRate"`
+	FallbackSuccessCount  int64                          `json:"fallbackSuccessCount"`
+	PromptTokens          int64                          `json:"promptTokens"`
+	CompletionTokens      int64                          `json:"completionTokens"`
+	TotalTokens           int64                          `json:"totalTokens"`
+	TotalCostMicroUSD     int64                          `json:"totalCostMicroUsd"`
+	TotalCostUSD          string                         `json:"totalCostUsd"`
+	SavedCostMicroUSD     int64                          `json:"savedCostMicroUsd"`
+	SavedCostUSD          string                         `json:"savedCostUsd"`
+	AverageLatencyMs      *float64                       `json:"averageLatencyMs"`
+	P95LatencyMs          *float64                       `json:"p95LatencyMs"`
+	AverageResponseTimeMs *float64                       `json:"averageResponseTimeMs"`
+	MaskingActionCounts   map[string]int64               `json:"maskingActionCounts"`
+	RoutingCountByModel   []routingCountByModelResponse  `json:"routingCountByModel"`
+	StatusCounts          map[string]int64               `json:"statusCounts"`
+	CostByProject         []projectBreakdownResponse     `json:"costByProject"`
+	CostByModel           []costByModelResponse          `json:"costByModel"`
+	CostByBudgetScope     []budgetScopeBreakdownResponse `json:"costByBudgetScope"`
+	BudgetScopeBreakdown  []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
 }
 
 type dashboardDataFreshnessResponse struct {
@@ -170,7 +168,6 @@ type dashboardBreakdownsResponse struct {
 	ByProject         []projectBreakdownResponse       `json:"byProject"`
 	ByApplication     []applicationBreakdownResponse   `json:"byApplication"`
 	ByBudgetScope     []budgetScopeBreakdownResponse   `json:"byBudgetScope"`
-	ByTeamBudgetScope []budgetScopeBreakdownResponse   `json:"byTeamBudgetScope"`
 	ByProviderModel   []providerModelBreakdownResponse `json:"byProviderModel"`
 	BySafetyOutcome   []outcomeBreakdownResponse       `json:"bySafetyOutcome"`
 	ByCacheOutcome    []outcomeBreakdownResponse       `json:"byCacheOutcome"`
@@ -612,36 +609,34 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 			ResolvedBy:      stringPointerOrNil(filter.BudgetScope.ResolvedBy),
 		},
 		Totals: dashboardTotalsResponse{
-			TotalRequests:            overview.TotalRequests,
-			SuccessfulRequests:       overview.SuccessfulRequests,
-			FailedRequests:           overview.FailedRequests,
-			BlockedRequests:          overview.BlockedRequests,
-			RateLimitedRequests:      overview.RateLimitedRequests,
-			CancelledRequests:        overview.CancelledRequests,
-			CacheHitRequests:         overview.CacheHitRequests,
-			CacheEligibleRequests:    overview.CacheEligibleRequests,
-			CacheHitRate:             overview.CacheHitRate,
-			ExactCacheHitRate:        overview.CacheHitRate,
-			FallbackSuccessCount:     overview.FallbackSuccessCount,
-			PromptTokens:             overview.PromptTokens,
-			CompletionTokens:         overview.CompletionTokens,
-			TotalTokens:              overview.TotalTokens,
-			TotalCostMicroUSD:        overview.TotalCostMicroUSD,
-			TotalCostUSD:             overview.TotalCostUSD,
-			SavedCostMicroUSD:        overview.SavedCostMicroUSD,
-			SavedCostUSD:             overview.SavedCostUSD,
-			AverageLatencyMs:         overview.AverageLatencyMs,
-			P95LatencyMs:             overview.P95LatencyMs,
-			AverageResponseTimeMs:    overview.AverageResponseTimeMs,
-			MaskingActionCounts:      copyInt64Map(overview.MaskingActionCounts),
-			RoutingCountByModel:      routingCountByModelResponses(overview.RoutingCountByModel),
-			StatusCounts:             copyInt64Map(overview.StatusCounts),
-			CostByProject:            projectBreakdownResponses(overview.ProjectBreakdown),
-			CostByModel:              costByModelResponses(overview.CostByModel),
-			CostByBudgetScope:        budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
-			CostByTeamBudgetScope:    budgetScopeBreakdownResponses(overview.TeamBudgetScopeBreakdown),
-			BudgetScopeBreakdown:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
-			TeamBudgetScopeBreakdown: budgetScopeBreakdownResponses(overview.TeamBudgetScopeBreakdown),
+			TotalRequests:         overview.TotalRequests,
+			SuccessfulRequests:    overview.SuccessfulRequests,
+			FailedRequests:        overview.FailedRequests,
+			BlockedRequests:       overview.BlockedRequests,
+			RateLimitedRequests:   overview.RateLimitedRequests,
+			CancelledRequests:     overview.CancelledRequests,
+			CacheHitRequests:      overview.CacheHitRequests,
+			CacheEligibleRequests: overview.CacheEligibleRequests,
+			CacheHitRate:          overview.CacheHitRate,
+			ExactCacheHitRate:     overview.CacheHitRate,
+			FallbackSuccessCount:  overview.FallbackSuccessCount,
+			PromptTokens:          overview.PromptTokens,
+			CompletionTokens:      overview.CompletionTokens,
+			TotalTokens:           overview.TotalTokens,
+			TotalCostMicroUSD:     overview.TotalCostMicroUSD,
+			TotalCostUSD:          overview.TotalCostUSD,
+			SavedCostMicroUSD:     overview.SavedCostMicroUSD,
+			SavedCostUSD:          overview.SavedCostUSD,
+			AverageLatencyMs:      overview.AverageLatencyMs,
+			P95LatencyMs:          overview.P95LatencyMs,
+			AverageResponseTimeMs: overview.AverageResponseTimeMs,
+			MaskingActionCounts:   copyInt64Map(overview.MaskingActionCounts),
+			RoutingCountByModel:   routingCountByModelResponses(overview.RoutingCountByModel),
+			StatusCounts:          copyInt64Map(overview.StatusCounts),
+			CostByProject:         projectBreakdownResponses(overview.ProjectBreakdown),
+			CostByModel:           costByModelResponses(overview.CostByModel),
+			CostByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+			BudgetScopeBreakdown:  budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 		},
 		DataFreshness: dashboardDataFreshnessResponse{
 			Source:           overview.DataFreshness.Source,
@@ -817,7 +812,6 @@ func dashboardBreakdowns(overview invocationlog.DashboardOverviewFields) dashboa
 		ByProject:         projectBreakdownResponses(overview.ProjectBreakdown),
 		ByApplication:     applicationBreakdownResponses(overview.ApplicationBreakdown),
 		ByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
-		ByTeamBudgetScope: budgetScopeBreakdownResponses(overview.TeamBudgetScopeBreakdown),
 		ByProviderModel:   providerModelBreakdownResponses(overview.CostByModel, overview.Performance.P95ProviderLatencyMs),
 		BySafetyOutcome:   outcomeBreakdownResponses(overview.SafetyOutcomeCounts),
 		ByCacheOutcome:    outcomeBreakdownResponses(overview.CacheOutcomeCounts),

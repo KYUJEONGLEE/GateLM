@@ -210,9 +210,6 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.Type != budget.ScopeTypeTeam || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.BudgetScopeBreakdown[0].RequestCount != 2 {
 		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
 	}
-	if len(overview.TeamBudgetScopeBreakdown) != 1 || overview.TeamBudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.TeamBudgetScopeBreakdown[0].CostUSD != "0.000100" {
-		t.Fatalf("unexpected team budget scope breakdown: %+v", overview.TeamBudgetScopeBreakdown)
-	}
 	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
 	}

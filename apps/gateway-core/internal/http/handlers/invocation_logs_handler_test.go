@@ -537,12 +537,6 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				CostMicroUSD: 256,
 				CostUSD:      "0.000256",
 			}},
-			TeamBudgetScopeBreakdown: []invocationlog.BudgetScopeBreakdown{{
-				BudgetScope:  budget.Scope{Type: budget.ScopeTypeTeam, ID: "team_demo", ResolvedBy: budget.ResolvedByControlPlaneRule},
-				RequestCount: 6,
-				CostMicroUSD: 256,
-				CostUSD:      "0.000256",
-			}},
 			DataFreshness: invocationlog.DashboardDataFreshness{
 				Source:           "postgresql_request_log",
 				RecordCount:      6,
@@ -599,14 +593,8 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	if len(response.Data.Totals.CostByProject) != 1 || response.Data.Totals.CostByProject[0].ProjectID != "project_demo" || response.Data.Totals.CostByProject[0].CostUSD != "0.000256" {
 		t.Fatalf("unexpected cost by project: %+v", response.Data.Totals.CostByProject)
 	}
-	if len(response.Data.Totals.CostByTeamBudgetScope) != 1 || response.Data.Totals.CostByTeamBudgetScope[0].BudgetScopeID != "team_demo" {
-		t.Fatalf("unexpected cost by team budget scope: %+v", response.Data.Totals.CostByTeamBudgetScope)
-	}
 	if len(response.Data.Breakdowns.ByProject) != 1 || response.Data.Breakdowns.ByProject[0].ProjectID != "project_demo" {
 		t.Fatalf("unexpected project breakdown response: %+v", response.Data.Breakdowns.ByProject)
-	}
-	if len(response.Data.Breakdowns.ByTeamBudgetScope) != 1 || response.Data.Breakdowns.ByTeamBudgetScope[0].BudgetScopeID != "team_demo" {
-		t.Fatalf("unexpected team budget scope breakdown response: %+v", response.Data.Breakdowns.ByTeamBudgetScope)
 	}
 	if response.Data.DataFreshness.Source != "postgresql_request_log" || response.Data.DataFreshness.RecordCount != 6 || response.Data.DataFreshness.LastLogCreatedAt == nil || !response.Data.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || !response.Data.DataFreshness.GeneratedAt.Equal(generatedAt) {
 		t.Fatalf("unexpected data freshness: %+v", response.Data.DataFreshness)

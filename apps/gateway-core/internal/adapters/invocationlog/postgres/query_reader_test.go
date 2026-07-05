@@ -238,12 +238,12 @@ func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testin
 
 func TestApplyInvocationMetadataFieldsMapsPromptAndResponseCapture(t *testing.T) {
 	log := invocationlog.LlmInvocationLog{}
-	applyInvocationMetadataFields(&log, []byte(`{"promptCapture":{"enabled":true,"mode":"log_safe_full","visibility":"admin_request_detail","capturedPrompt":"문의: [EMAIL_REDACTED]","truncated":false,"maxChars":8000},"responseCapture":{"enabled":true,"mode":"raw_full","visibility":"admin_request_detail","capturedResponse":"Mock response","truncated":false,"maxChars":8000}}`))
+	applyInvocationMetadataFields(&log, []byte(`{"promptCapture":{"enabled":true,"mode":"log_safe_full","visibility":"admin_request_detail","capturedPrompt":"?얜챷?? [EMAIL_REDACTED]","truncated":false,"maxChars":8000},"responseCapture":{"enabled":true,"mode":"raw_full","visibility":"admin_request_detail","capturedResponse":"Mock response","truncated":false,"maxChars":8000}}`))
 
 	if !log.PromptCapture.Enabled ||
 		log.PromptCapture.Mode != "log_safe_full" ||
 		log.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail ||
-		log.PromptCapture.CapturedPrompt != "문의: [EMAIL_REDACTED]" ||
+		log.PromptCapture.CapturedPrompt != "?얜챷?? [EMAIL_REDACTED]" ||
 		log.PromptCapture.Truncated ||
 		log.PromptCapture.MaxChars != 8000 {
 		t.Fatalf("unexpected prompt capture fields: %+v", log.PromptCapture)
@@ -360,9 +360,6 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	}
 	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
-	}
-	if len(overview.TeamBudgetScopeBreakdown) != 1 || overview.TeamBudgetScopeBreakdown[0].BudgetScope.Type != "team" || overview.TeamBudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" {
-		t.Fatalf("unexpected team budget scope breakdown: %+v", overview.TeamBudgetScopeBreakdown)
 	}
 	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)

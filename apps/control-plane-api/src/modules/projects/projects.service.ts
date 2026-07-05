@@ -1,5 +1,5 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Project } from '@prisma/client';
+﻿import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Project, ResourceStatus } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -11,6 +11,7 @@ import {
   UpdateProjectDto,
 } from './dto/project.dto';
 
+const DEFAULT_TENANT_BUDGET_USD = 1000;
 const DEFAULT_PROJECT_BUDGET_USD = 100;
 
 @Injectable()
@@ -21,14 +22,21 @@ export class ProjectsService {
     tenantId: string,
     dto: CreateProjectDto,
   ): Promise<ProjectResponseDto> {
-    await this.assertTenantExists(tenantId);
+    const totalBudgetUsd = dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD;
+
+    await this.assertTenantBudgetCanCoverProjects({
+      tenantId,
+      projectId: null,
+      totalBudgetUsd,
+      status: ResourceStatus.ACTIVE,
+    });
 
     const project = await this.prisma.project.create({
       data: {
         tenantId,
         name: dto.name,
         description: this.toNullableDescription(dto.description),
-        totalBudgetUsd: dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD,
+        totalBudgetUsd,
       },
     });
 
@@ -66,6 +74,7 @@ export class ProjectsService {
     dto: UpdateProjectDto,
   ): Promise<ProjectResponseDto> {
     const data: Prisma.ProjectUpdateInput = {};
+    let current: Project | null = null;
 
     if (dto.name !== undefined) {
       data.name = dto.name;
@@ -76,16 +85,32 @@ export class ProjectsService {
     if (dto.status !== undefined) {
       data.status = dto.status;
     }
-    if (dto.totalBudgetUsd !== undefined) {
-      await this.assertProjectBudgetCanCoverApplications(
+    if (dto.totalBudgetUsd !== undefined || dto.status !== undefined) {
+      current = await this.getProjectEntityOrThrow(projectId);
+      const nextTotalBudgetUsd =
+        dto.totalBudgetUsd ?? this.toProjectBudgetUsd(current.totalBudgetUsd);
+      const nextStatus = dto.status ?? current.status;
+
+      if (dto.totalBudgetUsd !== undefined) {
+        await this.assertProjectBudgetCanCoverApplications(
+          projectId,
+          nextTotalBudgetUsd,
+        );
+        data.totalBudgetUsd = nextTotalBudgetUsd;
+      }
+
+      await this.assertTenantBudgetCanCoverProjects({
+        tenantId: current.tenantId,
         projectId,
-        dto.totalBudgetUsd,
-      );
-      data.totalBudgetUsd = dto.totalBudgetUsd;
+        totalBudgetUsd: nextTotalBudgetUsd,
+        status: nextStatus,
+      });
     }
 
     if (Object.keys(data).length === 0) {
-      return this.getProjectOrThrow(projectId);
+      return current
+        ? this.toProjectResponse(current)
+        : this.getProjectOrThrow(projectId);
     }
 
     try {
@@ -116,6 +141,10 @@ export class ProjectsService {
   }
 
   private async getProjectOrThrow(projectId: string): Promise<ProjectResponseDto> {
+    return this.toProjectResponse(await this.getProjectEntityOrThrow(projectId));
+  }
+
+  private async getProjectEntityOrThrow(projectId: string): Promise<Project> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
@@ -124,11 +153,63 @@ export class ProjectsService {
       throw new NotFoundException('Project not found.');
     }
 
-    return this.toProjectResponse(project);
+    return project;
   }
 
   private toNullableDescription(value: string | undefined): string | null {
     return value && value.length > 0 ? value : null;
+  }
+
+  private async assertTenantBudgetCanCoverProjects(args: {
+    tenantId: string;
+    projectId: string | null;
+    totalBudgetUsd: number;
+    status: ResourceStatus;
+  }): Promise<void> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: args.tenantId },
+      select: {
+        id: true,
+        totalBudgetUsd: true,
+        projects: {
+          where: {
+            ...(args.projectId
+              ? {
+                  id: {
+                    not: args.projectId,
+                  },
+                }
+              : {}),
+            status: {
+              not: 'ARCHIVED',
+            },
+          },
+          select: {
+            totalBudgetUsd: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found.');
+    }
+
+    const tenantBudgetUsd =
+      this.toNumber(tenant.totalBudgetUsd) ?? DEFAULT_TENANT_BUDGET_USD;
+    const existingBudgetUsd = tenant.projects.reduce(
+      (total, project) =>
+        total + this.toProjectBudgetUsd(project.totalBudgetUsd),
+      0,
+    );
+    const nextBudgetUsd =
+      args.status === ResourceStatus.ARCHIVED
+        ? 0
+        : Math.max(0, args.totalBudgetUsd);
+
+    if (existingBudgetUsd + nextBudgetUsd > tenantBudgetUsd) {
+      throw new ConflictException('Project budgets exceed the tenant budget.');
+    }
   }
 
   private async assertProjectBudgetCanCoverApplications(
@@ -194,6 +275,10 @@ export class ProjectsService {
     return Math.max(0, args.budgetLimitUsd ?? 0);
   }
 
+  private toProjectBudgetUsd(value: Prisma.Decimal | null | undefined): number {
+    return this.toNumber(value) ?? DEFAULT_PROJECT_BUDGET_USD;
+  }
+
   private toNumber(value: Prisma.Decimal | null | undefined): number | null {
     return value === null || value === undefined ? null : value.toNumber();
   }
@@ -214,8 +299,7 @@ export class ProjectsService {
       name: project.name,
       description: project.description,
       status: project.status,
-      totalBudgetUsd:
-        this.toNumber(project.totalBudgetUsd) ?? DEFAULT_PROJECT_BUDGET_USD,
+      totalBudgetUsd: this.toProjectBudgetUsd(project.totalBudgetUsd),
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
     };

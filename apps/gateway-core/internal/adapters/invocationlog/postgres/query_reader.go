@@ -266,7 +266,6 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		ApplicationBreakdown:        applicationBreakdown,
 		CostByModel:                 costByModel,
 		BudgetScopeBreakdown:        budgetScopeBreakdown,
-		TeamBudgetScopeBreakdown:    teamBudgetScopeBreakdown(budgetScopeBreakdown),
 		LastLogCreatedAt:            nullableTimePointer(lastLogCreatedAt),
 		GeneratedAt:                 time.Now().UTC(),
 	}), nil
@@ -1177,16 +1176,6 @@ func decodeApplicationBreakdownJSON(raw []byte) ([]invocationlog.ApplicationBrea
 		})
 	}
 	return items, nil
-}
-
-func teamBudgetScopeBreakdown(items []invocationlog.BudgetScopeBreakdown) []invocationlog.BudgetScopeBreakdown {
-	teams := make([]invocationlog.BudgetScopeBreakdown, 0, len(items))
-	for _, item := range items {
-		if item.BudgetScope.Type == budget.ScopeTypeTeam {
-			teams = append(teams, item)
-		}
-	}
-	return teams
 }
 
 func decodeBudgetScopeBreakdownJSON(raw []byte) ([]invocationlog.BudgetScopeBreakdown, error) {

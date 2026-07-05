@@ -328,40 +328,39 @@ type DashboardPerformance struct {
 }
 
 type DashboardOverviewFields struct {
-	TotalRequests            int64
-	SuccessfulRequests       int64
-	FailedRequests           int64
-	BlockedRequests          int64
-	RateLimitedRequests      int64
-	CancelledRequests        int64
-	CacheHitRequests         int64
-	CacheEligibleRequests    int64
-	CacheHitRate             *float64
-	FallbackSuccessCount     int64
-	PromptTokens             int64
-	CompletionTokens         int64
-	TotalTokens              int64
-	TotalCostMicroUSD        int64
-	TotalCostUSD             string
-	SavedCostMicroUSD        int64
-	SavedCostUSD             string
-	AverageLatencyMs         *float64
-	P95LatencyMs             *float64
-	AverageResponseTimeMs    *float64
-	MaskingActionCounts      map[string]int64
-	RoutingCountByModel      []RoutingCountByModel
-	StatusCounts             map[string]int64
-	SafetyOutcomeCounts      map[string]int64
-	CacheOutcomeCounts       map[string]int64
-	FallbackOutcomeCounts    map[string]int64
-	ProjectBreakdown         []ProjectBreakdown
-	ApplicationBreakdown     []ApplicationBreakdown
-	CostByModel              []CostByModel
-	BudgetScopeBreakdown     []BudgetScopeBreakdown
-	TeamBudgetScopeBreakdown []BudgetScopeBreakdown
-	DataFreshness            DashboardDataFreshness
-	QueryBudget              DashboardQueryBudget
-	Performance              DashboardPerformance
+	TotalRequests         int64
+	SuccessfulRequests    int64
+	FailedRequests        int64
+	BlockedRequests       int64
+	RateLimitedRequests   int64
+	CancelledRequests     int64
+	CacheHitRequests      int64
+	CacheEligibleRequests int64
+	CacheHitRate          *float64
+	FallbackSuccessCount  int64
+	PromptTokens          int64
+	CompletionTokens      int64
+	TotalTokens           int64
+	TotalCostMicroUSD     int64
+	TotalCostUSD          string
+	SavedCostMicroUSD     int64
+	SavedCostUSD          string
+	AverageLatencyMs      *float64
+	P95LatencyMs          *float64
+	AverageResponseTimeMs *float64
+	MaskingActionCounts   map[string]int64
+	RoutingCountByModel   []RoutingCountByModel
+	StatusCounts          map[string]int64
+	SafetyOutcomeCounts   map[string]int64
+	CacheOutcomeCounts    map[string]int64
+	FallbackOutcomeCounts map[string]int64
+	ProjectBreakdown      []ProjectBreakdown
+	ApplicationBreakdown  []ApplicationBreakdown
+	CostByModel           []CostByModel
+	BudgetScopeBreakdown  []BudgetScopeBreakdown
+	DataFreshness         DashboardDataFreshness
+	QueryBudget           DashboardQueryBudget
+	Performance           DashboardPerformance
 }
 
 type DashboardOverviewAggregate struct {
@@ -395,7 +394,6 @@ type DashboardOverviewAggregate struct {
 	ApplicationBreakdown        []ApplicationBreakdown
 	CostByModel                 []CostByModel
 	BudgetScopeBreakdown        []BudgetScopeBreakdown
-	TeamBudgetScopeBreakdown    []BudgetScopeBreakdown
 	LastLogCreatedAt            *time.Time
 	GeneratedAt                 time.Time
 }
@@ -903,7 +901,6 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	aggregate.RoutingCountByModel = routingCountsFromMap(routingCounts)
 	aggregate.CostByModel = costCountsFromMap(costCounts)
 	aggregate.BudgetScopeBreakdown = budgetScopeBreakdownsFromMap(budgetCounts)
-	aggregate.TeamBudgetScopeBreakdown = teamBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown)
 	aggregate.ApplicationBreakdown = applicationBreakdownsFromMap(applicationCounts)
 	aggregate.ProjectBreakdown = projectBreakdownsFromMap(projectCounts)
 
@@ -912,41 +909,36 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 
 func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) DashboardOverviewFields {
 	generatedAt := generatedAtOrNow(aggregate.GeneratedAt)
-	teamBudgetScopeBreakdown := aggregate.TeamBudgetScopeBreakdown
-	if len(teamBudgetScopeBreakdown) == 0 {
-		teamBudgetScopeBreakdown = teamBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown)
-	}
 	overview := DashboardOverviewFields{
-		TotalRequests:            aggregate.TotalRequests,
-		SuccessfulRequests:       aggregate.SuccessfulRequests,
-		FailedRequests:           aggregate.FailedRequests,
-		BlockedRequests:          aggregate.BlockedRequests,
-		RateLimitedRequests:      aggregate.RateLimitedRequests,
-		CancelledRequests:        aggregate.CancelledRequests,
-		CacheHitRequests:         aggregate.CacheHitRequests,
-		CacheEligibleRequests:    aggregate.CacheEligibleRequests,
-		FallbackSuccessCount:     aggregate.FallbackSuccessCount,
-		PromptTokens:             aggregate.PromptTokens,
-		CompletionTokens:         aggregate.CompletionTokens,
-		TotalTokens:              aggregate.TotalTokens,
-		TotalCostMicroUSD:        aggregate.TotalCostMicroUSD,
-		TotalCostUSD:             FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
-		SavedCostMicroUSD:        aggregate.SavedCostMicroUSD,
-		SavedCostUSD:             FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
-		AverageLatencyMs:         aggregate.AverageLatencyMs,
-		P95LatencyMs:             aggregate.P95LatencyMs,
-		AverageResponseTimeMs:    aggregate.AverageLatencyMs,
-		MaskingActionCounts:      mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
-		RoutingCountByModel:      append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
-		StatusCounts:             mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
-		SafetyOutcomeCounts:      mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
-		CacheOutcomeCounts:       mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
-		FallbackOutcomeCounts:    mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
-		ProjectBreakdown:         normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
-		ApplicationBreakdown:     normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
-		CostByModel:              normalizedCostByModel(aggregate.CostByModel),
-		BudgetScopeBreakdown:     normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
-		TeamBudgetScopeBreakdown: normalizedBudgetScopeBreakdowns(teamBudgetScopeBreakdown),
+		TotalRequests:         aggregate.TotalRequests,
+		SuccessfulRequests:    aggregate.SuccessfulRequests,
+		FailedRequests:        aggregate.FailedRequests,
+		BlockedRequests:       aggregate.BlockedRequests,
+		RateLimitedRequests:   aggregate.RateLimitedRequests,
+		CancelledRequests:     aggregate.CancelledRequests,
+		CacheHitRequests:      aggregate.CacheHitRequests,
+		CacheEligibleRequests: aggregate.CacheEligibleRequests,
+		FallbackSuccessCount:  aggregate.FallbackSuccessCount,
+		PromptTokens:          aggregate.PromptTokens,
+		CompletionTokens:      aggregate.CompletionTokens,
+		TotalTokens:           aggregate.TotalTokens,
+		TotalCostMicroUSD:     aggregate.TotalCostMicroUSD,
+		TotalCostUSD:          FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
+		SavedCostMicroUSD:     aggregate.SavedCostMicroUSD,
+		SavedCostUSD:          FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
+		AverageLatencyMs:      aggregate.AverageLatencyMs,
+		P95LatencyMs:          aggregate.P95LatencyMs,
+		AverageResponseTimeMs: aggregate.AverageLatencyMs,
+		MaskingActionCounts:   mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
+		RoutingCountByModel:   append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
+		StatusCounts:          mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
+		SafetyOutcomeCounts:   mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
+		CacheOutcomeCounts:    mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
+		FallbackOutcomeCounts: mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
+		ProjectBreakdown:      normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
+		ApplicationBreakdown:  normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
+		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
+		BudgetScopeBreakdown:  normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
 		DataFreshness: DashboardDataFreshness{
 			Source:           "postgresql_request_log",
 			RecordCount:      aggregate.TotalRequests,
@@ -1297,17 +1289,6 @@ func normalizedBudgetScopeBreakdowns(items []BudgetScopeBreakdown) []BudgetScope
 		return normalized[i].BudgetScope.ResolvedBy < normalized[j].BudgetScope.ResolvedBy
 	})
 	return normalized
-}
-
-func teamBudgetScopeBreakdowns(items []BudgetScopeBreakdown) []BudgetScopeBreakdown {
-	normalized := normalizedBudgetScopeBreakdowns(items)
-	teams := make([]BudgetScopeBreakdown, 0, len(normalized))
-	for _, item := range normalized {
-		if item.BudgetScope.Type == budget.ScopeTypeTeam {
-			teams = append(teams, item)
-		}
-	}
-	return teams
 }
 
 func generatedAtOrNow(generatedAt time.Time) time.Time {
