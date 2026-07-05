@@ -22,8 +22,6 @@ reports/*
 !reports/rate-limit/
 reports/rate-limit/*
 !reports/rate-limit/README.md
-!reports/rate-limit/perf/
-!reports/rate-limit/perf/*.md
 !reports/rate-limit/report/
 !reports/rate-limit/report/*.md
 reports/rate-limit/runs/
