@@ -20,6 +20,8 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type DashboardOverviewProps = {
   activeTab?: DashboardTab;
+  applicationNames?: Record<string, string>;
+  applicationTokenRecords?: InvocationLogRecord[];
   detailPanel?: ReactNode;
   filters: DashboardFilterState;
   locale: Locale;
@@ -76,6 +78,7 @@ const dashboardText: Record<
       cacheHits: string;
       cacheRequests: string;
       cacheShare: string;
+      applicationTokens: string;
       modelShare: string;
       requests: string;
       requestTrend: string;
@@ -117,6 +120,7 @@ const dashboardText: Record<
       cacheHits: "Cache hits",
       cacheRequests: "Cache requests",
       cacheShare: "Cache share",
+      applicationTokens: "Token usage by application",
       modelShare: "Model request share",
       requests: "Requests",
       requestTrend: "Request trend",
@@ -176,6 +180,7 @@ const dashboardText: Record<
       cacheHits: "캐시 적중",
       cacheRequests: "캐시 요청",
       cacheShare: "캐시 비중",
+      applicationTokens: "앱별 토큰 사용량",
       modelShare: "모델 요청 비중",
       requests: "Requests",
       requestTrend: "요청 추이",
@@ -224,6 +229,8 @@ type DashboardCopy = (typeof dashboardText)[Locale];
 
 export function DashboardOverviewView({
   activeTab = "overview",
+  applicationNames = {},
+  applicationTokenRecords = [],
   detailPanel,
   filters,
   locale,
@@ -250,6 +257,10 @@ export function DashboardOverviewView({
   );
   const modelShareRows = getTopModelShareRows(overview);
   const cacheShareRows = getCacheShareRows(overview);
+  const applicationTokenShareRows = getApplicationTokenShareRows(
+    applicationTokenRecords,
+    applicationNames
+  );
 
   return (
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
@@ -314,6 +325,16 @@ export function DashboardOverviewView({
           </div>
           <PieShareChart ariaLabel={text.charts.modelShare} rows={modelShareRows} />
         </Link>
+
+        <article className="console-panel dashboard-chart-panel">
+          <div className="panel-heading dashboard-chart-heading">
+            <h3>{text.charts.applicationTokens}</h3>
+          </div>
+          <PieShareChart
+            ariaLabel={text.charts.applicationTokens}
+            rows={applicationTokenShareRows}
+          />
+        </article>
       </section>
 
       <section className="dashboard-grid">
@@ -1300,6 +1321,49 @@ function getCacheShareRows(overview: DashboardOverview) {
 
   return rows.length
     ? rows
+    : [
+        {
+          color: chartColors[0],
+          label: "none",
+          value: 1
+        }
+      ];
+}
+
+function getApplicationTokenShareRows(
+  records: InvocationLogRecord[],
+  applicationNames: Record<string, string>
+) {
+  const tokenByApplication = new Map<string, number>();
+
+  for (const record of records) {
+    const applicationId = record.applicationId || "unknown_application";
+    tokenByApplication.set(
+      applicationId,
+      (tokenByApplication.get(applicationId) ?? 0) + Math.max(record.totalTokens, 0)
+    );
+  }
+
+  const sortedRows = [...tokenByApplication.entries()]
+    .filter(([, totalTokens]) => totalTokens > 0)
+    .sort((left, right) => right[1] - left[1]);
+  const topRows = sortedRows.slice(0, 4).map(([applicationId, totalTokens], index) => ({
+    color: chartColors[index] ?? chartColors[0],
+    label: applicationNames[applicationId] ?? formatDisplayIdentifier(applicationId),
+    value: totalTokens
+  }));
+  const otherTokens = sortedRows.slice(4).reduce((sum, [, totalTokens]) => sum + totalTokens, 0);
+
+  if (otherTokens > 0) {
+    topRows.push({
+      color: chartColors[4] ?? chartColors[0],
+      label: "other",
+      value: otherTokens
+    });
+  }
+
+  return topRows.length
+    ? topRows
     : [
         {
           color: chartColors[0],

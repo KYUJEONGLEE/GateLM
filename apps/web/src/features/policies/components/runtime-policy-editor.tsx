@@ -4,6 +4,7 @@ import { Save, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
@@ -23,6 +24,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type RuntimePolicyEditorProps = {
   appTokenReadiness?: RuntimePolicyAppTokenReadiness;
+  breadcrumbItems?: BreadcrumbItem[];
   locale: Locale;
   model: RuntimePolicyModel;
 };
@@ -78,6 +80,7 @@ const policyText: Record<
     detectorType: string;
     close: string;
     details: string;
+    disabled: string;
     enabled: string;
     fallbackRoute: string;
     fixtureFallback: string;
@@ -113,6 +116,9 @@ const policyText: Record<
     routing: string;
     routingAdvanced: string;
     runtimeSnapshot: string;
+    responseCapture: string;
+    responseCaptureHint: string;
+    responseCaptureMaxChars: string;
     saveDraft: string;
     saveProviders: string;
     savingProviders: string;
@@ -157,6 +163,7 @@ const policyText: Record<
     detectorType: "Detector",
     close: "Close",
     details: "Details",
+    disabled: "Disabled",
     enabled: "Enabled",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
@@ -195,6 +202,10 @@ const policyText: Record<
     routing: "Routing",
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
+    responseCapture: "Response capture",
+    responseCaptureHint:
+      "Backend policy is preserved for publish, but raw response content is not displayed in this console.",
+    responseCaptureMaxChars: "Max characters",
     saveDraft: "Save draft",
     saveProviders: "Save providers",
     savingProviders: "Saving...",
@@ -240,6 +251,7 @@ const policyText: Record<
     detectorType: "Detector",
     close: "닫기",
     details: "상세보기",
+    disabled: "비활성화",
     enabled: "사용",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
@@ -278,6 +290,10 @@ const policyText: Record<
     routing: "Routing",
     routingAdvanced: "Routing advanced",
     runtimeSnapshot: "RuntimeSnapshot",
+    responseCapture: "응답 캡처",
+    responseCaptureHint:
+      "백엔드 정책은 게시 시 보존하지만, 이 콘솔에서는 raw response 원문을 표시하지 않습니다.",
+    responseCaptureMaxChars: "최대 글자 수",
     saveDraft: "Draft 저장",
     saveProviders: "Provider 저장",
     savingProviders: "저장 중...",
@@ -301,6 +317,7 @@ const policyText: Record<
 
 export function RuntimePolicyEditor({
   appTokenReadiness,
+  breadcrumbItems,
   locale,
   model
 }: RuntimePolicyEditorProps) {
@@ -598,6 +615,7 @@ export function RuntimePolicyEditor({
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
+          {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
           <p className="console-kicker">management</p>
           <h2>{text.title}</h2>
         </div>
@@ -732,6 +750,28 @@ export function RuntimePolicyEditor({
               );
             })}
           </div>
+        </article>
+
+        <article
+          className="console-panel policy-editor-panel"
+          style={generalSectionStyle}
+        >
+          <div className="panel-heading">
+            <h3>{text.responseCapture}</h3>
+          </div>
+          <label aria-disabled="true" className="policy-toggle-row">
+            <Switch checked={draftValues.responseCaptureEnabled} disabled readOnly />
+            <span>
+              {draftValues.responseCaptureEnabled ? text.enabled : text.disabled}
+            </span>
+          </label>
+          <p className="project-muted">{text.responseCaptureHint}</p>
+          <dl className="policy-summary-list">
+            <div>
+              <dt>{text.responseCaptureMaxChars}</dt>
+              <dd>{draftValues.responseCaptureMaxChars}</dd>
+            </div>
+          </dl>
         </article>
 
         <article

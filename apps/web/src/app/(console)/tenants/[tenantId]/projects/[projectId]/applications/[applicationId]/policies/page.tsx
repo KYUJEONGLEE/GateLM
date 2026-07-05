@@ -54,6 +54,22 @@ export default async function ApplicationPoliciesPage({
           applicationName: application.name,
           loadError: appTokensResult.ok ? null : appTokensResult.error
         }}
+        breadcrumbItems={[
+          {
+            href: `/tenants/${tenantId}/projects`,
+            label: "Projects"
+          },
+          {
+            href: `/tenants/${tenantId}/projects/${project.id}`,
+            label: project.name
+          },
+          {
+            label: application.name
+          },
+          {
+            label: "Policies"
+          }
+        ]}
         locale={locale}
         model={model}
       />

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import type {
   ProjectRecord,
   ProjectsModel,
@@ -21,6 +22,7 @@ type ProjectManagementProps = {
 };
 
 type ProjectDetailManagementProps = {
+  breadcrumbItems?: BreadcrumbItem[];
   locale: Locale;
   project: ProjectRecord;
   tenantId: string;
@@ -207,6 +209,7 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
 }
 
 export function ProjectDetailManagement({
+  breadcrumbItems,
   locale,
   project
 }: ProjectDetailManagementProps) {
@@ -274,6 +277,7 @@ export function ProjectDetailManagement({
     <main className="console-content management-line-content project-detail-content">
       <section className="dashboard-hero">
         <div>
+          {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
           <p className="console-kicker">{text.project}</p>
           <h2>{project.name}</h2>
         </div>

@@ -60,6 +60,15 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       tenantId={tenantId}
     >
       <ProjectDetailManagement
+        breadcrumbItems={[
+          {
+            href: `/tenants/${tenantId}/projects`,
+            label: "Projects"
+          },
+          {
+            label: project.name
+          }
+        ]}
         locale={locale}
         project={project}
         tenantId={tenantId}
