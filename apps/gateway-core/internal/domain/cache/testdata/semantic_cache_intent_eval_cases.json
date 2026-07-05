@@ -88,7 +88,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "API key creation guide remains reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.api_key_create",
       "expectedRequiredSlotsHash": ""
@@ -110,7 +110,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "API key issue/create wording shares same guide",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.api_key_create",
       "expectedRequiredSlotsHash": ""
@@ -132,7 +132,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "API key creation paraphrase remains reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.api_key_create",
       "expectedRequiredSlotsHash": ""
@@ -157,7 +157,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "API key creation paraphrases should share the same answer",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.api_key_create",
       "expectedRequiredSlotsHash": ""
@@ -182,7 +182,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "same credential creation help intent; no actual API key value is present",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.api_key_create",
       "expectedRequiredSlotsHash": ""
@@ -283,7 +283,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "App Token creation guide remains reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.app_token_create",
       "expectedRequiredSlotsHash": ""
@@ -305,7 +305,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "token issue/create wording maps to App Token creation",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.app_token_create",
       "expectedRequiredSlotsHash": ""
@@ -330,7 +330,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "app token creation wording should not require an OpenAI similarity-only decision",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.app_token_create",
       "expectedRequiredSlotsHash": ""
@@ -412,7 +412,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "forgotten password and password recreation wording should map to password reset guidance",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -433,7 +433,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "forgotten credential variants map to password reset guidance",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -454,7 +454,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "mixed Korean/English password reset wording should stay within same intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -475,7 +475,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "password reset lost-password wording remains same answer reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -499,7 +499,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "password reset paraphrases should resolve to the same canonicalIntent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -523,7 +523,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "same canonicalIntent and requiredSlots after Korean synonym normalization",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -544,7 +544,7 @@
       "denyCategory": false,
       "expectedDecision": "hit_candidate",
       "reason": "password reset location guidance reuses the same answer",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "account_access",
       "expectedCanonicalIntent": "account.password_reset",
       "expectedRequiredSlotsHash": ""
@@ -1009,7 +1009,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "exchange request location guide remains reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.exchange_request",
       "expectedRequiredSlotsHash": ""
@@ -1031,7 +1031,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "exchange request method wording remains same intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.exchange_request",
       "expectedRequiredSlotsHash": ""
@@ -1130,7 +1130,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "order/payment cancellation location guide remains reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.order_cancel",
       "expectedRequiredSlotsHash": ""
@@ -1152,7 +1152,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "order cancel procedure wording maps to same intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.order_cancel",
       "expectedRequiredSlotsHash": ""
@@ -1253,7 +1253,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "exchange request paraphrases can reuse the same application guidance",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.exchange_request",
       "expectedRequiredSlotsHash": ""
@@ -1278,7 +1278,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "order cancel paraphrases can reuse the same cancellation guidance",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.order_cancel",
       "expectedRequiredSlotsHash": ""
@@ -1332,7 +1332,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "payment cancellation wording should map to the order cancellation guidance path",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.order_cancel",
       "expectedRequiredSlotsHash": ""
@@ -1384,7 +1384,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "general refund request path can reuse the same application guidance",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.refund_request",
       "expectedRequiredSlotsHash": ""
@@ -1433,7 +1433,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "refund request menu guide remains reusable",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.refund_request",
       "expectedRequiredSlotsHash": ""
@@ -1454,7 +1454,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "refund request method wording remains same intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.refund_request",
       "expectedRequiredSlotsHash": ""
@@ -1558,7 +1558,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "shipping fee refund synonyms should map to the same strict support_refund intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.shipping_fee_refund",
       "expectedRequiredSlotsHash": ""
@@ -1583,7 +1583,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "same shipping fee refund intent, but support_refund requires strict policy and hard negative guard",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.shipping_fee_refund",
       "expectedRequiredSlotsHash": ""
@@ -1663,7 +1663,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "return shipping fee guidance is reusable only within same intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.return_shipping_fee",
       "expectedRequiredSlotsHash": ""
@@ -1685,7 +1685,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "return shipping fee variants share required slots",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.return_shipping_fee",
       "expectedRequiredSlotsHash": ""
@@ -1733,7 +1733,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "shipping fee refund synonyms remain same intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.shipping_fee_refund",
       "expectedRequiredSlotsHash": ""
@@ -1755,7 +1755,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "shipping fee refund policy wording remains same answer candidate",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.shipping_fee_refund",
       "expectedRequiredSlotsHash": ""
@@ -1777,7 +1777,7 @@
       "denyCategory": false,
       "expectedDecision": "strict_hit_candidate",
       "reason": "same shipping fee refund policy intent",
-      "expectedSemanticHit": true,
+      "expectedSemanticHit": false,
       "expectedCategory": "support_refund",
       "expectedCanonicalIntent": "support_refund.shipping_fee_refund",
       "expectedRequiredSlotsHash": ""

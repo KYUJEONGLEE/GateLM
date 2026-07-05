@@ -410,7 +410,6 @@ func semanticShadowEvalCategoryDisabledOrScopeDenied(reason string) bool {
 		SemanticCacheReasonScopeDenied,
 		SemanticCacheReasonTenantDenied,
 		SemanticCacheReasonApplicationDenied,
-		SemanticCacheReasonCategoryDenied,
 		"semantic_category_disabled":
 		return true
 	default:

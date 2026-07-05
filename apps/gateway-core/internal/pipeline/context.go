@@ -85,6 +85,10 @@ type RequestContext struct {
 	SemanticCacheCandidateFound bool
 	SemanticCacheCandidateHash  string
 	SemanticReturnedFromCache   bool
+	SemanticLookupAllowed       bool
+	SemanticStoreAllowed        bool
+	SemanticDenyReason          string
+	SemanticBypassReason        string
 	SemanticCanonicalIntent     string
 	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64

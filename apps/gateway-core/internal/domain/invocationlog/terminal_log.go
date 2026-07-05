@@ -79,6 +79,10 @@ type TerminalLog struct {
 	SemanticCacheCandidateFound bool
 	SemanticCacheCandidateHash  string
 	SemanticReturnedFromCache   bool
+	SemanticLookupAllowed       bool
+	SemanticStoreAllowed        bool
+	SemanticDenyReason          string
+	SemanticBypassReason        string
 	SemanticCanonicalIntent     string
 	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
@@ -171,6 +175,10 @@ type TerminalLogInput struct {
 	SemanticCacheCandidateFound bool
 	SemanticCacheCandidateHash  string
 	SemanticReturnedFromCache   bool
+	SemanticLookupAllowed       bool
+	SemanticStoreAllowed        bool
+	SemanticDenyReason          string
+	SemanticBypassReason        string
 	SemanticCanonicalIntent     string
 	SemanticRequiredSlotsHash   string
 	SemanticSimilarity          float64
@@ -324,6 +332,14 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	metadata["semanticCacheWouldMiss"] = input.SemanticCacheWouldMiss
 	metadata["semanticCandidateFound"] = input.SemanticCacheCandidateFound
 	metadata["semanticReturnedFromCache"] = input.SemanticReturnedFromCache
+	metadata["semanticLookupAllowed"] = input.SemanticLookupAllowed
+	metadata["semanticStoreAllowed"] = input.SemanticStoreAllowed
+	if strings.TrimSpace(input.SemanticDenyReason) != "" {
+		metadata["semanticDenyReason"] = strings.TrimSpace(input.SemanticDenyReason)
+	}
+	if strings.TrimSpace(input.SemanticBypassReason) != "" {
+		metadata["semanticBypassReason"] = strings.TrimSpace(input.SemanticBypassReason)
+	}
 	if strings.TrimSpace(input.SemanticCacheCandidateHash) != "" {
 		metadata["semanticCandidateHash"] = strings.TrimSpace(input.SemanticCacheCandidateHash)
 	}
@@ -432,6 +448,10 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		SemanticCacheCandidateFound: input.SemanticCacheCandidateFound,
 		SemanticCacheCandidateHash:  strings.TrimSpace(input.SemanticCacheCandidateHash),
 		SemanticReturnedFromCache:   input.SemanticReturnedFromCache,
+		SemanticLookupAllowed:       input.SemanticLookupAllowed,
+		SemanticStoreAllowed:        input.SemanticStoreAllowed,
+		SemanticDenyReason:          strings.TrimSpace(input.SemanticDenyReason),
+		SemanticBypassReason:        strings.TrimSpace(input.SemanticBypassReason),
 		SemanticCanonicalIntent:     strings.TrimSpace(input.SemanticCanonicalIntent),
 		SemanticRequiredSlotsHash:   strings.TrimSpace(input.SemanticRequiredSlotsHash),
 		SemanticSimilarity:          input.SemanticSimilarity,

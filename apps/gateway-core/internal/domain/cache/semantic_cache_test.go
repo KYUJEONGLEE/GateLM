@@ -369,7 +369,7 @@ func TestSemanticCacheServiceNormalizesInputInternally(t *testing.T) {
 		EntryID:        "entry-normalized",
 		RequestID:      "request-normalized",
 		Boundary:       boundary,
-		NormalizedText: "  PASSWORD    RESET  ",
+		NormalizedText: "  사용량    메뉴 위치 알려줘  ",
 		CachedResponse: []byte(`{"answer":"safe response"}`),
 		Now:            now,
 	})
@@ -382,13 +382,26 @@ func TestSemanticCacheServiceNormalizesInputInternally(t *testing.T) {
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "password reset",
+		NormalizedText: "API 사용량 확인 화면은 어디야?",
 	})
 	if err != nil {
 		t.Fatalf("정규화된 query search 실패: %v", err)
 	}
 	if !result.Hit || !decision.SemanticCacheHit || decision.SemanticMatchedRequestID != "request-normalized" {
 		t.Fatalf("service 내부 정규화 후 같은 의미 입력은 hit이어야 함: result=%+v decision=%+v", result, decision)
+	}
+	if !decision.LookupAllowed ||
+		decision.StoreAllowed ||
+		!decision.ReturnedFromCache ||
+		decision.DenyReason != "" ||
+		decision.BypassReason != "" ||
+		decision.CandidateHash == "" ||
+		decision.Category != SemanticCacheCategoryGeneral ||
+		decision.CanonicalIntent != "usage.monthly_usage_check" ||
+		decision.RequiredSlotsHash == "" ||
+		decision.SimilarityScore < 0.92 ||
+		decision.Threshold != 0.92 {
+		t.Fatalf("semantic hit decision safe metadata 불일치: %+v", decision)
 	}
 }
 
@@ -408,14 +421,14 @@ func TestSemanticCacheServiceRequiresIntentMaterialForHit(t *testing.T) {
 		HitPolicy:     testSemanticHitPolicy(t),
 	})
 
-	legacyEntry := testSemanticEntry("entry-legacy", "request-legacy", boundary, testSemanticVector(t, provider, "비밀번호 재설정 방법 알려줘"), now, now.Add(time.Hour))
+	legacyEntry := testSemanticEntry("entry-legacy", "request-legacy", boundary, testSemanticVector(t, provider, "사용량 메뉴 위치 알려줘"), now, now.Add(time.Hour))
 	if err := store.Upsert(ctx, legacyEntry); err != nil {
 		t.Fatalf("legacy semantic entry 저장 실패: %v", err)
 	}
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "패스워드 초기화는 어떻게 해?",
+		NormalizedText: "API 사용량 확인 화면은 어디야?",
 	})
 	if err != nil {
 		t.Fatalf("semantic search 실패: %v", err)
@@ -455,7 +468,7 @@ func TestSemanticCacheServiceWithoutIntentPolicyDoesNotCallEmbeddingProvider(t *
 	}
 }
 
-func TestSemanticCacheServiceWithIntentPolicyDoesNotLetMaterializationMissBlockEmbeddingLookup(t *testing.T) {
+func TestSemanticCacheServiceWithIntentPolicyFailsClosedBeforeEmbeddingOnMaterializationMiss(t *testing.T) {
 	ctx := context.Background()
 	boundary := testSemanticBoundary(t, nil)
 	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
@@ -477,17 +490,54 @@ func TestSemanticCacheServiceWithIntentPolicyDoesNotLetMaterializationMissBlockE
 	if err != nil {
 		t.Fatalf("materialization miss는 request 실패로 승격되면 안 됨: %v", err)
 	}
-	if provider.calls != 1 {
-		t.Fatalf("intent materialization miss여도 embedding lookup은 수행되어야 함: calls=%d", provider.calls)
+	if provider.calls != 0 {
+		t.Fatalf("intent materialization miss는 embedding 전에 fail-closed되어야 함: calls=%d", provider.calls)
 	}
 	if store.searchCalls != 0 {
 		t.Fatalf("intent materialization miss이면 semantic store search는 수행하면 안 됨: calls=%d", store.searchCalls)
 	}
-	if len(result.QueryVector) == 0 {
-		t.Fatalf("embedding lookup 결과 vector가 남아야 함: %+v", result)
+	if len(result.QueryVector) != 0 {
+		t.Fatalf("fail-closed materialization miss에는 query vector가 없어야 함: %+v", result)
 	}
 	if result.Hit || decision.SemanticCacheHit || decision.SemanticCacheDecisionReason != SemanticCacheReasonIntentUnavailable {
 		t.Fatalf("materialization miss는 provider bypass hit로 이어지면 안 됨: result=%+v decision=%+v", result, decision)
+	}
+	if decision.LookupAllowed || decision.StoreAllowed || decision.DenyReason != SemanticCacheReasonIntentUnavailable || decision.BypassReason != "" {
+		t.Fatalf("materialization miss는 lookup/store 불허 deny decision이어야 함: %+v", decision)
+	}
+}
+
+func TestSemanticCacheServiceDeniesRiskyCategoryBeforeLookup(t *testing.T) {
+	ctx := context.Background()
+	boundary := testSemanticBoundary(t, func(b *SemanticCacheBoundary) {
+		b.PromptCategory = SemanticCacheCategoryCode
+	})
+	provider := &countingTestEmbeddingProvider{delegate: NewFakeEmbeddingProvider("fake-test")}
+	store := &countingTestSemanticCacheStore{delegate: NewInMemorySemanticCacheStore(10)}
+	service := NewSemanticCacheService(store, provider, SemanticCacheServiceConfig{
+		Enabled:       true,
+		Threshold:     0.92,
+		TopK:          3,
+		TTL:           time.Hour,
+		PolicyVersion: "v1",
+		HitPolicy:     testSemanticHitPolicy(t),
+	})
+
+	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
+		Boundary:       boundary,
+		NormalizedText: "이 코드 설명해줘",
+	})
+	if err != nil {
+		t.Fatalf("deny category search는 request 실패로 승격되면 안 됨: %v", err)
+	}
+	if result.Hit || decision.SemanticCacheHit || decision.SemanticCacheDecisionReason != SemanticCacheReasonCategoryDenied {
+		t.Fatalf("code category는 semantic hit 금지여야 함: result=%+v decision=%+v", result, decision)
+	}
+	if provider.calls != 0 || store.searchCalls != 0 {
+		t.Fatalf("deny-first category는 embedding/store lookup 전에 종료되어야 함: embedding=%d store=%d", provider.calls, store.searchCalls)
+	}
+	if decision.LookupAllowed || decision.StoreAllowed || decision.DenyReason != SemanticCacheReasonCategoryDenied || decision.BypassReason != "" {
+		t.Fatalf("deny-first decision fields 불일치: %+v", decision)
 	}
 }
 
@@ -509,7 +559,7 @@ func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
 
 	result, decision, err := service.Search(ctx, SemanticCacheLookupRequest{
 		Boundary:       boundary,
-		NormalizedText: "비밀번호 재설정 방법 알려줘",
+		NormalizedText: "사용량 메뉴 위치 알려줘",
 	})
 	if err != nil {
 		t.Fatalf("semantic search 실패: %v", err)
@@ -525,7 +575,7 @@ func TestSemanticCacheServiceUpsertReusesProvidedEmbeddingVector(t *testing.T) {
 		EntryID:         "entry-reuse",
 		RequestID:       "request-reuse",
 		Boundary:        boundary,
-		NormalizedText:  "비밀번호 재설정 방법 알려줘",
+		NormalizedText:  "사용량 메뉴 위치 알려줘",
 		EmbeddingVector: result.QueryVector,
 		CachedResponse:  []byte(`{"answer":"normalized safe response"}`),
 		Now:             now,
@@ -559,10 +609,10 @@ func TestSemanticCacheServiceStoreEligibilityPolicy(t *testing.T) {
 		wantEmbeddingCall bool
 	}{
 		{
-			name:              "cacheable password reset FAQ stores",
-			category:          "account_access",
-			normalizedText:    "비밀번호 재설정 방법 알려줘",
-			cachedResponse:    []byte(`{"answer":"비밀번호 재설정 메뉴에서 재설정 메일을 요청할 수 있습니다."}`),
+			name:              "cacheable general static guidance stores",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
+			cachedResponse:    []byte(`{"answer":"사용량 메뉴에서 API 사용량을 확인할 수 있습니다."}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonStored,
 			wantStored:        true,
@@ -577,80 +627,80 @@ func TestSemanticCacheServiceStoreEligibilityPolicy(t *testing.T) {
 			wantReason:        SemanticCacheReasonDynamicUserState,
 		},
 		{
-			name:              "account status response bypasses store",
+			name:              "account access category denies store",
 			category:          "account_access",
 			normalizedText:    "비밀번호 재설정 방법 알려줘",
-			cachedResponse:    []byte(`{"answer":"계정 상태: 잠김"}`),
+			cachedResponse:    []byte(`{"answer":"비밀번호 재설정 메뉴에서 재설정 메일을 요청할 수 있습니다."}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
-			wantReason:        SemanticCacheReasonDynamicUserState,
+			wantReason:        SemanticCacheReasonAccountAccessDenied,
 		},
 		{
-			name:              "refund status response bypasses store",
+			name:              "support refund category denies store",
 			category:          "support_refund",
 			normalizedText:    "배송비도 환불되나요?",
-			cachedResponse:    []byte(`{"answer":"환불 상태: 처리 중"}`),
+			cachedResponse:    []byte(`{"answer":"배송비 환불 정책 안내입니다."}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityPolicySummary,
-			wantReason:        SemanticCacheReasonDynamicUserState,
+			wantReason:        SemanticCacheReasonSupportRefundDenied,
 		},
 		{
 			name:              "credential marker response bypasses store",
-			category:          "account_access",
-			normalizedText:    "API Key 발급 방법 알려줘",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"api_key=test-secret"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonPayloadUnsafe,
 		},
 		{
 			name:              "authorization marker response bypasses store",
-			category:          "account_access",
-			normalizedText:    "App Token 생성은 어디서 해?",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"Authorization: Bearer token"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonPayloadUnsafe,
 		},
 		{
 			name:              "app token marker response bypasses store",
-			category:          "account_access",
-			normalizedText:    "App Token 생성은 어디서 해?",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"app_token=test-secret"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonPayloadUnsafe,
 		},
 		{
 			name:              "provider key marker response bypasses store",
-			category:          "account_access",
-			normalizedText:    "API Key 발급 방법 알려줘",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"provider_key=test-secret"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonPayloadUnsafe,
 		},
 		{
 			name:              "raw prompt marker response bypasses store",
-			category:          "account_access",
-			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"raw prompt must not be cached"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonPayloadUnsafe,
 		},
 		{
 			name:              "raw response marker response bypasses store",
-			category:          "account_access",
-			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"raw response must not be cached"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			wantReason:        SemanticCacheReasonPayloadUnsafe,
 		},
 		{
 			name:           "unknown cacheability response bypasses store",
-			category:       "account_access",
-			normalizedText: "비밀번호 재설정 방법 알려줘",
+			category:       "general",
+			normalizedText: "사용량 메뉴 위치 알려줘",
 			cachedResponse: []byte(`{"answer":"safe looking but unclassified response"}`),
 			wantReason:     SemanticCacheReasonResponseNotCacheable,
 		},
 		{
 			name:              "fallback response bypasses store",
-			category:          "account_access",
-			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"fallback safe response"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			fallbackUsed:      true,
@@ -658,21 +708,23 @@ func TestSemanticCacheServiceStoreEligibilityPolicy(t *testing.T) {
 		},
 		{
 			name:              "provider error response bypasses store",
-			category:          "account_access",
-			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"provider failed"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityProviderError,
 			providerOutcome:   SemanticCacheProviderOutcomeError,
-			wantReason:        SemanticCacheReasonProviderError,
+			wantReason:        SemanticCacheReasonProviderErrorStoreBypass,
 		},
 		{
-			name:              "stream response bypasses store",
-			category:          "account_access",
-			normalizedText:    "비밀번호 재설정 방법 알려줘",
+			name:              "completed stream response stores",
+			category:          "general",
+			normalizedText:    "사용량 메뉴 위치 알려줘",
 			cachedResponse:    []byte(`{"answer":"stream response"}`),
 			cacheabilityClass: SemanticCacheResponseCacheabilityStaticGuidance,
 			stream:            true,
-			wantReason:        SemanticCacheReasonStreamingResponse,
+			wantReason:        SemanticCacheReasonStored,
+			wantStored:        true,
+			wantEmbeddingCall: true,
 		},
 		{
 			name:              "code category bypasses store",
@@ -774,11 +826,11 @@ func TestSemanticCacheFactoryRejectsUnknownImplementations(t *testing.T) {
 
 func TestSemanticCacheCategoryPolicyAllowsRoutingMVPAllowlist(t *testing.T) {
 	policy := NewSemanticCacheCategoryPolicy(
-		[]string{"general", "support_refund"},
-		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
+		[]string{"general"},
+		[]string{"account_access", "support_refund", "code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
 	)
 
-	for _, category := range []string{"general", "support_refund"} {
+	for _, category := range []string{"general"} {
 		t.Run(category, func(t *testing.T) {
 			if !policy.Allows(category) {
 				t.Fatalf("SC-CATEGORY-002 %q는 Semantic Cache 후보가 될 수 있어야 함", category)
@@ -789,11 +841,11 @@ func TestSemanticCacheCategoryPolicyAllowsRoutingMVPAllowlist(t *testing.T) {
 
 func TestSemanticCacheCategoryPolicyDeniesRiskyCategories(t *testing.T) {
 	policy := NewSemanticCacheCategoryPolicy(
-		[]string{"general", "support_refund"},
-		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
+		[]string{"general"},
+		[]string{"account_access", "support_refund", "code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
 	)
 
-	for _, category := range []string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"} {
+	for _, category := range []string{"account_access", "support_refund", "code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"} {
 		t.Run(category, func(t *testing.T) {
 			if policy.Allows(category) {
 				t.Fatalf("SC-CATEGORY-003 %q는 Semantic Cache에서 bypass되어야 함", category)
@@ -804,8 +856,8 @@ func TestSemanticCacheCategoryPolicyDeniesRiskyCategories(t *testing.T) {
 
 func TestSemanticCacheCategoryPolicyDeniesUnknownCategoryValues(t *testing.T) {
 	policy := NewSemanticCacheCategoryPolicy(
-		[]string{"general", "support_refund"},
-		[]string{"code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
+		[]string{"general"},
+		[]string{"account_access", "support_refund", "code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"},
 	)
 
 	for _, category := range []string{"faq", "simple_chat", "billing", "", " GENERAL "} {
@@ -879,14 +931,7 @@ func testSemanticStorePolicy() *SemanticCacheStorePolicy {
 		DefaultMode:   SemanticCacheStoreModeDisabled,
 		Categories: map[string]SemanticCacheCategoryStorePolicy{
 			"account_access": {
-				Mode:                          SemanticCacheStoreModeStrictStore,
-				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityStaticGuidance},
-				RequiresIntent:                true,
-				RequiresRequiredSlots:         true,
-				RequiresForbiddenPayloadGuard: true,
-				RequiresProviderSuccess:       true,
-				DenyFallback:                  true,
-				DenyStream:                    true,
+				Mode: SemanticCacheStoreModeDisabled,
 			},
 			"general": {
 				Mode:                          SemanticCacheStoreModeStrictStore,
@@ -896,17 +941,9 @@ func testSemanticStorePolicy() *SemanticCacheStorePolicy {
 				RequiresForbiddenPayloadGuard: true,
 				RequiresProviderSuccess:       true,
 				DenyFallback:                  true,
-				DenyStream:                    true,
 			},
 			"support_refund": {
-				Mode:                          SemanticCacheStoreModeStrictStore,
-				AllowCacheabilityClasses:      []string{SemanticCacheResponseCacheabilityPolicySummary},
-				RequiresIntent:                true,
-				RequiresRequiredSlots:         true,
-				RequiresForbiddenPayloadGuard: true,
-				RequiresProviderSuccess:       true,
-				DenyFallback:                  true,
-				DenyStream:                    true,
+				Mode: SemanticCacheStoreModeDisabled,
 			},
 			"code": {
 				Mode: SemanticCacheStoreModeDisabled,

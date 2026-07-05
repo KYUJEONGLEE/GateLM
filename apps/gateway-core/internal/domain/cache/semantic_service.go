@@ -135,9 +135,24 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
+	categoryMaterial := s.categoryOnlyIntentMaterial(request.Boundary.PromptCategory)
+	if denyRule, denied := s.config.HitPolicy.firstDenyRule(categoryMaterial); denied {
+		result.IntentMaterial = categoryMaterial
+		result.Reason = firstSemanticReason(denyRule.Reason, SemanticCacheReasonCategoryDenied)
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
-	if !intentOK && !request.CacheabilityGatePassed {
+	result.IntentMaterial = intentMaterial
+	if !intentOK {
 		result.Reason = intentReason
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
+	if denyRule, denied := s.config.HitPolicy.firstDenyRule(intentMaterial); denied {
+		result.Reason = firstSemanticReason(denyRule.Reason, SemanticCacheReasonCategoryDenied)
+		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
+	if !s.config.HitPolicy.strictAllowRuleMatches(intentMaterial) {
+		result.Reason = SemanticCacheReasonCategoryDenied
 		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
 
@@ -155,10 +170,6 @@ func (s SemanticCacheService) Search(ctx context.Context, request SemanticCacheL
 	result.QueryVector = queryVector
 	result.IntentMaterial = intentMaterial
 	result.EmbeddingInput = embeddingInput
-	if !intentOK {
-		result.Reason = firstSemanticReason(intentReason, result.Reason)
-		return result, result.Decision(true, providerName, s.config.PolicyVersion), nil
-	}
 	result = s.applyHitPolicy(result, intentMaterial, threshold)
 	result = s.applyReranker(ctx, result, intentMaterial, threshold)
 	return result, result.Decision(true, providerName, s.config.PolicyVersion), err
@@ -195,13 +206,28 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 		result.Reason = decision.Reason
 		return result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
+	if !s.intentPolicyConfigured() {
+		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
+	categoryMaterial := s.categoryOnlyIntentMaterial(request.Boundary.PromptCategory)
+	if denyRule, denied := s.config.HitPolicy.firstDenyRule(categoryMaterial); denied {
+		result.IntentMaterial = categoryMaterial
+		result.Reason = firstSemanticReason(denyRule.Reason, SemanticCacheReasonCategoryDenied)
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
 	intentMaterial, intentReason, intentOK := s.intentMaterial(request.Boundary.PromptCategory, normalizedText, request.IntentMaterial)
-	if s.intentPolicyConfigured() && !intentOK {
+	if !intentOK {
 		result.Reason = intentReason
 		return result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
-	if !s.intentPolicyConfigured() {
-		result.Reason = SemanticCacheReasonIntentPolicyUnavailable
+	result.IntentMaterial = intentMaterial
+	if denyRule, denied := s.config.HitPolicy.firstDenyRule(intentMaterial); denied {
+		result.Reason = firstSemanticReason(denyRule.Reason, SemanticCacheReasonCategoryDenied)
+		return result.Decision(true, providerName, s.config.PolicyVersion), nil
+	}
+	if !s.config.HitPolicy.strictAllowRuleMatches(intentMaterial) {
+		result.Reason = SemanticCacheReasonCategoryDenied
 		return result.Decision(true, providerName, s.config.PolicyVersion), nil
 	}
 	if decision, bypass := s.storeDecision(request, intentMaterial); bypass {
@@ -243,6 +269,17 @@ func (s SemanticCacheService) Upsert(ctx context.Context, request SemanticCacheS
 	}
 	result.Reason = SemanticCacheReasonStored
 	return result.Decision(true, providerName, s.config.PolicyVersion), nil
+}
+
+func (s SemanticCacheService) categoryOnlyIntentMaterial(category string) SemanticCacheIntentMaterial {
+	if !s.intentPolicyConfigured() {
+		return SemanticCacheIntentMaterial{}
+	}
+	return SemanticCacheIntentMaterial{
+		Category:                CanonicalSemanticCacheCategory(category),
+		CanonicalizationVersion: s.config.HitPolicy.CanonicalizationVersion,
+		SynonymPolicyVersion:    s.config.HitPolicy.SynonymPolicyVersion,
+	}.Normalize()
 }
 
 func (s SemanticCacheService) intentPolicyConfigured() bool {

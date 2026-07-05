@@ -89,6 +89,61 @@ func TestFastTextSidecarCacheabilityClassifierAllowsUnknownResponseFields(t *tes
 	}
 }
 
+func TestFastTextSidecarCacheabilityClassifierOverridesStrictStaticGuidanceOnly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeFastTextSidecarTestResponse(t, w, fastTextSidecarResponse{
+			Label:        string(CacheabilityLabelUnsafeOrUnknown),
+			Confidence:   floatPointer(0.94),
+			ReasonCode:   CacheabilityReasonFastTextSidecar,
+			ModelVersion: "cacheability-fasttext-synthetic-v3",
+		})
+	}))
+	defer server.Close()
+
+	classifier, err := NewFastTextSidecarCacheabilityClassifier(FastTextSidecarCacheabilityClassifierConfig{
+		Endpoint:   server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("construct failed: %v", err)
+	}
+
+	staticResult, err := classifier.Classify(context.Background(), CacheabilityClassificationRequest{
+		NormalizedText: "사용량은 어디서 확인해?",
+		PromptCategory: SemanticCacheCategoryGeneral,
+	})
+	if err != nil {
+		t.Fatalf("strict static guidance override should not fail: %v", err)
+	}
+	if staticResult.Label != CacheabilityLabelCacheableStatic ||
+		staticResult.ReasonCode != CacheabilityReasonRuleStaticGuidance ||
+		!staticResult.Passes(0.90) {
+		t.Fatalf("strict static guidance should override bad sidecar deny: %+v", staticResult)
+	}
+
+	dynamicResult, err := classifier.Classify(context.Background(), CacheabilityClassificationRequest{
+		NormalizedText: "이번 달 사용량 알려줘",
+		PromptCategory: SemanticCacheCategoryGeneral,
+	})
+	if err != nil {
+		t.Fatalf("dynamic result should still return sidecar result: %v", err)
+	}
+	if dynamicResult.Label != CacheabilityLabelUnsafeOrUnknown || dynamicResult.Passes(0.90) {
+		t.Fatalf("dynamic prompt must not be rescued by static override: %+v", dynamicResult)
+	}
+
+	nonGeneralResult, err := classifier.Classify(context.Background(), CacheabilityClassificationRequest{
+		NormalizedText: "사용량은 어디서 확인해?",
+		PromptCategory: SemanticCacheCategoryCode,
+	})
+	if err != nil {
+		t.Fatalf("non-general result should still return sidecar result: %v", err)
+	}
+	if nonGeneralResult.Label != CacheabilityLabelUnsafeOrUnknown || nonGeneralResult.Passes(0.90) {
+		t.Fatalf("non-general category must not be rescued by static override: %+v", nonGeneralResult)
+	}
+}
+
 func TestFastTextSidecarCacheabilityClassifierFailureModes(t *testing.T) {
 	t.Run("missing endpoint", func(t *testing.T) {
 		_, err := NewFastTextSidecarCacheabilityClassifier(FastTextSidecarCacheabilityClassifierConfig{})

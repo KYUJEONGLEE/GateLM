@@ -19,12 +19,15 @@ const (
 	SemanticCacheReasonIntentPolicyUnavailable = "intent_policy_unavailable"
 	SemanticCacheReasonIntentUnavailable       = "intent_unavailable"
 	SemanticCacheReasonIntentMaterialMissing   = "intent_material_missing"
-	SemanticCacheReasonIntentMismatch          = "intent_mismatch"
+	SemanticCacheReasonIntentMismatch          = "canonical_intent_mismatch"
 	SemanticCacheReasonSlotsUnavailable        = "slots_unavailable"
-	SemanticCacheReasonSlotsMismatch           = "slots_mismatch"
-	SemanticCacheReasonHardNegative            = "hard_negative"
-	SemanticCacheReasonCategoryDisabled        = "category_disabled"
+	SemanticCacheReasonSlotsMismatch           = "required_slots_mismatch"
+	SemanticCacheReasonHardNegative            = "hard_negative_guard_failed"
+	SemanticCacheReasonCategoryDisabled        = "category_denied"
 	SemanticCacheReasonCandidateOnly           = "candidate_only"
+	SemanticCacheReasonDynamicUserStateDenied  = "dynamic_user_state_denied"
+	SemanticCacheReasonAccountAccessDenied     = "account_access_denied"
+	SemanticCacheReasonSupportRefundDenied     = "support_refund_denied"
 )
 
 var ErrSemanticCacheIntentPolicyInvalid = errors.New("semantic cache intent policy is invalid")
@@ -34,10 +37,29 @@ type SemanticCacheHitPolicy struct {
 	CanonicalizationVersion string                               `json:"canonicalizationVersion"`
 	SynonymPolicyVersion    string                               `json:"synonymPolicyVersion"`
 	DefaultThreshold        float64                              `json:"defaultThreshold"`
+	BypassRules             []SemanticCachePolicyRule            `json:"bypassRules,omitempty"`
+	DenyRules               []SemanticCachePolicyRule            `json:"denyRules,omitempty"`
+	StrictAllowRules        []SemanticCacheStrictAllowRule       `json:"strictAllowRules,omitempty"`
 	Categories              map[string]SemanticCacheCategoryMode `json:"categories"`
 	Synonyms                map[string]map[string][]string       `json:"synonyms"`
 	Intents                 map[string]SemanticCacheIntentRule   `json:"intents"`
 	ForbiddenIntentPairs    []SemanticCacheIntentPair            `json:"forbiddenIntentPairs"`
+}
+
+type SemanticCachePolicyRule struct {
+	ID                 string   `json:"id"`
+	Reason             string   `json:"reason"`
+	Categories         []string `json:"categories,omitempty"`
+	CanonicalIntents   []string `json:"canonicalIntents,omitempty"`
+	RequiredSlotKeys   []string `json:"requiredSlotKeys,omitempty"`
+	RequiredSlotValues []string `json:"requiredSlotValues,omitempty"`
+}
+
+type SemanticCacheStrictAllowRule struct {
+	ID               string   `json:"id"`
+	Reason           string   `json:"reason"`
+	Categories       []string `json:"categories,omitempty"`
+	CanonicalIntents []string `json:"canonicalIntents,omitempty"`
 }
 
 type SemanticCacheCategoryMode struct {
@@ -125,6 +147,9 @@ func (p SemanticCacheHitPolicy) Normalize() (SemanticCacheHitPolicy, error) {
 	}
 
 	p.Categories = normalizeCategoryModes(p.Categories)
+	p.BypassRules = normalizeSemanticCachePolicyRules(p.BypassRules)
+	p.DenyRules = normalizeSemanticCachePolicyRules(p.DenyRules)
+	p.StrictAllowRules = normalizeSemanticCacheStrictAllowRules(p.StrictAllowRules)
 	p.Synonyms = normalizeSynonymPolicy(p.Synonyms)
 	p.Intents = normalizeIntentRules(p.Intents)
 	p.ForbiddenIntentPairs = normalizeForbiddenIntentPairs(p.ForbiddenIntentPairs)
@@ -216,6 +241,11 @@ func (p SemanticCacheHitPolicy) Evaluate(request SemanticCacheIntentMaterial, ca
 		decision.Reason = SemanticCacheReasonIntentUnavailable
 		return decision
 	}
+	if denyRule, denied := p.firstDenyRule(request); denied {
+		decision.Outcome = SemanticCacheOutcomeBypassed
+		decision.Reason = firstSemanticReason(denyRule.Reason, SemanticCacheReasonCategoryDenied)
+		return decision
+	}
 	categoryPolicy := p.categoryPolicy(request.Category)
 	if !categoryPolicy.Enabled || categoryPolicy.Mode == SemanticCachePolicyModeDisabled {
 		decision.Outcome = SemanticCacheOutcomeBypassed
@@ -233,6 +263,10 @@ func (p SemanticCacheHitPolicy) Evaluate(request SemanticCacheIntentMaterial, ca
 	}
 	if request.Category != cached.Category || request.CanonicalIntent != cached.CanonicalIntent {
 		decision.Reason = SemanticCacheReasonIntentMismatch
+		return decision
+	}
+	if !p.strictAllowRuleMatches(request) {
+		decision.Reason = SemanticCacheReasonCategoryDenied
 		return decision
 	}
 	if categoryPolicy.RequiresRequiredSlots && request.RequiredSlotsHash == "" {
@@ -270,6 +304,38 @@ func (p SemanticCacheHitPolicy) CategoryThreshold(category string, fallback floa
 		return p.DefaultThreshold
 	}
 	return fallback
+}
+
+func (p SemanticCacheHitPolicy) firstDenyRule(material SemanticCacheIntentMaterial) (SemanticCachePolicyRule, bool) {
+	material = material.Normalize()
+	for _, rule := range p.DenyRules {
+		if rule.matches(material) {
+			return rule, true
+		}
+	}
+	switch material.Category {
+	case SemanticCacheCategoryAccountAccess:
+		return SemanticCachePolicyRule{Reason: SemanticCacheReasonAccountAccessDenied}, true
+	case SemanticCacheCategorySupportRefund:
+		return SemanticCachePolicyRule{Reason: SemanticCacheReasonSupportRefundDenied}, true
+	case SemanticCacheCategoryCode, SemanticCacheCategoryTranslation, SemanticCacheCategoryReasoning, SemanticCacheCategorySensitive, SemanticCacheCategoryToolCall, SemanticCacheCategoryUnknown:
+		return SemanticCachePolicyRule{Reason: SemanticCacheReasonCategoryDenied}, true
+	default:
+		return SemanticCachePolicyRule{}, false
+	}
+}
+
+func (p SemanticCacheHitPolicy) strictAllowRuleMatches(material SemanticCacheIntentMaterial) bool {
+	if len(p.StrictAllowRules) == 0 {
+		return true
+	}
+	material = material.Normalize()
+	for _, rule := range p.StrictAllowRules {
+		if rule.matches(material) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p SemanticCacheHitPolicy) categoryPolicy(category string) SemanticCacheCategoryMode {
@@ -482,6 +548,105 @@ func normalizeForbiddenIntentPairs(pairs []SemanticCacheIntentPair) []SemanticCa
 		normalized = append(normalized, pair)
 	}
 	return normalized
+}
+
+func normalizeSemanticCachePolicyRules(rules []SemanticCachePolicyRule) []SemanticCachePolicyRule {
+	normalized := make([]SemanticCachePolicyRule, 0, len(rules))
+	for _, rule := range rules {
+		rule.ID = strings.TrimSpace(rule.ID)
+		rule.Reason = strings.TrimSpace(rule.Reason)
+		rule.Categories = normalizeSemanticCacheCategories(rule.Categories)
+		rule.CanonicalIntents = normalizeSemanticStringList(rule.CanonicalIntents)
+		rule.RequiredSlotKeys = normalizeSemanticPolicyRuleKeys(rule.RequiredSlotKeys)
+		rule.RequiredSlotValues = normalizeSemanticStringList(rule.RequiredSlotValues)
+		if rule.Reason == "" {
+			continue
+		}
+		normalized = append(normalized, rule)
+	}
+	return normalized
+}
+
+func normalizeSemanticCacheStrictAllowRules(rules []SemanticCacheStrictAllowRule) []SemanticCacheStrictAllowRule {
+	normalized := make([]SemanticCacheStrictAllowRule, 0, len(rules))
+	for _, rule := range rules {
+		rule.ID = strings.TrimSpace(rule.ID)
+		rule.Reason = strings.TrimSpace(rule.Reason)
+		rule.Categories = normalizeSemanticCacheCategories(rule.Categories)
+		rule.CanonicalIntents = normalizeSemanticStringList(rule.CanonicalIntents)
+		if rule.Reason == "" {
+			continue
+		}
+		normalized = append(normalized, rule)
+	}
+	return normalized
+}
+
+func normalizeSemanticPolicyRuleKeys(values []string) []string {
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func (r SemanticCachePolicyRule) matches(material SemanticCacheIntentMaterial) bool {
+	material = material.Normalize()
+	if len(r.Categories) > 0 && !semanticCategoryContains(r.Categories, material.Category) {
+		return false
+	}
+	if len(r.CanonicalIntents) > 0 && !semanticStringContains(r.CanonicalIntents, material.CanonicalIntent) {
+		return false
+	}
+	if len(r.RequiredSlotKeys) > 0 {
+		matched := false
+		for _, key := range r.RequiredSlotKeys {
+			if _, ok := material.RequiredSlots[key]; ok {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	if len(r.RequiredSlotValues) > 0 {
+		matched := false
+		for _, value := range material.RequiredSlots {
+			if semanticStringContains(r.RequiredSlotValues, value) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return len(r.Categories) > 0 ||
+		len(r.CanonicalIntents) > 0 ||
+		len(r.RequiredSlotKeys) > 0 ||
+		len(r.RequiredSlotValues) > 0
+}
+
+func (r SemanticCacheStrictAllowRule) matches(material SemanticCacheIntentMaterial) bool {
+	material = material.Normalize()
+	if len(r.Categories) > 0 && !semanticCategoryContains(r.Categories, material.Category) {
+		return false
+	}
+	if len(r.CanonicalIntents) > 0 && !semanticStringContains(r.CanonicalIntents, material.CanonicalIntent) {
+		return false
+	}
+	return len(r.Categories) > 0 || len(r.CanonicalIntents) > 0
 }
 
 func intentRuleCategoryAllowed(promptCategory string, intentCategory string) bool {
