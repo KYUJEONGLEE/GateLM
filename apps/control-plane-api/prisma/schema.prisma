@@ -50,6 +50,8 @@ model Tenant {
   runtimeConfigs      RuntimeConfig[]
   runtimeSnapshots    RuntimeSnapshot[]
   activeSnapshots     ActiveRuntimeSnapshot[]
+  budgetLedgerEntries BudgetLedgerEntry[]
+  budgetQuotas        BudgetQuota[]
   teams               Team[]
   projectTeamAssignments ProjectTeamAssignment[]
   tenantMemberships   TenantMembership[]
@@ -172,6 +174,7 @@ model Project {
   runtimeConfigs      RuntimeConfig[]
   runtimeSnapshots    RuntimeSnapshot[]
   activeSnapshots     ActiveRuntimeSnapshot[]
+  budgetLedgerEntries BudgetLedgerEntry[]
   projectTeamAssignments ProjectTeamAssignment[]
   conversations        Conversation[]
   chatMessages         ChatMessage[]
@@ -228,15 +231,16 @@ model Application {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  project        Project         @relation(fields: [projectId], references: [id])
-  appTokens      AppToken[]
+  tenant              Tenant                          @relation(fields: [tenantId], references: [id])
+  project             Project                         @relation(fields: [projectId], references: [id])
+  appTokens           AppToken[]
   providerConnections ApplicationProviderConnection[]
-  runtimeConfigs RuntimeConfig[]
-  runtimeSnapshots RuntimeSnapshot[]
-  activeSnapshots  ActiveRuntimeSnapshot[]
-  conversations    Conversation[]
-  chatMessages     ChatMessage[]
+  runtimeConfigs      RuntimeConfig[]
+  runtimeSnapshots    RuntimeSnapshot[]
+  activeSnapshots     ActiveRuntimeSnapshot[]
+  budgetLedgerEntries BudgetLedgerEntry[]
+  conversations       Conversation[]
+  chatMessages        ChatMessage[]
 
   @@index([tenantId])
   @@index([projectId])
@@ -378,6 +382,10 @@ model BudgetLedgerEntry {
   completedAt      DateTime? @map("completed_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  project     Project      @relation(fields: [projectId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+
   @@index([tenantId, budgetScopeType, budgetScopeId, monthStart])
   @@index([tenantId, projectId, monthStart])
   @@index([tenantId, applicationId, monthStart])
@@ -396,6 +404,8 @@ model BudgetQuota {
   source                  String   @default("manual")
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
+
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, budgetScopeType, budgetScopeId, monthStart])
   @@index([tenantId, monthStart, status])

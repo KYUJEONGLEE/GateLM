@@ -136,7 +136,8 @@ func isValidUUID(value string) bool {
 	if len(value) != 36 {
 		return false
 	}
-	for index, char := range value {
+	for index := 0; index < 36; index++ {
+		char := value[index]
 		if index == 8 || index == 13 || index == 18 || index == 23 {
 			if char != '-' {
 				return false
