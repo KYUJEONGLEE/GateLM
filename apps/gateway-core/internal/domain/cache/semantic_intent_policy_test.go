@@ -108,42 +108,6 @@ func TestSemanticCacheHitPolicyMaterializesCommonStaticGuidanceIntents(t *testin
 			},
 		},
 		{
-			name:       "RPS definition Korean josa meaning",
-			text:       "RPS의 뜻이 뭐야?",
-			wantIntent: "performance.rps_definition",
-			wantSlots: map[string]string{
-				"performanceConcept":    "rps",
-				"performanceAnswerType": "definition",
-			},
-		},
-		{
-			name:       "RPS definition Korean concept noun phrase",
-			text:       "RPS의 개념",
-			wantIntent: "performance.rps_definition",
-			wantSlots: map[string]string{
-				"performanceConcept":    "rps",
-				"performanceAnswerType": "definition",
-			},
-		},
-		{
-			name:       "RPS definition Korean subject particle",
-			text:       "RPS가 뭐야?",
-			wantIntent: "performance.rps_definition",
-			wantSlots: map[string]string{
-				"performanceConcept":    "rps",
-				"performanceAnswerType": "definition",
-			},
-		},
-		{
-			name:       "RPS definition Korean topic particle polite",
-			text:       "RPS는 뭔가요?",
-			wantIntent: "performance.rps_definition",
-			wantSlots: map[string]string{
-				"performanceConcept":    "rps",
-				"performanceAnswerType": "definition",
-			},
-		},
-		{
 			name:       "RPS definition English full name",
 			text:       "What is requests per second?",
 			wantIntent: "performance.rps_definition",
@@ -335,22 +299,6 @@ func TestSemanticCacheHitPolicyMaterializesCommonStaticGuidanceIntents(t *testin
 				if got := material.RequiredSlots[key]; got != want {
 					t.Fatalf("requiredSlots.%s 불일치: got=%s want=%s material=%+v", key, got, want, material)
 				}
-			}
-		})
-	}
-}
-
-func TestSemanticCacheHitPolicyDoesNotCollapseMultiConceptDefinitionToSingleIntent(t *testing.T) {
-	policy := testSemanticHitPolicy(t)
-
-	for _, text := range []string{
-		"RPS와 TPS의 뜻 알려줘",
-		"RPS랑 TPS 개념 설명해줘",
-	} {
-		t.Run(text, func(t *testing.T) {
-			material, decision := policy.Materialize(SemanticCacheCategoryGeneral, text)
-			if !material.IsZero() || decision.Allowed || decision.Reason != SemanticCacheReasonIntentUnavailable {
-				t.Fatalf("복수 성능 개념 질문은 단일 definition intent로 접으면 안 됨: material=%+v decision=%+v", material, decision)
 			}
 		})
 	}

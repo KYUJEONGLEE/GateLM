@@ -357,7 +357,6 @@ func (p SemanticCacheHitPolicy) intentRuleMatchScore(rule SemanticCacheIntentRul
 	if len(rule.MatchAll) == 0 {
 		return 0, false
 	}
-	matchText := semanticIntentMatchText(normalizedText)
 	score := rule.Priority
 	for _, term := range rule.MatchAll {
 		term = strings.TrimSpace(strings.ToLower(term))
@@ -367,124 +366,17 @@ func (p SemanticCacheHitPolicy) intentRuleMatchScore(rule SemanticCacheIntentRul
 		variants := p.termVariants(term)
 		matched := false
 		for _, variant := range variants {
-			if strings.Contains(matchText, variant) {
+			if strings.Contains(normalizedText, variant) {
 				matched = true
 				score++
 				break
 			}
 		}
-		if !matched && semanticGeneratedIntentTermMatches(term, rule, matchText) {
-			matched = true
-			score++
-		}
 		if !matched {
 			return 0, false
 		}
 	}
-	if semanticSinglePerformanceDefinitionRule(rule) && semanticPerformanceConceptMentionCount(matchText) > 1 {
-		return 0, false
-	}
 	return score, true
-}
-
-func semanticIntentMatchText(text string) string {
-	normalized := normalizeSemanticText(text)
-	loose := normalizeKoreanIntentParticles(normalized)
-	if loose == "" || loose == normalized {
-		return normalized
-	}
-	return normalized + " " + loose
-}
-
-func normalizeKoreanIntentParticles(text string) string {
-	fields := strings.Fields(normalizeSemanticText(text))
-	if len(fields) == 0 {
-		return ""
-	}
-	normalized := make([]string, 0, len(fields))
-	for _, field := range fields {
-		token := stripKoreanIntentParticle(strings.Trim(field, " \t\r\n.,!?;:()[]{}\"'`“”‘’<>"))
-		if token != "" {
-			normalized = append(normalized, token)
-		}
-	}
-	return strings.Join(normalized, " ")
-}
-
-func stripKoreanIntentParticle(token string) string {
-	for _, suffix := range []string{
-		"으로부터", "에게서", "에서는", "으로서", "으로써", "이라는", "라는",
-		"에서", "에게", "에는", "으로", "부터", "까지", "보다", "처럼", "마다", "이란",
-		"은", "는", "이", "가", "을", "를", "의", "에", "와", "과", "랑", "하고", "도", "만", "로",
-	} {
-		if strings.HasSuffix(token, suffix) && runeLen(token) > runeLen(suffix) {
-			return strings.TrimSuffix(token, suffix)
-		}
-	}
-	return token
-}
-
-func semanticGeneratedIntentTermMatches(term string, rule SemanticCacheIntentRule, matchText string) bool {
-	if !semanticSinglePerformanceDefinitionRule(rule) {
-		return false
-	}
-	concept := strings.TrimSpace(rule.RequiredSlots["performanceConcept"])
-	if concept == "" || term != concept+"_definition" {
-		return false
-	}
-	if semanticPerformanceConceptMentionCount(matchText) != 1 || !semanticIntentContainsToken(matchText, concept) {
-		return false
-	}
-	if containsAny(matchText, "차이", "비교", " vs ", " versus ", "difference", "compare") {
-		return false
-	}
-	if containsAny(matchText,
-		"increase", "improve", "low", "high", "good", "target", "recommended", "recommend",
-		"measure", "monitor", "test", "tool", "for my", "my service", "my app", "our service",
-		"how can", "how do", "why is", "which",
-		"높", "낮", "좋은", "적정", "권장", "추천", "측정", "모니터", "테스트", "도구", "내 서비스", "우리 서비스",
-	) {
-		return false
-	}
-	return containsAny(matchText,
-		"뜻", "의미", "개념", "정의", "설명", "뭐", "뭔", "무엇",
-		"what is", "meaning", "definition", "define", "explain", "concept",
-	)
-}
-
-func semanticSinglePerformanceDefinitionRule(rule SemanticCacheIntentRule) bool {
-	return strings.TrimSpace(rule.RequiredSlots["performanceAnswerType"]) == "definition" &&
-		strings.TrimSpace(rule.RequiredSlots["performanceConcept"]) != ""
-}
-
-func semanticPerformanceConceptMentionCount(text string) int {
-	count := 0
-	for _, concept := range []string{"rps", "tps", "latency", "throughput", "error_rate"} {
-		if semanticIntentContainsConcept(text, concept) {
-			count++
-		}
-	}
-	return count
-}
-
-func semanticIntentContainsConcept(text string, concept string) bool {
-	if concept == "error_rate" {
-		return strings.Contains(text, "error rate") || strings.Contains(text, "에러율") || strings.Contains(text, "오류율") || strings.Contains(text, "실패율")
-	}
-	return semanticIntentContainsToken(text, concept)
-}
-
-func semanticIntentContainsToken(text string, token string) bool {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return false
-	}
-	for _, field := range strings.Fields(text) {
-		if strings.Trim(field, " \t\r\n.,!?;:()[]{}\"'`“”‘’<>") == token {
-			return true
-		}
-	}
-	return false
 }
 
 func (p SemanticCacheHitPolicy) termVariants(term string) []string {
