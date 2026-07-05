@@ -453,12 +453,17 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
+        },
+        "restrictHighQualityOnBudgetRisk": {
+          "type": "boolean",
+          "description": "When true, Gateway may downgrade auto-routed high_quality requests after budget warning/exceeded outcomes. When false, budget status is still logged but high_quality is not restricted by this guard."
         }
       },
       "required": [
         "enabled",
         "enforcementMode",
-        "warningThresholdPercent"
+        "warningThresholdPercent",
+        "restrictHighQualityOnBudgetRisk"
       ]
     },
     "fallbackPolicy": {

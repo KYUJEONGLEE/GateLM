@@ -187,3 +187,42 @@ func TestStagePassesBudgetHighQualityRestrictionToRouter(t *testing.T) {
 		t.Fatal("expected budget warning to restrict high quality routes")
 	}
 }
+
+func TestStageDoesNotRestrictHighQualityWhenBudgetPolicyDisablesQualityGuard(t *testing.T) {
+	restrictHighQuality := false
+	router := &fakeRouter{
+		decision: routing.Decision{
+			RequestedModel:   "auto",
+			SelectedProvider: "mock-premium",
+			SelectedModel:    "mock-smart",
+			RoutingReason:    routing.ReasonCodeHighQuality,
+			PolicyHash:       "route_p0_v1",
+		},
+	}
+	stage := NewStage(router)
+	gatewayCtx := &request.GatewayContext{
+		Request: request.RequestContext{
+			RequestedModel: "auto",
+			PromptText:     "Fix this TypeScript function error.",
+		},
+		Governance: request.GovernanceContext{
+			BudgetDecision: &budget.Decision{
+				Allowed: true,
+				Outcome: budget.OutcomeWarned,
+				Policy: budget.Policy{
+					Enabled:                         true,
+					EnforcementMode:                 budget.EnforcementModeWarn,
+					WarningThresholdPercent:         80,
+					RestrictHighQualityOnBudgetRisk: &restrictHighQuality,
+				},
+			},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err != nil {
+		t.Fatalf("expected routing stage to pass, got %v", err)
+	}
+	if router.request.HighQualityRestricted {
+		t.Fatal("expected disabled budget quality guard to keep high quality routes unrestricted")
+	}
+}

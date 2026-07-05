@@ -269,6 +269,7 @@ export function buildDemoRuntimeConfigDocument(
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     },
     safetyPolicy,
     cachePolicy: {
@@ -848,6 +849,8 @@ function buildDemoRuntimeSnapshot(
         enabled: document.budgetPolicy.enabled,
         enforcementMode: document.budgetPolicy.enforcementMode,
         warningThresholdPercent: document.budgetPolicy.warningThresholdPercent,
+        restrictHighQualityOnBudgetRisk:
+          document.budgetPolicy.restrictHighQualityOnBudgetRisk,
       },
       fallback: {
         enabled: true,

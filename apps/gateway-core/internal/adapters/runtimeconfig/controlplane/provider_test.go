@@ -52,6 +52,9 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 		snapshot.BudgetPolicy.WarningThresholdPercent != 75 {
 		t.Fatalf("unexpected budget policy: %+v", snapshot.BudgetPolicy)
 	}
+	if snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk == nil || !*snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk {
+		t.Fatalf("expected budget high quality restriction to default on, got %+v", snapshot.BudgetPolicy)
+	}
 	if snapshot.RoutingPolicy.DefaultProvider != "openai-main" || snapshot.RoutingPolicy.DefaultModel != "gpt-test-low" {
 		t.Fatalf("unexpected routing policy: %+v", snapshot.RoutingPolicy)
 	}
@@ -70,6 +73,26 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 		snapshot.ResponseCapture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
 		snapshot.ResponseCapture.MaxChars != 1600 {
 		t.Fatalf("unexpected response capture policy: %+v", snapshot.ResponseCapture)
+	}
+}
+
+func TestProviderMapsBudgetHighQualityRestrictionToggle(t *testing.T) {
+	restrictHighQuality := false
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.Policies.Budget.RestrictHighQualityOnBudgetRisk = &restrictHighQuality
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	snapshot, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if err != nil {
+		t.Fatalf("expected runtime snapshot, got %v", err)
+	}
+
+	if snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk == nil || *snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk {
+		t.Fatalf("expected budget high quality restriction to be disabled, got %+v", snapshot.BudgetPolicy)
 	}
 }
 

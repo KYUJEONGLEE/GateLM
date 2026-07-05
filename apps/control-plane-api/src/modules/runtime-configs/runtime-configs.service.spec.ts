@@ -113,6 +113,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn',
         warningThresholdPercent: 70,
+        restrictHighQualityOnBudgetRisk: true,
       },
       cachePolicy: { ttlSeconds: 120 },
       promptCapturePolicy: {
@@ -143,6 +144,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 70,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.runtimeConfig.cachePolicy.ttlSeconds).toBe(120);
     expect(result.runtimeConfig.promptCapturePolicy).toEqual({
@@ -493,6 +495,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn' as const,
         warningThresholdPercent: 75,
+        restrictHighQualityOnBudgetRisk: true,
       },
     };
     prisma.runtimeConfig.findUnique.mockResolvedValue(
@@ -542,6 +545,7 @@ describe('RuntimeConfigsService', () => {
           enabled: true,
           enforcementMode: 'warn',
           warningThresholdPercent: 75,
+          restrictHighQualityOnBudgetRisk: true,
         },
       }),
     );
@@ -588,6 +592,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'block' as const,
         warningThresholdPercent: 70,
+        restrictHighQualityOnBudgetRisk: true,
       },
     };
     const tx = {
@@ -694,6 +699,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'block',
       warningThresholdPercent: 70,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(createdDocument.configVersion).toBe(
       'runtime_config_rollback_manual',
@@ -877,6 +883,7 @@ describe('RuntimeConfigsService', () => {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.policies.routing.defaultProvider).toBe('mock');
     expect(result.policies.routing.lowCostModel).toBe('mock-fast');
@@ -1015,6 +1022,7 @@ describe('RuntimeConfigsService', () => {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     });
   });
 
@@ -1045,6 +1053,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.budgetResolution).toEqual({
       budgetScopeType: 'application',
@@ -1123,6 +1132,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'block' as const,
         warningThresholdPercent: 75,
+        restrictHighQualityOnBudgetRisk: false,
       },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
@@ -1144,6 +1154,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'block',
       warningThresholdPercent: 75,
+      restrictHighQualityOnBudgetRisk: false,
     });
   });
 
@@ -1156,6 +1167,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn' as const,
         warningThresholdPercent: 65,
+        restrictHighQualityOnBudgetRisk: true,
       },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
@@ -1170,6 +1182,7 @@ describe('RuntimeConfigsService', () => {
     expect(Object.keys(result.policies.budget).sort()).toEqual([
       'enabled',
       'enforcementMode',
+      'restrictHighQualityOnBudgetRisk',
       'warningThresholdPercent',
     ]);
     expect(Object.keys(result.budgetResolution).sort()).toEqual([
@@ -1182,6 +1195,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 65,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.budgetResolution).toEqual({
       budgetScopeType: 'application',
@@ -2059,6 +2073,7 @@ describe('RuntimeConfigsService', () => {
           enabled: false,
           enforcementMode: 'disabled',
           warningThresholdPercent: 80,
+          restrictHighQualityOnBudgetRisk: true,
         },
         fallback: {
           enabled: true,
@@ -2169,6 +2184,7 @@ describe('RuntimeConfigsService', () => {
         enabled: false,
         enforcementMode: 'disabled',
         warningThresholdPercent: 80,
+        restrictHighQualityOnBudgetRisk: true,
       },
       safetyPolicy: {
         mode: 'rule_based',

@@ -90,7 +90,7 @@ Reject:
 | Scenario | Input / Setup | Expected result | Evidence |
 |---|---|---|---|
 | default budget scope | no override | `budgetScopeType=application`, `budgetScopeId=applicationId`, `resolvedBy=default_application` | Gateway test |
-| RuntimeSnapshot budget shape | active RuntimeSnapshot from Control Plane | `policies.budget` has `enabled`, `enforcementMode`, `warningThresholdPercent`; `budgetResolution` has `budgetScopeType`, `budgetScopeId`, `resolvedBy`, `warningThresholdPercent` | Control Plane test |
+| RuntimeSnapshot budget shape | active RuntimeSnapshot from Control Plane | `policies.budget` has `enabled`, `enforcementMode`, `warningThresholdPercent`, `restrictHighQualityOnBudgetRisk`; `budgetResolution` has `budgetScopeType`, `budgetScopeId`, `resolvedBy`, `warningThresholdPercent` | Control Plane test |
 | runtime budget override | snapshot specifies project/team scope | resolved budget scope from trusted snapshot/rule only | Gateway test |
 | client supplied budget scope | request body sends scope | ignored unless trusted rule resolves same result | Gateway test |
 | budget block | quota exceeded | terminal status `blocked`, provider `not_called` | Gateway test |

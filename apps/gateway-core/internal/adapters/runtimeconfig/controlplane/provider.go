@@ -195,9 +195,10 @@ type runtimeSnapshotRateLimitPolicy struct {
 }
 
 type runtimeSnapshotBudgetPolicy struct {
-	Enabled                 bool   `json:"enabled"`
-	EnforcementMode         string `json:"enforcementMode"`
-	WarningThresholdPercent int    `json:"warningThresholdPercent"`
+	Enabled                         bool   `json:"enabled"`
+	EnforcementMode                 string `json:"enforcementMode"`
+	WarningThresholdPercent         int    `json:"warningThresholdPercent"`
+	RestrictHighQualityOnBudgetRisk *bool  `json:"restrictHighQualityOnBudgetRisk,omitempty"`
 }
 
 type runtimeSnapshotFallbackPolicy struct {
@@ -277,9 +278,10 @@ func (r runtimeSnapshotResponse) executionSnapshot(expected lookupKey) (runtimec
 			Limit:         r.Policies.RateLimit.Limit,
 		},
 		BudgetPolicy: budget.Policy{
-			Enabled:                 r.Policies.Budget.Enabled,
-			EnforcementMode:         r.Policies.Budget.EnforcementMode,
-			WarningThresholdPercent: r.Policies.Budget.WarningThresholdPercent,
+			Enabled:                         r.Policies.Budget.Enabled,
+			EnforcementMode:                 r.Policies.Budget.EnforcementMode,
+			WarningThresholdPercent:         r.Policies.Budget.WarningThresholdPercent,
+			RestrictHighQualityOnBudgetRisk: r.Policies.Budget.RestrictHighQualityOnBudgetRisk,
 		},
 		SafetyPolicy: runtimeconfig.SafetyPolicy{
 			SecurityPolicyHash: securityPolicyHash,
