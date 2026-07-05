@@ -88,7 +88,7 @@ func (l *FixedWindowLimiter) Check(ctx context.Context, req ratelimit.Request) (
 		return decision, errors.New("redis fixed-window rate limiter requires a client")
 	}
 
-	ttlMillis := maxInt64(resetAt.Sub(now).Milliseconds(), 1)
+	ttlMillis := max(resetAt.Sub(now).Milliseconds(), 1)
 	key := l.fixedWindowKey(tenantID, config.Scope, scopeID, windowStart)
 	raw, err := l.client.Eval(ctx, fixedWindowScript, []string{key}, config.Limit, ttlMillis).Result()
 	if err != nil {
@@ -213,20 +213,6 @@ func retryAfterSeconds(now time.Time, resetAt time.Time) int {
 	}
 	duration := resetAt.Sub(now)
 	return int((duration + time.Second - time.Nanosecond) / time.Second)
-}
-
-func max(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func maxInt64(a int64, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 const fixedWindowScript = `

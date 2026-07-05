@@ -76,7 +76,7 @@ func (l *TokenBucketLimiter) Check(ctx context.Context, req ratelimit.Request) (
 	}
 
 	refillPerMillis := float64(config.Limit) / float64(config.WindowSeconds) / 1000
-	ttlMillis := maxInt64(int64(config.WindowSeconds)*2*1000, 1000)
+	ttlMillis := max(int64(config.WindowSeconds)*2*1000, 1000)
 	key := l.tokenBucketKey(tenantID, config.Scope, scopeID)
 	raw, err := l.client.Eval(ctx, tokenBucketScript, []string{key},
 		now.UnixMilli(),
