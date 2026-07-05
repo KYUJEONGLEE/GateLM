@@ -412,7 +412,7 @@ source
 
 완료 기준:
 
-- OpenAI/Gemini/Claude 데모 가격 행을 시드로 넣을 수 있다.
+- OpenAI/Gemini/Claude 공식 pricing 문서에서 확인한 가격 행을 시드로 넣을 수 있다.
 - 알 수 없는 프로바이더/모델을 조용히 0원으로 처리하지 않는다.
 - 원본 프로바이더 키나 인증 재료를 저장하지 않는다.
 - 프로바이더/모델은 enum이 아니라 텍스트/카탈로그 데이터로 유지한다.
@@ -661,7 +661,7 @@ PR-3과 PR-6은 팀 일정에 따라 PR-5에 합칠 수 있지만, 재혁님이 
 
 목적:
 
-- OpenAI/Gemini/Claude 데모 가격표 출처를 만든다.
+- OpenAI/Gemini/Claude 공식 pricing 문서 기준 가격표 snapshot을 만든다.
 - 프로바이더 사용량 토큰으로 `cost_micro_usd`를 계산한다.
 - 요청 로그와 기존 예산 원장에 같은 cost를 남긴다.
 
@@ -801,14 +801,14 @@ PR-0 문서의 작은 정리
 3. 프로바이더 응답 usage token을 기준으로 `cost_micro_usd`를 계산한다.
 4. 계산 결과를 요청 로그의 `cost_micro_usd`와 `metadata.costing`에 남긴다.
 5. 기존 terminal writer가 `cost_micro_usd > 0`일 때 원장에 쓰는 흐름을 그대로 사용한다.
-6. OpenAI/Gemini/Claude 데모 가격 rows를 `model_pricing_rules` seed에 추가한다. Claude는 현재 코드/문서의 provider key 후보를 맞추기 위해 `claude`, `anthropic`, `claude-main` 별칭을 함께 둔다.
+6. OpenAI/Gemini/Claude 공식 pricing 문서에서 확인한 가격 rows를 `model_pricing_rules` seed에 추가한다. Claude는 현재 코드/문서의 provider key 후보를 맞추기 위해 `claude`, `anthropic`, `claude-main` 별칭을 함께 둔다.
 
 의도적으로 제외한 내용:
 
 1. 프론트 파일 수정.
 2. Budget hard block.
 3. Control Plane/Prisma 가격 관리 화면 또는 API 확정.
-4. 공식 최신 가격 보장. 현재 seed는 `foundation_demo_seed` 기준 데모 가격이다.
+4. 가격 자동 동기화. 현재 seed는 공식 문서를 2026-07-05에 확인한 snapshot이며, provider 가격 변경 자동 추적은 후속 작업이다.
 5. provider/model enum 고정.
 6. raw prompt, raw response, API key, app token, provider key, Authorization header 저장.
 
@@ -818,3 +818,30 @@ PR-0 문서의 작은 정리
 2. 현재 월 원장 합계 조회.
 3. 한국어 입력을 보수적으로 잡는 사전 토큰 추정.
 4. 예상 비용 + 현재 월 비용 기준 예산 초과 전 차단.
+
+## 15. 공식 가격 seed 기준
+
+빠른 PR-1의 가격 seed는 임의 demo 값이 아니라, 2026-07-05에 각 provider 공식 pricing 문서를 확인한 snapshot으로 둔다. 자동 동기화가 아니므로 가격 변경 시 새 `pricingVersion`과 `effectiveFrom`으로 갱신해야 한다.
+
+공식 출처:
+
+| Provider | 공식 문서 | seed 기준 |
+|---|---|---|
+| OpenAI | https://developers.openai.com/api/docs/pricing | `gpt-5.4-mini`, `gpt-5.4` Standard short context 가격 |
+| Gemini | https://ai.google.dev/gemini-api/docs/pricing | `gemini-2.5-flash`, `gemini-2.5-pro` Standard text/short context 가격 |
+| Claude | https://platform.claude.com/docs/en/about-claude/pricing | `claude-haiku-4-5`, `claude-sonnet-4-6` Claude API 가격 |
+
+현재 seed 버전:
+
+```text
+pricingVersion = official-pricing-2026-07-05-v1
+effectiveFrom = 2026-07-05 00:00:00+00
+source = provider 공식 pricing 문서 URL
+```
+
+의도적으로 뺀 것:
+
+1. 현재 공식 pricing 표에서 바로 검증하지 못한 구버전 모델 가격.
+2. OpenAI/Gemini/Claude 외 provider 가격.
+3. 무료 티어, 배치, flex, priority, cache hit/write, regional premium, audio/image 전용 가격.
+4. 가격 자동 수집/동기화.
