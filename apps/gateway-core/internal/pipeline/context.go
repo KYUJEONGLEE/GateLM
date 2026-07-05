@@ -6,6 +6,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
@@ -60,6 +61,7 @@ type RequestContext struct {
 	RoutingPolicyHash          string
 	RoutingDecisionKeyHash     string
 	PromptCategory             string
+	CategoryDiagnostics        routing.CategoryDiagnostics
 
 	MaskingAction           string
 	MaskingDetectedTypes    []string

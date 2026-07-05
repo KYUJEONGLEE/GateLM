@@ -88,6 +88,9 @@ func TestEvaluateReportIncludesTierLatencyAndCostEvidence(t *testing.T) {
 	if report.CostEstimate.SavingRate <= 0 {
 		t.Fatalf("expected positive cost saving estimate: %#v", report.CostEstimate)
 	}
+	if len(report.Samples) != 2 || report.Samples[1].CategoryDiagnostics.TopCategory == "" || len(report.Samples[1].CategoryDiagnostics.ScoreVector) == 0 {
+		t.Fatalf("expected per-sample category diagnostics for score/margin review: %#v", report.Samples)
+	}
 }
 
 func TestLoadDatasetHandlesUTF8BOMJSONFile(t *testing.T) {

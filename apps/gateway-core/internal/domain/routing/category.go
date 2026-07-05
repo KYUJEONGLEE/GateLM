@@ -301,6 +301,7 @@ type RoutingSignals struct {
 	NeedsReasoning         bool
 	HasSupportRefundSignal bool
 	Category               string
+	CategoryDiagnostics    CategoryDiagnostics
 }
 
 func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
@@ -316,10 +317,33 @@ func DefaultCategoryPolicy() CategoryPolicy {
 }
 
 func (c RuleBasedCategoryClassifier) Classify(prompt string) string {
+	return c.ExtractRoutingSignals(prompt).Category
+}
+
+func (c RuleBasedCategoryClassifier) ExtractRoutingSignals(prompt string) RoutingSignals {
 	if c.compiled.policy.Rules == nil {
-		return extractRoutingSignalsCompiled(prompt, defaultCompiledCategoryPolicy).Category
+		return extractRoutingSignalsCompiled(prompt, defaultCompiledCategoryPolicy)
 	}
-	return extractRoutingSignalsCompiled(prompt, c.compiled).Category
+	return extractRoutingSignalsCompiled(prompt, c.compiled)
+}
+
+func (c RuleBasedCategoryClassifier) Diagnose(prompt string) CategoryDiagnostics {
+	if c.compiled.policy.Rules == nil {
+		return diagnoseCategoryCompiled(prompt, defaultCompiledCategoryPolicy)
+	}
+	return diagnoseCategoryCompiled(prompt, c.compiled)
+}
+
+func (d CategoryDiagnostics) WithSelectedCategory(category string) CategoryDiagnostics {
+	d.SelectedCategory = canonicalCategory(category)
+	if d.Confidence == "" {
+		d.Confidence = RoutingConfidenceLow
+	}
+	return d
+}
+
+func (d CategoryDiagnostics) HasData() bool {
+	return d.SelectedCategory != "" || d.TopCategory != "" || len(d.ScoreVector) > 0 || d.Confidence != ""
 }
 
 func ExtractRoutingSignals(prompt string) RoutingSignals {
@@ -330,13 +354,16 @@ func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals 
 	return extractRoutingSignalsCompiled(prompt, compileCategoryPolicy(policy))
 }
 
-func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolicy) RoutingSignals {
+func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolicy) (signals RoutingSignals) {
 	policy := compiled.policy
 	normalized := normalizeCategoryTextWithLimit(prompt, policy.MaxScanBytes)
-	signals := RoutingSignals{
+	signals = RoutingSignals{
 		PromptLength: utf8.RuneCountInString(prompt),
 		Category:     CategoryUnknown,
 	}
+	defer func() {
+		signals.CategoryDiagnostics = signals.CategoryDiagnostics.WithSelectedCategory(signals.Category)
+	}()
 	if normalized == "" {
 		return signals
 	}
@@ -349,6 +376,13 @@ func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolic
 	explicitRequestTokens := categoryTokens(explicitRequest)
 	matches := compiled.matcher.Match(normalized)
 	explicitRequestMatches := compiled.matcher.Match(explicitRequest)
+	signals.CategoryDiagnostics = rankCategoriesForCompiledPolicy(policy, normalized, tokens, matches)
+	if explicitRequest != "" {
+		explicitDiagnostics := rankCategoriesForCompiledPolicy(policy, explicitRequest, explicitRequestTokens, explicitRequestMatches)
+		if explicitDiagnostics.hasMatchedCategory() {
+			signals.CategoryDiagnostics = explicitDiagnostics
+		}
+	}
 	signals.HasCodeSignal = matchesCategoryRuleCompiled(normalized, tokens, policy.Rules[CategoryCode], matches.Category(CategoryCode))
 	signals.WantsTranslation = matchesCategoryRuleCompiled(normalized, tokens, policy.Rules[CategoryTranslation], matches.Category(CategoryTranslation))
 	signals.WantsSummarization = matchesCategoryRuleCompiled(normalized, tokens, policy.Rules[CategorySummarization], matches.Category(CategorySummarization))
@@ -773,17 +807,137 @@ func categoryExplicitCodeLikeRequest(text string, tokens []string) bool {
 }
 
 func bestCategoryForCompiledPolicy(policy CategoryPolicy, text string, tokens []string, matches categoryPhraseMatches) (string, bool) {
-	bestCategory := ""
-	bestScore := 0
+	diagnostics := rankCategoriesForCompiledPolicy(policy, text, tokens, matches)
+	if !diagnostics.hasMatchedCategory() {
+		return "", false
+	}
+	return diagnostics.TopCategory, true
+}
+
+func diagnoseCategoryCompiled(prompt string, compiled compiledCategoryPolicy) CategoryDiagnostics {
+	policy := compiled.policy
+	normalized := normalizeCategoryTextWithLimit(prompt, policy.MaxScanBytes)
+	if normalized == "" {
+		return emptyCategoryDiagnostics()
+	}
+
+	tokens := categoryTokens(normalized)
+	if isUnclassifiablePrompt(normalized, tokens) {
+		return emptyCategoryDiagnostics()
+	}
+
+	matches := compiled.matcher.Match(normalized)
+	diagnostics := rankCategoriesForCompiledPolicy(policy, normalized, tokens, matches)
+	explicitRequest := categoryExplicitRequestText(normalized)
+	if explicitRequest == "" {
+		return diagnostics
+	}
+
+	explicitRequestTokens := categoryTokens(explicitRequest)
+	explicitRequestMatches := compiled.matcher.Match(explicitRequest)
+	explicitDiagnostics := rankCategoriesForCompiledPolicy(policy, explicitRequest, explicitRequestTokens, explicitRequestMatches)
+	if explicitDiagnostics.hasMatchedCategory() {
+		return explicitDiagnostics
+	}
+	return diagnostics
+}
+
+func emptyCategoryDiagnostics() CategoryDiagnostics {
+	return CategoryDiagnostics{
+		TopCategory: CategoryUnknown,
+		Confidence:  RoutingConfidenceLow,
+	}
+}
+
+func rankCategoriesForCompiledPolicy(policy CategoryPolicy, text string, tokens []string, matches categoryPhraseMatches) CategoryDiagnostics {
+	scores := make([]CategoryScore, 0, len(policy.CategoryPriority))
+	var top CategoryScore
+	var second CategoryScore
 	for _, category := range policy.CategoryPriority {
 		canonical := canonicalCategory(category)
+		if canonical == CategoryUnknown || canonical == CategoryGeneral {
+			continue
+		}
 		score := scoreCategoryRuleCompiled(text, tokens, policy.Rules[canonical], matches.Category(canonical))
-		if score.Matched && score.Score > bestScore {
-			bestCategory = category
-			bestScore = score.Score
+		candidate := CategoryScore{Category: canonical, Score: score.Score, Matched: score.Matched}
+		scores = append(scores, candidate)
+		if !candidate.Matched {
+			continue
+		}
+		if !top.Matched || candidate.Score > top.Score {
+			second = top
+			top = candidate
+			continue
+		}
+		if !second.Matched || candidate.Score > second.Score {
+			second = candidate
 		}
 	}
-	return bestCategory, bestCategory != ""
+
+	diagnostics := emptyCategoryDiagnostics()
+	diagnostics.ScoreVector = scores
+	if !top.Matched {
+		return diagnostics
+	}
+
+	diagnostics.TopCategory = top.Category
+	diagnostics.TopScore = top.Score
+	if second.Matched {
+		diagnostics.SecondCategory = second.Category
+		diagnostics.SecondScore = second.Score
+		diagnostics.ScoreMargin = top.Score - second.Score
+	} else {
+		diagnostics.ScoreMargin = top.Score
+	}
+	diagnostics.Ambiguous, diagnostics.AmbiguityReason = categoryRankingAmbiguity(top, second, diagnostics.ScoreMargin)
+	diagnostics.Confidence = categoryRankingConfidence(top, second, diagnostics.ScoreMargin, diagnostics.Ambiguous)
+	return diagnostics
+}
+
+func (d CategoryDiagnostics) hasMatchedCategory() bool {
+	return d.TopCategory != "" && d.TopCategory != CategoryUnknown && d.TopScore > 0
+}
+
+func categoryRankingAmbiguity(top CategoryScore, second CategoryScore, margin int) (bool, string) {
+	if !top.Matched {
+		return false, ""
+	}
+	if top.Score < 3 {
+		return true, AmbiguityReasonLowScore
+	}
+	if second.Matched && margin <= 1 {
+		return true, AmbiguityReasonLowMargin
+	}
+	if second.Matched && categoryRiskPair(top.Category, second.Category) && margin <= 2 {
+		return true, AmbiguityReasonRiskPair
+	}
+	return false, ""
+}
+
+func categoryRankingConfidence(top CategoryScore, second CategoryScore, margin int, ambiguous bool) string {
+	if !top.Matched || ambiguous {
+		return RoutingConfidenceLow
+	}
+	if top.Score >= 4 && margin >= 3 {
+		return RoutingConfidenceHigh
+	}
+	if top.Score >= 3 && margin >= 2 {
+		return RoutingConfidenceMedium
+	}
+	return RoutingConfidenceLow
+}
+
+func categoryRiskPair(left string, right string) bool {
+	left = canonicalCategory(left)
+	right = canonicalCategory(right)
+	return sameCategoryPair(left, right, CategoryCode, CategoryGeneral) ||
+		sameCategoryPair(left, right, CategoryReasoning, CategorySummarization) ||
+		sameCategoryPair(left, right, CategoryTranslation, CategorySupportRefund) ||
+		sameCategoryPair(left, right, CategoryExtractionJSON, CategorySummarization)
+}
+
+func sameCategoryPair(left string, right string, first string, second string) bool {
+	return (left == first && right == second) || (left == second && right == first)
 }
 
 func explicitRequestMarkers() []string {

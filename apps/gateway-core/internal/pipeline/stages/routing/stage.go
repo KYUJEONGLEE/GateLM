@@ -57,6 +57,9 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	}
 	gatewayCtx.Routing.RoutingReason = decision.RoutingReason
 	gatewayCtx.Routing.RoutingPolicyHash = decision.PolicyHash
+	if decision.CategoryDiagnostics.HasData() {
+		gatewayCtx.Routing.CategoryDiagnostics = decision.CategoryDiagnostics.WithSelectedCategory(decision.RoutingDecisionMaterial.Category)
+	}
 
 	return nil
 }

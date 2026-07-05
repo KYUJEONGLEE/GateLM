@@ -25,6 +25,7 @@ type Decision struct {
 	RoutingDecisionMaterial    DecisionMaterial
 	RoutingReason              string
 	PolicyHash                 string
+	CategoryDiagnostics        CategoryDiagnostics
 }
 
 type DecisionMaterial struct {
@@ -33,6 +34,25 @@ type DecisionMaterial struct {
 	Tier          string `json:"tier"`
 	Capability    string `json:"capability"`
 	PolicyVariant string `json:"policyVariant"`
+}
+
+type CategoryDiagnostics struct {
+	SelectedCategory string          `json:"selectedCategory,omitempty"`
+	TopCategory      string          `json:"topCategory,omitempty"`
+	TopScore         int             `json:"topScore,omitempty"`
+	SecondCategory   string          `json:"secondCategory,omitempty"`
+	SecondScore      int             `json:"secondScore,omitempty"`
+	ScoreMargin      int             `json:"scoreMargin,omitempty"`
+	Confidence       string          `json:"confidence,omitempty"`
+	Ambiguous        bool            `json:"ambiguous,omitempty"`
+	AmbiguityReason  string          `json:"ambiguityReason,omitempty"`
+	ScoreVector      []CategoryScore `json:"scoreVector,omitempty"`
+}
+
+type CategoryScore struct {
+	Category string `json:"category"`
+	Score    int    `json:"score"`
+	Matched  bool   `json:"matched"`
 }
 
 const (
@@ -61,6 +81,15 @@ const (
 
 	PolicyVariantDefault                = "default"
 	PolicyVariantProviderHealthFallback = "provider_health_fallback"
+
+	RoutingConfidenceHigh   = "high"
+	RoutingConfidenceMedium = "medium"
+	RoutingConfidenceLow    = "low"
+
+	AmbiguityReasonLowScore  = "low_score"
+	AmbiguityReasonLowMargin = "low_margin"
+	AmbiguityReasonRiskPair  = "risk_pair"
+	AmbiguityReasonUncertain = "uncertain_high_quality"
 )
 
 func CanonicalDecisionMaterial(material DecisionMaterial) DecisionMaterial {

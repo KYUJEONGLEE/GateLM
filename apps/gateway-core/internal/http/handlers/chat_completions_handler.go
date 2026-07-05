@@ -3245,6 +3245,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		EmbeddingProvider:           reqCtx.EmbeddingProvider,
 		ProviderCatalogContentHash:  reqCtx.ProviderCatalogContentHash,
 		RoutingDecisionKeyHash:      reqCtx.RoutingDecisionKeyHash,
+		RoutingDiagnostics:          reqCtx.CategoryDiagnostics,
 		MaskingAction:               reqCtx.MaskingAction,
 		MaskingDetectedTypes:        reqCtx.MaskingDetectedTypes,
 		MaskingDetectedCount:        reqCtx.MaskingDetectedCount,
