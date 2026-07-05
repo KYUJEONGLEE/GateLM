@@ -237,14 +237,8 @@ func autoRouteForCategory(category string, diagnostics CategoryDiagnostics, prom
 	}
 	switch canonicalCategory(category) {
 	case CategoryCode:
-		if !categoryCertainForHighQuality(diagnostics) {
-			return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonAmbiguousBalanced
-		}
 		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
 	case CategoryReasoning:
-		if !categoryCertainForHighQuality(diagnostics) {
-			return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonAmbiguousBalanced
-		}
 		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonReasoningHighQuality
 	case CategoryTranslation:
 		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonTranslationBalanced
