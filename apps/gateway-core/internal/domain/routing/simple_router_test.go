@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -268,7 +269,7 @@ func TestSimpleRouterRoutesLongSupportRefundCategoryToLowCostModel(t *testing.T)
 	}))
 }
 
-func TestSimpleRouterRoutesReasoningCategoryToHighQualityModel(t *testing.T) {
+func TestSimpleRouterRoutesUncertainReasoningCategoryToBalancedModel(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",
 		DefaultModel:        "mock-balanced",
@@ -288,15 +289,20 @@ func TestSimpleRouterRoutesReasoningCategoryToHighQualityModel(t *testing.T) {
 		t.Fatalf("DecideRoute returned error: %v", err)
 	}
 
-	assertDecision(t, decision, expectedDecision("auto", "mock-premium", "mock-smart", ReasonReasoningHighQuality, "route_p0_v1", DecisionMaterial{
+	assertDecision(t, decision, expectedDecision("auto", "mock", "mock-balanced", ReasonAmbiguousBalanced, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
 		Category:      CategoryReasoning,
-		Tier:          TierHighQuality,
+		Tier:          TierBalanced,
 		Capability:    CapabilityReasoning,
 		PolicyVariant: PolicyVariantDefault,
 	}))
+	if !decision.CategoryDiagnostics.Ambiguous || decision.CategoryDiagnostics.AmbiguityReason != AmbiguityReasonUncertain {
+		t.Fatalf("expected uncertain reasoning to leave ambiguity diagnostics, got %#v", decision.CategoryDiagnostics)
+	}
+	if decision.CategoryDiagnostics.ScoreMargin <= 0 || len(decision.CategoryDiagnostics.ScoreVector) == 0 {
+		t.Fatalf("expected score margin and score vector diagnostics, got %#v", decision.CategoryDiagnostics)
+	}
 }
-
 func TestSimpleRouterFallsBackWhenSelectedCandidateUnavailable(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock-default",
@@ -316,7 +322,7 @@ func TestSimpleRouterFallsBackWhenSelectedCandidateUnavailable(t *testing.T) {
 
 	decision, err := router.DecideRoute(context.Background(), Request{
 		RequestedModel: "auto",
-		PromptText:     "Compare these rollout options and explain the tradeoff.",
+		PromptText:     "Fix this TypeScript function error with handler stack trace and nil pointer exception.",
 	})
 	if err != nil {
 		t.Fatalf("DecideRoute returned error: %v", err)
@@ -324,13 +330,12 @@ func TestSimpleRouterFallsBackWhenSelectedCandidateUnavailable(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("auto", "mock-default", "mock-balanced", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryReasoning,
+		Category:      CategoryCode,
 		Tier:          TierBalanced,
-		Capability:    CapabilityReasoning,
+		Capability:    CapabilityCode,
 		PolicyVariant: PolicyVariantProviderHealthFallback,
 	}))
 }
-
 func TestSimpleRouterHealthFallbackDoesNotEscalateLowCostToHighQuality(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock-default",
@@ -384,7 +389,7 @@ func TestSimpleRouterHealthFallbackPrefersAvailableOverDegraded(t *testing.T) {
 
 	decision, err := router.DecideRoute(context.Background(), Request{
 		RequestedModel: "auto",
-		PromptText:     "Compare these rollout options and explain the tradeoff.",
+		PromptText:     "Fix this TypeScript function error with handler stack trace and nil pointer exception.",
 	})
 	if err != nil {
 		t.Fatalf("DecideRoute returned error: %v", err)
@@ -392,13 +397,12 @@ func TestSimpleRouterHealthFallbackPrefersAvailableOverDegraded(t *testing.T) {
 
 	assertDecision(t, decision, expectedDecision("auto", "mock-cheap", "mock-fast", ReasonProviderHealthFallback, "route_p0_v1", DecisionMaterial{
 		RoutingMode:   RoutingModeAuto,
-		Category:      CategoryReasoning,
+		Category:      CategoryCode,
 		Tier:          TierLowCost,
-		Capability:    CapabilityReasoning,
+		Capability:    CapabilityCode,
 		PolicyVariant: PolicyVariantProviderHealthFallback,
 	}))
 }
-
 func TestSimpleRouterDoesNotHealthFallbackPinnedModel(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider: "mock",
@@ -627,7 +631,9 @@ func TestRoutingDecisionKeyHashChangesWhenCategoryChanges(t *testing.T) {
 func assertDecision(t *testing.T, actual Decision, expected Decision) {
 	t.Helper()
 
-	if actual != expected {
+	actual.CategoryDiagnostics = CategoryDiagnostics{}
+	expected.CategoryDiagnostics = CategoryDiagnostics{}
+	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("unexpected decision:\nactual:   %#v\nexpected: %#v", actual, expected)
 	}
 }

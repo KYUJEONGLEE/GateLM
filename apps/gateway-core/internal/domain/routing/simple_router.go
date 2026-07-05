@@ -19,6 +19,7 @@ const (
 	ReasonExtractionJSONBalanced = "category_extraction_json_balanced"
 	ReasonSupportRefundLowCost   = "category_support_refund_low_cost"
 	ReasonReasoningHighQuality   = "category_reasoning_high_quality"
+	ReasonAmbiguousBalanced      = "category_ambiguous_balanced"
 	ReasonProviderHealthFallback = "provider_health_fallback"
 
 	RouteCandidateAvailable   = "available"
@@ -183,7 +184,9 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	if requestedModel == "" {
 		requestedModel = config.DefaultModel
 	}
-	category := classifier.Classify(req.PromptText)
+	signals := classifier.ExtractRoutingSignals(req.PromptText)
+	category := signals.Category
+	diagnostics := routeDiagnosticsForCategory(category, signals.CategoryDiagnostics.WithSelectedCategory(category))
 	capability := capabilityForCategory(category)
 
 	decision := Decision{
@@ -191,10 +194,11 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 		SelectedProvider:           config.DefaultProvider,
 		SelectedProviderCatalogKey: config.DefaultProvider,
 		PolicyHash:                 config.PolicyHash,
+		CategoryDiagnostics:        diagnostics,
 	}
 
 	if strings.EqualFold(requestedModel, "auto") {
-		selectedProvider, selectedModel, tier, reason := autoRouteForCategory(category, req.PromptText, config)
+		selectedProvider, selectedModel, tier, reason := autoRouteForCategory(category, diagnostics, req.PromptText, config)
 		policyVariant := PolicyVariantDefault
 		selectedProvider, selectedModel, tier, reason, policyVariant = applyCandidateStatusFallback(selectedProvider, selectedModel, tier, reason, config)
 		decision.SelectedProvider = selectedProvider
@@ -227,7 +231,10 @@ func (r *SimpleRouter) DecideRoute(_ context.Context, req Request) (Decision, er
 	return decision, nil
 }
 
-func autoRouteForCategory(category string, prompt string, config SimpleRouterConfig) (string, string, string, string) {
+func autoRouteForCategory(category string, diagnostics CategoryDiagnostics, prompt string, config SimpleRouterConfig) (string, string, string, string) {
+	if diagnostics.Ambiguous {
+		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonAmbiguousBalanced
+	}
 	switch canonicalCategory(category) {
 	case CategoryCode:
 		return config.HighQualityProvider, config.HighQualityModel, TierHighQuality, ReasonCodeHighQuality
@@ -249,6 +256,22 @@ func autoRouteForCategory(category string, prompt string, config SimpleRouterCon
 		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
 	}
 	return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
+}
+
+func categoryCertainForHighQuality(diagnostics CategoryDiagnostics) bool {
+	return diagnostics.Confidence == RoutingConfidenceHigh && !diagnostics.Ambiguous
+}
+
+func routeDiagnosticsForCategory(category string, diagnostics CategoryDiagnostics) CategoryDiagnostics {
+	category = canonicalCategory(category)
+	if (category == CategoryCode || category == CategoryReasoning) && !categoryCertainForHighQuality(diagnostics) {
+		diagnostics.Ambiguous = true
+		diagnostics.Confidence = RoutingConfidenceLow
+		if diagnostics.AmbiguityReason == "" {
+			diagnostics.AmbiguityReason = AmbiguityReasonUncertain
+		}
+	}
+	return diagnostics
 }
 
 func applyCandidateStatusFallback(provider string, model string, tier string, reason string, config SimpleRouterConfig) (string, string, string, string, string) {

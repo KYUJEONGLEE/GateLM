@@ -221,6 +221,9 @@ func applyGatewayContext(reqCtx *pipeline.RequestContext, gatewayCtx *request.Ga
 	if gatewayCtx.Routing.RoutingPolicyHash != "" {
 		reqCtx.RoutingPolicyHash = gatewayCtx.Routing.RoutingPolicyHash
 	}
+	if gatewayCtx.Routing.CategoryDiagnostics.HasData() {
+		reqCtx.CategoryDiagnostics = gatewayCtx.Routing.CategoryDiagnostics
+	}
 
 	if gatewayCtx.Cache.CacheStatus != "" {
 		reqCtx.CacheStatus = gatewayCtx.Cache.CacheStatus

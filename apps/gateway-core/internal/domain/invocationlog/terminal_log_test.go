@@ -7,6 +7,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
@@ -501,5 +502,41 @@ func TestBuildTerminalLogStoresStageTimingsMetadata(t *testing.T) {
 	}
 	if timings["provider_response_wait"].DurationMs != 120 || timings["provider_response_wait"].Count != 1 {
 		t.Fatalf("unexpected stage timings metadata: %#v", timings)
+	}
+}
+
+func TestBuildTerminalLogStoresRoutingDiagnosticsMetadata(t *testing.T) {
+	startedAt := time.Date(2026, 7, 4, 1, 2, 3, 0, time.UTC)
+	log := BuildTerminalLog(TerminalLogInput{
+		RequestID:      "request_routing_diagnostics",
+		ApplicationID:  "app_demo",
+		Status:         StatusSuccess,
+		HTTPStatus:     200,
+		PromptCategory: routing.CategoryReasoning,
+		RoutingDiagnostics: routing.CategoryDiagnostics{
+			SelectedCategory: routing.CategoryReasoning,
+			TopCategory:      routing.CategoryReasoning,
+			TopScore:         3,
+			SecondCategory:   routing.CategorySummarization,
+			SecondScore:      2,
+			ScoreMargin:      1,
+			Confidence:       routing.RoutingConfidenceLow,
+			Ambiguous:        true,
+			AmbiguityReason:  routing.AmbiguityReasonLowMargin,
+			ScoreVector: []routing.CategoryScore{
+				{Category: routing.CategoryReasoning, Score: 3, Matched: true},
+				{Category: routing.CategorySummarization, Score: 2, Matched: true},
+			},
+		},
+		StartedAt:   startedAt,
+		CompletedAt: startedAt.Add(10 * time.Millisecond),
+	})
+
+	diagnostics, ok := log.Metadata["routingDiagnostics"].(routing.CategoryDiagnostics)
+	if !ok {
+		t.Fatalf("expected routingDiagnostics metadata, got %#v", log.Metadata["routingDiagnostics"])
+	}
+	if !diagnostics.Ambiguous || diagnostics.ScoreMargin != 1 || len(diagnostics.ScoreVector) != 2 {
+		t.Fatalf("unexpected routing diagnostics metadata: %#v", diagnostics)
 	}
 }

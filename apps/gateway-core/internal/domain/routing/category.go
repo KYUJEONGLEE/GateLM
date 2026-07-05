@@ -301,6 +301,7 @@ type RoutingSignals struct {
 	NeedsReasoning         bool
 	HasSupportRefundSignal bool
 	Category               string
+	CategoryDiagnostics    CategoryDiagnostics
 }
 
 func NewRuleBasedCategoryClassifier() RuleBasedCategoryClassifier {
@@ -316,10 +317,33 @@ func DefaultCategoryPolicy() CategoryPolicy {
 }
 
 func (c RuleBasedCategoryClassifier) Classify(prompt string) string {
+	return c.ExtractRoutingSignals(prompt).Category
+}
+
+func (c RuleBasedCategoryClassifier) ExtractRoutingSignals(prompt string) RoutingSignals {
 	if c.compiled.policy.Rules == nil {
-		return extractRoutingSignalsCompiled(prompt, defaultCompiledCategoryPolicy).Category
+		return extractRoutingSignalsCompiled(prompt, defaultCompiledCategoryPolicy)
 	}
-	return extractRoutingSignalsCompiled(prompt, c.compiled).Category
+	return extractRoutingSignalsCompiled(prompt, c.compiled)
+}
+
+func (c RuleBasedCategoryClassifier) Diagnose(prompt string) CategoryDiagnostics {
+	if c.compiled.policy.Rules == nil {
+		return diagnoseCategoryCompiled(prompt, defaultCompiledCategoryPolicy)
+	}
+	return diagnoseCategoryCompiled(prompt, c.compiled)
+}
+
+func (d CategoryDiagnostics) WithSelectedCategory(category string) CategoryDiagnostics {
+	d.SelectedCategory = canonicalCategory(category)
+	if d.Confidence == "" {
+		d.Confidence = RoutingConfidenceLow
+	}
+	return d
+}
+
+func (d CategoryDiagnostics) HasData() bool {
+	return d.SelectedCategory != "" || d.TopCategory != "" || len(d.ScoreVector) > 0 || d.Confidence != ""
 }
 
 func ExtractRoutingSignals(prompt string) RoutingSignals {
@@ -330,13 +354,16 @@ func extractRoutingSignals(prompt string, policy CategoryPolicy) RoutingSignals 
 	return extractRoutingSignalsCompiled(prompt, compileCategoryPolicy(policy))
 }
 
-func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolicy) RoutingSignals {
+func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolicy) (signals RoutingSignals) {
 	policy := compiled.policy
 	normalized := normalizeCategoryTextWithLimit(prompt, policy.MaxScanBytes)
-	signals := RoutingSignals{
+	signals = RoutingSignals{
 		PromptLength: utf8.RuneCountInString(prompt),
 		Category:     CategoryUnknown,
 	}
+	defer func() {
+		signals.CategoryDiagnostics = signals.CategoryDiagnostics.WithSelectedCategory(signals.Category)
+	}()
 	if normalized == "" {
 		return signals
 	}
@@ -349,6 +376,13 @@ func extractRoutingSignalsCompiled(prompt string, compiled compiledCategoryPolic
 	explicitRequestTokens := categoryTokens(explicitRequest)
 	matches := compiled.matcher.Match(normalized)
 	explicitRequestMatches := compiled.matcher.Match(explicitRequest)
+	signals.CategoryDiagnostics = rankCategoriesForCompiledPolicy(policy, normalized, tokens, matches)
+	if explicitRequest != "" {
+		explicitDiagnostics := rankCategoriesForCompiledPolicy(policy, explicitRequest, explicitRequestTokens, explicitRequestMatches)
+		if explicitDiagnostics.hasMatchedCategory() {
+			signals.CategoryDiagnostics = explicitDiagnostics
+		}
+	}
 	signals.HasCodeSignal = matchesCategoryRuleCompiled(normalized, tokens, policy.Rules[CategoryCode], matches.Category(CategoryCode))
 	signals.WantsTranslation = matchesCategoryRuleCompiled(normalized, tokens, policy.Rules[CategoryTranslation], matches.Category(CategoryTranslation))
 	signals.WantsSummarization = matchesCategoryRuleCompiled(normalized, tokens, policy.Rules[CategorySummarization], matches.Category(CategorySummarization))
@@ -556,6 +590,9 @@ func categoryIntentFrameCategory(text string, tokens []string) (string, bool) {
 	if categoryFrameCodeTranslation(text) {
 		return CategoryCode, true
 	}
+	if categoryFramePreDecision(text) {
+		return CategoryReasoning, true
+	}
 	if categoryFrameTranslation(text) {
 		return CategoryTranslation, true
 	}
@@ -588,6 +625,16 @@ func categoryFrameCodeTranslation(text string) bool {
 	})
 }
 
+func categoryFramePreDecision(text string) bool {
+	return containsAny(text, []string{
+		"하기 전에", "전에 먼저", "먼저", "이전에", "전에",
+	}) && containsAny(text, []string{
+		"판단", "기준", "정해줘", "결정", "맞는지", "남겨야", "고를지", "선택할지",
+	}) && containsAny(text, []string{
+		"번역", "영어", "영문", "json", "추출", "뽑", "요약", "환불", "코드", "모델", "정책",
+	})
+}
+
 func categoryFrameTranslation(text string) bool {
 	if containsAny(text, []string{
 		"직역하지 말고", "비즈니스 영어", "영문 공지", "중국어 사용자", "일본어 고객",
@@ -597,19 +644,25 @@ func categoryFrameTranslation(text string) bool {
 	}
 	return containsAny(text, []string{
 		"영어로", "영문으로", "영문", "일본어", "중국어", "한국어로", "한글로",
-		"english", "japanese", "chinese", "korean", "해외 고객", "영어권 고객",
+		"english", "japanese", "chinese", "korean", "해외 고객", "영어권 고객", "영어권", "외국어",
 	}) && containsAny(text, []string{
-		"번역", "바꿔줘", "바꿔 주세요", "다듬어줘", "고쳐줘", "직역",
+		"translate", "translation", "번역", "옮겨줘", "옮겨 주세요", "바꿔줘", "바꿔 주세요", "다듬어줘", "고쳐줘", "직역",
 		"문체", "톤으로", "자연스럽게", "어색하지 않게", "현지", "메일 문체",
 	})
 }
 
 func categoryFrameExtractionJSON(text string) bool {
+	if containsAny(text, []string{"필요하면 표", "표를 써도", "표로 정리해도"}) && !containsAny(text, []string{
+		"json", "필드", "추출", "뽑", "열과 값", "key/value", "키/값", "값을 추출", "값을 뽑",
+	}) {
+		return false
+	}
 	return containsAny(text, []string{
 		"json", "key/value", "키/값", "schema", "스키마", "필드", "배열", "null", "구조화", "값만",
+		"requestid", "provider", "model", "latency", "열과 값", "값을 추출", "값을 뽑",
 	}) && containsAny(text, []string{
 		"추출", "뽑아", "나눠", "변환", "채워", "정리해줘", "정리해 주세요", "형태로 정리",
-		"return as json", "as json", "json으로",
+		"return as json", "as json", "json으로", "필드로 나눠", "구조화해줘",
 	})
 }
 
@@ -621,16 +674,20 @@ func categoryFrameCode(text string, tokens []string) bool {
 		"handler", "controller", "query", "cache key", "routing decision", "provider adapter",
 		"powershell", "script", "react", "hook", "nestjs", "prisma", "redis", "sql",
 		"go gateway", "request log writer", "dto", "api", "db", "코드", "함수", "타입",
+		"index", "migration", "컬럼", "디버깅", "interface", "타입 에러", "쿼리 패턴",
+		"go test", "race 가능성", "schema", "로컬 db",
 	}) && containsAny(text, []string{
 		"실패", "테스트가 깨", "깨지", "예외", "race", "nil pointer", "성능", "병목",
 		"리팩토링", "버그", "에러", "오류", "원인", "검토", "고쳐", "느린",
+		"추적", "확인해야", "추가해야", "수정", "디버깅", "어긋", "안 맞", "간헐적으로 실패",
 	})
 }
 
 func categoryFrameReasoning(text string) bool {
 	return containsAny(text, []string{
-		"비교", "추천", "판단", "우선순위", "장단점", "위험", "근거", "트레이드오프",
+		"비교", "추천", "판단", "우선순위", "장단점", "위험", "트레이드오프",
 		"전략", "선택지", "도입할지", "미룰지", "영향", "무엇을 먼저",
+		"기준을 정", "기준을 세", "최종 추천", "선택해야", "고를지",
 	}) && !categoryFrameTranslation(text) && !categoryFrameExtractionJSON(text)
 }
 
@@ -666,14 +723,21 @@ func categoryExplicitGeneralRequest(text string, tokens []string) bool {
 		"무엇을 하는",
 		"뭐 하는",
 		"처음 보는",
+		"모르는 사람",
 		"비개발자도 이해",
 		"쉽게 설명",
 		"간단히 설명",
 		"무엇인지",
 		"뭔지",
 		"왜 필요한지",
+		"풀어줘",
+		"한 문단으로",
 		"어디서 확인",
 		"메뉴 위치",
+		"메뉴를 알려",
+		"어떤 메뉴",
+		"먼저 봐야 할 메뉴",
+		"이동 경로",
 		"위치만 알려",
 		"사용 방법",
 		"관련 문서",
@@ -773,17 +837,140 @@ func categoryExplicitCodeLikeRequest(text string, tokens []string) bool {
 }
 
 func bestCategoryForCompiledPolicy(policy CategoryPolicy, text string, tokens []string, matches categoryPhraseMatches) (string, bool) {
-	bestCategory := ""
-	bestScore := 0
+	diagnostics := rankCategoriesForCompiledPolicy(policy, text, tokens, matches)
+	if !diagnostics.hasMatchedCategory() {
+		return "", false
+	}
+	return diagnostics.TopCategory, true
+}
+
+func diagnoseCategoryCompiled(prompt string, compiled compiledCategoryPolicy) CategoryDiagnostics {
+	policy := compiled.policy
+	normalized := normalizeCategoryTextWithLimit(prompt, policy.MaxScanBytes)
+	if normalized == "" {
+		return emptyCategoryDiagnostics()
+	}
+
+	tokens := categoryTokens(normalized)
+	if isUnclassifiablePrompt(normalized, tokens) {
+		return emptyCategoryDiagnostics()
+	}
+
+	matches := compiled.matcher.Match(normalized)
+	diagnostics := rankCategoriesForCompiledPolicy(policy, normalized, tokens, matches)
+	explicitRequest := categoryExplicitRequestText(normalized)
+	if explicitRequest == "" {
+		return diagnostics
+	}
+
+	explicitRequestTokens := categoryTokens(explicitRequest)
+	explicitRequestMatches := compiled.matcher.Match(explicitRequest)
+	explicitDiagnostics := rankCategoriesForCompiledPolicy(policy, explicitRequest, explicitRequestTokens, explicitRequestMatches)
+	if explicitDiagnostics.hasMatchedCategory() {
+		return explicitDiagnostics
+	}
+	return diagnostics
+}
+
+func emptyCategoryDiagnostics() CategoryDiagnostics {
+	return CategoryDiagnostics{
+		TopCategory: CategoryUnknown,
+		Confidence:  RoutingConfidenceLow,
+	}
+}
+
+func rankCategoriesForCompiledPolicy(policy CategoryPolicy, text string, tokens []string, matches categoryPhraseMatches) CategoryDiagnostics {
+	scores := make([]CategoryScore, 0, len(policy.CategoryPriority))
+	var top CategoryScore
+	var second CategoryScore
 	for _, category := range policy.CategoryPriority {
 		canonical := canonicalCategory(category)
+		if canonical == CategoryUnknown || canonical == CategoryGeneral {
+			continue
+		}
 		score := scoreCategoryRuleCompiled(text, tokens, policy.Rules[canonical], matches.Category(canonical))
-		if score.Matched && score.Score > bestScore {
-			bestCategory = category
-			bestScore = score.Score
+		candidate := CategoryScore{Category: canonical, Score: score.Score, Matched: score.Matched}
+		if canonical == CategoryTranslation && !categoryFrameTranslation(text) {
+			candidate.Matched = false
+		}
+		scores = append(scores, candidate)
+		if !candidate.Matched {
+			continue
+		}
+		if !top.Matched || candidate.Score > top.Score {
+			second = top
+			top = candidate
+			continue
+		}
+		if !second.Matched || candidate.Score > second.Score {
+			second = candidate
 		}
 	}
-	return bestCategory, bestCategory != ""
+
+	diagnostics := emptyCategoryDiagnostics()
+	diagnostics.ScoreVector = scores
+	if !top.Matched {
+		return diagnostics
+	}
+
+	diagnostics.TopCategory = top.Category
+	diagnostics.TopScore = top.Score
+	if second.Matched {
+		diagnostics.SecondCategory = second.Category
+		diagnostics.SecondScore = second.Score
+		diagnostics.ScoreMargin = top.Score - second.Score
+	} else {
+		diagnostics.ScoreMargin = top.Score
+	}
+	diagnostics.Ambiguous, diagnostics.AmbiguityReason = categoryRankingAmbiguity(top, second, diagnostics.ScoreMargin)
+	diagnostics.Confidence = categoryRankingConfidence(top, second, diagnostics.ScoreMargin, diagnostics.Ambiguous)
+	return diagnostics
+}
+
+func (d CategoryDiagnostics) hasMatchedCategory() bool {
+	return d.TopCategory != "" && d.TopCategory != CategoryUnknown && d.TopScore > 0
+}
+
+func categoryRankingAmbiguity(top CategoryScore, second CategoryScore, margin int) (bool, string) {
+	if !top.Matched {
+		return false, ""
+	}
+	if top.Score < 3 {
+		return true, AmbiguityReasonLowScore
+	}
+	if second.Matched && margin <= 1 {
+		return true, AmbiguityReasonLowMargin
+	}
+	if second.Matched && categoryRiskPair(top.Category, second.Category) && margin <= 2 {
+		return true, AmbiguityReasonRiskPair
+	}
+	return false, ""
+}
+
+func categoryRankingConfidence(top CategoryScore, second CategoryScore, margin int, ambiguous bool) string {
+	if !top.Matched || ambiguous {
+		return RoutingConfidenceLow
+	}
+	if top.Score >= 4 && margin >= 3 {
+		return RoutingConfidenceHigh
+	}
+	if top.Score >= 3 && margin >= 2 {
+		return RoutingConfidenceMedium
+	}
+	return RoutingConfidenceLow
+}
+
+func categoryRiskPair(left string, right string) bool {
+	left = canonicalCategory(left)
+	right = canonicalCategory(right)
+	return sameCategoryPair(left, right, CategoryCode, CategoryGeneral) ||
+		sameCategoryPair(left, right, CategoryReasoning, CategorySummarization) ||
+		sameCategoryPair(left, right, CategoryTranslation, CategorySupportRefund) ||
+		sameCategoryPair(left, right, CategoryExtractionJSON, CategorySummarization)
+}
+
+func sameCategoryPair(left string, right string, first string, second string) bool {
+	return (left == first && right == second) || (left == second && right == first)
 }
 
 func explicitRequestMarkers() []string {
@@ -821,16 +1008,11 @@ func explicitRequestMarkers() []string {
 		"추출해",
 		"추출해줘",
 		"json으로",
-		"표로",
-		"해줘",
-		"해주세요",
-		"please",
 		"summarize",
 		"translate",
 		"extract",
 		"compare",
 		"recommend",
-		"write",
 		"return as json",
 	}
 }
@@ -838,6 +1020,16 @@ func explicitRequestMarkers() []string {
 func isVagueUnknownPrompt(text string, tokens []string) bool {
 	normalized := strings.TrimSpace(text)
 	if normalized == "" {
+		return true
+	}
+	if containsAny(normalized, []string{
+		"아직 잘 모르겠",
+		"그냥 확인만",
+		"특별한 목적은 없어",
+		"설명하기 어렵",
+		"일단 이것 좀 봐줘",
+		"볼 수 있는 게 있나",
+	}) {
 		return true
 	}
 	noise := []string{

@@ -27,6 +27,13 @@ func TestStageWritesRoutingFields(t *testing.T) {
 			SelectedModel:    "mock-fast",
 			RoutingReason:    routing.ReasonShortPromptLowCost,
 			PolicyHash:       "route_p0_v1",
+			CategoryDiagnostics: routing.CategoryDiagnostics{
+				SelectedCategory: routing.CategorySupportRefund,
+				TopCategory:      routing.CategorySupportRefund,
+				TopScore:         5,
+				ScoreMargin:      5,
+				Confidence:       routing.RoutingConfidenceHigh,
+			},
 			RoutingDecisionMaterial: routing.DecisionMaterial{
 				RoutingMode:   routing.RoutingModeAuto,
 				Category:      routing.CategorySupportRefund,
@@ -62,6 +69,9 @@ func TestStageWritesRoutingFields(t *testing.T) {
 	}
 	if gatewayCtx.Routing.RoutingDecisionMaterial["category"] != routing.CategorySupportRefund {
 		t.Fatalf("expected routing category material to be written, got %#v", gatewayCtx.Routing.RoutingDecisionMaterial)
+	}
+	if gatewayCtx.Routing.CategoryDiagnostics.TopScore != 5 || gatewayCtx.Routing.CategoryDiagnostics.ScoreMargin != 5 {
+		t.Fatalf("expected routing diagnostics to be copied, got %#v", gatewayCtx.Routing.CategoryDiagnostics)
 	}
 }
 

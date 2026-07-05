@@ -9,6 +9,7 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
@@ -47,6 +48,7 @@ type TerminalLog struct {
 	RoutingPolicyHash      string
 	PromptCategory         string
 	RoutingDecisionKeyHash string
+	RoutingDiagnostics     routing.CategoryDiagnostics
 
 	PromptTokens      int
 	CompletionTokens  int
@@ -143,6 +145,7 @@ type TerminalLogInput struct {
 	RoutingPolicyHash      string
 	PromptCategory         string
 	RoutingDecisionKeyHash string
+	RoutingDiagnostics     routing.CategoryDiagnostics
 
 	PromptTokens      int
 	CompletionTokens  int
@@ -323,6 +326,9 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 	if strings.TrimSpace(input.PromptCategory) != "" {
 		metadata["promptCategory"] = strings.TrimSpace(input.PromptCategory)
 	}
+	if input.RoutingDiagnostics.HasData() {
+		metadata["routingDiagnostics"] = input.RoutingDiagnostics
+	}
 	metadata["semanticCacheEnabled"] = input.SemanticCacheEnabled
 	if strings.TrimSpace(input.SemanticCacheMode) != "" {
 		metadata["semanticCacheMode"] = strings.TrimSpace(input.SemanticCacheMode)
@@ -416,6 +422,7 @@ func BuildTerminalLog(input TerminalLogInput) TerminalLog {
 		RoutingPolicyHash:      strings.TrimSpace(input.RoutingPolicyHash),
 		PromptCategory:         strings.TrimSpace(input.PromptCategory),
 		RoutingDecisionKeyHash: strings.TrimSpace(input.RoutingDecisionKeyHash),
+		RoutingDiagnostics:     input.RoutingDiagnostics,
 
 		PromptTokens:      input.PromptTokens,
 		CompletionTokens:  input.CompletionTokens,
