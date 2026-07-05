@@ -1,4 +1,4 @@
-﻿import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Project, ResourceStatus } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
@@ -276,7 +276,7 @@ export class ProjectsService {
   }
 
   private toProjectBudgetUsd(value: Prisma.Decimal | null | undefined): number {
-    return this.toNumber(value) ?? DEFAULT_PROJECT_BUDGET_USD;
+    return Math.max(0, this.toNumber(value) ?? DEFAULT_PROJECT_BUDGET_USD);
   }
 
   private toNumber(value: Prisma.Decimal | null | undefined): number | null {
