@@ -110,6 +110,13 @@ export class ApplicationsService {
     dto: UpdateApplicationDto,
   ): Promise<ApplicationResponseDto> {
     const data: Prisma.ApplicationUpdateInput = {};
+    let current: Application | null = null;
+    let budgetValues: {
+      budgetLimitMode: ApplicationBudgetLimitModeDto;
+      budgetLimitPercent: number | null;
+      budgetLimitUsd: number | null;
+    } | null = null;
+    let projectBudgetUsdForAudit: number | null = null;
 
     if (dto.name !== undefined) {
       data.name = dto.name;
@@ -126,8 +133,20 @@ export class ApplicationsService {
       dto.budgetLimitPercent !== undefined ||
       dto.status !== undefined
     ) {
-      const current = await this.getApplicationEntityOrThrow(applicationId);
-      const budgetValues = this.resolveUpdateBudgetValues(current, dto);
+      current = await this.getApplicationEntityOrThrow(applicationId);
+      budgetValues = this.resolveUpdateBudgetValues(current, dto);
+      if (
+        dto.budgetLimitMode !== undefined ||
+        dto.budgetLimitUsd !== undefined ||
+        dto.budgetLimitPercent !== undefined
+      ) {
+        const projectForBudgetAudit = await this.getProjectOrThrow(
+          current.projectId,
+        );
+        projectBudgetUsdForAudit = this.toProjectBudgetUsd(
+          projectForBudgetAudit.totalBudgetUsd,
+        );
+      }
 
       await this.assertApplicationBudgetCanFitProject({
         applicationId,
@@ -148,9 +167,33 @@ export class ApplicationsService {
     }
 
     try {
-      const application = await this.prisma.application.update({
-        where: { id: applicationId },
-        data,
+      const budgetFieldsTouched =
+        dto.budgetLimitMode !== undefined ||
+        dto.budgetLimitUsd !== undefined ||
+        dto.budgetLimitPercent !== undefined;
+      const budgetAuditData =
+        budgetFieldsTouched &&
+        current !== null &&
+        budgetValues !== null &&
+        projectBudgetUsdForAudit !== null
+          ? this.buildApplicationBudgetAuditData(
+              current,
+              budgetValues,
+              projectBudgetUsdForAudit,
+            )
+          : null;
+
+      const application = await this.prisma.$transaction(async (tx) => {
+        const updatedApplication = await tx.application.update({
+          where: { id: applicationId },
+          data,
+        });
+
+        if (budgetAuditData !== null) {
+          await tx.budgetAuditLog.create({ data: budgetAuditData });
+        }
+
+        return updatedApplication;
       });
       const project = await this.getProjectOrThrow(application.projectId);
 
@@ -380,6 +423,74 @@ export class ApplicationsService {
         'Application budgets exceed the project budget.',
       );
     }
+  }
+
+  private buildApplicationBudgetAuditData(
+    current: Application,
+    budgetValues: {
+      budgetLimitMode: ApplicationBudgetLimitModeDto;
+      budgetLimitPercent: number | null;
+      budgetLimitUsd: number | null;
+    },
+    projectBudgetUsd: number,
+  ): Prisma.BudgetAuditLogUncheckedCreateInput | null {
+    const oldBudgetLimitMode = this.normalizeBudgetLimitMode(
+      current.budgetLimitMode,
+    );
+    const oldBudgetLimitPercent = this.toNumber(current.budgetLimitPercent);
+    const oldBudgetLimitUsd = this.toNumber(current.budgetLimitUsd);
+    const oldLimitMicroUsd = this.usdToMicroUsd(
+      this.getApplicationBudgetLimitUsd({
+        budgetLimitMode: oldBudgetLimitMode,
+        budgetLimitPercent: oldBudgetLimitPercent,
+        budgetLimitUsd: oldBudgetLimitUsd,
+        projectBudgetUsd,
+      }),
+    );
+    const newLimitMicroUsd = this.usdToMicroUsd(
+      this.getApplicationBudgetLimitUsd({
+        budgetLimitMode: budgetValues.budgetLimitMode,
+        budgetLimitPercent: budgetValues.budgetLimitPercent,
+        budgetLimitUsd: budgetValues.budgetLimitUsd,
+        projectBudgetUsd,
+      }),
+    );
+
+    const changed =
+      oldBudgetLimitMode !== budgetValues.budgetLimitMode ||
+      oldBudgetLimitPercent !== budgetValues.budgetLimitPercent ||
+      oldBudgetLimitUsd !== budgetValues.budgetLimitUsd ||
+      oldLimitMicroUsd !== newLimitMicroUsd;
+    if (!changed) {
+      return null;
+    }
+
+    return {
+      tenantId: current.tenantId,
+      projectId: current.projectId,
+      applicationId: current.id,
+      budgetScopeType: 'application',
+      budgetScopeId: current.id,
+      action: 'budget_updated',
+      actorType: 'admin_placeholder',
+      oldLimitMicroUsd,
+      newLimitMicroUsd,
+      oldBudgetLimitMode,
+      newBudgetLimitMode: budgetValues.budgetLimitMode,
+      oldBudgetLimitPercent,
+      newBudgetLimitPercent: budgetValues.budgetLimitPercent,
+      metadata: {
+        field: 'applicationBudgetLimit',
+        oldBudgetLimitUsd,
+        newBudgetLimitUsd: budgetValues.budgetLimitUsd,
+        projectBudgetUsd,
+        source: 'control_plane_application_update',
+      },
+    };
+  }
+
+  private usdToMicroUsd(value: number): bigint {
+    return BigInt(Math.round(value * 1_000_000));
   }
 
   private getApplicationBudgetLimitUsd(args: {

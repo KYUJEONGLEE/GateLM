@@ -2112,7 +2112,7 @@ func TestChatCompletionsHandlerDoesNotSetHitRequestIDBeforeCachedPayloadDecodes(
 		CachePolicyHash:      "cache_p0_v1",
 	}
 
-	payload, hitRequestID, hit := handler.lookupExactCache(
+	payload, hitRequestID, _, hit := handler.lookupExactCache(
 		context.Background(),
 		reqCtx,
 		provider.ChatCompletionRequest{Model: "mock-balanced"},

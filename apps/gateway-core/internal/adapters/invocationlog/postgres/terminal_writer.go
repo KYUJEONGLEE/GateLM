@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -88,6 +89,9 @@ func (w *TerminalLogWriter) WriteTerminalLog(ctx context.Context, log invocation
 		record.CompletedAt,
 	)
 	if err != nil {
+		return err
+	}
+	if err := w.writeBudgetNotificationEvents(ctx, record, log.BudgetDecision); err != nil {
 		return err
 	}
 	if record.CostMicroUSD <= 0 {
@@ -262,6 +266,134 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 	}, nil
 }
 
+type budgetNotificationRecipient struct {
+	ScopeType string
+	ScopeID   string
+	Role      string
+}
+
+func (w *TerminalLogWriter) writeBudgetNotificationEvents(ctx context.Context, record terminalLogRecord, decision *budget.Decision) error {
+	if decision == nil {
+		return nil
+	}
+	severity, eventType, ok := budgetNotificationSeverity(decision.Outcome)
+	if !ok {
+		return nil
+	}
+	scope := budget.NormalizeScope(decision.Scope, record.ApplicationID)
+	if strings.TrimSpace(scope.Type) == "" || strings.TrimSpace(scope.ID) == "" {
+		scope = budget.NormalizeScope(record.BudgetScope, record.ApplicationID)
+	}
+	if strings.TrimSpace(scope.Type) == "" || strings.TrimSpace(scope.ID) == "" {
+		return nil
+	}
+
+	completedAt := record.CompletedAt
+	if completedAt.IsZero() {
+		completedAt = record.CreatedAt
+	}
+	completedAt = completedAt.UTC()
+	monthStart := time.Date(completedAt.Year(), completedAt.Month(), 1, 0, 0, 0, 0, time.UTC)
+	recipients := budgetNotificationRecipients(record, scope.Type)
+	if len(recipients) == 0 {
+		return nil
+	}
+
+	metadata, err := json.Marshal(map[string]any{
+		"reason":              strings.TrimSpace(decision.Reason),
+		"budgetScope":         budget.ToMetadata(scope, record.ApplicationID),
+		"source":              "gateway_budget_check",
+		"warningThresholdPct": decision.WarningThresholdPercent,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, recipient := range recipients {
+		eventKey := budgetNotificationEventKey(record.TenantID, scope, monthStart, severity, recipient)
+		_, err := w.db.Exec(ctx, upsertNotificationEventSQL,
+			record.TenantID,
+			nullableUUID(record.ProjectID),
+			budgetNotificationApplicationID(record, scope.Type),
+			scope.Type,
+			scope.ID,
+			eventType,
+			severity,
+			recipient.ScopeType,
+			recipient.ScopeID,
+			recipient.Role,
+			eventKey,
+			nullableNonNegativeInt64(decision.LimitMicroUSD),
+			nullableNonNegativeInt64(decision.UsedMicroUSD),
+			decision.RemainingMicroUSD,
+			decision.UsagePercent,
+			nullableText(record.RequestID),
+			monthStart,
+			metadata,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func budgetNotificationSeverity(outcome string) (string, string, bool) {
+	switch strings.TrimSpace(outcome) {
+	case budget.OutcomeWarned:
+		return "warning", "budget_warning", true
+	case budget.OutcomeDegraded, budget.OutcomeBlocked:
+		return "exceeded", "budget_exceeded", true
+	default:
+		return "", "", false
+	}
+}
+
+func budgetNotificationRecipients(record terminalLogRecord, scopeType string) []budgetNotificationRecipient {
+	switch strings.TrimSpace(scopeType) {
+	case budget.ScopeTypeApplication:
+		if strings.TrimSpace(record.ProjectID) == "" {
+			return nil
+		}
+		return []budgetNotificationRecipient{{ScopeType: "project", ScopeID: record.ProjectID, Role: "project_admin"}}
+	case budget.ScopeTypeProject:
+		recipients := []budgetNotificationRecipient{{ScopeType: "tenant", ScopeID: record.TenantID, Role: "tenant_admin"}}
+		if strings.TrimSpace(record.ProjectID) != "" {
+			recipients = append(recipients, budgetNotificationRecipient{ScopeType: "project", ScopeID: record.ProjectID, Role: "project_admin"})
+		}
+		return recipients
+	default:
+		return nil
+	}
+}
+
+func budgetNotificationApplicationID(record terminalLogRecord, scopeType string) any {
+	if strings.TrimSpace(scopeType) != budget.ScopeTypeApplication {
+		return nil
+	}
+	return nullableUUID(record.ApplicationID)
+}
+
+func budgetNotificationEventKey(tenantID string, scope budget.Scope, monthStart time.Time, severity string, recipient budgetNotificationRecipient) string {
+	return fmt.Sprintf(
+		"budget:%s:%s:%s:%s:%s:%s:%s",
+		strings.TrimSpace(tenantID),
+		strings.TrimSpace(scope.Type),
+		strings.TrimSpace(scope.ID),
+		monthStart.Format("2006-01"),
+		strings.TrimSpace(severity),
+		strings.TrimSpace(recipient.Role),
+		strings.TrimSpace(recipient.ScopeID),
+	)
+}
+
+func nullableNonNegativeInt64(value int64) any {
+	if value < 0 {
+		return nil
+	}
+	return value
+}
+
 const insertTerminalLogSQL = `
 insert into p0_llm_invocation_logs (
   id,
@@ -319,6 +451,59 @@ insert into p0_llm_invocation_logs (
 )
 on conflict (request_id) do nothing`
 
+const upsertNotificationEventSQL = `
+insert into notification_events (
+  tenant_id,
+  project_id,
+  application_id,
+  budget_scope_type,
+  budget_scope_id,
+  event_type,
+  severity,
+  recipient_scope_type,
+  recipient_scope_id,
+  recipient_role,
+  event_key,
+  limit_micro_usd,
+  used_micro_usd,
+  remaining_micro_usd,
+  usage_percent,
+  source_request_id,
+  month_start,
+  metadata,
+  created_at,
+  updated_at
+) values (
+  $1::uuid,
+  $2::uuid,
+  $3::uuid,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15,
+  $16,
+  $17::date,
+  $18::jsonb,
+  now(),
+  now()
+)
+on conflict (event_key)
+do update set
+  limit_micro_usd = excluded.limit_micro_usd,
+  used_micro_usd = excluded.used_micro_usd,
+  remaining_micro_usd = excluded.remaining_micro_usd,
+  usage_percent = excluded.usage_percent,
+  source_request_id = excluded.source_request_id,
+  metadata = notification_events.metadata || excluded.metadata,
+  updated_at = now()`
 const upsertBudgetLedgerEntrySQL = `
 insert into budget_ledger_entries (
   request_id,
