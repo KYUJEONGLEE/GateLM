@@ -52,6 +52,8 @@ model Tenant {
   activeSnapshots     ActiveRuntimeSnapshot[]
   budgetLedgerEntries BudgetLedgerEntry[]
   budgetQuotas        BudgetQuota[]
+  budgetAuditLogs     BudgetAuditLog[]
+  notificationEvents  NotificationEvent[]
   teams               Team[]
   projectTeamAssignments ProjectTeamAssignment[]
   tenantMemberships   TenantMembership[]
@@ -175,6 +177,8 @@ model Project {
   runtimeSnapshots    RuntimeSnapshot[]
   activeSnapshots     ActiveRuntimeSnapshot[]
   budgetLedgerEntries BudgetLedgerEntry[]
+  budgetAuditLogs     BudgetAuditLog[]
+  notificationEvents  NotificationEvent[]
   projectTeamAssignments ProjectTeamAssignment[]
   conversations        Conversation[]
   chatMessages         ChatMessage[]
@@ -239,6 +243,8 @@ model Application {
   runtimeSnapshots    RuntimeSnapshot[]
   activeSnapshots     ActiveRuntimeSnapshot[]
   budgetLedgerEntries BudgetLedgerEntry[]
+  budgetAuditLogs     BudgetAuditLog[]
+  notificationEvents  NotificationEvent[]
   conversations       Conversation[]
   chatMessages        ChatMessage[]
 
@@ -412,6 +418,71 @@ model BudgetQuota {
   @@map("budget_quotas")
 }
 
+model BudgetAuditLog {
+  id                    String    @id @default(uuid()) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  projectId             String?   @map("project_id") @db.Uuid
+  applicationId         String?   @map("application_id") @db.Uuid
+  budgetScopeType       String    @map("budget_scope_type")
+  budgetScopeId         String    @map("budget_scope_id")
+  action                String    @default("budget_updated")
+  actorType             String    @default("admin_placeholder") @map("actor_type")
+  actorId               String?   @map("actor_id") @db.Uuid
+  oldLimitMicroUsd      BigInt?   @map("old_limit_micro_usd")
+  newLimitMicroUsd      BigInt?   @map("new_limit_micro_usd")
+  oldBudgetLimitMode    String?   @map("old_budget_limit_mode")
+  newBudgetLimitMode    String?   @map("new_budget_limit_mode")
+  oldBudgetLimitPercent Decimal?  @map("old_budget_limit_percent") @db.Decimal(5, 2)
+  newBudgetLimitPercent Decimal?  @map("new_budget_limit_percent") @db.Decimal(5, 2)
+  metadata              Json      @default("{}")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  project     Project?     @relation(fields: [projectId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, budgetScopeType, budgetScopeId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([applicationId, createdAt])
+  @@map("budget_audit_logs")
+}
+
+model NotificationEvent {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  projectId          String?  @map("project_id") @db.Uuid
+  applicationId      String?  @map("application_id") @db.Uuid
+  budgetScopeType    String   @map("budget_scope_type")
+  budgetScopeId      String   @map("budget_scope_id")
+  eventType          String   @map("event_type")
+  severity           String
+  status             String   @default("pending")
+  recipientScopeType String   @map("recipient_scope_type")
+  recipientScopeId   String   @map("recipient_scope_id")
+  recipientRole      String   @map("recipient_role")
+  eventKey           String   @unique @map("event_key")
+  limitMicroUsd      BigInt?  @map("limit_micro_usd")
+  usedMicroUsd       BigInt?  @map("used_micro_usd")
+  remainingMicroUsd  BigInt?  @map("remaining_micro_usd")
+  usagePercent       Decimal? @map("usage_percent") @db.Decimal(12, 4)
+  sourceRequestId    String?  @map("source_request_id")
+  monthStart         DateTime @map("month_start") @db.Date
+  metadata           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  project     Project?     @relation(fields: [projectId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, severity, createdAt])
+  @@index([tenantId, budgetScopeType, budgetScopeId, monthStart])
+  @@index([projectId, createdAt])
+  @@index([applicationId, createdAt])
+  @@map("notification_events")
+}
 model RuntimeConfig {
   id            String                    @id @default(uuid()) @db.Uuid
   tenantId      String                    @db.Uuid

@@ -114,9 +114,45 @@ export class ProjectsService {
     }
 
     try {
-      const project = await this.prisma.project.update({
-        where: { id: projectId },
-        data,
+      const oldTotalBudgetUsd = current
+        ? this.toProjectBudgetUsd(current.totalBudgetUsd)
+        : null;
+      const newTotalBudgetUsd =
+        dto.totalBudgetUsd !== undefined
+          ? dto.totalBudgetUsd
+          : oldTotalBudgetUsd;
+      const shouldAuditBudgetChange =
+        oldTotalBudgetUsd !== null &&
+        newTotalBudgetUsd !== null &&
+        dto.totalBudgetUsd !== undefined &&
+        oldTotalBudgetUsd !== newTotalBudgetUsd;
+
+      const project = await this.prisma.$transaction(async (tx) => {
+        const updatedProject = await tx.project.update({
+          where: { id: projectId },
+          data,
+        });
+
+        if (shouldAuditBudgetChange) {
+          await tx.budgetAuditLog.create({
+            data: {
+              tenantId: updatedProject.tenantId,
+              projectId: updatedProject.id,
+              budgetScopeType: 'project',
+              budgetScopeId: updatedProject.id,
+              action: 'budget_updated',
+              actorType: 'admin_placeholder',
+              oldLimitMicroUsd: this.usdToMicroUsd(oldTotalBudgetUsd as number),
+              newLimitMicroUsd: this.usdToMicroUsd(newTotalBudgetUsd as number),
+              metadata: {
+                field: 'totalBudgetUsd',
+                source: 'control_plane_project_update',
+              },
+            },
+          });
+        }
+
+        return updatedProject;
       });
 
       return this.toProjectResponse(project);
@@ -281,6 +317,10 @@ export class ProjectsService {
 
   private toNumber(value: Prisma.Decimal | null | undefined): number | null {
     return value === null || value === undefined ? null : value.toNumber();
+  }
+
+  private usdToMicroUsd(value: number): bigint {
+    return BigInt(Math.round(value * 1_000_000));
   }
 
   private isRecordNotFoundError(

@@ -7,13 +7,15 @@ import "context"
 type CacheLookupResult = struct {
 	Hit               bool
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 
 type CacheEntry struct {
-	KeyHash   string
-	RequestID string
-	Payload   []byte
+	KeyHash           string
+	RequestID         string
+	SavedCostMicroUSD int64
+	Payload           []byte
 }
 
 type CacheStore interface {

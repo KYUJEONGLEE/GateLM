@@ -278,6 +278,10 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
 	})
+	mux.Handle("GET /api/reports/costs", handlers.CostReportHandler{
+		Reader:   routerOptions.InvocationLogReader,
+		TenantID: cfg.DemoTenantID,
+	})
 
 	mux.Handle("POST /v1/chat/completions", http.Handler(&handlers.ChatCompletionsHandler{
 		Providers:                            providers,

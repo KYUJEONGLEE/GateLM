@@ -42,6 +42,7 @@ type Result struct {
 	CacheType         string
 	CacheKeyHash      string
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 
@@ -58,6 +59,7 @@ type Store interface {
 type LookupResult = struct {
 	Hit               bool
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 
@@ -122,6 +124,7 @@ func (s *Stage) Execute(ctx context.Context, req Request) (Result, error) {
 			CacheType:         CacheTypeExact,
 			CacheKeyHash:      keyHash,
 			CacheHitRequestID: lookup.CacheHitRequestID,
+			SavedCostMicroUSD: lookup.SavedCostMicroUSD,
 			Payload:           lookup.Payload,
 		}, nil
 	}

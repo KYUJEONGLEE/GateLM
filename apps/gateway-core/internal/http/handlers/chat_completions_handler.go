@@ -262,8 +262,8 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		gatewayCtx = newGatewayContext(reqCtx, promptText)
-		cachePayload, cacheHitRequestID, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
-		applyExactCacheLookupToGatewayContext(gatewayCtx, reqCtx, cachePayload, cacheHitRequestID, cacheHit)
+		cachePayload, cacheHitRequestID, savedCostMicroUSD, cacheHit := h.lookupExactCache(r.Context(), reqCtx, chatReq, promptText)
+		applyExactCacheLookupToGatewayContext(gatewayCtx, reqCtx, cachePayload, cacheHitRequestID, savedCostMicroUSD, cacheHit)
 	}
 	if h.writeCachedChatCompletionIfHit(r.Context(), w, reqCtx, gatewayCtx, startedAt) {
 		return
@@ -415,7 +415,7 @@ func isPreCacheGatewayError(err error) bool {
 	}
 }
 
-func applyExactCacheLookupToGatewayContext(gatewayCtx *request.GatewayContext, reqCtx *pipeline.RequestContext, payload []byte, cacheHitRequestID string, hit bool) {
+func applyExactCacheLookupToGatewayContext(gatewayCtx *request.GatewayContext, reqCtx *pipeline.RequestContext, payload []byte, cacheHitRequestID string, savedCostMicroUSD int64, hit bool) {
 	if gatewayCtx == nil || reqCtx == nil {
 		return
 	}
@@ -428,10 +428,12 @@ func applyExactCacheLookupToGatewayContext(gatewayCtx *request.GatewayContext, r
 	gatewayCtx.Cache.CacheDecisionReason = reqCtx.CacheDecisionReason
 	gatewayCtx.Cache.FallbackOccurred = reqCtx.FallbackOccurred
 	gatewayCtx.Cache.Payload = nil
+	gatewayCtx.Cache.SavedCostMicroUSD = 0
 	if hit {
 		gatewayCtx.Cache.CacheStatus = cachestage.CacheStatusHit
 		gatewayCtx.Cache.CacheType = cachestage.CacheTypeExact
 		gatewayCtx.Cache.CacheHitRequestID = cacheHitRequestID
+		gatewayCtx.Cache.SavedCostMicroUSD = savedCostMicroUSD
 		gatewayCtx.Cache.Payload = payload
 	}
 }
@@ -1443,18 +1445,18 @@ func sortedKeys(set map[string]struct{}) []string {
 	return values
 }
 
-func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, bool) {
+func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) ([]byte, string, int64, bool) {
 	cacheStartedAt := time.Now()
 	defer func() {
 		recordRequestStageTiming(reqCtx, stagetiming.StageCacheExactLookup, time.Since(cacheStartedAt))
 	}()
 	if reqCtx.MaskingAction == string(maskdomain.ActionBlocked) {
 		bypassExactCache(reqCtx, "masking_blocked")
-		return nil, "", false
+		return nil, "", 0, false
 	}
 	if h.ExactCacheStore == nil || h.ExactCacheKeyBuilder == nil {
 		bypassExactCache(reqCtx, "cache_dependency_unavailable")
-		return nil, "", false
+		return nil, "", 0, false
 	}
 
 	keyHash, err := h.buildExactCacheKey(ctx, reqCtx, chatReq, redactedPrompt)
@@ -1463,7 +1465,7 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 		reqCtx.CacheType = cachestage.CacheTypeExact
 		reqCtx.CacheDecisionReason = "key_build_error"
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "error")
-		return nil, "", false
+		return nil, "", 0, false
 	}
 	reqCtx.CacheKeyHash = keyHash
 
@@ -1473,7 +1475,7 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 		reqCtx.CacheType = cachestage.CacheTypeExact
 		reqCtx.CacheDecisionReason = "lookup_error"
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "error")
-		return nil, "", false
+		return nil, "", 0, false
 	}
 
 	if !lookup.Hit {
@@ -1481,14 +1483,14 @@ func (h *ChatCompletionsHandler) lookupExactCache(ctx context.Context, reqCtx *p
 		reqCtx.CacheType = cachestage.CacheTypeExact
 		reqCtx.CacheDecisionReason = "routing_aware_key_miss"
 		h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
-		return nil, "", false
+		return nil, "", 0, false
 	}
 
 	reqCtx.CacheStatus = cachestage.CacheStatusHit
 	reqCtx.CacheType = cachestage.CacheTypeExact
 	reqCtx.CacheDecisionReason = "routing_aware_key_hit"
 	h.recordCacheOperation("lookup", reqCtx.CacheStatus, reqCtx.CacheType, "success")
-	return lookup.Payload, lookup.CacheHitRequestID, true
+	return lookup.Payload, lookup.CacheHitRequestID, lookup.SavedCostMicroUSD, true
 }
 
 func (h *ChatCompletionsHandler) buildExactCacheKey(ctx context.Context, reqCtx *pipeline.RequestContext, chatReq provider.ChatCompletionRequest, redactedPrompt string) (string, error) {
@@ -1542,9 +1544,10 @@ func (h *ChatCompletionsHandler) writeExactCache(ctx context.Context, reqCtx *pi
 	}
 
 	if err := h.ExactCacheStore.SetExact(ctx, ports.CacheEntry{
-		KeyHash:   reqCtx.CacheKeyHash,
-		RequestID: reqCtx.RequestID,
-		Payload:   payload,
+		KeyHash:           reqCtx.CacheKeyHash,
+		RequestID:         reqCtx.RequestID,
+		SavedCostMicroUSD: reqCtx.CostMicroUSD,
+		Payload:           payload,
 	}); err != nil {
 		h.recordCacheOperation("write", reqCtx.CacheStatus, cachestage.CacheTypeExact, "error")
 		log.Printf("exact cache write failed request_id=%s cache_key_hash=%s cause=%q",

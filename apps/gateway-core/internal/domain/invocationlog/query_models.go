@@ -23,6 +23,7 @@ type Reader interface {
 	ListProjectLogs(ctx context.Context, filter ProjectLogsFilter) ([]RequestLogListItem, error)
 	GetRequestDetail(ctx context.Context, filter RequestDetailFilter) (RequestDetail, error)
 	GetDashboardOverview(ctx context.Context, filter DashboardOverviewFilter) (DashboardOverviewFields, error)
+	GetCostReport(ctx context.Context, filter CostReportFilter) (CostReportFields, error)
 }
 
 type ProjectLogsFilter struct {
@@ -52,6 +53,18 @@ type DashboardOverviewFilter struct {
 	BudgetScope budget.Scope
 	From        time.Time
 	To          time.Time
+}
+
+type CostReportFilter struct {
+	TenantID      string
+	ProjectID     string
+	ApplicationID string
+	Provider      string
+	Model         string
+	BudgetScope   budget.Scope
+	Period        string
+	From          time.Time
+	To            time.Time
 }
 
 type LlmInvocationLog struct {
@@ -304,6 +317,94 @@ type BudgetScopeBreakdown struct {
 	CostUSD      string
 }
 
+type CostReportTotals struct {
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportBucket struct {
+	PeriodStart       time.Time
+	PeriodEnd         time.Time
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportProjectBreakdown struct {
+	ProjectID         string
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportApplicationBreakdown struct {
+	ApplicationID     string
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportModelBreakdown struct {
+	SelectedProvider  string
+	SelectedModel     string
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportBudgetScopeBreakdown struct {
+	BudgetScope       budget.Scope
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportBreakdowns struct {
+	ByProject     []CostReportProjectBreakdown
+	ByApplication []CostReportApplicationBreakdown
+	ByModel       []CostReportModelBreakdown
+	ByBudgetScope []CostReportBudgetScopeBreakdown
+}
+
+type CostReportFields struct {
+	Period        string
+	Totals        CostReportTotals
+	Buckets       []CostReportBucket
+	Breakdowns    CostReportBreakdowns
+	DataFreshness DashboardDataFreshness
+}
+
 type DashboardDataFreshness struct {
 	Source           string
 	RecordCount      int64
@@ -486,6 +587,33 @@ func NormalizeDashboardOverviewFilter(filter DashboardOverviewFilter) (Dashboard
 	}
 	if err := validateTimeRange(filter.From, filter.To); err != nil {
 		return DashboardOverviewFilter{}, err
+	}
+	return filter, nil
+}
+
+func NormalizeCostReportFilter(filter CostReportFilter) (CostReportFilter, error) {
+	filter.TenantID = strings.TrimSpace(filter.TenantID)
+	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
+	filter.ApplicationID = strings.TrimSpace(filter.ApplicationID)
+	filter.Provider = strings.TrimSpace(filter.Provider)
+	filter.Model = strings.TrimSpace(filter.Model)
+	filter.Period = strings.ToLower(strings.TrimSpace(filter.Period))
+	if filter.Period == "" {
+		filter.Period = "day"
+	}
+	if filter.Period != "day" && filter.Period != "week" && filter.Period != "month" {
+		return CostReportFilter{}, fmt.Errorf("%w: period must be day, week, or month", ErrInvalidLogQuery)
+	}
+	var err error
+	filter.BudgetScope, err = normalizeBudgetScopeFilter(filter.BudgetScope)
+	if err != nil {
+		return CostReportFilter{}, err
+	}
+	if filter.TenantID == "" {
+		return CostReportFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
+	}
+	if err := validateTimeRange(filter.From, filter.To); err != nil {
+		return CostReportFilter{}, err
 	}
 	return filter, nil
 }

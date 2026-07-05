@@ -584,6 +584,10 @@ func (r *routerTestInvocationLogReader) GetDashboardOverview(_ context.Context, 
 	return r.overview, nil
 }
 
+func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
+	return invocationlog.CostReportFields{}, nil
+}
+
 type routerTestAPIKeyAuthenticator struct {
 	identity auth.APIKeyIdentity
 	err      error

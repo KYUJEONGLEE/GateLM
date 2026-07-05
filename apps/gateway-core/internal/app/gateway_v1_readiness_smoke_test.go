@@ -562,6 +562,10 @@ func (s *readinessObservabilityStore) GetDashboardOverview(ctx context.Context, 
 	return invocationlog.BuildDashboardOverview(s.invocationLogs()), nil
 }
 
+func (s *readinessObservabilityStore) GetCostReport(ctx context.Context, filter invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
+	return invocationlog.CostReportFields{}, nil
+}
+
 func (s *readinessObservabilityStore) terminalLogs() []invocationlog.TerminalLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()
