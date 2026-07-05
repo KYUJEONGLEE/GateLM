@@ -19,6 +19,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -182,6 +183,75 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerCalculatesCostFromProviderUsage(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	calculator := &recordingCostCalculator{result: costing.Result{
+		CostMicroUSD:              2,
+		Currency:                  costing.CurrencyUSD,
+		PricingRuleID:             "price_mock_balanced_v1",
+		PricingVersion:            "pricing_test_v1",
+		PricingProvider:           "mock",
+		PricingModel:              "mock-balanced",
+		InputMicroUSDPer1MTokens:  100_000,
+		OutputMicroUSDPer1MTokens: 400_000,
+		TokenCountSource:          costing.TokenCountSourceProviderUsage,
+		CostSource:                costing.CostSourcePricingCatalog,
+		PromptTokens:              4,
+		CompletionTokens:          3,
+		TotalTokens:               7,
+	}}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+		CostCalculator:    calculator,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	resp := decodeChatCompletionResponse(t, rr)
+	if calculator.calls != 1 {
+		t.Fatalf("expected one cost calculation, got %d", calculator.calls)
+	}
+	if calculator.ctxErr != nil {
+		t.Fatalf("cost calculator context must ignore request cancellation, got %v", calculator.ctxErr)
+	}
+	if !calculator.hasDeadline {
+		t.Fatalf("cost calculator context must have a deadline")
+	}
+	if calculator.lastRequest.PromptTokens != 4 || calculator.lastRequest.CompletionTokens != 3 || calculator.lastRequest.TotalTokens != 7 {
+		t.Fatalf("unexpected cost calculator usage request: %+v", calculator.lastRequest)
+	}
+	if !containsString(calculator.lastRequest.ProviderKeys, "mock") || !containsString(calculator.lastRequest.ModelKeys, "mock-balanced") {
+		t.Fatalf("unexpected pricing lookup keys: %+v", calculator.lastRequest)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.CostMicroUSD != 2 || rr.Header().Get("X-GateLM-Estimated-Cost-Usd") != "0.000002" || resp.GateLM.EstimatedCostUSD != "0.000002" {
+		t.Fatalf("unexpected calculated cost: log=%d header=%q gate_lm=%q", logged.CostMicroUSD, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
+	}
+	metadata, ok := logged.Metadata["costing"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing costing metadata: %+v", logged.Metadata)
+	}
+	if metadata["pricingRuleId"] != "price_mock_balanced_v1" || metadata["costSource"] != costing.CostSourcePricingCatalog {
+		t.Fatalf("unexpected costing metadata: %+v", metadata)
+	}
+	if metadata["amountType"] != costing.AmountTypeEstimatedProviderUsageCost || metadata["credentialOwner"] != costing.CredentialOwnerTenant || metadata["billableByGateLM"] != false {
+		t.Fatalf("costing metadata must describe tenant-owned provider usage, not GateLM billing: %+v", metadata)
+	}
+}
 func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{
@@ -3090,6 +3160,35 @@ func (a countingProviderAdapter) ListModels(ctx context.Context, config provider
 func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	(*a.calls)++
 	return &provider.ChatCompletionResponse{}, nil
+}
+
+type recordingCostCalculator struct {
+	calls       int
+	lastRequest costing.Request
+	result      costing.Result
+	err         error
+	ctxErr      error
+	hasDeadline bool
+}
+
+func (c *recordingCostCalculator) Calculate(ctx context.Context, req costing.Request) (costing.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return costing.Result{}, err
+	}
+	c.calls++
+	c.lastRequest = req
+	c.ctxErr = ctx.Err()
+	_, c.hasDeadline = ctx.Deadline()
+	return c.result, c.err
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 type recordingProviderAdapter struct {

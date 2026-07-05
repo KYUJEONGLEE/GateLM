@@ -26,6 +26,7 @@ type RouterOptions struct {
 	AppTokenValidator     handlers.AppTokenValidator
 	AuthFailureLogWriter  invocationlog.AuthFailureLogWriter
 	TerminalLogWriter     invocationlog.TerminalLogWriter
+	CostCalculator        handlers.CostCalculator
 	InvocationLogReader   invocationlog.Reader
 	ExactCacheStore       ports.CacheStore
 	ExactCacheKeyBuilder  handlers.ExactCacheKeyBuilder
@@ -57,6 +58,12 @@ func WithAuthFailureLogWriter(writer invocationlog.AuthFailureLogWriter) RouterO
 func WithTerminalLogWriter(writer invocationlog.TerminalLogWriter) RouterOption {
 	return func(options *RouterOptions) {
 		options.TerminalLogWriter = writer
+	}
+}
+
+func WithCostCalculator(calculator handlers.CostCalculator) RouterOption {
+	return func(options *RouterOptions) {
+		options.CostCalculator = calculator
 	}
 }
 
@@ -289,6 +296,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		PreProviderPipeline:                  preProviderPipeline,
 		AuthFailureLogWriter:                 authFailureLogWriter,
 		TerminalLogWriter:                    terminalLogWriter,
+		CostCalculator:                       routerOptions.CostCalculator,
 		MaskingEngine:                        maskingEngine,
 		MetricsRegistry:                      metricsRegistry,
 		ExactCacheStore:                      routerOptions.ExactCacheStore,

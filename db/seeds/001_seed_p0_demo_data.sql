@@ -372,6 +372,138 @@ insert into model_pricing_rules (
   'p0-demo',
   '2024-01-01 00:00:00+00',
   'p0_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000804',
+  'openai-main',
+  'gpt-5.4-mini',
+  'USD',
+  750000,
+  4500000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://developers.openai.com/api/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000805',
+  'openai-main',
+  'gpt-5.4',
+  'USD',
+  2500000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://developers.openai.com/api/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000806',
+  'openai',
+  'gpt-5.4-mini',
+  'USD',
+  750000,
+  4500000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://developers.openai.com/api/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000807',
+  'openai',
+  'gpt-5.4',
+  'USD',
+  2500000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://developers.openai.com/api/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000808',
+  'gemini',
+  'gemini-2.5-flash',
+  'USD',
+  300000,
+  2500000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://ai.google.dev/gemini-api/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000809',
+  'gemini',
+  'gemini-2.5-pro',
+  'USD',
+  1250000,
+  10000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://ai.google.dev/gemini-api/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000810',
+  'anthropic',
+  'claude-haiku-4-5',
+  'USD',
+  1000000,
+  5000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.claude.com/docs/en/about-claude/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000811',
+  'anthropic',
+  'claude-haiku-4-5-20251001',
+  'USD',
+  1000000,
+  5000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.claude.com/docs/en/about-claude/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000812',
+  'anthropic',
+  'claude-sonnet-4-6',
+  'USD',
+  3000000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.claude.com/docs/en/about-claude/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000813',
+  'claude',
+  'claude-haiku-4-5',
+  'USD',
+  1000000,
+  5000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.claude.com/docs/en/about-claude/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000814',
+  'claude',
+  'claude-sonnet-4-6',
+  'USD',
+  3000000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.claude.com/docs/en/about-claude/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000815',
+  'claude-main',
+  'claude-sonnet-4-6',
+  'USD',
+  3000000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.claude.com/docs/en/about-claude/pricing'
 )
 on conflict (id) do update set
   provider = excluded.provider,
