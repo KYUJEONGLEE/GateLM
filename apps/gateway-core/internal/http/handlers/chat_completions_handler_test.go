@@ -242,6 +242,9 @@ func TestChatCompletionsHandlerCalculatesCostFromProviderUsage(t *testing.T) {
 	if metadata["pricingRuleId"] != "price_mock_balanced_v1" || metadata["costSource"] != costing.CostSourcePricingCatalog {
 		t.Fatalf("unexpected costing metadata: %+v", metadata)
 	}
+	if metadata["amountType"] != costing.AmountTypeEstimatedProviderUsageCost || metadata["credentialOwner"] != costing.CredentialOwnerTenant || metadata["billableByGateLM"] != false {
+		t.Fatalf("costing metadata must describe tenant-owned provider usage, not GateLM billing: %+v", metadata)
+	}
 }
 func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}

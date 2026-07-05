@@ -10,6 +10,9 @@ import (
 const (
 	CurrencyUSD = "USD"
 
+	AmountTypeEstimatedProviderUsageCost = "estimated_provider_usage_cost"
+	CredentialOwnerTenant                = "tenant"
+
 	TokenCountSourceProviderUsage = "provider_usage"
 	TokenCountSourceMissing       = "missing"
 
@@ -69,6 +72,9 @@ type Request struct {
 type Result struct {
 	CostMicroUSD              int64  `json:"costMicroUsd"`
 	Currency                  string `json:"currency"`
+	AmountType                string `json:"amountType,omitempty"`
+	CredentialOwner           string `json:"credentialOwner,omitempty"`
+	BillableByGateLM          bool   `json:"billableByGateLM"`
 	PricingRuleID             string `json:"pricingRuleId,omitempty"`
 	PricingVersion            string `json:"pricingVersion,omitempty"`
 	PricingProvider           string `json:"pricingProvider,omitempty"`
@@ -95,6 +101,9 @@ func (r Result) Metadata() map[string]any {
 		"schemaVersion":    1,
 		"costMicroUsd":     r.CostMicroUSD,
 		"currency":         firstNonEmpty(r.Currency, CurrencyUSD),
+		"amountType":       firstNonEmpty(r.AmountType, AmountTypeEstimatedProviderUsageCost),
+		"credentialOwner":  firstNonEmpty(r.CredentialOwner, CredentialOwnerTenant),
+		"billableByGateLM": r.BillableByGateLM,
 		"tokenCountSource": strings.TrimSpace(r.TokenCountSource),
 		"costSource":       strings.TrimSpace(r.CostSource),
 		"promptTokens":     r.PromptTokens,
@@ -211,6 +220,9 @@ func baseResult(req Request) Result {
 	}
 	return Result{
 		Currency:         CurrencyUSD,
+		AmountType:       AmountTypeEstimatedProviderUsageCost,
+		CredentialOwner:  CredentialOwnerTenant,
+		BillableByGateLM: false,
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		TotalTokens:      totalTokens,

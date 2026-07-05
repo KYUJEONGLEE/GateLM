@@ -40,6 +40,10 @@ func TestCalculatorUsesProviderUsageAndPricingRule(t *testing.T) {
 	if result.PricingRuleID != "price_openai_gpt_4o_mini_v1" || result.PricingVersion != "pricing_2026_07_demo" {
 		t.Fatalf("unexpected pricing metadata: %+v", result)
 	}
+	metadata := result.Metadata()
+	if metadata["amountType"] != AmountTypeEstimatedProviderUsageCost || metadata["credentialOwner"] != CredentialOwnerTenant || metadata["billableByGateLM"] != false {
+		t.Fatalf("costing metadata must not look like GateLM billing: %v", metadata)
+	}
 	if catalog.lookup.ProviderKeys[0] != "openai-main" || catalog.lookup.ModelKeys[0] != "gpt-4o-mini" {
 		t.Fatalf("unexpected lookup keys: %+v", catalog.lookup)
 	}
