@@ -841,9 +841,6 @@ func bestCategoryForCompiledPolicy(policy CategoryPolicy, text string, tokens []
 	if !diagnostics.hasMatchedCategory() {
 		return "", false
 	}
-	if diagnostics.TopCategory == CategoryTranslation && !categoryFrameTranslation(text) {
-		return "", false
-	}
 	return diagnostics.TopCategory, true
 }
 
@@ -893,6 +890,9 @@ func rankCategoriesForCompiledPolicy(policy CategoryPolicy, text string, tokens 
 		}
 		score := scoreCategoryRuleCompiled(text, tokens, policy.Rules[canonical], matches.Category(canonical))
 		candidate := CategoryScore{Category: canonical, Score: score.Score, Matched: score.Matched}
+		if canonical == CategoryTranslation && !categoryFrameTranslation(text) {
+			candidate.Matched = false
+		}
 		scores = append(scores, candidate)
 		if !candidate.Matched {
 			continue

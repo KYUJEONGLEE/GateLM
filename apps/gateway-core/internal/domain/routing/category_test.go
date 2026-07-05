@@ -85,6 +85,27 @@ func TestRuleBasedCategoryClassifierUsesPolicyPriority(t *testing.T) {
 	}
 }
 
+func TestRuleBasedCategoryClassifierFallsBackFromInvalidTranslationFrame(t *testing.T) {
+	policy := DefaultCategoryPolicy()
+	policy.CategoryPriority = []string{CategoryTranslation, CategorySupportRefund}
+	policy.Rules[CategoryTranslation] = CategoryRule{Contains: []string{"translation"}, Threshold: 3}
+	policy.Rules[CategorySupportRefund] = CategoryRule{Contains: []string{"refund"}, Threshold: 3}
+
+	classifier := NewRuleBasedCategoryClassifierWithPolicy(policy)
+	prompt := "refund request mentions translation menu but does not ask to translate"
+
+	if actual := classifier.Classify(prompt); actual != CategorySupportRefund {
+		t.Fatalf("expected invalid translation frame to fall back to support_refund, got %s", actual)
+	}
+
+	diagnostics := classifier.Diagnose(prompt)
+	if diagnostics.TopCategory != CategorySupportRefund {
+		t.Fatalf("expected diagnostics top category to use fallback candidate, got %#v", diagnostics)
+	}
+	if len(diagnostics.ScoreVector) < 2 || diagnostics.ScoreVector[0].Category != CategoryTranslation || diagnostics.ScoreVector[0].Matched {
+		t.Fatalf("expected translation score to remain visible but unmatched, got %#v", diagnostics.ScoreVector)
+	}
+}
 func TestRuleBasedCategoryClassifierClonesExternalPolicy(t *testing.T) {
 	policy := CategoryPolicy{
 		MaxScanBytes:     maxCategoryScanBytes,
