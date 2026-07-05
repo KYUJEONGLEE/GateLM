@@ -24,7 +24,6 @@ reports/rate-limit/*
 !reports/rate-limit/README.md
 !reports/rate-limit/report/
 !reports/rate-limit/report/*.md
-reports/rate-limit/runs/
 
 __pycache__/
 *.py[cod]
