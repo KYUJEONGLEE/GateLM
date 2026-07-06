@@ -10,12 +10,8 @@ test("project cards expose sorting and action links", async ({ page }) => {
   const budgetSort = page.getByRole("button", { exact: true, name: "Budget" });
 
   await expect(usageSort).toHaveAttribute("aria-pressed", "true");
-  await expect
-    .poll(async () => {
-      await budgetSort.click();
-      return budgetSort.getAttribute("aria-pressed");
-    })
-    .toBe("true");
+  await budgetSort.click();
+  await expect(budgetSort).toHaveAttribute("aria-pressed", "true");
 
   const projectCard = page.getByTestId("project-card").first();
   const editLink = projectCard.getByRole("link", { exact: true, name: "Edit" });

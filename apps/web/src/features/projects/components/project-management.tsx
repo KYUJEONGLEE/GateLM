@@ -575,7 +575,7 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
 type ProjectMonthlyCostRecord = ProjectMonthlyCostReport["projectCosts"][number];
 
 type ProjectUsage = {
-  costMicroUsd: number;
+  costMicroUsd: number | null;
   remainingBudgetUsd: number | null;
   usagePercent: number | null;
 };
@@ -601,7 +601,7 @@ function compareProjectsBySortMode(
 
   return (
     compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
-    compareDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
+    compareNullableDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
     left.name.localeCompare(right.name)
   );
 }
@@ -648,12 +648,10 @@ function getProjectUsage(
   usageKnown: boolean
 ): ProjectUsage {
   if (!usageKnown) {
-    const budgetUsd = Math.max(0, project.totalBudgetUsd);
-
     return {
-      costMicroUsd: 0,
-      remainingBudgetUsd: budgetUsd,
-      usagePercent: 0
+      costMicroUsd: null,
+      remainingBudgetUsd: null,
+      usagePercent: null
     };
   }
 
@@ -720,7 +718,11 @@ function formatUsagePercent(value: number | null) {
   return `${Math.round(value)}%`;
 }
 
-function formatMicroUsd(value: number) {
+function formatMicroUsd(value: number | null) {
+  if (value === null) {
+    return "-";
+  }
+
   return formatBudgetUsd(value / 1_000_000);
 }
 

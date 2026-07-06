@@ -178,13 +178,20 @@ async function getProjectBudgetThreshold(
     };
   }
 
-  const config = await getRuntimePolicyConfigForApplication(project.runtimeApplicationId);
-  const warningThresholdPercent = config?.budgetPolicy?.warningThresholdPercent;
+  try {
+    const config = await getRuntimePolicyConfigForApplication(project.runtimeApplicationId);
+    const warningThresholdPercent = config?.budgetPolicy?.warningThresholdPercent;
 
-  return {
-    projectId: project.id,
-    warningThresholdPercent: normalizeWarningThresholdPercent(warningThresholdPercent)
-  };
+    return {
+      projectId: project.id,
+      warningThresholdPercent: normalizeWarningThresholdPercent(warningThresholdPercent)
+    };
+  } catch {
+    return {
+      projectId: project.id,
+      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
+    };
+  }
 }
 
 async function listProjects(tenantId: string): Promise<ProjectListResult> {
