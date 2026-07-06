@@ -1,11 +1,29 @@
-import { RotateCcw } from "lucide-react";
+import {
+  Activity,
+  CheckCircle2,
+  Clock3,
+  DollarSign,
+  RotateCcw
+} from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { AiInsightsPanel } from "@/features/dashboard/components/ai-insights-panel";
+import { CostOverTimeCard } from "@/features/dashboard/components/cost-over-time-card";
 import {
   DashboardLineEChart,
   DashboardPieEChart
 } from "@/features/dashboard/components/dashboard-echarts";
+import { DashboardFilterForm } from "@/features/dashboard/components/dashboard-filter-form";
+import { LiveRequestsCard } from "@/features/dashboard/components/live-requests-card";
+import {
+  ProviderModelUsageCard,
+  type ProviderModelUsageProvider,
+  type ProviderModelUsageRow
+} from "@/features/dashboard/components/provider-model-usage-card";
+import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { DashboardOverview, InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
+import type { LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
 import {
   formatDisplayIdentifier,
   formatModelDisplayName
@@ -22,10 +40,14 @@ type DashboardOverviewProps = {
   activeTab?: DashboardTab;
   applicationNames?: Record<string, string>;
   applicationTokenRecords?: InvocationLogRecord[];
+  costOverTime?: CostOverTimeSummary;
   detailPanel?: ReactNode;
   filters: DashboardFilterState;
+  liveRequests?: LiveRequestsPayload;
   locale: Locale;
+  monthToDateOverview?: DashboardOverview;
   overview: DashboardOverview;
+  projects?: ProjectRecord[];
   rateLimitedRecords?: InvocationLogRecord[];
   recentRecords?: InvocationLogRecord[];
   suppressContentMotion?: boolean;
@@ -228,6 +250,374 @@ const dashboardText: Record<
 type DashboardCopy = (typeof dashboardText)[Locale];
 
 export function DashboardOverviewView({
+  costOverTime,
+  detailPanel,
+  filters,
+  liveRequests,
+  locale,
+  monthToDateOverview,
+  overview,
+  projects = [],
+  recentRecords = [],
+  suppressContentMotion = false
+}: DashboardOverviewProps) {
+  const text = dashboardText[locale];
+  const monthToDate = monthToDateOverview ?? overview;
+  const successRate = ratio(overview.successfulRequests, overview.totalRequests);
+  const dataAsOf = formatDashboardDataAsOf(latestRecordTimestamp(recentRecords) ?? overview.range.to);
+  const selectedProject = filters.projectId
+    ? projects.find((project) => project.id === filters.projectId)
+    : null;
+  const kpiCards = [
+    {
+      detail: `${formatInteger(overview.totalRequests)}건 · ${kpiRangeLabel(filters.range)}`,
+      icon: <Activity aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: "총 요청",
+      tone: "blue",
+      value: formatInteger(overview.totalRequests)
+    },
+    {
+      detail: `${formatInteger(overview.successfulRequests)}건 성공`,
+      icon: <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: "성공률",
+      tone: "green",
+      value: formatPercent(successRate)
+    },
+    {
+      detail: `p95 ${formatLatency(Math.round(overview.p95LatencyMs))}`,
+      icon: <Clock3 aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: "평균 지연 시간",
+      tone: "violet",
+      value: formatLatency(Math.round(overview.averageLatencyMs))
+    },
+    {
+      detail: "이번 달 실시간 누적 비용",
+      icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
+      label: "이번 달 누적 비용",
+      tone: "orange",
+      value: formatMicroUsd(monthToDate.totalCostMicroUsd)
+    }
+  ];
+
+  return (
+    <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
+      <section className="dashboard-main-header">
+        <div>
+          <h1>{text.title}</h1>
+        </div>
+        <Link
+          aria-label="Refresh dashboard"
+          className="dashboard-refresh-link"
+          href={dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })}
+        >
+          <RotateCcw aria-hidden="true" size={18} strokeWidth={2.3} />
+        </Link>
+      </section>
+
+      <section className="dashboard-summary-bar" aria-label="Dashboard filters">
+        <DashboardFilterForm
+          actionPath={`/tenants/${overview.filters.tenantId}/dashboard`}
+          applyLabel={text.filter.apply}
+          filters={filters}
+          projects={projects}
+          rangeOptions={dashboardRanges.map((range) => ({
+            label: rangeLabel(range),
+            value: range
+          }))}
+        />
+        <div className="dashboard-data-freshness">
+          <span>Data as of</span>
+          <strong>{dataAsOf}</strong>
+        </div>
+      </section>
+
+      <section className="dashboard-overview-workspace" aria-label="Dashboard overview workspace">
+        <div className="dashboard-main-panel">
+          <div className="dashboard-kpi-grid" aria-label="Dashboard key metrics">
+            {kpiCards.map((card) => (
+              <article className="dashboard-kpi-card" data-tone={card.tone} key={card.label}>
+                <div className="dashboard-kpi-card-header">
+                  <span className="dashboard-kpi-icon">{card.icon}</span>
+                  <span className="dashboard-kpi-label">{card.label}</span>
+                </div>
+                <strong>{card.value}</strong>
+                <p>{card.detail}</p>
+              </article>
+            ))}
+          </div>
+          <div className="dashboard-secondary-grid">
+            <CostOverTimeCard
+              filters={{
+                ...filters,
+                tenantId: overview.filters.tenantId
+              }}
+              initialSummary={costOverTime}
+              rangeLabel={rangeLabel(filters.range)}
+            />
+            {filters.projectId === "" ? (
+              <ProjectSpendByCostChart
+                overview={overview}
+                projects={projects}
+                rangeLabel={rangeLabel(filters.range)}
+              />
+            ) : (
+              <ProviderModelUsageCard rows={buildProviderModelUsageRows(overview)} />
+            )}
+          </div>
+        </div>
+        <aside className="dashboard-ai-panel" aria-label="AI analysis workspace">
+          <AiInsightsPanel
+            averageLatencyMs={overview.averageLatencyMs}
+            blockedRequests={overview.blockedRequests}
+            cacheHitRate={overview.exactCacheHitRate ?? overview.cacheHitRate}
+            failedRequests={overview.failedRequests}
+            monthToDateSpendMicroUsd={monthToDate.totalCostMicroUsd}
+            projectName={selectedProject?.name ?? null}
+            rangeLabel={rangeLabel(filters.range)}
+            successRate={successRate}
+            totalRequests={overview.totalRequests}
+          />
+        </aside>
+      </section>
+
+      <LiveRequestsCard
+        filters={{
+          ...filters,
+          tenantId: overview.filters.tenantId
+        }}
+        initialPayload={liveRequests}
+      />
+
+      {detailPanel}
+    </main>
+  );
+}
+
+function ratio(numerator: number, denominator: number) {
+  if (denominator <= 0) {
+    return 0;
+  }
+
+  return numerator / denominator;
+}
+
+function latestRecordTimestamp(records: InvocationLogRecord[]) {
+  let latest = 0;
+
+  for (const record of records) {
+    const timestamp = Date.parse(record.createdAt);
+    if (Number.isFinite(timestamp) && timestamp > latest) {
+      latest = timestamp;
+    }
+  }
+
+  return latest > 0 ? new Date(latest).toISOString() : undefined;
+}
+
+function formatDashboardDataAsOf(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Seoul"
+  }).format(date);
+}
+
+function rangeLabel(range: DashboardRange) {
+  if (range === "15m") {
+    return "Last 15 minutes";
+  }
+
+  if (range === "1h") {
+    return "Last hour";
+  }
+
+  if (range === "1d") {
+    return "Last 24 hours";
+  }
+
+  return "Last 7 days";
+}
+
+function kpiRangeLabel(range: DashboardRange) {
+  if (range === "15m") {
+    return "최근 15분";
+  }
+
+  if (range === "1h") {
+    return "최근 1시간";
+  }
+
+  if (range === "1d") {
+    return "최근 24시간";
+  }
+
+  return "최근 7일";
+}
+
+function formatMicroUsd(value: number) {
+  const dollars = value / 1_000_000;
+
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
+    minimumFractionDigits: 2,
+    style: "currency"
+  }).format(dollars);
+}
+
+function ProjectSpendByCostChart({
+  overview,
+  projects,
+  rangeLabel
+}: {
+  overview: DashboardOverview;
+  projects: ProjectRecord[];
+  rangeLabel: string;
+}) {
+  const rows = buildProjectSpendRows(overview, projects);
+  const maxCost = Math.max(...rows.map((row) => row.costMicroUsd), 0);
+
+  return (
+    <section className="dashboard-project-spend-panel" aria-label="Project spend by cost">
+      <div className="dashboard-project-spend-header">
+        <div>
+          <h2>Project Spend by Cost</h2>
+          <p>프로젝트별 발생 비용 기준</p>
+        </div>
+        <span>{rangeLabel}</span>
+      </div>
+      {rows.length > 0 ? (
+        <div className="dashboard-project-spend-table">
+          <div className="dashboard-project-spend-row dashboard-project-spend-row-head">
+            <span>Project</span>
+            <span>Cost</span>
+            <span>%</span>
+          </div>
+          {rows.map((row) => (
+            <div className="dashboard-project-spend-row" key={row.projectId}>
+              <strong>{row.projectName}</strong>
+              <div className="dashboard-project-spend-bar-track">
+                <span
+                  className="dashboard-project-spend-bar"
+                  style={{
+                    "--project-spend-width": `${maxCost > 0 ? Math.max((row.costMicroUsd / maxCost) * 100, 2) : 2}%`
+                  } as CSSProperties}
+                />
+              </div>
+              <span className="dashboard-project-spend-cost">{formatMicroUsd(row.costMicroUsd)}</span>
+              <span className="dashboard-project-spend-percent">{formatPercent(row.share)}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="dashboard-project-spend-empty">No project cost data yet</div>
+      )}
+    </section>
+  );
+}
+
+function buildProjectSpendRows(overview: DashboardOverview, projects: ProjectRecord[]) {
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const sourceRows = overview.costByProject ?? [];
+  const totalCost = sourceRows.reduce((sum, row) => sum + Math.max(row.costMicroUsd, 0), 0);
+
+  return sourceRows
+    .filter((row) => row.requestCount > 0 || row.costMicroUsd > 0)
+    .map((row) => ({
+      costMicroUsd: Math.max(row.costMicroUsd, 0),
+      projectId: row.projectId,
+      projectName: projectNames.get(row.projectId) ?? formatDisplayIdentifier(row.projectId),
+      share: totalCost > 0 ? Math.max(row.costMicroUsd, 0) / totalCost : 0
+    }))
+    .sort((left, right) => right.costMicroUsd - left.costMicroUsd);
+}
+
+function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModelUsageRow[] {
+  const rows = overview.breakdowns?.byProviderModel?.length
+    ? overview.breakdowns.byProviderModel.map((row) => ({
+        model: row.selectedModel,
+        provider: row.selectedProvider,
+        requestCount: row.requestCount
+      }))
+    : overview.costByModel.length
+      ? overview.costByModel.map((row) => ({
+          model: row.selectedModel,
+          provider: row.selectedProvider,
+          requestCount: row.requestCount
+        }))
+      : overview.routingCountByModel.map((row) => ({
+          model: row.selectedModel,
+          provider: row.selectedProvider,
+          requestCount: row.requestCount
+        }));
+  const rowMap = new Map<string, ProviderModelUsageRow>();
+
+  for (const row of rows) {
+    const provider = normalizeProviderUsageProvider(row.provider);
+    const model = formatModelDisplayName(row.model, "Unknown");
+    const key = `${provider}:${model}`;
+    const existing = rowMap.get(key);
+
+    rowMap.set(key, {
+      model,
+      provider,
+      providerLabel: providerUsageLabel(provider, row.provider),
+      requestCount: Math.max(row.requestCount, 0) + (existing?.requestCount ?? 0)
+    });
+  }
+
+  return Array.from(rowMap.values()).sort((first, second) => second.requestCount - first.requestCount);
+}
+
+function normalizeProviderUsageProvider(value: string): ProviderModelUsageProvider {
+  const provider = value.toLowerCase();
+
+  if (provider.includes("openai")) {
+    return "openai";
+  }
+
+  if (provider.includes("anthropic") || provider.includes("claude")) {
+    return "anthropic";
+  }
+
+  if (provider.includes("google") || provider.includes("gemini")) {
+    return "google";
+  }
+
+  if (provider.includes("mock")) {
+    return "mock";
+  }
+
+  return "unknown";
+}
+
+function providerUsageLabel(provider: ProviderModelUsageProvider, fallback: string) {
+  if (provider === "openai") {
+    return "OpenAI";
+  }
+
+  if (provider === "anthropic") {
+    return "Anthropic";
+  }
+
+  if (provider === "google") {
+    return "Google";
+  }
+
+  if (provider === "mock") {
+    return "Mock";
+  }
+
+  return formatDisplayIdentifier(fallback || "Unknown");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function DashboardOverviewLegacyView({
   activeTab = "overview",
   applicationNames = {},
   applicationTokenRecords = [],

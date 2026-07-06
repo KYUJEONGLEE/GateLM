@@ -2,6 +2,9 @@
 
 import {
   Activity,
+  Bell,
+  ChevronDown,
+  CircleHelp,
   Database,
   FolderKanban,
   House,
@@ -14,7 +17,7 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import {
   DropdownMenu,
@@ -27,6 +30,27 @@ import type { Locale } from "@/lib/i18n/locale";
 type ConsoleSection = "dashboard" | "management" | "analytics";
 type ExpandableConsoleSection = "management" | "analytics";
 type ConsoleTheme = "light" | "dark";
+type NotificationSeverity = "critical" | "info" | "warning";
+type NotificationCategory = "Budget" | "Cache" | "Cost" | "Provider" | "Rate Limit" | "Safety" | "System";
+
+type CurrentUser = {
+  avatarUrl?: string;
+  displayName: string;
+  email?: string;
+  id: string;
+  role: string;
+  tenantName?: string;
+};
+
+type AdminNotification = {
+  category: NotificationCategory;
+  createdAt: string;
+  id: string;
+  message: string;
+  read: boolean;
+  severity: NotificationSeverity;
+  title: string;
+};
 
 export type ManagementNavItem =
   | "api-keys"
@@ -203,6 +227,51 @@ const shellText: Record<
 const openSectionsStorageKey = "gatelm_console_open_sections";
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
+const notificationReadStorageKey = "gatelm_console_header_notification_read_ids";
+
+// No notification API exists yet; these are preview notifications for the console header demo.
+const previewNotificationSeeds: Array<Omit<AdminNotification, "read">> = [
+  {
+    category: "Budget",
+    createdAt: "2m ago",
+    id: "budget-usage-preview",
+    message: "Monthly budget usage is approaching the configured limit.",
+    severity: "warning",
+    title: "Budget warning"
+  },
+  {
+    category: "Provider",
+    createdAt: "5m ago",
+    id: "provider-error-preview",
+    message: "Recent gateway requests include provider-side 5xx errors.",
+    severity: "critical",
+    title: "Provider error"
+  },
+  {
+    category: "Safety",
+    createdAt: "8m ago",
+    id: "safety-block-preview",
+    message: "Secret-like prompt content was blocked by policy.",
+    severity: "warning",
+    title: "Safety block detected"
+  },
+  {
+    category: "Rate Limit",
+    createdAt: "14m ago",
+    id: "rate-limit-preview",
+    message: "A project is close to its current rate limit window.",
+    severity: "info",
+    title: "Rate limit warning"
+  },
+  {
+    category: "Cache",
+    createdAt: "22m ago",
+    id: "cache-opportunity-preview",
+    message: "Cache hit rate is lower than expected for repeated traffic.",
+    severity: "info",
+    title: "Cache opportunity"
+  }
+];
 
 export function ConsoleShell({
   activeAnalyticsItem,
@@ -220,7 +289,19 @@ export function ConsoleShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser>(() => buildFallbackCurrentUser(tenantLabel));
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
+
+  const notifications = useMemo(
+    () =>
+      previewNotificationSeeds.map((notification) => ({
+        ...notification,
+        read: readNotificationIds.includes(notification.id)
+      })),
+    [readNotificationIds]
+  );
+  const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
 
   useEffect(() => {
     const storedOpenSections = readStoredOpenSections();
@@ -241,6 +322,44 @@ export function ConsoleShell({
     setTheme(initialTheme);
     applyTheme(initialTheme);
   }, []);
+
+  useEffect(() => {
+    setReadNotificationIds(readStoredNotificationIds());
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch("/api/auth/me", {
+          credentials: "include"
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!response.ok) {
+          setCurrentUser(buildFallbackCurrentUser(tenantLabel));
+          return;
+        }
+
+        const payload = (await response.json()) as unknown;
+        setCurrentUser(parseCurrentUser(payload, tenantLabel) ?? buildFallbackCurrentUser(tenantLabel));
+      } catch {
+        if (isMounted) {
+          setCurrentUser(buildFallbackCurrentUser(tenantLabel));
+        }
+      }
+    }
+
+    void loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tenantLabel]);
 
   function toggleSidebar() {
     if (isMobileViewport()) {
@@ -276,6 +395,12 @@ export function ConsoleShell({
       method: "POST"
     }).catch(() => undefined);
     window.location.assign("/?view=landing");
+  }
+
+  function markAllNotificationsRead() {
+    const nextReadIds = previewNotificationSeeds.map((notification) => notification.id);
+    setReadNotificationIds(nextReadIds);
+    writeStoredNotificationIds(nextReadIds);
   }
 
   function toggleSection(section: ConsoleSection) {
@@ -551,10 +676,305 @@ export function ConsoleShell({
       </aside>
 
       <div className="console-main">
+        <ConsoleTopbarActions
+          currentUser={currentUser}
+          isLoggingOut={isLoggingOut}
+          notifications={notifications}
+          onLogout={logout}
+          onMarkAllNotificationsRead={markAllNotificationsRead}
+          tenantLabel={tenantLabel}
+          unreadNotificationCount={unreadNotificationCount}
+        />
         {children}
       </div>
     </div>
   );
+}
+
+function ConsoleTopbarActions({
+  currentUser,
+  isLoggingOut,
+  notifications,
+  onLogout,
+  onMarkAllNotificationsRead,
+  tenantLabel,
+  unreadNotificationCount
+}: {
+  currentUser: CurrentUser;
+  isLoggingOut: boolean;
+  notifications: AdminNotification[];
+  onLogout: () => Promise<void>;
+  onMarkAllNotificationsRead: () => void;
+  tenantLabel: string;
+  unreadNotificationCount: number;
+}) {
+  const initials = getUserInitials(currentUser.displayName);
+
+  return (
+    <div className="console-topbar-actions" aria-label="Console account actions">
+      <button
+        aria-label="Help"
+        className="console-topbar-icon-button"
+        title="Help"
+        type="button"
+      >
+        <CircleHelp aria-hidden="true" size={18} strokeWidth={2.2} />
+      </button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`${unreadNotificationCount} unread notifications`}
+          className="console-topbar-icon-button console-notification-trigger"
+          title="Notifications"
+        >
+          <Bell aria-hidden="true" size={18} strokeWidth={2.2} />
+          {unreadNotificationCount > 0 ? (
+            <span className="console-notification-badge">
+              {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+            </span>
+          ) : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          aria-label="Notifications"
+          className="console-notification-popover"
+          sideOffset={10}
+        >
+          <div className="console-notification-popover-header">
+            <div>
+              <strong>Notifications</strong>
+              <span>{unreadNotificationCount} unread</span>
+            </div>
+            <button
+              disabled={unreadNotificationCount === 0}
+              onClick={onMarkAllNotificationsRead}
+              type="button"
+            >
+              Mark all as read
+            </button>
+          </div>
+
+          <div className="console-notification-list">
+            {notifications.slice(0, 5).map((notification) => (
+              <article
+                className="console-notification-row"
+                data-read={notification.read}
+                data-severity={notification.severity}
+                key={notification.id}
+              >
+                <span className="console-notification-severity-dot" aria-hidden="true" />
+                <div>
+                  <div className="console-notification-row-title">
+                    <strong>{notification.title}</strong>
+                    {!notification.read ? <span aria-label="Unread notification" /> : null}
+                  </div>
+                  <p>{notification.message}</p>
+                  <footer>
+                    <span>{notification.category}</span>
+                    <small>{notification.createdAt}</small>
+                  </footer>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {/* No notifications route exists yet. Keep this disabled until a backend/page is added. */}
+          <button className="console-notification-view-all" disabled type="button">
+            View all notifications
+          </button>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger className="console-user-trigger" aria-label="Open user profile menu">
+          <span className="console-user-avatar" aria-hidden="true">
+            {currentUser.avatarUrl ? (
+              <span
+                className="console-user-avatar-image"
+                style={{ backgroundImage: `url(${currentUser.avatarUrl})` }}
+              />
+            ) : (
+              <span>{initials}</span>
+            )}
+          </span>
+          <span className="console-user-copy">
+            <strong>{currentUser.displayName}</strong>
+            <small>{currentUser.role}</small>
+          </span>
+          <ChevronDown aria-hidden="true" size={14} strokeWidth={2.4} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          aria-label="User profile"
+          className="console-user-popover"
+          sideOffset={10}
+        >
+          <div className="console-user-popover-header">
+            <span className="console-user-avatar" aria-hidden="true">
+              {currentUser.avatarUrl ? (
+                <span
+                  className="console-user-avatar-image"
+                  style={{ backgroundImage: `url(${currentUser.avatarUrl})` }}
+                />
+              ) : (
+                <span>{initials}</span>
+              )}
+            </span>
+            <div>
+              <strong>{currentUser.displayName}</strong>
+              {currentUser.email ? <span>{currentUser.email}</span> : null}
+            </div>
+          </div>
+
+          <dl className="console-user-meta">
+            <div>
+              <dt>Role</dt>
+              <dd>{currentUser.role}</dd>
+            </div>
+            <div>
+              <dt>Organization</dt>
+              <dd>{currentUser.tenantName ?? tenantLabel}</dd>
+            </div>
+          </dl>
+
+          <div className="console-user-menu-actions">
+            <button className="console-user-menu-action" disabled type="button">
+              <SettingsIcon aria-hidden="true" size={14} strokeWidth={2.2} />
+              <span>Settings</span>
+              <small>Not connected</small>
+            </button>
+            <button
+              className="console-user-menu-action"
+              disabled={isLoggingOut}
+              onClick={() => {
+                void onLogout();
+              }}
+              type="button"
+            >
+              <LogOut aria-hidden="true" size={14} strokeWidth={2.2} />
+              <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+            </button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function buildFallbackCurrentUser(tenantLabel: string): CurrentUser {
+  return {
+    displayName: "Admin",
+    id: "demo-admin",
+    role: "Super Admin",
+    tenantName: tenantLabel
+  };
+}
+
+function parseCurrentUser(payload: unknown, tenantLabel: string): CurrentUser | null {
+  const root = getRecord(payload);
+  const data = getRecord(root?.data);
+  const user = getRecord(data?.user);
+
+  if (!user) {
+    return null;
+  }
+
+  const email = readString(user, "email");
+  const membership = getPrimaryMembership(data);
+  const tenant = getRecord(data?.tenant);
+  const displayName =
+    readString(user, "displayName") ??
+    readString(user, "name") ??
+    getDisplayNameFromEmail(email) ??
+    "Admin";
+
+  return {
+    avatarUrl: readString(user, "avatarUrl") ?? readString(user, "picture") ?? undefined,
+    displayName,
+    email: email ?? undefined,
+    id: readString(user, "id") ?? readString(user, "userId") ?? "current-admin",
+    role: formatRoleLabel(readString(membership, "role") ?? readString(user, "role")),
+    tenantName: readString(tenant, "name") ?? tenantLabel
+  };
+}
+
+function getPrimaryMembership(data: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!data) {
+    return null;
+  }
+
+  const membership = getRecord(data.membership);
+  if (membership) {
+    return membership;
+  }
+
+  if (!Array.isArray(data.memberships)) {
+    return null;
+  }
+
+  return data.memberships.map(getRecord).find((item): item is Record<string, unknown> => Boolean(item)) ?? null;
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readString(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue : null;
+}
+
+function getDisplayNameFromEmail(email: string | null) {
+  if (!email) {
+    return null;
+  }
+
+  const localPart = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!localPart) {
+    return null;
+  }
+
+  return localPart
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatRoleLabel(role: string | null) {
+  if (!role) {
+    return "Super Admin";
+  }
+
+  const normalizedRole = role.trim().toLowerCase();
+  if (normalizedRole === "tenant_admin" || normalizedRole === "super_admin") {
+    return "Super Admin";
+  }
+
+  return normalizedRole
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Super Admin";
+}
+
+function getUserInitials(displayName: string) {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0]?.charAt(0) ?? ""}${parts[1]?.charAt(0) ?? ""}`.toUpperCase();
+  }
+
+  return (parts[0]?.charAt(0) || "A").toUpperCase();
 }
 
 function getActiveOpenSections(activeSection: ConsoleSection): ExpandableConsoleSection[] {
@@ -569,6 +989,36 @@ function mergeOpenSections(
   ...sectionGroups: Array<ExpandableConsoleSection[]>
 ): ExpandableConsoleSection[] {
   return Array.from(new Set(sectionGroups.flat()));
+}
+
+function readStoredNotificationIds(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(notificationReadStorageKey);
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    return parsedValue.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredNotificationIds(notificationIds: string[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(notificationReadStorageKey, JSON.stringify(notificationIds));
 }
 
 function readStoredOpenSections(): ExpandableConsoleSection[] | null {
