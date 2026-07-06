@@ -66,7 +66,7 @@ docker compose --env-file .env run --rm --no-deps control-plane-api ./node_modul
 Apply Gateway runtime tables:
 
 ```bash
-docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q < migrations/001_gateway_runtime_tables.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/001_gateway_runtime_tables.sql
 ```
 
 Seed the current MVP demo tenant, project, application, credentials, provider, and active RuntimeSnapshot:
