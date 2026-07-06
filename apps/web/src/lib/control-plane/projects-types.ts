@@ -5,19 +5,22 @@ export type ProjectRecord = {
   description: string | null;
   id: string;
   name: string;
+  runtimeApplicationId: string | null;
   status: ProjectStatus;
   tenantId: string;
   totalBudgetUsd: number;
   updatedAt: string;
 };
 
-export type ProjectFormValues = {
+export type ProjectBaseValues = {
   description: string;
   name: string;
   totalBudgetUsd: number;
 };
 
-export type ProjectUpdateValues = ProjectFormValues & {
+export type ProjectFormValues = ProjectBaseValues;
+
+export type ProjectUpdateValues = ProjectBaseValues & {
   projectId: string;
   status: ProjectStatus;
 };

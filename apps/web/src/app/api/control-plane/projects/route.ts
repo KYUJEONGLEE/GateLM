@@ -64,13 +64,21 @@ function isProjectFormValues(value: unknown): value is ProjectFormValues {
 }
 
 function isProjectUpdateValues(value: unknown): value is ProjectUpdateValues {
-  if (!isProjectFormValues(value)) {
+  if (!value || typeof value !== "object") {
     return false;
   }
 
   const record = value as Partial<ProjectUpdateValues>;
 
-  return typeof record.projectId === "string" && isProjectStatus(record.status);
+  return (
+    typeof record.name === "string" &&
+    typeof record.description === "string" &&
+    typeof record.totalBudgetUsd === "number" &&
+    Number.isFinite(record.totalBudgetUsd) &&
+    record.totalBudgetUsd >= 0 &&
+    typeof record.projectId === "string" &&
+    isProjectStatus(record.status)
+  );
 }
 
 function isProjectStatus(value: unknown): value is ProjectStatus {

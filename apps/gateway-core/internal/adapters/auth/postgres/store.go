@@ -43,9 +43,10 @@ func (s *Store) AuthenticateAPIKey(ctx context.Context, bearerToken string) (aut
 	}
 
 	return auth.APIKeyIdentity{
-		APIKeyID:  candidate.id,
-		TenantID:  candidate.tenantID,
-		ProjectID: candidate.projectID,
+		APIKeyID:      candidate.id,
+		TenantID:      candidate.tenantID,
+		ProjectID:     candidate.projectID,
+		ApplicationID: candidate.applicationID,
 	}, nil
 }
 
@@ -184,18 +185,27 @@ func credentialHashesEqual(expected string, actual string) bool {
 
 const apiKeyLookupSQL = `
 select
-  id::text,
-  "tenantId"::text,
-  "projectId"::text,
-  ''::text as "applicationId",
-  "secretHash"
-from gateway_api_keys
-where prefix = $1
-  and "last4" = $2
-  and "hashAlgorithm" = 'sha256'
-  and status = 'ACTIVE'
-  and ("expiresAt" is null or "expiresAt" > now())
-order by "createdAt" desc`
+  api_keys.id::text,
+  api_keys."tenantId"::text,
+  api_keys."projectId"::text,
+  coalesce(default_application.id::text, '') as "applicationId",
+  api_keys."secretHash"
+from gateway_api_keys api_keys
+left join lateral (
+  select applications.id
+  from applications
+  where applications."tenantId" = api_keys."tenantId"
+    and applications."projectId" = api_keys."projectId"
+    and applications.status = 'ACTIVE'
+  order by applications."createdAt" asc, applications.id asc
+  limit 1
+) default_application on true
+where api_keys.prefix = $1
+  and api_keys."last4" = $2
+  and api_keys."hashAlgorithm" = 'sha256'
+  and api_keys.status = 'ACTIVE'
+  and (api_keys."expiresAt" is null or api_keys."expiresAt" > now())
+order by api_keys."createdAt" desc`
 
 const appTokenLookupSQL = `
 select

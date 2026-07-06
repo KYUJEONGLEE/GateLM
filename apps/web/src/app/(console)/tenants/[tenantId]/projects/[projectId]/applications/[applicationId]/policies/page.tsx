@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
 import { listApiKeysForProject } from "@/lib/control-plane/api-keys-client";
-import { listAppTokensForApplication } from "@/lib/control-plane/app-tokens-client";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyModelForApplication } from "@/lib/control-plane/runtime-policy-client";
@@ -41,13 +40,6 @@ export default async function ApplicationPoliciesPage({
     ? apiKeysResult.data.filter((apiKey) => isActiveCredential(apiKey.status, apiKey.expiresAt))
         .length
     : 0;
-  const appTokensResult = await listAppTokensForApplication(application.id);
-  const activeAppTokenCount = appTokensResult.ok
-    ? appTokensResult.data.filter((appToken) =>
-        isActiveCredential(appToken.status, appToken.expiresAt)
-      )
-        .length
-    : 0;
 
   return (
     <ConsoleShell
@@ -62,11 +54,6 @@ export default async function ApplicationPoliciesPage({
           loadError: apiKeysResult.ok ? null : apiKeysResult.error,
           projectId: project.id,
           projectName: project.name
-        }}
-        appTokenReadiness={{
-          activeAppTokenCount,
-          applicationName: application.name,
-          loadError: appTokensResult.ok ? null : appTokensResult.error
         }}
         breadcrumbItems={[
           {

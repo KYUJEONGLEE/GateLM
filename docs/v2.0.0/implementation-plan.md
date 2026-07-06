@@ -60,11 +60,11 @@ Reference / Draft documents:
 
 v2.0.0 is healthy when this flow works end to end:
 
-1. Admin prepares Organization / Project / Application / Provider / API Key / App Token.
+1. Admin prepares Organization / Project / hidden default Application / Provider / Project API Key.
 2. Admin validates editable RuntimeConfig and publishes immutable RuntimeSnapshot.
 3. Customer App or Employee Chat sends a request through Web BFF/server-side boundary.
-4. Gateway verifies API Key and App Token.
-5. Gateway resolves `tenantId/projectId/applicationId`.
+4. Gateway verifies the Project API Key.
+5. Gateway resolves `tenantId/projectId`, then resolves the server-owned hidden default `applicationId`.
 6. Gateway loads RuntimeSnapshot by `tenantId/projectId/applicationId`.
 7. Gateway resolves trusted budget scope and applies budget/rate limit.
 8. request-side safety runs before routing, exact cache, provider call, and streaming start.

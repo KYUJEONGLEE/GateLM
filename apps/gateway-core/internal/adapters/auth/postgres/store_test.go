@@ -15,10 +15,11 @@ func TestStoreAuthenticatesAPIKeyWithHashCandidate(t *testing.T) {
 	plaintext := "gsk_live_test_secret_1234"
 	queryer := &fakeQueryer{
 		rows: newFakeRows([]credentialCandidate{{
-			id:         "00000000-0000-4000-8000-000000000400",
-			tenantID:   "00000000-0000-4000-8000-000000000100",
-			projectID:  "00000000-0000-4000-8000-000000000200",
-			secretHash: credentialHash(plaintext),
+			id:            "00000000-0000-4000-8000-000000000400",
+			tenantID:      "00000000-0000-4000-8000-000000000100",
+			projectID:     "00000000-0000-4000-8000-000000000200",
+			applicationID: "00000000-0000-4000-8000-000000000300",
+			secretHash:    credentialHash(plaintext),
 		}}),
 	}
 
@@ -30,7 +31,7 @@ func TestStoreAuthenticatesAPIKeyWithHashCandidate(t *testing.T) {
 	if identity.APIKeyID != "00000000-0000-4000-8000-000000000400" ||
 		identity.TenantID != "00000000-0000-4000-8000-000000000100" ||
 		identity.ProjectID != "00000000-0000-4000-8000-000000000200" ||
-		identity.ApplicationID != "" {
+		identity.ApplicationID != "00000000-0000-4000-8000-000000000300" {
 		t.Fatalf("unexpected api key identity: %+v", identity)
 	}
 	assertLookupArgs(t, queryer, "gsk_live_", "1234")

@@ -24,7 +24,6 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
-  appTokenReadiness?: RuntimePolicyAppTokenReadiness;
   breadcrumbItems?: BreadcrumbItem[];
   locale: Locale;
   model: RuntimePolicyModel;
@@ -35,12 +34,6 @@ type RuntimePolicyApiKeyReadiness = {
   loadError: string | null;
   projectId: string;
   projectName: string;
-};
-
-type RuntimePolicyAppTokenReadiness = {
-  activeAppTokenCount: number;
-  applicationName: string;
-  loadError: string | null;
 };
 
 type SubmitState =
@@ -119,12 +112,9 @@ const policyText: Record<
   Locale,
   {
     activeConfig: string;
-    activeAppTokenMissing: string;
     activeApiKeyMissing: string;
     apiKeyIssueFailed: string;
     apiKeyIssued: string;
-    appTokenIssueFailed: string;
-    appTokenIssued: string;
     budget: string;
     budgetEnforcement: string;
     budgetTab: string;
@@ -185,9 +175,7 @@ const policyText: Record<
     saveDraft: string;
     safetyTab: string;
     issueApiKey: string;
-    issueAppToken: string;
     issuingApiKey: string;
-    issuingAppToken: string;
     shortPrompt: string;
     snapshotState: string;
     snapshotVersion: string;
@@ -205,16 +193,11 @@ const policyText: Record<
 > = {
   en: {
     activeConfig: "Active config",
-    activeAppTokenMissing:
-      "Runtime policy save and publish require an active App Token for this application.",
     activeApiKeyMissing:
       "Runtime policy save and publish require an active API Key for this project.",
     apiKeyIssueFailed: "API Key issue failed.",
     apiKeyIssued:
       "Active API Key prepared. Store the plaintext now; it will not be displayed again.",
-    appTokenIssueFailed: "App Token issue failed.",
-    appTokenIssued:
-      "Active App Token prepared. The token plaintext is not displayed on this policy screen.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetTab: "Budget",
@@ -279,9 +262,7 @@ const policyText: Record<
     saveDraft: "Save draft",
     safetyTab: "Safety",
     issueApiKey: "Issue API Key",
-    issueAppToken: "Issue App Token",
     issuingApiKey: "Issuing...",
-    issuingAppToken: "Issuing...",
     shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -301,16 +282,11 @@ const policyText: Record<
   },
   ko: {
     activeConfig: "Active config",
-    activeAppTokenMissing:
-      "Runtime policy 저장과 게시에는 이 애플리케이션의 active App Token이 필요합니다.",
     activeApiKeyMissing:
       "Runtime policy 저장과 게시에는 이 프로젝트의 active API Key가 필요합니다.",
     apiKeyIssueFailed: "API Key 발급에 실패했습니다.",
     apiKeyIssued:
       "Active API Key가 준비되었습니다. 원문은 지금 저장해야 하며 다시 표시되지 않습니다.",
-    appTokenIssueFailed: "App Token 발급에 실패했습니다.",
-    appTokenIssued:
-      "Active App Token이 준비되었습니다. 이 정책 화면에서는 token 원문을 표시하지 않습니다.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetTab: "Budget",
@@ -375,9 +351,7 @@ const policyText: Record<
     saveDraft: "Draft 저장",
     safetyTab: "Safety",
     issueApiKey: "API Key 발급",
-    issueAppToken: "App Token 발급",
     issuingApiKey: "발급 중...",
-    issuingAppToken: "발급 중...",
     shortPrompt: "Short prompt 기준",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -399,16 +373,12 @@ const policyText: Record<
 
 export function RuntimePolicyEditor({
   apiKeyReadiness,
-  appTokenReadiness,
   breadcrumbItems,
   locale,
   model
 }: RuntimePolicyEditorProps) {
   const router = useRouter();
   const text = policyText[locale];
-  const [activeAppTokenCount, setActiveAppTokenCount] = useState(
-    appTokenReadiness?.activeAppTokenCount ?? 1
-  );
   const [activeApiKeyCount, setActiveApiKeyCount] = useState(
     apiKeyReadiness?.activeApiKeyCount ?? 1
   );
@@ -422,7 +392,6 @@ export function RuntimePolicyEditor({
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>("routing");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
-  const [isIssuingAppToken, setIsIssuingAppToken] = useState(false);
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
@@ -433,7 +402,6 @@ export function RuntimePolicyEditor({
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
       : model.activeConfig;
-  const hasActiveAppToken = activeAppTokenCount > 0;
   const hasActiveApiKey = activeApiKeyCount > 0;
   const providerOptions = model.activeConfig.providers;
   const modelOptionsByProvider = useMemo(
@@ -520,14 +488,6 @@ export function RuntimePolicyEditor({
     if (!hasActiveApiKey) {
       setSubmitState({
         message: text.activeApiKeyMissing,
-        status: "error"
-      });
-      return;
-    }
-
-    if (!hasActiveAppToken) {
-      setSubmitState({
-        message: text.activeAppTokenMissing,
         status: "error"
       });
       return;
@@ -670,47 +630,6 @@ export function RuntimePolicyEditor({
     router.refresh();
   }
 
-  async function issueRuntimeAppToken() {
-    setIsIssuingAppToken(true);
-    setSubmitState({ message: "", status: "idle" });
-
-    const response = await fetch("/api/control-plane/app-tokens", {
-      body: JSON.stringify({
-        action: "issue",
-        values: {
-          applicationId: model.applicationId,
-          displayName: `${appTokenReadiness?.applicationName ?? "Application"} Runtime App Token`,
-          expiresAt: "",
-          scopes: "gateway:invoke"
-        }
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      appToken?: unknown;
-      error?: string;
-    };
-
-    if (!response.ok || !payload.appToken) {
-      setSubmitState({
-        message: payload.error ?? text.appTokenIssueFailed,
-        status: "error"
-      });
-      setIsIssuingAppToken(false);
-      return;
-    }
-
-    setActiveAppTokenCount((current) => Math.max(1, current + 1));
-    setSubmitState({
-      message: text.appTokenIssued,
-      status: "success"
-    });
-    setIsIssuingAppToken(false);
-  }
-
   async function rollbackPolicy(targetConfigVersion: string) {
     setRollbackTarget(targetConfigVersion);
     setSubmitState({ message: "", status: "idle" });
@@ -762,9 +681,7 @@ export function RuntimePolicyEditor({
             {text.details}
           </Button>
           <Button
-            disabled={
-              isSubmitting || !hasActiveApiKey || !hasActiveAppToken || !hasRoutingCandidates
-            }
+            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
             onClick={() => void submitPolicy("save-draft")}
             type="button"
             variant="outline"
@@ -773,9 +690,7 @@ export function RuntimePolicyEditor({
             {text.saveDraft}
           </Button>
           <Button
-            disabled={
-              isSubmitting || !hasActiveApiKey || !hasActiveAppToken || !hasRoutingCandidates
-            }
+            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
             onClick={() => void submitPolicy("publish")}
             type="button"
           >
@@ -810,22 +725,6 @@ export function RuntimePolicyEditor({
             variant="outline"
           >
             {isIssuingApiKey ? text.issuingApiKey : text.issueApiKey}
-          </Button>
-        </div>
-      ) : null}
-      {!hasActiveAppToken ? (
-        <div className="policy-alert runtime-credential-alert" data-status="error">
-          <span>
-            {text.activeAppTokenMissing}
-            {appTokenReadiness?.loadError ? ` ${appTokenReadiness.loadError}` : ""}
-          </span>
-          <Button
-            disabled={isIssuingAppToken}
-            onClick={() => void issueRuntimeAppToken()}
-            type="button"
-            variant="outline"
-          >
-            {isIssuingAppToken ? text.issuingAppToken : text.issueAppToken}
           </Button>
         </div>
       ) : null}

@@ -259,6 +259,7 @@ function buildProjectUsageRows(
       description: null,
       id: projectId,
       name: "Unknown project",
+      runtimeApplicationId: null,
       status: "ACTIVE" as const,
       tenantId: "",
       totalBudgetUsd: 0,
@@ -380,4 +381,3 @@ function average(values: number[]) {
 function sum(values: number[]) {
   return values.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0);
 }
-

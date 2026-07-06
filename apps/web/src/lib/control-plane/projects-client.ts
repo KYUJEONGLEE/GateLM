@@ -266,6 +266,7 @@ function getFixtureProject(): ProjectRecord {
     description: "Customer support Gateway project from the v1 runtime config fixture.",
     id: runtimeConfig.projectId,
     name: "Customer Support",
+    runtimeApplicationId: null,
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
     totalBudgetUsd: 100,
@@ -297,6 +298,10 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     id: record.id,
     name: record.name,
+    runtimeApplicationId:
+      typeof record.runtimeApplicationId === "string" && record.runtimeApplicationId.trim()
+        ? record.runtimeApplicationId
+        : null,
     status,
     tenantId: record.tenantId,
     totalBudgetUsd: normalizeNumber(record.totalBudgetUsd, 100),

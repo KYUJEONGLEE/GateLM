@@ -2219,23 +2219,7 @@ select {
 }
 
 .project-table {
-  min-width: 1060px;
-}
-
-.project-clickable-row {
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.project-clickable-row:hover {
-  background: var(--surface-subtle);
-}
-
-.project-clickable-row:focus-visible {
-  outline: 2px solid rgba(16, 163, 127, 0.32);
-  outline-offset: -2px;
+  min-width: 1180px;
 }
 
 .project-table-field {
@@ -2340,6 +2324,27 @@ select {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.project-list-row-actions {
+  min-width: 170px;
+}
+
+.project-list-action-link {
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  text-decoration: none;
+}
+
+.project-list-action-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+.project-list-action-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .application-policy-cell {
@@ -2863,7 +2868,14 @@ select {
 }
 
 .management-line-content .project-detail-panel .project-detail-form {
-  width: min(100%, 590px);
+  flex: 1 1 0;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1.4fr)
+    minmax(0, 0.75fr)
+    minmax(0, 0.75fr);
+  width: auto;
+  max-width: none;
 }
 
 .management-line-content .project-detail-panel .project-delete-section {
@@ -2871,8 +2883,8 @@ select {
 }
 
 .management-line-content .project-detail-panel .project-delete-actions {
-  grid-column: 2;
-  justify-content: flex-start;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
 }
 
 .project-detail-content {
@@ -2955,7 +2967,6 @@ select {
   background: transparent;
   border: 0;
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
   border-radius: 0;
 }
 
@@ -4307,32 +4318,6 @@ select {
   justify-self: center;
 }
 
-.onboarding-step-title {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 2px;
-}
-
-.onboarding-step-title p,
-.onboarding-step-title h3 {
-  margin: 0;
-}
-
-.onboarding-step-title p {
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  text-transform: uppercase;
-}
-
-.onboarding-step-title h3 {
-  color: var(--foreground);
-  font-size: var(--font-size-xl);
-  line-height: 1.2;
-}
-
 .onboarding-panel .panel-heading {
   display: flex;
   align-items: flex-start;
@@ -4358,7 +4343,8 @@ select {
 }
 
 .onboarding-field input,
-.onboarding-field select {
+.onboarding-field select,
+.onboarding-field textarea {
   width: 100%;
   min-height: 44px;
   padding: 0 13px;
@@ -4371,16 +4357,206 @@ select {
   outline: none;
 }
 
+.onboarding-field textarea {
+  min-height: 88px;
+  padding: 11px 13px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 .onboarding-field input:focus,
-.onboarding-field select:focus {
+.onboarding-field select:focus,
+.onboarding-field textarea:focus {
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(72, 128, 255, 0.16);
 }
 
-.onboarding-field input:disabled {
+.onboarding-field input:disabled,
+.onboarding-field textarea:disabled {
   background: var(--surface-subtle);
   color: var(--text-muted);
   cursor: not-allowed;
+}
+
+.onboarding-field .onboarding-input-with-unit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.onboarding-field .onboarding-field-unit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.onboarding-team-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.onboarding-team-field legend {
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.onboarding-team-selector {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.onboarding-team-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.onboarding-team-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 9px 0 12px;
+  background: color-mix(in srgb, var(--brand-green) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand-green) 28%, var(--border));
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.onboarding-team-tag span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-team-tag span:last-child {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.onboarding-team-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.onboarding-team-toggle[aria-expanded="true"] {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.onboarding-team-toggle:focus-visible {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(72, 128, 255, 0.16);
+  outline: none;
+}
+
+.onboarding-team-options {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  overflow: hidden;
+}
+
+.onboarding-team-options > .project-empty {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 13px;
+}
+
+.onboarding-team-option {
+  display: grid;
+  min-width: 0;
+  padding: 11px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.onboarding-team-option:last-child {
+  border-bottom: 0;
+}
+
+.onboarding-team-option:hover,
+.onboarding-team-option:focus-visible {
+  background: var(--surface-subtle);
+  outline: none;
+}
+
+.onboarding-team-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.onboarding-team-option strong {
+  color: var(--foreground);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.onboarding-team-option small {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-team-create-button {
+  justify-self: start;
+  gap: 8px;
+}
+
+.onboarding-team-create-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .onboarding-detail-grid {
@@ -4439,6 +4615,14 @@ select {
   line-height: 1.5;
 }
 
+.one-time-secret-value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
 .one-time-secret code {
   display: block;
   min-width: 0;
@@ -4450,6 +4634,45 @@ select {
   color: var(--warning-text);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
+}
+
+.one-time-secret-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  color: var(--warning-text);
+  cursor: pointer;
+}
+
+.one-time-secret-copy-button:hover,
+.one-time-secret-copy-button:focus-visible {
+  background: var(--warning-soft);
+  outline: none;
+}
+
+.one-time-secret-copy-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(187, 121, 21, 0.18);
+}
+
+.one-time-secret-copy-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.one-time-secret-copy-button[data-copied="true"] {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.one-time-secret-copy-button[data-copied="true"]:hover,
+.one-time-secret-copy-button[data-copied="true"]:focus-visible {
+  background: var(--warning-soft);
 }
 
 .one-time-secret[data-hidden="true"] {
