@@ -608,15 +608,15 @@ async function prepareConversationGatewayContext({
 }
 
 function withRawCurrentUserMessage(
-  messages: GatewayContextMessage[],
+  messages: GatewayContextMessage[] | null | undefined,
   currentContent: string
 ): GatewayContextMessage[] {
   const normalizedCurrentContent = currentContent.trim();
   if (!normalizedCurrentContent) {
-    return messages;
+    return messages ?? [];
   }
 
-  const nextMessages = messages.map((message) => ({ ...message }));
+  const nextMessages = (messages ?? []).map((message) => ({ ...message }));
   const currentMessageIndex = nextMessages.length - 1;
   const currentMessage = nextMessages[currentMessageIndex];
 
