@@ -71,11 +71,11 @@ type PolicySectionLabelText = {
 };
 
 const policySections: PolicySection[] = [
-  "safety",
   "routing",
   "budget",
   "rateLimit",
   "cache",
+  "safety",
   "streaming",
   "providerModel"
 ];

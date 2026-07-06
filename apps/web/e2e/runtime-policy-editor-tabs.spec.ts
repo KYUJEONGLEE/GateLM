@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 
 const policyPath = "/tenants/tenant_demo_acme/policies";
 const policyTabs = [
-  "Safety",
   "Routing",
   "Budget",
   "Rate Limit",
   "Cache",
+  "Safety",
   "Streaming",
   "Provider/Model"
 ] as const;
@@ -46,16 +46,17 @@ test("policy editor exposes category tabs and category panels", async ({ page })
   for (const tabName of policyTabs) {
     await expect(page.getByRole("tab", { exact: true, name: tabName })).toBeVisible();
   }
+  await expect(page.getByRole("tab")).toHaveText([...policyTabs]);
 
-  await expect(page.getByRole("tabpanel", { exact: true, name: "Safety" })).toBeVisible();
-  await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
-
-  await page.getByRole("tab", { exact: true, name: "Routing" }).click();
   await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
-  await expect(
-    page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "Safety" })
-  ).toBeHidden();
   await expect(page.getByText("Default route")).toBeVisible();
+
+  await page.getByRole("tab", { exact: true, name: "Safety" }).click();
+  await expect(page.getByRole("tabpanel", { exact: true, name: "Safety" })).toBeVisible();
+  await expect(
+    page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "Routing" })
+  ).toBeHidden();
+  await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
 });
 
 test("safety detectors expose five editable categories and gray locked mandatory protection", async ({
@@ -63,6 +64,7 @@ test("safety detectors expose five editable categories and gray locked mandatory
 }) => {
   await prepareRuntimeConfigPostRoute(page);
   await page.goto(policyPath);
+  await page.getByRole("tab", { exact: true, name: "Safety" }).click();
 
   const safetyPanel = page.getByRole("tabpanel", { exact: true, name: "Safety" });
   const detectorRows = safetyPanel.locator(".policy-detector-row");
@@ -143,6 +145,7 @@ test("legacy draft responses without safety policy keep default detector set", a
   await page.getByRole("button", { exact: true, name: "Save draft" }).click();
   await expect.poll(() => runtimeConfigPosts.length).toBe(1);
   await expect(page.getByText("Draft saved.")).toBeVisible();
+  await page.getByRole("tab", { exact: true, name: "Safety" }).click();
 
   const safetyPanel = page.getByRole("tabpanel", { exact: true, name: "Safety" });
   const detectorRows = safetyPanel.locator(".policy-detector-row");
