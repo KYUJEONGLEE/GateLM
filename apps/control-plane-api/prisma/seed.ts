@@ -438,84 +438,62 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
     const apiKeyPreview = credentialPreview(demoApiKey, 'gsk_live_');
     const appTokenPreview = credentialPreview(demoAppToken, 'gat_app_');
 
-    const provider = await tx.providerConnection.upsert({
+    const existingMockProvider = await tx.providerConnection.findFirst({
       where: {
-        projectId_provider: {
-          projectId: DEMO_PROJECT_ID,
-          provider: DEMO_PROVIDER,
-        },
-      },
-      update: {
         tenantId: DEMO_TENANT_ID,
-        displayName: 'Mock Provider',
-        status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: mockProviderBaseUrl,
-        timeoutMs: 30000,
-        secretRef: null,
-        credentialPrefix: null,
-        credentialLast4: null,
-        resolver: 'none',
-        providerConfig: demoProviderConfig(),
-      },
-      create: {
-        id: DEMO_MOCK_PROVIDER_ID,
-        tenantId: DEMO_TENANT_ID,
-        projectId: DEMO_PROJECT_ID,
         provider: DEMO_PROVIDER,
-        displayName: 'Mock Provider',
-        status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: mockProviderBaseUrl,
-        timeoutMs: 30000,
-        secretRef: null,
-        credentialPrefix: null,
-        credentialLast4: null,
-        resolver: 'none',
-        providerConfig: demoProviderConfig(),
       },
     });
+    const provider = existingMockProvider
+      ? await tx.providerConnection.update({
+          where: { id: existingMockProvider.id },
+          data: {
+            tenantId: DEMO_TENANT_ID,
+            projectId: null,
+            displayName: 'Mock Provider',
+            status: ProviderConnectionStatus.ACTIVE,
+            baseUrl: mockProviderBaseUrl,
+            timeoutMs: 30000,
+            secretRef: null,
+            credentialPrefix: null,
+            credentialLast4: null,
+            resolver: 'none',
+            providerConfig: demoProviderConfig(),
+          },
+        })
+      : await tx.providerConnection.create({
+          data: {
+            id: DEMO_MOCK_PROVIDER_ID,
+            tenantId: DEMO_TENANT_ID,
+            projectId: null,
+            provider: DEMO_PROVIDER,
+            displayName: 'Mock Provider',
+            status: ProviderConnectionStatus.ACTIVE,
+            baseUrl: mockProviderBaseUrl,
+            timeoutMs: 30000,
+            secretRef: null,
+            credentialPrefix: null,
+            credentialLast4: null,
+            resolver: 'none',
+            providerConfig: demoProviderConfig(),
+          },
+        });
 
     const openAIProvider =
       providerMode === 'actual'
-        ? await tx.providerConnection.upsert({
-            where: {
-              projectId_provider: {
-                projectId: DEMO_PROJECT_ID,
-                provider: DEMO_OPENAI_PROVIDER,
-              },
-            },
-            update: {
-              tenantId: DEMO_TENANT_ID,
-              displayName: 'OpenAI Main',
-              status: ProviderConnectionStatus.ACTIVE,
-              baseUrl: openAIBaseUrl,
-              timeoutMs: 30000,
-              secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
-              credentialPrefix: 'env_ref_',
-              credentialLast4: '0000',
-              resolver: 'environment',
-              providerConfig: demoOpenAIProviderConfig(
-                openAILowCostModel,
-                openAIBalancedModel,
-              ),
-            },
-            create: {
-              id: DEMO_OPENAI_PROVIDER_ID,
-              tenantId: DEMO_TENANT_ID,
-              projectId: DEMO_PROJECT_ID,
-              provider: DEMO_OPENAI_PROVIDER,
-              displayName: 'OpenAI Main',
-              status: ProviderConnectionStatus.ACTIVE,
-              baseUrl: openAIBaseUrl,
-              timeoutMs: 30000,
-              secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
-              credentialPrefix: 'env_ref_',
-              credentialLast4: '0000',
-              resolver: 'environment',
-              providerConfig: demoOpenAIProviderConfig(
-                openAILowCostModel,
-                openAIBalancedModel,
-              ),
-            },
+        ? await upsertDemoTenantProvider(tx, {
+            baseUrl: openAIBaseUrl,
+            credentialLast4: '0000',
+            credentialPrefix: 'env_ref_',
+            displayName: 'OpenAI Main',
+            fallbackId: DEMO_OPENAI_PROVIDER_ID,
+            provider: DEMO_OPENAI_PROVIDER,
+            providerConfig: demoOpenAIProviderConfig(
+              openAILowCostModel,
+              openAIBalancedModel,
+            ),
+            resolver: 'environment',
+            secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
           })
         : null;
 
@@ -686,6 +664,70 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
         updatedBy: runtimeSnapshot.publishedBy,
       },
     });
+  });
+}
+
+async function upsertDemoTenantProvider(
+  tx: Prisma.TransactionClient,
+  args: {
+    baseUrl: string;
+    credentialLast4: string | null;
+    credentialPrefix: string | null;
+    displayName: string;
+    fallbackId: string;
+    provider: string;
+    providerConfig: Prisma.InputJsonObject;
+    resolver: string;
+    secretRef: string | null;
+  },
+) {
+  const existingProvider = await tx.providerConnection.findFirst({
+    where: {
+      tenantId: DEMO_TENANT_ID,
+      provider: args.provider,
+    },
+  });
+
+  if (existingProvider) {
+    return tx.providerConnection.update({
+      where: { id: existingProvider.id },
+      data: {
+        tenantId: DEMO_TENANT_ID,
+        projectId: null,
+        displayName: args.displayName,
+        status: ProviderConnectionStatus.ACTIVE,
+        baseUrl: args.baseUrl,
+        timeoutMs: 30000,
+        secretRef: existingProvider.secretRef ?? args.secretRef,
+        credentialPrefix:
+          existingProvider.credentialPrefix ?? args.credentialPrefix,
+        credentialLast4:
+          existingProvider.credentialLast4 ?? args.credentialLast4,
+        resolver:
+          existingProvider.resolver && existingProvider.resolver !== 'none'
+            ? existingProvider.resolver
+            : args.resolver,
+        providerConfig: args.providerConfig,
+      },
+    });
+  }
+
+  return tx.providerConnection.create({
+    data: {
+      id: args.fallbackId,
+      tenantId: DEMO_TENANT_ID,
+      projectId: null,
+      provider: args.provider,
+      displayName: args.displayName,
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: args.baseUrl,
+      timeoutMs: 30000,
+      secretRef: args.secretRef,
+      credentialPrefix: args.credentialPrefix,
+      credentialLast4: args.credentialLast4,
+      resolver: args.resolver,
+      providerConfig: args.providerConfig,
+    },
   });
 }
 

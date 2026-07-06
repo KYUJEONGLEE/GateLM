@@ -209,10 +209,6 @@ describe('Control Plane demo seed baseline', () => {
 
   it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
     const tx = createMockTransaction();
-    tx.providerConnection.upsert.mockImplementation(
-      (args: { create?: { id?: string } }) =>
-        Promise.resolve({ id: args.create?.id ?? 'provider-demo-id' }),
-    );
     const client = {
       $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
         callback(tx),
@@ -223,11 +219,18 @@ describe('Control Plane demo seed baseline', () => {
       await seedDemoData(client as unknown as PrismaClient);
     });
 
-    expect(tx.providerConnection.upsert).toHaveBeenCalledTimes(2);
-    expect(tx.providerConnection.upsert).toHaveBeenCalledWith(
+    expect(tx.providerConnection.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: '00000000-0000-4000-8000-000000000100',
+        provider: 'openai-main',
+      },
+    });
+    expect(tx.providerConnection.create).toHaveBeenCalledTimes(2);
+    expect(tx.providerConnection.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
+        data: expect.objectContaining({
           id: DEMO_OPENAI_PROVIDER_ID,
+          projectId: null,
           provider: 'openai-main',
           resolver: 'environment',
           secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
@@ -259,7 +262,13 @@ function createMockTransaction() {
     application: { upsert: jest.fn() },
     providerPreset: { updateMany: jest.fn(), upsert: jest.fn() },
     providerConnection: {
-      upsert: jest.fn().mockResolvedValue({ id: 'provider-demo-id' }),
+      create: jest.fn((args: { data: { id?: string } }) =>
+        Promise.resolve({ id: args.data.id ?? 'provider-demo-id' }),
+      ),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve({ id: args.where.id }),
+      ),
     },
     gatewayApiKey: { upsert: jest.fn() },
     appToken: { upsert: jest.fn() },
