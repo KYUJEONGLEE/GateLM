@@ -1732,7 +1732,7 @@ select {
   width: min(100%, 1020px);
   background: transparent;
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 
 .policy-tab-panel {
