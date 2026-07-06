@@ -70,6 +70,12 @@ export class UpsertProviderDto {
   @Transform(({ value }) => trimString(value))
   @IsOptional()
   @IsString()
+  @MaxLength(8192)
+  credentialValue?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
   @MaxLength(80)
   resolver?: string;
 

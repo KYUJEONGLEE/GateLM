@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { AdminOnboardingFlow } from "@/features/onboarding/components/admin-onboarding-flow";
 import { getAdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
@@ -13,11 +12,7 @@ type OnboardingPageProps = {
 export default async function OnboardingPage({ params }: OnboardingPageProps) {
   const { tenantId } = await params;
   const locale = await getRequestLocale();
-  const model = getAdminOnboardingModel();
-
-  if (tenantId !== model.tenantId) {
-    notFound();
-  }
+  const model = getAdminOnboardingModel({ tenantId });
 
   return (
     <ConsoleShell

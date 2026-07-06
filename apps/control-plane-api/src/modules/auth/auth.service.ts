@@ -78,13 +78,13 @@ export class AuthService {
     verificationRequired: boolean;
   }> {
     const email = normalizeEmail(dto.email);
-    const existingUser = await this.repository.findUserByEmail(email);
-    if (existingUser) {
-      throw new ConflictException('Email is already registered.');
-    }
-
     const devAutoVerify = this.isDevAutoVerifyEnabled();
     const now = new Date();
+    const existingUser = await this.repository.findUserByEmail(email);
+    if (existingUser) {
+      return this.resumeIncompleteSignup(existingUser, dto, devAutoVerify, now);
+    }
+
     const passwordHash = await hashPassword(dto.password);
     const user = await this.repository.createUser({
       authProvider: 'local',
@@ -208,22 +208,40 @@ export class AuthService {
     }
 
     const passwordMatches = await verifyPassword(dto.password, user.passwordHash);
-    if (!passwordMatches || !user.emailVerifiedAt) {
+    if (!passwordMatches) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    await this.repository.updateUserLastLogin(user.id, new Date());
-    const memberships = await this.repository.findMembershipsByUserId(user.id);
+    const now = new Date();
+    let loginUser = user;
+    if (!loginUser.emailVerifiedAt) {
+      if (
+        loginUser.authProvider !== 'local' ||
+        !this.isDevAutoVerifyEnabled()
+      ) {
+        throw new UnauthorizedException('Invalid email or password.');
+      }
+
+      loginUser = await this.repository.updateUserEmailVerified(
+        loginUser.id,
+        now,
+      );
+    }
+
+    await this.repository.updateUserLastLogin(loginUser.id, now);
+    const memberships = await this.repository.findMembershipsByUserId(
+      loginUser.id,
+    );
     const sessionKind: AuthSessionKind =
       memberships.length > 0 ? 'full' : 'onboarding';
-    const session = await this.issueSession(user.id, sessionKind);
+    const session = await this.issueSession(loginUser.id, sessionKind);
 
     return {
       memberships: memberships.map((membership) =>
         this.toPublicMembership(membership),
       ),
       session,
-      user: this.toPublicUser(user),
+      user: this.toPublicUser(loginUser),
     };
   }
 
@@ -414,10 +432,79 @@ export class AuthService {
   }
 
   private isDevAutoVerifyEnabled(): boolean {
+    const emailTransport =
+      this.config.get<string>('AUTH_EMAIL_TRANSPORT') ?? 'dev_memory';
+    const devAutoVerify =
+      this.config.get<string>('CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY') ??
+      (emailTransport === 'dev_memory' ? 'true' : 'false');
+
     return (
-      this.config.get<string>('AUTH_EMAIL_TRANSPORT') === 'dev_memory' &&
-      this.config.get<string>('CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY') === 'true'
+      emailTransport === 'dev_memory' &&
+      devAutoVerify === 'true'
     );
+  }
+
+  private async resumeIncompleteSignup(
+    user: AuthUser,
+    dto: SignupDto,
+    devAutoVerify: boolean,
+    now: Date,
+  ): Promise<{
+    session?: SessionIssue;
+    user: PublicUser;
+    verificationRequired: boolean;
+  }> {
+    const memberships = await this.repository.findMembershipsByUserId(user.id);
+    if (
+      memberships.length > 0 ||
+      user.authProvider !== 'local' ||
+      !user.passwordHash
+    ) {
+      throw new ConflictException('Email is already registered.');
+    }
+
+    const passwordMatches = await verifyPassword(
+      dto.password,
+      user.passwordHash,
+    );
+    if (!passwordMatches) {
+      throw new ConflictException(
+        'Email signup is already in progress. Use the original password to finish onboarding.',
+      );
+    }
+
+    if (devAutoVerify || user.emailVerifiedAt) {
+      const verifiedUser = user.emailVerifiedAt
+        ? user
+        : await this.repository.updateUserEmailVerified(user.id, now);
+      const session = await this.issueSession(verifiedUser.id, 'onboarding');
+
+      return {
+        session,
+        user: this.toPublicUser(verifiedUser),
+        verificationRequired: false,
+      };
+    }
+
+    const code = createVerificationCode();
+    const expiresAt = addMinutes(now, 15);
+
+    await this.repository.consumeOpenVerificationCodes(user.id, now);
+    await this.repository.createVerificationCode({
+      codeHash: hashSecret(code),
+      expiresAt,
+      userId: user.id,
+    });
+    await this.emailSender.sendVerificationEmail({
+      code,
+      email: user.email,
+      expiresAt,
+    });
+
+    return {
+      user: this.toPublicUser(user),
+      verificationRequired: true,
+    };
   }
 }
 

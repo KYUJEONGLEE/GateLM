@@ -21,6 +21,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 const defaultTenantId = "tenant_demo_acme";
 const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
+const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
 
 type WebConsoleInitViewProps = {
   locale: Locale;
@@ -43,6 +44,10 @@ function getDashboardHref() {
   return `/tenants/${defaultTenantId}/dashboard`;
 }
 
+function getProjectsHref(tenantId: string) {
+  return `/tenants/${encodeURIComponent(tenantId)}/projects`;
+}
+
 function redirectToDashboard(replace = false) {
   const href = getDashboardHref();
   if (replace) {
@@ -51,6 +56,28 @@ function redirectToDashboard(replace = false) {
   }
 
   window.location.assign(href);
+}
+
+function redirectToProjects(tenantId: string, replace = false) {
+  const href = getProjectsHref(tenantId);
+  if (replace) {
+    window.location.replace(href);
+    return;
+  }
+
+  window.location.assign(href);
+}
+
+function getCreatedTenantDisplayNameStorageKey(tenantId: string) {
+  return `${createdTenantDisplayNameStorageKeyPrefix}${tenantId}`;
+}
+
+function storeCreatedTenantDisplayName(tenantId: string, tenantName: string) {
+  try {
+    window.sessionStorage.setItem(getCreatedTenantDisplayNameStorageKey(tenantId), tenantName);
+  } catch {
+    // Session storage can be unavailable in hardened browser contexts.
+  }
 }
 
 function hasStayOnLandingHistoryState() {
@@ -185,12 +212,12 @@ const initText: Record<
       email: "Email",
       loginTitle: "Login to GateLM",
       name: "Name",
-      organization: "Organization name",
+      organization: "Tenant name",
       organizationPlaceholder: "Acme AI Operations",
       password: "Password",
-      readyBody: "The organization is ready and your account has Owner/Admin access.",
+      readyBody: "The tenant is ready and your account has Owner/Admin access.",
       readyTitle: "Owner/Admin granted",
-      signupTitle: "Create an organization account",
+      signupTitle: "Create a tenant account",
       verificationCode: "Verification code"
     },
     console: {
@@ -230,8 +257,8 @@ const initText: Record<
     },
     signupSteps: {
       account: "Email/password sign up",
-      organization: "Organization name",
-      ready: "Organization + Owner/Admin",
+      organization: "Tenant name",
+      ready: "Tenant + Owner/Admin",
       verify: "Email verification"
     },
     summary: {
@@ -305,7 +332,7 @@ const initText: Record<
       gatewayRequest: "Gateway 요청",
       logout: "로그아웃",
       chat: "직원 Chat 확인",
-      dashboard: "대시보드 열기",
+      dashboard: "대시보드로 이동",
       googleLogin: "Google로 계속하기",
       login: "로그인",
       loginSubmit: "로그인",
@@ -319,12 +346,12 @@ const initText: Record<
       email: "이메일",
       loginTitle: "GateLM 로그인",
       name: "이름",
-      organization: "조직 이름",
+      organization: "Tenant 이름",
       organizationPlaceholder: "Acme AI 운영팀",
       password: "비밀번호",
-      readyBody: "조직이 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
+      readyBody: "Tenant가 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
       readyTitle: "Owner/Admin 권한 부여",
-      signupTitle: "기업 계정 만들기",
+      signupTitle: "Tenant 계정 만들기",
       verificationCode: "인증 코드"
     },
     console: {
@@ -364,8 +391,8 @@ const initText: Record<
     },
     signupSteps: {
       account: "이메일/비밀번호 회원가입",
-      organization: "조직 이름 입력",
-      ready: "조직 생성 + Owner/Admin",
+      organization: "Tenant 이름 입력",
+      ready: "Tenant 생성 + Owner/Admin",
       verify: "이메일 인증"
     },
     summary: {
@@ -453,9 +480,9 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("auth") === "organization") {
+    if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
       window.history.replaceState(null, "", "/");
-      redirectToDashboard(true);
+      redirectToProjects(defaultTenantId, true);
       return;
     }
     const hasLandingViewParam = params.get("view") === "landing";
@@ -594,7 +621,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         });
         setSignupEmail(email);
         if (result.data?.verificationRequired === false) {
-          setAuthNotice("Email verified in local development. Create your organization.");
+          setAuthNotice("Email verification skipped in local fake mode. Create your tenant.");
           setSignupStep("organization");
           return;
         }
@@ -608,16 +635,33 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           code: readFormString(formData, "verificationCode"),
           email: signupEmail
         });
-        setAuthNotice("Email verified. Create your organization.");
+        setAuthNotice("Email verified. Create your tenant.");
         setSignupStep("organization");
         return;
       }
 
-      await postAuth("organizations", {
-        organizationName: readFormString(formData, "organization")
+      const tenantName = readFormString(formData, "tenant");
+      const result = await postAuth("organizations", {
+        organizationName: tenantName
       });
+      if (result.error) {
+        setAuthNotice(null);
+        setAuthError(result.error.message ?? "Failed to create tenant.");
+        return;
+      }
+
+      const tenant = result.data?.tenant;
+      const tenantId = typeof tenant?.id === "string" && tenant.id.trim()
+        ? tenant.id.trim()
+        : defaultTenantId;
+
+      storeCreatedTenantDisplayName(tenantId, tenantName);
+      setIsAuthPanelOpen(false);
+      setAuthError(null);
       setAuthNotice(null);
-      setSignupStep("ready");
+      setSignupStep("account");
+      setAuthStatus("authenticated");
+      redirectToProjects(tenantId);
     });
   }
 
@@ -651,6 +695,12 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
             <Send aria-hidden="true" size={16} strokeWidth={2.4} />
             <span>{text.actions.gatewayRequest}</span>
           </Link>
+          {authStatus === "authenticated" ? (
+            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
+              <Route aria-hidden="true" size={17} strokeWidth={2.4} />
+              <span>{text.actions.dashboard}</span>
+            </Link>
+          ) : null}
         </div>
         <div className="landing-nav-links">
           <a href="#gateway">{text.nav.gateway}</a>
@@ -661,16 +711,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         <div className="landing-top-actions">
           <LanguageSwitcher ariaLabel={text.language} locale={locale} />
           {authStatus === "authenticated" ? (
-            <>
-              <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
-                <Route aria-hidden="true" size={17} strokeWidth={2.4} />
-                <span>{text.actions.dashboard}</span>
-              </Link>
-              <button className="landing-auth-button" onClick={logout} type="button">
-                <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
-                <span>{text.actions.logout}</span>
-              </button>
-            </>
+            <button className="landing-auth-button" onClick={logout} type="button">
+              <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
+              <span>{text.actions.logout}</span>
+            </button>
           ) : null}
           {authStatus === "anonymous" ? (
             <>
@@ -881,6 +925,10 @@ type AuthPostResponse = {
     session?: {
       kind?: string;
     };
+    tenant?: {
+      id?: string;
+      name?: string;
+    };
     verificationRequired?: boolean;
   };
   error?: {
@@ -1088,7 +1136,7 @@ function SignupFlow({
           <span>{text.auth.organization}</span>
           <input
             autoComplete="organization"
-            name="organization"
+            name="tenant"
             placeholder={text.auth.organizationPlaceholder}
             required
             type="text"

@@ -285,6 +285,10 @@ function getErrorMessage(payload: unknown, status: number) {
     }
   }
 
+  if (status === 409) {
+    return "Application budgets exceed the project budget.";
+  }
+
   return `Control Plane request failed with HTTP ${status}.`;
 }
 

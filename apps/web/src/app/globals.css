@@ -641,6 +641,10 @@ select {
   line-height: 1.2;
 }
 
+.console-sidebar-settings-row[data-align="end"] {
+  justify-content: flex-end;
+}
+
 .console-sidebar-settings-row .language-switcher {
   width: auto;
   padding: 1px;
@@ -659,6 +663,31 @@ select {
   background: var(--accent);
   color: var(--foreground);
   box-shadow: none;
+}
+
+.console-sidebar-logout-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.console-sidebar-logout-button:hover {
+  background: var(--accent);
+}
+
+.console-sidebar-logout-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .console-sidebar-tenant {
@@ -4418,6 +4447,12 @@ select {
 .onboarding-field select:focus {
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(72, 128, 255, 0.16);
+}
+
+.onboarding-field input:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 .onboarding-detail-grid {
@@ -8318,6 +8353,10 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .landing-auth-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .landing-brand-cluster .landing-auth-button {
+    width: auto;
   }
 
   .landing-hero,

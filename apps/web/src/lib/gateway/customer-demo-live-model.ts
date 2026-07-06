@@ -1,18 +1,14 @@
-import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
+import {
+  getControlPlaneApplicationId,
+  getControlPlaneProjectId,
+  getControlPlaneTenantId
+} from "@/lib/control-plane/control-plane-config";
 import type {
   CustomerDemoExchange,
   CustomerDemoModel,
   CustomerDemoRequest,
   CustomerDemoScenarioId
 } from "@/lib/gateway/customer-demo-client";
-
-type RuntimeConfigFixture = {
-  runtimeConfig: {
-    applicationId: string;
-    projectId: string;
-    tenantId: string;
-  };
-};
 
 type LiveScenarioTemplate = {
   cacheStatus: string;
@@ -117,17 +113,19 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
 ];
 
 export function getCustomerDemoLiveModel(): CustomerDemoModel {
-  const runtimeConfig = (runtimeConfigFixture as RuntimeConfigFixture).runtimeConfig;
+  const tenantId = getControlPlaneTenantId();
+  const projectId = getControlPlaneProjectId();
+  const applicationId = getControlPlaneApplicationId();
 
   return {
-    applicationId: runtimeConfig.applicationId,
+    applicationId,
     integrationMode: "gateway",
-    projectId: runtimeConfig.projectId,
+    projectId,
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>
-      buildLiveScenario(template, runtimeConfig.tenantId)
+      buildLiveScenario(template, tenantId)
     ),
     surface: "demo",
-    tenantId: runtimeConfig.tenantId
+    tenantId
   };
 }
 
