@@ -17,6 +17,7 @@ from app.adapters.safety.privacy_filter_adapter import (
     KOELECTRA_PRIVACY_NER_LOCAL_DIR_NAME,
     KOELECTRA_PRIVACY_NER_SOURCE,
     PrivacyFilterAdapter,
+    _OpenAIPrivacyFilterOnnxClassifier,
     _decode_openai_privacy_filter_spans,
     aggregation_strategy_for_model,
     normalize_label,
@@ -353,6 +354,49 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(decoded[0]["end"], 20)
         self.assertAlmostEqual(float(decoded[0]["score"]), 0.8)
         self.assertEqual(decoded[1], {"entity_group": "secret", "score": 0.6, "start": 22, "end": 28})
+
+    def test_openai_privacy_filter_onnx_decoder_treats_unit_prefix_as_single_span(self) -> None:
+        decoded = _decode_openai_privacy_filter_spans(
+            id_to_label={
+                0: "U-secret",
+                1: "B-private_email",
+                2: "E-private_email",
+            },
+            predicted_ids=[0, 1, 2],
+            confidences=[0.95, 0.9, 0.8],
+            offsets=[(0, 6), (7, 12), (12, 17)],
+        )
+
+        self.assertEqual(len(decoded), 2)
+        self.assertEqual(decoded[0], {"entity_group": "secret", "score": 0.95, "start": 0, "end": 6})
+        self.assertEqual(decoded[1]["entity_group"], "private_email")
+        self.assertAlmostEqual(float(decoded[1]["score"]), 0.85)
+        self.assertEqual(decoded[1]["start"], 7)
+        self.assertEqual(decoded[1]["end"], 17)
+
+    def test_openai_privacy_filter_onnx_session_uses_cpu_execution_provider(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeOnnxRuntime(types.SimpleNamespace):
+            @staticmethod
+            def InferenceSession(model_path: str, **kwargs: object) -> object:
+                captured["model_path"] = model_path
+                captured["kwargs"] = kwargs
+                return object()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_dir = Path(temp_dir) / "openai--privacy-filter"
+            (model_dir / "onnx").mkdir(parents=True)
+            (model_dir / "config.json").write_text('{"id2label": {"0": "O"}}', encoding="utf-8")
+            (model_dir / "onnx" / "model_quantized.onnx").write_bytes(b"")
+
+            with mock.patch.dict(sys.modules, {"onnxruntime": FakeOnnxRuntime()}):
+                classifier = _OpenAIPrivacyFilterOnnxClassifier(model_dir)
+                session = classifier._load_session()
+
+        self.assertIsNotNone(session)
+        self.assertEqual(captured["model_path"], str(model_dir / "onnx" / "model_quantized.onnx"))
+        self.assertEqual(captured["kwargs"], {"providers": ["CPUExecutionProvider"]})
 
     def test_runtime_for_value_defaults_to_onnx_for_unknown_values(self) -> None:
         self.assertEqual(runtime_for_value("onnx"), "onnx")
