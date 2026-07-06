@@ -634,6 +634,8 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 
 func costReportBucketExpression(period string) string {
 	switch period {
+	case "hour":
+		return "date_trunc('hour', created_at)"
 	case "week":
 		return "date_trunc('week', created_at)"
 	case "month":
@@ -645,6 +647,8 @@ func costReportBucketExpression(period string) string {
 
 func costReportBucketEnd(start time.Time, period string) time.Time {
 	switch period {
+	case "hour":
+		return start.Add(time.Hour)
 	case "week":
 		return start.AddDate(0, 0, 7)
 	case "month":
