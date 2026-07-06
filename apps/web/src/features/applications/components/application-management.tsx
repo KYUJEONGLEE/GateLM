@@ -61,6 +61,7 @@ type OneTimeAppTokenState = {
 };
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
+const budgetLimitUsdPrecision = 1_000_000;
 
 const applicationText: Record<
   Locale,
@@ -789,7 +790,8 @@ function getApplicationBudgetLimitUsd(
   projectBudgetUsd: number
 ) {
   if (values.budgetLimitMode === "PERCENT") {
-    return (projectBudgetUsd * values.budgetLimitPercent) / 100;
+    const calculatedBudgetLimitUsd = (projectBudgetUsd * values.budgetLimitPercent) / 100;
+    return Math.round(calculatedBudgetLimitUsd * budgetLimitUsdPrecision) / budgetLimitUsdPrecision;
   }
 
   return values.budgetLimitUsd;
