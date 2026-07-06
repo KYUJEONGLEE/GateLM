@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
+import { listApiKeysForProject } from "@/lib/control-plane/api-keys-client";
 import { listAppTokensForApplication } from "@/lib/control-plane/app-tokens-client";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
@@ -35,9 +36,16 @@ export default async function ApplicationPoliciesPage({
   }
 
   const model = await getRuntimePolicyModelForApplication(tenantId, application.id, project.id);
+  const apiKeysResult = await listApiKeysForProject(project.id);
+  const activeApiKeyCount = apiKeysResult.ok
+    ? apiKeysResult.data.filter((apiKey) => isActiveCredential(apiKey.status, apiKey.expiresAt))
+        .length
+    : 0;
   const appTokensResult = await listAppTokensForApplication(application.id);
   const activeAppTokenCount = appTokensResult.ok
-    ? appTokensResult.data.filter((appToken) => isActiveAppToken(appToken.status, appToken.expiresAt))
+    ? appTokensResult.data.filter((appToken) =>
+        isActiveCredential(appToken.status, appToken.expiresAt)
+      )
         .length
     : 0;
 
@@ -49,6 +57,12 @@ export default async function ApplicationPoliciesPage({
       tenantId={tenantId}
     >
       <RuntimePolicyEditor
+        apiKeyReadiness={{
+          activeApiKeyCount,
+          loadError: apiKeysResult.ok ? null : apiKeysResult.error,
+          projectId: project.id,
+          projectName: project.name
+        }}
         appTokenReadiness={{
           activeAppTokenCount,
           applicationName: application.name,
@@ -77,7 +91,7 @@ export default async function ApplicationPoliciesPage({
   );
 }
 
-function isActiveAppToken(status: string, expiresAt: string | null) {
+function isActiveCredential(status: string, expiresAt: string | null) {
   if (status !== "active") {
     return false;
   }

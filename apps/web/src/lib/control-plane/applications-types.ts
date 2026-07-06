@@ -23,8 +23,6 @@ export type ApplicationFormValues = {
   description: string;
   name: string;
   projectId?: string;
-  providerConnectionIds?: string[];
-  selectedModelKey?: string;
 };
 
 export type ApplicationUpdateValues = ApplicationFormValues & {

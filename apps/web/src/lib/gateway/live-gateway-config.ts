@@ -28,8 +28,7 @@ export function getLiveGatewayConfig(): LiveGatewayConfig {
       firstEnv("GATELM_DEMO_APP_TOKEN", "GATELM_GATEWAY_APP_TOKEN", "GATEWAY_APP_TOKEN")
       ?? "glm_app_token_test_redacted",
     applicationChatMaxTokens: getApplicationChatMaxTokens(),
-    applicationChatModel:
-      firstEnv("GATELM_APPLICATION_CHAT_MODEL", "GATEWAY_APPLICATION_CHAT_MODEL") ?? "auto",
+    applicationChatModel: "auto",
     applicationChatStreamingEnabled: getApplicationChatStreamingEnabled(),
     baseUrl: normalizeBaseUrl(
       firstEnv("GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL")

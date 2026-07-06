@@ -16,18 +16,14 @@ import type {
   ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
 import type { OneTimeAppTokenResponse } from "@/lib/control-plane/app-tokens-types";
-import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
-import type { RuntimePolicyModelConfig } from "@/lib/control-plane/runtime-policy-types";
 
 type ApplicationManagementProps = {
   locale: Locale;
   model: ApplicationsModel;
-  modelOptions?: RuntimePolicyModelConfig[];
   policySummariesByApplicationId?: Record<string, ApplicationPolicySummary | null>;
   projectBudgetUsd?: number;
-  providerConnections?: ProviderConnectionRecord[];
   tenantId: string;
 };
 
@@ -47,7 +43,6 @@ type SubmitState = {
 type ApplicationResponsePayload = {
   application?: ApplicationRecord;
   error?: string;
-  policyError?: string;
 };
 
 type AppTokenResponsePayload = {
@@ -86,10 +81,7 @@ const applicationText: Record<
     empty: string;
     fixtureFallback: string;
     management: string;
-    model: string;
-    modelUnavailable: string;
     name: string;
-    policyWarning: string;
     policy: string;
     policyConfigure: string;
     policyMissing: string;
@@ -119,14 +111,11 @@ const applicationText: Record<
     empty: "No applications found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture application.",
     management: "management",
-    model: "Model",
-    modelUnavailable: "No runtime models are available.",
     name: "Name",
     policy: "Policy",
     policyConfigure: "Configure policy",
     policyMissing: "No active policy",
     policyPublished: "Published",
-    policyWarning: "Application was created, but the selected model policy was not applied.",
     save: "Save",
     source: "Source",
     status: "Status",
@@ -151,14 +140,11 @@ const applicationText: Record<
     empty: "애플리케이션이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 애플리케이션을 표시 중입니다.",
     management: "관리",
-    model: "모델",
-    modelUnavailable: "사용 가능한 Runtime 모델이 없습니다.",
     name: "이름",
     policy: "정책",
     policyConfigure: "정책 설정",
     policyMissing: "활성 정책 없음",
     policyPublished: "Published",
-    policyWarning: "애플리케이션은 생성되었지만 선택한 모델 정책은 적용되지 않았습니다.",
     save: "저장",
     source: "출처",
     status: "상태",
@@ -171,18 +157,15 @@ const applicationText: Record<
 export function ApplicationManagement({
   locale,
   model,
-  modelOptions = [],
   policySummariesByApplicationId = {},
   projectBudgetUsd = 100,
-  providerConnections = [],
   tenantId
 }: ApplicationManagementProps) {
   const router = useRouter();
   const text = applicationText[locale];
-  const selectableModels = getSelectableModelOptions(modelOptions, providerConnections);
   const [applications, setApplications] = useState<ApplicationRecord[]>(model.applications);
   const [createValues, setCreateValues] =
-    useState<ApplicationFormValues>(() => getEmptyApplicationForm(selectableModels));
+    useState<ApplicationFormValues>(() => getEmptyApplicationForm());
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [oneTimeAppToken, setOneTimeAppToken] = useState<OneTimeAppTokenState | null>(null);
   const [editingRows, setEditingRows] = useState<Record<string, ApplicationUpdateValues>>(() =>
@@ -207,14 +190,14 @@ export function ApplicationManagement({
   );
 
   function openCreateModal() {
-    setCreateValues(getEmptyApplicationForm(selectableModels));
+    setCreateValues(getEmptyApplicationForm());
     setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(true);
   }
 
   function closeCreateModal() {
-    setCreateValues(getEmptyApplicationForm(selectableModels));
+    setCreateValues(getEmptyApplicationForm());
     setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(false);
@@ -283,18 +266,16 @@ export function ApplicationManagement({
       ...current,
       [createdApplication.id]: getApplicationUpdateValues(createdApplication)
     }));
-    setCreateValues(getEmptyApplicationForm(selectableModels));
+    setCreateValues(getEmptyApplicationForm());
     setSubmitState({
       message: appToken
-        ? payload.policyError
-          ? `${text.policyWarning} ${payload.policyError}`
-          : locale === "ko"
+        ? locale === "ko"
             ? "애플리케이션이 생성되고 App Token이 발급되었습니다."
             : "Application created and App Token issued."
         : locale === "ko"
           ? "애플리케이션은 생성되었지만 App Token 발급에 실패했습니다."
           : "Application created, but App Token issue failed.",
-      status: payload.policyError ? "error" : "success"
+      status: "success"
     });
     setPendingAction(null);
     router.refresh();
@@ -674,37 +655,6 @@ export function ApplicationManagement({
                     }))
                   }
                 />
-                <label className="policy-field">
-                  <span>{text.model}</span>
-                  {selectableModels.length > 0 ? (
-                    <select
-                      onChange={(event) =>
-                        setCreateValues((current) => ({
-                          ...current,
-                          providerConnectionIds:
-                            selectableModels.find((option) => option.value === event.target.value)
-                              ?.providerConnectionId
-                              ? [
-                                  selectableModels.find(
-                                    (option) => option.value === event.target.value
-                                  )?.providerConnectionId ?? ""
-                                ].filter(Boolean)
-                              : [],
-                          selectedModelKey: event.target.value
-                        }))
-                      }
-                      value={createValues.selectedModelKey}
-                    >
-                      {selectableModels.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input disabled type="text" value={text.modelUnavailable} />
-                  )}
-                </label>
               </div>
             )}
 
@@ -757,21 +707,13 @@ function getApplicationUpdateValues(application: ApplicationRecord): Application
   };
 }
 
-function getEmptyApplicationForm(
-  modelOptions: Array<{ label: string; providerConnectionId: string | null; value: string }>
-): ApplicationFormValues {
-  const selectedModel = modelOptions[0];
-
+function getEmptyApplicationForm(): ApplicationFormValues {
   return {
     budgetLimitMode: "FIXED",
     budgetLimitPercent: 0,
     budgetLimitUsd: 0,
     description: "",
-    name: "",
-    providerConnectionIds: selectedModel?.providerConnectionId
-      ? [selectedModel.providerConnectionId]
-      : [],
-    selectedModelKey: selectedModel?.value ?? ""
+    name: ""
   };
 }
 
@@ -892,43 +834,4 @@ function formatBudgetUsd(value: number) {
     maximumFractionDigits: 2,
     minimumFractionDigits: 0
   })}`;
-}
-
-function getSelectableModelOptions(
-  models: RuntimePolicyModelConfig[],
-  providerConnections: ProviderConnectionRecord[]
-) {
-  const registryOptions = providerConnections.flatMap((providerConnection) =>
-    getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
-      label: `${model} (${providerConnection.provider})`,
-      providerConnectionId: providerConnection.id,
-      value: `${providerConnection.provider}::${model}`
-    }))
-  );
-
-  if (registryOptions.length > 0) {
-    return registryOptions;
-  }
-
-  return models
-    .filter((model) => model.status === "active")
-    .map((model) => ({
-      label: `${model.displayName || model.model} (${model.provider})`,
-      providerConnectionId: null,
-      value: `${model.provider}::${model.model}`
-    }));
-}
-
-function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
-  const models = providerConfig?.models;
-
-  return Array.isArray(models)
-    ? Array.from(
-        new Set(
-          models
-            .map((model) => (typeof model === "string" ? model.trim() : ""))
-            .filter(Boolean)
-        )
-      )
-    : [];
 }

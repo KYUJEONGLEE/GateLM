@@ -424,7 +424,16 @@ func (p SafetyPolicy) Validate() error {
 
 func IsKnownSafetyDetectorType(detectorType string) bool {
 	switch strings.TrimSpace(detectorType) {
-	case "email", "phone_number", "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key":
+	case "email",
+		"phone_number",
+		"person_name",
+		"postal_address",
+		"organization_name",
+		"resident_registration_number",
+		"api_key",
+		"authorization_header",
+		"jwt",
+		"private_key":
 		return true
 	default:
 		return false

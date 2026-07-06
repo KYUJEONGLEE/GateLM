@@ -22,7 +22,7 @@ type CredentialLifecycleFixture = {
   };
 };
 
-type ApiKeyListResult =
+export type ApiKeyListResult =
   | {
       data: ApiKeyListItem[];
       ok: true;
@@ -82,6 +82,10 @@ export async function getApiKeysModel(routeTenantId: string): Promise<ApiKeysMod
     routeTenantId,
     source: "fixture"
   };
+}
+
+export async function listApiKeysForProject(projectId: string): Promise<ApiKeyListResult> {
+  return listApiKeys(projectId);
 }
 
 export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApiKeyResult> {
