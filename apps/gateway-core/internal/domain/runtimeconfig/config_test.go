@@ -134,6 +134,28 @@ func TestResponseCapturePolicyNormalizeAndValidate(t *testing.T) {
 	}
 }
 
+func TestSafetyPolicyValidateAcceptsPiiAndMandatoryDetectorSet(t *testing.T) {
+	policy := SafetyPolicy{
+		SecurityPolicyHash: "hash_security_policy_test",
+		DetectorSet: []DetectorPolicy{
+			{DetectorType: "email", Action: DetectorActionRedact},
+			{DetectorType: "phone_number", Action: DetectorActionRedact},
+			{DetectorType: "person_name", Action: DetectorActionRedact},
+			{DetectorType: "postal_address", Action: DetectorActionRedact},
+			{DetectorType: "organization_name", Action: DetectorActionRedact},
+			{DetectorType: "resident_registration_number", Action: DetectorActionBlock},
+			{DetectorType: "api_key", Action: DetectorActionBlock},
+			{DetectorType: "authorization_header", Action: DetectorActionBlock},
+			{DetectorType: "jwt", Action: DetectorActionBlock},
+			{DetectorType: "private_key", Action: DetectorActionBlock},
+		},
+	}
+
+	if err := policy.Validate(); err != nil {
+		t.Fatalf("expected v2 safety detector set to validate, got %v", err)
+	}
+}
+
 func TestActiveConfigValidateActiveRejectsInactiveCredentialStatus(t *testing.T) {
 	tests := []struct {
 		name   string

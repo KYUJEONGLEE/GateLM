@@ -33,6 +33,7 @@ test("create project can select existing teams and create a team inline before a
           description: "",
           id: "project_onboarding_team_demo",
           name: body.values?.name,
+          runtimeApplicationId: "application_onboarding_team_demo",
           status: "ACTIVE",
           tenantId: "tenant_demo_acme",
           totalBudgetUsd: body.values?.totalBudgetUsd,
@@ -128,7 +129,6 @@ test("create project can select existing teams and create a team inline before a
   await page.goto("/tenants/tenant_demo_acme/onboarding");
 
   await page.getByRole("textbox", { name: "Project name" }).fill("Team enabled project");
-  await page.getByRole("textbox", { name: "Warning threshold" }).fill("75");
   const teamGroup = page.getByRole("group", { name: "Team" });
   const teamToggle = teamGroup.getByRole("button", { name: "Select teams" });
   await teamToggle.click();
@@ -172,12 +172,12 @@ test("create project can select existing teams and create a team inline before a
     .toBe(issuedPlaintext);
   await expect(copyApiKeyButton).toHaveAttribute("data-copied", "true");
   expect(createdProjectValues).toMatchObject({
-    name: "Team enabled project",
-    selectedModelKey: "mock::mock-fast",
-    warningThresholdPercent: 75
+    name: "Team enabled project"
   });
   expect(createdProjectValues).not.toHaveProperty("budgetLimitPercent");
-  expect(createdProjectValues.providerConnectionIds).toEqual([expect.any(String)]);
+  expect(createdProjectValues).not.toHaveProperty("providerConnectionIds");
+  expect(createdProjectValues).not.toHaveProperty("selectedModelKey");
+  expect(createdProjectValues).not.toHaveProperty("warningThresholdPercent");
   await expect.poll(() => attachedTeamIds.length).toBe(2);
   expect(attachedTeamIds).toContain("team_field_ops");
   expect(attachedTeamIds).toContain(firstAttachedTeamId);

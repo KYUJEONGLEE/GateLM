@@ -2700,6 +2700,10 @@ export class RuntimeConfigsService {
   private toResolver(
     resolver: string,
   ): 'none' | 'control_plane_secret_store' | 'environment' {
+    if (resolver === 'credential_store') {
+      return 'control_plane_secret_store';
+    }
+
     if (
       resolver === 'none' ||
       resolver === 'control_plane_secret_store' ||
