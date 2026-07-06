@@ -2887,19 +2887,16 @@ select {
   padding-top: 0;
 }
 
-.management-line-content .applications-panel-heading,
-.management-line-content .model-catalog-toolbar {
+.management-line-content .applications-panel-heading {
   display: contents;
 }
 
-.management-line-content .applications-panel-heading > .panel-heading,
-.management-line-content .model-catalog-toolbar > .panel-heading {
+.management-line-content .applications-panel-heading > .panel-heading {
   grid-column: 1;
   margin-bottom: 0;
 }
 
-.management-line-content .applications-panel-heading > .primary-button,
-.management-line-content .model-catalog-actions {
+.management-line-content .applications-panel-heading > .primary-button {
   grid-column: 2;
   justify-self: end;
   margin-bottom: 8px;
@@ -3133,29 +3130,6 @@ select {
   }
 }
 
-.management-line-content > .model-catalog-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  width: min(100%, 1280px);
-  padding: 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.management-line-content > .model-catalog-metrics .metric-card {
-  padding: 18px 20px;
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.management-line-content > .model-catalog-metrics .metric-card:last-child {
-  border-right: 0;
-}
-
 .project-empty {
   margin: 0;
   color: var(--text-muted);
@@ -3340,6 +3314,35 @@ select {
   padding-top: 16px;
 }
 
+.provider-registration-modal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  gap: 14px;
+  padding: 24px;
+}
+
+.provider-registration-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.provider-registration-heading h3 {
+  margin: 0 0 8px;
+  color: var(--foreground);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-black);
+}
+
+.provider-registration-form {
+  border-top: 1px solid var(--border);
+}
+
+.provider-registration-note {
+  margin: -4px 0 0;
+}
+
 .management-line-content .table-wrap {
   overflow-x: visible;
 }
@@ -3383,81 +3386,6 @@ select {
   color: var(--foreground);
   font-size: var(--font-size-base);
   line-height: 1.4;
-}
-
-.model-catalog-metrics .metric-card strong {
-  font-size: var(--font-size-xl);
-}
-
-.model-catalog-toolbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 18px;
-}
-
-.model-catalog-toolbar .panel-heading {
-  margin-bottom: 0;
-}
-
-.model-catalog-actions {
-  display: flex;
-  align-items: end;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.model-catalog-actions .policy-field {
-  min-width: 170px;
-}
-
-.model-catalog-table {
-  min-width: 0;
-  table-layout: fixed;
-}
-
-.model-catalog-table th:nth-child(1) {
-  width: 34%;
-}
-
-.model-catalog-table th:nth-child(2) {
-  width: 19%;
-}
-
-.model-catalog-table th:nth-child(3) {
-  width: 30%;
-}
-
-.model-catalog-table th:nth-child(4) {
-  width: 12%;
-}
-
-.model-catalog-table th:nth-child(5) {
-  width: 5%;
-}
-
-.model-capability-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.model-catalog-metadata {
-  display: grid;
-  gap: 4px;
-  min-width: 170px;
-}
-
-.model-catalog-detail-modal {
-  width: min(860px, 100%);
-}
-
-.model-catalog-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
 }
 
 .metrics-toolbar {
@@ -6809,7 +6737,6 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .customer-demo-chat .panel-heading,
   .health-toolbar,
   .metrics-toolbar,
-  .model-catalog-toolbar,
   .request-line,
   .customer-demo-actions {
     align-items: flex-start;
@@ -7017,6 +6944,11 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
     gap: 8px;
   }
 
+  .provider-registration-modal {
+    width: min(100%, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+  }
+
   .api-key-issue-form > .policy-field {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -7030,13 +6962,10 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .team-section-header,
   .team-section-header-action,
   .team-attach-controls,
-  .modal-actions,
-  .model-catalog-actions {
+  .modal-actions {
     flex-direction: column;
   }
 
-  .model-catalog-actions,
-  .model-catalog-actions .policy-field,
   .applications-panel-heading .primary-button,
   .team-attach-controls,
   .team-attach-controls select,
@@ -7048,8 +6977,7 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .team-row-actions button,
   .team-row-attached button,
   .modal-actions button,
-  .project-detail-actions .primary-button,
-  .model-catalog-actions button {
+  .project-detail-actions .primary-button {
     width: 100%;
   }
 
@@ -7110,10 +7038,6 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
 
   .team-row-detail-meta div:last-child {
     border-bottom: 1px solid var(--border);
-  }
-
-  .model-catalog-detail-grid {
-    grid-template-columns: 1fr;
   }
 
   .team-row-main {
@@ -7199,15 +7123,12 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .management-line-content .project-detail-section > :not(.panel-heading),
   .management-line-content .applications-panel-heading > .panel-heading,
   .management-line-content .applications-panel-heading > .primary-button,
-  .management-line-content .model-catalog-toolbar > .panel-heading,
-  .management-line-content .model-catalog-actions,
   .management-line-content .team-section-header-with-actions > div,
   .management-line-content .team-section-header-with-actions > .team-attach-controls {
     grid-column: 1;
   }
 
   .management-line-content .applications-panel-heading > .primary-button,
-  .management-line-content .model-catalog-actions,
   .management-line-content .team-section-header-with-actions > .team-attach-controls {
     justify-self: stretch;
   }
@@ -7221,20 +7142,6 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .management-line-content .project-detail-panel .project-delete-actions {
     grid-column: 1;
     justify-content: stretch;
-  }
-
-  .management-line-content > .model-catalog-metrics {
-    grid-template-columns: 1fr;
-    width: 100%;
-  }
-
-  .management-line-content > .model-catalog-metrics .metric-card {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .management-line-content > .model-catalog-metrics .metric-card:last-child {
-    border-bottom: 0;
   }
 
   .policy-settings-list .policy-tab-panel > .policy-editor-panel {
