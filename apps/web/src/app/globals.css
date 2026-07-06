@@ -641,6 +641,10 @@ select {
   line-height: 1.2;
 }
 
+.console-sidebar-settings-row[data-align="end"] {
+  justify-content: flex-end;
+}
+
 .console-sidebar-settings-row .language-switcher {
   width: auto;
   padding: 1px;
@@ -659,6 +663,31 @@ select {
   background: var(--accent);
   color: var(--foreground);
   box-shadow: none;
+}
+
+.console-sidebar-logout-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.console-sidebar-logout-button:hover {
+  background: var(--accent);
+}
+
+.console-sidebar-logout-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .console-sidebar-tenant {
@@ -2933,6 +2962,177 @@ select {
   border-radius: 0;
 }
 
+.application-management-content > .console-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.application-management-content > .console-panel > .applications-panel-heading,
+.application-management-content > .console-panel > .application-row-list,
+.application-management-content > .console-panel > .project-empty {
+  grid-column: 1;
+  width: 100%;
+}
+
+.application-management-content .applications-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 0;
+}
+
+.application-management-content .applications-panel-heading > .panel-heading,
+.application-management-content .applications-panel-heading > .primary-button {
+  grid-column: auto;
+  margin-bottom: 0;
+}
+
+.application-management-content .applications-panel-heading > .primary-button {
+  justify-self: auto;
+}
+
+.application-row-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.application-row {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.application-row-main {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 0.8fr)
+    minmax(260px, 1.25fr)
+    minmax(180px, 0.85fr)
+    minmax(150px, 0.7fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.application-row .policy-field,
+.application-budget-cell,
+.application-row-detail {
+  min-width: 0;
+}
+
+.application-row .project-table-field > span {
+  display: block;
+}
+
+.application-row .application-description-field textarea {
+  min-height: 86px;
+}
+
+.application-budget-cell {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.application-row .application-budget-fields {
+  grid-template-columns: minmax(100px, 0.75fr) minmax(110px, 1fr);
+  align-items: end;
+  min-width: 0;
+}
+
+.application-status-cell {
+  align-content: start;
+}
+
+.application-row-meta {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1fr)
+    minmax(200px, 0.8fr)
+    minmax(160px, 0.7fr)
+    auto;
+  gap: 12px 18px;
+  align-items: start;
+  min-width: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.application-row-label {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.application-row-detail {
+  display: grid;
+  gap: 6px;
+}
+
+.application-row-actions {
+  align-self: start;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.application-row-actions button {
+  gap: 6px;
+  min-width: 94px;
+}
+
+.application-row-actions svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 1100px) {
+  .application-row-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .application-description-field {
+    grid-column: span 2;
+  }
+
+  .application-row-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .application-row-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .application-management-content .applications-panel-heading,
+  .application-row-actions {
+    flex-direction: column;
+  }
+
+  .application-management-content .applications-panel-heading > .primary-button,
+  .application-row-actions button {
+    width: 100%;
+  }
+
+  .application-row-main,
+  .application-row-meta,
+  .application-row .application-budget-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .application-description-field {
+    grid-column: auto;
+  }
+}
+
 .management-line-content > .model-catalog-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4247,6 +4447,12 @@ select {
 .onboarding-field select:focus {
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 3px rgba(72, 128, 255, 0.16);
+}
+
+.onboarding-field input:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 .onboarding-detail-grid {
@@ -7084,6 +7290,13 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   backdrop-filter: blur(16px);
 }
 
+.landing-brand-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .landing-brand {
   display: inline-flex;
   align-items: center;
@@ -7092,6 +7305,10 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   font-size: 1.375rem;
   font-weight: var(--font-weight-bold);
   line-height: 1.1;
+}
+
+.landing-gateway-request-button {
+  flex: 0 0 auto;
 }
 
 .landing-brand-mark {
@@ -8118,6 +8335,11 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
     gap: 12px;
   }
 
+  .landing-brand-cluster {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
   .landing-brand {
     justify-self: start;
   }
@@ -8137,6 +8359,10 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   .landing-auth-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .landing-brand-cluster .landing-auth-button {
+    width: auto;
   }
 
   .landing-hero,

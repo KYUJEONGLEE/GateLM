@@ -6,6 +6,7 @@ import {
   FolderKanban,
   House,
   LayoutDashboard,
+  LogOut,
   Menu,
   Plug,
   ScrollText,
@@ -165,6 +166,7 @@ const shellText: Record<
     settings: string;
     light: string;
     dark: string;
+    logout: string;
     theme: string;
     planned: string;
     tenant: string;
@@ -177,6 +179,7 @@ const shellText: Record<
     language: "Console language",
     landing: "Landing",
     light: "Light",
+    logout: "Logout",
     planned: "planned",
     settings: "Tenant settings",
     tenant: "tenant",
@@ -189,6 +192,7 @@ const shellText: Record<
     dark: "다크",
     language: "콘솔 언어",
     light: "라이트",
+    logout: "로그아웃",
     planned: "예정",
     settings: "테넌트 설정",
     tenant: "테넌트",
@@ -215,6 +219,7 @@ export function ConsoleShell({
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
   useEffect(() => {
@@ -258,6 +263,19 @@ export function ConsoleShell({
     setTheme(nextTheme);
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
+  }
+
+  async function logout() {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    await fetch("/api/auth/logout", {
+      credentials: "include",
+      method: "POST"
+    }).catch(() => undefined);
+    window.location.assign("/?view=landing");
   }
 
   function toggleSection(section: ConsoleSection) {
@@ -335,7 +353,7 @@ export function ConsoleShell({
         >
           <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
         </button>
-        <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+        <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
           <span className="console-brand-mark">G</span>
           <span className="console-brand-copy">
             <strong>GateLM</strong>
@@ -359,7 +377,7 @@ export function ConsoleShell({
       />
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
-          <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+          <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
             <span className="console-brand-mark">G</span>
             <span className="console-brand-copy">
               <strong>GateLM</strong>
@@ -514,6 +532,17 @@ export function ConsoleShell({
                       {text.dark}
                     </button>
                   </div>
+                </div>
+                <div className="console-sidebar-settings-row" data-align="end">
+                  <button
+                    className="console-sidebar-logout-button"
+                    disabled={isLoggingOut}
+                    onClick={logout}
+                    type="button"
+                  >
+                    <LogOut aria-hidden="true" size={14} strokeWidth={2.3} />
+                    <span>{text.logout}</span>
+                  </button>
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>

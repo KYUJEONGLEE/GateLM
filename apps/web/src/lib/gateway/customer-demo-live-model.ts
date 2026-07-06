@@ -115,13 +115,15 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
 
 export function getCustomerDemoLiveModel(): CustomerDemoModel {
   const tenantId = getControlPlaneTenantId();
+  const projectId = getControlPlaneProjectId();
+  const applicationId = getControlPlaneApplicationId();
   const gatewayConfig = getLiveGatewayConfig();
 
   return {
-    applicationId: getControlPlaneApplicationId(),
+    applicationId,
     applicationChatStreamingEnabled: gatewayConfig.applicationChatStreamingEnabled,
     integrationMode: "gateway",
-    projectId: getControlPlaneProjectId(),
+    projectId,
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>
       buildLiveScenario(template, tenantId)
     ),

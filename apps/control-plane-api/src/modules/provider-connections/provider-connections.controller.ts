@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -74,6 +75,20 @@ export class ProviderConnectionsController {
     @Query() query: ListProvidersQueryDto,
   ): Promise<ListEnvelope<ProviderResponseDto>> {
     return this.providerConnectionsService.listTenantProviders(tenantId, query);
+  }
+
+  @Delete('tenants/:tenantId/providers/:provider')
+  @HttpCode(HttpStatus.OK)
+  async deleteTenantProvider(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('provider') provider: string,
+  ): Promise<DataEnvelope<ProviderResponseDto>> {
+    return {
+      data: await this.providerConnectionsService.deleteTenantProvider(
+        tenantId,
+        provider,
+      ),
+    };
   }
 
   @Get('applications/:applicationId/providers')

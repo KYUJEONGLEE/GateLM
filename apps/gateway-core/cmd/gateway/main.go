@@ -14,7 +14,9 @@ import (
 	postgresauth "gatelm/apps/gateway-core/internal/adapters/auth/postgres"
 	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
+	credentialcomposite "gatelm/apps/gateway-core/internal/adapters/credentials/composite"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
+	credentialpostgres "gatelm/apps/gateway-core/internal/adapters/credentials/postgres"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
@@ -68,7 +70,6 @@ func main() {
 	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
 	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter, anthropicAdapter)
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
-	credentialResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
 	metricsRegistry := metrics.NewRegistry()
 
 	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
@@ -76,6 +77,10 @@ func main() {
 		log.Fatalf("gateway-core postgres pool configuration failed: %v", err)
 	}
 	defer postgresPool.Close()
+	credentialResolver, err := buildProviderCredentialResolver(cfg, postgresPool)
+	if err != nil {
+		log.Fatalf("gateway-core provider credential resolver configuration failed: %v", err)
+	}
 
 	redisOptions, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -193,6 +198,22 @@ func main() {
 			log.Printf("gateway-core async terminal log flush failed: %v", err)
 		}
 	}
+}
+
+func buildProviderCredentialResolver(cfg config.Config, postgresPool *pgxpool.Pool) (credentials.Resolver, error) {
+	envResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
+	if strings.TrimSpace(cfg.ProviderCredentialEncryptionKey) == "" {
+		return envResolver, nil
+	}
+
+	dbResolver, err := credentialpostgres.NewResolver(postgresPool, credentialpostgres.Config{
+		EncryptionKey:        cfg.ProviderCredentialEncryptionKey,
+		EncryptionKeyVersion: cfg.ProviderCredentialEncryptionKeyVersion,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return credentialcomposite.NewResolver(dbResolver, envResolver), nil
 }
 
 func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvider, providercatalog.Resolver) {

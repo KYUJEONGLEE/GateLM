@@ -294,7 +294,10 @@ class _OpenAIPrivacyFilterOnnxClassifier:
                 import onnxruntime as ort
             except ImportError as exc:
                 raise RuntimeError("OpenAI privacy-filter ONNX runtime requires onnxruntime.") from exc
-            session = ort.InferenceSession(str(self.model_dir / "onnx" / "model_quantized.onnx"))
+            session = ort.InferenceSession(
+                str(self.model_dir / "onnx" / "model_quantized.onnx"),
+                providers=["CPUExecutionProvider"],
+            )
             self._session = session
         return session
 
@@ -370,7 +373,8 @@ def _decode_openai_privacy_filter_spans(
 
 def _split_bioes_label(label: str) -> tuple[str, str]:
     if len(label) > 2 and label[1] == "-" and label[0].upper() in {"B", "I", "E", "S", "U"}:
-        return label[0].upper(), label[2:]
+        marker = label[0].upper()
+        return ("S" if marker == "U" else marker), label[2:]
     return "S", label
 
 

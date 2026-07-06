@@ -242,16 +242,21 @@ function getProviderModels(
   }));
 }
 
-export function getAdminOnboardingModel(): AdminOnboardingModel {
+export function getAdminOnboardingModel(
+  options: {
+    tenantId?: string;
+  } = {}
+): AdminOnboardingModel {
   const adminApi = controlPlaneAdminApiFixture as ControlPlaneAdminApiFixture;
   const credentials = credentialLifecycleFixture as CredentialLifecycleFixture;
   const runtime = runtimeConfigFixture as RuntimeConfigFixture;
   const runtimeConfig = runtime.runtimeConfig;
   const provider = runtimeConfig.providers?.[0] ?? unconfiguredProvider;
   const providerModels = getProviderModels(runtimeConfig.models, provider);
+  const tenantId = options.tenantId ?? runtimeConfig.tenantId;
 
   return {
-    tenantId: runtimeConfig.tenantId,
+    tenantId,
     project: {
       id: runtimeConfig.projectId,
       status: runtimeConfig.projectStatus

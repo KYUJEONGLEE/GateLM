@@ -9,6 +9,7 @@ import {
   EMAIL_SENDER,
   GOOGLE_OAUTH_CLIENT,
 } from './auth.tokens';
+import { hashPassword } from './auth.crypto';
 import { createInMemoryAuthRepository } from './testing/in-memory-auth-repository';
 
 describe('Auth HTTP API', () => {
@@ -30,7 +31,9 @@ describe('Auth HTTP API', () => {
     getProfile: jest.Mock;
   };
 
-  async function createAuthTestApp(options: { devAutoVerify?: boolean } = {}) {
+  async function createAuthTestApp(
+    options: { devAutoVerify?: boolean; omitDevAutoVerify?: boolean } = {},
+  ) {
     repository = createInMemoryAuthRepository();
     emailSender = {
       sent: [],
@@ -58,11 +61,13 @@ describe('Auth HTTP API', () => {
         const values: Record<string, string> = {
           AUTH_EMAIL_TRANSPORT: 'dev_memory',
           CONTROL_PLANE_AUTH_COOKIE_SECURE: 'false',
-          CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: options.devAutoVerify
-            ? 'true'
-            : 'false',
           CONTROL_PLANE_WEB_ORIGIN: 'http://localhost:3000',
         };
+        if (!options.omitDevAutoVerify) {
+          values.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY = options.devAutoVerify
+            ? 'true'
+            : 'false';
+        }
 
         return values[key];
       }),
@@ -166,6 +171,121 @@ describe('Auth HTTP API', () => {
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
   });
 
+  it('defaults dev memory signup to fake email verification when the auto verify flag is unset', async () => {
+    await app.close();
+    await createAuthTestApp({ omitDevAutoVerify: true });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'default-fake-owner@example.com',
+        name: 'Default Fake Owner',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(201);
+
+    expect(String(response.headers['set-cookie'])).toContain(
+      'gatelm_onboarding=',
+    );
+    expect(response.body).toMatchObject({
+      data: {
+        session: {
+          kind: 'onboarding',
+        },
+        user: {
+          email: 'default-fake-owner@example.com',
+        },
+        verificationRequired: false,
+      },
+    });
+    expect(emailSender.sent).toHaveLength(0);
+    expect(repository.dump().emailVerificationCodes).toHaveLength(0);
+  });
+
+  it('resends verification for an incomplete local signup instead of returning a duplicate account conflict', async () => {
+    const firstResponse = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'retry-owner@example.com',
+        name: 'Retry Owner',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(201);
+
+    const secondResponse = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'retry-owner@example.com',
+        name: 'Retry Owner',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(201);
+
+    expect(firstResponse.body).toMatchObject({
+      data: {
+        verificationRequired: true,
+        user: {
+          email: 'retry-owner@example.com',
+        },
+      },
+    });
+    expect(secondResponse.body).toMatchObject({
+      data: {
+        verificationRequired: true,
+        user: {
+          email: 'retry-owner@example.com',
+        },
+      },
+    });
+    expect(repository.dump().users).toHaveLength(1);
+    expect(repository.dump().emailVerificationCodes).toHaveLength(2);
+    expect(repository.dump().emailVerificationCodes[0]?.consumedAt).toBeInstanceOf(
+      Date,
+    );
+    expect(emailSender.sent).toHaveLength(2);
+  });
+
+  it('resumes an incomplete fake-verified local signup with an onboarding session', async () => {
+    await app.close();
+    await createAuthTestApp({ devAutoVerify: true });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'resume-owner@example.com',
+        name: 'Resume Owner',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'resume-owner@example.com',
+        name: 'Resume Owner',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(201);
+
+    expect(String(response.headers['set-cookie'])).toContain(
+      'gatelm_onboarding=',
+    );
+    expect(response.body).toMatchObject({
+      data: {
+        session: {
+          kind: 'onboarding',
+        },
+        user: {
+          email: 'resume-owner@example.com',
+        },
+        verificationRequired: false,
+      },
+    });
+    expect(repository.dump().users).toHaveLength(1);
+    expect(repository.dump().tenantMemberships).toHaveLength(0);
+    expect(emailSender.sent).toHaveLength(0);
+  });
+
   it('verifies email, creates an organization, and grants tenant_admin membership', async () => {
     const agent = request.agent(app.getHttpServer());
 
@@ -265,6 +385,44 @@ describe('Auth HTTP API', () => {
     expect(cookie).toContain('HttpOnly');
     expect(JSON.stringify(loginResponse.body)).not.toContain('accessToken');
     expect(JSON.stringify(loginResponse.body)).not.toContain('refreshToken');
+  });
+
+  it('logs in to resume a pending local signup in fake verification mode', async () => {
+    await app.close();
+    await createAuthTestApp({ devAutoVerify: true });
+    await repository.createUser({
+      authProvider: 'local',
+      email: 'pending-login@example.com',
+      emailVerifiedAt: null,
+      name: 'Pending Login',
+      passwordHash: await hashPassword('correct-horse-battery-staple'),
+      status: 'pending_email_verification',
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({
+        email: 'pending-login@example.com',
+        password: 'correct-horse-battery-staple',
+      })
+      .expect(200);
+
+    expect(String(response.headers['set-cookie'])).toContain(
+      'gatelm_onboarding=',
+    );
+    expect(response.body).toMatchObject({
+      data: {
+        memberships: [],
+        session: {
+          kind: 'onboarding',
+        },
+        user: {
+          email: 'pending-login@example.com',
+        },
+      },
+    });
+    expect(response.body.data.user.emailVerifiedAt).toEqual(expect.any(String));
+    expect(repository.dump().users[0]?.emailVerifiedAt).toBeInstanceOf(Date);
   });
 
   it('starts Google OAuth and returns verified Google users to the app with a login session without storing Google tokens', async () => {

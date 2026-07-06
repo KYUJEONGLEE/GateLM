@@ -4,11 +4,12 @@ import {
   Building2,
   CheckCircle2,
   Crown,
-  House,
   KeyRound,
   LogIn,
+  LogOut,
   MailCheck,
   Route,
+  Send,
   ShieldCheck,
   UserPlus,
   X
@@ -19,12 +20,15 @@ import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { Locale } from "@/lib/i18n/locale";
 
 const defaultTenantId = "tenant_demo_acme";
+const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
+const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
 
 type WebConsoleInitViewProps = {
   locale: Locale;
 };
 
 type AuthMode = "login" | "signup";
+type AuthStatus = "anonymous" | "authenticated" | "checking";
 type SignupStepId = "account" | "verify" | "organization" | "ready";
 
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
@@ -36,15 +40,77 @@ const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
   verify: MailCheck
 };
 
+function getDashboardHref() {
+  return `/tenants/${defaultTenantId}/dashboard`;
+}
+
+function getProjectsHref(tenantId: string) {
+  return `/tenants/${encodeURIComponent(tenantId)}/projects`;
+}
+
+function redirectToDashboard(replace = false) {
+  const href = getDashboardHref();
+  if (replace) {
+    window.location.replace(href);
+    return;
+  }
+
+  window.location.assign(href);
+}
+
+function redirectToProjects(tenantId: string, replace = false) {
+  const href = getProjectsHref(tenantId);
+  if (replace) {
+    window.location.replace(href);
+    return;
+  }
+
+  window.location.assign(href);
+}
+
+function getCreatedTenantDisplayNameStorageKey(tenantId: string) {
+  return `${createdTenantDisplayNameStorageKeyPrefix}${tenantId}`;
+}
+
+function storeCreatedTenantDisplayName(tenantId: string, tenantName: string) {
+  try {
+    window.sessionStorage.setItem(getCreatedTenantDisplayNameStorageKey(tenantId), tenantName);
+  } catch {
+    // Session storage can be unavailable in hardened browser contexts.
+  }
+}
+
+function hasStayOnLandingHistoryState() {
+  const state = window.history.state;
+
+  return Boolean(
+    state &&
+      typeof state === "object" &&
+      (state as Record<string, unknown>)[stayOnLandingHistoryStateKey] === true
+  );
+}
+
+function replaceLandingUrl() {
+  const state = window.history.state;
+  const nextState =
+    state && typeof state === "object"
+      ? { ...(state as Record<string, unknown>), [stayOnLandingHistoryStateKey]: true }
+      : { [stayOnLandingHistoryStateKey]: true };
+
+  window.history.replaceState(nextState, "", "/");
+}
+
 const initText: Record<
   Locale,
   {
     actions: {
       chat: string;
       dashboard: string;
+      gatewayRequest: string;
       googleLogin: string;
       login: string;
       loginSubmit: string;
+      logout: string;
       onboarding: string;
       requestLogs: string;
       signup: string;
@@ -131,9 +197,11 @@ const initText: Record<
     actions: {
       chat: "Employee Chat",
       dashboard: "Open Dashboard",
+      gatewayRequest: "Gateway request",
       googleLogin: "Continue with Google",
       login: "Login",
       loginSubmit: "Login",
+      logout: "Logout",
       onboarding: "Management",
       requestLogs: "Request logs",
       signup: "Sign up",
@@ -144,12 +212,12 @@ const initText: Record<
       email: "Email",
       loginTitle: "Login to GateLM",
       name: "Name",
-      organization: "Organization name",
+      organization: "Tenant name",
       organizationPlaceholder: "Acme AI Operations",
       password: "Password",
-      readyBody: "The organization is ready and your account has Owner/Admin access.",
+      readyBody: "The tenant is ready and your account has Owner/Admin access.",
       readyTitle: "Owner/Admin granted",
-      signupTitle: "Create an organization account",
+      signupTitle: "Create a tenant account",
       verificationCode: "Verification code"
     },
     console: {
@@ -189,8 +257,8 @@ const initText: Record<
     },
     signupSteps: {
       account: "Email/password sign up",
-      organization: "Organization name",
-      ready: "Organization + Owner/Admin",
+      organization: "Tenant name",
+      ready: "Tenant + Owner/Admin",
       verify: "Email verification"
     },
     summary: {
@@ -261,8 +329,10 @@ const initText: Record<
   },
   ko: {
     actions: {
+      gatewayRequest: "Gateway 요청",
+      logout: "로그아웃",
       chat: "직원 Chat 확인",
-      dashboard: "대시보드 열기",
+      dashboard: "대시보드로 이동",
       googleLogin: "Google로 계속하기",
       login: "로그인",
       loginSubmit: "로그인",
@@ -276,12 +346,12 @@ const initText: Record<
       email: "이메일",
       loginTitle: "GateLM 로그인",
       name: "이름",
-      organization: "조직 이름",
+      organization: "Tenant 이름",
       organizationPlaceholder: "Acme AI 운영팀",
       password: "비밀번호",
-      readyBody: "조직이 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
+      readyBody: "Tenant가 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
       readyTitle: "Owner/Admin 권한 부여",
-      signupTitle: "기업 계정 만들기",
+      signupTitle: "Tenant 계정 만들기",
       verificationCode: "인증 코드"
     },
     console: {
@@ -321,8 +391,8 @@ const initText: Record<
     },
     signupSteps: {
       account: "이메일/비밀번호 회원가입",
-      organization: "조직 이름 입력",
-      ready: "조직 생성 + Owner/Admin",
+      organization: "Tenant 이름 입력",
+      ready: "Tenant 생성 + Owner/Admin",
       verify: "이메일 인증"
     },
     summary: {
@@ -393,51 +463,13 @@ const initText: Record<
   }
 };
 
-const consoleInitText: Record<
-  Locale,
-  {
-    actions: {
-      chat: string;
-      dashboard: string;
-      landing: string;
-      onboarding: string;
-      requestLogs: string;
-    };
-    language: string;
-    title: string;
-  }
-> = {
-  en: {
-    actions: {
-      chat: "Gateway request",
-      dashboard: "Dashboard",
-      landing: "Landing",
-      onboarding: "Management",
-      requestLogs: "Request logs"
-    },
-    language: "Console language",
-    title: "Web Console"
-  },
-  ko: {
-    actions: {
-      landing: "랜딩",
-      chat: "Gateway 요청",
-      dashboard: "대시보드",
-      onboarding: "관리",
-      requestLogs: "요청 로그"
-    },
-    language: "콘솔 언어",
-    title: "웹 콘솔"
-  }
-};
-
 export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
-  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
@@ -448,15 +480,15 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("auth") === "organization") {
+    if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
       window.history.replaceState(null, "", "/");
-      setIsConsoleOpen(true);
+      redirectToProjects(defaultTenantId, true);
       return;
     }
-    if (params.get("view") === "landing") {
-      window.history.replaceState(null, "", "/");
-      setIsConsoleOpen(false);
-      return;
+    const hasLandingViewParam = params.get("view") === "landing";
+    const shouldStayOnLanding = hasLandingViewParam || hasStayOnLandingHistoryState();
+    if (hasLandingViewParam) {
+      replaceLandingUrl();
     }
 
     let isMounted = true;
@@ -467,7 +499,12 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           credentials: "include"
         });
 
-        if (!response.ok || !isMounted) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (!response.ok) {
+          setAuthStatus("anonymous");
           return;
         }
 
@@ -483,14 +520,20 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           return;
         }
 
-        if (
+        const hasConsoleSession =
           body.data?.session?.kind === "full" ||
-          body.data?.session?.kind === "onboarding"
-        ) {
-          setIsConsoleOpen(true);
+          body.data?.session?.kind === "onboarding";
+
+        setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
+
+        if (hasConsoleSession && !shouldStayOnLanding) {
+          redirectToDashboard(true);
         }
       } catch {
         // Anonymous visitors should still see the landing page.
+        if (isMounted) {
+          setAuthStatus("anonymous");
+        }
       }
     }
 
@@ -517,13 +560,25 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     setAuthNotice(null);
   }
 
+  async function logout() {
+    setIsAuthPanelOpen(false);
+    setAuthError(null);
+    setAuthNotice(null);
+    setAuthStatus("anonymous");
+    window.history.replaceState(null, "", "/");
+    await fetch("/api/auth/logout", {
+      credentials: "include",
+      method: "POST"
+    }).catch(() => undefined);
+  }
+
   function completeAuth() {
     setIsAuthPanelOpen(false);
     setAuthError(null);
     setAuthNotice(null);
     setSignupStep("account");
-    window.history.replaceState(null, "", "/");
-    setIsConsoleOpen(true);
+    setAuthStatus("authenticated");
+    redirectToDashboard();
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -566,7 +621,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         });
         setSignupEmail(email);
         if (result.data?.verificationRequired === false) {
-          setAuthNotice("Email verified in local development. Create your organization.");
+          setAuthNotice("Email verification skipped in local fake mode. Create your tenant.");
           setSignupStep("organization");
           return;
         }
@@ -580,16 +635,33 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           code: readFormString(formData, "verificationCode"),
           email: signupEmail
         });
-        setAuthNotice("Email verified. Create your organization.");
+        setAuthNotice("Email verified. Create your tenant.");
         setSignupStep("organization");
         return;
       }
 
-      await postAuth("organizations", {
-        organizationName: readFormString(formData, "organization")
+      const tenantName = readFormString(formData, "tenant");
+      const result = await postAuth("organizations", {
+        organizationName: tenantName
       });
+      if (result.error) {
+        setAuthNotice(null);
+        setAuthError(result.error.message ?? "Failed to create tenant.");
+        return;
+      }
+
+      const tenant = result.data?.tenant;
+      const tenantId = typeof tenant?.id === "string" && tenant.id.trim()
+        ? tenant.id.trim()
+        : defaultTenantId;
+
+      storeCreatedTenantDisplayName(tenantId, tenantName);
+      setIsAuthPanelOpen(false);
+      setAuthError(null);
       setAuthNotice(null);
-      setSignupStep("ready");
+      setSignupStep("account");
+      setAuthStatus("authenticated");
+      redirectToProjects(tenantId);
     });
   }
 
@@ -611,22 +683,25 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     window.location.assign("/api/auth/google/start");
   }
 
-  function returnToLanding() {
-    window.history.replaceState(null, "", "/");
-    setIsConsoleOpen(false);
-  }
-
-  if (isConsoleOpen) {
-    return <ConsoleInitPanel locale={locale} onReturnToLanding={returnToLanding} />;
-  }
-
   return (
     <main className="landing-shell">
       <nav className="landing-topbar" aria-label="GateLM landing navigation">
-        <Link className="landing-brand" href="/" aria-label="GateLM home">
-          <span className="landing-brand-mark">G</span>
-          <strong>GateLM</strong>
-        </Link>
+        <div className="landing-brand-cluster">
+          <Link className="landing-brand" href="/" aria-label="GateLM home">
+            <span className="landing-brand-mark">G</span>
+            <strong>GateLM</strong>
+          </Link>
+          <Link className="landing-auth-button landing-gateway-request-button" href="/application">
+            <Send aria-hidden="true" size={16} strokeWidth={2.4} />
+            <span>{text.actions.gatewayRequest}</span>
+          </Link>
+          {authStatus === "authenticated" ? (
+            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
+              <Route aria-hidden="true" size={17} strokeWidth={2.4} />
+              <span>{text.actions.dashboard}</span>
+            </Link>
+          ) : null}
+        </div>
         <div className="landing-nav-links">
           <a href="#gateway">{text.nav.gateway}</a>
           <a href="#policies">{text.nav.policies}</a>
@@ -635,22 +710,32 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         </div>
         <div className="landing-top-actions">
           <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          <button
-            className="landing-auth-button"
-            onClick={() => openAuthPanel("login")}
-            type="button"
-          >
-            <LogIn aria-hidden="true" size={17} strokeWidth={2.4} />
-            <span>{text.actions.login}</span>
-          </button>
-          <button
-            className="landing-auth-button landing-auth-button-primary"
-            onClick={() => openAuthPanel("signup")}
-            type="button"
-          >
-            <UserPlus aria-hidden="true" size={17} strokeWidth={2.4} />
-            <span>{text.actions.signup}</span>
-          </button>
+          {authStatus === "authenticated" ? (
+            <button className="landing-auth-button" onClick={logout} type="button">
+              <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
+              <span>{text.actions.logout}</span>
+            </button>
+          ) : null}
+          {authStatus === "anonymous" ? (
+            <>
+              <button
+                className="landing-auth-button"
+                onClick={() => openAuthPanel("login")}
+                type="button"
+              >
+                <LogIn aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.login}</span>
+              </button>
+              <button
+                className="landing-auth-button landing-auth-button-primary"
+                onClick={() => openAuthPanel("signup")}
+                type="button"
+              >
+                <UserPlus aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.signup}</span>
+              </button>
+            </>
+          ) : null}
         </div>
       </nav>
 
@@ -794,52 +879,6 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
   );
 }
 
-function ConsoleInitPanel({
-  locale,
-  onReturnToLanding
-}: {
-  locale: Locale;
-  onReturnToLanding: () => void;
-}) {
-  const text = consoleInitText[locale];
-
-  return (
-    <main className="init-shell">
-      <section className="init-panel" aria-labelledby="init-title">
-        <div>
-          <div className="init-heading-row">
-            <p className="init-label">GateLM</p>
-            <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          </div>
-          <h1 id="init-title">{text.title}</h1>
-          <div className="init-actions">
-            <button
-              className="primary-link init-landing-button"
-              onClick={onReturnToLanding}
-              type="button"
-            >
-              <House aria-hidden="true" size={16} strokeWidth={2.4} />
-              <span>{text.actions.landing}</span>
-            </button>
-            <Link className="primary-link" href="/application">
-              {text.actions.chat}
-            </Link>
-            <Link className="primary-link" href={`/tenants/${defaultTenantId}/onboarding`}>
-              {text.actions.onboarding}
-            </Link>
-            <Link className="primary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
-              {text.actions.dashboard}
-            </Link>
-            <Link className="back-link" href={`/tenants/${defaultTenantId}/request-logs`}>
-              {text.actions.requestLogs}
-            </Link>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
-}
-
 function GatewayScene({ text }: { text: (typeof initText)[Locale]["scene"] }) {
   return (
     <div className="landing-hero-scene" aria-hidden="true">
@@ -885,6 +924,10 @@ type AuthPostResponse = {
   data?: {
     session?: {
       kind?: string;
+    };
+    tenant?: {
+      id?: string;
+      name?: string;
     };
     verificationRequired?: boolean;
   };
@@ -1093,7 +1136,7 @@ function SignupFlow({
           <span>{text.auth.organization}</span>
           <input
             autoComplete="organization"
-            name="organization"
+            name="tenant"
             placeholder={text.auth.organizationPlaceholder}
             required
             type="text"
