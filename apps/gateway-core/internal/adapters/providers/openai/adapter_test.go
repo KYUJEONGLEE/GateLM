@@ -82,6 +82,7 @@ func TestAdapterCreateChatCompletionSupportsPathfulOpenAICompatibleBaseURL(t *te
 
 func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T) {
 	var gotStream bool
+	var gotIncludeUsage bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -94,6 +95,7 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 			t.Fatalf("decode request: %v", err)
 		}
 		gotStream = request.Stream
+		gotIncludeUsage = request.StreamOptions != nil && request.StreamOptions.IncludeUsage
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"안녕\"},\"finish_reason\":null}],\"usage\":null}\n\n"))
 		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-fake\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}\n\n"))
@@ -110,6 +112,9 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 
 	if !gotStream {
 		t.Fatal("expected upstream request stream=true")
+	}
+	if !gotIncludeUsage {
+		t.Fatal("expected upstream request stream_options.include_usage=true")
 	}
 
 	first, err := stream.Next()
