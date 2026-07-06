@@ -1075,7 +1075,7 @@ export class ProviderConnectionsService {
       );
     }
 
-    await tx.$executeRaw`
+    const affectedCredentialRows = await tx.$executeRaw`
       INSERT INTO "provider_credentials" (
         "id",
         "tenantId",
@@ -1119,7 +1119,14 @@ export class ProviderConnectionsService {
         "rotatedAt" = CURRENT_TIMESTAMP,
         "revokedAt" = NULL,
         "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "provider_credentials"."tenantId" = EXCLUDED."tenantId"
     `;
+
+    if (affectedCredentialRows === 0) {
+      throw new ConflictException(
+        'Provider credential reference is already owned by another tenant.',
+      );
+    }
   }
 
   private toStoredCredentialRefId(

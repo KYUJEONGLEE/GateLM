@@ -277,6 +277,50 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
+  it('rejects a stored provider credential ref owned by another tenant', async () => {
+    const { service, prisma } = createService();
+    process.env.GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = encryptionKey;
+    const credentialValue = 'synthetic_provider_key_ABCDEFGH2468';
+    const providerId = '00000000-0000-4000-8000-000000000922';
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
+      id: providerId,
+      tenantId,
+      projectId: null,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 30000,
+      secretRef: null,
+      credentialPrefix: null,
+      credentialLast4: null,
+      resolver: 'none',
+      providerConfig: { adapterType: 'openai_compatible' },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    prisma.$executeRaw.mockResolvedValue(0);
+
+    await expect(
+      service.upsertTenantProvider(tenantId, {
+        provider: 'openai-main',
+        displayName: 'OpenAI Main',
+        baseUrl: 'https://api.openai.com/v1',
+        credentialValue,
+        resolver: 'environment',
+        secretRef: 'provider_credential:shared-ref',
+      }),
+    ).rejects.toThrow(
+      'Provider credential reference is already owned by another tenant.',
+    );
+    expect(prisma.providerConnection.update).not.toHaveBeenCalled();
+    expect(JSON.stringify(prisma.$executeRaw.mock.calls)).not.toContain(
+      credentialValue,
+    );
+  });
+
   it('lists provider presets without credential material', async () => {
     const { service, prisma } = createService();
     prisma.providerPreset.findMany.mockResolvedValue([

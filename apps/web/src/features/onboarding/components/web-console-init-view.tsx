@@ -644,6 +644,12 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
       const result = await postAuth("organizations", {
         organizationName: tenantName
       });
+      if (result.error) {
+        setAuthNotice(null);
+        setAuthError(result.error.message ?? "Failed to create tenant.");
+        return;
+      }
+
       const tenant = result.data?.tenant;
       const tenantId = typeof tenant?.id === "string" && tenant.id.trim()
         ? tenant.id.trim()

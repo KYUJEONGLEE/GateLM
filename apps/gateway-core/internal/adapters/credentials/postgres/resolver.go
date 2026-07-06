@@ -133,7 +133,9 @@ func decryptCredential(key []byte, row storedCredential) (string, error) {
 		return "", err
 	}
 
-	sealed := append(append([]byte{}, ciphertext...), tag...)
+	sealed := make([]byte, len(ciphertext)+len(tag))
+	copy(sealed, ciphertext)
+	copy(sealed[len(ciphertext):], tag)
 	plaintext, err := gcm.Open(nil, nonce, sealed, []byte(row.refID))
 	if err != nil {
 		return "", err
