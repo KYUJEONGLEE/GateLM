@@ -9,6 +9,7 @@ import type {
   CustomerDemoRequest,
   CustomerDemoScenarioId
 } from "@/lib/gateway/customer-demo-client";
+import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveScenarioTemplate = {
   cacheStatus: string;
@@ -61,19 +62,19 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
     status: "blocked",
     title: "Blocked"
   },
-	{
-		cacheStatus: "hit",
-		description: "Same safe request resolves to exact cache hit and provider bypass.",
+  {
+    cacheStatus: "hit",
+    description: "Same safe request resolves to exact cache hit and provider bypass.",
     detectedTypes: [],
     httpStatus: 200,
     maskingAction: "none",
     promptPreview:
       "Write a concise support reply for a delayed shipment. Keep it under three sentences.",
-		providerCall: "skipped",
-		scenarioId: "cache-hit",
-		status: "success",
-		title: "Cache hit"
-	},
+    providerCall: "skipped",
+    scenarioId: "cache-hit",
+    status: "success",
+    title: "Cache hit"
+  },
   {
     cacheStatus: "bypass",
     description: "Application-scoped rate limit stops the request before provider cost.",
@@ -116,9 +117,11 @@ export function getCustomerDemoLiveModel(): CustomerDemoModel {
   const tenantId = getControlPlaneTenantId();
   const projectId = getControlPlaneProjectId();
   const applicationId = getControlPlaneApplicationId();
+  const gatewayConfig = getLiveGatewayConfig();
 
   return {
     applicationId,
+    applicationChatStreamingEnabled: gatewayConfig.applicationChatStreamingEnabled,
     integrationMode: "gateway",
     projectId,
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>

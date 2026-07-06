@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/domain/credentials"
@@ -86,6 +87,55 @@ func TestResolverRejectsInactiveStoredCredentialWithoutDecrypting(t *testing.T) 
 	}
 }
 
+func TestResolverRejectsMalformedNonceWithoutPanic(t *testing.T) {
+	key := []byte("12345678901234567890123456789012")
+	refID := "provider_credential:malformed_nonce"
+	encrypted := encryptCredentialForTest(t, key, refID, "resolved-provider-credential")
+	db := &fakeCredentialQueryer{
+		row: fakeCredentialRow{
+			values: []string{
+				refID,
+				"ACTIVE",
+				encrypted.ciphertext,
+				base64.StdEncoding.EncodeToString([]byte("short")),
+				encrypted.tag,
+				"v1",
+			},
+		},
+	}
+	resolver := NewResolverWithKey(db, key, "v1")
+
+	_, err := resolver.Resolve(context.Background(), credentials.Ref{
+		CredentialRefID:   refID,
+		CredentialVersion: 1,
+		CredentialState:   credentials.StateActive,
+	})
+	if err == nil || !strings.Contains(err.Error(), "incorrect nonce length") {
+		t.Fatalf("expected nonce length error, got %v", err)
+	}
+}
+
+func TestResolverReturnsContextErrorWithoutUnavailableWrapping(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	db := &fakeCredentialQueryer{
+		onQuery: cancel,
+		row:     fakeCredentialRow{err: context.Canceled},
+	}
+	resolver := NewResolverWithKey(db, []byte("12345678901234567890123456789012"), "v1")
+
+	_, err := resolver.Resolve(ctx, credentials.Ref{
+		CredentialRefID:   "provider_credential:canceled",
+		CredentialVersion: 1,
+		CredentialState:   credentials.StateActive,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled error, got %v", err)
+	}
+	if errors.Is(err, credentials.ErrUnavailable) {
+		t.Fatalf("context cancellation must not be wrapped as unavailable: %v", err)
+	}
+}
+
 type encryptedCredentialForTest struct {
 	ciphertext string
 	nonce      string
@@ -113,12 +163,16 @@ func encryptCredentialForTest(t *testing.T, key []byte, refID string, plaintext 
 }
 
 type fakeCredentialQueryer struct {
-	args []any
-	row  fakeCredentialRow
+	args    []any
+	onQuery func()
+	row     fakeCredentialRow
 }
 
 func (q *fakeCredentialQueryer) QueryRow(_ context.Context, _ string, arguments ...any) pgx.Row {
 	q.args = append([]any{}, arguments...)
+	if q.onQuery != nil {
+		q.onQuery()
+	}
 	return q.row
 }
 

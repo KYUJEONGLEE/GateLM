@@ -50,6 +50,11 @@ type ApplicationResponsePayload = {
 };
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
+const budgetLimitUsdPrecision = 1_000_000;
+
+function roundBudgetUsd(value: number): number {
+  return Math.round(value * budgetLimitUsdPrecision) / budgetLimitUsdPrecision;
+}
 
 const applicationText: Record<
   Locale,
@@ -178,7 +183,10 @@ export function ApplicationManagement({
   const allocatedBudgetUsd = applications
     .filter((application) => application.status !== "ARCHIVED")
     .reduce((total, application) => total + application.effectiveBudgetLimitUsd, 0);
-  const remainingBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd);
+  const roundedAllocatedBudgetUsd = roundBudgetUsd(allocatedBudgetUsd);
+  const remainingBudgetUsd = roundBudgetUsd(
+    Math.max(0, projectBudgetUsd - roundedAllocatedBudgetUsd)
+  );
 
   function openCreateModal() {
     setCreateValues(getEmptyApplicationForm(selectableModels));
@@ -289,9 +297,11 @@ export function ApplicationManagement({
     const currentApplication = applications.find((application) => application.id === applicationId);
     const currentBudgetUsd =
       currentApplication && currentApplication.status !== "ARCHIVED"
-        ? currentApplication.effectiveBudgetLimitUsd
+        ? roundBudgetUsd(currentApplication.effectiveBudgetLimitUsd)
         : 0;
-    const availableBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd + currentBudgetUsd);
+    const availableBudgetUsd = roundBudgetUsd(
+      Math.max(0, projectBudgetUsd - roundedAllocatedBudgetUsd + currentBudgetUsd)
+    );
     const nextBudgetUsd =
       values.status === "ARCHIVED" ? 0 : getApplicationBudgetLimitUsd(values, projectBudgetUsd);
 
@@ -699,7 +709,8 @@ function getApplicationBudgetLimitUsd(
   projectBudgetUsd: number
 ) {
   if (values.budgetLimitMode === "PERCENT") {
-    return (projectBudgetUsd * values.budgetLimitPercent) / 100;
+    const calculatedBudgetLimitUsd = (projectBudgetUsd * values.budgetLimitPercent) / 100;
+    return roundBudgetUsd(calculatedBudgetLimitUsd);
   }
 
   return values.budgetLimitUsd;

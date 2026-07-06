@@ -35,16 +35,21 @@ import {
 
 type ProviderModelsPayload = {
   data?: unknown;
+  models?: unknown;
 };
 
 type ProviderModelRecord = {
+  baseModelId?: unknown;
   created?: unknown;
   created_at?: unknown;
+  displayName?: unknown;
   display_name?: unknown;
   id?: unknown;
+  name?: unknown;
   object?: unknown;
   owned_by?: unknown;
   ownedBy?: unknown;
+  supportedGenerationMethods?: unknown;
   type?: unknown;
 };
 
@@ -166,7 +171,6 @@ export class ProviderConnectionsService {
         where: {
           tenantId: tenant.id,
           provider: dto.provider,
-          projectId: null,
         },
       });
 
@@ -174,6 +178,7 @@ export class ProviderConnectionsService {
         const savedProviderConnection = await tx.providerConnection.update({
           where: { id: existingProvider.id },
           data: {
+            projectId: null,
             displayName: dto.displayName,
             status: dto.status,
             baseUrl: dto.baseUrl,
@@ -252,6 +257,37 @@ export class ProviderConnectionsService {
     };
   }
 
+  async deleteProvider(
+    projectId: string,
+    provider: string,
+  ): Promise<ProviderResponseDto> {
+    await this.getProjectOrThrow(projectId);
+    const providerKey = this.toProviderKeyOrThrow(provider);
+
+    const deletedProviderConnection = await this.prisma.$transaction(
+      async (tx) => {
+        const providerConnection = await tx.providerConnection.findUnique({
+          where: {
+            projectId_provider: {
+              projectId,
+              provider: providerKey,
+            },
+          },
+        });
+
+        if (!providerConnection) {
+          throw new NotFoundException('Provider connection not found.');
+        }
+
+        return tx.providerConnection.delete({
+          where: { id: providerConnection.id },
+        });
+      },
+    );
+
+    return this.toProviderResponse(deletedProviderConnection);
+  }
+
   async listTenantProviders(
     tenantId: string,
     query: ListProvidersQueryDto,
@@ -260,7 +296,7 @@ export class ProviderConnectionsService {
 
     const limit = query.limit ?? 50;
     const providers = await this.prisma.providerConnection.findMany({
-      where: { tenantId },
+      where: { tenantId, projectId: null },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -297,17 +333,6 @@ export class ProviderConnectionsService {
 
         if (!providerConnection) {
           throw new NotFoundException('Provider connection not found.');
-        }
-
-        const applicationConnectionCount =
-          await tx.applicationProviderConnection.count({
-            where: { providerConnectionId: providerConnection.id },
-          });
-
-        if (applicationConnectionCount > 0) {
-          throw new ConflictException(
-            'Provider connection is assigned to an application and cannot be deleted.',
-          );
         }
 
         return tx.providerConnection.delete({
@@ -355,6 +380,7 @@ export class ProviderConnectionsService {
       ? await this.prisma.providerConnection.findMany({
           where: {
             id: { in: providerConnectionIds },
+            projectId: null,
             tenantId: application.tenantId,
           },
         })
@@ -362,7 +388,7 @@ export class ProviderConnectionsService {
 
     if (providers.length !== providerConnectionIds.length) {
       throw new BadRequestException(
-        'Application provider connections must reference providers from the same tenant.',
+        'Application provider connections must reference tenant-level providers from the same tenant.',
       );
     }
 
@@ -677,7 +703,6 @@ export class ProviderConnectionsService {
       return null;
     }
 
-    const credentialRefList = Prisma.join(credentialRefs);
     const rows = await this.prisma.$queryRaw<StoredProviderCredentialRow[]>(
       Prisma.sql`
         SELECT
@@ -688,8 +713,8 @@ export class ProviderConnectionsService {
           "encryptionTag",
           "encryptionKeyVersion"
         FROM "provider_credentials"
-        WHERE "credentialRefId" IN (${credentialRefList})
-        ORDER BY array_position(ARRAY[${credentialRefList}]::text[], "credentialRefId")
+        WHERE "credentialRefId" = ANY(${credentialRefs}::text[])
+        ORDER BY array_position(${credentialRefs}::text[], "credentialRefId")
         LIMIT 1
       `,
     );
@@ -835,6 +860,7 @@ export class ProviderConnectionsService {
       const headers: Record<string, string> = {
         Accept: 'application/json',
       };
+      let requestUrl = endpoint;
 
       if (credential) {
         if (adapterType === 'anthropic') {
@@ -846,7 +872,7 @@ export class ProviderConnectionsService {
         }
       }
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(requestUrl, {
         headers,
         method: 'GET',
         signal: controller.signal,
@@ -878,7 +904,10 @@ export class ProviderConnectionsService {
 
       return payload as ProviderModelsPayload;
     } catch (error) {
-      if (error instanceof BadGatewayException) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 

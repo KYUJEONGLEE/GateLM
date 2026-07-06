@@ -11,6 +11,7 @@ export type LiveGatewayConfig = {
   apiKey: string;
   applicationChatMaxTokens: number;
   applicationChatModel: string;
+  applicationChatStreamingEnabled: boolean;
   baseUrl: string;
   projectId: string;
   providerFailureControlUrl: string;
@@ -25,6 +26,7 @@ export function getLiveGatewayConfig(): LiveGatewayConfig {
     applicationChatMaxTokens: getApplicationChatMaxTokens(),
     applicationChatModel:
       firstEnv("GATELM_APPLICATION_CHAT_MODEL", "GATEWAY_APPLICATION_CHAT_MODEL") ?? "auto",
+    applicationChatStreamingEnabled: getApplicationChatStreamingEnabled(),
     baseUrl: normalizeBaseUrl(
       firstEnv("GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL")
         ?? `http://${defaultGatewayHost()}:${process.env.GATEWAY_PORT ?? "8080"}`
@@ -81,6 +83,15 @@ function getApplicationChatMaxTokens() {
   return DEFAULT_APPLICATION_CHAT_MAX_TOKENS;
 }
 
+function getApplicationChatStreamingEnabled() {
+  const configured = firstEnv(
+    "GATELM_APPLICATION_CHAT_STREAMING_ENABLED",
+    "GATEWAY_APPLICATION_CHAT_STREAMING_ENABLED"
+  );
+
+  return parseBoolean(configured, true);
+}
+
 function getProviderFailureModels() {
   const configured = firstEnv("GATELM_PROVIDER_FAILURE_MODELS", "K6_PROVIDER_FAILURE_MODELS");
   const parsed = parseCsv(configured);
@@ -118,6 +129,27 @@ function parsePositiveInt(value: string | undefined) {
   }
 
   return parsed;
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean) {
+  if (!value) {
+    return fallback;
+  }
+
+  switch (value.trim().toLowerCase()) {
+    case "1":
+    case "true":
+    case "yes":
+    case "on":
+      return true;
+    case "0":
+    case "false":
+    case "no":
+    case "off":
+      return false;
+    default:
+      return fallback;
+  }
 }
 
 function clamp(value: number, min: number, max: number) {

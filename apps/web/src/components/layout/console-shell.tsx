@@ -2,7 +2,6 @@
 
 import {
   Activity,
-  Database,
   FolderKanban,
   House,
   LayoutDashboard,
@@ -31,7 +30,6 @@ type ConsoleTheme = "light" | "dark";
 export type ManagementNavItem =
   | "api-keys"
   | "app-tokens"
-  | "model-catalog"
   | "policies"
   | "project"
   | "provider"
@@ -48,7 +46,6 @@ const childIcons: Record<AnalyticsNavItem | ManagementNavItem, typeof LayoutDash
   "api-keys": SettingsIcon,
   "app-tokens": SettingsIcon,
   health: Activity,
-  "model-catalog": Database,
   policies: ScrollText,
   project: FolderKanban,
   provider: Plug,
@@ -116,14 +113,6 @@ const navigationItems: Array<{
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
-      },
-      {
-        labels: {
-          en: "Model Catalog",
-          ko: "Model Catalog"
-        },
-        item: "model-catalog",
-        path: (tenantId) => `/tenants/${tenantId}/model-catalog`
       }
     ],
     section: "management"

@@ -272,25 +272,6 @@ export async function removeProviderModel({
   });
 }
 
-export async function listProviderConnections(projectId: string): Promise<ProviderListResult> {
-  try {
-    const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers?limit=50`,
-      {
-        cache: "no-store"
-      }
-    );
-
-    return readProviderListResponse(response);
-  } catch {
-    return {
-      error: "Control Plane unavailable.",
-      ok: false,
-      status: 0
-    };
-  }
-}
-
 export async function listTenantProviderConnections(
   tenantId: string
 ): Promise<ProviderListResult> {
@@ -637,7 +618,7 @@ async function readProviderDiscoveryResponse(response: Response): Promise<Provid
     if (response.status === 404) {
       return {
         error:
-          "Provider model discovery API is not available in the current Control Plane build.",
+          "Provider connection was not found for the configured Control Plane project.",
         ok: false,
         status: response.status
       };
@@ -899,6 +880,10 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       providerConfig: {
         adapterType: "openai_compatible",
         credentialRequired: true,
+        modelDiscovery: {
+          cacheTtlSeconds: 3600,
+          type: "openai_compatible_models"
+        },
         requestFormat: "openai_chat_completions"
       },
       providerKey: "openai"
