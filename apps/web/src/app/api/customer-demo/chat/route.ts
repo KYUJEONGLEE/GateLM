@@ -599,9 +599,42 @@ async function prepareConversationGatewayContext({
   return {
     contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
     conversationId: conversation.id,
-    messages: messageResult.data.context.messages,
+    messages: withRawCurrentUserMessage(
+      messageResult.data.context.messages,
+      message ?? definition.gatewayPrompt
+    ),
     userMessageId: messageResult.data.message.id
   };
+}
+
+function withRawCurrentUserMessage(
+  messages: GatewayContextMessage[],
+  currentContent: string
+): GatewayContextMessage[] {
+  const normalizedCurrentContent = currentContent.trim();
+  if (!normalizedCurrentContent) {
+    return messages;
+  }
+
+  const nextMessages = messages.map((message) => ({ ...message }));
+  const currentMessageIndex = nextMessages.length - 1;
+  const currentMessage = nextMessages[currentMessageIndex];
+
+  if (currentMessage?.role === "user") {
+    nextMessages[currentMessageIndex] = {
+      ...currentMessage,
+      content: normalizedCurrentContent
+    };
+    return nextMessages;
+  }
+
+  return [
+    ...nextMessages,
+    {
+      content: normalizedCurrentContent,
+      role: "user"
+    }
+  ];
 }
 
 async function createApplicationConversation({
