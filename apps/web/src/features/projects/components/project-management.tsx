@@ -3,23 +3,26 @@
 import { Pencil, Plus, Save, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import type {
+  ProjectBudgetThresholdRecord,
   ProjectRecord,
   ProjectsModel,
   ProjectStatus,
   ProjectUpdateValues
 } from "@/lib/control-plane/projects-types";
-import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
+import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
+import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ProjectManagementProps = {
+  budgetThresholds: ProjectBudgetThresholdRecord[];
   locale: Locale;
   model: ProjectsModel;
-  runtimeApplicationIdsByProjectId?: Record<string, string | null>;
+  monthlyCostReport: ProjectMonthlyCostReport;
 };
 
 type ProjectDetailManagementProps = {
@@ -39,7 +42,12 @@ type ProjectResponsePayload = {
   project?: ProjectRecord;
 };
 
+type ProjectSortMode = "budget" | "limitRisk" | "usage";
+type ProjectBudgetState = "alert" | "operational" | "warning";
+
 const projectStatuses: ProjectStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
+const projectSortModes: ProjectSortMode[] = ["budget", "limitRisk", "usage"];
+const defaultWarningThresholdPercent = 80;
 
 const projectText: Record<
   Locale,
@@ -51,22 +59,31 @@ const projectText: Record<
     edit: string;
     editPolicy: string;
     empty: string;
+    budgetAlert: string;
+    budgetWarning: string;
+    costReportFallback: string;
     fixtureFallback: string;
     detailSaved: string;
     general: string;
     management: string;
     name: string;
+    operating: string;
     project: string;
     projectId: string;
     save: string;
     delete: string;
     deleteConfirm: string;
+    sortBudget: string;
+    sortLabel: string;
+    sortLimitRisk: string;
+    sortUsage: string;
     totalBudget: string;
     deleted: string;
     source: string;
     status: string;
     title: string;
     updated: string;
+    usage: string;
   }
 > = {
   en: {
@@ -77,22 +94,31 @@ const projectText: Record<
     edit: "Edit",
     editPolicy: "Edit policy",
     empty: "No projects found.",
+    budgetAlert: "Limit exceeded",
+    budgetWarning: "Warning",
+    costReportFallback: "Monthly usage is unavailable.",
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
     detailSaved: "Project saved.",
     general: "General",
     management: "management",
     name: "Name",
+    operating: "Operating",
     project: "Project",
     projectId: "Project ID",
     save: "Save",
     delete: "Delete",
     deleteConfirm: "Delete this project? This action cannot be undone.",
+    sortBudget: "Budget",
+    sortLabel: "Sort by",
+    sortLimitRisk: "Limit risk",
+    sortUsage: "Usage",
     totalBudget: "Project budget",
     deleted: "Project deleted.",
     source: "Source",
     status: "Status",
     title: "Projects",
-    updated: "Updated"
+    updated: "Updated",
+    usage: "Usage"
   },
   ko: {
     actions: "작업",
@@ -102,32 +128,71 @@ const projectText: Record<
     edit: "편집",
     editPolicy: "정책 수정",
     empty: "프로젝트가 없습니다.",
+    budgetAlert: "한도 초과",
+    budgetWarning: "주의",
+    costReportFallback: "월간 사용량을 불러올 수 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
     detailSaved: "Project가 저장되었습니다.",
     general: "일반",
     management: "관리",
     name: "이름",
+    operating: "운영중",
     project: "Project",
     projectId: "Project ID",
     save: "저장",
     delete: "삭제",
     deleteConfirm: "이 Project를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+    sortBudget: "예산순",
+    sortLabel: "정렬 기준",
+    sortLimitRisk: "한도 임박순",
+    sortUsage: "사용량순",
     totalBudget: "프로젝트 예산",
     deleted: "Project가 삭제되었습니다.",
     source: "출처",
     status: "상태",
     title: "프로젝트",
-    updated: "수정"
+    updated: "수정",
+    usage: "사용률"
   }
 };
 
 export function ProjectManagement({
+  budgetThresholds,
   locale,
   model,
-  runtimeApplicationIdsByProjectId = {}
+  monthlyCostReport
 }: ProjectManagementProps) {
   const text = projectText[locale];
+  const [sortMode, setSortMode] = useState<ProjectSortMode>("usage");
   const projects = model.projects.filter((project) => project.status !== "ARCHIVED");
+  const projectCostsById = useMemo(
+    () => new Map(monthlyCostReport.projectCosts.map((cost) => [cost.projectId, cost])),
+    [monthlyCostReport.projectCosts]
+  );
+  const warningThresholdsByProjectId = useMemo(
+    () =>
+      new Map(
+        budgetThresholds.map((threshold) => [
+          threshold.projectId,
+          threshold.warningThresholdPercent
+        ])
+      ),
+    [budgetThresholds]
+  );
+  const usageKnown = monthlyCostReport.source === "gateway";
+  const sortedProjects = useMemo(
+    () =>
+      [...projects].sort((left, right) =>
+        compareProjectsBySortMode(
+          left,
+          right,
+          sortMode,
+          getProjectUsage(left, projectCostsById.get(left.id), usageKnown),
+          getProjectUsage(right, projectCostsById.get(right.id), usageKnown)
+        )
+      ),
+    [projectCostsById, projects, sortMode, usageKnown]
+  );
 
   return (
     <main className="console-content management-line-content">
@@ -150,94 +215,118 @@ export function ProjectManagement({
         </Alert>
       ) : null}
 
-      <section className="console-panel">
+      {monthlyCostReport.loadError ? (
+        <Alert variant="warning">
+          <AlertDescription>{text.costReportFallback}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="console-panel project-list-panel">
         <div className="panel-heading">
           <h3>{text.title}</h3>
         </div>
         {projects.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table project-table">
-              <thead>
-                <tr>
-                  <th>{text.name}</th>
-                  <th>{text.description}</th>
-                  <th>{text.totalBudget}</th>
-                  <th>{text.status}</th>
-                  <th>{text.updated}</th>
-                  <th>{text.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((project) => {
-                  const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
-                  const runtimeApplicationId = runtimeApplicationIdsByProjectId[project.id];
-                  const policyHref = runtimeApplicationId
-                    ? `${projectHref}/applications/${runtimeApplicationId}/policies`
-                    : null;
+          <div className="project-card-list">
+            <div className="project-sort-control" aria-label={text.sortLabel}>
+              <span>{text.sortLabel}</span>
+              <div className="project-sort-buttons">
+                {projectSortModes.map((mode) => (
+                  <button
+                    aria-pressed={sortMode === mode}
+                    className="project-sort-button"
+                    data-active={sortMode === mode}
+                    key={mode}
+                    onClick={() => setSortMode(mode)}
+                    type="button"
+                  >
+                    {formatProjectSortMode(mode, text)}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                  return (
-                    <tr key={project.id}>
-                      <td>
-                        <strong className="provider-name">{project.name}</strong>
-                      </td>
-                      <td>{nullableText(project.description, "-")}</td>
-                      <td>{formatBudgetUsd(project.totalBudgetUsd)}</td>
-                      <td>
-                        <Badge
-                          className="project-status-badge"
-                          data-status={project.status}
-                          variant="outline"
-                        >
-                          {formatProjectStatus(project.status)}
-                        </Badge>
-                      </td>
-                      <td>
-                        <span className="project-muted">{formatDateTime(project.updatedAt)}</span>
-                        <small className="project-muted">
-                          {text.created}: {formatDateTime(project.createdAt)}
-                        </small>
-                      </td>
-                      <td>
-                        <div className="project-row-actions project-list-row-actions">
-                          <Link
-                            className="secondary-button project-list-action-link"
-                            href={projectHref}
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => event.stopPropagation()}
-                            onMouseDown={(event) => event.stopPropagation()}
-                          >
-                            <Pencil aria-hidden="true" />
-                            {text.edit}
-                          </Link>
-                          {policyHref ? (
-                            <Link
-                              className="secondary-button project-list-action-link"
-                              href={policyHref}
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                              onMouseDown={(event) => event.stopPropagation()}
-                            >
-                              <Settings aria-hidden="true" />
-                              {text.editPolicy}
-                            </Link>
-                          ) : (
-                            <span
-                              aria-disabled="true"
-                              className="secondary-button project-list-action-link project-list-action-disabled"
-                            >
-                              <Settings aria-hidden="true" />
-                              {text.editPolicy}
-                            </span>
-                          )}
+            <div className="project-card-grid">
+              {sortedProjects.map((project) => {
+                const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
+                const policyHref = project.runtimeApplicationId ? `${projectHref}/policies` : null;
+                const usage = getProjectUsage(project, projectCostsById.get(project.id), usageKnown);
+                const warningThresholdPercent =
+                  warningThresholdsByProjectId.get(project.id) ?? defaultWarningThresholdPercent;
+                const budgetState = getProjectBudgetState(
+                  usage.usagePercent,
+                  warningThresholdPercent
+                );
+                const progressWidth = usage.usagePercent === null
+                  ? 0
+                  : Math.max(0, Math.min(usage.usagePercent, 100));
+                const usageCostText = `${formatMicroUsd(usage.costMicroUsd)} / ${formatBudgetUsd(project.totalBudgetUsd)}`;
+
+                return (
+                  <article
+                    className="project-card"
+                    data-budget-state={budgetState}
+                    data-testid="project-card"
+                    key={project.id}
+                  >
+                    <div className="project-card-title-row">
+                      <h4 className="project-card-title">{project.name}</h4>
+                      <Badge
+                        className="project-budget-badge"
+                        data-budget-state={budgetState}
+                        variant="outline"
+                      >
+                        {formatProjectBudgetState(budgetState, text)}
+                      </Badge>
+                    </div>
+
+                    <div className="project-card-usage">
+                      <div className="project-usage-summary">
+                        <div>
+                          <span className="project-usage-label">{text.usage}</span>
+                          <strong className="project-usage-value">
+                            {formatUsagePercent(usage.usagePercent)}
+                          </strong>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <span className="project-usage-cost">{usageCostText}</span>
+                      </div>
+                      <div
+                        aria-label={text.usage}
+                        aria-valuemax={100}
+                        aria-valuemin={0}
+                        aria-valuenow={Math.round(progressWidth)}
+                        className="project-usage-track"
+                        role="progressbar"
+                      >
+                        <span className="project-usage-fill" style={{ width: `${progressWidth}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="project-card-actions">
+                      <Link className="secondary-button project-list-action-link" href={projectHref}>
+                        <Pencil aria-hidden="true" />
+                        {text.edit}
+                      </Link>
+                      {policyHref ? (
+                        <Link className="secondary-button project-list-action-link" href={policyHref}>
+                          <Settings aria-hidden="true" />
+                          {text.editPolicy}
+                        </Link>
+                      ) : (
+                        <span
+                          aria-disabled="true"
+                          className="secondary-button project-list-action-link project-list-action-disabled"
+                        >
+                          <Settings aria-hidden="true" />
+                          {text.editPolicy}
+                        </span>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         )}
       </section>
@@ -481,6 +570,158 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
       </section>
     </main>
   );
+}
+
+type ProjectMonthlyCostRecord = ProjectMonthlyCostReport["projectCosts"][number];
+
+type ProjectUsage = {
+  costMicroUsd: number;
+  remainingBudgetUsd: number | null;
+  usagePercent: number | null;
+};
+
+function compareProjectsBySortMode(
+  left: ProjectRecord,
+  right: ProjectRecord,
+  sortMode: ProjectSortMode,
+  leftUsage: ProjectUsage,
+  rightUsage: ProjectUsage
+) {
+  if (sortMode === "budget") {
+    return compareDescending(left.totalBudgetUsd, right.totalBudgetUsd) || left.name.localeCompare(right.name);
+  }
+
+  if (sortMode === "limitRisk") {
+    return (
+      compareNullableAscending(leftUsage.remainingBudgetUsd, rightUsage.remainingBudgetUsd) ||
+      compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
+      left.name.localeCompare(right.name)
+    );
+  }
+
+  return (
+    compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
+    compareDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
+    left.name.localeCompare(right.name)
+  );
+}
+
+function compareDescending(left: number, right: number) {
+  return right - left;
+}
+
+function compareNullableAscending(left: number | null, right: number | null) {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return left - right;
+}
+
+function compareNullableDescending(left: number | null, right: number | null) {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return right - left;
+}
+
+function getProjectUsage(
+  project: ProjectRecord,
+  monthlyCost: ProjectMonthlyCostRecord | undefined,
+  usageKnown: boolean
+): ProjectUsage {
+  if (!usageKnown) {
+    const budgetUsd = Math.max(0, project.totalBudgetUsd);
+
+    return {
+      costMicroUsd: 0,
+      remainingBudgetUsd: budgetUsd,
+      usagePercent: 0
+    };
+  }
+
+  const costMicroUsd = monthlyCost?.costMicroUsd ?? 0;
+  const costUsd = costMicroUsd / 1_000_000;
+  const budgetUsd = Math.max(0, project.totalBudgetUsd);
+  const usagePercent = budgetUsd > 0 ? (costUsd * 100) / budgetUsd : costUsd > 0 ? 100 : 0;
+
+  return {
+    costMicroUsd,
+    remainingBudgetUsd: budgetUsd - costUsd,
+    usagePercent
+  };
+}
+
+function getProjectBudgetState(
+  usagePercent: number | null,
+  warningThresholdPercent: number
+): ProjectBudgetState {
+  if (usagePercent !== null && usagePercent >= 100) {
+    return "alert";
+  }
+
+  if (
+    usagePercent !== null &&
+    warningThresholdPercent > 0 &&
+    usagePercent >= warningThresholdPercent
+  ) {
+    return "warning";
+  }
+
+  return "operational";
+}
+
+function formatProjectBudgetState(state: ProjectBudgetState, text: (typeof projectText)[Locale]) {
+  if (state === "alert") {
+    return text.budgetAlert;
+  }
+
+  if (state === "warning") {
+    return text.budgetWarning;
+  }
+
+  return text.operating;
+}
+
+function formatProjectSortMode(mode: ProjectSortMode, text: (typeof projectText)[Locale]) {
+  if (mode === "budget") {
+    return text.sortBudget;
+  }
+
+  if (mode === "limitRisk") {
+    return text.sortLimitRisk;
+  }
+
+  return text.sortUsage;
+}
+
+function formatUsagePercent(value: number | null) {
+  if (value === null) {
+    return "-";
+  }
+
+  return `${Math.round(value)}%`;
+}
+
+function formatMicroUsd(value: number) {
+  return formatBudgetUsd(value / 1_000_000);
 }
 
 function getProjectUpdateValues(project: ProjectRecord): ProjectUpdateValues {

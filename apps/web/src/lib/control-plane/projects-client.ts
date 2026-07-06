@@ -5,8 +5,12 @@ import {
   getControlPlaneBaseUrl,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
-import { publishRuntimePolicyModelSelectionForApplication } from "@/lib/control-plane/runtime-policy-client";
+import {
+  getRuntimePolicyConfigForApplication,
+  publishRuntimePolicyModelSelectionForApplication
+} from "@/lib/control-plane/runtime-policy-client";
 import type {
+  ProjectBudgetThresholdRecord,
   ProjectFormValues,
   ProjectRecord,
   ProjectsModel,
@@ -47,6 +51,8 @@ type ProjectListResult =
       status: number;
     };
 
+const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
+
 export async function getProjectsModel(routeTenantId: string): Promise<ProjectsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneTenantId = getControlPlaneTenantId();
@@ -71,6 +77,12 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
     routeTenantId,
     source: "fixture"
   };
+}
+
+export async function getProjectBudgetThresholds(
+  projects: ProjectRecord[]
+): Promise<ProjectBudgetThresholdRecord[]> {
+  return Promise.all(projects.map(getProjectBudgetThreshold));
 }
 
 export async function createProject(values: ProjectFormValues): Promise<ProjectRequestResult> {
@@ -156,6 +168,25 @@ export async function updateProject(values: ProjectUpdateValues): Promise<Projec
   }
 }
 
+async function getProjectBudgetThreshold(
+  project: ProjectRecord
+): Promise<ProjectBudgetThresholdRecord> {
+  if (!project.runtimeApplicationId) {
+    return {
+      projectId: project.id,
+      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
+    };
+  }
+
+  const config = await getRuntimePolicyConfigForApplication(project.runtimeApplicationId);
+  const warningThresholdPercent = config?.budgetPolicy?.warningThresholdPercent;
+
+  return {
+    projectId: project.id,
+    warningThresholdPercent: normalizeWarningThresholdPercent(warningThresholdPercent)
+  };
+}
+
 async function listProjects(tenantId: string): Promise<ProjectListResult> {
   try {
     const response = await fetch(
@@ -173,6 +204,12 @@ async function listProjects(tenantId: string): Promise<ProjectListResult> {
       status: 0
     };
   }
+}
+
+function normalizeWarningThresholdPercent(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100
+    ? value
+    : DEFAULT_WARNING_THRESHOLD_PERCENT;
 }
 
 function toProjectPayload(values: ProjectFormValues) {
