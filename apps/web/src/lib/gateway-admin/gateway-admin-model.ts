@@ -223,7 +223,7 @@ function buildProviderRows(
     .map((providerName) => {
       const provider = providers.find((item) => item.provider === providerName);
       const providerRecords = records.filter((record) => record.selectedProvider === providerName);
-      const failedRequests = providerRecords.filter(isProblemRecord).length;
+      const failedRequests = providerRecords.filter(isFailedRecord).length;
       const requestCount = providerRecords.length;
       const errorRate = safeRate(failedRequests, requestCount);
       const models = getProviderModels(provider, providerRecords);
@@ -275,7 +275,7 @@ function buildProjectUsageRows(
       budgetUsd: project.totalBudgetUsd,
       cacheHitRate: safeRate(cacheHitCount, requestCount),
       costMicroUsd: sum(projectRecords.map((record) => record.costMicroUsd)),
-      failedRequests: projectRecords.filter(isProblemRecord).length,
+      failedRequests: projectRecords.filter(isFailedRecord).length,
       projectId: project.id,
       projectName: project.name,
       requestCount,
@@ -349,6 +349,10 @@ function deriveHealth(requestCount: number, errorRate: number): GatewayAdminHeal
   }
 
   return "healthy";
+}
+
+function isFailedRecord(record: InvocationLogRecord) {
+  return record.status === "failed";
 }
 
 function isProblemRecord(record: InvocationLogRecord) {

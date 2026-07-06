@@ -162,7 +162,12 @@ function GatewayAdminHeader({
 
 function GatewayAdminOverview({ model }: { model: GatewayAdminModel }) {
   const overview = model.overview;
-  const successRate = overview ? safeRate(overview.successfulRequests, overview.totalRequests) : 0;
+  const successRate = overview
+    ? safeRate(overview.successfulRequests, overview.totalRequests)
+    : safeRate(
+        model.records.filter((record) => record.status === "success").length,
+        model.records.length
+      );
 
   return (
     <div className={styles.stack}>
@@ -545,6 +550,7 @@ function TrafficFilterBar({ model }: { model: GatewayAdminModel }) {
   return (
     <form action="/admin/gateway/traffic" className={styles.filterBar}>
       <input name="range" type="hidden" value={model.filters.range} />
+      {model.filters.projectId ? <input name="projectId" type="hidden" value={model.filters.projectId} /> : null}
       <label>
         <span>Provider</span>
         <select defaultValue={model.filters.provider ?? ""} name="provider">
