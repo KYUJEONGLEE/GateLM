@@ -1,5 +1,7 @@
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { AdminOnboardingFlow } from "@/features/onboarding/components/admin-onboarding-flow";
+import { getProviderConnectionsModel } from "@/lib/control-plane/provider-connections-client";
+import { getTeamsModel } from "@/lib/control-plane/teams-client";
 import { getAdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -13,6 +15,10 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
   const { tenantId } = await params;
   const locale = await getRequestLocale();
   const model = getAdminOnboardingModel({ tenantId });
+  const [providerConnectionsModel, teamsModel] = await Promise.all([
+    getProviderConnectionsModel(tenantId),
+    getTeamsModel(tenantId)
+  ]);
 
   return (
     <ConsoleShell
@@ -25,6 +31,8 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
         activeStepId="project"
         locale={locale}
         model={model}
+        providerConnectionsModel={providerConnectionsModel}
+        teamsModel={teamsModel}
       />
     </ConsoleShell>
   );

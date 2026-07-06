@@ -45,9 +45,18 @@ type ProjectTeamResponsePayload = {
 
 const teamStatuses: TeamStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
 
-const emptyTeamForm: TeamFormValues = {
+export const emptyTeamForm: TeamFormValues = {
   description: "",
   name: ""
+};
+
+type TeamCreateModalProps = {
+  createValues: TeamFormValues;
+  locale: Locale;
+  onChange: (values: Partial<TeamFormValues>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  pendingAction: string | null;
 };
 
 const teamText: Record<
@@ -443,82 +452,99 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
       </section>
 
       {isCreateModalOpen ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            if (pendingAction !== "create") {
-              setIsCreateModalOpen(false);
-            }
-          }}
-          role="presentation"
-        >
-          <section
-            aria-labelledby="team-create-title"
-            aria-modal="true"
-            className="modal-panel"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <div className="panel-heading">
-              <div>
-                <p className="console-kicker">{text.management}</p>
-                <h3 id="team-create-title">{text.create}</h3>
-                <p>{text.createDescription}</p>
-              </div>
-            </div>
-            <div className="modal-form-grid">
-              <label className="policy-field">
-                <span>{text.name}</span>
-                <input
-                  autoFocus
-                  maxLength={120}
-                  onChange={(event) =>
-                    setCreateValues((current) => ({
-                      ...current,
-                      name: event.target.value
-                    }))
-                  }
-                  type="text"
-                  value={createValues.name}
-                />
-              </label>
-              <label className="policy-field">
-                <span>{text.description}</span>
-                <input
-                  maxLength={500}
-                  onChange={(event) =>
-                    setCreateValues((current) => ({
-                      ...current,
-                      description: event.target.value
-                    }))
-                  }
-                  type="text"
-                  value={createValues.description}
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <Button
-                disabled={pendingAction === "create"}
-                onClick={() => setIsCreateModalOpen(false)}
-                type="button"
-                variant="outline"
-              >
-                {text.cancel}
-              </Button>
-              <Button
-                disabled={pendingAction !== null || createValues.name.trim().length === 0}
-                onClick={() => void submitCreateTeam()}
-                type="button"
-              >
-                <Plus aria-hidden="true" />
-                {pendingAction === "create" ? "..." : text.create}
-              </Button>
-            </div>
-          </section>
-        </div>
+        <TeamCreateModal
+          createValues={createValues}
+          locale={locale}
+          onChange={(values) =>
+            setCreateValues((current) => ({
+              ...current,
+              ...values
+            }))
+          }
+          onClose={() => setIsCreateModalOpen(false)}
+          onSubmit={submitCreateTeam}
+          pendingAction={pendingAction}
+        />
       ) : null}
     </main>
+  );
+}
+
+export function TeamCreateModal({
+  createValues,
+  locale,
+  onChange,
+  onClose,
+  onSubmit,
+  pendingAction
+}: TeamCreateModalProps) {
+  const text = teamText[locale];
+
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={() => {
+        if (pendingAction !== "create") {
+          onClose();
+        }
+      }}
+      role="presentation"
+    >
+      <section
+        aria-labelledby="team-create-title"
+        aria-modal="true"
+        className="modal-panel"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="panel-heading">
+          <div>
+            <p className="console-kicker">{text.management}</p>
+            <h3 id="team-create-title">{text.create}</h3>
+            <p>{text.createDescription}</p>
+          </div>
+        </div>
+        <div className="modal-form-grid">
+          <label className="policy-field">
+            <span>{text.name}</span>
+            <input
+              autoFocus
+              maxLength={120}
+              onChange={(event) => onChange({ name: event.target.value })}
+              type="text"
+              value={createValues.name}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.description}</span>
+            <input
+              maxLength={500}
+              onChange={(event) => onChange({ description: event.target.value })}
+              type="text"
+              value={createValues.description}
+            />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <Button
+            disabled={pendingAction === "create"}
+            onClick={onClose}
+            type="button"
+            variant="outline"
+          >
+            {text.cancel}
+          </Button>
+          <Button
+            disabled={pendingAction !== null || createValues.name.trim().length === 0}
+            onClick={() => void onSubmit()}
+            type="button"
+          >
+            <Plus aria-hidden="true" />
+            {pendingAction === "create" ? "..." : text.create}
+          </Button>
+        </div>
+      </section>
+    </div>
   );
 }
 

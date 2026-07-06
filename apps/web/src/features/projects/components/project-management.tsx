@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Pencil, Plus, Save, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import type { Locale } from "@/lib/i18n/locale";
 type ProjectManagementProps = {
   locale: Locale;
   model: ProjectsModel;
+  runtimeApplicationIdsByProjectId?: Record<string, string | null>;
 };
 
 type ProjectDetailManagementProps = {
@@ -43,10 +44,12 @@ const projectStatuses: ProjectStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
 const projectText: Record<
   Locale,
   {
+    actions: string;
     createProject: string;
     created: string;
     description: string;
     edit: string;
+    editPolicy: string;
     empty: string;
     fixtureFallback: string;
     detailSaved: string;
@@ -67,10 +70,12 @@ const projectText: Record<
   }
 > = {
   en: {
+    actions: "Actions",
     createProject: "Create Project",
     created: "Created",
     description: "Description",
     edit: "Edit",
+    editPolicy: "Edit policy",
     empty: "No projects found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
     detailSaved: "Project saved.",
@@ -90,10 +95,12 @@ const projectText: Record<
     updated: "Updated"
   },
   ko: {
+    actions: "작업",
     createProject: "Create Project",
     created: "생성",
     description: "설명",
-    edit: "수정",
+    edit: "편집",
+    editPolicy: "정책 수정",
     empty: "프로젝트가 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
     detailSaved: "Project가 저장되었습니다.",
@@ -114,14 +121,13 @@ const projectText: Record<
   }
 };
 
-export function ProjectManagement({ locale, model }: ProjectManagementProps) {
-  const router = useRouter();
+export function ProjectManagement({
+  locale,
+  model,
+  runtimeApplicationIdsByProjectId = {}
+}: ProjectManagementProps) {
   const text = projectText[locale];
   const projects = model.projects.filter((project) => project.status !== "ARCHIVED");
-
-  function openProject(projectId: string) {
-    router.push(`/tenants/${model.routeTenantId}/projects/${projectId}`);
-  }
 
   return (
     <main className="console-content management-line-content">
@@ -160,45 +166,76 @@ export function ProjectManagement({ locale, model }: ProjectManagementProps) {
                   <th>{text.totalBudget}</th>
                   <th>{text.status}</th>
                   <th>{text.updated}</th>
+                  <th>{text.actions}</th>
                 </tr>
               </thead>
               <tbody>
-                {projects.map((project) => (
-                  <tr
-                    className="project-clickable-row"
-                    key={project.id}
-                    onClick={() => openProject(project.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        openProject(project.id);
-                      }
-                    }}
-                    role="link"
-                    tabIndex={0}
-                  >
-                    <td>
-                      <strong className="provider-name">{project.name}</strong>
-                    </td>
-                    <td>{nullableText(project.description, "-")}</td>
-                    <td>{formatBudgetUsd(project.totalBudgetUsd)}</td>
-                    <td>
-                      <Badge
-                        className="project-status-badge"
-                        data-status={project.status}
-                        variant="outline"
-                      >
-                        {formatProjectStatus(project.status)}
-                      </Badge>
-                    </td>
-                    <td>
-                      <span className="project-muted">{formatDateTime(project.updatedAt)}</span>
-                      <small className="project-muted">
-                        {text.created}: {formatDateTime(project.createdAt)}
-                      </small>
-                    </td>
-                  </tr>
-                ))}
+                {projects.map((project) => {
+                  const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
+                  const runtimeApplicationId = runtimeApplicationIdsByProjectId[project.id];
+                  const policyHref = runtimeApplicationId
+                    ? `${projectHref}/applications/${runtimeApplicationId}/policies`
+                    : null;
+
+                  return (
+                    <tr key={project.id}>
+                      <td>
+                        <strong className="provider-name">{project.name}</strong>
+                      </td>
+                      <td>{nullableText(project.description, "-")}</td>
+                      <td>{formatBudgetUsd(project.totalBudgetUsd)}</td>
+                      <td>
+                        <Badge
+                          className="project-status-badge"
+                          data-status={project.status}
+                          variant="outline"
+                        >
+                          {formatProjectStatus(project.status)}
+                        </Badge>
+                      </td>
+                      <td>
+                        <span className="project-muted">{formatDateTime(project.updatedAt)}</span>
+                        <small className="project-muted">
+                          {text.created}: {formatDateTime(project.createdAt)}
+                        </small>
+                      </td>
+                      <td>
+                        <div className="project-row-actions project-list-row-actions">
+                          <Link
+                            className="secondary-button project-list-action-link"
+                            href={projectHref}
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
+                          >
+                            <Pencil aria-hidden="true" />
+                            {text.edit}
+                          </Link>
+                          {policyHref ? (
+                            <Link
+                              className="secondary-button project-list-action-link"
+                              href={policyHref}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                              onMouseDown={(event) => event.stopPropagation()}
+                            >
+                              <Settings aria-hidden="true" />
+                              {text.editPolicy}
+                            </Link>
+                          ) : (
+                            <span
+                              aria-disabled="true"
+                              className="secondary-button project-list-action-link project-list-action-disabled"
+                            >
+                              <Settings aria-hidden="true" />
+                              {text.editPolicy}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -429,9 +466,6 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
 
       <section className="console-panel project-detail-panel">
         <div className="project-detail-section project-delete-section">
-          <div className="project-detail-section-heading">
-            <h3>{text.delete}</h3>
-          </div>
           <div className="project-detail-actions project-delete-actions">
             <button
               className="secondary-button project-danger-button"

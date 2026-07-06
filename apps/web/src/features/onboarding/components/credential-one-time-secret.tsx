@@ -1,3 +1,5 @@
+import { Copy } from "lucide-react";
+import { useState } from "react";
 import type { CredentialIssueResponse } from "@/lib/fixtures/v1-admin-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -30,6 +32,21 @@ export function CredentialOneTimeSecret({
   locale
 }: CredentialOneTimeSecretProps) {
   const text = secretText[locale];
+  const copyLabel = `Copy ${credentialName}`;
+  const [hasCopied, setHasCopied] = useState(false);
+
+  async function copyPlaintext() {
+    if (!navigator.clipboard) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(issueResponse.plaintext);
+      setHasCopied(true);
+    } catch {
+      setHasCopied(false);
+    }
+  }
 
   return (
     <section className="one-time-secret">
@@ -39,7 +56,19 @@ export function CredentialOneTimeSecret({
           {credentialName} {text.plaintext}
         </h4>
       </div>
-      <code>{issueResponse.plaintext}</code>
+      <div className="one-time-secret-value-row">
+        <code>{issueResponse.plaintext}</code>
+        <button
+          aria-label={copyLabel}
+          className="one-time-secret-copy-button"
+          data-copied={hasCopied}
+          onClick={() => void copyPlaintext()}
+          title={copyLabel}
+          type="button"
+        >
+          <Copy aria-hidden="true" />
+        </button>
+      </div>
     </section>
   );
 }

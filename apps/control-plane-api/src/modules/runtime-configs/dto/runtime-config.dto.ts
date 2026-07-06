@@ -571,10 +571,10 @@ export interface ActiveRuntimeConfigResponseDto {
   applicationStatus: ResourceStatusDto;
   apiKeyId: string;
   apiKeyStatus: CredentialStatusDto;
-  appTokenId: string;
-  appTokenStatus: CredentialStatusDto;
+  appTokenId: string | null;
+  appTokenStatus: CredentialStatusDto | null;
   apiKey: RuntimeConfigCredentialRefDto;
-  appToken: RuntimeConfigCredentialRefDto;
+  appToken: RuntimeConfigCredentialRefDto | null;
   providers: RuntimeConfigProviderDto[];
   models: RuntimeConfigModelResponseDto[];
   defaultProvider: string;

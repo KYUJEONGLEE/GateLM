@@ -1,5 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Project, ResourceStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Application, Prisma, Project, ResourceStatus } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -13,6 +18,12 @@ import {
 
 const DEFAULT_TENANT_BUDGET_USD = 1000;
 const DEFAULT_PROJECT_BUDGET_USD = 100;
+const DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT = 100;
+
+type RuntimeApplicationProjection = Pick<
+  Application,
+  'id' | 'projectId' | 'status'
+>;
 
 @Injectable()
 export class ProjectsService {
@@ -23,6 +34,12 @@ export class ProjectsService {
     dto: CreateProjectDto,
   ): Promise<ProjectResponseDto> {
     const totalBudgetUsd = dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD;
+    const budgetLimitPercent =
+      dto.budgetLimitPercent ?? DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT;
+    const providerConnectionIds = await this.getValidProviderConnectionIdsOrThrow(
+      tenantId,
+      dto.providerConnectionIds ?? [],
+    );
 
     await this.assertTenantBudgetCanCoverProjects({
       tenantId,
@@ -31,16 +48,48 @@ export class ProjectsService {
       status: ResourceStatus.ACTIVE,
     });
 
-    const project = await this.prisma.project.create({
-      data: {
-        tenantId,
-        name: dto.name,
-        description: this.toNullableDescription(dto.description),
-        totalBudgetUsd,
-      },
-    });
+    const { project, runtimeApplicationId } = await this.prisma.$transaction(
+      async (tx) => {
+        const createdProject = await tx.project.create({
+          data: {
+            tenantId,
+            name: dto.name,
+            description: this.toNullableDescription(dto.description),
+            totalBudgetUsd,
+          },
+        });
+        const runtimeApplication = await tx.application.create({
+          data: {
+            tenantId,
+            projectId: createdProject.id,
+            name: dto.name,
+            description: this.toNullableDescription(dto.description),
+            budgetLimitMode: 'PERCENT',
+            budgetLimitPercent,
+            budgetLimitUsd: null,
+          },
+        });
 
-    return this.toProjectResponse(project);
+        if (providerConnectionIds.length > 0) {
+          await tx.applicationProviderConnection.createMany({
+            data: providerConnectionIds.map((providerConnectionId) => ({
+              applicationId: runtimeApplication.id,
+              projectId: createdProject.id,
+              providerConnectionId,
+              tenantId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        return {
+          project: createdProject,
+          runtimeApplicationId: runtimeApplication.id,
+        };
+      },
+    );
+
+    return this.toProjectResponse(project, runtimeApplicationId);
   }
 
   async listProjects(
@@ -58,9 +107,18 @@ export class ProjectsService {
     });
     const hasMore = projects.length > limit;
     const page = projects.slice(0, limit);
+    const runtimeApplicationIdsByProjectId =
+      await this.getRuntimeApplicationIdsByProjectIds(
+        page.map((project) => project.id),
+      );
 
     return {
-      data: page.map((project) => this.toProjectResponse(project)),
+      data: page.map((project) =>
+        this.toProjectResponse(
+          project,
+          runtimeApplicationIdsByProjectId.get(project.id) ?? null,
+        ),
+      ),
       pagination: {
         limit,
         nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
@@ -109,7 +167,7 @@ export class ProjectsService {
 
     if (Object.keys(data).length === 0) {
       return current
-        ? this.toProjectResponse(current)
+        ? this.toProjectResponseWithRuntimeApplication(current)
         : this.getProjectOrThrow(projectId);
     }
 
@@ -155,7 +213,7 @@ export class ProjectsService {
         return updatedProject;
       });
 
-      return this.toProjectResponse(project);
+      return this.toProjectResponseWithRuntimeApplication(project);
     } catch (error) {
       if (this.isRecordNotFoundError(error)) {
         throw new NotFoundException('Project not found.');
@@ -177,7 +235,9 @@ export class ProjectsService {
   }
 
   private async getProjectOrThrow(projectId: string): Promise<ProjectResponseDto> {
-    return this.toProjectResponse(await this.getProjectEntityOrThrow(projectId));
+    return this.toProjectResponseWithRuntimeApplication(
+      await this.getProjectEntityOrThrow(projectId),
+    );
   }
 
   private async getProjectEntityOrThrow(projectId: string): Promise<Project> {
@@ -190,6 +250,33 @@ export class ProjectsService {
     }
 
     return project;
+  }
+
+  private async getValidProviderConnectionIdsOrThrow(
+    tenantId: string,
+    rawProviderConnectionIds: string[],
+  ): Promise<string[]> {
+    const providerConnectionIds = [...new Set(rawProviderConnectionIds)];
+
+    if (providerConnectionIds.length === 0) {
+      return [];
+    }
+
+    const providers = await this.prisma.providerConnection.findMany({
+      where: {
+        id: { in: providerConnectionIds },
+        tenantId,
+      },
+      select: { id: true },
+    });
+
+    if (providers.length !== providerConnectionIds.length) {
+      throw new BadRequestException(
+        'Runtime providers must belong to the same tenant.',
+      );
+    }
+
+    return providerConnectionIds;
   }
 
   private toNullableDescription(value: string | undefined): string | null {
@@ -332,7 +419,76 @@ export class ProjectsService {
     );
   }
 
-  private toProjectResponse(project: Project): ProjectResponseDto {
+  private async toProjectResponseWithRuntimeApplication(
+    project: Project,
+  ): Promise<ProjectResponseDto> {
+    const runtimeApplicationIdsByProjectId =
+      await this.getRuntimeApplicationIdsByProjectIds([project.id]);
+
+    return this.toProjectResponse(
+      project,
+      runtimeApplicationIdsByProjectId.get(project.id) ?? null,
+    );
+  }
+
+  private async getRuntimeApplicationIdsByProjectIds(
+    projectIds: string[],
+  ): Promise<Map<string, string>> {
+    const uniqueProjectIds = [...new Set(projectIds)].filter(Boolean);
+
+    if (uniqueProjectIds.length === 0) {
+      return new Map();
+    }
+
+    const applications = await this.prisma.application.findMany({
+      where: {
+        projectId: {
+          in: uniqueProjectIds,
+        },
+        status: {
+          not: ResourceStatus.ARCHIVED,
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+      },
+    });
+
+    return this.toRuntimeApplicationIdMap(applications);
+  }
+
+  private toRuntimeApplicationIdMap(
+    applications: RuntimeApplicationProjection[],
+  ): Map<string, string> {
+    const selectedByProjectId = new Map<string, RuntimeApplicationProjection>();
+
+    for (const application of applications) {
+      const current = selectedByProjectId.get(application.projectId);
+
+      if (
+        !current ||
+        (current.status !== ResourceStatus.ACTIVE &&
+          application.status === ResourceStatus.ACTIVE)
+      ) {
+        selectedByProjectId.set(application.projectId, application);
+      }
+    }
+
+    return new Map(
+      [...selectedByProjectId.entries()].map(([projectId, application]) => [
+        projectId,
+        application.id,
+      ]),
+    );
+  }
+
+  private toProjectResponse(
+    project: Project,
+    runtimeApplicationId: string | null,
+  ): ProjectResponseDto {
     return {
       id: project.id,
       tenantId: project.tenantId,
@@ -340,6 +496,7 @@ export class ProjectsService {
       description: project.description,
       status: project.status,
       totalBudgetUsd: this.toProjectBudgetUsd(project.totalBudgetUsd),
+      runtimeApplicationId,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
     };

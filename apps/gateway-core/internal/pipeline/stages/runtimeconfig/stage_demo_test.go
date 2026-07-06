@@ -79,7 +79,7 @@ func TestRuntimeConfigProviderDemo(t *testing.T) {
 	)
 
 	invalidConfig := demoActiveConfig()
-	invalidConfig.AppTokenID = ""
+	invalidConfig.APIKeyID = ""
 	invalidCtx := demoGatewayContext()
 	err := NewStage(&demoRuntimeProvider{config: invalidConfig}).Execute(ctx, invalidCtx)
 	if err == nil {
@@ -96,7 +96,7 @@ func TestRuntimeConfigProviderDemo(t *testing.T) {
 		t.Fatalf("expected invalid runtime config to bypass cache, got %#v", invalidCtx.Cache)
 	}
 
-	t.Logf("\n[Security Check]\nmissing appTokenId error.code: %s\nmissing appTokenId error.stage: %s\nmissing appTokenId cacheStatus: %s\nmissing appTokenId cacheType: %s\nraw API Key/App Token stored in GatewayContext: false",
+	t.Logf("\n[Security Check]\nmissing apiKeyId error.code: %s\nmissing apiKeyId error.stage: %s\nmissing apiKeyId cacheStatus: %s\nmissing apiKeyId cacheType: %s\nraw API Key/App Token stored in GatewayContext: false",
 		gatewayErr.Code,
 		gatewayErr.Stage,
 		invalidCtx.Cache.CacheStatus,

@@ -15,7 +15,6 @@ import type {
   ApplicationStatus,
   ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
-import type { OneTimeAppTokenResponse } from "@/lib/control-plane/app-tokens-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
@@ -50,16 +49,6 @@ type ApplicationResponsePayload = {
   policyError?: string;
 };
 
-type AppTokenResponsePayload = {
-  appToken?: OneTimeAppTokenResponse;
-  error?: string;
-};
-
-type OneTimeAppTokenState = {
-  applicationName: string;
-  appToken: OneTimeAppTokenResponse;
-};
-
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
 const budgetLimitUsdPrecision = 1_000_000;
 
@@ -71,11 +60,9 @@ const applicationText: Record<
   Locale,
   {
     applicationId: string;
-    appToken: string;
     budget: string;
     budgetMode: string;
     budgetPercent: string;
-    budgetSummary: string;
     cancel: string;
     close: string;
     create: string;
@@ -104,11 +91,9 @@ const applicationText: Record<
 > = {
   en: {
     applicationId: "Application ID",
-    appToken: "App Token",
     budget: "Budget limit",
     budgetMode: "Budget mode",
     budgetPercent: "Budget percent",
-    budgetSummary: "Allocated budget",
     cancel: "Cancel",
     close: "OK",
     create: "Create application",
@@ -136,11 +121,9 @@ const applicationText: Record<
   },
   ko: {
     applicationId: "Application ID",
-    appToken: "App Token",
     budget: "예산 한도",
     budgetMode: "예산 방식",
     budgetPercent: "예산 비율",
-    budgetSummary: "배정 예산",
     cancel: "취소",
     close: "확인",
     create: "애플리케이션 생성",
@@ -184,7 +167,6 @@ export function ApplicationManagement({
   const [createValues, setCreateValues] =
     useState<ApplicationFormValues>(() => getEmptyApplicationForm(selectableModels));
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [oneTimeAppToken, setOneTimeAppToken] = useState<OneTimeAppTokenState | null>(null);
   const [editingRows, setEditingRows] = useState<Record<string, ApplicationUpdateValues>>(() =>
     Object.fromEntries(
       model.applications.map((application) => [
@@ -208,14 +190,12 @@ export function ApplicationManagement({
 
   function openCreateModal() {
     setCreateValues(getEmptyApplicationForm(selectableModels));
-    setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(true);
   }
 
   function closeCreateModal() {
     setCreateValues(getEmptyApplicationForm(selectableModels));
-    setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(false);
   }
@@ -276,7 +256,6 @@ export function ApplicationManagement({
     }
 
     const createdApplication = payload.application;
-    const appToken = await issueInitialAppToken(createdApplication);
 
     setApplications((current) => [...current, createdApplication]);
     setEditingRows((current) => ({
@@ -285,53 +264,11 @@ export function ApplicationManagement({
     }));
     setCreateValues(getEmptyApplicationForm(selectableModels));
     setSubmitState({
-      message: appToken
-        ? payload.policyError
-          ? `${text.policyWarning} ${payload.policyError}`
-          : locale === "ko"
-            ? "애플리케이션이 생성되고 App Token이 발급되었습니다."
-            : "Application created and App Token issued."
-        : locale === "ko"
-          ? "애플리케이션은 생성되었지만 App Token 발급에 실패했습니다."
-          : "Application created, but App Token issue failed.",
+      message: payload.policyError ? `${text.policyWarning} ${payload.policyError}` : text.created,
       status: payload.policyError ? "error" : "success"
     });
     setPendingAction(null);
     router.refresh();
-  }
-
-  async function issueInitialAppToken(application: ApplicationRecord) {
-    try {
-      const response = await fetch("/api/control-plane/app-tokens", {
-        body: JSON.stringify({
-          action: "issue",
-          values: {
-            applicationId: application.id,
-            displayName: `${application.name} App Token`,
-            expiresAt: "",
-            scopes: "gateway:invoke"
-          }
-        }),
-        headers: {
-          "Content-Type": "application/json"
-        },
-        method: "POST"
-      });
-      const payload = (await response.json().catch(() => ({}))) as AppTokenResponsePayload;
-
-      if (!response.ok || !payload.appToken) {
-        return null;
-      }
-
-      setOneTimeAppToken({
-        applicationName: application.name,
-        appToken: payload.appToken
-      });
-
-      return payload.appToken;
-    } catch {
-      return null;
-    }
   }
 
   async function submitUpdateApplication(
@@ -441,14 +378,6 @@ export function ApplicationManagement({
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
       ) : null}
-      <section className="application-budget-summary" aria-label={text.budgetSummary}>
-        <span>
-          {text.budgetSummary}: {formatBudgetUsd(allocatedBudgetUsd)} /{" "}
-          {formatBudgetUsd(projectBudgetUsd)}
-        </span>
-        <span>{formatBudgetUsd(remainingBudgetUsd)} remaining</span>
-      </section>
-
       <section className="console-panel">
         <div className="applications-panel-heading">
           <div className="panel-heading">
@@ -621,19 +550,7 @@ export function ApplicationManagement({
               </Alert>
             ) : null}
 
-            {oneTimeAppToken ? (
-              <div className="one-time-secret">
-                <div>
-                  <p className="console-kicker">{text.create}</p>
-                  <h4>
-                    {oneTimeAppToken.applicationName} {text.appToken}
-                  </h4>
-                  <p>{oneTimeAppToken.appToken.warning || text.warning}</p>
-                </div>
-                <code>{oneTimeAppToken.appToken.plaintext}</code>
-              </div>
-            ) : (
-              <div className="modal-form-grid">
+            <div className="modal-form-grid">
                 <label className="policy-field">
                   <span>{text.name}</span>
                   <input
@@ -706,15 +623,9 @@ export function ApplicationManagement({
                   )}
                 </label>
               </div>
-            )}
 
             <div className="modal-actions">
-              {oneTimeAppToken ? (
-                <button className="primary-button" onClick={closeCreateModal} type="button">
-                  {text.close}
-                </button>
-              ) : (
-                <>
+              <>
                   <button
                     className="secondary-button"
                     disabled={pendingAction !== null}
@@ -736,7 +647,6 @@ export function ApplicationManagement({
                     {pendingAction === "create" ? text.creating : text.save}
                   </button>
                 </>
-              )}
             </div>
           </section>
         </div>

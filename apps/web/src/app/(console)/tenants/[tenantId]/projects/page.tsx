@@ -13,6 +13,12 @@ export default async function ProjectsPage({ params }: ProjectsPageProps) {
   const { tenantId } = await params;
   const locale = await getRequestLocale();
   const projectsModel = await getProjectsModel(tenantId);
+  const runtimeApplicationIdsByProjectId = Object.fromEntries(
+    projectsModel.projects.map((project) => [
+      project.id,
+      project.runtimeApplicationId ?? null
+    ] as const)
+  );
 
   return (
     <ConsoleShell
@@ -21,7 +27,11 @@ export default async function ProjectsPage({ params }: ProjectsPageProps) {
       locale={locale}
       tenantId={tenantId}
     >
-      <ProjectManagement locale={locale} model={projectsModel} />
+      <ProjectManagement
+        locale={locale}
+        model={projectsModel}
+        runtimeApplicationIdsByProjectId={runtimeApplicationIdsByProjectId}
+      />
     </ConsoleShell>
   );
 }

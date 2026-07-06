@@ -5,6 +5,7 @@ import {
   getControlPlaneBaseUrl,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import { publishRuntimePolicyModelSelectionForApplication } from "@/lib/control-plane/runtime-policy-client";
 import type {
   ProjectFormValues,
   ProjectRecord,
@@ -25,6 +26,7 @@ type ProjectRequestResult =
   | {
       data: ProjectRecord;
       ok: true;
+      policyError?: string;
       status: number;
     }
   | {
@@ -87,7 +89,35 @@ export async function createProject(values: ProjectFormValues): Promise<ProjectR
       }
     );
 
-    return readProjectResponse(response);
+    const result = await readProjectResponse(response);
+
+    if (!result.ok || !values.selectedModelKey?.trim()) {
+      return result;
+    }
+
+    const runtimeApplicationId = result.data.runtimeApplicationId;
+
+    if (!runtimeApplicationId) {
+      return {
+        ...result,
+        policyError: "Runtime boundary was not created."
+      };
+    }
+
+    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+      runtimeApplicationId,
+      values.selectedModelKey,
+      {
+        warningThresholdPercent: values.warningThresholdPercent
+      }
+    );
+
+    return runtimePolicy.ok
+      ? result
+      : {
+          ...result,
+          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+        };
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -149,6 +179,7 @@ function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
+    providerConnectionIds: values.providerConnectionIds ?? [],
     totalBudgetUsd: values.totalBudgetUsd
   };
 }
@@ -266,6 +297,7 @@ function getFixtureProject(): ProjectRecord {
     description: "Customer support Gateway project from the v1 runtime config fixture.",
     id: runtimeConfig.projectId,
     name: "Customer Support",
+    runtimeApplicationId: null,
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
     totalBudgetUsd: 100,
@@ -297,6 +329,10 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     id: record.id,
     name: record.name,
+    runtimeApplicationId:
+      typeof record.runtimeApplicationId === "string" && record.runtimeApplicationId.trim()
+        ? record.runtimeApplicationId
+        : null,
     status,
     tenantId: record.tenantId,
     totalBudgetUsd: normalizeNumber(record.totalBudgetUsd, 100),
