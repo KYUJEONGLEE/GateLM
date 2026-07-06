@@ -80,6 +80,7 @@ export type CustomerDemoExchange = {
 
 export type CustomerDemoModel = {
   applicationId: string;
+  applicationChatStreamingEnabled?: boolean;
   integrationMode: CustomerDemoIntegrationMode;
   projectId: string;
   scenarios: CustomerDemoExchange[];

@@ -121,12 +121,14 @@ export async function POST(request: Request) {
 
   const scenarioId = payload.scenarioId;
   const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+  const streamRequested =
+    payload.stream && (payload.surface !== "application" || (model.applicationChatStreamingEnabled ?? true));
 
   if (!scenario) {
     return NextResponse.json({ error: "Customer demo scenario is not configured." }, { status: 404 });
   }
 
-  if (payload.stream && payload.surface === "application") {
+  if (streamRequested && payload.surface === "application") {
     return streamLiveScenario({
       model,
       payload,
@@ -138,7 +140,7 @@ export async function POST(request: Request) {
   try {
     const gatewayResult = await executeLiveScenario(
       scenarioId,
-      payload.stream,
+      streamRequested,
       payload.message,
       payload.surface,
       payload.conversationId,
@@ -597,9 +599,42 @@ async function prepareConversationGatewayContext({
   return {
     contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
     conversationId: conversation.id,
-    messages: messageResult.data.context.messages,
+    messages: withRawCurrentUserMessage(
+      messageResult.data.context.messages,
+      message ?? definition.gatewayPrompt
+    ),
     userMessageId: messageResult.data.message.id
   };
+}
+
+function withRawCurrentUserMessage(
+  messages: GatewayContextMessage[] | null | undefined,
+  currentContent: string
+): GatewayContextMessage[] {
+  const normalizedCurrentContent = currentContent.trim();
+  if (!normalizedCurrentContent) {
+    return messages ?? [];
+  }
+
+  const nextMessages = (messages ?? []).map((message) => ({ ...message }));
+  const currentMessageIndex = nextMessages.length - 1;
+  const currentMessage = nextMessages[currentMessageIndex];
+
+  if (currentMessage?.role === "user") {
+    nextMessages[currentMessageIndex] = {
+      ...currentMessage,
+      content: normalizedCurrentContent
+    };
+    return nextMessages;
+  }
+
+  return [
+    ...nextMessages,
+    {
+      content: normalizedCurrentContent,
+      role: "user"
+    }
+  ];
 }
 
 async function createApplicationConversation({

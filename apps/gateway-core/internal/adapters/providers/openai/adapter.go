@@ -116,6 +116,7 @@ func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provide
 	}
 
 	req.Stream = true
+	req.StreamOptions = withStreamingUsage(req.StreamOptions)
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("encode provider streaming chat request: %w", err))
@@ -150,6 +151,16 @@ func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provide
 		body:   resp.Body,
 		reader: bufio.NewReader(resp.Body),
 	}, nil
+}
+
+func withStreamingUsage(options *provider.ChatCompletionStreamOptions) *provider.ChatCompletionStreamOptions {
+	if options == nil {
+		return &provider.ChatCompletionStreamOptions{IncludeUsage: true}
+	}
+
+	copied := *options
+	copied.IncludeUsage = true
+	return &copied
 }
 
 func normalizeConfig(config provider.ExecutionConfig) provider.ExecutionConfig {

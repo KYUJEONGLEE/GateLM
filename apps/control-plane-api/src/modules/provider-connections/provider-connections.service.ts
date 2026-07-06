@@ -703,7 +703,6 @@ export class ProviderConnectionsService {
       return null;
     }
 
-    const credentialRefList = Prisma.join(credentialRefs);
     const rows = await this.prisma.$queryRaw<StoredProviderCredentialRow[]>(
       Prisma.sql`
         SELECT
@@ -714,8 +713,8 @@ export class ProviderConnectionsService {
           "encryptionTag",
           "encryptionKeyVersion"
         FROM "provider_credentials"
-        WHERE "credentialRefId" IN (${credentialRefList})
-        ORDER BY array_position(ARRAY[${credentialRefList}]::text[], "credentialRefId")
+        WHERE "credentialRefId" = ANY(${credentialRefs}::text[])
+        ORDER BY array_position(${credentialRefs}::text[], "credentialRefId")
         LIMIT 1
       `,
     );

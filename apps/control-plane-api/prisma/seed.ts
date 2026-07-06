@@ -497,6 +497,30 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
           })
         : null;
 
+    for (const providerConnection of [
+      provider,
+      ...(openAIProvider ? [openAIProvider] : []),
+    ]) {
+      await tx.applicationProviderConnection.upsert({
+        where: {
+          applicationId_providerConnectionId: {
+            applicationId: DEMO_APPLICATION_ID,
+            providerConnectionId: providerConnection.id,
+          },
+        },
+        update: {
+          tenantId: DEMO_TENANT_ID,
+          projectId: DEMO_PROJECT_ID,
+        },
+        create: {
+          tenantId: DEMO_TENANT_ID,
+          projectId: DEMO_PROJECT_ID,
+          applicationId: DEMO_APPLICATION_ID,
+          providerConnectionId: providerConnection.id,
+        },
+      });
+    }
+
     await tx.gatewayApiKey.upsert({
       where: { id: DEMO_API_KEY_ID },
       update: {

@@ -162,10 +162,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
   const requestInFlight = useRef(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const hasScenarios = model.scenarios.length > 0;
   const text = customerDemoText[locale];
+  const canStreamApplicationChat =
+    model.integrationMode === "gateway" && (model.applicationChatStreamingEnabled ?? true);
   const firstUserMessage = messages.find((message) => message.side === "outgoing");
   const currentConversationTitle = firstUserMessage?.body ?? text.sidebar.newConversation;
   const currentConversationAuthor = messages.length > 0 ? text.chatPreview : text.appName;
@@ -202,6 +204,17 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
       behavior: "smooth"
     });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  }, [inputValue]);
 
   const startNewChat = useCallback(async () => {
     if (requestInFlight.current) {
@@ -273,7 +286,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     }
 
     const message = inputValue.trim();
-    const streamRequested = options.stream ?? (model.integrationMode === "gateway");
+    const streamRequested = canStreamApplicationChat && (options.stream ?? true);
 
     if (!message) {
       return;
@@ -380,7 +393,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         inputRef.current?.focus({ preventScroll: true });
       });
     }
-  }, [client, contextRetentionEnabled, conversationId, inputValue, model, text.error]);
+  }, [canStreamApplicationChat, client, contextRetentionEnabled, conversationId, inputValue, model, text.error]);
 
   return (
     <main className="customer-demo-shell customer-chat-shell" data-sidebar-open={isSidebarOpen}>
@@ -531,13 +544,21 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             }}
           >
             <label className="customer-chat-input">
-              <input
+              <textarea
                 aria-label={text.inputPlaceholder}
                 disabled={isLoading || !hasScenarios}
                 onChange={(event) => setInputValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  void sendUserMessage();
+                }}
                 placeholder={text.inputPlaceholder}
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={inputValue}
               />
             </label>
