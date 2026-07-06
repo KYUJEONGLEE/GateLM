@@ -879,7 +879,7 @@ export function ProviderConnectionManagement({
                               </div>
                               <div className="provider-discovery-actions">
                                 <Button
-                                  disabled={pendingAction || discovery.selectedModels.length === 0}
+                                  disabled={pendingAction}
                                   onClick={() =>
                                     provider
                                       ? void applyDiscoveredModelsToProvider(provider)
