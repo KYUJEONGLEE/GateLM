@@ -38,11 +38,16 @@ test("project cards expose sorting and action links", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(editHref ?? "")}$`));
 
   await page.goto(projectsPath);
-  await page.getByTestId("project-card").first().getByRole("link", {
+  const currentPolicyLink = page.getByTestId("project-card").first().getByRole("link", {
     exact: true,
     name: "Edit policy"
-  }).click();
-  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(policyHref ?? "")}$`));
+  });
+  const currentPolicyHref = await currentPolicyLink.getAttribute("href");
+
+  expect(currentPolicyHref).toBeTruthy();
+
+  await currentPolicyLink.click();
+  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(projectsPath)}/[^/]+/policies$`));
 });
 
 function escapeRegExp(value: string) {

@@ -7,20 +7,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import { emptyTeamForm, TeamCreateModal } from "@/features/teams/components/team-management";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
-import type {
-  ProviderConnectionRecord,
-  ProviderConnectionsModel
-} from "@/lib/control-plane/provider-connections-types";
 import type { ProjectRecord, ProjectStatus } from "@/lib/control-plane/projects-types";
 import type { TeamFormValues, TeamRecord, TeamsModel } from "@/lib/control-plane/teams-types";
-import type { AdminOnboardingModel, AdminProviderModel } from "@/lib/fixtures/v1-admin-fixtures";
+import type { AdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
 
 type AdminOnboardingFlowProps = {
   activeStepId: OnboardingStepId;
   locale: Locale;
   model: AdminOnboardingModel;
-  providerConnectionsModel: ProviderConnectionsModel;
   teamsModel: TeamsModel;
 };
 
@@ -138,8 +133,6 @@ type OnboardingDraft = {
   projectStatus: string;
   runtimePublishState: string;
   safetyMode: string;
-  selectedModelKey: string;
-  warningThresholdPercent: string;
 };
 
 type ProjectSetupState = {
@@ -174,17 +167,10 @@ type TeamCreateState = {
   status: "error" | "idle" | "saving";
 };
 
-type RuntimeModelOption = {
-  label: string;
-  providerConnectionId: string | null;
-  value: string;
-};
-
 export function AdminOnboardingFlow({
   activeStepId,
   locale,
   model,
-  providerConnectionsModel,
   teamsModel
 }: AdminOnboardingFlowProps) {
   const router = useRouter();
@@ -193,12 +179,8 @@ export function AdminOnboardingFlow({
     0
   );
   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
-  const selectableModels = getSelectableModelOptions(
-    providerConnectionsModel.providers,
-    model.provider.models
-  );
   const [draft, setDraft] = useState<OnboardingDraft>(() =>
-    buildInitialDraft(model, selectableModels)
+    buildInitialDraft(model)
   );
   const [teams, setTeams] = useState<TeamRecord[]>(() => teamsModel.teams);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(() => new Set());
@@ -226,9 +208,7 @@ export function AdminOnboardingFlow({
     activeStep.id === "project" &&
     (
       draft.projectName.trim().length === 0 ||
-      !isValidBudgetInput(draft.projectTotalBudgetUsd) ||
-      !isValidPercentInput(draft.warningThresholdPercent) ||
-      !draft.selectedModelKey.trim()
+      !isValidBudgetInput(draft.projectTotalBudgetUsd)
     );
   const isReviewIncomplete =
     activeStep.id === "runtime-config" && projectSetupState.status !== "issued";
@@ -241,8 +221,6 @@ export function AdminOnboardingFlow({
     projectSetupState.status === "issued" ||
     draft.projectName.trim().length === 0 ||
     !isValidBudgetInput(draft.projectTotalBudgetUsd) ||
-    !isValidPercentInput(draft.warningThresholdPercent) ||
-    !draft.selectedModelKey.trim() ||
     draft.apiKeyDisplayName.trim().length === 0;
 
   function toggleTeamSelection(teamId: string) {
@@ -343,19 +321,13 @@ export function AdminOnboardingFlow({
 
     try {
       if (!project) {
-        const selectedModel = getSelectedModelOption(selectableModels, draft.selectedModelKey);
         const projectResponse = await fetch("/api/control-plane/projects", {
           body: JSON.stringify({
             action: "create",
             values: {
               description: draft.projectDescription,
               name: draft.projectName,
-              providerConnectionIds: selectedModel?.providerConnectionId
-                ? [selectedModel.providerConnectionId]
-                : [],
-              selectedModelKey: draft.selectedModelKey,
-              totalBudgetUsd: Number(draft.projectTotalBudgetUsd),
-              warningThresholdPercent: Number(draft.warningThresholdPercent)
+              totalBudgetUsd: Number(draft.projectTotalBudgetUsd)
             }
           }),
           headers: {
@@ -530,7 +502,6 @@ export function AdminOnboardingFlow({
                 onOpenTeamCreate: () => setIsTeamCreateModalOpen(true),
                 onToggleTeam: toggleTeamSelection,
                 projectSetupState,
-                selectableModels,
                 selectedTeamIds,
                 teamCreateError: teamCreateState.error,
                 text,
@@ -599,7 +570,6 @@ function renderStepContent({
   onOpenTeamCreate,
   onToggleTeam,
   projectSetupState,
-  selectableModels,
   selectedTeamIds,
   teamCreateError,
   text,
@@ -614,7 +584,6 @@ function renderStepContent({
   onOpenTeamCreate: () => void;
   onToggleTeam: (teamId: string) => void;
   projectSetupState: ProjectSetupState;
-  selectableModels: RuntimeModelOption[];
   selectedTeamIds: Set<string>;
   teamCreateError: string;
   text: (typeof onboardingText)[Locale];
@@ -655,31 +624,6 @@ function renderStepContent({
           unit="$"
           value={draft.projectTotalBudgetUsd}
         />
-        <OnboardingField
-          field="warningThresholdPercent"
-          inputMode="numeric"
-          label="Warning threshold"
-          onChange={updateDraft}
-          unit="%"
-          value={draft.warningThresholdPercent}
-        />
-        {selectableModels.length > 0 ? (
-          <OnboardingSelect
-            field="selectedModelKey"
-            label="Model"
-            onChange={updateDraft}
-            options={selectableModels}
-            value={draft.selectedModelKey}
-          />
-        ) : (
-          <OnboardingField
-            disabled
-            field="selectedModelKey"
-            label="Model"
-            onChange={updateDraft}
-            value="No runtime models available"
-          />
-        )}
         <OnboardingSelect
           field="projectStatus"
           label="Status"
@@ -801,6 +745,7 @@ function OnboardingTeamPicker({
             {availableTeams.length > 0 ? (
               availableTeams.map((team) => (
                 <button
+                  aria-selected={false}
                   className="onboarding-team-option"
                   data-team-id={team.id}
                   key={team.id}
@@ -947,23 +892,18 @@ function OnboardingSelect({
   field: keyof OnboardingDraft;
   label: string;
   onChange: (field: keyof OnboardingDraft, value: string) => void;
-  options: Array<string | RuntimeModelOption>;
+  options: string[];
   value: string;
 }) {
   return (
     <label className="onboarding-field">
       <span>{label}</span>
       <select onChange={(event) => onChange(field, event.target.value)} required value={value}>
-        {options.map((option) => {
-          const value = typeof option === "string" ? option : option.value;
-          const label = typeof option === "string" ? option : option.label;
-
-          return (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          );
-        })}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -987,17 +927,6 @@ function isValidBudgetInput(value: string) {
   return value.trim().length > 0 && Number.isFinite(parsed) && parsed >= 0;
 }
 
-function isValidPercentInput(value: string) {
-  const parsed = Number(value);
-
-  return (
-    value.trim().length > 0 &&
-    Number.isInteger(parsed) &&
-    parsed >= 0 &&
-    parsed <= 100
-  );
-}
-
 export function normalizeOnboardingStepId(value: string | string[] | undefined): OnboardingStepId {
   const stepId = Array.isArray(value) ? value[0] : value;
   return onboardingSteps.some((step) => step.id === stepId)
@@ -1017,10 +946,7 @@ function getStepState(index: number, activeIndex: number) {
   return "upcoming";
 }
 
-function buildInitialDraft(
-  model: AdminOnboardingModel,
-  selectableModels: RuntimeModelOption[]
-): OnboardingDraft {
+function buildInitialDraft(model: AdminOnboardingModel): OnboardingDraft {
   return {
     apiKeyDisplayName: model.apiKey.listItem.displayName,
     cacheEnabled: model.runtimeConfig.cacheEnabled ? "enabled" : "disabled",
@@ -1030,51 +956,6 @@ function buildInitialDraft(
     projectTotalBudgetUsd: "100",
     projectStatus: normalizeDraftProjectStatus(model.project.status),
     runtimePublishState: model.runtimeConfig.publishState,
-    safetyMode: model.runtimeConfig.safetyMode,
-    selectedModelKey: selectableModels[0]?.value ?? "",
-    warningThresholdPercent: "80"
+    safetyMode: model.runtimeConfig.safetyMode
   };
-}
-
-function getSelectedModelOption(options: RuntimeModelOption[], value: string) {
-  return options.find((option) => option.value === value) ?? null;
-}
-
-function getSelectableModelOptions(
-  providerConnections: ProviderConnectionRecord[],
-  fallbackModels: AdminProviderModel[]
-): RuntimeModelOption[] {
-  const providerConnectionOptions = providerConnections.flatMap((providerConnection) =>
-    getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
-      label: `${model} (${providerConnection.provider})`,
-      providerConnectionId: providerConnection.id,
-      value: `${providerConnection.provider}::${model}`
-    }))
-  );
-
-  if (providerConnectionOptions.length > 0) {
-    return providerConnectionOptions;
-  }
-
-  return fallbackModels
-    .filter((model) => model.status === "active" || model.status === "ACTIVE")
-    .map((model) => ({
-      label: `${model.displayName || model.model} (${model.provider})`,
-      providerConnectionId: null,
-      value: `${model.provider}::${model.model}`
-    }));
-}
-
-function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
-  const models = providerConfig?.models;
-
-  return Array.isArray(models)
-    ? Array.from(
-        new Set(
-          models
-            .map((model) => (typeof model === "string" ? model.trim() : ""))
-            .filter(Boolean)
-        )
-      )
-    : [];
 }

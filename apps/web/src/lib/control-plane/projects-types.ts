@@ -23,11 +23,7 @@ export type ProjectBaseValues = {
   totalBudgetUsd: number;
 };
 
-export type ProjectFormValues = ProjectBaseValues & {
-  providerConnectionIds?: string[];
-  selectedModelKey?: string;
-  warningThresholdPercent: number;
-};
+export type ProjectFormValues = ProjectBaseValues;
 
 export type ProjectUpdateValues = ProjectBaseValues & {
   projectId: string;

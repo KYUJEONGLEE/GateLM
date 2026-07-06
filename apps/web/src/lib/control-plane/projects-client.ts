@@ -5,10 +5,7 @@ import {
   getControlPlaneBaseUrl,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
-import {
-  getRuntimePolicyConfigForApplication,
-  publishRuntimePolicyModelSelectionForApplication
-} from "@/lib/control-plane/runtime-policy-client";
+import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
 import type {
   ProjectBudgetThresholdRecord,
   ProjectFormValues,
@@ -30,7 +27,6 @@ type ProjectRequestResult =
   | {
       data: ProjectRecord;
       ok: true;
-      policyError?: string;
       status: number;
     }
   | {
@@ -101,35 +97,7 @@ export async function createProject(values: ProjectFormValues): Promise<ProjectR
       }
     );
 
-    const result = await readProjectResponse(response);
-
-    if (!result.ok || !values.selectedModelKey?.trim()) {
-      return result;
-    }
-
-    const runtimeApplicationId = result.data.runtimeApplicationId;
-
-    if (!runtimeApplicationId) {
-      return {
-        ...result,
-        policyError: "Runtime boundary was not created."
-      };
-    }
-
-    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
-      runtimeApplicationId,
-      values.selectedModelKey,
-      {
-        warningThresholdPercent: values.warningThresholdPercent
-      }
-    );
-
-    return runtimePolicy.ok
-      ? result
-      : {
-          ...result,
-          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
-        };
+    return readProjectResponse(response);
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -223,7 +191,6 @@ function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
-    providerConnectionIds: values.providerConnectionIds ?? [],
     totalBudgetUsd: values.totalBudgetUsd
   };
 }

@@ -568,41 +568,49 @@ async function prepareConversationGatewayContext({
   }
 
   const contextRetentionEnabled = options.contextRetentionEnabled ?? false;
-  const model = getCustomerDemoLiveModel();
-  const conversation =
-    options.conversationId
-      ? await updateExistingConversation({
-          contextRetentionEnabled,
-          conversationId: options.conversationId
-        })
-      : await createApplicationConversation({
-          contextRetentionEnabled
-        });
-
-  const messageResult = await createChatConversationMessage({
-    applicationId: model.applicationId,
-    content: message ?? definition.gatewayPrompt,
-    conversationId: conversation.id,
-    projectId: model.projectId,
-    requestId,
-    role: "user",
-    systemMessage: DEFAULT_SYSTEM_MESSAGE,
-    tenantId: model.tenantId
-  });
-
-  if (!messageResult.ok) {
-    throw new Error(messageResult.error);
+  if (!contextRetentionEnabled) {
+    return null;
   }
 
-  return {
-    contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
-    conversationId: conversation.id,
-    messages: withRawCurrentUserMessage(
-      messageResult.data.context.messages,
-      message ?? definition.gatewayPrompt
-    ),
-    userMessageId: messageResult.data.message.id
-  };
+  try {
+    const model = getCustomerDemoLiveModel();
+    const conversation =
+      options.conversationId
+        ? await updateExistingConversation({
+            contextRetentionEnabled,
+            conversationId: options.conversationId
+          })
+        : await createApplicationConversation({
+            contextRetentionEnabled
+          });
+
+    const messageResult = await createChatConversationMessage({
+      applicationId: model.applicationId,
+      content: message ?? definition.gatewayPrompt,
+      conversationId: conversation.id,
+      projectId: model.projectId,
+      requestId,
+      role: "user",
+      systemMessage: DEFAULT_SYSTEM_MESSAGE,
+      tenantId: model.tenantId
+    });
+
+    if (!messageResult.ok) {
+      return null;
+    }
+
+    return {
+      contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
+      conversationId: conversation.id,
+      messages: withRawCurrentUserMessage(
+        messageResult.data.context.messages,
+        message ?? definition.gatewayPrompt
+      ),
+      userMessageId: messageResult.data.message.id
+    };
+  } catch {
+    return null;
+  }
 }
 
 function withRawCurrentUserMessage(

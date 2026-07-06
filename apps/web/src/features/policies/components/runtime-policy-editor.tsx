@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   getRuntimePolicyDraftValues,
@@ -16,16 +17,23 @@ import {
   type RuntimePolicyHistoryItem,
   type RuntimePolicyModelConfig,
   type RuntimePolicyModel,
-  type RuntimePolicyProvider,
   type RuntimePolicySnapshot
 } from "@/lib/control-plane/runtime-policy-types";
 import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type RuntimePolicyEditorProps = {
+  apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
   breadcrumbItems?: BreadcrumbItem[];
   locale: Locale;
   model: RuntimePolicyModel;
+};
+
+type RuntimePolicyApiKeyReadiness = {
+  activeApiKeyCount: number;
+  loadError: string | null;
+  projectId: string;
+  projectName: string;
 };
 
 type SubmitState =
@@ -39,14 +47,18 @@ type SubmitState =
       status: "success";
     };
 
+type OneTimeApiKeyState = {
+  apiKey: OneTimeApiKeyResponse;
+  projectName: string;
+};
+
 type PolicySection =
   | "safety"
   | "routing"
   | "budget"
   | "rateLimit"
   | "cache"
-  | "streaming"
-  | "providerModel";
+  | "streaming";
 
 type RoutingProviderOption = {
   provider: string;
@@ -56,7 +68,6 @@ type RoutingProviderOption = {
 type PolicySectionLabelText = {
   budgetTab: string;
   cacheTab: string;
-  providerModelTab: string;
   rateLimitTab: string;
   routing: string;
   safetyTab: string;
@@ -69,8 +80,7 @@ const policySections: PolicySection[] = [
   "rateLimit",
   "cache",
   "safety",
-  "streaming",
-  "providerModel"
+  "streaming"
 ];
 
 function getPolicyTabId(section: PolicySection) {
@@ -95,8 +105,6 @@ function getPolicySectionLabel(section: PolicySection, text: PolicySectionLabelT
       return text.cacheTab;
     case "streaming":
       return text.streaming;
-    case "providerModel":
-      return text.providerModelTab;
   }
 }
 
@@ -104,9 +112,9 @@ const policyText: Record<
   Locale,
   {
     activeConfig: string;
-    applicationProviders: string;
-    applicationProvidersHint: string;
-    applicationProvidersSaved: string;
+    activeApiKeyMissing: string;
+    apiKeyIssueFailed: string;
+    apiKeyIssued: string;
     budget: string;
     budgetEnforcement: string;
     budgetTab: string;
@@ -118,7 +126,6 @@ const policyText: Record<
     cacheTtl: string;
     catalogVersion: string;
     configVersion: string;
-    configuredModels: string;
     completionPrice: string;
     defaultRoute: string;
     detectors: string;
@@ -152,7 +159,6 @@ const policyText: Record<
     providerConnectionMissing: string;
     providerCount: string;
     providerCatalog: string;
-    providerModelTab: string;
     publish: string;
     publishedAt: string;
     history: string;
@@ -167,9 +173,9 @@ const policyText: Record<
     responseCaptureHint: string;
     responseCaptureMaxChars: string;
     saveDraft: string;
-    saveProviders: string;
-    savingProviders: string;
     safetyTab: string;
+    issueApiKey: string;
+    issuingApiKey: string;
     shortPrompt: string;
     snapshotState: string;
     snapshotVersion: string;
@@ -187,10 +193,11 @@ const policyText: Record<
 > = {
   en: {
     activeConfig: "Active config",
-    applicationProviders: "Application providers",
-    applicationProvidersHint:
-      "Select the providers this application can use. Routing only shows models from connected providers.",
-    applicationProvidersSaved: "Application provider connections saved.",
+    activeApiKeyMissing:
+      "Runtime policy save and publish require an active API Key for this project.",
+    apiKeyIssueFailed: "API Key issue failed.",
+    apiKeyIssued:
+      "Active API Key prepared. Store the plaintext now; it will not be displayed again.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetTab: "Budget",
@@ -202,7 +209,6 @@ const policyText: Record<
     cacheTtl: "TTL seconds",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
-    configuredModels: "Configured models",
     completionPrice: "Completion micro USD",
     defaultRoute: "Default route",
     detectors: "Safety detectors",
@@ -239,7 +245,6 @@ const policyText: Record<
       "Connect at least one provider with configured models before saving or publishing this policy.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
-    providerModelTab: "Provider/Model",
     publish: "Publish active config",
     publishedAt: "Published",
     history: "Runtime history",
@@ -255,9 +260,9 @@ const policyText: Record<
       "Backend policy is preserved for publish, but raw response content is not displayed in this console.",
     responseCaptureMaxChars: "Max characters",
     saveDraft: "Save draft",
-    saveProviders: "Save providers",
-    savingProviders: "Saving...",
     safetyTab: "Safety",
+    issueApiKey: "Issue API Key",
+    issuingApiKey: "Issuing...",
     shortPrompt: "Short prompt threshold",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -277,10 +282,11 @@ const policyText: Record<
   },
   ko: {
     activeConfig: "Active config",
-    applicationProviders: "Application providers",
-    applicationProvidersHint:
-      "이 애플리케이션이 사용할 provider를 선택합니다. Routing은 연결된 provider의 model만 표시합니다.",
-    applicationProvidersSaved: "Application provider 연결을 저장했습니다.",
+    activeApiKeyMissing:
+      "Runtime policy 저장과 게시에는 이 프로젝트의 active API Key가 필요합니다.",
+    apiKeyIssueFailed: "API Key 발급에 실패했습니다.",
+    apiKeyIssued:
+      "Active API Key가 준비되었습니다. 원문은 지금 저장해야 하며 다시 표시되지 않습니다.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
     budgetTab: "Budget",
@@ -292,7 +298,6 @@ const policyText: Record<
     cacheTtl: "TTL 초",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
-    configuredModels: "Configured models",
     completionPrice: "Completion micro USD",
     defaultRoute: "Default route",
     detectors: "Safety detector",
@@ -329,7 +334,6 @@ const policyText: Record<
       "정책을 저장하거나 게시하려면 model이 설정된 provider를 하나 이상 연결해야 합니다.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
-    providerModelTab: "Provider/Model",
     publish: "Active config 게시",
     publishedAt: "게시 시각",
     history: "Runtime history",
@@ -345,9 +349,9 @@ const policyText: Record<
       "백엔드 정책은 게시 시 보존하지만, 이 콘솔에서는 raw response 원문을 표시하지 않습니다.",
     responseCaptureMaxChars: "최대 글자 수",
     saveDraft: "Draft 저장",
-    saveProviders: "Provider 저장",
-    savingProviders: "저장 중...",
     safetyTab: "Safety",
+    issueApiKey: "API Key 발급",
+    issuingApiKey: "발급 중...",
     shortPrompt: "Short prompt 기준",
     snapshotState: "Snapshot state",
     snapshotVersion: "Snapshot version",
@@ -368,12 +372,16 @@ const policyText: Record<
 };
 
 export function RuntimePolicyEditor({
+  apiKeyReadiness,
   breadcrumbItems,
   locale,
   model
 }: RuntimePolicyEditorProps) {
   const router = useRouter();
   const text = policyText[locale];
+  const [activeApiKeyCount, setActiveApiKeyCount] = useState(
+    apiKeyReadiness?.activeApiKeyCount ?? 1
+  );
   const [draftValues, setDraftValues] = useState<RuntimePolicyDraftValues>(() =>
     getRuntimePolicyDraftValues(model.activeConfig)
   );
@@ -381,42 +389,28 @@ export function RuntimePolicyEditor({
     message: "",
     status: "idle"
   });
-  const [activePolicySection, setActivePolicySection] = useState<PolicySection>("safety");
+  const [activePolicySection, setActivePolicySection] = useState<PolicySection>("routing");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [isSavingProviders, setIsSavingProviders] = useState(false);
-  const [providerSelectionIds, setProviderSelectionIds] = useState<string[]>(
-    model.providerConnections.selectedIds
-  );
+  const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
+  const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   useEffect(() => {
     setDraftValues(getRuntimePolicyDraftValues(model.activeConfig));
-    setProviderSelectionIds(model.providerConnections.selectedIds);
-  }, [
-    model.activeConfig,
-    model.applicationId,
-    model.providerConnections.selectedIds
-  ]);
+  }, [model.activeConfig, model.applicationId]);
   const displayConfig =
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
       : model.activeConfig;
+  const hasActiveApiKey = activeApiKeyCount > 0;
   const providerOptions = model.activeConfig.providers;
-  const selectedProviderIdSet = useMemo(
-    () => new Set(providerSelectionIds),
-    [providerSelectionIds]
-  );
-  const hasProviderSelectionChanged = !haveSameStringSet(
-    providerSelectionIds,
-    model.providerConnections.selectedIds
-  );
   const modelOptionsByProvider = useMemo(
-    () => groupModelsByProvider(draftValues.models),
-    [draftValues.models]
+    () => groupRoutingModelsByProvider(draftValues.models, model.providerConnections.available),
+    [draftValues.models, model.providerConnections.available]
   );
   const routingProviderOptions = useMemo(
     () =>
-      getRoutingProviderOptions(model.activeConfig.providers, draftValues.models, [
+      getRoutingProviderOptions(model.providerConnections.available, draftValues.models, [
         draftValues.routingDefaultProvider,
         draftValues.routingLowCostProvider,
         draftValues.routingFallbackProvider
@@ -426,63 +420,33 @@ export function RuntimePolicyEditor({
       draftValues.routingDefaultProvider,
       draftValues.routingFallbackProvider,
       draftValues.routingLowCostProvider,
-      model.activeConfig.providers
+      model.providerConnections.available
     ]
+  );
+  const selectedRoutingProviderNames = getSelectedRoutingProviderNames(draftValues);
+  const selectedRoutingProviderConnections = getSelectedRoutingProviderConnections(
+    draftValues,
+    model.providerConnections.available
   );
   const hasRoutingCandidates =
     routingProviderOptions.length > 0 &&
-    Boolean(draftValues.routingDefaultProvider && draftValues.routingDefaultModel) &&
-    Boolean(draftValues.routingLowCostProvider && draftValues.routingLowCostModel) &&
-    Boolean(draftValues.routingFallbackProvider && draftValues.routingFallbackModel);
-
-  function toggleProviderSelection(providerConnection: ProviderConnectionRecord) {
-    const providerModels = getProviderConnectionModels(providerConnection);
-
-    if (providerModels.length === 0) {
-      return;
-    }
-
-    setProviderSelectionIds((current) =>
-      current.includes(providerConnection.id)
-        ? current.filter((providerConnectionId) => providerConnectionId !== providerConnection.id)
-        : [...current, providerConnection.id]
+    selectedRoutingProviderNames.length > 0 &&
+    selectedRoutingProviderConnections.length === selectedRoutingProviderNames.length &&
+    hasRoutingModelSelection(
+      draftValues.routingDefaultProvider,
+      draftValues.routingDefaultModel,
+      modelOptionsByProvider
+    ) &&
+    hasRoutingModelSelection(
+      draftValues.routingLowCostProvider,
+      draftValues.routingLowCostModel,
+      modelOptionsByProvider
+    ) &&
+    hasRoutingModelSelection(
+      draftValues.routingFallbackProvider,
+      draftValues.routingFallbackModel,
+      modelOptionsByProvider
     );
-  }
-
-  async function saveApplicationProviders() {
-    setIsSavingProviders(true);
-    setSubmitState({ message: "", status: "idle" });
-
-    const response = await fetch("/api/control-plane/application-providers", {
-      body: JSON.stringify({
-        applicationId: model.applicationId,
-        providerConnectionIds: providerSelectionIds
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-
-    if (!response.ok) {
-      setSubmitState({
-        message: payload.error ?? "Application provider update failed.",
-        status: "error"
-      });
-      setIsSavingProviders(false);
-      return;
-    }
-
-    setSubmitState({
-      message: text.applicationProvidersSaved,
-      status: "success"
-    });
-    setIsSavingProviders(false);
-    router.refresh();
-  }
 
   function updateRoutingProvider(
     route: "default" | "fallback" | "lowCost",
@@ -521,6 +485,14 @@ export function RuntimePolicyEditor({
   }
 
   async function submitPolicy(action: "save-draft" | "publish") {
+    if (!hasActiveApiKey) {
+      setSubmitState({
+        message: text.activeApiKeyMissing,
+        status: "error"
+      });
+      return;
+    }
+
     if (!hasRoutingCandidates) {
       setSubmitState({
         message: text.providerConnectionMissing,
@@ -532,11 +504,52 @@ export function RuntimePolicyEditor({
     setIsSubmitting(true);
     setSubmitState({ message: "", status: "idle" });
 
+    if (selectedRoutingProviderConnections.length !== selectedRoutingProviderNames.length) {
+      setSubmitState({
+        message: text.providerConnectionMissing,
+        status: "error"
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    const providerConnectionResponse = await fetch("/api/control-plane/application-providers", {
+      body: JSON.stringify({
+        applicationId: model.applicationId,
+        providerConnectionIds: selectedRoutingProviderConnections.map(
+          (providerConnection) => providerConnection.id
+        )
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const providerConnectionPayload = (await providerConnectionResponse
+      .json()
+      .catch(() => ({}))) as {
+      error?: string;
+    };
+
+    if (!providerConnectionResponse.ok) {
+      setSubmitState({
+        message: providerConnectionPayload.error ?? "Application provider update failed.",
+        status: "error"
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    const submitValues = mergeDraftValuesWithProviderConnections(
+      draftValues,
+      selectedRoutingProviderConnections
+    );
+
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({
         action,
         applicationId: model.applicationId,
-        values: draftValues
+        values: submitValues
       }),
       headers: {
         "Content-Type": "application/json"
@@ -564,6 +577,57 @@ export function RuntimePolicyEditor({
     });
     setDraftValues(getRuntimePolicyDraftValues(payload.runtimeConfig));
     setIsSubmitting(false);
+    if (action === "publish") {
+      router.refresh();
+    }
+  }
+
+  async function issueRuntimeApiKey() {
+    setIsIssuingApiKey(true);
+    setSubmitState({ message: "", status: "idle" });
+    setOneTimeApiKey(null);
+
+    const projectName = apiKeyReadiness?.projectName ?? "Project";
+    const response = await fetch("/api/control-plane/api-keys", {
+      body: JSON.stringify({
+        action: "issue",
+        values: {
+          displayName: `${projectName} Runtime API Key`,
+          expiresAt: "",
+          projectId: apiKeyReadiness?.projectId,
+          scopes: "gateway:invoke"
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      apiKey?: OneTimeApiKeyResponse;
+      error?: string;
+    };
+
+    if (!response.ok || !payload.apiKey) {
+      setSubmitState({
+        message: payload.error ?? text.apiKeyIssueFailed,
+        status: "error"
+      });
+      setIsIssuingApiKey(false);
+      return;
+    }
+
+    setActiveApiKeyCount((current) => Math.max(1, current + 1));
+    setOneTimeApiKey({
+      apiKey: payload.apiKey,
+      projectName
+    });
+    setSubmitState({
+      message: text.apiKeyIssued,
+      status: "success"
+    });
+    setIsIssuingApiKey(false);
+    router.refresh();
   }
 
   async function rollbackPolicy(targetConfigVersion: string) {
@@ -617,7 +681,7 @@ export function RuntimePolicyEditor({
             {text.details}
           </Button>
           <Button
-            disabled={isSubmitting || !hasRoutingCandidates}
+            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
             onClick={() => void submitPolicy("save-draft")}
             type="button"
             variant="outline"
@@ -626,7 +690,7 @@ export function RuntimePolicyEditor({
             {text.saveDraft}
           </Button>
           <Button
-            disabled={isSubmitting || !hasRoutingCandidates}
+            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
             onClick={() => void submitPolicy("publish")}
             type="button"
           >
@@ -647,6 +711,32 @@ export function RuntimePolicyEditor({
         <Alert variant="warning">
           <AlertDescription>{text.templateFallback}</AlertDescription>
         </Alert>
+      ) : null}
+      {!hasActiveApiKey ? (
+        <div className="policy-alert runtime-credential-alert" data-status="error">
+          <span>
+            {text.activeApiKeyMissing}
+            {apiKeyReadiness?.loadError ? ` ${apiKeyReadiness.loadError}` : ""}
+          </span>
+          <Button
+            disabled={isIssuingApiKey}
+            onClick={() => void issueRuntimeApiKey()}
+            type="button"
+            variant="outline"
+          >
+            {isIssuingApiKey ? text.issuingApiKey : text.issueApiKey}
+          </Button>
+        </div>
+      ) : null}
+      {oneTimeApiKey ? (
+        <div className="one-time-secret">
+          <div>
+            <p className="console-kicker">{oneTimeApiKey.projectName}</p>
+            <h4>API Key</h4>
+            <p>{oneTimeApiKey.apiKey.warning || text.apiKeyIssued}</p>
+          </div>
+          <code>{oneTimeApiKey.apiKey.plaintext}</code>
+        </div>
       ) : null}
       {!hasRoutingCandidates ? (
         <div className="policy-alert runtime-credential-alert" data-status="error">
@@ -1037,103 +1127,6 @@ export function RuntimePolicyEditor({
           </article>
         </div>
 
-        <div
-          aria-labelledby={getPolicyTabId("providerModel")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "providerModel"}
-          id={getPolicyPanelId("providerModel")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          <article className="console-panel policy-editor-panel wide-panel">
-            <div className="panel-heading">
-              <h3>{text.applicationProviders}</h3>
-              <Button
-                disabled={!hasProviderSelectionChanged || isSavingProviders}
-                onClick={() => void saveApplicationProviders()}
-                type="button"
-                variant="outline"
-              >
-                {isSavingProviders ? text.savingProviders : text.saveProviders}
-              </Button>
-            </div>
-            <p className="project-muted">{text.applicationProvidersHint}</p>
-            {model.providerConnections.loadError ? (
-              <p className="project-muted">{model.providerConnections.loadError}</p>
-            ) : null}
-            <div className="policy-provider-list">
-              {model.providerConnections.available.length === 0 ? (
-                <p className="project-muted">{text.providerConnectionMissing}</p>
-              ) : null}
-              {model.providerConnections.available.map((providerConnection) => {
-                const providerModels = getProviderConnectionModels(providerConnection);
-                const isSelectable = providerModels.length > 0;
-
-                return (
-                  <label
-                    aria-disabled={!isSelectable}
-                    className="policy-provider-option"
-                    data-disabled={!isSelectable}
-                    key={providerConnection.id}
-                  >
-                    <input
-                      checked={selectedProviderIdSet.has(providerConnection.id)}
-                      disabled={!isSelectable || isSavingProviders}
-                      onChange={() => toggleProviderSelection(providerConnection)}
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>{providerConnection.displayName}</strong>
-                      <small>
-                        {providerConnection.provider}
-                        {" · "}
-                        {isSelectable ? providerModels.join(", ") : text.noProviderModels}
-                      </small>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </article>
-
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.configuredModels}</h3>
-            </div>
-            {draftValues.models.length > 0 ? (
-              <dl className="policy-summary-list">
-                {draftValues.models.map((item) => (
-                  <div key={`${item.provider}:${item.model}`}>
-                    <dt>{item.provider}</dt>
-                    <dd>
-                      {item.model} / {item.contextWindowTokens} {text.tokens} /{" "}
-                      {text.jsonMode} {formatEnabled(item.supportsJsonMode)} /{" "}
-                      {text.streaming} {formatEnabled(item.supportsStreaming)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <p className="project-muted">{text.noProviderModels}</p>
-            )}
-          </article>
-
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.activeConfig}</h3>
-            </div>
-            <dl className="policy-summary-list">
-              <div>
-                <dt>{text.configVersion}</dt>
-                <dd>{displayConfig.configVersion}</dd>
-              </div>
-              <div>
-                <dt>{text.publishedAt}</dt>
-                <dd>{formatDateTime(displayConfig.publishedAt)}</dd>
-              </div>
-            </dl>
-          </article>
-        </div>
       </section>
 
       {isDetailOpen ? (
@@ -1477,6 +1470,7 @@ function RoutingPairEditor({
 }) {
   const modelOptions = modelOptionsByProvider.get(provider) ?? [];
   const hasProviderOptions = providerOptions.length > 0;
+  const selectedModelAvailable = modelOptions.some((option) => option.model === selectedModel);
 
   return (
     <fieldset className="policy-routing-pair">
@@ -1503,9 +1497,12 @@ function RoutingPairEditor({
           aria-label={`${label} Model`}
           disabled={modelOptions.length === 0}
           onChange={(event) => onModelChange(event.target.value)}
-          value={modelOptions.length === 0 ? "" : selectedModel}
+          value={modelOptions.length === 0 || !selectedModelAvailable ? "" : selectedModel}
         >
           {modelOptions.length === 0 ? <option value="">No models</option> : null}
+          {modelOptions.length > 0 && !selectedModelAvailable ? (
+            <option value="">Select a registered model</option>
+          ) : null}
           {modelOptions.map((option) => (
             <option key={`${option.provider}:${option.model}`} value={option.model}>
               {option.model}
@@ -1644,39 +1641,41 @@ function groupModelsByProvider(models: RuntimePolicyModelConfig[]) {
   return groups;
 }
 
+function groupRoutingModelsByProvider(
+  _models: RuntimePolicyModelConfig[],
+  providerConnections: ProviderConnectionRecord[]
+) {
+  return groupModelsByProvider(getProviderConnectionRuntimeModels(providerConnections));
+}
+
 function getRoutingProviderOptions(
-  providers: RuntimePolicyProvider[],
-  models: RuntimePolicyModelConfig[],
-  selectedProviders: string[]
+  providerConnections: ProviderConnectionRecord[],
+  _models: RuntimePolicyModelConfig[],
+  selectedProviders: Array<string | null | undefined>
 ): RoutingProviderOption[] {
   const providerOptions = new Map<string, RoutingProviderOption>();
 
-  for (const provider of providers) {
-    const providerName = provider.provider.trim();
+  for (const providerConnection of providerConnections) {
+    const providerName = normalizePolicyText(providerConnection.provider);
 
-    if (providerName) {
+    if (providerName && getProviderConnectionModels(providerConnection).length > 0) {
       providerOptions.set(providerName, {
         provider: providerName,
-        providerId: provider.providerId || `provider-${providerName}`
-      });
-    }
-  }
-
-  for (const model of models) {
-    const providerName = model.provider.trim();
-
-    if (providerName && !providerOptions.has(providerName)) {
-      providerOptions.set(providerName, {
-        provider: providerName,
-        providerId: `model-provider-${providerName}`
+        providerId: providerConnection.id
       });
     }
   }
 
   for (const provider of selectedProviders) {
-    const providerName = provider.trim();
+    const providerName = normalizePolicyText(provider);
 
-    if (providerName && !providerOptions.has(providerName)) {
+    if (
+      providerName &&
+      !providerOptions.has(providerName) &&
+      providerConnections.some(
+        (providerConnection) => normalizePolicyText(providerConnection.provider) === providerName
+      )
+    ) {
       providerOptions.set(providerName, {
         provider: providerName,
         providerId: `selected-provider-${providerName}`
@@ -1685,6 +1684,171 @@ function getRoutingProviderOptions(
   }
 
   return Array.from(providerOptions.values());
+}
+
+function getSelectedRoutingProviderConnections(
+  values: RuntimePolicyDraftValues,
+  providerConnections: ProviderConnectionRecord[]
+) {
+  const providerConnectionsByProvider = new Map(
+    providerConnections.map((providerConnection) => [
+      normalizePolicyText(providerConnection.provider),
+      providerConnection
+    ])
+  );
+
+  return getSelectedRoutingProviderNames(values)
+    .map((provider) => providerConnectionsByProvider.get(provider))
+    .filter(
+      (providerConnection): providerConnection is ProviderConnectionRecord =>
+        Boolean(providerConnection && getProviderConnectionModels(providerConnection).length > 0)
+    );
+}
+
+function getSelectedRoutingProviderNames(values: RuntimePolicyDraftValues) {
+  return Array.from(
+    new Set(
+      [
+        values.routingDefaultProvider,
+        values.routingLowCostProvider,
+        values.routingFallbackProvider
+      ]
+        .map((provider) => normalizePolicyText(provider))
+        .filter(Boolean)
+    )
+  );
+}
+
+function mergeDraftValuesWithProviderConnections(
+  values: RuntimePolicyDraftValues,
+  providerConnections: ProviderConnectionRecord[]
+): RuntimePolicyDraftValues {
+  const providerModels = getProviderConnectionRuntimeModels(providerConnections);
+  const models = mergeRuntimePolicyModels([], providerModels);
+  const providerModelKeys = new Set(
+    providerModels.map((model) => runtimePolicyModelKey(model.provider, model.model))
+  );
+
+  return {
+    ...values,
+    models,
+    pricingRules: mergeRuntimePolicyPricingRules(
+      values.pricingRules.filter((pricingRule) =>
+        providerModelKeys.has(runtimePolicyModelKey(pricingRule.provider, pricingRule.model))
+      ),
+      providerModels
+    )
+  };
+}
+
+function getProviderConnectionRuntimeModels(providerConnections: ProviderConnectionRecord[]) {
+  return providerConnections.flatMap((providerConnection) =>
+    getProviderConnectionModels(providerConnection).map((modelName) =>
+      toRuntimePolicyModelConfig(providerConnection, modelName)
+    )
+  );
+}
+
+function toRuntimePolicyModelConfig(
+  providerConnection: ProviderConnectionRecord,
+  modelName: string
+): RuntimePolicyModelConfig {
+  return {
+    contextWindowTokens: 128000,
+    displayName: modelName,
+    model: modelName,
+    provider: providerConnection.provider,
+    status: providerConnection.status === "ACTIVE" ? "active" : "disabled",
+    supportsJsonMode: true,
+    supportsStreaming: true
+  };
+}
+
+function mergeRuntimePolicyModels(
+  models: RuntimePolicyModelConfig[],
+  nextModels: RuntimePolicyModelConfig[]
+) {
+  const merged = new Map<string, RuntimePolicyModelConfig>();
+
+  for (const model of [...models, ...nextModels]) {
+    const provider = normalizePolicyText(model.provider);
+    const modelName = normalizePolicyText(model.model);
+
+    if (provider && modelName) {
+      merged.set(`${provider}::${modelName}`, {
+        ...model,
+        displayName: normalizePolicyText(model.displayName) || modelName,
+        model: modelName,
+        provider
+      });
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function runtimePolicyModelKey(provider: unknown, model: unknown) {
+  return `${normalizePolicyText(provider)}::${normalizePolicyText(model)}`;
+}
+
+function mergeRuntimePolicyPricingRules(
+  pricingRules: RuntimePolicyDraftValues["pricingRules"],
+  models: RuntimePolicyModelConfig[]
+) {
+  const merged = new Map<string, RuntimePolicyDraftValues["pricingRules"][number]>();
+
+  for (const pricingRule of pricingRules) {
+    const provider = normalizePolicyText(pricingRule.provider);
+    const model = normalizePolicyText(pricingRule.model);
+
+    if (provider && model) {
+      merged.set(`${provider}::${model}`, {
+        ...pricingRule,
+        model,
+        provider
+      });
+    }
+  }
+
+  for (const model of models) {
+    const provider = normalizePolicyText(model.provider);
+    const modelName = normalizePolicyText(model.model);
+    const key = `${provider}::${modelName}`;
+
+    if (provider && modelName && !merged.has(key)) {
+      merged.set(key, {
+        completionTokenMicroUsd: 10,
+        model: modelName,
+        pricingVersion: "default",
+        promptTokenMicroUsd: 10,
+        provider
+      });
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function hasRoutingModelSelection(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>
+) {
+  const trimmedProvider = normalizePolicyText(provider);
+  const trimmedModel = normalizePolicyText(model);
+
+  if (!trimmedProvider || !trimmedModel) {
+    return false;
+  }
+
+  return Boolean(
+    modelOptionsByProvider
+      .get(trimmedProvider)
+      ?.some(
+        (option) =>
+          normalizePolicyText(option.model) === trimmedModel && option.status === "active"
+      )
+  );
 }
 
 function getProviderConnectionModels(providerConnection: ProviderConnectionRecord) {
@@ -1703,12 +1867,6 @@ function getProviderConnectionModels(providerConnection: ProviderConnectionRecor
   );
 }
 
-function haveSameStringSet(left: string[], right: string[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  const rightValues = new Set(right);
-
-  return left.every((value) => rightValues.has(value));
+function normalizePolicyText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
