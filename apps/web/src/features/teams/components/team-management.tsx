@@ -274,6 +274,17 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
           <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
         </div>
+        <div className="team-section-header-action">
+          <button
+            className="primary-button"
+            disabled={pendingAction !== null}
+            onClick={() => setIsCreateModalOpen(true)}
+            type="button"
+          >
+            <Plus aria-hidden="true" />
+            {text.create}
+          </button>
+        </div>
       </section>
 
       {model.source === "fixture" ? (
@@ -294,17 +305,6 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
           <div>
             <h3>{text.title}</h3>
             <p>{text.listDescription}</p>
-          </div>
-          <div className="team-section-header-action">
-            <button
-              className="primary-button"
-              disabled={pendingAction !== null}
-              onClick={() => setIsCreateModalOpen(true)}
-              type="button"
-            >
-              <Plus aria-hidden="true" />
-              {text.create}
-            </button>
           </div>
         </div>
         {visibleTeams.length === 0 ? (
@@ -653,55 +653,55 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
           </div>
         </div>
 
-      {model.source === "fixture" ? (
-        <Alert variant="warning">
-          <AlertDescription>
-            {text.fixtureFallback} {model.loadError}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {submitState.message ? (
-        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
-          <AlertDescription>{submitState.message}</AlertDescription>
-        </Alert>
-      ) : null}
+        {model.source === "fixture" ? (
+          <Alert variant="warning">
+            <AlertDescription>
+              {text.fixtureFallback} {model.loadError}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {submitState.message ? (
+          <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+            <AlertDescription>{submitState.message}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {attachedTeams.length === 0 ? (
-        <p className="project-empty">
-          {assignableTeams.length === 0 ? text.noAssignableTeam : text.empty}
-        </p>
-      ) : (
-        <div className="team-list team-list-compact">
-          {attachedTeams.map((projectTeam) => (
-            <article className="team-row team-row-attached" key={projectTeam.id}>
-              <div>
-                <strong>{projectTeam.teamName}</strong>
-                <p>{nullableText(projectTeam.teamDescription, "-")}</p>
-              </div>
-              <Badge
-                className="project-status-badge"
-                data-status={projectTeam.teamStatus}
-                variant="outline"
-              >
-                {formatTeamStatus(projectTeam.teamStatus)}
-              </Badge>
-              <span className="team-row-assigned">
-                {text.assigned}: <strong>{formatDateTime(projectTeam.assignedAt)}</strong>
-              </span>
-              <Button
-                className="team-delete-button"
-                disabled={pendingAction !== null}
-                onClick={() => void submitDetachTeam(projectTeam.teamId)}
-                type="button"
-                variant="outline"
-              >
-                <Trash2 aria-hidden="true" />
-                {pendingAction === `detach:${projectTeam.teamId}` ? "..." : text.remove}
-              </Button>
-            </article>
-          ))}
-        </div>
-      )}
+        {attachedTeams.length === 0 ? (
+          <p className="project-empty">
+            {assignableTeams.length === 0 ? text.noAssignableTeam : text.empty}
+          </p>
+        ) : (
+          <div className="team-list team-list-compact">
+            {attachedTeams.map((projectTeam) => (
+              <article className="team-row team-row-attached" key={projectTeam.id}>
+                <div>
+                  <strong>{projectTeam.teamName}</strong>
+                  <p>{nullableText(projectTeam.teamDescription, "-")}</p>
+                </div>
+                <Badge
+                  className="project-status-badge"
+                  data-status={projectTeam.teamStatus}
+                  variant="outline"
+                >
+                  {formatTeamStatus(projectTeam.teamStatus)}
+                </Badge>
+                <span className="team-row-assigned">
+                  {text.assigned}: <strong>{formatDateTime(projectTeam.assignedAt)}</strong>
+                </span>
+                <Button
+                  className="team-delete-button"
+                  disabled={pendingAction !== null}
+                  onClick={() => void submitDetachTeam(projectTeam.teamId)}
+                  type="button"
+                  variant="outline"
+                >
+                  <Trash2 aria-hidden="true" />
+                  {pendingAction === `detach:${projectTeam.teamId}` ? "..." : text.remove}
+                </Button>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

@@ -818,49 +818,45 @@ select {
   padding: var(--space-8) var(--space-8) var(--space-12);
 }
 
-.dashboard-hero,
-.detail-header {
+.dashboard-hero {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  width: 100%;
-  height: var(--console-title-block-height);
-  min-height: var(--console-title-block-height);
-  overflow: hidden;
-  gap: var(--space-6);
-  padding: var(--space-8);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
+  gap: 16px;
+  padding: 0;
+  margin-bottom: 24px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
-.dashboard-hero > div:first-child,
-.detail-header > div:first-child {
-  min-width: 0;
+.dashboard-hero > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.dashboard-hero h2,
-.detail-header h2 {
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-tight);
+.dashboard-hero h2 {
+  order: 1;
+}
+
+.dashboard-hero .console-kicker {
+  order: 2;
+}
+
+.dashboard-hero .console-kicker,
+.dashboard-hero h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
   letter-spacing: 0;
-  overflow-wrap: anywhere;
+  color: #07152f;
+  text-transform: none;
 }
 
-.dashboard-hero p,
-.detail-header p {
-  display: -webkit-box;
-  max-width: 760px;
-  overflow: hidden;
-  margin: 12px 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-size-base);
-  line-height: 1.6;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+.dashboard-hero .console-kicker::after {
+  content: none;
 }
 
 .primary-link,

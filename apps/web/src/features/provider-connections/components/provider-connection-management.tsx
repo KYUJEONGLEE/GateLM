@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { PlugZap, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -14,12 +14,20 @@ import type {
   ProviderModelDiscovery,
   ProviderPresetRecord
 } from "@/lib/control-plane/provider-connections-types";
+import type {
+  RuntimePolicyModelConfig,
+  RuntimePolicyPricingRule
+} from "@/lib/control-plane/runtime-policy-types";
+import type { ModelCatalogItem } from "@/lib/gateway/model-catalog-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ProviderConnectionManagementProps = {
   locale: Locale;
   model: ProviderConnectionsModel;
+  modelCatalogItems?: ModelCatalogItem[];
+  pricingRules?: RuntimePolicyPricingRule[];
+  runtimeModels?: RuntimePolicyModelConfig[];
 };
 
 type SubmitState = {
@@ -174,7 +182,10 @@ const providerText: Record<
 
 export function ProviderConnectionManagement({
   locale,
-  model
+  model,
+  modelCatalogItems = [],
+  pricingRules = [],
+  runtimeModels = []
 }: ProviderConnectionManagementProps) {
   const router = useRouter();
   const text = providerText[locale];
@@ -196,6 +207,9 @@ export function ProviderConnectionManagement({
     formValues.provider,
     selectedModels
   );
+  const modelCatalogByProvider = buildModelCatalogByProvider(modelCatalogItems);
+  const pricingRulesByModel = buildPricingRuleIndex(pricingRules);
+  const runtimeModelsByModel = buildRuntimeModelIndex(runtimeModels);
 
   async function submitProvider() {
     const validationError = validateProviderForm(formValues, locale);
@@ -730,6 +744,12 @@ export function ProviderConnectionManagement({
               <tbody>
                 {providers.map((provider) => {
                   const discovery = discoveryByProvider[provider.provider];
+                  const providerModelRows = getProviderModelCatalogRows(
+                    provider,
+                    modelCatalogByProvider,
+                    pricingRulesByModel,
+                    runtimeModelsByModel
+                  );
 
                   return (
                     <Fragment key={provider.id}>
@@ -794,6 +814,13 @@ export function ProviderConnectionManagement({
                           </div>
                         </td>
                       </tr>
+                      {providerModelRows.length > 0 ? (
+                        <tr key={`${provider.id}-model-catalog`} className="provider-discovery-row">
+                          <td colSpan={5}>
+                            <ProviderModelCatalogPanel locale={locale} rows={providerModelRows} />
+                          </td>
+                        </tr>
+                      ) : null}
                       {discovery ? (
                         <tr key={`${provider.id}-discovery`} className="provider-discovery-row">
                           <td colSpan={5}>
@@ -877,6 +904,209 @@ export function ProviderConnectionManagement({
   );
 }
 
+
+type ProviderModelCatalogRow = {
+  catalogItem: ModelCatalogItem | null;
+  modelName: string;
+  pricingRule: RuntimePolicyPricingRule | null;
+  runtimeModel: RuntimePolicyModelConfig | null;
+};
+
+function ProviderModelCatalogPanel({
+  locale,
+  rows
+}: {
+  locale: Locale;
+  rows: ProviderModelCatalogRow[];
+}) {
+  const labels = {
+    capabilities: "Capabilities",
+    model: "Model",
+    price: "Price",
+    status: "Status",
+    tier: "Tier",
+    title: "Model price / tier"
+  };
+
+  return (
+    <div className="provider-discovery-panel">
+      <div className="provider-model-selection-toolbar">
+        <strong>{labels.title}</strong>
+        <span className="project-muted">
+          {locale === "ko" ? `${rows.length} models` : `${rows.length} models`}
+        </span>
+      </div>
+      <div className="table-wrap">
+        <table className="data-table provider-model-catalog-table">
+          <thead>
+            <tr>
+              <th>{labels.model}</th>
+              <th>{labels.tier}</th>
+              <th>{labels.price}</th>
+              <th>{labels.status}</th>
+              <th>{labels.capabilities}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.modelName}>
+                <td>
+                  <strong className="provider-name">{row.catalogItem?.alias ?? row.modelName}</strong>
+                  {row.catalogItem?.alias ? (
+                    <small className="project-muted">{row.modelName}</small>
+                  ) : null}
+                </td>
+                <td>{nullableText(row.catalogItem?.costTier, "-")}</td>
+                <td>
+                  <span>{formatPricingRule(row.pricingRule)}</span>
+                  {row.pricingRule?.pricingVersion ? (
+                    <small className="project-muted">{row.pricingRule.pricingVersion}</small>
+                  ) : null}
+                </td>
+                <td>{formatModelCatalogStatus(row)}</td>
+                <td>{formatModelCapabilities(row)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function buildModelCatalogByProvider(items: ModelCatalogItem[]) {
+  const byProvider = new Map<string, ModelCatalogItem[]>();
+
+  for (const item of items) {
+    const provider = item.provider ?? item.ownedBy;
+    const providerKey = normalizeLookupKey(provider);
+
+    if (!providerKey) {
+      continue;
+    }
+
+    byProvider.set(providerKey, [...(byProvider.get(providerKey) ?? []), item]);
+  }
+
+  for (const [providerKey, providerModels] of byProvider) {
+    byProvider.set(
+      providerKey,
+      providerModels.sort((left, right) => left.id.localeCompare(right.id))
+    );
+  }
+
+  return byProvider;
+}
+
+function buildPricingRuleIndex(rules: RuntimePolicyPricingRule[]) {
+  const index = new Map<string, RuntimePolicyPricingRule>();
+
+  for (const rule of rules) {
+    index.set(getProviderModelLookupKey(rule.provider, rule.model), rule);
+  }
+
+  return index;
+}
+
+function buildRuntimeModelIndex(models: RuntimePolicyModelConfig[]) {
+  const index = new Map<string, RuntimePolicyModelConfig>();
+
+  for (const model of models) {
+    index.set(getProviderModelLookupKey(model.provider, model.model), model);
+  }
+
+  return index;
+}
+
+function getProviderModelCatalogRows(
+  provider: ProviderConnectionRecord,
+  modelCatalogByProvider: Map<string, ModelCatalogItem[]>,
+  pricingRulesByModel: Map<string, RuntimePolicyPricingRule>,
+  runtimeModelsByModel: Map<string, RuntimePolicyModelConfig>
+): ProviderModelCatalogRow[] {
+  const providerKey = normalizeLookupKey(provider.provider);
+  const catalogItems = modelCatalogByProvider.get(providerKey) ?? [];
+  const catalogByModel = new Map(
+    catalogItems.map((item) => [normalizeLookupKey(item.id), item] as const)
+  );
+  const modelNames = new Set([
+    ...getProviderConfigModels(provider.providerConfig),
+    ...catalogItems.map((item) => item.id)
+  ]);
+
+  return Array.from(modelNames)
+    .sort((left, right) => left.localeCompare(right))
+    .map((modelName) => {
+      const lookupKey = getProviderModelLookupKey(provider.provider, modelName);
+
+      return {
+        catalogItem: catalogByModel.get(normalizeLookupKey(modelName)) ?? null,
+        modelName,
+        pricingRule: pricingRulesByModel.get(lookupKey) ?? null,
+        runtimeModel: runtimeModelsByModel.get(lookupKey) ?? null
+      };
+    });
+}
+
+function getProviderModelLookupKey(provider: string, model: string) {
+  return `${normalizeLookupKey(provider)}:${normalizeLookupKey(model)}`;
+}
+
+function normalizeLookupKey(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function formatPricingRule(rule: RuntimePolicyPricingRule | null) {
+  if (!rule) {
+    return "-";
+  }
+
+  return `input ${formatMicroUsdPerToken(rule.promptTokenMicroUsd)} / output ${formatMicroUsdPerToken(
+    rule.completionTokenMicroUsd
+  )}`;
+}
+
+function formatMicroUsdPerToken(value: number) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+
+  const normalized = Number.isInteger(value)
+    ? value.toString()
+    : value.toFixed(4).replace(/\.?0+$/, "");
+
+  return `$${normalized}/1M`;
+}
+
+function formatModelCatalogStatus(row: ProviderModelCatalogRow) {
+  if (row.catalogItem?.allowed === false || row.runtimeModel?.status === "disabled") {
+    return "Disabled";
+  }
+
+  if (row.catalogItem?.allowed === true || row.runtimeModel?.status === "active") {
+    return "Active";
+  }
+
+  return "-";
+}
+
+function formatModelCapabilities(row: ProviderModelCatalogRow) {
+  const capabilities = new Set(row.catalogItem?.capabilities ?? []);
+
+  if (row.runtimeModel?.supportsStreaming) {
+    capabilities.add("streaming");
+  }
+
+  if (row.runtimeModel?.supportsJsonMode) {
+    capabilities.add("json_mode");
+  }
+
+  if (row.runtimeModel?.contextWindowTokens) {
+    capabilities.add(`context:${row.runtimeModel.contextWindowTokens.toLocaleString()}`);
+  }
+
+  return Array.from(capabilities).join(", ") || "-";
+}
 function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConnectionFormValues {
   const providerConfig = provider.providerConfig;
 

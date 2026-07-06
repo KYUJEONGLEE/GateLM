@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Activity,
@@ -118,11 +118,11 @@ const navigationItems: Array<{
       },
       {
         labels: {
-          en: "Model Catalog",
-          ko: "Model Catalog"
+          en: "Policy",
+          ko: "Policy"
         },
-        item: "model-catalog",
-        path: (tenantId) => `/tenants/${tenantId}/model-catalog`
+        item: "policies",
+        path: (tenantId) => `/tenants/${tenantId}/policies`
       }
     ],
     section: "management"

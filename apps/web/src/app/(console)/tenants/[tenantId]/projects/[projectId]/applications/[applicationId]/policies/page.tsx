@@ -43,7 +43,7 @@ export default async function ApplicationPoliciesPage({
 
   return (
     <ConsoleShell
-      activeManagementItem="project"
+      activeManagementItem="policies"
       activeSection="management"
       locale={locale}
       tenantId={tenantId}
