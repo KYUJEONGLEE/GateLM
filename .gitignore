@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 plan.md
+.codex/
 
 *.pem
 *.key
@@ -17,11 +18,17 @@ build/
 .next/
 coverage/
 *.tsbuildinfo
-reports/
+reports/*
+!reports/rate-limit/
+reports/rate-limit/*
+!reports/rate-limit/README.md
+!reports/rate-limit/report/
+!reports/rate-limit/report/*.md
 
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
 .pytest_cache/
 .mypy_cache/
 

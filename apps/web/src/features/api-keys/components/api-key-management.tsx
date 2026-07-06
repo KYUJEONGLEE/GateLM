@@ -3,6 +3,7 @@
 import { Ban, Copy, EyeOff, Plus, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
@@ -300,7 +301,7 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
   }
 
   return (
-    <main className="console-content">
+    <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
           <p className="console-kicker">{text.management}</p>
@@ -309,14 +310,14 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
       </section>
 
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{text.fixtureFallback} {model.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
 
       {oneTimeSecret ? (
@@ -362,7 +363,7 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
         </section>
       ) : null}
 
-      <section className="console-panel">
+      <section className="console-panel credential-line-panel">
         <div className="panel-heading">
           <h3>{text.issue}</h3>
         </div>
@@ -421,7 +422,7 @@ export function ApiKeyManagement({ locale, model }: ApiKeyManagementProps) {
         </div>
       </section>
 
-      <section className="console-panel">
+      <section className="console-panel credential-line-panel">
         <div className="panel-heading">
           <h3>{text.title}</h3>
           <p>{text.activeOnly}</p>

@@ -15,9 +15,10 @@ type Store struct {
 }
 
 type entry struct {
-	requestID string
-	payload   []byte
-	expiresAt time.Time
+	requestID         string
+	savedCostMicroUSD int64
+	payload           []byte
+	expiresAt         time.Time
 }
 
 func NewStore(ttl time.Duration) *Store {
@@ -51,6 +52,7 @@ func (s *Store) GetExact(_ context.Context, keyHash string) (ports.CacheLookupRe
 	return ports.CacheLookupResult{
 		Hit:               true,
 		CacheHitRequestID: cached.requestID,
+		SavedCostMicroUSD: cached.savedCostMicroUSD,
 		Payload:           payload,
 	}, nil
 }
@@ -64,9 +66,10 @@ func (s *Store) SetExact(_ context.Context, cacheEntry ports.CacheEntry) error {
 	defer s.mu.Unlock()
 
 	s.entries[cacheEntry.KeyHash] = entry{
-		requestID: cacheEntry.RequestID,
-		payload:   append([]byte(nil), cacheEntry.Payload...),
-		expiresAt: time.Now().Add(s.ttl),
+		requestID:         cacheEntry.RequestID,
+		savedCostMicroUSD: cacheEntry.SavedCostMicroUSD,
+		payload:           append([]byte(nil), cacheEntry.Payload...),
+		expiresAt:         time.Now().Add(s.ttl),
 	}
 	return nil
 }

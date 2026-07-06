@@ -62,18 +62,25 @@ type RateLimitOutcome struct {
 }
 
 type BudgetOutcome struct {
-	Outcome         string `json:"outcome"`
-	BudgetScopeType string `json:"budgetScopeType"`
-	BudgetScopeID   string `json:"budgetScopeId"`
-	ResolvedBy      string `json:"resolvedBy"`
+	Outcome           string   `json:"outcome"`
+	BudgetScopeType   string   `json:"budgetScopeType"`
+	BudgetScopeID     string   `json:"budgetScopeId"`
+	ResolvedBy        string   `json:"resolvedBy"`
+	Reason            *string  `json:"reason,omitempty"`
+	LimitMicroUSD     *int64   `json:"limitMicroUsd,omitempty"`
+	UsedMicroUSD      *int64   `json:"usedMicroUsd,omitempty"`
+	RemainingMicroUSD *int64   `json:"remainingMicroUsd,omitempty"`
+	UsagePercent      *float64 `json:"usagePercent,omitempty"`
 }
 
 type SafetyOutcome struct {
-	Outcome               string   `json:"outcome"`
-	MaskingAction         string   `json:"maskingAction,omitempty"`
-	DetectedTypes         []string `json:"detectedTypes,omitempty"`
-	DetectedCount         int      `json:"detectedCount"`
-	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
+	Outcome                 string   `json:"outcome"`
+	MaskingAction           string   `json:"maskingAction,omitempty"`
+	DetectedTypes           []string `json:"detectedTypes,omitempty"`
+	DetectedCount           int      `json:"detectedCount"`
+	PolicyAllowedTypes      []string `json:"policyAllowedTypes,omitempty"`
+	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes,omitempty"`
+	RedactedPromptPreview   *string  `json:"redactedPromptPreview"`
 }
 
 type RoutingOutcome struct {
@@ -195,33 +202,35 @@ func DomainOutcomesForInvocationLog(log LlmInvocationLog) DomainOutcomes {
 		return log.DomainOutcomes
 	}
 	terminal := TerminalLog{
-		RequestID:             log.RequestID,
-		TraceID:               log.TraceID,
-		ApplicationID:         log.ApplicationID,
-		BudgetScope:           log.BudgetScope,
-		RuntimeSnapshot:       log.RuntimeSnapshot,
-		RateLimitDecision:     nil,
-		Stream:                log.Stream,
-		RequestedModel:        log.RequestedModel,
-		Provider:              log.Provider,
-		Model:                 log.Model,
-		SelectedProvider:      log.SelectedProvider,
-		SelectedModel:         log.SelectedModel,
-		RoutingReason:         log.RoutingReason,
-		ProviderLatencyMs:     log.ProviderLatencyMs,
-		Status:                log.Status,
-		HTTPStatus:            log.HTTPStatus,
-		ErrorCode:             log.ErrorCode,
-		ErrorStage:            log.ErrorStage,
-		CacheStatus:           log.CacheStatus,
-		CacheType:             log.CacheType,
-		CacheHitRequestID:     log.CacheHitRequestID,
-		MaskingAction:         log.MaskingAction,
-		MaskingDetectedTypes:  log.MaskingDetectedTypes,
-		MaskingDetectedCount:  log.MaskingDetectedCount,
-		RedactedPromptPreview: log.RedactedPromptPreview,
-		LatencyMs:             log.LatencyMs,
-		CreatedAt:             log.CreatedAt,
+		RequestID:               log.RequestID,
+		TraceID:                 log.TraceID,
+		ApplicationID:           log.ApplicationID,
+		BudgetScope:             log.BudgetScope,
+		RuntimeSnapshot:         log.RuntimeSnapshot,
+		RateLimitDecision:       nil,
+		Stream:                  log.Stream,
+		RequestedModel:          log.RequestedModel,
+		Provider:                log.Provider,
+		Model:                   log.Model,
+		SelectedProvider:        log.SelectedProvider,
+		SelectedModel:           log.SelectedModel,
+		RoutingReason:           log.RoutingReason,
+		ProviderLatencyMs:       log.ProviderLatencyMs,
+		Status:                  log.Status,
+		HTTPStatus:              log.HTTPStatus,
+		ErrorCode:               log.ErrorCode,
+		ErrorStage:              log.ErrorStage,
+		CacheStatus:             log.CacheStatus,
+		CacheType:               log.CacheType,
+		CacheHitRequestID:       log.CacheHitRequestID,
+		MaskingAction:           log.MaskingAction,
+		MaskingDetectedTypes:    log.MaskingDetectedTypes,
+		MaskingDetectedCount:    log.MaskingDetectedCount,
+		PolicyAllowedTypes:      log.PolicyAllowedTypes,
+		MandatoryProtectedTypes: log.MandatoryProtectedTypes,
+		RedactedPromptPreview:   log.RedactedPromptPreview,
+		LatencyMs:               log.LatencyMs,
+		CreatedAt:               log.CreatedAt,
 	}
 	if log.CompletedAt != nil {
 		terminal.CompletedAt = *log.CompletedAt
@@ -320,13 +329,18 @@ func rateLimitOutcome(decision *ratelimit.Decision) RateLimitOutcome {
 func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.Decision) BudgetOutcome {
 	normalized := budget.NormalizeScope(scope, applicationID)
 	outcome := budget.OutcomeNotChecked
+	var reason *string
+	var limitMicroUSD *int64
+	var usedMicroUSD *int64
+	var remainingMicroUSD *int64
+	var usagePercent *float64
 	if decision != nil {
 		decisionScope := budget.NormalizeScope(decision.Scope, applicationID)
 		if strings.TrimSpace(decisionScope.ID) != "" {
 			normalized = decisionScope
 		}
 		switch strings.TrimSpace(decision.Outcome) {
-		case budget.OutcomeAllowed, budget.OutcomeWarned, budget.OutcomeBlocked, budget.OutcomeNotUsed, budget.OutcomeNotChecked:
+		case budget.OutcomeAllowed, budget.OutcomeWarned, budget.OutcomeDegraded, budget.OutcomeBlocked, budget.OutcomeNotUsed, budget.OutcomeNotChecked:
 			outcome = strings.TrimSpace(decision.Outcome)
 		default:
 			if decision.Allowed {
@@ -334,6 +348,17 @@ func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.De
 			} else {
 				outcome = budget.OutcomeBlocked
 			}
+		}
+		reason = stringPointer(decision.Reason)
+		if decision.UsageKnown {
+			limitValue := decision.LimitMicroUSD
+			usedValue := decision.UsedMicroUSD
+			remainingValue := decision.RemainingMicroUSD
+			usageValue := decision.UsagePercent
+			limitMicroUSD = &limitValue
+			usedMicroUSD = &usedValue
+			remainingMicroUSD = &remainingValue
+			usagePercent = &usageValue
 		}
 	}
 	if strings.TrimSpace(normalized.ID) == "" {
@@ -346,13 +371,17 @@ func budgetOutcome(scope budget.Scope, applicationID string, decision *budget.De
 		normalized.ResolvedBy = budget.ResolvedByDefaultApplication
 	}
 	return BudgetOutcome{
-		Outcome:         outcome,
-		BudgetScopeType: normalized.Type,
-		BudgetScopeID:   normalized.ID,
-		ResolvedBy:      normalized.ResolvedBy,
+		Outcome:           outcome,
+		BudgetScopeType:   normalized.Type,
+		BudgetScopeID:     normalized.ID,
+		ResolvedBy:        normalized.ResolvedBy,
+		Reason:            reason,
+		LimitMicroUSD:     limitMicroUSD,
+		UsedMicroUSD:      usedMicroUSD,
+		RemainingMicroUSD: remainingMicroUSD,
+		UsagePercent:      usagePercent,
 	}
 }
-
 func safetyOutcome(log TerminalLog) SafetyOutcome {
 	action := strings.TrimSpace(log.MaskingAction)
 	if action == "" {
@@ -371,11 +400,13 @@ func safetyOutcome(log TerminalLog) SafetyOutcome {
 		action = ""
 	}
 	return SafetyOutcome{
-		Outcome:               outcome,
-		MaskingAction:         action,
-		DetectedTypes:         append([]string{}, log.MaskingDetectedTypes...),
-		DetectedCount:         log.MaskingDetectedCount,
-		RedactedPromptPreview: stringPointer(log.RedactedPromptPreview),
+		Outcome:                 outcome,
+		MaskingAction:           action,
+		DetectedTypes:           append([]string{}, log.MaskingDetectedTypes...),
+		DetectedCount:           log.MaskingDetectedCount,
+		PolicyAllowedTypes:      append([]string{}, log.PolicyAllowedTypes...),
+		MandatoryProtectedTypes: append([]string{}, log.MandatoryProtectedTypes...),
+		RedactedPromptPreview:   stringPointer(log.RedactedPromptPreview),
 	}
 }
 
@@ -412,6 +443,8 @@ func cacheOutcome(cacheStatus string, cacheType string, cacheHitRequestID string
 		outcome = "miss"
 	case CacheStatusError:
 		outcome = "error"
+	case CacheStatusStoreSkipped:
+		outcome = "store_skipped"
 	case "":
 		outcome = "bypassed"
 	case CacheStatusBypass:

@@ -8,8 +8,72 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 )
+
+func TestTerminalLogWriterWritesProjectBudgetNotificationsForTenantAndProjectAdmins(t *testing.T) {
+	execer := &fakeExecer{}
+	writer := NewTerminalLogWriter(execer, TerminalLogDefaults{
+		TenantID:      "00000000-0000-4000-8000-000000000100",
+		ProjectID:     "00000000-0000-4000-8000-000000000200",
+		ApplicationID: "00000000-0000-4000-8000-000000000300",
+	})
+	startedAt := time.Date(2026, 7, 6, 1, 2, 3, 0, time.UTC)
+	completedAt := startedAt.Add(50 * time.Millisecond)
+	scope := budget.Scope{
+		Type:       budget.ScopeTypeProject,
+		ID:         "00000000-0000-4000-8000-000000000200",
+		ResolvedBy: budget.ResolvedByRuntimeSnapshot,
+	}
+
+	err := writer.WriteTerminalLog(context.Background(), invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
+		RequestID:     "request_project_budget_exceeded",
+		TenantID:      "00000000-0000-4000-8000-000000000100",
+		ProjectID:     "00000000-0000-4000-8000-000000000200",
+		ApplicationID: "00000000-0000-4000-8000-000000000300",
+		BudgetScope:   scope,
+		BudgetDecision: &budget.Decision{
+			Allowed:                 true,
+			Outcome:                 budget.OutcomeDegraded,
+			Scope:                   scope,
+			Reason:                  "quota_exceeded_quality_guard",
+			WarningThresholdPercent: 80,
+			LimitMicroUSD:           1000,
+			UsedMicroUSD:            1200,
+			RemainingMicroUSD:       -200,
+			UsagePercent:            120,
+		},
+		Provider:    "mock",
+		Model:       "mock-fast",
+		Status:      invocationlog.StatusSuccess,
+		HTTPStatus:  200,
+		StartedAt:   startedAt,
+		CompletedAt: completedAt,
+	}))
+	if err != nil {
+		t.Fatalf("WriteTerminalLog returned error: %v", err)
+	}
+	if execer.calls != 3 {
+		t.Fatalf("expected terminal insert and two notification events, got %d calls", execer.calls)
+	}
+	if !strings.Contains(execer.queries[1], "insert into notification_events") || !strings.Contains(execer.queries[2], "insert into notification_events") {
+		t.Fatalf("expected notification event upserts, got %#v", execer.queries)
+	}
+
+	tenantAdminArgs := execer.argsHistory[1]
+	projectAdminArgs := execer.argsHistory[2]
+	assertArg(t, tenantAdminArgs, 6, "exceeded")
+	assertArg(t, tenantAdminArgs, 7, "tenant")
+	assertArg(t, tenantAdminArgs, 9, "tenant_admin")
+	assertArg(t, projectAdminArgs, 6, "exceeded")
+	assertArg(t, projectAdminArgs, 7, "project")
+	assertArg(t, projectAdminArgs, 9, "project_admin")
+	assertArg(t, projectAdminArgs, 11, int64(1000))
+	assertArg(t, projectAdminArgs, 12, int64(1200))
+	assertArg(t, projectAdminArgs, 13, int64(-200))
+	assertArg(t, projectAdminArgs, 15, "request_project_budget_exceeded")
+}
 
 func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	execer := &fakeExecer{}
@@ -52,9 +116,9 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 		MaskingAction:           "redacted",
 		MaskingDetectedTypes:    []string{"email"},
 		MaskingDetectedCount:    1,
-		RedactedPromptPreview:   "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptPreview:   "Send a reply to [EMAIL_1].",
 		SecurityPolicyVersionID: "sec_p0_v1",
-		RedactedPromptForHash:   "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptForHash:   "Send a reply to [EMAIL_1].",
 		StartedAt:               startedAt,
 		CompletedAt:             completedAt,
 	}))
@@ -103,7 +167,7 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 	assertArg(t, args, 39, 1)
 	assertHashArg(t, args, 40)
 	assertHashArg(t, args, 41)
-	assertArg(t, args, 42, "Send a reply to [EMAIL_REDACTED].")
+	assertArg(t, args, 42, "Send a reply to [EMAIL_1].")
 
 	ledgerArgs := execer.argsHistory[1]
 	if len(ledgerArgs) != 10 {

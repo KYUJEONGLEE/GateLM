@@ -60,6 +60,62 @@
       ]
     },
     {
+      "providerId": "provider_synthetic_anthropic",
+      "providerName": "claude-main",
+      "adapterType": "anthropic",
+      "enabled": true,
+      "baseUrl": "https://api.anthropic.com/v1",
+      "timeoutMs": 30000,
+      "credentialRequired": true,
+      "credentialRef": {
+        "credentialRefId": "credential_ref_synthetic_anthropic_001",
+        "credentialVersion": 1,
+        "credentialState": "active",
+        "credentialHash": "sha256:synthetic-anthropic-credential-reference-hash"
+      },
+      "adapterConfig": {
+        "requestFormat": "anthropic_messages",
+        "apiVersion": "2023-06-01"
+      },
+      "fallbackEligible": false,
+      "models": [
+        {
+          "modelId": "model_synthetic_claude_low_cost",
+          "modelName": "claude-synthetic-haiku",
+          "displayName": "Synthetic Claude Low Cost Model",
+          "enabled": true,
+          "capabilities": {
+            "streamingSupported": false,
+            "supportsJsonMode": false,
+            "maxInputTokens": 200000,
+            "maxOutputTokens": 4096
+          },
+          "routing": {
+            "autoRoutingEligible": true,
+            "costTier": "low",
+            "fallbackPriority": 2
+          }
+        },
+        {
+          "modelId": "model_synthetic_claude_balanced",
+          "modelName": "claude-synthetic-sonnet",
+          "displayName": "Synthetic Claude Balanced Model",
+          "enabled": true,
+          "capabilities": {
+            "streamingSupported": false,
+            "supportsJsonMode": false,
+            "maxInputTokens": 200000,
+            "maxOutputTokens": 8192
+          },
+          "routing": {
+            "autoRoutingEligible": true,
+            "costTier": "balanced",
+            "fallbackPriority": 3
+          }
+        }
+      ]
+    },
+    {
       "providerId": "provider_synthetic_mock",
       "providerName": "synthetic_mock_provider",
       "adapterType": "mock",
@@ -79,7 +135,7 @@
           "displayName": "Mock Fallback Chat Model",
           "enabled": true,
           "capabilities": {
-            "streamingSupported": false,
+            "streamingSupported": true,
             "supportsJsonMode": false,
             "maxInputTokens": 4096,
             "maxOutputTokens": 1024

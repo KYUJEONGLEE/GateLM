@@ -23,6 +23,14 @@ const (
 	RuntimeStateStaleSnapshotUsed  = "stale_snapshot_used"
 	DefaultGatewayInstanceIDCompat = "gateway_core_static"
 	DefaultPublishedByCompat       = "runtime_config_compat"
+
+	PromptCaptureModeDisabled    = "disabled"
+	PromptCaptureModeLogSafeFull = "log_safe_full"
+	PromptCaptureDefaultMaxChars = 8000
+
+	ResponseCaptureModeDisabled    = "disabled"
+	ResponseCaptureModeRawFull     = "raw_full"
+	ResponseCaptureDefaultMaxChars = 8000
 )
 
 var (
@@ -31,6 +39,9 @@ var (
 	ErrMissingCredentialBinding = errors.New("runtime config credential binding is missing")
 	ErrInactiveConfig           = errors.New("runtime config is not active")
 	ErrMissingRuntimeHash       = errors.New("runtime config hash is missing")
+	ErrInvalidPromptCapture     = errors.New("runtime config prompt capture policy is invalid")
+	ErrInvalidResponseCapture   = errors.New("runtime config response capture policy is invalid")
+	ErrInvalidSafetyPolicy      = errors.New("runtime config safety policy is invalid")
 )
 
 type Provider interface {
@@ -58,11 +69,13 @@ type ActiveConfig struct {
 	AppTokenID        string
 	AppTokenStatus    string
 
-	RateLimit     ratelimit.Config
-	BudgetPolicy  budget.Policy
-	SafetyPolicy  SafetyPolicy
-	RoutingPolicy RoutingPolicy
-	CachePolicy   CachePolicy
+	RateLimit       ratelimit.Config
+	BudgetPolicy    budget.Policy
+	SafetyPolicy    SafetyPolicy
+	RoutingPolicy   RoutingPolicy
+	CachePolicy     CachePolicy
+	PromptCapture   PromptCapturePolicy
+	ResponseCapture ResponseCapturePolicy
 }
 
 type ExecutionSnapshot struct {
@@ -73,11 +86,13 @@ type ExecutionSnapshot struct {
 	BudgetScope   budget.Scope
 	Snapshot      RuntimeSnapshotProvenance
 
-	RateLimit     ratelimit.Config
-	BudgetPolicy  budget.Policy
-	SafetyPolicy  SafetyPolicy
-	RoutingPolicy RoutingPolicy
-	CachePolicy   CachePolicy
+	RateLimit       ratelimit.Config
+	BudgetPolicy    budget.Policy
+	SafetyPolicy    SafetyPolicy
+	RoutingPolicy   RoutingPolicy
+	CachePolicy     CachePolicy
+	PromptCapture   PromptCapturePolicy
+	ResponseCapture ResponseCapturePolicy
 }
 
 type RuntimeSnapshotProvenance struct {
@@ -100,13 +115,27 @@ type LegacyHashes struct {
 
 type SafetyPolicy struct {
 	SecurityPolicyHash string
+	DetectorSet        []DetectorPolicy
 }
+
+type DetectorPolicy struct {
+	DetectorType string
+	Action       string
+}
+
+const (
+	DetectorActionAllow  = "allow"
+	DetectorActionRedact = "redact"
+	DetectorActionBlock  = "block"
+)
 
 type RoutingPolicy struct {
 	DefaultProvider     string
 	DefaultModel        string
 	LowCostProvider     string
 	LowCostModel        string
+	HighQualityProvider string
+	HighQualityModel    string
 	FallbackProvider    string
 	FallbackModel       string
 	ShortPromptMaxChars int
@@ -118,6 +147,18 @@ type CachePolicy struct {
 	Type            string
 	TTLSeconds      int
 	CachePolicyHash string
+}
+
+type PromptCapturePolicy struct {
+	Enabled  bool
+	Mode     string
+	MaxChars int
+}
+
+type ResponseCapturePolicy struct {
+	Enabled  bool
+	Mode     string
+	MaxChars int
 }
 
 func (c ActiveConfig) Normalize() ActiveConfig {
@@ -136,16 +177,20 @@ func (c ActiveConfig) Normalize() ActiveConfig {
 	c.AppTokenStatus = strings.TrimSpace(c.AppTokenStatus)
 	c.RateLimit = ratelimit.NormalizeConfig(c.RateLimit)
 	c.BudgetPolicy = budget.NormalizePolicy(c.BudgetPolicy)
-	c.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(c.SafetyPolicy.SecurityPolicyHash)
+	c.SafetyPolicy = c.SafetyPolicy.Normalize()
 	c.RoutingPolicy.DefaultProvider = strings.TrimSpace(c.RoutingPolicy.DefaultProvider)
 	c.RoutingPolicy.DefaultModel = strings.TrimSpace(c.RoutingPolicy.DefaultModel)
 	c.RoutingPolicy.LowCostProvider = strings.TrimSpace(c.RoutingPolicy.LowCostProvider)
 	c.RoutingPolicy.LowCostModel = strings.TrimSpace(c.RoutingPolicy.LowCostModel)
+	c.RoutingPolicy.HighQualityProvider = strings.TrimSpace(c.RoutingPolicy.HighQualityProvider)
+	c.RoutingPolicy.HighQualityModel = strings.TrimSpace(c.RoutingPolicy.HighQualityModel)
 	c.RoutingPolicy.FallbackProvider = strings.TrimSpace(c.RoutingPolicy.FallbackProvider)
 	c.RoutingPolicy.FallbackModel = strings.TrimSpace(c.RoutingPolicy.FallbackModel)
 	c.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(c.RoutingPolicy.RoutingPolicyHash)
 	c.CachePolicy.Type = strings.TrimSpace(c.CachePolicy.Type)
 	c.CachePolicy.CachePolicyHash = strings.TrimSpace(c.CachePolicy.CachePolicyHash)
+	c.PromptCapture = NormalizePromptCapturePolicy(c.PromptCapture)
+	c.ResponseCapture = NormalizeResponseCapturePolicy(c.ResponseCapture)
 	return c
 }
 
@@ -160,6 +205,9 @@ func (c ActiveConfig) ValidateActive() error {
 	if c.ConfigHash == "" || c.SafetyPolicy.SecurityPolicyHash == "" || c.RoutingPolicy.RoutingPolicyHash == "" {
 		return ErrMissingRuntimeHash
 	}
+	if err := c.SafetyPolicy.Validate(); err != nil {
+		return err
+	}
 	if c.PublishState != PublishStateActive ||
 		c.TenantStatus != StatusActive ||
 		c.ProjectStatus != StatusActive ||
@@ -167,6 +215,12 @@ func (c ActiveConfig) ValidateActive() error {
 		c.APIKeyStatus != StatusActive ||
 		c.AppTokenStatus != StatusActive {
 		return ErrInactiveConfig
+	}
+	if !IsValidPromptCapturePolicy(c.PromptCapture) {
+		return ErrInvalidPromptCapture
+	}
+	if !IsValidResponseCapturePolicy(c.ResponseCapture) {
+		return ErrInvalidResponseCapture
 	}
 	return nil
 }
@@ -181,17 +235,19 @@ func (c ActiveConfig) MatchesScope(tenantID string, projectID string, applicatio
 func (c ActiveConfig) ExecutionSnapshot() ExecutionSnapshot {
 	c = c.Normalize()
 	return ExecutionSnapshot{
-		ConfigHash:    c.ConfigHash,
-		TenantID:      c.TenantID,
-		ProjectID:     c.ProjectID,
-		ApplicationID: c.ApplicationID,
-		BudgetScope:   budget.DefaultScope(c.ApplicationID),
-		Snapshot:      c.Snapshot,
-		RateLimit:     c.RateLimit,
-		BudgetPolicy:  c.BudgetPolicy,
-		SafetyPolicy:  c.SafetyPolicy,
-		RoutingPolicy: c.RoutingPolicy,
-		CachePolicy:   c.CachePolicy,
+		ConfigHash:      c.ConfigHash,
+		TenantID:        c.TenantID,
+		ProjectID:       c.ProjectID,
+		ApplicationID:   c.ApplicationID,
+		BudgetScope:     budget.DefaultScope(c.ApplicationID),
+		Snapshot:        c.Snapshot,
+		RateLimit:       c.RateLimit,
+		BudgetPolicy:    c.BudgetPolicy,
+		SafetyPolicy:    c.SafetyPolicy,
+		RoutingPolicy:   c.RoutingPolicy,
+		CachePolicy:     c.CachePolicy,
+		PromptCapture:   c.PromptCapture,
+		ResponseCapture: c.ResponseCapture,
 	}
 }
 
@@ -203,22 +259,104 @@ func (s ExecutionSnapshot) Normalize(publishedAt time.Time, gatewayInstanceID st
 	s.BudgetScope = budget.NormalizeScope(s.BudgetScope, s.ApplicationID)
 	s.RateLimit = ratelimit.NormalizeConfig(s.RateLimit)
 	s.BudgetPolicy = budget.NormalizePolicy(s.BudgetPolicy)
-	s.SafetyPolicy.SecurityPolicyHash = strings.TrimSpace(s.SafetyPolicy.SecurityPolicyHash)
+	s.SafetyPolicy = s.SafetyPolicy.Normalize()
 	s.RoutingPolicy.DefaultProvider = strings.TrimSpace(s.RoutingPolicy.DefaultProvider)
 	s.RoutingPolicy.DefaultModel = strings.TrimSpace(s.RoutingPolicy.DefaultModel)
 	s.RoutingPolicy.LowCostProvider = strings.TrimSpace(s.RoutingPolicy.LowCostProvider)
 	s.RoutingPolicy.LowCostModel = strings.TrimSpace(s.RoutingPolicy.LowCostModel)
+	s.RoutingPolicy.HighQualityProvider = strings.TrimSpace(s.RoutingPolicy.HighQualityProvider)
+	s.RoutingPolicy.HighQualityModel = strings.TrimSpace(s.RoutingPolicy.HighQualityModel)
 	s.RoutingPolicy.FallbackProvider = strings.TrimSpace(s.RoutingPolicy.FallbackProvider)
 	s.RoutingPolicy.FallbackModel = strings.TrimSpace(s.RoutingPolicy.FallbackModel)
 	s.RoutingPolicy.RoutingPolicyHash = strings.TrimSpace(s.RoutingPolicy.RoutingPolicyHash)
 	s.CachePolicy.Type = strings.TrimSpace(s.CachePolicy.Type)
 	s.CachePolicy.CachePolicyHash = strings.TrimSpace(s.CachePolicy.CachePolicyHash)
+	s.PromptCapture = NormalizePromptCapturePolicy(s.PromptCapture)
+	s.ResponseCapture = NormalizeResponseCapturePolicy(s.ResponseCapture)
 	s.Snapshot = s.Snapshot.Normalize(ActiveConfig{
 		ConfigHash:    s.ConfigHash,
 		SafetyPolicy:  s.SafetyPolicy,
 		RoutingPolicy: s.RoutingPolicy,
 	}, publishedAt, gatewayInstanceID)
 	return s
+}
+
+func DefaultPromptCapturePolicy() PromptCapturePolicy {
+	return PromptCapturePolicy{
+		Enabled:  false,
+		Mode:     PromptCaptureModeDisabled,
+		MaxChars: PromptCaptureDefaultMaxChars,
+	}
+}
+
+func NormalizePromptCapturePolicy(policy PromptCapturePolicy) PromptCapturePolicy {
+	policy.Mode = strings.TrimSpace(policy.Mode)
+	if policy.MaxChars <= 0 {
+		policy.MaxChars = PromptCaptureDefaultMaxChars
+	}
+	if !policy.Enabled {
+		policy.Mode = PromptCaptureModeDisabled
+		return policy
+	}
+	if policy.Mode == "" {
+		policy.Mode = PromptCaptureModeLogSafeFull
+	}
+	return policy
+}
+
+func PromptCaptureAllowsLogSafeCapture(policy PromptCapturePolicy) bool {
+	policy = NormalizePromptCapturePolicy(policy)
+	return policy.Enabled && policy.Mode == PromptCaptureModeLogSafeFull
+}
+
+func IsValidPromptCapturePolicy(policy PromptCapturePolicy) bool {
+	policy = NormalizePromptCapturePolicy(policy)
+	if policy.MaxChars <= 0 {
+		return false
+	}
+	if !policy.Enabled {
+		return policy.Mode == PromptCaptureModeDisabled
+	}
+	return policy.Mode == PromptCaptureModeLogSafeFull
+}
+
+func DefaultResponseCapturePolicy() ResponseCapturePolicy {
+	return ResponseCapturePolicy{
+		Enabled:  false,
+		Mode:     ResponseCaptureModeDisabled,
+		MaxChars: ResponseCaptureDefaultMaxChars,
+	}
+}
+
+func NormalizeResponseCapturePolicy(policy ResponseCapturePolicy) ResponseCapturePolicy {
+	policy.Mode = strings.TrimSpace(policy.Mode)
+	if policy.MaxChars <= 0 {
+		policy.MaxChars = ResponseCaptureDefaultMaxChars
+	}
+	if !policy.Enabled {
+		policy.Mode = ResponseCaptureModeDisabled
+		return policy
+	}
+	if policy.Mode == "" {
+		policy.Mode = ResponseCaptureModeRawFull
+	}
+	return policy
+}
+
+func ResponseCaptureAllowsRawCapture(policy ResponseCapturePolicy) bool {
+	policy = NormalizeResponseCapturePolicy(policy)
+	return policy.Enabled && policy.Mode == ResponseCaptureModeRawFull
+}
+
+func IsValidResponseCapturePolicy(policy ResponseCapturePolicy) bool {
+	policy = NormalizeResponseCapturePolicy(policy)
+	if policy.MaxChars <= 0 {
+		return false
+	}
+	if !policy.Enabled {
+		return policy.Mode == ResponseCaptureModeDisabled
+	}
+	return policy.Mode == ResponseCaptureModeRawFull
 }
 
 func (s ExecutionSnapshot) Validate() error {
@@ -229,7 +367,86 @@ func (s ExecutionSnapshot) Validate() error {
 	if s.ConfigHash == "" || s.SafetyPolicy.SecurityPolicyHash == "" || s.RoutingPolicy.RoutingPolicyHash == "" {
 		return ErrMissingRuntimeHash
 	}
+	if err := s.SafetyPolicy.Validate(); err != nil {
+		return err
+	}
+	if !IsValidPromptCapturePolicy(s.PromptCapture) {
+		return ErrInvalidPromptCapture
+	}
+	if !IsValidResponseCapturePolicy(s.ResponseCapture) {
+		return ErrInvalidResponseCapture
+	}
 	return nil
+}
+
+func (p SafetyPolicy) Normalize() SafetyPolicy {
+	p.SecurityPolicyHash = strings.TrimSpace(p.SecurityPolicyHash)
+	if len(p.DetectorSet) == 0 {
+		p.DetectorSet = nil
+		return p
+	}
+	normalized := make([]DetectorPolicy, 0, len(p.DetectorSet))
+	for _, detector := range p.DetectorSet {
+		detectorType := strings.TrimSpace(detector.DetectorType)
+		action := strings.TrimSpace(detector.Action)
+		if detectorType == "" && action == "" {
+			continue
+		}
+		normalized = append(normalized, DetectorPolicy{
+			DetectorType: detectorType,
+			Action:       action,
+		})
+	}
+	p.DetectorSet = normalized
+	return p
+}
+
+func (p SafetyPolicy) Validate() error {
+	p = p.Normalize()
+	seen := map[string]struct{}{}
+	for _, detector := range p.DetectorSet {
+		if !IsKnownSafetyDetectorType(detector.DetectorType) {
+			return ErrInvalidSafetyPolicy
+		}
+		if !IsKnownSafetyDetectorAction(detector.Action) {
+			return ErrInvalidSafetyPolicy
+		}
+		if IsMandatorySafetyDetectorType(detector.DetectorType) && detector.Action == DetectorActionAllow {
+			return ErrInvalidSafetyPolicy
+		}
+		if _, exists := seen[detector.DetectorType]; exists {
+			return ErrInvalidSafetyPolicy
+		}
+		seen[detector.DetectorType] = struct{}{}
+	}
+	return nil
+}
+
+func IsKnownSafetyDetectorType(detectorType string) bool {
+	switch strings.TrimSpace(detectorType) {
+	case "email", "phone_number", "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key":
+		return true
+	default:
+		return false
+	}
+}
+
+func IsMandatorySafetyDetectorType(detectorType string) bool {
+	switch strings.TrimSpace(detectorType) {
+	case "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key":
+		return true
+	default:
+		return false
+	}
+}
+
+func IsKnownSafetyDetectorAction(action string) bool {
+	switch strings.TrimSpace(action) {
+	case DetectorActionAllow, DetectorActionRedact, DetectorActionBlock:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s ExecutionSnapshot) MatchesScope(tenantID string, projectID string, applicationID string) bool {
@@ -240,11 +457,15 @@ func (s ExecutionSnapshot) MatchesScope(tenantID string, projectID string, appli
 }
 
 func (p RoutingPolicy) SimpleRouterConfig() routing.SimpleRouterConfig {
+	highQualityProvider := firstNonEmptyString(p.HighQualityProvider, p.DefaultProvider)
+	highQualityModel := firstNonEmptyString(p.HighQualityModel, p.DefaultModel)
 	return routing.SimpleRouterConfig{
 		DefaultProvider:     p.DefaultProvider,
 		DefaultModel:        p.DefaultModel,
+		LowCostProvider:     firstNonEmptyString(p.LowCostProvider, p.DefaultProvider),
 		LowCostModel:        p.LowCostModel,
-		HighQualityModel:    p.FallbackModel,
+		HighQualityProvider: highQualityProvider,
+		HighQualityModel:    highQualityModel,
 		PolicyHash:          p.RoutingPolicyHash,
 		ShortPromptMaxChars: p.ShortPromptMaxChars,
 	}

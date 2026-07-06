@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/v2.1.0/schemas/category-evaluation-record.schema.json",
+  "title": "GateLM Category Evaluation Record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "gatelm.category-evaluation-record.v1"
+    },
+    "datasetVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "Dataset release identifier. Must not contain raw prompt text."
+    },
+    "sampleId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-zA-Z0-9._:-]+$",
+      "description": "Stable sample id. Must not encode raw prompt text or secrets."
+    },
+    "redactedPrompt": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 65536,
+      "description": "Safety-masked prompt text. It may be empty when the prompt is fully redacted. Raw prompt, raw detected values, and secrets are forbidden."
+    },
+    "expectedCategory": {
+      "type": "string",
+      "enum": [
+        "general",
+        "code",
+        "translation",
+        "summarization",
+        "extraction_json",
+        "support_refund",
+        "reasoning",
+        "unknown"
+      ]
+    },
+    "expectedTier": {
+      "type": "string",
+      "enum": [
+        "low_cost",
+        "balanced",
+        "high_quality"
+      ],
+      "description": "Expected routing tier for offline evaluation. This is an evidence label, not a RuntimeConfig or RuntimeSnapshot field."
+    },
+    "labelSource": {
+      "type": "string",
+      "enum": [
+        "human_review",
+        "synthetic_fixture"
+      ]
+    },
+    "consentType": {
+      "type": "string",
+      "enum": [
+        "synthetic",
+        "internal_manual_review"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "synthetic_fixture",
+        "manual_seed"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "en",
+        "ko",
+        "mixed",
+        "unknown"
+      ]
+    },
+    "redactionVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "labelConfidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Optional confidence for pseudo labels or reviewer confidence."
+    },
+    "reviewerNote": {
+      "type": "string",
+      "maxLength": 240,
+      "description": "Short safe note. Must not contain raw prompt fragments, secrets, or provider raw errors."
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "datasetVersion",
+    "sampleId",
+    "redactedPrompt",
+    "expectedCategory",
+    "expectedTier",
+    "labelSource",
+    "consentType",
+    "source",
+    "language",
+    "redactionVersion",
+    "createdAt"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "synthetic_fixture"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "consentType": {
+            "const": "synthetic"
+          },
+          "labelSource": {
+            "const": "synthetic_fixture"
+          }
+        }
+      }
+    }
+  ]
+}

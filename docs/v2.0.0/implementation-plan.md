@@ -10,7 +10,7 @@ v2.0.0 extends the v1.0.0 baseline into an organization-based LLMOps Gateway MVP
 Customer App / Employee Chat
 -> Gateway
 -> RuntimeSnapshot policy
--> budget / safety / cache / routing
+-> budget / safety / routing / exact cache
 -> Actual Provider or Mock fallback
 -> Request Log / Detail / Dashboard / Metrics / k6 evidence
 ```
@@ -67,20 +67,21 @@ v2.0.0 is healthy when this flow works end to end:
 5. Gateway resolves `tenantId/projectId/applicationId`.
 6. Gateway loads RuntimeSnapshot by `tenantId/projectId/applicationId`.
 7. Gateway resolves trusted budget scope and applies budget/rate limit.
-8. request-side safety runs before cache, routing, provider call, and streaming start.
-9. Exact Cache may bypass provider call.
-10. `model=auto` records selected provider/model and routing reason.
-11. Actual Provider responds, or Mock fallback responds when policy allows.
-12. Streaming thin slice records final outcome without token-level logging.
-13. Gateway produces terminal status and domain outcomes.
-14. Request Log / Detail / Dashboard / Metrics / k6 consume Gateway-produced outcomes.
+8. request-side safety runs before routing, exact cache, provider call, and streaming start.
+9. Routing/category/provider/model decision runs before Exact Cache key generation and lookup.
+10. Routing-aware Exact Cache may bypass provider call.
+11. `model=auto` records selected provider/model and routing reason.
+12. Actual Provider responds, or Mock fallback responds when policy allows.
+13. Streaming thin slice records final outcome without token-level logging.
+14. Gateway produces terminal status and domain outcomes.
+15. Request Log / Detail / Dashboard / Metrics / k6 consume Gateway-produced outcomes.
 
 ## 5. Scope
 
 | Area | v2.0.0 Main Path |
 |---|---|
 | Control Plane | RuntimeConfig validation/publish, RuntimeSnapshot, Provider/Model catalog, `credentialRef`, budget policy source |
-| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, exact cache, routing, provider, fallback, streaming, logging outcomes |
+| Gateway | auth/context, RuntimeSnapshot load, budget/rate limit, request-side safety, routing, routing-aware exact cache, provider, fallback, streaming, logging outcomes |
 | Product Experience | Admin/Developer/Employee surfaces, Employee Chat through Application boundary, Request Detail, Dashboard, Demo Scenario Runner |
 | Safety | request-side safety and sanitized evidence; no response-side safety main path |
 | Observability | Gateway-produced outcomes, Request Log/Detail read model, Dashboard aggregation, metrics guardrail, k6 baseline |
@@ -190,7 +191,7 @@ Done when:
 | 1 | `feat/gateway-outcome-adoption-gate` | Canonical Gateway outcome producer/mapper and read model consumption |
 | 2A | `feat/provider-adapter-openai-and-mock-fallback` | Actual OpenAI Provider Adapter, model catalog entries, Mock fallback |
 | 2B | `feat/runtime-snapshot-live-thin-slice` | RuntimeSnapshot execution view, lookup, provenance, reload failure behavior |
-| 3 | `feat/v2-budget-safety-cache-routing` | budget/rate limit, request-side safety, exact cache, routing order |
+| 3 | `feat/v2-budget-safety-cache-routing` | budget/rate limit, request-side safety, routing-aware exact cache order |
 | 4 | `feat/streaming-thin-slice` | streaming feel and final status logging |
 | 5 | `feat/v2-observability-dashboard-k6` | Request Detail, Dashboard, metrics guard, k6 baseline |
 | 6 | `feat/v2-demo-evidence` | Demo Scenario Runner, preset evidence, final presentation proof |

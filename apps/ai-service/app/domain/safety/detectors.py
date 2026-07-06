@@ -10,6 +10,7 @@ ALLOWED_DETECTOR_TYPES = frozenset(
         "private_date",
         "private_url",
         "person_name",
+        "organization_name",
         "customer_id",
         "employee_id",
         "account_id",
@@ -30,8 +31,11 @@ ALLOWED_DETECTOR_TYPES = frozenset(
         "passport_number",
         "driver_license",
         "authorization_header",
+        "confidential_business_context",
         "jwt",
         "private_key",
         "secret",
+        "sensitive_health_context",
+        "unknown_pii",
     }
 )

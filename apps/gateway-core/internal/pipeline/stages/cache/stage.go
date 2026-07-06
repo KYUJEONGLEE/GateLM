@@ -9,13 +9,15 @@ import (
 const (
 	StageName = "exact_cache_lookup"
 
-	CacheStatusHit    = "hit"
-	CacheStatusMiss   = "miss"
-	CacheStatusBypass = "bypass"
-	CacheStatusError  = "error"
+	CacheStatusHit          = "hit"
+	CacheStatusMiss         = "miss"
+	CacheStatusBypass       = "bypass"
+	CacheStatusError        = "error"
+	CacheStatusStoreSkipped = "store_skipped"
 
-	CacheTypeNone  = "none"
-	CacheTypeExact = "exact"
+	CacheTypeNone     = "none"
+	CacheTypeExact    = "exact"
+	CacheTypeSemantic = "semantic"
 
 	MaskingActionBlocked = "blocked"
 )
@@ -40,6 +42,7 @@ type Result struct {
 	CacheType         string
 	CacheKeyHash      string
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 
@@ -56,6 +59,7 @@ type Store interface {
 type LookupResult = struct {
 	Hit               bool
 	CacheHitRequestID string
+	SavedCostMicroUSD int64
 	Payload           []byte
 }
 
@@ -120,6 +124,7 @@ func (s *Stage) Execute(ctx context.Context, req Request) (Result, error) {
 			CacheType:         CacheTypeExact,
 			CacheKeyHash:      keyHash,
 			CacheHitRequestID: lookup.CacheHitRequestID,
+			SavedCostMicroUSD: lookup.SavedCostMicroUSD,
 			Payload:           lookup.Payload,
 		}, nil
 	}

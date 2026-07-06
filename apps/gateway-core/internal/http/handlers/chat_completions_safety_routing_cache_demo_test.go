@@ -36,7 +36,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	if first.Header().Get("X-GateLM-Cache-Status") != "miss" || firstResp.GateLM.CacheStatus != "miss" {
 		t.Fatalf("expected first safe request to miss exact cache, header=%q gate_lm=%#v", first.Header().Get("X-GateLM-Cache-Status"), firstResp.GateLM)
 	}
-	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "short_prompt_low_cost" {
+	if firstResp.GateLM.SelectedModel != "mock-fast" || firstResp.GateLM.RoutingReason != "category_support_refund_low_cost" {
 		t.Fatalf("unexpected model=auto routing result: %#v", firstResp.GateLM)
 	}
 	if *demo.providerCalls != 1 || demo.cacheStore.setCalls != 1 || demo.cacheStore.getCalls != 1 {
@@ -46,11 +46,18 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	cacheGetsAfterFirst := demo.cacheStore.getCalls
 	cacheSetsAfterFirst := demo.cacheStore.setCalls
 	firstMaterial := demo.keyBuilder.materials[0]
-	if firstMaterial.SecurityPolicyVersionID != "hash_security_policy_phase3_demo" ||
-		firstMaterial.RoutingPolicyVersionID != "hash_routing_policy_phase3_demo" ||
+	if firstMaterial.SafetyPolicyHash != "hash_security_policy_phase3_demo" ||
+		firstMaterial.MaskingPolicyHash != "hash_security_policy_phase3_demo" ||
+		firstMaterial.RoutingPolicyHash != "hash_routing_policy_phase3_demo" ||
 		firstMaterial.RequestedModel != "auto" ||
-		firstMaterial.NormalizedRedactedPrompt != safePrompt {
+		firstMaterial.ProviderCatalogStableKey != "mock" ||
+		firstMaterial.ModelID != "mock-fast" ||
+		firstMaterial.NormalizedMaskedRequestBodyHash == "" ||
+		firstMaterial.RoutingDecisionKeyHash == "" {
 		t.Fatalf("unexpected exact cache key material: %#v", firstMaterial)
+	}
+	if firstMaterial.NormalizedRedactedPrompt != "" {
+		t.Fatalf("exact cache key material must not keep raw/redacted prompt text: %#v", firstMaterial)
 	}
 
 	second := demo.exercise(t, "request_v1_phase3_safe_hit_002", safePrompt)
@@ -85,7 +92,7 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 		t.Fatalf("redacted request should continue to provider once, got provider calls=%d", *demo.providerCalls)
 	}
 	providerPrompt := providerPromptAt(t, *demo.providerRequests, 1)
-	if !strings.Contains(providerPrompt, "[EMAIL_REDACTED]") || !strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]") {
+	if !strings.Contains(providerPrompt, "[EMAIL_1]") || !strings.Contains(providerPrompt, "[PHONE_NUMBER_1]") {
 		t.Fatalf("provider prompt must contain redaction placeholders, got %q", providerPrompt)
 	}
 	if strings.Contains(providerPrompt, rawEmail) || strings.Contains(providerPrompt, rawPhone) ||
@@ -141,8 +148,8 @@ func TestChatCompletionsSafetyRoutingCacheDemo(t *testing.T) {
 	}))
 	t.Logf("\n[When #3 - 입력]\n%s", demoHTTPRequest(t, "Write a safe reply to <email> and ask them to call <phone_number>."))
 	t.Logf("\n[Then #3 - 출력]\n%s", demoSuccessHTTPOutput(t, redacted, redactedResp, map[string]any{
-		"providerPromptPreview":           "Write a safe reply to [EMAIL_REDACTED] and ask them to call [PHONE_NUMBER_REDACTED].",
-		"providerPromptContainsMask":      strings.Contains(providerPrompt, "[EMAIL_REDACTED]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_REDACTED]"),
+		"providerPromptPreview":           "Write a safe reply to [EMAIL_1] and ask them to call [PHONE_NUMBER_1].",
+		"providerPromptContainsMask":      strings.Contains(providerPrompt, "[EMAIL_1]") && strings.Contains(providerPrompt, "[PHONE_NUMBER_1]"),
 		"rawSensitiveValueExposed":        false,
 		"actualRawValuesHiddenFromOutput": true,
 		"의미":                              "email/phone은 차단하지 않고 redaction 후 provider로 전달된다.",

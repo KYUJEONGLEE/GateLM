@@ -5,7 +5,9 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type GatewayContext struct {
@@ -18,6 +20,8 @@ type GatewayContext struct {
 	Routing    RoutingContext
 	Cache      CacheContext
 	Status     StatusContext
+
+	StageTimings stagetiming.Timings
 }
 
 type RequestContext struct {
@@ -46,6 +50,7 @@ type RuntimeContext struct {
 	SecurityPolicyHash string
 	RoutingPolicyHash  string
 	Snapshot           runtimeconfig.RuntimeSnapshotProvenance
+	SafetyPolicy       runtimeconfig.SafetyPolicy
 
 	RateLimitConfig    ratelimit.Config
 	HasRateLimitConfig bool
@@ -55,6 +60,10 @@ type RuntimeContext struct {
 	HasRoutingPolicy   bool
 	CachePolicy        runtimeconfig.CachePolicy
 	HasCachePolicy     bool
+	PromptCapture      runtimeconfig.PromptCapturePolicy
+	HasPromptCapture   bool
+	ResponseCapture    runtimeconfig.ResponseCapturePolicy
+	HasResponseCapture bool
 }
 
 type GovernanceContext struct {
@@ -66,26 +75,38 @@ type MaskingContext struct {
 	Action                  string
 	DetectedTypes           []string
 	DetectedCount           int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
 	RedactedPrompt          string
 	RedactedPromptPreview   string
 	SecurityPolicyVersionID string
 }
 
 type RoutingContext struct {
-	RequestedModel    string
-	SelectedProvider  string
-	SelectedModel     string
-	RoutingReason     string
-	RoutingPolicyHash string
+	RequestedModel             string
+	SelectedProvider           string
+	SelectedProviderID         string
+	SelectedProviderCatalogKey string
+	SelectedModel              string
+	SelectedModelID            string
+	ProviderCatalogContentHash string
+	RoutingDecisionKeyHash     string
+	RoutingDecisionMaterial    map[string]string
+	RoutingReason              string
+	RoutingPolicyHash          string
+	CategoryDiagnostics        routing.CategoryDiagnostics
 }
 
 type CacheContext struct {
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
-	SavedCostMicroUSD int64
-	Payload           []byte
+	CacheStatus         string
+	CacheType           string
+	CacheKeyHash        string
+	CacheHitRequestID   string
+	CacheKeyVersion     string
+	CacheDecisionReason string
+	FallbackOccurred    bool
+	SavedCostMicroUSD   int64
+	Payload             []byte
 }
 
 type StatusContext struct {
@@ -114,6 +135,9 @@ func (c *GatewayContext) BypassCache() {
 	c.Cache.CacheType = "none"
 	c.Cache.CacheKeyHash = ""
 	c.Cache.CacheHitRequestID = ""
+	c.Cache.CacheKeyVersion = ""
+	c.Cache.CacheDecisionReason = "bypassed"
+	c.Cache.FallbackOccurred = false
 	c.Cache.SavedCostMicroUSD = 0
 	c.Cache.Payload = nil
 }

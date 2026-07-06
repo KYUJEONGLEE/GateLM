@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma, ResourceStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -10,19 +10,24 @@ describe('ApplicationsService', () => {
   const projectId = '00000000-0000-4000-8000-000000000200';
   const createdAt = new Date('2026-06-27T00:00:00.000Z');
 
+  type MockPrisma = {
+    project: { findUnique: jest.Mock };
+    application: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+    };
+    applicationProviderConnection: { createMany: jest.Mock };
+    providerConnection: { findMany: jest.Mock };
+    $transaction: jest.Mock;
+  };
+
   function createService(): {
     service: ApplicationsService;
-    prisma: {
-      project: { findUnique: jest.Mock };
-      application: {
-        create: jest.Mock;
-        findMany: jest.Mock;
-        findUnique: jest.Mock;
-        update: jest.Mock;
-      };
-    };
+    prisma: MockPrisma;
   } {
-    const prisma = {
+    const prisma: MockPrisma = {
       project: {
         findUnique: jest.fn(),
       },
@@ -32,13 +37,88 @@ describe('ApplicationsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      applicationProviderConnection: {
+        createMany: jest.fn(),
+      },
+      providerConnection: {
+        findMany: jest.fn(),
+      },
+      $transaction: jest.fn(),
     };
+    prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
 
     return {
       service: new ApplicationsService(prisma as unknown as PrismaService),
       prisma,
     };
   }
+
+  it('creates an application and links selected provider connections', async () => {
+    const { service, prisma } = createService();
+    const providerConnectionId = '00000000-0000-4000-8000-000000000601';
+    const createdApplication = application(
+      '00000000-0000-4000-8000-000000000301',
+    );
+    prisma.project.findUnique.mockResolvedValue({
+      applications: [],
+      id: projectId,
+      tenantId,
+      totalBudgetUsd: null,
+    });
+    prisma.providerConnection.findMany.mockResolvedValue([
+      { id: providerConnectionId },
+    ]);
+    prisma.application.create.mockResolvedValue(createdApplication);
+
+    const result = await service.createApplication(projectId, {
+      budgetLimitUsd: 10,
+      name: 'Support Chat',
+      providerConnectionIds: [providerConnectionId],
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.application.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: 'Support Chat',
+          projectId,
+          tenantId,
+        }),
+      }),
+    );
+    expect(prisma.applicationProviderConnection.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          applicationId: createdApplication.id,
+          projectId,
+          providerConnectionId,
+          tenantId,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(result.id).toBe(createdApplication.id);
+  });
+
+  it('rejects provider connections from another tenant before creating an application', async () => {
+    const { service, prisma } = createService();
+    prisma.project.findUnique.mockResolvedValue({
+      applications: [],
+      id: projectId,
+      tenantId,
+      totalBudgetUsd: null,
+    });
+    prisma.providerConnection.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.createApplication(projectId, {
+        name: 'Support Chat',
+        providerConnectionIds: ['00000000-0000-4000-8000-000000000601'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.application.create).not.toHaveBeenCalled();
+  });
 
   function application(id: string) {
     return {
@@ -48,6 +128,9 @@ describe('ApplicationsService', () => {
       name: `Application ${id}`,
       description: null,
       status: ResourceStatus.ACTIVE,
+      budgetLimitMode: 'FIXED',
+      budgetLimitPercent: null,
+      budgetLimitUsd: null,
       createdAt,
       updatedAt: createdAt,
     };
@@ -55,7 +138,11 @@ describe('ApplicationsService', () => {
 
   it('sets hasMore and nextCursor from limit plus one pagination', async () => {
     const { service, prisma } = createService();
-    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.project.findUnique.mockResolvedValue({
+      id: projectId,
+      tenantId,
+      totalBudgetUsd: null,
+    });
     prisma.application.findMany.mockResolvedValue([
       application('00000000-0000-4000-8000-000000000301'),
       application('00000000-0000-4000-8000-000000000302'),

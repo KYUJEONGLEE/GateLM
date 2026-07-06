@@ -1,469 +1,600 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  ArrowUp,
+  Bot,
+  MessageSquarePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings as SettingsIcon
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
-import {
-  formatDisplayIdentifier,
-  formatTenantDisplayName
-} from "@/lib/formatting/display-identifiers";
+import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
   type CustomerDemoExchange,
-  type CustomerDemoHeader,
-  type CustomerDemoModel,
-  type CustomerDemoScenarioId
+  type CustomerDemoModel
 } from "@/lib/gateway/customer-demo-client";
 import type { Locale } from "@/lib/i18n/locale";
+import { MarkdownMessage } from "./markdown-message";
 
 type CustomerDemoAppProps = {
   locale: Locale;
   model: CustomerDemoModel;
 };
 
+type LocalChatMessage = {
+  body: string;
+  id: string;
+  side: "incoming" | "outgoing";
+};
+
+type ConsoleTheme = "dark" | "light";
+
 const customerDemoText: Record<
   Locale,
   {
     actions: {
-      detail: string;
       loading: string;
+      newChat: string;
       replay: string;
       send: string;
     };
-    assistantLabel: string;
+    appName: string;
     chatPreview: string;
-    context: {
-      application: string;
-      project: string;
-      tenant: string;
+    disclaimer: string;
+    emptyState: {
+      subtitle: string;
+      title: string;
     };
-    detectedNone: string;
     error: string;
-    gatewayRequest: string;
-    gatewayResult: string;
+    inputPlaceholder: string;
     language: string;
-    requestMetadata: string;
-    responseMetadata: string;
-    scenarios: Record<
-      CustomerDemoScenarioId,
-      {
-        title: string;
-      }
-    >;
-    scenarioSelector: string;
-    summary: {
-      cache: string;
-      http: string;
-      latency: string;
-      masking: string;
+    sidebar: {
+      application: string;
+      contextMemory?: string;
+      contextOff?: string;
+      contextOn?: string;
+      current: string;
+      dark: string;
+      language: string;
+      light: string;
+      newConversation: string;
+      openSidebar: string;
+      settings: string;
+      closeSidebar: string;
+      theme: string;
+      user: string;
     };
     title: string;
-    userLabel: string;
-    withheld: {
-      assistant: string;
-      blocked: string;
-      cacheHit: string;
-      customer: string;
-      error: string;
-      pending: string;
-      rateLimited: string;
-      success: string;
-    };
-    webConsole: string;
   }
 > = {
   en: {
     actions: {
-      detail: "Open request detail",
       loading: "Processing...",
-      replay: "Replay fixture request",
-      send: "Send Gateway request"
+      newChat: "New chat",
+      replay: "Send again",
+      send: "Send"
     },
-    assistantLabel: "Assistant / Gateway outcome",
+    appName: "Acme Support",
     chatPreview: "conversation",
-    context: {
-      application: "Application",
-      project: "Project",
-      tenant: "Tenant"
+    disclaimer: "AI can make mistakes. Verify important information.",
+    emptyState: {
+      subtitle: "Start a new conversation with Acme Support.",
+      title: "What can I help with?"
     },
-    detectedNone: "none",
     error: "Unable to load this request state.",
-    gatewayRequest: "Gateway request",
-    gatewayResult: "Gateway result",
+    inputPlaceholder: "Ask Acme support anything",
     language: "Console language",
-    requestMetadata: "Request metadata",
-    responseMetadata: "Response metadata",
-    scenarios: {
-      blocked: {
-        title: "Blocked"
-      },
-      "cache-hit": {
-        title: "Cache hit"
-      },
-      "rate-limited": {
-        title: "Rate limit"
-      },
-      redacted: {
-        title: "Redaction"
-      },
-      safe: {
-        title: "Safe request"
-      }
+    sidebar: {
+      application: "Application",
+      contextMemory: "Context memory",
+      contextOff: "Off",
+      contextOn: "On",
+      current: "Current conversation",
+      dark: "Dark",
+      language: "Language",
+      light: "Light",
+      newConversation: "New conversation",
+      openSidebar: "Open sidebar",
+      settings: "User settings",
+      closeSidebar: "Close sidebar",
+      theme: "Theme",
+      user: "User"
     },
-    scenarioSelector: "Request path",
-    summary: {
-      cache: "Cache",
-      http: "HTTP status",
-      latency: "Latency",
-      masking: "Masking"
-    },
-    title: "Gateway request",
-    userLabel: "Customer message",
-    withheld: {
-      assistant: "Gateway response content is withheld from the console. Use metadata and request detail for verification.",
-      blocked: "Blocked before provider call.",
-      cacheHit: "Served from exact cache.",
-      customer: "Customer prompt content is withheld from the console.",
-      error: "Gateway returned a sanitized error.",
-      pending: "Ready to send through Gateway.",
-      rateLimited: "Rate limit applied before provider call.",
-      success: "Gateway request completed successfully."
-    },
-    webConsole: "Web Console"
+    title: "Acme Support"
   },
   ko: {
     actions: {
-      detail: "요청 상세 열기",
       loading: "처리 중...",
-      replay: "Fixture 요청 재실행",
-      send: "Gateway 요청 전송"
+      newChat: "새 채팅",
+      replay: "다시 전송",
+      send: "전송"
     },
-    assistantLabel: "Assistant / Gateway 결과",
+    appName: "Acme Support",
     chatPreview: "대화",
-    context: {
-      application: "애플리케이션",
-      project: "프로젝트",
-      tenant: "테넌트"
+    disclaimer: "AI는 실수할 수 있습니다. 중요한 정보는 다시 확인하세요.",
+    emptyState: {
+      subtitle: "Acme Support와 새 대화를 시작하세요.",
+      title: "무엇을 도와드릴까요?"
     },
-    detectedNone: "없음",
     error: "요청 상태를 불러오지 못했습니다.",
-    gatewayRequest: "Gateway 요청",
-    gatewayResult: "Gateway 결과",
+    inputPlaceholder: "Acme 지원팀에 메시지 입력",
     language: "콘솔 언어",
-    requestMetadata: "요청 메타데이터",
-    responseMetadata: "응답 메타데이터",
-    scenarios: {
-      blocked: {
-        title: "차단"
-      },
-      "cache-hit": {
-        title: "캐시 적중"
-      },
-      "rate-limited": {
-        title: "Rate limit"
-      },
-      redacted: {
-        title: "Redaction"
-      },
-      safe: {
-        title: "Safe 요청"
-      }
+    sidebar: {
+      application: "Application",
+      current: "현재 대화",
+      dark: "다크",
+      language: "언어",
+      light: "라이트",
+      newConversation: "새 대화",
+      openSidebar: "좌측탭 열기",
+      settings: "사용자 설정",
+      closeSidebar: "좌측탭 닫기",
+      theme: "테마",
+      user: "User"
     },
-    scenarioSelector: "처리 유형",
-    summary: {
-      cache: "캐시",
-      http: "HTTP 상태",
-      latency: "지연 시간",
-      masking: "마스킹"
-    },
-    title: "Gateway 요청",
-    userLabel: "고객 메시지",
-    withheld: {
-      assistant: "Gateway 응답 원문은 콘솔에 표시하지 않습니다. 검증은 metadata와 요청 상세에서 확인합니다.",
-      blocked: "Provider 호출 전에 차단되었습니다.",
-      cacheHit: "Exact Cache에서 응답했습니다.",
-      customer: "고객 prompt 원문은 콘솔에 표시하지 않습니다.",
-      error: "Gateway가 정제된 오류만 반환했습니다.",
-      pending: "Gateway로 전송할 준비가 되었습니다.",
-      rateLimited: "Provider 호출 전에 Rate Limit이 적용되었습니다.",
-      success: "Gateway 요청이 성공적으로 완료되었습니다."
-    },
-    webConsole: "웹 콘솔"
+    title: "Acme Support"
   }
 };
+
+const themeStorageKey = "gatelm_console_theme";
 
 export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const client = useMemo(() => {
     if (model.integrationMode === "gateway") {
-      return new RouteGatewayChatClient(model.tenantId);
+      return new RouteGatewayChatClient(model.tenantId, model.surface);
     }
 
     return new FixtureGatewayChatClient(model.scenarios);
-  }, [model.integrationMode, model.scenarios, model.tenantId]);
-  const [exchange, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
+  }, [model.integrationMode, model.scenarios, model.surface, model.tenantId]);
+  const [, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [contextRetentionEnabled, setContextRetentionEnabled] = useState(false);
+  const [messages, setMessages] = useState<LocalChatMessage[]>([]);
+  const [theme, setTheme] = useState<ConsoleTheme>("light");
   const requestInFlight = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
   const hasScenarios = model.scenarios.length > 0;
-  const hasRequestDetail = isRequestDetailAvailable(exchange);
   const text = customerDemoText[locale];
-  const exchangeText = text.scenarios[exchange.scenarioId];
-  const tenantLabel = formatTenantDisplayName(model.tenantId);
+  const firstUserMessage = messages.find((message) => message.side === "outgoing");
+  const currentConversationTitle = firstUserMessage?.body ?? text.sidebar.newConversation;
+  const currentConversationAuthor = messages.length > 0 ? text.chatPreview : text.appName;
 
-  const previewScenario = useCallback((scenarioId: CustomerDemoScenarioId) => {
-    if (requestInFlight.current) {
+  useEffect(() => {
+    const initialTheme = readStoredTheme() ?? readDocumentTheme();
+    setTheme(initialTheme);
+    applyTheme(initialTheme);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
       return;
     }
 
-    const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const syncSidebarState = () => setIsSidebarOpen(!mobileQuery.matches);
 
-    if (!scenario) {
+    syncSidebarState();
+    mobileQuery.addEventListener("change", syncSidebarState);
+
+    return () => mobileQuery.removeEventListener("change", syncSidebarState);
+  }, []);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+
+    if (!thread) {
       return;
     }
 
-    setLoadError(null);
-    setExchange(model.integrationMode === "gateway" ? buildPendingExchange(model, scenario) : scenario);
-  }, [model]);
+    thread.scrollTo({
+      top: thread.scrollHeight,
+      behavior: "smooth"
+    });
+  }, [messages, isLoading]);
 
-  const sendScenario = useCallback(async (scenarioId: CustomerDemoScenarioId) => {
+  const startNewChat = useCallback(async () => {
     if (requestInFlight.current) {
       return;
     }
 
     requestInFlight.current = true;
     setIsLoading(true);
-    setLoadError(null);
 
     try {
-      setExchange(await client.sendChatCompletion(scenarioId));
+      const conversation = await client.createConversation({
+        contextRetentionEnabled
+      });
+
+      setConversationId(conversation.id);
+      setContextRetentionEnabled(conversation.contextRetentionEnabled);
+      setExchange(buildInitialExchange(model));
+      setInputValue("");
+      setLoadError(null);
+      setMessages([]);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : text.error);
     } finally {
       requestInFlight.current = false;
       setIsLoading(false);
     }
-  }, [client, text.error]);
+  }, [client, contextRetentionEnabled, model, text.error]);
+
+  const toggleSidebar = useCallback(() => {
+    setIsUserSettingsOpen(false);
+    setIsSidebarOpen((current) => !current);
+  }, []);
+
+  function selectTheme(nextTheme: ConsoleTheme) {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    writeStoredTheme(nextTheme);
+  }
+
+  const updateContextRetention = useCallback((enabled: boolean) => {
+    const previousValue = contextRetentionEnabled;
+
+    setContextRetentionEnabled(enabled);
+    setLoadError(null);
+
+    if (!conversationId) {
+      return;
+    }
+
+    void client
+      .updateConversation(conversationId, {
+        contextRetentionEnabled: enabled
+      })
+      .then((conversation) => {
+        setConversationId(conversation.id);
+        setContextRetentionEnabled(conversation.contextRetentionEnabled);
+      })
+      .catch((error) => {
+        setContextRetentionEnabled(previousValue);
+        setLoadError(error instanceof Error ? error.message : text.error);
+      });
+  }, [client, contextRetentionEnabled, conversationId, text.error]);
+
+  const sendUserMessage = useCallback(async (
+    options: { stream?: boolean } = {}
+  ) => {
+    if (requestInFlight.current) {
+      return;
+    }
+
+    const message = inputValue.trim();
+    const streamRequested = options.stream ?? (model.integrationMode === "gateway");
+
+    if (!message) {
+      return;
+    }
+
+    const scenario = model.scenarios.find((item) => item.scenarioId === "safe");
+
+    requestInFlight.current = true;
+    setIsLoading(true);
+    setInputValue("");
+    setLoadError(null);
+    setMessages((current) => [
+      ...current,
+      {
+        body: message,
+        id: `user-${Date.now()}`,
+        side: "outgoing"
+      }
+    ]);
+
+    try {
+      if (scenario && model.integrationMode === "gateway") {
+        setExchange(buildPendingExchange(model, scenario, { stream: streamRequested }));
+      }
+
+      const assistantMessageId = `assistant-${Date.now()}`;
+      let streamedAssistantMessage = "";
+      const nextExchange = streamRequested
+        ? await client.sendChatCompletionStream(
+            "safe",
+            {
+              contextRetentionEnabled,
+              conversationId,
+              message,
+              stream: true
+            },
+            {
+              onDelta: (content) => {
+                streamedAssistantMessage += content;
+                setMessages((current) => {
+                  if (current.some((item) => item.id === assistantMessageId)) {
+                    return current.map((item) =>
+                      item.id === assistantMessageId
+                        ? {
+                            ...item,
+                            body: streamedAssistantMessage
+                          }
+                        : item
+                    );
+                  }
+
+                  return [
+                    ...current,
+                    {
+                      body: streamedAssistantMessage,
+                      id: assistantMessageId,
+                      side: "incoming"
+                    }
+                  ];
+                });
+              }
+            }
+          )
+        : await client.sendChatCompletion("safe", {
+            contextRetentionEnabled,
+            conversationId,
+            message,
+            stream: false
+          });
+
+      setExchange(nextExchange);
+      setConversationId(nextExchange.conversationId ?? conversationId);
+      setContextRetentionEnabled(nextExchange.contextRetentionEnabled);
+      setMessages((current) => {
+        if (streamedAssistantMessage && current.some((item) => item.id === assistantMessageId)) {
+          return current;
+        }
+
+        return [
+          ...current,
+          {
+            body: nextExchange.assistantMessage,
+            id: assistantMessageId,
+            side: "incoming"
+          }
+        ];
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : text.error;
+
+      setLoadError(errorMessage);
+      setMessages((current) => [
+        ...current,
+        {
+          body: errorMessage,
+          id: `assistant-error-${Date.now()}`,
+          side: "incoming"
+        }
+      ]);
+    } finally {
+      requestInFlight.current = false;
+      setIsLoading(false);
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      });
+    }
+  }, [client, contextRetentionEnabled, conversationId, inputValue, model, text.error]);
 
   return (
-    <main className="customer-demo-shell">
-      <header className="customer-demo-header">
-        <Link className="customer-demo-brand" href="/">
-          <span>AC</span>
-          <strong>Acme Support Desk</strong>
-        </Link>
-        <div className="customer-demo-header-meta">
-          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          <Link href={`/tenants/${model.tenantId}/dashboard`}>{text.webConsole}</Link>
+    <main className="customer-demo-shell customer-chat-shell" data-sidebar-open={isSidebarOpen}>
+      <button
+        aria-expanded={isSidebarOpen}
+        aria-label={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
+        className="customer-chat-sidebar-toggle"
+        onClick={toggleSidebar}
+        title={isSidebarOpen ? text.sidebar.closeSidebar : text.sidebar.openSidebar}
+        type="button"
+      >
+        {isSidebarOpen ? (
+          <PanelLeftClose aria-hidden="true" size={18} strokeWidth={2.2} />
+        ) : (
+          <PanelLeftOpen aria-hidden="true" size={18} strokeWidth={2.2} />
+        )}
+      </button>
+      <aside className="customer-chat-sidebar" aria-label="Application navigation">
+        <section className="customer-chat-sidebar-history" aria-label={text.sidebar.current}>
+          <span>{text.sidebar.application}</span>
+          <div className="customer-chat-sidebar-card">
+            <strong>{text.appName}</strong>
+            <small>{formatDisplayIdentifier(model.applicationId)}</small>
+          </div>
+
+          <button
+            className="customer-chat-new-button"
+            disabled={isLoading}
+            onClick={() => void startNewChat()}
+            type="button"
+          >
+            <MessageSquarePlus size={16} strokeWidth={2} />
+            {text.actions.newChat}
+          </button>
+
+          <span>{text.sidebar.current}</span>
+          <div className="customer-chat-sidebar-card">
+            <strong>{currentConversationTitle}</strong>
+            <small>{currentConversationAuthor}</small>
+          </div>
+        </section>
+
+        <div className="customer-chat-user-wrap">
+          {isUserSettingsOpen ? (
+            <div className="customer-chat-settings-popover" aria-label={text.sidebar.settings}>
+              <div className="customer-chat-settings-row">
+                <span>{text.sidebar.language}</span>
+                <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+              </div>
+              <div className="customer-chat-settings-row">
+                <span>{text.sidebar.theme}</span>
+                <div className="theme-segmented-control" data-density="compact">
+                  <button
+                    data-active={theme === "light"}
+                    onClick={() => selectTheme("light")}
+                    type="button"
+                  >
+                    {text.sidebar.light}
+                  </button>
+                  <button
+                    data-active={theme === "dark"}
+                    onClick={() => selectTheme("dark")}
+                    type="button"
+                  >
+                    {text.sidebar.dark}
+                  </button>
+                </div>
+              </div>
+              <div className="customer-chat-settings-row">
+                <span>{text.sidebar.contextMemory ?? "Context memory"}</span>
+                <label className="customer-chat-context-toggle">
+                  <input
+                    checked={contextRetentionEnabled}
+                    disabled={isLoading}
+                    onChange={(event) => updateContextRetention(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    {contextRetentionEnabled
+                      ? (text.sidebar.contextOn ?? "On")
+                      : (text.sidebar.contextOff ?? "Off")}
+                  </span>
+                </label>
+              </div>
+            </div>
+          ) : null}
+          <div className="customer-chat-user-card">
+            <strong>{text.sidebar.user}</strong>
+            <button
+              aria-expanded={isUserSettingsOpen}
+              aria-label={text.sidebar.settings}
+              className="customer-chat-settings-button"
+              data-open={isUserSettingsOpen}
+              onClick={() => setIsUserSettingsOpen((current) => !current)}
+              title={text.sidebar.settings}
+              type="button"
+            >
+              <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
+            </button>
+          </div>
         </div>
-      </header>
+      </aside>
 
-      <section className="customer-demo-hero">
-        <div>
-          <p className="console-kicker">support desk</p>
-          <h1>{text.title}</h1>
-        </div>
-        <dl className="customer-demo-context" aria-label="Application context">
-          <div>
-            <dt>{text.context.tenant}</dt>
-            <dd>{tenantLabel}</dd>
-          </div>
-          <div>
-            <dt>{text.context.project}</dt>
-            <dd>{model.projectId}</dd>
-          </div>
-          <div>
-            <dt>{text.context.application}</dt>
-            <dd>{formatDisplayIdentifier(model.applicationId)}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="customer-demo-summary-grid" aria-label="Selected request summary">
-        <DemoSummaryCard
-          icon="↗"
-          label={text.summary.http}
-          tone={exchange.status}
-          value={String(exchange.httpStatus)}
-        />
-        <DemoSummaryCard
-          icon="◌"
-          label={text.summary.cache}
-          tone={exchange.cacheStatus}
-          value={exchange.cacheStatus}
-        />
-        <DemoSummaryCard
-          icon="◆"
-          label={text.summary.masking}
-          tone={exchange.maskingAction}
-          value={exchange.maskingAction}
-        />
-        <DemoSummaryCard
-          icon="●"
-          label={text.summary.latency}
-          tone="latency"
-          value={`${exchange.latencyMs} ms`}
-        />
-      </section>
-
-      <section className="customer-demo-layout" aria-label="Gateway request states">
-        <aside className="customer-demo-scenarios" aria-label={text.scenarioSelector}>
-          <div className="customer-demo-section-title">
-            <h2>{text.scenarioSelector}</h2>
-          </div>
-          {model.scenarios.map((scenario) => {
-            const scenarioText = text.scenarios[scenario.scenarioId];
-
-            return (
-              <Button
-                className="customer-demo-scenario"
-                data-active={scenario.scenarioId === exchange.scenarioId}
-                data-status={scenario.status}
-                disabled={isLoading}
-                key={scenario.scenarioId}
-                onClick={() => previewScenario(scenario.scenarioId)}
-                type="button"
-                variant="outline"
+      <section className="customer-chat-main" aria-busy={isLoading}>
+        <section className="customer-chat-content" aria-label="Application chat">
+          <div className="customer-chat-thread" aria-label={text.chatPreview} ref={threadRef}>
+            {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
+            {messages.length === 0 && !isLoading ? (
+              <div className="customer-chat-empty-state">
+                <h1>{text.emptyState.title}</h1>
+                <p>{text.emptyState.subtitle}</p>
+              </div>
+            ) : null}
+            {messages.map((message) => (
+              <article
+                className="customer-chat-message"
+                data-side={message.side}
+                key={message.id}
               >
-                <Badge variant="secondary">{scenario.httpStatus}</Badge>
-                <strong>{scenarioText.title}</strong>
-              </Button>
-            );
-          })}
-        </aside>
-
-        <Card
-          className="customer-demo-chat"
-          aria-busy={isLoading}
-          aria-label="Text-only chat preview"
-        >
-          <CardHeader className="panel-heading">
-            <div>
-              <p className="console-kicker">{text.chatPreview}</p>
-              <CardTitle>{exchangeText.title}</CardTitle>
-            </div>
-            <Badge className="status-badge" data-status={exchange.status} variant="secondary">
-              {exchange.status}
-            </Badge>
-          </CardHeader>
-
-          <CardContent className="customer-demo-chat-content">
-            <div className="chat-window">
-              {loadError ? <p className="customer-demo-error">{loadError}</p> : null}
-              <article className="chat-bubble chat-bubble-user">
-                <span>{text.userLabel}</span>
-                <p>{text.withheld.customer}</p>
+                {message.side === "incoming" ? (
+                  <span className="customer-chat-avatar" aria-hidden="true">
+                    <Bot size={18} strokeWidth={2} />
+                  </span>
+                ) : null}
+                <div className="customer-chat-message-body">
+                  {message.side === "incoming" ? (
+                    <MarkdownMessage content={message.body} />
+                  ) : (
+                    <p>{message.body}</p>
+                  )}
+                </div>
               </article>
-              <article className="chat-bubble chat-bubble-assistant" data-status={exchange.status}>
-                <span>{text.assistantLabel}</span>
-                <p>{getSafeOutcomeMessage(exchange, text.withheld)}</p>
-              </article>
-            </div>
+            ))}
+            {isLoading ? (
+              <div className="customer-chat-typing" aria-label={text.actions.loading}>
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : null}
+          </div>
 
-            <div className="customer-demo-actions">
-              <Button
-                className="primary-button"
+          <form
+            className="customer-chat-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void sendUserMessage();
+            }}
+          >
+            <label className="customer-chat-input">
+              <input
+                aria-label={text.inputPlaceholder}
                 disabled={isLoading || !hasScenarios}
-                onClick={() => sendScenario(exchange.scenarioId)}
-                type="button"
-              >
+                onChange={(event) => setInputValue(event.target.value)}
+                placeholder={text.inputPlaceholder}
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+              />
+            </label>
+            <Button
+              className="customer-chat-send-button"
+              disabled={isLoading || !hasScenarios || inputValue.trim().length === 0}
+              type="submit"
+            >
+              <ArrowUp size={19} strokeWidth={2.6} />
+              <span>
                 {isLoading
                   ? text.actions.loading
                   : model.integrationMode === "gateway"
                     ? text.actions.send
                     : text.actions.replay}
-              </Button>
-              {hasRequestDetail ? (
-                <Link className="secondary-button" href={exchange.requestLogHref}>
-                  {text.actions.detail}
-                </Link>
-              ) : (
-                <Button className="secondary-button" disabled type="button" variant="outline">
-                  {text.actions.detail}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <section className="customer-demo-inspector" aria-label="Gateway request inspector">
-          <Card className="console-panel customer-demo-inspector-card">
-            <CardHeader className="panel-heading">
-              <div>
-                <CardTitle>{text.gatewayRequest}</CardTitle>
-              </div>
-              <CardAction>
-                <Badge variant="outline">{exchange.request.method}</Badge>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <div className="request-line">
-                <span>{exchange.request.method}</span>
-                <code>{exchange.request.endpoint}</code>
-              </div>
-              <HeaderList headers={exchange.request.headers} />
-              <dl className="customer-demo-metrics" aria-label={text.requestMetadata}>
-                <Metric label="Model" value={exchange.request.body.model} />
-                <Metric label="Messages" value={String(exchange.request.body.messages.length)} />
-                <Metric label="Cache mode" value={exchange.request.body.gate_lm.cache.mode} />
-                <Metric label="Routing mode" value={exchange.request.body.gate_lm.routing.mode} />
-                <Metric label="Stream" value={String(exchange.request.body.stream)} />
-                <Metric label="Prompt" value="withheld" />
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card className="console-panel customer-demo-inspector-card">
-            <CardHeader className="panel-heading">
-              <div>
-                <CardTitle>{text.gatewayResult}</CardTitle>
-              </div>
-              <CardAction>
-                <Badge variant={exchange.status === "success" ? "secondary" : "outline"}>
-                  {exchange.status}
-                </Badge>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <dl className="customer-demo-metrics">
-                <Metric label="HTTP" value={String(exchange.httpStatus)} />
-                <Metric label="Request ID" value={formatDisplayIdentifier(exchange.requestId)} />
-                <Metric label="Cache" value={exchange.cacheStatus} />
-                <Metric label="Masking" value={exchange.maskingAction} />
-                <Metric label="Provider" value={exchange.providerCall} />
-                <Metric label="Latency" value={`${exchange.latencyMs} ms`} />
-                <Metric label="Error code" value={getErrorCode(exchange.response.body)} />
-                <Metric
-                  label="Detected"
-                  value={
-                    exchange.detectedTypes.length > 0
-                      ? exchange.detectedTypes.join(", ")
-                      : text.detectedNone
-                  }
-                />
-              </dl>
-              <HeaderList headers={exchange.response.headers} />
-              <dl className="customer-demo-metrics" aria-label={text.responseMetadata}>
-                <Metric label="Body" value="withheld" />
-                <Metric label="Selected provider" value={getResponseHeader(exchange, "X-GateLM-Routed-Provider")} />
-                <Metric label="Selected model" value={getResponseHeader(exchange, "X-GateLM-Routed-Model")} />
-                <Metric label="Cache status" value={getResponseHeader(exchange, "X-GateLM-Cache-Status")} />
-              </dl>
-            </CardContent>
-          </Card>
+              </span>
+            </Button>
+          </form>
         </section>
+        <p className="customer-chat-disclaimer">{text.disclaimer}</p>
       </section>
     </main>
   );
+}
+
+function readDocumentTheme(): ConsoleTheme {
+  if (typeof document === "undefined") {
+    return "light";
+  }
+
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme: ConsoleTheme) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.theme = theme;
+}
+
+function readStoredTheme(): ConsoleTheme | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.localStorage.getItem(themeStorageKey);
+
+  return storedValue === "dark" || storedValue === "light" ? storedValue : null;
+}
+
+function writeStoredTheme(theme: ConsoleTheme) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(themeStorageKey, theme);
 }
 
 function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
@@ -476,14 +607,29 @@ function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
   return buildPendingExchange(model, base);
 }
 
-function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoExchange): CustomerDemoExchange {
+function buildPendingExchange(
+  model: CustomerDemoModel,
+  scenario: CustomerDemoExchange,
+  options: { stream?: boolean } = {}
+): CustomerDemoExchange {
+  const streamRequested = options.stream === true;
+
   return {
     ...scenario,
-    assistantMessage: "Ready to send this scenario through the live Gateway.",
+    assistantMessage: "Ready to send.",
     cacheStatus: "pending",
+    contextRetentionEnabled: false,
+    conversationId: null,
     httpStatus: 0,
     latencyMs: 0,
     providerCall: "skipped",
+    request: {
+      ...scenario.request,
+      body: {
+        ...scenario.request.body,
+        stream: streamRequested
+      }
+    },
     requestId: "pending-live-request",
     requestLogHref: `/tenants/${model.tenantId}/request-logs`,
     response: {
@@ -494,22 +640,22 @@ function buildPendingExchange(model: CustomerDemoModel, scenario: CustomerDemoEx
       statusCode: 0
     },
     status: "pending",
+    streaming: {
+      completed: null,
+      contentType: null,
+      chunkCount: null,
+      requested: streamRequested
+    },
     title: scenario.title
   };
-}
-
-function isRequestDetailAvailable(exchange: CustomerDemoExchange): boolean {
-  return (
-    exchange.requestId !== "pending-live-request" &&
-    exchange.requestId !== "not-configured" &&
-    exchange.requestLogHref.includes(`/request-logs/${exchange.requestId}`)
-  );
 }
 
 function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
   return {
     assistantMessage: "No customer demo scenario is configured.",
     cacheStatus: "not-configured",
+    contextRetentionEnabled: false,
+    conversationId: null,
     description: "Customer demo scenarios are not available for this tenant application.",
     detectedTypes: [],
     httpStatus: 0,
@@ -573,110 +719,12 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
     },
     scenarioId: "safe",
     status: "not-configured",
+    streaming: {
+      completed: null,
+      contentType: null,
+      chunkCount: null,
+      requested: false
+    },
     title: "No scenario configured"
   };
-}
-
-function DemoSummaryCard({
-  icon,
-  label,
-  tone,
-  value
-}: {
-  icon: string;
-  label: string;
-  tone: string;
-  value: string;
-}) {
-  return (
-    <Card className="customer-demo-summary-card" data-tone={tone}>
-      <CardContent className="customer-demo-summary-content">
-        <div>
-          <span>{label}</span>
-          <strong>{value}</strong>
-        </div>
-        <i aria-hidden="true">{icon}</i>
-      </CardContent>
-    </Card>
-  );
-}
-
-function HeaderList({ headers }: { headers: CustomerDemoHeader[] }) {
-  return (
-    <dl className="header-list">
-      {headers.map((header) => (
-        <div key={header.name}>
-          <dt>{header.name}</dt>
-          <dd>{formatDisplayIdentifier(header.value)}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
-function getSafeOutcomeMessage(
-  exchange: CustomerDemoExchange,
-  text: {
-    assistant: string;
-    blocked: string;
-    cacheHit: string;
-    error: string;
-    pending: string;
-    rateLimited: string;
-    success: string;
-  }
-) {
-  if (exchange.status === "pending") {
-    return text.pending;
-  }
-
-  if (exchange.status === "blocked") {
-    return text.blocked;
-  }
-
-  if (exchange.status === "rate_limited") {
-    return text.rateLimited;
-  }
-
-  if (exchange.status === "cache_hit") {
-    return text.cacheHit;
-  }
-
-  if (exchange.status === "success") {
-    return text.success;
-  }
-
-  if (exchange.status === "error") {
-    return text.error;
-  }
-
-  return text.assistant;
-}
-
-function getResponseHeader(exchange: CustomerDemoExchange, name: string) {
-  return exchange.response.headers.find((header) => header.name === name)?.value ?? "not-set";
-}
-
-function getErrorCode(body: unknown) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return "none";
-  }
-
-  const error = (body as { error?: unknown }).error;
-
-  if (!error || typeof error !== "object" || Array.isArray(error)) {
-    return "none";
-  }
-
-  const code = (error as { code?: unknown }).code;
-  return typeof code === "string" && code.trim() ? code : "none";
 }

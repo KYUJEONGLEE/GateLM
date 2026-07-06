@@ -1,14 +1,31 @@
 "use client";
 
-import { Menu } from "lucide-react";
+import {
+  Activity,
+  Database,
+  FolderKanban,
+  House,
+  LayoutDashboard,
+  Menu,
+  Plug,
+  ScrollText,
+  Settings as SettingsIcon,
+  Users
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
-type ConsoleSection = "dashboard" | "management" | "analytics" | "settings";
+type ConsoleSection = "dashboard" | "management" | "analytics";
 type ExpandableConsoleSection = "management" | "analytics";
+type ConsoleTheme = "light" | "dark";
 
 export type ManagementNavItem =
   | "api-keys"
@@ -16,8 +33,27 @@ export type ManagementNavItem =
   | "model-catalog"
   | "policies"
   | "project"
-  | "provider";
-export type AnalyticsNavItem = "health" | "metrics" | "request-logs";
+  | "provider"
+  | "teams";
+export type AnalyticsNavItem = "health" | "request-logs";
+
+const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
+  analytics: Activity,
+  dashboard: LayoutDashboard,
+  management: FolderKanban
+};
+
+const childIcons: Record<AnalyticsNavItem | ManagementNavItem, typeof LayoutDashboard> = {
+  "api-keys": SettingsIcon,
+  "app-tokens": SettingsIcon,
+  health: Activity,
+  "model-catalog": Database,
+  policies: ScrollText,
+  project: FolderKanban,
+  provider: Plug,
+  "request-logs": ScrollText,
+  teams: Users
+};
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
@@ -66,6 +102,14 @@ const navigationItems: Array<{
       },
       {
         labels: {
+          en: "Teams",
+          ko: "Teams"
+        },
+        item: "teams",
+        path: (tenantId) => `/tenants/${tenantId}/teams`
+      },
+      {
+        labels: {
           en: "Providers",
           ko: "Provider"
         },
@@ -79,14 +123,6 @@ const navigationItems: Array<{
         },
         item: "model-catalog",
         path: (tenantId) => `/tenants/${tenantId}/model-catalog`
-      },
-      {
-        labels: {
-          en: "Policies",
-          ko: "정책"
-        },
-        item: "policies",
-        path: (tenantId) => `/tenants/${tenantId}/policies`
       }
     ],
     section: "management"
@@ -107,14 +143,6 @@ const navigationItems: Array<{
       },
       {
         labels: {
-          en: "Metrics",
-          ko: "Metrics"
-        },
-        item: "metrics",
-        path: (tenantId) => `/tenants/${tenantId}/metrics`
-      },
-      {
-        labels: {
           en: "Request logs",
           ko: "요청 로그"
         },
@@ -122,15 +150,8 @@ const navigationItems: Array<{
         path: (tenantId) => `/tenants/${tenantId}/request-logs`
       }
     ],
+    path: (tenantId) => `/tenants/${tenantId}/request-logs`,
     section: "analytics"
-  },
-  {
-    labels: {
-      en: "Settings",
-      ko: "설정"
-    },
-    planned: true,
-    section: "settings"
   }
 ];
 
@@ -140,6 +161,11 @@ const shellText: Record<
     collapseNavigation: string;
     expandNavigation: string;
     language: string;
+    landing: string;
+    settings: string;
+    light: string;
+    dark: string;
+    theme: string;
     planned: string;
     tenant: string;
   }
@@ -147,21 +173,32 @@ const shellText: Record<
   en: {
     collapseNavigation: "Collapse navigation",
     expandNavigation: "Expand navigation",
+    dark: "Dark",
     language: "Console language",
+    landing: "Landing",
+    light: "Light",
     planned: "planned",
-    tenant: "tenant"
+    settings: "Tenant settings",
+    tenant: "tenant",
+    theme: "Theme"
   },
   ko: {
+    landing: "랜딩",
     collapseNavigation: "내비게이션 닫기",
     expandNavigation: "내비게이션 열기",
+    dark: "다크",
     language: "콘솔 언어",
+    light: "라이트",
     planned: "예정",
-    tenant: "테넌트"
+    settings: "테넌트 설정",
+    tenant: "테넌트",
+    theme: "테마"
   }
 };
 
 const openSectionsStorageKey = "gatelm_console_open_sections";
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
+const themeStorageKey = "gatelm_console_theme";
 
 export function ConsoleShell({
   activeAnalyticsItem,
@@ -177,10 +214,13 @@ export function ConsoleShell({
     getActiveOpenSections(activeSection)
   );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
+  const [theme, setTheme] = useState<ConsoleTheme>("light");
 
   useEffect(() => {
     const storedOpenSections = readStoredOpenSections();
     setOpenSections(mergeOpenSections(storedOpenSections ?? [], getActiveOpenSections(activeSection)));
+    setIsMobileNavigationOpen(false);
   }, [activeSection]);
 
   useEffect(() => {
@@ -191,12 +231,33 @@ export function ConsoleShell({
     }
   }, []);
 
+  useEffect(() => {
+    const initialTheme = readStoredTheme() ?? readDocumentTheme();
+    setTheme(initialTheme);
+    applyTheme(initialTheme);
+  }, []);
+
   function toggleSidebar() {
+    if (isMobileViewport()) {
+      setIsMobileNavigationOpen((current) => !current);
+      return;
+    }
+
     setIsSidebarCollapsed((current) => {
       const next = !current;
       writeStoredSidebarCollapsed(next);
       return next;
     });
+  }
+
+  function closeMobileNavigation() {
+    setIsMobileNavigationOpen(false);
+  }
+
+  function selectTheme(nextTheme: ConsoleTheme) {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    writeStoredTheme(nextTheme);
   }
 
   function toggleSection(section: ConsoleSection) {
@@ -215,7 +276,7 @@ export function ConsoleShell({
   }
 
   function isChildActive(child: ChildNavigationItem) {
-    if (child.item === "health" || child.item === "metrics" || child.item === "request-logs") {
+    if (child.item === "health" || child.item === "request-logs") {
       return child.item === activeAnalyticsItem;
     }
 
@@ -225,6 +286,7 @@ export function ConsoleShell({
   function renderSubnavItems(children: ChildNavigationItem[]) {
     return children.map((child) => {
       const childLabel = child.labels[locale];
+      const ChildIcon = childIcons[child.item];
 
       if (child.disabled || !child.path) {
         return (
@@ -234,7 +296,8 @@ export function ConsoleShell({
             data-disabled="true"
             key={child.item}
           >
-            {childLabel}
+            <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
+            <span>{childLabel}</span>
             <small>{text.planned}</small>
           </span>
         );
@@ -247,18 +310,56 @@ export function ConsoleShell({
           data-active={isChildActive(child)}
           href={child.path(tenantId)}
           key={child.item}
+          onClick={closeMobileNavigation}
         >
-          {childLabel}
+          <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
+          <span>{childLabel}</span>
         </Link>
       );
     });
   }
 
   return (
-    <div className="console-shell" data-sidebar-collapsed={isSidebarCollapsed}>
+    <div
+      className="console-shell"
+      data-mobile-nav-open={isMobileNavigationOpen}
+      data-sidebar-collapsed={isSidebarCollapsed}
+    >
+      <header className="console-mobile-topbar">
+        <button
+          aria-expanded={isMobileNavigationOpen}
+          aria-label={isMobileNavigationOpen ? text.collapseNavigation : text.expandNavigation}
+          className="console-sidebar-toggle"
+          onClick={toggleSidebar}
+          type="button"
+        >
+          <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
+        </button>
+        <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
+          <span className="console-brand-mark">G</span>
+          <span className="console-brand-copy">
+            <strong>GateLM</strong>
+          </span>
+        </Link>
+        <Link
+          aria-label={text.landing}
+          className="console-mobile-landing-link"
+          href="/?view=landing"
+          title={text.landing}
+        >
+          <House aria-hidden="true" size={17} strokeWidth={2.4} />
+          <span>{text.landing}</span>
+        </Link>
+      </header>
+      <button
+        aria-label={text.collapseNavigation}
+        className="console-mobile-nav-backdrop"
+        onClick={closeMobileNavigation}
+        type="button"
+      />
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
-          <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+          <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
             <span className="console-brand-mark">G</span>
             <span className="console-brand-copy">
               <strong>GateLM</strong>
@@ -277,9 +378,20 @@ export function ConsoleShell({
           </button>
         </div>
 
+        <Link
+          className="console-landing-link"
+          href="/?view=landing"
+          onClick={closeMobileNavigation}
+          title={text.landing}
+        >
+          <House aria-hidden="true" size={16} strokeWidth={2.4} />
+          <span>{text.landing}</span>
+        </Link>
+
         <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {
             const label = item.labels[locale];
+            const SectionIcon = sectionIcons[item.section];
 
             if (!item.path) {
               if (item.children) {
@@ -290,11 +402,11 @@ export function ConsoleShell({
                     <button
                       aria-expanded={isOpen}
                       className="console-nav-link"
-                      data-active={item.section === activeSection}
                       data-open={isOpen}
                       onClick={() => toggleSection(item.section)}
                       type="button"
                     >
+                      <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                       <span>{label}</span>
                     </button>
 
@@ -315,6 +427,7 @@ export function ConsoleShell({
                   data-disabled="true"
                   key={item.section}
                 >
+                  <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                   <span>{label}</span>
                   {item.planned ? <small>{text.planned}</small> : null}
                 </span>
@@ -328,7 +441,9 @@ export function ConsoleShell({
                   className="console-nav-link"
                   data-active={item.section === activeSection}
                   href={item.path(tenantId)}
+                  onClick={closeMobileNavigation}
                 >
+                  <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                   <span>{label}</span>
                 </Link>
 
@@ -360,11 +475,49 @@ export function ConsoleShell({
             );
           })}
         </div>
-        <div className="console-sidebar-language" aria-hidden={isSidebarCollapsed}>
-          <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-        </div>
-        <div className="console-sidebar-tenant" aria-hidden={isSidebarCollapsed}>
-          <strong>{tenantLabel}</strong>
+        <div className="console-sidebar-tenant-wrap" aria-hidden={isSidebarCollapsed}>
+          <div className="console-sidebar-tenant">
+            <strong>{tenantLabel}</strong>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={text.settings}
+                className="console-sidebar-settings-button"
+                title={text.settings}
+              >
+                <SettingsIcon aria-hidden="true" size={16} strokeWidth={2.3} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                aria-label={text.settings}
+                className="console-sidebar-settings-popover"
+                sideOffset={8}
+              >
+                <div className="console-sidebar-settings-row">
+                  <span>{text.language}</span>
+                  <LanguageSwitcher ariaLabel={text.language} locale={locale} />
+                </div>
+                <div className="console-sidebar-settings-row">
+                  <span>{text.theme}</span>
+                  <div className="theme-segmented-control" data-density="compact">
+                    <button
+                      data-active={theme === "light"}
+                      onClick={() => selectTheme("light")}
+                      type="button"
+                    >
+                      {text.light}
+                    </button>
+                    <button
+                      data-active={theme === "dark"}
+                      onClick={() => selectTheme("dark")}
+                      type="button"
+                    >
+                      {text.dark}
+                    </button>
+                  </div>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </aside>
 
@@ -445,4 +598,42 @@ function writeStoredSidebarCollapsed(isCollapsed: boolean) {
   }
 
   window.localStorage.setItem(sidebarCollapsedStorageKey, String(isCollapsed));
+}
+
+function isMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 1100px)").matches;
+}
+
+function readDocumentTheme(): ConsoleTheme {
+  if (typeof document === "undefined") {
+    return "light";
+  }
+
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme: ConsoleTheme) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.theme = theme;
+}
+
+function readStoredTheme(): ConsoleTheme | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.localStorage.getItem(themeStorageKey);
+
+  return storedValue === "dark" || storedValue === "light" ? storedValue : null;
+}
+
+function writeStoredTheme(theme: ConsoleTheme) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(themeStorageKey, theme);
 }

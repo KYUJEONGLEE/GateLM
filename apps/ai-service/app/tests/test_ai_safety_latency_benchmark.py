@@ -8,6 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
 from app.domain.ai_safety_benchmark.corpus import load_benchmark_corpus, render_case_prompt
 from app.domain.ai_safety_benchmark.report import (
     build_report,
@@ -17,6 +18,7 @@ from app.domain.ai_safety_benchmark.report import (
 from app.domain.ai_safety_benchmark.resources import ResourceSampler
 from app.domain.ai_safety_benchmark.runner import run_benchmark
 from app.domain.ai_safety_benchmark.stats import nearest_rank
+from app.domain.ai_safety_benchmark.targets import GatewayHttpBenchmarkTarget, gateway_reported_latency_ms
 from app.domain.ai_safety_benchmark.types import BenchmarkError, TargetResult
 from app.services import ai_safety_latency_benchmark_runner
 
@@ -114,6 +116,8 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
                         "benchmark-test-run",
                         "--git-sha",
                         "testsha",
+                        "--model-id",
+                        KOELECTRA_PRIVACY_NER_MODEL,
                     ],
                     target_factory=lambda _args: fake_target,
                     generated_at=datetime(2026, 7, 1, 0, 0, tzinfo=timezone.utc),
@@ -127,11 +131,38 @@ class AiSafetyLatencyBenchmarkTests(unittest.TestCase):
             self.assertTrue(markdown_path.exists())
             report = json.loads(json_path.read_text(encoding="utf-8"))
             self.assertEqual(report["metadata"]["runId"], "benchmark-test-run")
+            self.assertEqual(report["metadata"]["modelId"], KOELECTRA_PRIVACY_NER_MODEL)
             self.assertEqual(selected_runtime(report)["requests"], 100)
             self.assertEqual(
                 [runtime["status"] for runtime in report["runtimeResults"]],
                 ["pass", "not_run", "not_run"],
             )
+
+    def test_cli_builds_gateway_http_target(self) -> None:
+        args = ai_safety_latency_benchmark_runner.build_parser().parse_args(
+            [
+                "--target",
+                "gateway_http",
+                "--endpoint-url",
+                "http://127.0.0.1:8080/v1/chat/completions",
+            ]
+        )
+
+        target = ai_safety_latency_benchmark_runner.build_target(args)
+
+        self.assertIsInstance(target, GatewayHttpBenchmarkTarget)
+
+    def test_gateway_reported_latency_reads_only_sanitized_metadata(self) -> None:
+        response = FakeGatewayResponse(
+            {
+                "gate_lm": {
+                    "requestId": "request_not_written_to_report",
+                    "latencyMs": 17,
+                }
+            }
+        )
+
+        self.assertEqual(gateway_reported_latency_ms(response, fallback_latency_ms=41), 17)
 
 
 class FakeBenchmarkTarget:
@@ -171,6 +202,14 @@ class FakeBenchmarkTarget:
             sidecar_outcome="success",
             fallback_mode="none",
         )
+
+
+class FakeGatewayResponse:
+    def __init__(self, body: dict) -> None:
+        self.body = body
+
+    def json(self) -> dict:
+        return self.body
 
 
 def build_fake_report(

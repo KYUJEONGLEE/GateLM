@@ -19,6 +19,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
@@ -66,7 +67,7 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 		safeMissResp.GateLM.CacheStatus != invocationlog.CacheStatusMiss ||
 		safeMissResp.GateLM.SelectedProvider != "mock" ||
 		safeMissResp.GateLM.SelectedModel != "mock-fast" ||
-		safeMissResp.GateLM.RoutingReason != "short_prompt_low_cost" {
+		safeMissResp.GateLM.RoutingReason != routing.ReasonSupportRefundLowCost {
 		t.Fatalf("unexpected safe miss response: status=%d gate_lm=%#v body=%s", safeMiss.Code, safeMissResp.GateLM, safeMiss.Body.String())
 	}
 	providerCallsAfterMiss := harness.provider.chatCallCount()
@@ -91,8 +92,8 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 		t.Fatalf("expected redacted success response, got status=%d gate_lm=%#v body=%s", redacted.Code, redactedResp.GateLM, redacted.Body.String())
 	}
 	redactedProviderPrompt := readinessProviderPromptAt(t, harness.provider.chatRequestSnapshot(), 1)
-	if !strings.Contains(redactedProviderPrompt, "[EMAIL_REDACTED]") ||
-		!strings.Contains(redactedProviderPrompt, "[PHONE_NUMBER_REDACTED]") ||
+	if !strings.Contains(redactedProviderPrompt, "[EMAIL_1]") ||
+		!strings.Contains(redactedProviderPrompt, "[PHONE_NUMBER_1]") ||
 		strings.Contains(redactedProviderPrompt, rawEmail) ||
 		strings.Contains(redactedProviderPrompt, rawPhone) {
 		t.Fatalf("provider prompt must use placeholders only, got %q", redactedProviderPrompt)
@@ -559,6 +560,10 @@ func (s *readinessObservabilityStore) GetRequestDetail(ctx context.Context, filt
 
 func (s *readinessObservabilityStore) GetDashboardOverview(ctx context.Context, filter invocationlog.DashboardOverviewFilter) (invocationlog.DashboardOverviewFields, error) {
 	return invocationlog.BuildDashboardOverview(s.invocationLogs()), nil
+}
+
+func (s *readinessObservabilityStore) GetCostReport(ctx context.Context, filter invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
+	return invocationlog.CostReportFields{}, nil
 }
 
 func (s *readinessObservabilityStore) terminalLogs() []invocationlog.TerminalLog {

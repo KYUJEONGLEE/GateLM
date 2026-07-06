@@ -1,0 +1,96 @@
+[
+  {
+    "id": "ko_general_admin_screen",
+    "prompt": "관리자 화면은 어디서 볼 수 있어?",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_general_account_settings",
+    "prompt": "계정 설정은 어디에서 바꾸나요?",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_general_usage_page",
+    "prompt": "사용량 화면 위치를 알려줘",
+    "expectedCategory": "general"
+  },
+  {
+    "id": "ko_support_refund_order_cancel",
+    "prompt": "주문 취소하고 환불받고 싶어요",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_shipping_fee",
+    "prompt": "반품하면 배송비도 환불되나요?",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_support_refund_payment_cancel",
+    "prompt": "결제 취소가 가능한지 알려줘",
+    "expectedCategory": "support_refund"
+  },
+  {
+    "id": "ko_code_typescript_error",
+    "prompt": "이 타입스크립트 함수 에러 원인을 알려줘",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_refactor",
+    "prompt": "이 코드를 더 읽기 쉽게 리팩토링해줘",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_code_sql_query",
+    "prompt": "select * from users where id = 1",
+    "expectedCategory": "code"
+  },
+  {
+    "id": "ko_translation_to_english",
+    "prompt": "이 안내 문구를 영어로 번역해줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "ko_translation_to_korean",
+    "prompt": "This notice should be translated into Korean.",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "ko_summarization_meeting",
+    "prompt": "회의록 핵심만 세 줄로 요약해줘",
+    "expectedCategory": "summarization"
+  },
+  {
+    "id": "ko_extraction_json_order",
+    "prompt": "주문 상태와 요청사항을 json 형태로 정리해줘",
+    "expectedCategory": "extraction_json"
+  },
+  {
+    "id": "ko_reasoning_tradeoff",
+    "prompt": "두 방식의 장단점을 비교하고 어떤 게 나은지 추천해줘",
+    "expectedCategory": "reasoning"
+  },
+  {
+    "id": "unknown_empty",
+    "prompt": "",
+    "expectedCategory": "unknown"
+  },
+  {
+    "id": "unknown_whitespace",
+    "prompt": "   ",
+    "expectedCategory": "unknown"
+  },
+  {
+    "id": "unknown_missing_user_message",
+    "expectedCategory": "unknown"
+  },
+  {
+    "id": "priority_refund_translation",
+    "prompt": "환불 정책을 영어로 번역해줘",
+    "expectedCategory": "translation"
+  },
+  {
+    "id": "priority_code_translation",
+    "prompt": "이 코드를 영어로 번역해줘",
+    "expectedCategory": "code"
+  }
+]

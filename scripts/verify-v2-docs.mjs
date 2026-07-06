@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyCategoryEvaluationDataset } from "./verify-v2.1-category-eval.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -451,6 +452,9 @@ function main() {
   assertCiGate();
   assertSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
+  for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
+    fail(failure);
+  }
 
   if (failures.length > 0) {
     console.error("v2 document verification failed:");

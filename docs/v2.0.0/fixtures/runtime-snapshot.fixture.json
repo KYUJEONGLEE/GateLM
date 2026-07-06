@@ -44,12 +44,26 @@
       "defaultRequestedModel": "auto",
       "defaultProvider": "synthetic_primary_provider",
       "defaultModel": "low_cost_chat_model",
+      "lowCostProvider": "synthetic_primary_provider",
+      "lowCostModel": "low_cost_chat_model",
+      "highQualityProvider": "synthetic_primary_provider",
+      "highQualityModel": "high_quality_chat_model",
       "routingPolicyHash": "sha256:synthetic-routing-policy-hash"
     },
     "cache": {
       "exactCacheEnabled": true,
       "semanticCacheMode": "evidence_only",
       "cachePolicyHash": "sha256:synthetic-cache-policy-hash"
+    },
+    "promptCapture": {
+      "enabled": false,
+      "mode": "disabled",
+      "maxChars": 8000
+    },
+    "responseCapture": {
+      "enabled": false,
+      "mode": "disabled",
+      "maxChars": 8000
     },
     "rateLimit": {
       "enabled": true,
@@ -60,7 +74,8 @@
     "budget": {
       "enabled": true,
       "enforcementMode": "block",
-      "warningThresholdPercent": 80
+      "warningThresholdPercent": 80,
+      "restrictHighQualityOnBudgetRisk": true
     },
     "fallback": {
       "enabled": true,

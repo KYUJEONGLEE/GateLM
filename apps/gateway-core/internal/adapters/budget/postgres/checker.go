@@ -70,6 +70,8 @@ func (c *Checker) Check(ctx context.Context, req budget.Request) (budget.Decisio
 		scope.Type,
 		scope.ID,
 		monthStart,
+		policy.WarningThresholdPercent,
+		scopeUUIDArgument(scope),
 	).Scan(&limitMicroUSD, &warningThresholdPercent, &usedMicroUSD); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			base.Outcome = budget.OutcomeNotChecked
@@ -81,6 +83,17 @@ func (c *Checker) Check(ctx context.Context, req budget.Request) (budget.Decisio
 		return budget.NormalizeDecision(base, normalizedReq), fmt.Errorf("check budget quota usage: %w", err)
 	}
 
+	if warningThresholdPercent < 0 || warningThresholdPercent > 100 {
+		warningThresholdPercent = policy.WarningThresholdPercent
+	}
+	remainingMicroUSD := limitMicroUSD - usedMicroUSD
+	usagePercent := 0.0
+	if limitMicroUSD > 0 {
+		usagePercent = float64(usedMicroUSD) * 100 / float64(limitMicroUSD)
+	} else if usedMicroUSD > 0 {
+		usagePercent = 100
+	}
+
 	decision := budget.Decision{
 		Allowed:                 true,
 		Outcome:                 budget.OutcomeAllowed,
@@ -88,16 +101,15 @@ func (c *Checker) Check(ctx context.Context, req budget.Request) (budget.Decisio
 		Policy:                  policy,
 		WarningThresholdPercent: warningThresholdPercent,
 		Reason:                  "within_budget",
+		UsageKnown:              true,
+		LimitMicroUSD:           limitMicroUSD,
+		UsedMicroUSD:            usedMicroUSD,
+		RemainingMicroUSD:       remainingMicroUSD,
+		UsagePercent:            usagePercent,
 	}
 	if limitMicroUSD <= 0 || usedMicroUSD >= limitMicroUSD {
-		if policy.EnforcementMode == budget.EnforcementModeBlock {
-			decision.Allowed = false
-			decision.Outcome = budget.OutcomeBlocked
-			decision.Reason = "quota_exceeded"
-		} else {
-			decision.Outcome = budget.OutcomeWarned
-			decision.Reason = "quota_exceeded_warn_only"
-		}
+		decision.Outcome = budget.OutcomeDegraded
+		decision.Reason = "quota_exceeded_quality_guard"
 		return budget.NormalizeDecision(decision, normalizedReq), nil
 	}
 
@@ -109,6 +121,36 @@ func (c *Checker) Check(ctx context.Context, req budget.Request) (budget.Decisio
 	return budget.NormalizeDecision(decision, normalizedReq), nil
 }
 
+func scopeUUIDArgument(scope budget.Scope) any {
+	switch strings.TrimSpace(scope.Type) {
+	case budget.ScopeTypeApplication, budget.ScopeTypeProject:
+		if isValidUUID(scope.ID) {
+			return strings.TrimSpace(scope.ID)
+		}
+	}
+	return nil
+}
+
+func isValidUUID(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 36 {
+		return false
+	}
+	for index := 0; index < 36; index++ {
+		char := value[index]
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 func monthStartUTC(now time.Time) time.Time {
 	if now.IsZero() {
 		now = time.Now()
@@ -118,14 +160,48 @@ func monthStartUTC(now time.Time) time.Time {
 }
 
 const quotaUsageSQL = `
-with active_quota as (
+with quota_candidates as (
+  select
+    q.limit_micro_usd,
+    q.warning_threshold_percent,
+    0 as priority
+  from budget_quotas q
+  where q.tenant_id = $1::uuid
+    and q.budget_scope_type = $2
+    and q.budget_scope_id = $3
+    and q.month_start = $4::date
+    and q.status = 'active'
+  union all
+  select
+    case
+      when coalesce(nullif(a."budgetLimitMode", ''), 'FIXED') = 'PERCENT'
+        then round(coalesce(p."totalBudgetUsd", 0) * 1000000 * coalesce(a."budgetLimitPercent", 0) / 100)::bigint
+      else round(coalesce(a."budgetLimitUsd", 0) * 1000000)::bigint
+    end as limit_micro_usd,
+    $5::int as warning_threshold_percent,
+    10 as priority
+  from applications a
+  join projects p on p.id = a."projectId" and p."tenantId" = a."tenantId"
+  where $2 = 'application'
+    and a."tenantId" = $1::uuid
+    and a.id = $6::uuid
+    and a.status = 'ACTIVE'
+    and p.status = 'ACTIVE'
+  union all
+  select
+    round(coalesce(p."totalBudgetUsd", 0) * 1000000)::bigint as limit_micro_usd,
+    $5::int as warning_threshold_percent,
+    20 as priority
+  from projects p
+  where $2 = 'project'
+    and p."tenantId" = $1::uuid
+    and p.id = $6::uuid
+    and p.status = 'ACTIVE'
+), active_quota as (
   select limit_micro_usd, warning_threshold_percent
-  from budget_quotas
-  where tenant_id = $1::uuid
-    and budget_scope_type = $2
-    and budget_scope_id = $3
-    and month_start = $4::date
-    and status = 'active'
+  from quota_candidates
+  order by priority
+  limit 1
 )
 select
   q.limit_micro_usd,

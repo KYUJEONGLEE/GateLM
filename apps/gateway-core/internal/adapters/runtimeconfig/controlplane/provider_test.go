@@ -52,8 +52,47 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 		snapshot.BudgetPolicy.WarningThresholdPercent != 75 {
 		t.Fatalf("unexpected budget policy: %+v", snapshot.BudgetPolicy)
 	}
+	if snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk == nil || !*snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk {
+		t.Fatalf("expected budget high quality restriction to default on, got %+v", snapshot.BudgetPolicy)
+	}
 	if snapshot.RoutingPolicy.DefaultProvider != "openai-main" || snapshot.RoutingPolicy.DefaultModel != "gpt-test-low" {
 		t.Fatalf("unexpected routing policy: %+v", snapshot.RoutingPolicy)
+	}
+	if snapshot.RoutingPolicy.LowCostProvider != "openai-low" || snapshot.RoutingPolicy.LowCostModel != "gpt-test-mini" {
+		t.Fatalf("expected low-cost routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
+	}
+	if snapshot.RoutingPolicy.HighQualityProvider != "openai-premium" || snapshot.RoutingPolicy.HighQualityModel != "gpt-test-smart" {
+		t.Fatalf("expected high-quality routing policy to survive snapshot mapping: %+v", snapshot.RoutingPolicy)
+	}
+	if !snapshot.PromptCapture.Enabled ||
+		snapshot.PromptCapture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
+		snapshot.PromptCapture.MaxChars != 1200 {
+		t.Fatalf("unexpected prompt capture policy: %+v", snapshot.PromptCapture)
+	}
+	if !snapshot.ResponseCapture.Enabled ||
+		snapshot.ResponseCapture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
+		snapshot.ResponseCapture.MaxChars != 1600 {
+		t.Fatalf("unexpected response capture policy: %+v", snapshot.ResponseCapture)
+	}
+}
+
+func TestProviderMapsBudgetHighQualityRestrictionToggle(t *testing.T) {
+	restrictHighQuality := false
+	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
+	response.Policies.Budget.RestrictHighQualityOnBudgetRisk = &restrictHighQuality
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeRuntimeSnapshot(t, w, response)
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client())
+	snapshot, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID)
+	if err != nil {
+		t.Fatalf("expected runtime snapshot, got %v", err)
+	}
+
+	if snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk == nil || *snapshot.BudgetPolicy.RestrictHighQualityOnBudgetRisk {
+		t.Fatalf("expected budget high quality restriction to be disabled, got %+v", snapshot.BudgetPolicy)
 	}
 }
 
@@ -143,13 +182,27 @@ func testRuntimeSnapshotResponse(ref providercatalog.Reference, applicationID st
 				PolicyHash: "hash_security_policy_live",
 			},
 			Routing: runtimeSnapshotRoutingPolicy{
-				DefaultProvider:   "openai-main",
-				DefaultModel:      "gpt-test-low",
-				RoutingPolicyHash: "hash_routing_policy_live",
+				DefaultProvider:     "openai-main",
+				DefaultModel:        "gpt-test-low",
+				LowCostProvider:     "openai-low",
+				LowCostModel:        "gpt-test-mini",
+				HighQualityProvider: "openai-premium",
+				HighQualityModel:    "gpt-test-smart",
+				RoutingPolicyHash:   "hash_routing_policy_live",
 			},
 			Cache: runtimeSnapshotCachePolicy{
 				ExactCacheEnabled: true,
 				CachePolicyHash:   "hash_cache_policy_live",
+			},
+			PromptCapture: runtimeSnapshotPromptCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+				MaxChars: 1200,
+			},
+			ResponseCapture: runtimeSnapshotResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 1600,
 			},
 			RateLimit: runtimeSnapshotRateLimitPolicy{
 				Enabled:       true,

@@ -2,12 +2,87 @@ from __future__ import annotations
 
 import os
 import unittest
+from dataclasses import fields
 from unittest.mock import patch
 
+from app.adapters.safety.privacy_filter_adapter import KOELECTRA_PRIVACY_NER_MODEL
+from app.core.config import (
+    DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID,
+    DEFAULT_AI_SAFETY_DETECTOR_RUNTIME,
+    Settings,
+    load_settings,
+)
 from app.main import run
 
 
 class AiServiceLauncherConfigTests(unittest.TestCase):
+    def test_settings_loads_configured_ai_safety_detector_model_id(self) -> None:
+        env = {
+            "AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID": KOELECTRA_PRIVACY_NER_MODEL,
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_model_id, KOELECTRA_PRIVACY_NER_MODEL)
+
+    def test_settings_rejects_blank_or_whitespace_model_id(self) -> None:
+        env = {
+            "AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID": "bad model id",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_model_id, DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID)
+
+    def test_settings_loads_additional_ai_safety_detector_model_ids(self) -> None:
+        env = {
+            "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS": (
+                f"{KOELECTRA_PRIVACY_NER_MODEL}, custom/example-token-classifier,"
+                f"{KOELECTRA_PRIVACY_NER_MODEL}, bad model id"
+            ),
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(
+            settings.ai_safety_additional_detector_model_ids,
+            (KOELECTRA_PRIVACY_NER_MODEL, "custom/example-token-classifier"),
+        )
+
+    def test_settings_loads_ai_safety_detector_runtime(self) -> None:
+        with patch.dict(os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx"}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_runtime, "onnx")
+
+    def test_settings_defaults_ai_safety_detector_runtime_to_onnx(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(DEFAULT_AI_SAFETY_DETECTOR_RUNTIME, "onnx")
+        self.assertEqual(settings.ai_safety_detector_runtime, "onnx")
+
+    def test_settings_rejects_unknown_ai_safety_detector_runtime(self) -> None:
+        with patch.dict(os.environ, {"AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "bad"}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_detector_runtime, DEFAULT_AI_SAFETY_DETECTOR_RUNTIME)
+
+    def test_settings_has_no_shadow_classifier_configuration(self) -> None:
+        self.assertEqual(
+            {field.name for field in fields(Settings)},
+            {
+                "host",
+                "port",
+                "log_level",
+                "remote_safety_mode",
+                "access_log_enabled",
+                "ai_safety_detector_model_id",
+                "ai_safety_additional_detector_model_ids",
+                "ai_safety_detector_runtime",
+            },
+        )
+
     def test_launcher_passes_access_log_setting_to_uvicorn(self) -> None:
         env = {
             "AI_SERVICE_HOST": "127.0.0.9",

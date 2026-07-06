@@ -1,10 +1,28 @@
 package config
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+)
+
+const (
+	SemanticCacheStoreInMemory           = "in_memory"
+	SemanticCacheEmbeddingProviderFake   = "fake"
+	SemanticCacheEmbeddingProviderOpenAI = "openai"
+	SemanticCacheClassifierTypeNoop      = cachekey.CacheabilityClassifierTypeNoop
+	SemanticCacheClassifierTypeStub      = cachekey.CacheabilityClassifierTypeStub
+	SemanticCacheClassifierTypeFastText  = cachekey.CacheabilityClassifierTypeFastText
+
+	RateLimitBackendPostgres      = "postgres"
+	RateLimitBackendRedis         = "redis"
+	RateLimitAlgorithmFixedWindow = "fixed_window"
+	RateLimitAlgorithmTokenBucket = "token_bucket"
 )
 
 type Config struct {
@@ -14,6 +32,8 @@ type Config struct {
 	ControlPlaneBaseURL      string
 	ControlPlaneTimeout      time.Duration
 	RuntimeSnapshotMode      string
+	RuntimeSnapshotCache     RuntimeSnapshotCacheConfig
+	ProviderCatalogCache     ProviderCatalogCacheConfig
 	AuthSource               string
 	MockProviderBaseURL      string
 	DefaultProvider          string
@@ -57,16 +77,99 @@ type Config struct {
 	RateLimitEnabled         bool
 	RateLimitWindowSecs      int
 	RateLimitLimit           int
+	RateLimitBackend         string
+	RateLimitAlgorithm       string
+	RateLimitRedisKeyPrefix  string
+	AISafetySidecar          AISafetySidecarConfig
+	AsyncLogEnabled          bool
+	AsyncLogQueueSize        int
+	AsyncLogWorkerCount      int
+	AsyncLogWriteTimeout     time.Duration
+	AsyncLogShutdownTimeout  time.Duration
+	PromptCaptureEnabled     bool
+	PromptCaptureMaxChars    int
+	ResponseCaptureEnabled   bool
+	ResponseCaptureMaxChars  int
+	SemanticCache            SemanticCacheConfig
+}
+
+type AISafetySidecarConfig struct {
+	Enabled     bool
+	EndpointURL string
+	Timeout     time.Duration
+	ModelID     string
+	DetectorSet string
+	Locale      string
+}
+
+type RuntimeSnapshotCacheConfig struct {
+	Enabled  bool
+	TTL      time.Duration
+	StaleTTL time.Duration
+}
+
+type ProviderCatalogCacheConfig struct {
+	Enabled  bool
+	TTL      time.Duration
+	StaleTTL time.Duration
+}
+
+type SemanticCacheConfig struct {
+	Enabled                 bool
+	Mode                    string
+	Threshold               float64
+	TopK                    int
+	TTL                     time.Duration
+	Store                   string
+	MaxEntries              int
+	EmbeddingProvider       string
+	EmbeddingModel          string
+	EmbeddingDimensions     int
+	EmbeddingTimeout        time.Duration
+	OpenAIBaseURL           string
+	OpenAIAPIKey            string
+	PolicyVersion           string
+	KeyVersion              string
+	IntentPolicyPath        string
+	AllowCategories         []string
+	DenyCategories          []string
+	AllowedTenantIDs        []string
+	AllowedApplicationIDs   []string
+	AllowedCategories       []string
+	CategoryThresholds      map[string]float64
+	ClassifierEnabled       bool
+	ClassifierType          string
+	ClassifierEndpoint      string
+	ClassifierMinConfidence float64
+	ClassifierTimeout       time.Duration
 }
 
 func Load() Config {
-	return Config{
-		Port:                     envString("GATEWAY_PORT", "8080"),
-		DatabaseURL:              envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
-		RedisURL:                 envString("REDIS_URL", "redis://localhost:6379"),
-		ControlPlaneBaseURL:      envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
-		ControlPlaneTimeout:      envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
-		RuntimeSnapshotMode:      envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
+	cfg, _ := LoadWithError()
+	return cfg
+}
+
+func LoadWithError() (Config, error) {
+	semanticCache, err := LoadSemanticCacheConfig()
+	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
+	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
+	cfg := Config{
+		Port:                envString("GATEWAY_PORT", "8080"),
+		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
+		RedisURL:            envString("REDIS_URL", "redis://localhost:6379"),
+		ControlPlaneBaseURL: envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
+		ControlPlaneTimeout: envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
+		RuntimeSnapshotMode: envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
+		RuntimeSnapshotCache: RuntimeSnapshotCacheConfig{
+			Enabled:  envBool("GATEWAY_RUNTIME_SNAPSHOT_CACHE_ENABLED", true),
+			TTL:      envDurationMillis("GATEWAY_RUNTIME_SNAPSHOT_CACHE_TTL_MS", 5000),
+			StaleTTL: envDurationMillis("GATEWAY_RUNTIME_SNAPSHOT_CACHE_STALE_TTL_MS", 60000),
+		},
+		ProviderCatalogCache: ProviderCatalogCacheConfig{
+			Enabled:  envBool("GATEWAY_PROVIDER_CATALOG_CACHE_ENABLED", true),
+			TTL:      envDurationMillis("GATEWAY_PROVIDER_CATALOG_CACHE_TTL_MS", 5000),
+			StaleTTL: envDurationMillis("GATEWAY_PROVIDER_CATALOG_CACHE_STALE_TTL_MS", 60000),
+		},
 		AuthSource:               envString("GATEWAY_AUTH_SOURCE", "database"),
 		MockProviderBaseURL:      envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		DefaultProvider:          envString("GATEWAY_DEFAULT_PROVIDER", "mock"),
@@ -110,7 +213,176 @@ func Load() Config {
 		RateLimitEnabled:         envBool("GATEWAY_RATE_LIMIT_ENABLED", true),
 		RateLimitWindowSecs:      envInt("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitLimit:           envInt("GATEWAY_RATE_LIMIT_LIMIT", 60),
+		RateLimitBackend:         rateLimitBackend,
+		RateLimitAlgorithm:       rateLimitAlgorithm,
+		RateLimitRedisKeyPrefix:  strings.TrimSpace(envString("GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX", "")),
+		AISafetySidecar: AISafetySidecarConfig{
+			Enabled:     envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
+			EndpointURL: envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
+			Timeout:     envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 300),
+			ModelID:     envString("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter"),
+			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
+			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
+		},
+		AsyncLogEnabled:         envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
+		AsyncLogQueueSize:       envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
+		AsyncLogWorkerCount:     envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
+		AsyncLogWriteTimeout:    envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
+		AsyncLogShutdownTimeout: envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
+		PromptCaptureEnabled:    envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
+		PromptCaptureMaxChars:   envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
+		ResponseCaptureEnabled:  envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
+		ResponseCaptureMaxChars: envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
+		SemanticCache:           semanticCache,
 	}
+	if err != nil {
+		return cfg, err
+	}
+	if err := validateRateLimitConfig(cfg); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+func normalizeRateLimitBackend(value string) string {
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	if normalized == "" {
+		return RateLimitBackendRedis
+	}
+	return normalized
+}
+
+func normalizeRateLimitAlgorithm(value string, backend string) string {
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	if normalized == "" {
+		if backend == RateLimitBackendPostgres {
+			return RateLimitAlgorithmFixedWindow
+		}
+		return RateLimitAlgorithmTokenBucket
+	}
+	return normalized
+}
+
+func validateRateLimitConfig(cfg Config) error {
+	switch cfg.RateLimitBackend {
+	case RateLimitBackendPostgres, RateLimitBackendRedis:
+	default:
+		return fmt.Errorf("unsupported gateway rate limit backend %q", cfg.RateLimitBackend)
+	}
+
+	switch cfg.RateLimitAlgorithm {
+	case RateLimitAlgorithmFixedWindow, RateLimitAlgorithmTokenBucket:
+	default:
+		return fmt.Errorf("unsupported gateway rate limit algorithm %q", cfg.RateLimitAlgorithm)
+	}
+
+	if cfg.RateLimitAlgorithm == RateLimitAlgorithmTokenBucket && cfg.RateLimitBackend != RateLimitBackendRedis {
+		return fmt.Errorf("token bucket requires redis backend, got %q", cfg.RateLimitBackend)
+	}
+
+	return nil
+}
+
+func LoadSemanticCacheConfig() (SemanticCacheConfig, error) {
+	enabled, err := semanticEnvBool("SEMANTIC_CACHE_ENABLED", false)
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	classifierEnabled, err := semanticEnvBool("SEMANTIC_CACHE_CLASSIFIER_ENABLED", false)
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	mode := semanticEnvString("SEMANTIC_CACHE_MODE", cachekey.SemanticCacheModeEnforce)
+	switch mode {
+	case cachekey.SemanticCacheModeOff, cachekey.SemanticCacheModeShadow, cachekey.SemanticCacheModeEnforce:
+	default:
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache mode %q", mode)
+	}
+	store := semanticEnvString("SEMANTIC_CACHE_STORE", SemanticCacheStoreInMemory)
+	if store != SemanticCacheStoreInMemory {
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache store %q", store)
+	}
+	embeddingProvider := semanticEnvString("SEMANTIC_CACHE_EMBEDDING_PROVIDER", SemanticCacheEmbeddingProviderFake)
+	if embeddingProvider != SemanticCacheEmbeddingProviderFake && embeddingProvider != SemanticCacheEmbeddingProviderOpenAI {
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache embedding provider %q", embeddingProvider)
+	}
+	classifierType := semanticEnvString("SEMANTIC_CACHE_CLASSIFIER_TYPE", SemanticCacheClassifierTypeStub)
+	switch classifierType {
+	case SemanticCacheClassifierTypeNoop, SemanticCacheClassifierTypeStub, SemanticCacheClassifierTypeFastText:
+	default:
+		return SemanticCacheConfig{}, fmt.Errorf("unsupported semantic cache classifier type %q", classifierType)
+	}
+	classifierEndpoint := semanticEnvString("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT", "")
+	if classifierEnabled && classifierType == SemanticCacheClassifierTypeFastText {
+		parsedEndpoint, parseErr := url.Parse(classifierEndpoint)
+		if strings.TrimSpace(classifierEndpoint) == "" || parseErr != nil || parsedEndpoint.Scheme == "" || parsedEndpoint.Host == "" {
+			return SemanticCacheConfig{}, fmt.Errorf("SEMANTIC_CACHE_CLASSIFIER_ENDPOINT is required when SEMANTIC_CACHE_CLASSIFIER_ENABLED=true and SEMANTIC_CACHE_CLASSIFIER_TYPE=fasttext")
+		}
+	}
+	intentPolicyPath := semanticEnvString("SEMANTIC_CACHE_INTENT_POLICY_PATH", "")
+	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	if enabled && mode != cachekey.SemanticCacheModeOff && embeddingProvider == SemanticCacheEmbeddingProviderOpenAI && strings.TrimSpace(intentPolicyPath) != "" && openAIAPIKey == "" {
+		return SemanticCacheConfig{}, fmt.Errorf("OPENAI_API_KEY is required when SEMANTIC_CACHE_ENABLED=true, SEMANTIC_CACHE_MODE is not off, SEMANTIC_CACHE_EMBEDDING_PROVIDER=openai, and SEMANTIC_CACHE_INTENT_POLICY_PATH is set")
+	}
+	threshold := semanticEnvFloat("SEMANTIC_CACHE_THRESHOLD", 0.92, 0, 1)
+	threshold = semanticEnvFloat("SEMANTIC_CACHE_DEFAULT_THRESHOLD", threshold, 0, 1)
+
+	return SemanticCacheConfig{
+		Enabled:                 enabled,
+		Mode:                    mode,
+		Threshold:               threshold,
+		TopK:                    semanticEnvInt("SEMANTIC_CACHE_TOP_K", 3, 1),
+		TTL:                     time.Duration(semanticEnvInt("SEMANTIC_CACHE_TTL_SECONDS", 3600, 1)) * time.Second,
+		Store:                   store,
+		MaxEntries:              semanticEnvInt("SEMANTIC_CACHE_MAX_ENTRIES", 1000, 1),
+		EmbeddingProvider:       embeddingProvider,
+		EmbeddingModel:          semanticEnvString("SEMANTIC_CACHE_EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingDimensions:     semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_DIMENSIONS", 0, 0),
+		EmbeddingTimeout:        time.Duration(semanticEnvInt("SEMANTIC_CACHE_EMBEDDING_TIMEOUT_MS", 3000, 1)) * time.Millisecond,
+		OpenAIBaseURL:           semanticEnvString("SEMANTIC_CACHE_OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIAPIKey:            openAIAPIKey,
+		PolicyVersion:           semanticEnvString("SEMANTIC_CACHE_POLICY_VERSION", "v1"),
+		KeyVersion:              semanticEnvString("SEMANTIC_CACHE_KEY_VERSION", "v1"),
+		IntentPolicyPath:        intentPolicyPath,
+		AllowCategories:         semanticEnvCSV("SEMANTIC_CACHE_ALLOW_CATEGORIES", []string{"general"}),
+		DenyCategories:          semanticEnvCSV("SEMANTIC_CACHE_DENY_CATEGORIES", []string{"account_access", "support_refund", "code", "translation", "summarization", "extraction_json", "reasoning", "sensitive", "tool_call", "unknown"}),
+		AllowedTenantIDs:        semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_TENANT_IDS", nil),
+		AllowedApplicationIDs:   semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_APPLICATION_IDS", nil),
+		AllowedCategories:       semanticEnvCSV("SEMANTIC_CACHE_ALLOWED_CATEGORIES", nil),
+		CategoryThresholds:      semanticCacheCategoryThresholds(),
+		ClassifierEnabled:       classifierEnabled,
+		ClassifierType:          classifierType,
+		ClassifierEndpoint:      classifierEndpoint,
+		ClassifierMinConfidence: semanticEnvFloat("SEMANTIC_CACHE_CLASSIFIER_MIN_CONFIDENCE", cachekey.DefaultCacheabilityClassifierMinConfidence, 0, 1),
+		ClassifierTimeout:       time.Duration(semanticEnvInt("SEMANTIC_CACHE_CLASSIFIER_TIMEOUT_MS", int(cachekey.DefaultCacheabilityClassifierTimeout.Milliseconds()), 1)) * time.Millisecond,
+	}, nil
+}
+
+func semanticCacheCategoryThresholds() map[string]float64 {
+	envByCategory := map[string]string{
+		"general":        "SEMANTIC_CACHE_THRESHOLD_GENERAL",
+		"account_access": "SEMANTIC_CACHE_THRESHOLD_ACCOUNT_ACCESS",
+		"support_refund": "SEMANTIC_CACHE_THRESHOLD_SUPPORT_REFUND",
+		"code":           "SEMANTIC_CACHE_THRESHOLD_CODE",
+		"translation":    "SEMANTIC_CACHE_THRESHOLD_TRANSLATION",
+		"unknown":        "SEMANTIC_CACHE_THRESHOLD_UNKNOWN",
+	}
+	thresholds := map[string]float64{}
+	for category, key := range envByCategory {
+		value := semanticEnvString(key, "")
+		if value == "" {
+			continue
+		}
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil || parsed <= 0 || parsed > 1 {
+			continue
+		}
+		thresholds[category] = parsed
+	}
+	if len(thresholds) == 0 {
+		return nil
+	}
+	return thresholds
 }
 
 func envString(key string, fallback string) string {
@@ -189,6 +461,72 @@ func envBool(key string, fallback bool) bool {
 	}
 
 	return parsed
+}
+
+func semanticEnvString(key string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		value = strings.TrimSpace(os.Getenv("GATEWAY_" + key))
+	}
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func semanticEnvBool(key string, fallback bool) (bool, error) {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func semanticEnvFloat(key string, fallback float64, minVal float64, maxVal float64) float64 {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed < minVal || parsed > maxVal {
+		return fallback
+	}
+	return parsed
+}
+
+func semanticEnvInt(key string, fallback int, minVal int) int {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < minVal {
+		return fallback
+	}
+	return parsed
+}
+
+func semanticEnvCSV(key string, fallback []string) []string {
+	value := semanticEnvString(key, "")
+	if value == "" {
+		return append([]string{}, fallback...)
+	}
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	if len(values) == 0 {
+		return append([]string{}, fallback...)
+	}
+	return values
 }
 
 func DatabaseDriverURL(rawURL string) string {

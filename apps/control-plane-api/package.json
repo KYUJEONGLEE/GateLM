@@ -5,7 +5,7 @@
   "description": "GateLM Control Plane and Runtime Policy API",
   "scripts": {
     "dev": "nest start --watch",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "build": "nest build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --passWithNoTests",

@@ -67,6 +67,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		SecurityPolicyHash: snapshot.SafetyPolicy.SecurityPolicyHash,
 		RoutingPolicyHash:  snapshot.RoutingPolicy.RoutingPolicyHash,
 		Snapshot:           snapshot.Snapshot,
+		SafetyPolicy:       snapshot.SafetyPolicy,
 		RateLimitConfig:    snapshot.RateLimit,
 		HasRateLimitConfig: true,
 		BudgetPolicy:       snapshot.BudgetPolicy,
@@ -75,6 +76,10 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		HasRoutingPolicy:   true,
 		CachePolicy:        snapshot.CachePolicy,
 		HasCachePolicy:     true,
+		PromptCapture:      snapshot.PromptCapture,
+		HasPromptCapture:   true,
+		ResponseCapture:    snapshot.ResponseCapture,
+		HasResponseCapture: true,
 	}
 
 	gatewayCtx.Masking.SecurityPolicyVersionID = snapshot.SafetyPolicy.SecurityPolicyHash

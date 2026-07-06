@@ -38,6 +38,7 @@ describe('RuntimeConfigsService', () => {
       gatewayApiKey: { findFirst: jest.Mock; findUnique: jest.Mock };
       appToken: { findFirst: jest.Mock; findUnique: jest.Mock };
       providerConnection: { findMany: jest.Mock };
+      applicationProviderConnection: { findMany: jest.Mock };
       runtimeConfig: {
         findFirst: jest.Mock;
         findMany: jest.Mock;
@@ -68,6 +69,9 @@ describe('RuntimeConfigsService', () => {
         findUnique: jest.fn(),
       },
       providerConnection: {
+        findMany: jest.fn(),
+      },
+      applicationProviderConnection: {
         findMany: jest.fn(),
       },
       runtimeConfig: {
@@ -109,8 +113,19 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn',
         warningThresholdPercent: 70,
+        restrictHighQualityOnBudgetRisk: true,
       },
       cachePolicy: { ttlSeconds: 120 },
+      promptCapturePolicy: {
+        enabled: true,
+        mode: 'log_safe_full',
+        maxChars: 1200,
+      },
+      responseCapturePolicy: {
+        enabled: true,
+        mode: 'raw_full',
+        maxChars: 1600,
+      },
     });
 
     expect(prisma.runtimeConfig.create).toHaveBeenCalledWith(
@@ -129,12 +144,186 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 70,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.runtimeConfig.cachePolicy.ttlSeconds).toBe(120);
+    expect(result.runtimeConfig.promptCapturePolicy).toEqual({
+      enabled: true,
+      mode: 'log_safe_full',
+      maxChars: 1200,
+    });
+    expect(result.runtimeConfig.responseCapturePolicy).toEqual({
+      enabled: true,
+      mode: 'raw_full',
+      maxChars: 1600,
+    });
     expect(result.runtimeConfig.configHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('secretHash');
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('a'.repeat(64));
     expect(JSON.stringify(result.runtimeConfig)).not.toContain('b'.repeat(64));
+  });
+
+  it('rejects draft runtime configs that disable mandatory safety detectors', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+
+    await expect(
+      service.upsertDraft(applicationId, {
+        safetyPolicy: {
+          detectors: [
+            {
+              type: 'api_key',
+              enabled: false,
+              action: 'block',
+              placeholder: '[API_KEY_REDACTED]',
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow(
+      'Safety detector api_key is mandatory and cannot be disabled.',
+    );
+    expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
+    expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts optional v2 safety detector categories in draft configs', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const optionalDetectorTypes = [
+      'email',
+      'phone_number',
+      'person_name',
+      'postal_address',
+      'organization_name',
+    ] as const;
+
+    const result = await service.upsertDraft(applicationId, {
+      safetyPolicy: {
+        detectors: optionalDetectorTypes.map((type) => ({
+          type,
+          enabled: true,
+          action: 'redact',
+          placeholder: `[${type.toUpperCase()}_REDACTED]`,
+        })),
+      },
+    });
+
+    expect(
+      result.runtimeConfig.safetyPolicy.detectors.map(
+        (detector) => detector.type,
+      ),
+    ).toEqual([...optionalDetectorTypes]);
+    expect(result.runtimeConfig.safetyPolicy.detectors).toEqual(
+      optionalDetectorTypes.map((type) =>
+        expect.objectContaining({
+          type,
+          enabled: true,
+          action: 'redact',
+        }),
+      ),
+    );
+  });
+
+  it('keeps optional high-quality routing model in the runtime policy', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      providerConfig: { models: ['mock-fast', 'mock-balanced', 'mock-smart'] },
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {
+      routingPolicy: {
+        defaultProvider: 'mock',
+        defaultModel: 'mock-balanced',
+        lowCostProvider: 'mock',
+        lowCostModel: 'mock-fast',
+        highQualityProvider: 'mock',
+        highQualityModel: 'mock-smart',
+      },
+    });
+
+    expect(result.runtimeConfig.routingPolicy).toEqual(
+      expect.objectContaining({
+        defaultModel: 'mock-balanced',
+        lowCostModel: 'mock-fast',
+        highQualityProvider: 'mock',
+        highQualityModel: 'mock-smart',
+      }),
+    );
+    expect(result.runtimeConfig.routingPolicy.routingPolicyHash).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+  });
+
+  it('uses the selected high-quality provider default model when the model is omitted', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    prisma.providerConnection.findMany.mockResolvedValue([
+      {
+        id: providerId,
+        tenantId,
+        projectId,
+        provider: 'openai-main',
+        displayName: 'OpenAI Main',
+        status: ProviderConnectionStatus.ACTIVE,
+        baseUrl: 'https://api.openai.example/v1',
+        timeoutMs: 30000,
+        secretRef: 'secret/provider/openai-main',
+        credentialPrefix: 'sk_',
+        credentialLast4: '9xA1',
+        resolver: 'none',
+        providerConfig: { models: ['gpt-4o'] },
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000601',
+        tenantId,
+        projectId,
+        provider: 'mock-premium',
+        displayName: 'Mock Premium',
+        status: ProviderConnectionStatus.ACTIVE,
+        baseUrl: 'http://mock-premium:8090',
+        timeoutMs: 30000,
+        secretRef: 'secret/provider/mock-premium',
+        credentialPrefix: 'mock_',
+        credentialLast4: '8bB2',
+        resolver: 'none',
+        providerConfig: { models: ['mock-smart', 'mock-balanced'] },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {
+      routingPolicy: {
+        defaultProvider: 'openai-main',
+        defaultModel: 'gpt-4o',
+        highQualityProvider: 'mock-premium',
+      },
+    });
+
+    expect(result.runtimeConfig.routingPolicy).toEqual(
+      expect.objectContaining({
+        defaultProvider: 'openai-main',
+        defaultModel: 'gpt-4o',
+        highQualityProvider: 'mock-premium',
+        highQualityModel: 'mock-smart',
+      }),
+    );
   });
 
   it('publishes a draft as the single active runtime config snapshot', async () => {
@@ -249,7 +438,7 @@ describe('RuntimeConfigsService', () => {
     expect(result.publishState).toBe('active');
     expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v1');
     expect(result.providers[0]?.credentialRef).toEqual({
-      credentialRefId: `provider_credential:${providerId}`,
+      credentialRefId: 'secret/provider/mock',
       credentialVersion: 1,
       credentialState: 'active',
     });
@@ -349,6 +538,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn' as const,
         warningThresholdPercent: 75,
+        restrictHighQualityOnBudgetRisk: true,
       },
     };
     prisma.runtimeConfig.findUnique.mockResolvedValue(
@@ -398,6 +588,7 @@ describe('RuntimeConfigsService', () => {
           enabled: true,
           enforcementMode: 'warn',
           warningThresholdPercent: 75,
+          restrictHighQualityOnBudgetRisk: true,
         },
       }),
     );
@@ -444,6 +635,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'block' as const,
         warningThresholdPercent: 70,
+        restrictHighQualityOnBudgetRisk: true,
       },
     };
     const tx = {
@@ -550,6 +742,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'block',
       warningThresholdPercent: 70,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(createdDocument.configVersion).toBe(
       'runtime_config_rollback_manual',
@@ -686,7 +879,19 @@ describe('RuntimeConfigsService', () => {
   it('returns an active RuntimeSnapshot execution view without copying legacy secret refs', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
-    const activeDocument = activeRuntimeConfigDocument();
+    const activeDocument = {
+      ...activeRuntimeConfigDocument(),
+      promptCapturePolicy: {
+        enabled: true,
+        mode: 'log_safe_full' as const,
+        maxChars: 1200,
+      },
+      responseCapturePolicy: {
+        enabled: true,
+        mode: 'raw_full' as const,
+        maxChars: 1600,
+      },
+    };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
       runtimeConfigRecord(activeDocument, {
         publishState: RuntimeConfigPublishState.ACTIVE,
@@ -721,9 +926,21 @@ describe('RuntimeConfigsService', () => {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.policies.routing.defaultProvider).toBe('mock');
+    expect(result.policies.routing.lowCostModel).toBe('mock-fast');
     expect(result.policies.safety.requestSideRequired).toBe(true);
+    expect(result.policies.promptCapture).toEqual({
+      enabled: true,
+      mode: 'log_safe_full',
+      maxChars: 1200,
+    });
+    expect(result.policies.responseCapture).toEqual({
+      enabled: true,
+      mode: 'raw_full',
+      maxChars: 1600,
+    });
     expect(result.legacyHashes).toEqual({
       configHash: activeDocument.configHash,
       securityPolicyHash: activeDocument.safetyPolicy.securityPolicyHash,
@@ -848,6 +1065,7 @@ describe('RuntimeConfigsService', () => {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     });
   });
 
@@ -878,12 +1096,73 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 80,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.budgetResolution).toEqual({
       budgetScopeType: 'application',
       budgetScopeId: applicationId,
       resolvedBy: 'default_application',
       warningThresholdPercent: 80,
+    });
+  });
+
+  it('defaults missing prompt capture mode to log_safe_full when capture is enabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.promptCapturePolicy = {
+      enabled: true,
+      maxChars: 1200,
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.promptCapture).toEqual({
+      enabled: true,
+      mode: 'log_safe_full',
+      maxChars: 1200,
+    });
+  });
+
+  it('defaults missing response capture mode to raw_full when capture is enabled', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument() as unknown as Record<
+      string,
+      unknown
+    >;
+    activeDocument.responseCapturePolicy = {
+      enabled: true,
+      maxChars: 1600,
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(
+        activeDocument as unknown as ActiveRuntimeConfigResponseDto,
+        {
+          publishState: RuntimeConfigPublishState.ACTIVE,
+          publishedAt: now,
+        },
+      ),
+    );
+
+    const result = await service.getActiveRuntimeSnapshot(applicationId);
+
+    expect(result.policies.responseCapture).toEqual({
+      enabled: true,
+      mode: 'raw_full',
+      maxChars: 1600,
     });
   });
 
@@ -896,6 +1175,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'block' as const,
         warningThresholdPercent: 75,
+        restrictHighQualityOnBudgetRisk: false,
       },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
@@ -917,6 +1197,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'block',
       warningThresholdPercent: 75,
+      restrictHighQualityOnBudgetRisk: false,
     });
   });
 
@@ -929,6 +1210,7 @@ describe('RuntimeConfigsService', () => {
         enabled: true,
         enforcementMode: 'warn' as const,
         warningThresholdPercent: 65,
+        restrictHighQualityOnBudgetRisk: true,
       },
     };
     prisma.runtimeConfig.findFirst.mockResolvedValue(
@@ -943,6 +1225,7 @@ describe('RuntimeConfigsService', () => {
     expect(Object.keys(result.policies.budget).sort()).toEqual([
       'enabled',
       'enforcementMode',
+      'restrictHighQualityOnBudgetRisk',
       'warningThresholdPercent',
     ]);
     expect(Object.keys(result.budgetResolution).sort()).toEqual([
@@ -955,6 +1238,7 @@ describe('RuntimeConfigsService', () => {
       enabled: true,
       enforcementMode: 'warn',
       warningThresholdPercent: 65,
+      restrictHighQualityOnBudgetRisk: true,
     });
     expect(result.budgetResolution).toEqual({
       budgetScopeType: 'application',
@@ -1095,6 +1379,80 @@ describe('RuntimeConfigsService', () => {
     });
     expect(JSON.stringify(catalog)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
+  });
+
+  it('preserves Anthropic adapter config in the Provider Catalog body', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const anthropicProviderId = '00000000-0000-4000-8000-000000000602';
+    const activeDocument = activeRuntimeConfigDocument();
+    const activeDocumentWithClaude = {
+      ...activeDocument,
+      providers: [
+        ...activeDocument.providers,
+        {
+          providerId: anthropicProviderId,
+          provider: 'claude',
+          displayName: 'Claude',
+          status: 'active' as const,
+          adapterType: 'anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          timeoutMs: 30000,
+          credentialRequired: true,
+          credentialRef: {
+            credentialRefId: `provider_credential:${anthropicProviderId}`,
+            credentialVersion: 1,
+            credentialState: 'active' as const,
+          },
+          secretRef: `provider_credential:${anthropicProviderId}`,
+          credentialPreview: { prefix: 'env_ref_', last4: '0000' },
+          resolver: 'environment' as const,
+          adapterConfig: {
+            apiVersion: '2023-06-01',
+            requestFormat: 'anthropic_messages' as const,
+          },
+          models: ['claude-synthetic-sonnet'],
+          failureMode: 'fail_closed' as const,
+        },
+      ],
+      models: [
+        ...activeDocument.models,
+        {
+          provider: 'claude',
+          model: 'claude-synthetic-sonnet',
+          displayName: 'Claude Synthetic Sonnet',
+          status: 'active' as const,
+          contextWindowTokens: 200000,
+          supportsStreaming: false,
+          supportsJsonMode: false,
+        },
+      ],
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocumentWithClaude, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const claudeProvider = catalog.providers.find(
+      (provider) => provider.providerName === 'claude',
+    );
+
+    expect(claudeProvider).toMatchObject({
+      providerId: anthropicProviderId,
+      adapterType: 'anthropic',
+      adapterConfig: {
+        apiVersion: '2023-06-01',
+        requestFormat: 'anthropic_messages',
+      },
+      models: [
+        expect.objectContaining({
+          modelName: 'claude-synthetic-sonnet',
+        }),
+      ],
+    });
   });
 
   it('filters unselected providers that require missing credentials from the Provider Catalog body', async () => {
@@ -1621,6 +1979,19 @@ describe('RuntimeConfigsService', () => {
         ...providerOverrides,
       },
     ]);
+    prisma.applicationProviderConnection.findMany.mockImplementation(async () => {
+      const providers = await prisma.providerConnection.findMany();
+
+      return providers.map((provider: { id: string }) => ({
+        id: `application-provider-${provider.id}`,
+        tenantId,
+        projectId,
+        applicationId,
+        providerConnectionId: provider.id,
+        providerConnection: provider,
+        createdAt: now,
+      }));
+    });
   }
 
   function runtimeConfigRecord(
@@ -1716,12 +2087,24 @@ describe('RuntimeConfigsService', () => {
           defaultRequestedModel: 'auto',
           defaultProvider: 'mock',
           defaultModel: 'mock-fast',
+          lowCostProvider: 'mock',
+          lowCostModel: 'mock-fast',
           routingPolicyHash: 'e'.repeat(64),
         },
         cache: {
           exactCacheEnabled: true,
           semanticCacheMode: 'evidence_only',
           cachePolicyHash: 'a'.repeat(64),
+        },
+        promptCapture: {
+          enabled: false,
+          mode: 'disabled',
+          maxChars: 8000,
+        },
+        responseCapture: {
+          enabled: false,
+          mode: 'disabled',
+          maxChars: 8000,
         },
         rateLimit: {
           enabled: true,
@@ -1733,6 +2116,7 @@ describe('RuntimeConfigsService', () => {
           enabled: false,
           enforcementMode: 'disabled',
           warningThresholdPercent: 80,
+          restrictHighQualityOnBudgetRisk: true,
         },
         fallback: {
           enabled: true,
@@ -1843,6 +2227,7 @@ describe('RuntimeConfigsService', () => {
         enabled: false,
         enforcementMode: 'disabled',
         warningThresholdPercent: 80,
+        restrictHighQualityOnBudgetRisk: true,
       },
       safetyPolicy: {
         mode: 'rule_based',
@@ -1858,6 +2243,16 @@ describe('RuntimeConfigsService', () => {
         ],
       },
       cachePolicy: { enabled: true, type: 'exact', ttlSeconds: 3600 },
+      promptCapturePolicy: {
+        enabled: false,
+        mode: 'disabled',
+        maxChars: 8000,
+      },
+      responseCapturePolicy: {
+        enabled: false,
+        mode: 'disabled',
+        maxChars: 8000,
+      },
       routingPolicy: {
         type: 'simple',
         autoModel: 'auto',

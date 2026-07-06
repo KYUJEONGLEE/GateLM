@@ -168,13 +168,13 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			"redacted",
 			[]byte(`["email"]`),
 			1,
-			sql.NullString{String: "Send a reply to [EMAIL_REDACTED].", Valid: true},
+			sql.NullString{String: "Send a reply to [EMAIL_1].", Valid: true},
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullString{},
 			createdAt,
 			sql.NullTime{Time: completedAt, Valid: true},
-			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_REDACTED]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
+			[]byte(`{"runtimeSnapshot":{"runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"contentHash":"content_hash_query_test","runtimeState":"snapshot_active","publishedAt":"2026-06-25T00:00:00Z","publishedBy":"runtime_config_compat","gatewayInstanceId":"gateway_query_test","legacyHashes":{"configHash":"config_hash_query_test","securityPolicyHash":"security_hash_query_test","routingPolicyHash":"route_hash_query_test"}},"domainOutcomes":{"auth":{"outcome":"passed","httpStatus":200,"errorCode":null},"runtime":{"outcome":"snapshot_active","runtimeSnapshotId":"runtime_snapshot_query_test","runtimeSnapshotVersion":2,"runtimeState":"snapshot_active"},"rateLimit":{"outcome":"not_checked"},"budget":{"outcome":"not_used","budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application"},"safety":{"outcome":"redacted","maskingAction":"redacted","detectedTypes":["email"],"detectedCount":1,"redactedPromptPreview":"Send a reply to [EMAIL_1]."},"routing":{"outcome":"selected","requestedModel":"auto","selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"low_cost"},"cache":{"outcome":"miss","cacheType":"exact","cacheHitRequestId":null},"provider":{"outcome":"success","selectedProvider":"mock","selectedModel":"mock-fast","latencyMs":86,"sanitizedErrorCode":null},"fallback":{"outcome":"not_needed","fallbackProvider":null,"reason":null},"streaming":{"outcome":"not_streaming","streamingRequested":false},"logging":{"outcome":"written","requestLogWritten":true,"sanitizedErrorCode":null}}}`),
 		}},
 	}
 
@@ -236,6 +236,28 @@ func TestDecodeDomainOutcomesMetadataNormalizesNullSafetyDetectedTypes(t *testin
 	}
 }
 
+func TestApplyInvocationMetadataFieldsMapsPromptAndResponseCapture(t *testing.T) {
+	log := invocationlog.LlmInvocationLog{}
+	applyInvocationMetadataFields(&log, []byte(`{"promptCapture":{"enabled":true,"mode":"log_safe_full","visibility":"admin_request_detail","capturedPrompt":"문의: [EMAIL_REDACTED]","truncated":false,"maxChars":8000},"responseCapture":{"enabled":true,"mode":"raw_full","visibility":"admin_request_detail","capturedResponse":"Mock response","truncated":false,"maxChars":8000}}`))
+
+	if !log.PromptCapture.Enabled ||
+		log.PromptCapture.Mode != "log_safe_full" ||
+		log.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail ||
+		log.PromptCapture.CapturedPrompt != "문의: [EMAIL_REDACTED]" ||
+		log.PromptCapture.Truncated ||
+		log.PromptCapture.MaxChars != 8000 {
+		t.Fatalf("unexpected prompt capture fields: %+v", log.PromptCapture)
+	}
+	if !log.ResponseCapture.Enabled ||
+		log.ResponseCapture.Mode != "raw_full" ||
+		log.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail ||
+		log.ResponseCapture.CapturedResponse != "Mock response" ||
+		log.ResponseCapture.Truncated ||
+		log.ResponseCapture.MaxChars != 8000 {
+		t.Fatalf("unexpected response capture fields: %+v", log.ResponseCapture)
+	}
+}
+
 func TestDecodeDomainOutcomesMetadataNormalizesNullDomainOutcomes(t *testing.T) {
 	outcomes, err := decodeDomainOutcomesMetadata([]byte(`{"domainOutcomes":null}`))
 	if err != nil {
@@ -264,6 +286,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			int64(1),
 			int64(3),
 			int64(1),
+			int64(2),
 			int64(13),
 			int64(20),
 			int64(33),
@@ -280,10 +303,12 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			[]byte(`{"passed":4,"redacted":1,"blocked":1}`),
 			[]byte(`{"hit":1,"miss":2,"bypassed":3}`),
 			[]byte(`{"success":1,"not_called":5}`),
+			[]byte(`{"allowed":3,"warned":1,"degraded":2}`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","routingReason":"short_prompt_low_cost","requestCount":2}]`),
 			[]byte(`[{"selectedProvider":"mock","selectedModel":"mock-fast","requestCount":2,"totalTokens":30,"costMicroUsd":100}]`),
+			[]byte(`[{"projectId":"project_demo","requestCount":6,"promptTokens":13,"completionTokens":20,"totalTokens":33,"costMicroUsd":100}]`),
 			[]byte(`[{"applicationId":"app_demo","requestCount":6,"costMicroUsd":100}]`),
-			[]byte(`[{"budgetScopeType":"application","budgetScopeId":"app_demo","resolvedBy":"default_application","requestCount":6,"costMicroUsd":100}]`),
+			[]byte(`[{"budgetScopeType":"team","budgetScopeId":"team_demo","resolvedBy":"control_plane_rule","requestCount":6,"costMicroUsd":100}]`),
 			sql.NullTime{Time: lastLogCreatedAt, Valid: true},
 		}},
 	}
@@ -319,9 +344,15 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if overview.SafetyOutcomeCounts["blocked"] != 1 || overview.CacheOutcomeCounts["hit"] != 1 || overview.FallbackOutcomeCounts["success"] != 1 {
 		t.Fatalf("unexpected outcome counts: safety=%+v cache=%+v fallback=%+v", overview.SafetyOutcomeCounts, overview.CacheOutcomeCounts, overview.FallbackOutcomeCounts)
 	}
+	if overview.BudgetOutcomeCounts["degraded"] != 2 || overview.BudgetOutcomeCounts["warned"] != 1 || overview.BudgetDowngradedRequests != 2 {
+		t.Fatalf("unexpected budget outcome counts: counts=%+v downgraded=%d", overview.BudgetOutcomeCounts, overview.BudgetDowngradedRequests)
+	}
 	if overview.Performance.P95GatewayInternalLatencyMs == nil || !floatEquals(*overview.Performance.P95GatewayInternalLatencyMs, 20) ||
 		overview.Performance.P95ProviderLatencyMs == nil || !floatEquals(*overview.Performance.P95ProviderLatencyMs, 86) {
 		t.Fatalf("unexpected performance split: %+v", overview.Performance)
+	}
+	if len(overview.ProjectBreakdown) != 1 || overview.ProjectBreakdown[0].ProjectID != "project_demo" || overview.ProjectBreakdown[0].TotalTokens != 33 || overview.ProjectBreakdown[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected project breakdown: %+v", overview.ProjectBreakdown)
 	}
 	if len(overview.ApplicationBreakdown) != 1 || overview.ApplicationBreakdown[0].ApplicationID != "app_demo" {
 		t.Fatalf("unexpected application breakdown: %+v", overview.ApplicationBreakdown)
@@ -332,7 +363,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if len(overview.CostByModel) != 1 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
 	}
-	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.BudgetScopeBreakdown[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
 	}
 	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
@@ -345,6 +376,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"terminal_status = 'failed'",
 		"terminal_status = 'rate_limited'",
 		"cache_eligible_requests",
+		"cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact'",
 		"saved_cost_micro_usd",
 		"percentile_disc(0.95)",
 		"status_counts",
@@ -354,6 +386,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 		"fallback_outcome_counts",
 		"routing_count_by_model",
 		"cost_by_model",
+		"project_breakdown",
 		"application_breakdown",
 		"budget_scope_breakdown",
 	} {

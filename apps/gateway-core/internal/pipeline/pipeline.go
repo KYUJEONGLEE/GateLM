@@ -2,8 +2,10 @@ package pipeline
 
 import (
 	"context"
+	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 )
 
 type Pipeline struct {
@@ -16,7 +18,12 @@ func New(stages ...Stage) Pipeline {
 
 func (p Pipeline) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	for _, stage := range p.stages {
-		if err := stage.Execute(ctx, gatewayCtx); err != nil {
+		startedAt := time.Now()
+		err := stage.Execute(ctx, gatewayCtx)
+		if gatewayCtx != nil {
+			stagetiming.Record(&gatewayCtx.StageTimings, stage.Name(), time.Since(startedAt))
+		}
+		if err != nil {
 			return err
 		}
 	}

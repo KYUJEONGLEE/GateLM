@@ -1,10 +1,17 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { ApplicationManagement } from "@/features/applications/components/application-management";
-import { ProjectDetailManagement } from "@/features/projects/components/project-management";
+import {
+  ProjectDeleteManagement,
+  ProjectDetailManagement
+} from "@/features/projects/components/project-management";
+import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
+import { getProviderConnectionsModel } from "@/lib/control-plane/provider-connections-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
+import type { RuntimePolicyConfig } from "@/lib/control-plane/runtime-policy-types";
+import { getProjectTeamsModel } from "@/lib/control-plane/teams-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ProjectDetailPageProps = {
@@ -25,12 +32,25 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   const applicationsModel = await getApplicationsModel(tenantId, project.id);
+  const providerConnectionsModel = await getProviderConnectionsModel(tenantId);
+  const projectTeamsModel = await getProjectTeamsModel(tenantId, project.id);
   const activeApplication = applicationsModel.applications.find(
     (application) => application.status === "ACTIVE"
   );
-  const runtimeConfig = activeApplication
-    ? await getRuntimePolicyConfigForApplication(activeApplication.id)
-    : null;
+  const runtimeConfigEntries = await Promise.all(
+    applicationsModel.applications.map(async (application) => [
+      application.id,
+      await getRuntimePolicyConfigForApplication(application.id)
+    ] as const)
+  );
+  const runtimeConfigByApplicationId = Object.fromEntries(runtimeConfigEntries) as Record<
+    string,
+    RuntimePolicyConfig | null
+  >;
+  const runtimeConfig =
+    (activeApplication ? runtimeConfigByApplicationId[activeApplication.id] : null) ??
+    runtimeConfigEntries.find(([, config]) => config !== null)?.[1] ??
+    null;
 
   return (
     <ConsoleShell
@@ -40,21 +60,47 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       tenantId={tenantId}
     >
       <ProjectDetailManagement
+        breadcrumbItems={[
+          {
+            href: `/tenants/${tenantId}/projects`,
+            label: "Projects"
+          },
+          {
+            label: project.name
+          }
+        ]}
         locale={locale}
         project={project}
         tenantId={tenantId}
-        runtimeSettings={
-          runtimeConfig
-            ? {
-                cacheEnabled: runtimeConfig.cachePolicy.enabled,
-                cacheType: runtimeConfig.cachePolicy.type,
-                publishState: runtimeConfig.publishState,
-                safetyMode: runtimeConfig.safetyPolicy.mode
-              }
-            : null
-        }
       />
-      <ApplicationManagement locale={locale} model={applicationsModel} />
+      <ApplicationManagement
+        locale={locale}
+        model={applicationsModel}
+        modelOptions={runtimeConfig?.models ?? []}
+        policySummariesByApplicationId={Object.fromEntries(
+          runtimeConfigEntries.map(([applicationId, config]) => [
+            applicationId,
+            config
+              ? {
+                  defaultModel: config.routingPolicy.defaultModel,
+                  defaultProvider: config.routingPolicy.defaultProvider,
+                  modelCount: config.models.length,
+                  publishedAt: config.publishedAt,
+                  publishState: config.publishState
+                }
+              : null
+          ])
+        )}
+        projectBudgetUsd={project.totalBudgetUsd}
+        providerConnections={providerConnectionsModel.providers}
+        tenantId={tenantId}
+      />
+      <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />
+      <ProjectDeleteManagement
+        locale={locale}
+        project={project}
+        tenantId={tenantId}
+      />
     </ConsoleShell>
   );
 }

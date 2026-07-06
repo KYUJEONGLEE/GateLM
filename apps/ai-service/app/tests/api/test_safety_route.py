@@ -28,7 +28,7 @@ class SafetyRouteTests(unittest.TestCase):
         self.assertEqual(body["decision"]["action"], "redacted")
         self.assertEqual(body["decision"]["detectedTypes"], ["email"])
         self.assertEqual(body["decision"]["detectedCount"], 1)
-        self.assertIn("[EMAIL_REDACTED]", body["decision"]["redactedPromptPreview"])
+        self.assertIn("[EMAIL_1]", body["decision"]["redactedPromptPreview"])
         self.assertNotIn(SYNTHETIC_EMAIL, response.text)
         self.assertEqual(body["metadata"]["contractVersion"], "remote-safety.v1")
         self.assertEqual(body["metadata"]["detectedTypeCounts"], {"email": 1})

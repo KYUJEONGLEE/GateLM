@@ -22,8 +22,9 @@ type Store struct {
 }
 
 type cacheValue struct {
-	RequestID string `json:"requestId"`
-	Payload   []byte `json:"payload"`
+	RequestID         string `json:"requestId"`
+	SavedCostMicroUSD int64  `json:"savedCostMicroUsd"`
+	Payload           []byte `json:"payload"`
 }
 
 func NewStore(client Client, ttl time.Duration) *Store {
@@ -60,6 +61,7 @@ func (s *Store) GetExact(ctx context.Context, keyHash string) (ports.CacheLookup
 	return ports.CacheLookupResult{
 		Hit:               true,
 		CacheHitRequestID: cached.RequestID,
+		SavedCostMicroUSD: cached.SavedCostMicroUSD,
 		Payload:           cached.Payload,
 	}, nil
 }
@@ -70,8 +72,9 @@ func (s *Store) SetExact(ctx context.Context, cacheEntry ports.CacheEntry) error
 	}
 
 	payload, err := json.Marshal(cacheValue{
-		RequestID: cacheEntry.RequestID,
-		Payload:   cacheEntry.Payload,
+		RequestID:         cacheEntry.RequestID,
+		SavedCostMicroUSD: cacheEntry.SavedCostMicroUSD,
+		Payload:           cacheEntry.Payload,
 	})
 	if err != nil {
 		return err

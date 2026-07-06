@@ -21,7 +21,7 @@ async function bootstrap(): Promise<void> {
   const config = app.get(ConfigService);
   const port = config.getOrThrow<number>('CONTROL_PLANE_PORT');
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 }
 
 void bootstrap();

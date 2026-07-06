@@ -123,6 +123,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var cacheHitRequests int64
 	var cacheEligibleRequests int64
 	var fallbackSuccessRequests int64
+	var budgetDowngradedRequests int64
 	var promptTokens int64
 	var completionTokens int64
 	var totalTokens int64
@@ -139,8 +140,10 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	var safetyOutcomeCountsJSON []byte
 	var cacheOutcomeCountsJSON []byte
 	var fallbackOutcomeCountsJSON []byte
+	var budgetOutcomeCountsJSON []byte
 	var routingCountByModelJSON []byte
 	var costByModelJSON []byte
+	var projectBreakdownJSON []byte
 	var applicationBreakdownJSON []byte
 	var budgetScopeBreakdownJSON []byte
 	var lastLogCreatedAt sql.NullTime
@@ -154,6 +157,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&cacheHitRequests,
 		&cacheEligibleRequests,
 		&fallbackSuccessRequests,
+		&budgetDowngradedRequests,
 		&promptTokens,
 		&completionTokens,
 		&totalTokens,
@@ -170,8 +174,10 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		&safetyOutcomeCountsJSON,
 		&cacheOutcomeCountsJSON,
 		&fallbackOutcomeCountsJSON,
+		&budgetOutcomeCountsJSON,
 		&routingCountByModelJSON,
 		&costByModelJSON,
+		&projectBreakdownJSON,
 		&applicationBreakdownJSON,
 		&budgetScopeBreakdownJSON,
 		&lastLogCreatedAt,
@@ -199,11 +205,19 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
+	budgetOutcomeCounts, err := decodeInt64MapJSON(budgetOutcomeCountsJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
 	routingCountByModel, err := decodeRoutingCountByModelJSON(routingCountByModelJSON)
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
 	costByModel, err := decodeCostByModelJSON(costByModelJSON)
+	if err != nil {
+		return invocationlog.DashboardOverviewFields{}, err
+	}
+	projectBreakdown, err := decodeProjectBreakdownJSON(projectBreakdownJSON)
 	if err != nil {
 		return invocationlog.DashboardOverviewFields{}, err
 	}
@@ -239,6 +253,7 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		CacheHitRequests:            cacheHitRequests,
 		CacheEligibleRequests:       cacheEligibleRequests,
 		FallbackSuccessCount:        fallbackSuccessRequests,
+		BudgetDowngradedRequests:    budgetDowngradedRequests,
 		PromptTokens:                promptTokens,
 		CompletionTokens:            completionTokens,
 		TotalTokens:                 totalTokens,
@@ -256,6 +271,8 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 		SafetyOutcomeCounts:         safetyOutcomeCounts,
 		CacheOutcomeCounts:          cacheOutcomeCounts,
 		FallbackOutcomeCounts:       fallbackOutcomeCounts,
+		BudgetOutcomeCounts:         budgetOutcomeCounts,
+		ProjectBreakdown:            projectBreakdown,
 		ApplicationBreakdown:        applicationBreakdown,
 		CostByModel:                 costByModel,
 		BudgetScopeBreakdown:        budgetScopeBreakdown,
@@ -264,6 +281,378 @@ func (r *QueryReader) GetDashboardOverview(ctx context.Context, filter invocatio
 	}), nil
 }
 
+func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
+	if r == nil || r.db == nil {
+		return invocationlog.CostReportFields{}, errors.New("query reader requires a database queryer")
+	}
+
+	normalizedFilter, err := invocationlog.NormalizeCostReportFilter(filter)
+	if err != nil {
+		return invocationlog.CostReportFields{}, err
+	}
+
+	buckets, lastLogCreatedAt, err := r.queryCostReportBuckets(ctx, normalizedFilter)
+	if err != nil {
+		return invocationlog.CostReportFields{}, err
+	}
+	projectBreakdown, err := r.queryCostReportProjectBreakdown(ctx, normalizedFilter)
+	if err != nil {
+		return invocationlog.CostReportFields{}, err
+	}
+	applicationBreakdown, err := r.queryCostReportApplicationBreakdown(ctx, normalizedFilter)
+	if err != nil {
+		return invocationlog.CostReportFields{}, err
+	}
+	modelBreakdown, err := r.queryCostReportModelBreakdown(ctx, normalizedFilter)
+	if err != nil {
+		return invocationlog.CostReportFields{}, err
+	}
+	budgetScopeBreakdown, err := r.queryCostReportBudgetScopeBreakdown(ctx, normalizedFilter)
+	if err != nil {
+		return invocationlog.CostReportFields{}, err
+	}
+
+	totals := invocationlog.CostReportTotals{}
+	for _, bucket := range buckets {
+		totals.RequestCount += bucket.RequestCount
+		totals.PromptTokens += bucket.PromptTokens
+		totals.CompletionTokens += bucket.CompletionTokens
+		totals.TotalTokens += bucket.TotalTokens
+		totals.CostMicroUSD += bucket.CostMicroUSD
+		totals.SavedCostMicroUSD += bucket.SavedCostMicroUSD
+	}
+	totals.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.CostMicroUSD)
+	totals.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.SavedCostMicroUSD)
+
+	generatedAt := time.Now().UTC()
+	return invocationlog.CostReportFields{
+		Period:  normalizedFilter.Period,
+		Totals:  totals,
+		Buckets: buckets,
+		Breakdowns: invocationlog.CostReportBreakdowns{
+			ByProject:     projectBreakdown,
+			ByApplication: applicationBreakdown,
+			ByModel:       modelBreakdown,
+			ByBudgetScope: budgetScopeBreakdown,
+		},
+		DataFreshness: invocationlog.DashboardDataFreshness{
+			Source:           "request_log",
+			RecordCount:      totals.RequestCount,
+			LastLogCreatedAt: lastLogCreatedAt,
+			GeneratedAt:      generatedAt,
+			LastAggregatedAt: generatedAt,
+			IsStale:          false,
+		},
+	}, nil
+}
+
+func (r *QueryReader) queryCostReportBuckets(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportBucket, *time.Time, error) {
+	query, args := buildCostReportBucketsQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	buckets := []invocationlog.CostReportBucket{}
+	var maxLastLog time.Time
+	var hasLastLog bool
+	for rows.Next() {
+		var bucket invocationlog.CostReportBucket
+		var lastLog sql.NullTime
+		if err := rows.Scan(
+			&bucket.PeriodStart,
+			&bucket.RequestCount,
+			&bucket.PromptTokens,
+			&bucket.CompletionTokens,
+			&bucket.TotalTokens,
+			&bucket.CostMicroUSD,
+			&bucket.SavedCostMicroUSD,
+			&lastLog,
+		); err != nil {
+			return nil, nil, err
+		}
+		bucket.PeriodStart = bucket.PeriodStart.UTC()
+		bucket.PeriodEnd = costReportBucketEnd(bucket.PeriodStart, filter.Period)
+		bucket.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(bucket.CostMicroUSD)
+		bucket.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(bucket.SavedCostMicroUSD)
+		if lastLog.Valid {
+			last := lastLog.Time.UTC()
+			if !hasLastLog || last.After(maxLastLog) {
+				maxLastLog = last
+				hasLastLog = true
+			}
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	var lastLogCreatedAt *time.Time
+	if hasLastLog {
+		lastLogCreatedAt = &maxLastLog
+	}
+	return buckets, lastLogCreatedAt, nil
+}
+
+func (r *QueryReader) queryCostReportProjectBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportProjectBreakdown, error) {
+	query, args := buildCostReportProjectBreakdownQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.CostReportProjectBreakdown{}
+	for rows.Next() {
+		var item invocationlog.CostReportProjectBreakdown
+		if err := rows.Scan(&item.ProjectID, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
+			return nil, err
+		}
+		item.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		item.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.SavedCostMicroUSD)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *QueryReader) queryCostReportApplicationBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportApplicationBreakdown, error) {
+	query, args := buildCostReportApplicationBreakdownQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.CostReportApplicationBreakdown{}
+	for rows.Next() {
+		var item invocationlog.CostReportApplicationBreakdown
+		if err := rows.Scan(&item.ApplicationID, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
+			return nil, err
+		}
+		item.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		item.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.SavedCostMicroUSD)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *QueryReader) queryCostReportModelBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportModelBreakdown, error) {
+	query, args := buildCostReportModelBreakdownQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.CostReportModelBreakdown{}
+	for rows.Next() {
+		var item invocationlog.CostReportModelBreakdown
+		if err := rows.Scan(&item.SelectedProvider, &item.SelectedModel, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
+			return nil, err
+		}
+		item.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		item.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.SavedCostMicroUSD)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *QueryReader) queryCostReportBudgetScopeBreakdown(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportBudgetScopeBreakdown, error) {
+	query, args := buildCostReportBudgetScopeBreakdownQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.CostReportBudgetScopeBreakdown{}
+	for rows.Next() {
+		var item invocationlog.CostReportBudgetScopeBreakdown
+		if err := rows.Scan(&item.BudgetScope.Type, &item.BudgetScope.ID, &item.BudgetScope.ResolvedBy, &item.RequestCount, &item.PromptTokens, &item.CompletionTokens, &item.TotalTokens, &item.CostMicroUSD, &item.SavedCostMicroUSD); err != nil {
+			return nil, err
+		}
+		item.CostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		item.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.SavedCostMicroUSD)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func buildCostReportBucketsQuery(filter invocationlog.CostReportFilter) (string, []any) {
+	whereSQL, args := buildCostReportWhere(filter)
+	bucketExpression := costReportBucketExpression(filter.Period)
+	query := fmt.Sprintf(`
+select
+  %s as period_start,
+  count(*)::bigint as request_count,
+  coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+  coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+  coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+  coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
+  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd,
+  max(created_at) as last_log_created_at
+from p0_llm_invocation_logs
+where %s
+group by 1
+order by 1`, bucketExpression, whereSQL)
+	return query, args
+}
+
+func buildCostReportProjectBreakdownQuery(filter invocationlog.CostReportFilter) (string, []any) {
+	whereSQL, args := buildCostReportWhere(filter)
+	query := fmt.Sprintf(`
+select
+  project_id::text as project_id,
+  count(*)::bigint as request_count,
+  coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+  coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+  coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+  coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
+  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
+from p0_llm_invocation_logs
+where %s and project_id is not null
+group by 1
+order by cost_micro_usd desc, project_id
+limit 100`, whereSQL)
+	return query, args
+}
+
+func buildCostReportApplicationBreakdownQuery(filter invocationlog.CostReportFilter) (string, []any) {
+	whereSQL, args := buildCostReportWhere(filter)
+	query := fmt.Sprintf(`
+select
+  application_id::text as application_id,
+  count(*)::bigint as request_count,
+  coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+  coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+  coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+  coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
+  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
+from p0_llm_invocation_logs
+where %s and application_id is not null
+group by 1
+order by cost_micro_usd desc, application_id
+limit 100`, whereSQL)
+	return query, args
+}
+
+func buildCostReportModelBreakdownQuery(filter invocationlog.CostReportFilter) (string, []any) {
+	whereSQL, args := buildCostReportWhere(filter)
+	query := fmt.Sprintf(`
+with filtered as (
+  select
+    coalesce(nullif(selected_provider, ''), nullif(provider, '')) as selected_provider_key,
+    coalesce(nullif(selected_model, ''), nullif(model, '')) as selected_model_key,
+    prompt_tokens,
+    completion_tokens,
+    total_tokens,
+    cost_micro_usd,
+    saved_cost_micro_usd
+  from p0_llm_invocation_logs
+  where %s
+)
+select
+  selected_provider_key,
+  selected_model_key,
+  count(*)::bigint as request_count,
+  coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+  coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+  coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+  coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
+  coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
+from filtered
+where selected_provider_key is not null and selected_model_key is not null
+group by 1, 2
+order by cost_micro_usd desc, selected_provider_key, selected_model_key
+limit 100`, whereSQL)
+	return query, args
+}
+
+func buildCostReportBudgetScopeBreakdownQuery(filter invocationlog.CostReportFilter) (string, []any) {
+	whereSQL, args := buildCostReportWhere(filter)
+	query := fmt.Sprintf(`
+select *
+from (
+  select
+    %s as budget_scope_type,
+    %s as budget_scope_id,
+    %s as budget_scope_resolved_by,
+    count(*)::bigint as request_count,
+    coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+    coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+    coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+    coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
+    coalesce(sum(saved_cost_micro_usd), 0)::bigint as saved_cost_micro_usd
+  from p0_llm_invocation_logs
+  where %s
+  group by 1, 2, 3
+) budget_scope_rollup
+where budget_scope_id is not null and budget_scope_id <> ''
+order by cost_micro_usd desc, budget_scope_type, budget_scope_id, budget_scope_resolved_by
+limit 100`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, whereSQL)
+	return query, args
+}
+
+func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any) {
+	args := []any{filter.From.UTC(), filter.To.UTC()}
+	where := []string{
+		"created_at >= $1",
+		"created_at < $2",
+	}
+	addOptionalWhere := func(expression string, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		args = append(args, value)
+		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
+	}
+
+	addOptionalWhere("tenant_id", filter.TenantID)
+	addOptionalWhere("project_id", filter.ProjectID)
+	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
+	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
+	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
+	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
+	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
+
+	return strings.Join(where, " and "), args
+}
+
+func costReportBucketExpression(period string) string {
+	switch period {
+	case "week":
+		return "date_trunc('week', created_at)"
+	case "month":
+		return "date_trunc('month', created_at)"
+	default:
+		return "date_trunc('day', created_at)"
+	}
+}
+
+func costReportBucketEnd(start time.Time, period string) time.Time {
+	switch period {
+	case "week":
+		return start.AddDate(0, 0, 7)
+	case "month":
+		return start.AddDate(0, 1, 0)
+	default:
+		return start.AddDate(0, 0, 1)
+	}
+}
 func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
 	args := []any{filter.TenantID, filter.ProjectID, filter.From.UTC(), filter.To.UTC()}
 	where := []string{
@@ -354,11 +743,13 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 	safetyOutcomeSQL := metadataOutcomeSQL("safety", `case coalesce(nullif(masking_action, ''), 'none') when 'blocked' then 'blocked' when 'redacted' then 'redacted' else 'passed' end`)
 	cacheOutcomeSQL := metadataOutcomeSQL("cache", `case coalesce(nullif(cache_status, ''), 'bypass') when 'hit' then 'hit' when 'miss' then 'miss' when 'error' then 'error' when 'bypass' then 'bypassed' else 'not_used' end`)
 	fallbackOutcomeSQL := metadataOutcomeSQL("fallback", `'not_called'`)
+	budgetOutcomeSQL := metadataOutcomeSQL("budget", `'not_checked'`)
 
 	query := fmt.Sprintf(`
 with filtered as (
   select
     request_id,
+    project_id::text as project_id,
     application_id::text,
     %s as terminal_status,
     prompt_tokens,
@@ -374,6 +765,7 @@ with filtered as (
     %s as safety_outcome,
     %s as cache_outcome,
     %s as fallback_outcome,
+    %s as budget_outcome,
     masking_action,
     provider,
     model,
@@ -395,8 +787,9 @@ select
   count(*) filter (where terminal_status = 'rate_limited')::bigint as rate_limited_requests,
   count(*) filter (where terminal_status = 'cancelled')::bigint as cancelled_requests,
   count(*) filter (where cache_outcome = 'hit' and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_hit_requests,
-  count(*) filter (where cache_outcome in ('hit', 'miss', 'error'))::bigint as cache_eligible_requests,
+  count(*) filter (where cache_outcome in ('hit', 'miss', 'error') and coalesce(nullif(cache_type, ''), 'none') = 'exact')::bigint as cache_eligible_requests,
   count(*) filter (where fallback_outcome = 'success')::bigint as fallback_success_requests,
+  count(*) filter (where routing_reason = 'budget_downgraded_from_high_quality')::bigint as budget_downgraded_requests,
   coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
   coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
   coalesce(sum(total_tokens), 0)::bigint as total_tokens,
@@ -449,6 +842,14 @@ select
     ) fallback_rollup
   ), '{}'::jsonb) as fallback_outcome_counts,
   coalesce((
+    select jsonb_object_agg(budget_outcome_key, request_count)
+    from (
+      select coalesce(nullif(budget_outcome, ''), 'not_checked') as budget_outcome_key, count(*)::bigint as request_count
+      from filtered
+      group by 1
+    ) budget_outcome_rollup
+  ), '{}'::jsonb) as budget_outcome_counts,
+  coalesce((
     select jsonb_agg(jsonb_build_object(
       'selectedProvider', selected_provider_key,
       'selectedModel', selected_model_key,
@@ -488,6 +889,28 @@ select
   ), '[]'::jsonb) as cost_by_model,
   coalesce((
     select jsonb_agg(jsonb_build_object(
+      'projectId', project_id,
+      'requestCount', request_count,
+      'promptTokens', prompt_tokens,
+      'completionTokens', completion_tokens,
+      'totalTokens', total_tokens,
+      'costMicroUsd', cost_micro_usd
+    ) order by cost_micro_usd desc, project_id)
+    from (
+      select
+        project_id,
+        count(*)::bigint as request_count,
+        coalesce(sum(prompt_tokens), 0)::bigint as prompt_tokens,
+        coalesce(sum(completion_tokens), 0)::bigint as completion_tokens,
+        coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+        coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
+      from filtered
+      where project_id is not null and project_id <> ''
+      group by 1
+    ) project_rollup
+  ), '[]'::jsonb) as project_breakdown,
+  coalesce((
+    select jsonb_agg(jsonb_build_object(
       'applicationId', application_id,
       'requestCount', request_count,
       'costMicroUsd', cost_micro_usd
@@ -523,7 +946,7 @@ select
     where budget_scope_id is not null and budget_scope_id <> ''
   ), '[]'::jsonb) as budget_scope_breakdown,
   max(created_at) as last_log_created_at
-from filtered`, terminalStatusSQL, safetyOutcomeSQL, cacheOutcomeSQL, fallbackOutcomeSQL, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
+from filtered`, terminalStatusSQL, safetyOutcomeSQL, cacheOutcomeSQL, fallbackOutcomeSQL, budgetOutcomeSQL, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, strings.Join(where, " and "))
 
 	return query, args
 }
@@ -620,6 +1043,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	log.SelectedModel = nullableString(selectedModel)
 	log.RoutingReason = nullableString(routingReason)
 	var err error
+	applyInvocationMetadataFields(&log, metadataJSON)
 	log.DomainOutcomes, err = decodeDomainOutcomesMetadata(metadataJSON)
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
@@ -719,6 +1143,7 @@ func scanRequestDetailRow(row Row) (invocationlog.LlmInvocationLog, error) {
 	if completedAt.Valid {
 		log.CompletedAt = &completedAt.Time
 	}
+	applyInvocationMetadataFields(&log, metadataJSON)
 	log.RuntimeSnapshot, err = decodeRuntimeSnapshotBridgeMetadata(metadataJSON, log.CreatedAt)
 	if err != nil {
 		return invocationlog.LlmInvocationLog{}, err
@@ -777,12 +1202,46 @@ func decodeStringArrayJSON(raw []byte) ([]string, error) {
 }
 
 type invocationMetadataJSON struct {
-	TerminalStatus       string                            `json:"terminalStatus"`
-	RuntimeSnapshot      *runtimeSnapshotMetadataJSON      `json:"runtimeSnapshot"`
-	Runtime              *runtimeMetadataJSON              `json:"runtime"`
-	DomainOutcomes       *invocationlog.DomainOutcomes     `json:"domainOutcomes"`
-	GatewayStageOutcomes *gatewayStageOutcomesMetadataJSON `json:"gatewayStageOutcomes"`
-	StageOutcomes        *gatewayStageOutcomesMetadataJSON `json:"stageOutcomes"`
+	TerminalStatus              string                            `json:"terminalStatus"`
+	RuntimeSnapshot             *runtimeSnapshotMetadataJSON      `json:"runtimeSnapshot"`
+	Runtime                     *runtimeMetadataJSON              `json:"runtime"`
+	DomainOutcomes              *invocationlog.DomainOutcomes     `json:"domainOutcomes"`
+	GatewayStageOutcomes        *gatewayStageOutcomesMetadataJSON `json:"gatewayStageOutcomes"`
+	StageOutcomes               *gatewayStageOutcomesMetadataJSON `json:"stageOutcomes"`
+	CacheDecisionReason         string                            `json:"cacheDecisionReason"`
+	ProviderCalled              bool                              `json:"providerCalled"`
+	SelectedProviderID          string                            `json:"selectedProviderId"`
+	SelectedModelID             string                            `json:"selectedModelId"`
+	RoutingPolicyHash           string                            `json:"routingPolicyHash"`
+	RoutingDecisionKeyHash      string                            `json:"routingDecisionKeyHash"`
+	PromptCategory              string                            `json:"promptCategory"`
+	SemanticCacheHit            bool                              `json:"semanticCacheHit"`
+	SemanticSimilarity          float64                           `json:"semanticSimilarity"`
+	SemanticMatchedRequestID    string                            `json:"semanticMatchedRequestId"`
+	SemanticCacheThreshold      float64                           `json:"semanticCacheThreshold"`
+	SemanticCachePolicyVersion  string                            `json:"semanticCachePolicyVersion"`
+	SemanticCacheDecisionReason string                            `json:"semanticCacheDecisionReason"`
+	EmbeddingProvider           string                            `json:"embeddingProvider"`
+	PromptCapture               *promptCaptureMetadataJSON        `json:"promptCapture"`
+	ResponseCapture             *responseCaptureMetadataJSON      `json:"responseCapture"`
+}
+
+type promptCaptureMetadataJSON struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`
+	Visibility     string `json:"visibility"`
+	CapturedPrompt string `json:"capturedPrompt"`
+	Truncated      bool   `json:"truncated"`
+	MaxChars       int    `json:"maxChars"`
+}
+
+type responseCaptureMetadataJSON struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	Visibility       string `json:"visibility"`
+	CapturedResponse string `json:"capturedResponse"`
+	Truncated        bool   `json:"truncated"`
+	MaxChars         int    `json:"maxChars"`
 }
 
 type runtimeMetadataJSON struct {
@@ -807,6 +1266,98 @@ type runtimeSnapshotMetadataJSON struct {
 type gatewayStageOutcomesMetadataJSON struct {
 	TerminalStatus string                        `json:"terminalStatus"`
 	DomainOutcomes *invocationlog.DomainOutcomes `json:"domainOutcomes"`
+}
+
+func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []byte) {
+	if log == nil || len(raw) == 0 || string(raw) == "null" {
+		return
+	}
+	var metadata invocationMetadataJSON
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return
+	}
+	if strings.TrimSpace(metadata.CacheDecisionReason) != "" {
+		log.CacheDecisionReason = strings.TrimSpace(metadata.CacheDecisionReason)
+	}
+	if metadata.ProviderCalled {
+		log.ProviderCalled = true
+	}
+	if strings.TrimSpace(metadata.SelectedProviderID) != "" {
+		log.SelectedProviderID = strings.TrimSpace(metadata.SelectedProviderID)
+	}
+	if strings.TrimSpace(metadata.SelectedModelID) != "" {
+		log.SelectedModelID = strings.TrimSpace(metadata.SelectedModelID)
+	}
+	if routingPolicyHash := routingPolicyHashFromMetadata(metadata); routingPolicyHash != "" {
+		log.RoutingPolicyHash = routingPolicyHash
+	}
+	if strings.TrimSpace(metadata.RoutingDecisionKeyHash) != "" {
+		log.RoutingDecisionKeyHash = strings.TrimSpace(metadata.RoutingDecisionKeyHash)
+	}
+	if strings.TrimSpace(metadata.PromptCategory) != "" {
+		log.PromptCategory = strings.TrimSpace(metadata.PromptCategory)
+	}
+	log.SemanticCacheHit = metadata.SemanticCacheHit
+	if metadata.SemanticSimilarity > 0 {
+		log.SemanticSimilarity = metadata.SemanticSimilarity
+	}
+	if strings.TrimSpace(metadata.SemanticMatchedRequestID) != "" {
+		log.SemanticMatchedRequestID = strings.TrimSpace(metadata.SemanticMatchedRequestID)
+	}
+	if metadata.SemanticCacheThreshold > 0 {
+		log.SemanticCacheThreshold = metadata.SemanticCacheThreshold
+	}
+	if strings.TrimSpace(metadata.SemanticCachePolicyVersion) != "" {
+		log.SemanticCachePolicyVersion = strings.TrimSpace(metadata.SemanticCachePolicyVersion)
+	}
+	if strings.TrimSpace(metadata.SemanticCacheDecisionReason) != "" {
+		log.SemanticCacheDecisionReason = strings.TrimSpace(metadata.SemanticCacheDecisionReason)
+	}
+	if strings.TrimSpace(metadata.EmbeddingProvider) != "" {
+		log.EmbeddingProvider = strings.TrimSpace(metadata.EmbeddingProvider)
+	}
+	if metadata.PromptCapture != nil {
+		log.PromptCapture = invocationlog.PromptCaptureFields{
+			Enabled:        metadata.PromptCapture.Enabled,
+			Mode:           strings.TrimSpace(metadata.PromptCapture.Mode),
+			Visibility:     strings.TrimSpace(metadata.PromptCapture.Visibility),
+			CapturedPrompt: strings.TrimSpace(metadata.PromptCapture.CapturedPrompt),
+			Truncated:      metadata.PromptCapture.Truncated,
+			MaxChars:       metadata.PromptCapture.MaxChars,
+		}
+	}
+	if metadata.ResponseCapture != nil {
+		log.ResponseCapture = invocationlog.ResponseCaptureFields{
+			Enabled:          metadata.ResponseCapture.Enabled,
+			Mode:             strings.TrimSpace(metadata.ResponseCapture.Mode),
+			Visibility:       strings.TrimSpace(metadata.ResponseCapture.Visibility),
+			CapturedResponse: strings.TrimSpace(metadata.ResponseCapture.CapturedResponse),
+			Truncated:        metadata.ResponseCapture.Truncated,
+			MaxChars:         metadata.ResponseCapture.MaxChars,
+		}
+	}
+}
+
+func routingPolicyHashFromMetadata(metadata invocationMetadataJSON) string {
+	if strings.TrimSpace(metadata.RoutingPolicyHash) != "" {
+		return strings.TrimSpace(metadata.RoutingPolicyHash)
+	}
+	if metadata.RuntimeSnapshot != nil {
+		if routingPolicyHash := strings.TrimSpace(metadata.RuntimeSnapshot.LegacyHashes.Normalize().RoutingPolicyHash); routingPolicyHash != "" {
+			return routingPolicyHash
+		}
+	}
+	if metadata.Runtime != nil {
+		if metadata.Runtime.RuntimeSnapshot != nil {
+			if routingPolicyHash := strings.TrimSpace(metadata.Runtime.RuntimeSnapshot.LegacyHashes.Normalize().RoutingPolicyHash); routingPolicyHash != "" {
+				return routingPolicyHash
+			}
+		}
+		if routingPolicyHash := strings.TrimSpace(metadata.Runtime.legacyHashes().RoutingPolicyHash); routingPolicyHash != "" {
+			return routingPolicyHash
+		}
+	}
+	return ""
 }
 
 // decodeRuntimeSnapshotBridgeMetadata accepts v2 RuntimeSnapshot metadata plus v1 runtime hash metadata.
@@ -954,6 +1505,41 @@ func decodeCostByModelJSON(raw []byte) ([]invocationlog.CostByModel, error) {
 		return []invocationlog.CostByModel{}, nil
 	}
 	return values, nil
+}
+
+func decodeProjectBreakdownJSON(raw []byte) ([]invocationlog.ProjectBreakdown, error) {
+	if len(raw) == 0 || (len(raw) == 4 && raw[0] == 'n' && raw[1] == 'u' && raw[2] == 'l' && raw[3] == 'l') {
+		return []invocationlog.ProjectBreakdown{}, nil
+	}
+	var rows []struct {
+		ProjectID        string `json:"projectId"`
+		RequestCount     int64  `json:"requestCount"`
+		PromptTokens     int64  `json:"promptTokens"`
+		CompletionTokens int64  `json:"completionTokens"`
+		TotalTokens      int64  `json:"totalTokens"`
+		CostMicroUSD     int64  `json:"costMicroUsd"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		return []invocationlog.ProjectBreakdown{}, nil
+	}
+	items := make([]invocationlog.ProjectBreakdown, 0, len(rows))
+	for _, row := range rows {
+		if strings.TrimSpace(row.ProjectID) == "" {
+			continue
+		}
+		items = append(items, invocationlog.ProjectBreakdown{
+			ProjectID:        row.ProjectID,
+			RequestCount:     row.RequestCount,
+			PromptTokens:     row.PromptTokens,
+			CompletionTokens: row.CompletionTokens,
+			TotalTokens:      row.TotalTokens,
+			CostMicroUSD:     row.CostMicroUSD,
+		})
+	}
+	return items, nil
 }
 
 func decodeApplicationBreakdownJSON(raw []byte) ([]invocationlog.ApplicationBreakdown, error) {

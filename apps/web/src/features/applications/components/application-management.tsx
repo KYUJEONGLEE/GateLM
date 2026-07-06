@@ -1,11 +1,14 @@
 "use client";
 
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Settings, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type {
+  ApplicationBudgetLimitMode,
   ApplicationFormValues,
   ApplicationRecord,
   ApplicationsModel,
@@ -13,12 +16,27 @@ import type {
   ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
 import type { OneTimeAppTokenResponse } from "@/lib/control-plane/app-tokens-types";
+import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import type { RuntimePolicyModelConfig } from "@/lib/control-plane/runtime-policy-types";
 
 type ApplicationManagementProps = {
   locale: Locale;
   model: ApplicationsModel;
+  modelOptions?: RuntimePolicyModelConfig[];
+  policySummariesByApplicationId?: Record<string, ApplicationPolicySummary | null>;
+  projectBudgetUsd?: number;
+  providerConnections?: ProviderConnectionRecord[];
+  tenantId: string;
+};
+
+type ApplicationPolicySummary = {
+  defaultModel: string;
+  defaultProvider: string;
+  modelCount: number;
+  publishedAt: string;
+  publishState: string;
 };
 
 type SubmitState = {
@@ -29,6 +47,7 @@ type SubmitState = {
 type ApplicationResponsePayload = {
   application?: ApplicationRecord;
   error?: string;
+  policyError?: string;
 };
 
 type AppTokenResponsePayload = {
@@ -43,16 +62,15 @@ type OneTimeAppTokenState = {
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
 
-const emptyApplicationForm: ApplicationFormValues = {
-  description: "",
-  name: ""
-};
-
 const applicationText: Record<
   Locale,
   {
     applicationId: string;
     appToken: string;
+    budget: string;
+    budgetMode: string;
+    budgetPercent: string;
+    budgetSummary: string;
     cancel: string;
     close: string;
     create: string;
@@ -63,7 +81,14 @@ const applicationText: Record<
     empty: string;
     fixtureFallback: string;
     management: string;
+    model: string;
+    modelUnavailable: string;
     name: string;
+    policyWarning: string;
+    policy: string;
+    policyConfigure: string;
+    policyMissing: string;
+    policyPublished: string;
     save: string;
     source: string;
     status: string;
@@ -75,6 +100,10 @@ const applicationText: Record<
   en: {
     applicationId: "Application ID",
     appToken: "App Token",
+    budget: "Budget limit",
+    budgetMode: "Budget mode",
+    budgetPercent: "Budget percent",
+    budgetSummary: "Allocated budget",
     cancel: "Cancel",
     close: "OK",
     create: "Create application",
@@ -85,7 +114,14 @@ const applicationText: Record<
     empty: "No applications found.",
     fixtureFallback: "Control Plane unavailable. Showing fixture application.",
     management: "management",
+    model: "Model",
+    modelUnavailable: "No runtime models are available.",
     name: "Name",
+    policy: "Policy",
+    policyConfigure: "Configure policy",
+    policyMissing: "No active policy",
+    policyPublished: "Published",
+    policyWarning: "Application was created, but the selected model policy was not applied.",
     save: "Save",
     source: "Source",
     status: "Status",
@@ -96,6 +132,10 @@ const applicationText: Record<
   ko: {
     applicationId: "Application ID",
     appToken: "App Token",
+    budget: "예산 한도",
+    budgetMode: "예산 방식",
+    budgetPercent: "예산 비율",
+    budgetSummary: "배정 예산",
     cancel: "취소",
     close: "확인",
     create: "애플리케이션 생성",
@@ -106,7 +146,14 @@ const applicationText: Record<
     empty: "애플리케이션이 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 애플리케이션을 표시 중입니다.",
     management: "관리",
+    model: "모델",
+    modelUnavailable: "사용 가능한 Runtime 모델이 없습니다.",
     name: "이름",
+    policy: "정책",
+    policyConfigure: "정책 설정",
+    policyMissing: "활성 정책 없음",
+    policyPublished: "Published",
+    policyWarning: "애플리케이션은 생성되었지만 선택한 모델 정책은 적용되지 않았습니다.",
     save: "저장",
     source: "출처",
     status: "상태",
@@ -116,12 +163,21 @@ const applicationText: Record<
   }
 };
 
-export function ApplicationManagement({ locale, model }: ApplicationManagementProps) {
+export function ApplicationManagement({
+  locale,
+  model,
+  modelOptions = [],
+  policySummariesByApplicationId = {},
+  projectBudgetUsd = 100,
+  providerConnections = [],
+  tenantId
+}: ApplicationManagementProps) {
   const router = useRouter();
   const text = applicationText[locale];
+  const selectableModels = getSelectableModelOptions(modelOptions, providerConnections);
   const [applications, setApplications] = useState<ApplicationRecord[]>(model.applications);
   const [createValues, setCreateValues] =
-    useState<ApplicationFormValues>(emptyApplicationForm);
+    useState<ApplicationFormValues>(() => getEmptyApplicationForm(selectableModels));
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [oneTimeAppToken, setOneTimeAppToken] = useState<OneTimeAppTokenState | null>(null);
   const [editingRows, setEditingRows] = useState<Record<string, ApplicationUpdateValues>>(() =>
@@ -137,16 +193,20 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
     message: "",
     status: "idle"
   });
+  const allocatedBudgetUsd = applications
+    .filter((application) => application.status !== "ARCHIVED")
+    .reduce((total, application) => total + application.effectiveBudgetLimitUsd, 0);
+  const remainingBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd);
 
   function openCreateModal() {
-    setCreateValues(emptyApplicationForm);
+    setCreateValues(getEmptyApplicationForm(selectableModels));
     setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(true);
   }
 
   function closeCreateModal() {
-    setCreateValues(emptyApplicationForm);
+    setCreateValues(getEmptyApplicationForm(selectableModels));
     setOneTimeAppToken(null);
     setSubmitState({ message: "", status: "idle" });
     setIsCreateModalOpen(false);
@@ -157,6 +217,14 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
       setSubmitState({
         message:
           locale === "ko" ? "애플리케이션 이름을 입력하세요." : "Application name is required.",
+        status: "error"
+      });
+      return;
+    }
+    if (!isValidApplicationBudgetValues(createValues)) {
+      setSubmitState({
+        message:
+          locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
         status: "error"
       });
       return;
@@ -197,16 +265,18 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
       ...current,
       [createdApplication.id]: getApplicationUpdateValues(createdApplication)
     }));
-    setCreateValues(emptyApplicationForm);
+    setCreateValues(getEmptyApplicationForm(selectableModels));
     setSubmitState({
       message: appToken
-        ? locale === "ko"
-          ? "애플리케이션이 생성되고 App Token이 발급되었습니다."
-          : "Application created and App Token issued."
+        ? payload.policyError
+          ? `${text.policyWarning} ${payload.policyError}`
+          : locale === "ko"
+            ? "애플리케이션이 생성되고 App Token이 발급되었습니다."
+            : "Application created and App Token issued."
         : locale === "ko"
           ? "애플리케이션은 생성되었지만 App Token 발급에 실패했습니다."
           : "Application created, but App Token issue failed.",
-      status: "success"
+      status: payload.policyError ? "error" : "success"
     });
     setPendingAction(null);
     router.refresh();
@@ -256,6 +326,14 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
       setSubmitState({
         message:
           locale === "ko" ? "애플리케이션 이름을 입력하세요." : "Application name is required.",
+        status: "error"
+      });
+      return;
+    }
+    if (!isValidApplicationBudgetValues(values)) {
+      setSubmitState({
+        message:
+          locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
         status: "error"
       });
       return;
@@ -315,24 +393,24 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
   }
 
   return (
-    <main className="console-content">
-      <section className="dashboard-hero">
-        <div>
-          <p className="console-kicker">{text.management}</p>
-          <h2>{text.title}</h2>
-        </div>
-      </section>
-
+    <main className="console-content management-line-content application-management-content">
       {model.source === "fixture" ? (
-        <p className="policy-alert" data-status="warning">
-          {text.fixtureFallback} {model.loadError}
-        </p>
+        <Alert variant="warning">
+          <AlertDescription>{text.fixtureFallback} {model.loadError}</AlertDescription>
+        </Alert>
       ) : null}
       {!isCreateModalOpen && submitState.message ? (
-        <p className="policy-alert" data-status={submitState.status}>
-          {submitState.message}
-        </p>
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
       ) : null}
+      <section className="application-budget-summary" aria-label={text.budgetSummary}>
+        <span>
+          {text.budgetSummary}: {formatBudgetUsd(allocatedBudgetUsd)} /{" "}
+          {formatBudgetUsd(projectBudgetUsd)}
+        </span>
+        <span>{formatBudgetUsd(remainingBudgetUsd)} remaining</span>
+      </section>
 
       <section className="console-panel">
         <div className="applications-panel-heading">
@@ -347,27 +425,17 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
         {applications.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table project-table">
-              <thead>
-                <tr>
-                  <th>{text.name}</th>
-                  <th>{text.description}</th>
-                  <th>{text.status}</th>
-                  <th>{text.updated}</th>
-                  <th>{text.applicationId}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((application) => {
-                  const rowValues =
-                    editingRows[application.id] ?? getApplicationUpdateValues(application);
+          <div className="application-row-list">
+            {applications.map((application) => {
+              const rowValues =
+                editingRows[application.id] ?? getApplicationUpdateValues(application);
+              const policySummary = policySummariesByApplicationId[application.id] ?? null;
+              const policyHref = `/tenants/${tenantId}/projects/${model.controlPlaneProjectId}/applications/${application.id}/policies`;
 
-                  return (
-                    <tr key={application.id}>
-                      <td>
-                        <label className="policy-field project-table-field">
+              return (
+                <article className="application-row" key={application.id}>
+                  <div className="application-row-main">
+                    <label className="policy-field project-table-field application-name-field">
                           <span>{text.name}</span>
                           <input
                             maxLength={120}
@@ -377,10 +445,8 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                             type="text"
                             value={rowValues.name}
                           />
-                        </label>
-                      </td>
-                      <td>
-                        <label className="policy-field project-table-field">
+                    </label>
+                    <label className="policy-field project-table-field application-description-field">
                           <span>{text.description}</span>
                           <textarea
                             maxLength={500}
@@ -389,17 +455,20 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                             }
                             value={rowValues.description}
                           />
-                        </label>
-                      </td>
-                      <td>
-                        <div className="project-status-cell">
-                          <Badge
-                            className="project-status-badge"
-                            data-status={application.status}
-                            variant="outline"
-                          >
-                            {formatApplicationStatus(application.status)}
-                          </Badge>
+                    </label>
+                    <div className="application-budget-cell">
+                        <ApplicationBudgetFields
+                          budgetLimitMode={rowValues.budgetLimitMode}
+                          budgetLimitPercent={rowValues.budgetLimitPercent}
+                          budgetLimitUsd={rowValues.budgetLimitUsd}
+                          labels={text}
+                          onChange={(values) => updateRow(application.id, values)}
+                        />
+                        <small className="project-muted">
+                          {formatBudgetLimit(application)}
+                        </small>
+                    </div>
+                    <div className="project-status-cell application-status-cell">
                           <label className="policy-field project-table-field">
                             <span>{text.status}</span>
                             <select
@@ -417,19 +486,54 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                               ))}
                             </select>
                           </label>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="project-muted">{formatDateTime(application.updatedAt)}</span>
-                        <small className="project-muted">
-                          {text.created}: {formatDateTime(application.createdAt)}
-                        </small>
-                      </td>
-                      <td>
-                        <code className="project-code">{application.id}</code>
-                      </td>
-                      <td>
-                        <div className="project-row-actions">
+                          <Badge
+                            className="project-status-badge"
+                            data-status={application.status}
+                            variant="outline"
+                          >
+                            {formatApplicationStatus(application.status)}
+                          </Badge>
+                    </div>
+                  </div>
+
+                  <div className="application-row-meta">
+                    <div className="application-policy-cell">
+                      <span className="application-row-label">{text.policy}</span>
+                          <Badge
+                            className="project-status-badge"
+                            data-status={policySummary ? "ACTIVE" : "DISABLED"}
+                            variant="outline"
+                          >
+                            {policySummary ? text.policyPublished : text.policyMissing}
+                          </Badge>
+                          {policySummary ? (
+                            <small className="project-muted">
+                              {policySummary.defaultProvider}:{policySummary.defaultModel}
+                            </small>
+                          ) : null}
+                          {policySummary ? (
+                            <small className="project-muted">
+                              {policySummary.modelCount} models ·{" "}
+                              {formatDateTime(policySummary.publishedAt)}
+                            </small>
+                          ) : null}
+                          <Link className="application-policy-link" href={policyHref}>
+                            <Settings aria-hidden="true" />
+                            {text.policyConfigure}
+                          </Link>
+                    </div>
+                    <div className="application-row-detail">
+                      <span className="application-row-label">{text.updated}</span>
+                      <span className="project-muted">{formatDateTime(application.updatedAt)}</span>
+                      <small className="project-muted">
+                        {text.created}: {formatDateTime(application.createdAt)}
+                      </small>
+                    </div>
+                    <div className="application-row-detail">
+                      <span className="application-row-label">{text.applicationId}</span>
+                      <code className="project-code">{application.id}</code>
+                    </div>
+                    <div className="project-row-actions application-row-actions">
                           <Button
                             disabled={pendingAction !== null}
                             onClick={() => void submitUpdateApplication(application.id)}
@@ -453,13 +557,11 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                             <Trash2 aria-hidden="true" />
                             {text.delete}
                           </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -477,9 +579,9 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
             </div>
 
             {submitState.message ? (
-              <p className="policy-alert" data-status={submitState.status}>
-                {submitState.message}
-              </p>
+              <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+                <AlertDescription>{submitState.message}</AlertDescription>
+              </Alert>
             ) : null}
 
             {oneTimeAppToken ? (
@@ -523,6 +625,49 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                     value={createValues.description}
                   />
                 </label>
+                <ApplicationBudgetFields
+                  budgetLimitMode={createValues.budgetLimitMode}
+                  budgetLimitPercent={createValues.budgetLimitPercent}
+                  budgetLimitUsd={createValues.budgetLimitUsd}
+                  labels={text}
+                  onChange={(values) =>
+                    setCreateValues((current) => ({
+                      ...current,
+                      ...values
+                    }))
+                  }
+                />
+                <label className="policy-field">
+                  <span>{text.model}</span>
+                  {selectableModels.length > 0 ? (
+                    <select
+                      onChange={(event) =>
+                        setCreateValues((current) => ({
+                          ...current,
+                          providerConnectionIds:
+                            selectableModels.find((option) => option.value === event.target.value)
+                              ?.providerConnectionId
+                              ? [
+                                  selectableModels.find(
+                                    (option) => option.value === event.target.value
+                                  )?.providerConnectionId ?? ""
+                                ].filter(Boolean)
+                              : [],
+                          selectedModelKey: event.target.value
+                        }))
+                      }
+                      value={createValues.selectedModelKey}
+                    >
+                      {selectableModels.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input disabled type="text" value={text.modelUnavailable} />
+                  )}
+                </label>
               </div>
             )}
 
@@ -543,7 +688,11 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
                   </button>
                   <button
                     className="primary-button"
-                    disabled={pendingAction !== null || createValues.name.trim().length === 0}
+                    disabled={
+                      pendingAction !== null ||
+                      createValues.name.trim().length === 0 ||
+                      !isValidApplicationBudgetValues(createValues)
+                    }
                     onClick={() => void submitCreateApplication()}
                     type="button"
                   >
@@ -562,12 +711,166 @@ export function ApplicationManagement({ locale, model }: ApplicationManagementPr
 function getApplicationUpdateValues(application: ApplicationRecord): ApplicationUpdateValues {
   return {
     applicationId: application.id,
+    budgetLimitMode: application.budgetLimitMode,
+    budgetLimitPercent: application.budgetLimitPercent ?? 0,
+    budgetLimitUsd: application.budgetLimitUsd ?? 0,
     description: nullableText(application.description, ""),
     name: application.name,
     status: application.status
   };
 }
 
+function getEmptyApplicationForm(
+  modelOptions: Array<{ label: string; providerConnectionId: string | null; value: string }>
+): ApplicationFormValues {
+  const selectedModel = modelOptions[0];
+
+  return {
+    budgetLimitMode: "FIXED",
+    budgetLimitPercent: 0,
+    budgetLimitUsd: 0,
+    description: "",
+    name: "",
+    providerConnectionIds: selectedModel?.providerConnectionId
+      ? [selectedModel.providerConnectionId]
+      : [],
+    selectedModelKey: selectedModel?.value ?? ""
+  };
+}
+
 function formatApplicationStatus(status: ApplicationStatus) {
   return status.toLowerCase();
+}
+
+function isValidApplicationBudgetValues(values: ApplicationFormValues) {
+  if (values.budgetLimitMode === "PERCENT") {
+    return (
+      Number.isFinite(values.budgetLimitPercent) &&
+      values.budgetLimitPercent >= 0 &&
+      values.budgetLimitPercent <= 100
+    );
+  }
+
+  return Number.isFinite(values.budgetLimitUsd) && values.budgetLimitUsd >= 0;
+}
+
+function ApplicationBudgetFields({
+  budgetLimitMode,
+  budgetLimitPercent,
+  budgetLimitUsd,
+  labels,
+  onChange
+}: {
+  budgetLimitMode: ApplicationBudgetLimitMode;
+  budgetLimitPercent: number;
+  budgetLimitUsd: number;
+  labels: (typeof applicationText)[Locale];
+  onChange: (values: Partial<ApplicationFormValues>) => void;
+}) {
+  return (
+    <div className="application-budget-fields">
+      <label className="policy-field project-table-field">
+        <span>{labels.budgetMode}</span>
+        <select
+          onChange={(event) =>
+            onChange({
+              budgetLimitMode: event.target.value as ApplicationBudgetLimitMode
+            })
+          }
+          value={budgetLimitMode}
+        >
+          <option value="FIXED">Fixed</option>
+          <option value="PERCENT">Percent</option>
+        </select>
+      </label>
+      {budgetLimitMode === "PERCENT" ? (
+        <label className="policy-field project-table-field">
+          <span>{labels.budgetPercent}</span>
+          <input
+            max={100}
+            min={0}
+            onChange={(event) =>
+              onChange({
+                budgetLimitPercent: Number(event.target.value)
+              })
+            }
+            step="0.01"
+            type="number"
+            value={budgetLimitPercent}
+          />
+        </label>
+      ) : (
+        <label className="policy-field project-table-field">
+          <span>{labels.budget}</span>
+          <input
+            min={0}
+            onChange={(event) =>
+              onChange({
+                budgetLimitUsd: Number(event.target.value)
+              })
+            }
+            step="0.01"
+            type="number"
+            value={budgetLimitUsd}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function formatBudgetLimit(application: ApplicationRecord) {
+  if (application.budgetLimitMode === "PERCENT") {
+    return `${application.budgetLimitPercent ?? 0}% = ${formatBudgetUsd(
+      application.effectiveBudgetLimitUsd
+    )}`;
+  }
+
+  return formatBudgetUsd(application.effectiveBudgetLimitUsd);
+}
+
+function formatBudgetUsd(value: number) {
+  return `$${value.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0
+  })}`;
+}
+
+function getSelectableModelOptions(
+  models: RuntimePolicyModelConfig[],
+  providerConnections: ProviderConnectionRecord[]
+) {
+  const registryOptions = providerConnections.flatMap((providerConnection) =>
+    getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
+      label: `${model} (${providerConnection.provider})`,
+      providerConnectionId: providerConnection.id,
+      value: `${providerConnection.provider}::${model}`
+    }))
+  );
+
+  if (registryOptions.length > 0) {
+    return registryOptions;
+  }
+
+  return models
+    .filter((model) => model.status === "active")
+    .map((model) => ({
+      label: `${model.displayName || model.model} (${model.provider})`,
+      providerConnectionId: null,
+      value: `${model.provider}::${model.model}`
+    }));
+}
+
+function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
+  const models = providerConfig?.models;
+
+  return Array.isArray(models)
+    ? Array.from(
+        new Set(
+          models
+            .map((model) => (typeof model === "string" ? model.trim() : ""))
+            .filter(Boolean)
+        )
+      )
+    : [];
 }

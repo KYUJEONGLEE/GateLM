@@ -1,6 +1,8 @@
 import { ProviderConnectionStatus, ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEnum,
   IsInt,
   IsObject,
@@ -108,6 +110,13 @@ export class ListProviderPresetsQueryDto {
   status?: ResourceStatus = ResourceStatus.ACTIVE;
 }
 
+export class SetApplicationProvidersDto {
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  providerConnectionIds!: string[];
+}
+
 export interface ProviderCredentialPreviewDto {
   prefix: string | null;
   last4: string | null;
@@ -116,7 +125,7 @@ export interface ProviderCredentialPreviewDto {
 export interface ProviderResponseDto {
   id: string;
   tenantId: string;
-  projectId: string;
+  projectId: string | null;
   provider: string;
   displayName: string;
   status: ProviderConnectionStatus;

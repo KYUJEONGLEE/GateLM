@@ -1,4 +1,5 @@
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+export const DEFAULT_DISPLAY_TIMEZONE = "Asia/Seoul";
 
 function getDateTimeFormatter(timezone: string) {
   const existing = dateTimeFormatters.get(timezone);
@@ -15,7 +16,10 @@ function getDateTimeFormatter(timezone: string) {
   return formatter;
 }
 
-export function formatDateTime(value: string | null | undefined, timezone = "UTC") {
+export function formatDateTime(
+  value: string | null | undefined,
+  timezone = DEFAULT_DISPLAY_TIMEZONE
+) {
   if (!value) {
     return "-";
   }

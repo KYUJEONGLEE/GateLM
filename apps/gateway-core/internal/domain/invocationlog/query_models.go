@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -22,6 +23,7 @@ type Reader interface {
 	ListProjectLogs(ctx context.Context, filter ProjectLogsFilter) ([]RequestLogListItem, error)
 	GetRequestDetail(ctx context.Context, filter RequestDetailFilter) (RequestDetail, error)
 	GetDashboardOverview(ctx context.Context, filter DashboardOverviewFilter) (DashboardOverviewFields, error)
+	GetCostReport(ctx context.Context, filter CostReportFilter) (CostReportFields, error)
 }
 
 type ProjectLogsFilter struct {
@@ -53,6 +55,18 @@ type DashboardOverviewFilter struct {
 	To          time.Time
 }
 
+type CostReportFilter struct {
+	TenantID      string
+	ProjectID     string
+	ApplicationID string
+	Provider      string
+	Model         string
+	BudgetScope   budget.Scope
+	Period        string
+	From          time.Time
+	To            time.Time
+}
+
 type LlmInvocationLog struct {
 	RequestID     string
 	TraceID       string
@@ -65,43 +79,61 @@ type LlmInvocationLog struct {
 	EndUserID     string
 	FeatureID     string
 
-	Endpoint              string
-	Method                string
-	Source                string
-	Stream                bool
-	RequestedProvider     string
-	RequestedModel        string
-	Provider              string
-	Model                 string
-	SelectedProvider      string
-	SelectedModel         string
-	RoutingReason         string
-	RoutingRuleID         string
-	PromptTokens          int64
-	CompletionTokens      int64
-	TotalTokens           int64
-	CostMicroUSD          int64
-	SavedCostMicroUSD     int64
-	LatencyMs             int64
-	ProviderLatencyMs     *int64
-	Status                string
-	TerminalStatus        string
-	DomainOutcomes        DomainOutcomes
-	HTTPStatus            int
-	ErrorCode             string
-	ErrorMessage          string
-	ErrorStage            string
-	CacheStatus           string
-	CacheType             string
-	CacheKeyHash          string
-	CacheHitRequestID     string
-	MaskingAction         string
-	MaskingDetectedTypes  []string
-	MaskingDetectedCount  int
-	RedactedPromptPreview string
-	RuntimeSnapshot       runtimeconfig.RuntimeSnapshotProvenance
-	CreatedAt             time.Time
-	CompletedAt           *time.Time
+	Endpoint                    string
+	Method                      string
+	Source                      string
+	Stream                      bool
+	RequestedProvider           string
+	RequestedModel              string
+	Provider                    string
+	Model                       string
+	SelectedProvider            string
+	SelectedModel               string
+	RoutingReason               string
+	RoutingRuleID               string
+	PromptTokens                int64
+	CompletionTokens            int64
+	TotalTokens                 int64
+	CostMicroUSD                int64
+	SavedCostMicroUSD           int64
+	LatencyMs                   int64
+	ProviderLatencyMs           *int64
+	Status                      string
+	TerminalStatus              string
+	DomainOutcomes              DomainOutcomes
+	HTTPStatus                  int
+	ErrorCode                   string
+	ErrorMessage                string
+	ErrorStage                  string
+	CacheStatus                 string
+	CacheType                   string
+	CacheKeyHash                string
+	CacheHitRequestID           string
+	CacheDecisionReason         string
+	PromptCategory              string
+	ProviderCalled              bool
+	SelectedProviderID          string
+	SelectedModelID             string
+	RoutingPolicyHash           string
+	RoutingDecisionKeyHash      string
+	SemanticCacheHit            bool
+	SemanticSimilarity          float64
+	SemanticMatchedRequestID    string
+	SemanticCacheThreshold      float64
+	SemanticCachePolicyVersion  string
+	SemanticCacheDecisionReason string
+	EmbeddingProvider           string
+	MaskingAction               string
+	MaskingDetectedTypes        []string
+	MaskingDetectedCount        int
+	PolicyAllowedTypes          []string
+	MandatoryProtectedTypes     []string
+	RedactedPromptPreview       string
+	PromptCapture               PromptCaptureFields
+	ResponseCapture             ResponseCaptureFields
+	RuntimeSnapshot             runtimeconfig.RuntimeSnapshotProvenance
+	CreatedAt                   time.Time
+	CompletedAt                 *time.Time
 }
 
 type RequestLogListItem struct {
@@ -145,6 +177,7 @@ type RequestDetail struct {
 	Model           string
 	RequestedModel  string
 	SelectedModel   string
+	ProviderCalled  bool
 	Usage           UsageFields
 	UsageSummary    UsageSummaryFields
 	Cost            CostFields
@@ -154,6 +187,8 @@ type RequestDetail struct {
 	Routing         RoutingFields
 	Masking         MaskingFields
 	SafetySummary   SafetySummaryFields
+	PromptCapture   PromptCaptureFields
+	ResponseCapture ResponseCaptureFields
 	RuntimeSnapshot *runtimeconfig.RuntimeSnapshotProvenance
 	Error           ErrorFields
 	CreatedAt       time.Time
@@ -178,24 +213,40 @@ type LatencyFields struct {
 }
 
 type CacheFields struct {
-	CacheStatus       string
-	CacheType         string
-	CacheKeyHash      string
-	CacheHitRequestID string
+	CacheStatus                 string
+	CacheOutcome                string
+	CacheType                   string
+	CacheKeyHash                string
+	CacheHitRequestID           string
+	CacheDecisionReason         string
+	SemanticCacheHit            bool
+	SemanticSimilarity          float64
+	SemanticMatchedRequestID    string
+	SemanticCacheThreshold      float64
+	SemanticCachePolicyVersion  string
+	SemanticCacheDecisionReason string
+	EmbeddingProvider           string
+	PromptCategory              string
 }
 
 type RoutingFields struct {
-	RoutingReason    string
-	RoutingRuleID    string
-	SelectedProvider string
-	SelectedModel    string
+	RoutingReason          string
+	RoutingRuleID          string
+	SelectedProvider       string
+	SelectedProviderID     string
+	SelectedModel          string
+	SelectedModelID        string
+	RoutingPolicyHash      string
+	RoutingDecisionKeyHash string
 }
 
 type MaskingFields struct {
-	MaskingAction         string
-	MaskingDetectedTypes  []string
-	MaskingDetectedCount  int
-	RedactedPromptPreview string
+	MaskingAction           string
+	MaskingDetectedTypes    []string
+	MaskingDetectedCount    int
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
+	RedactedPromptPreview   string
 }
 
 type ErrorFields struct {
@@ -219,10 +270,12 @@ type UsageSummaryFields struct {
 }
 
 type SafetySummaryFields struct {
-	Outcome            string
-	DetectedCount      int
-	DetectorCategories []string
-	MaskingAction      string
+	Outcome                 string
+	DetectedCount           int
+	DetectorCategories      []string
+	PolicyAllowedTypes      []string
+	MandatoryProtectedTypes []string
+	MaskingAction           string
 }
 
 type RoutingCountByModel struct {
@@ -239,6 +292,15 @@ type ApplicationBreakdown struct {
 	CostUSD       string
 }
 
+type ProjectBreakdown struct {
+	ProjectID        string
+	RequestCount     int64
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	CostMicroUSD     int64
+	CostUSD          string
+}
 type CostByModel struct {
 	SelectedProvider string
 	SelectedModel    string
@@ -253,6 +315,94 @@ type BudgetScopeBreakdown struct {
 	RequestCount int64
 	CostMicroUSD int64
 	CostUSD      string
+}
+
+type CostReportTotals struct {
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportBucket struct {
+	PeriodStart       time.Time
+	PeriodEnd         time.Time
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportProjectBreakdown struct {
+	ProjectID         string
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportApplicationBreakdown struct {
+	ApplicationID     string
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportModelBreakdown struct {
+	SelectedProvider  string
+	SelectedModel     string
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportBudgetScopeBreakdown struct {
+	BudgetScope       budget.Scope
+	RequestCount      int64
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	CostMicroUSD      int64
+	CostUSD           string
+	SavedCostMicroUSD int64
+	SavedCostUSD      string
+}
+
+type CostReportBreakdowns struct {
+	ByProject     []CostReportProjectBreakdown
+	ByApplication []CostReportApplicationBreakdown
+	ByModel       []CostReportModelBreakdown
+	ByBudgetScope []CostReportBudgetScopeBreakdown
+}
+
+type CostReportFields struct {
+	Period        string
+	Totals        CostReportTotals
+	Buckets       []CostReportBucket
+	Breakdowns    CostReportBreakdowns
+	DataFreshness DashboardDataFreshness
 }
 
 type DashboardDataFreshness struct {
@@ -280,38 +430,41 @@ type DashboardPerformance struct {
 }
 
 type DashboardOverviewFields struct {
-	TotalRequests         int64
-	SuccessfulRequests    int64
-	FailedRequests        int64
-	BlockedRequests       int64
-	RateLimitedRequests   int64
-	CancelledRequests     int64
-	CacheHitRequests      int64
-	CacheEligibleRequests int64
-	CacheHitRate          *float64
-	FallbackSuccessCount  int64
-	PromptTokens          int64
-	CompletionTokens      int64
-	TotalTokens           int64
-	TotalCostMicroUSD     int64
-	TotalCostUSD          string
-	SavedCostMicroUSD     int64
-	SavedCostUSD          string
-	AverageLatencyMs      *float64
-	P95LatencyMs          *float64
-	AverageResponseTimeMs *float64
-	MaskingActionCounts   map[string]int64
-	RoutingCountByModel   []RoutingCountByModel
-	StatusCounts          map[string]int64
-	SafetyOutcomeCounts   map[string]int64
-	CacheOutcomeCounts    map[string]int64
-	FallbackOutcomeCounts map[string]int64
-	ApplicationBreakdown  []ApplicationBreakdown
-	CostByModel           []CostByModel
-	BudgetScopeBreakdown  []BudgetScopeBreakdown
-	DataFreshness         DashboardDataFreshness
-	QueryBudget           DashboardQueryBudget
-	Performance           DashboardPerformance
+	TotalRequests            int64
+	SuccessfulRequests       int64
+	FailedRequests           int64
+	BlockedRequests          int64
+	RateLimitedRequests      int64
+	CancelledRequests        int64
+	CacheHitRequests         int64
+	CacheEligibleRequests    int64
+	CacheHitRate             *float64
+	FallbackSuccessCount     int64
+	PromptTokens             int64
+	CompletionTokens         int64
+	TotalTokens              int64
+	TotalCostMicroUSD        int64
+	TotalCostUSD             string
+	SavedCostMicroUSD        int64
+	SavedCostUSD             string
+	AverageLatencyMs         *float64
+	P95LatencyMs             *float64
+	AverageResponseTimeMs    *float64
+	MaskingActionCounts      map[string]int64
+	RoutingCountByModel      []RoutingCountByModel
+	StatusCounts             map[string]int64
+	SafetyOutcomeCounts      map[string]int64
+	CacheOutcomeCounts       map[string]int64
+	FallbackOutcomeCounts    map[string]int64
+	BudgetOutcomeCounts      map[string]int64
+	BudgetDowngradedRequests int64
+	ProjectBreakdown         []ProjectBreakdown
+	ApplicationBreakdown     []ApplicationBreakdown
+	CostByModel              []CostByModel
+	BudgetScopeBreakdown     []BudgetScopeBreakdown
+	DataFreshness            DashboardDataFreshness
+	QueryBudget              DashboardQueryBudget
+	Performance              DashboardPerformance
 }
 
 type DashboardOverviewAggregate struct {
@@ -341,6 +494,9 @@ type DashboardOverviewAggregate struct {
 	SafetyOutcomeCounts         map[string]int64
 	CacheOutcomeCounts          map[string]int64
 	FallbackOutcomeCounts       map[string]int64
+	BudgetOutcomeCounts         map[string]int64
+	BudgetDowngradedRequests    int64
+	ProjectBreakdown            []ProjectBreakdown
 	ApplicationBreakdown        []ApplicationBreakdown
 	CostByModel                 []CostByModel
 	BudgetScopeBreakdown        []BudgetScopeBreakdown
@@ -362,6 +518,10 @@ type budgetScopeKey struct {
 
 type applicationKey struct {
 	applicationID string
+}
+
+type projectKey struct {
+	projectID string
 }
 
 func NormalizeProjectLogsFilter(filter ProjectLogsFilter) (ProjectLogsFilter, error) {
@@ -431,6 +591,33 @@ func NormalizeDashboardOverviewFilter(filter DashboardOverviewFilter) (Dashboard
 	return filter, nil
 }
 
+func NormalizeCostReportFilter(filter CostReportFilter) (CostReportFilter, error) {
+	filter.TenantID = strings.TrimSpace(filter.TenantID)
+	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
+	filter.ApplicationID = strings.TrimSpace(filter.ApplicationID)
+	filter.Provider = strings.TrimSpace(filter.Provider)
+	filter.Model = strings.TrimSpace(filter.Model)
+	filter.Period = strings.ToLower(strings.TrimSpace(filter.Period))
+	if filter.Period == "" {
+		filter.Period = "day"
+	}
+	if filter.Period != "day" && filter.Period != "week" && filter.Period != "month" {
+		return CostReportFilter{}, fmt.Errorf("%w: period must be day, week, or month", ErrInvalidLogQuery)
+	}
+	var err error
+	filter.BudgetScope, err = normalizeBudgetScopeFilter(filter.BudgetScope)
+	if err != nil {
+		return CostReportFilter{}, err
+	}
+	if filter.TenantID == "" {
+		return CostReportFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
+	}
+	if err := validateTimeRange(filter.From, filter.To); err != nil {
+		return CostReportFilter{}, err
+	}
+	return filter, nil
+}
+
 func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 	terminalStatus := NormalizeTerminalStatus(firstNonEmptyString(log.TerminalStatus, log.Status))
 	domainOutcomes := NormalizeDomainOutcomes(log)
@@ -466,10 +653,12 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 	domainOutcomes := NormalizeDomainOutcomes(log)
 	latencySummary := BuildLatencySummary(log.LatencyMs, log.ProviderLatencyMs)
 	safetySummary := SafetySummaryFields{
-		Outcome:            domainOutcomes.Safety.Outcome,
-		DetectedCount:      log.MaskingDetectedCount,
-		DetectorCategories: append([]string(nil), log.MaskingDetectedTypes...),
-		MaskingAction:      defaultString(log.MaskingAction, "none"),
+		Outcome:                 domainOutcomes.Safety.Outcome,
+		DetectedCount:           log.MaskingDetectedCount,
+		DetectorCategories:      append([]string(nil), log.MaskingDetectedTypes...),
+		PolicyAllowedTypes:      append([]string(nil), domainOutcomes.Safety.PolicyAllowedTypes...),
+		MandatoryProtectedTypes: append([]string(nil), domainOutcomes.Safety.MandatoryProtectedTypes...),
+		MaskingAction:           defaultString(log.MaskingAction, "none"),
 	}
 	return RequestDetail{
 		RequestID:      log.RequestID,
@@ -486,6 +675,7 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		Model:          log.Model,
 		RequestedModel: log.RequestedModel,
 		SelectedModel:  log.SelectedModel,
+		ProviderCalled: requestDetailProviderCalled(log),
 		Usage: UsageFields{
 			PromptTokens:     log.PromptTokens,
 			CompletionTokens: log.CompletionTokens,
@@ -509,24 +699,42 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		},
 		LatencySummary: latencySummary,
 		Cache: CacheFields{
-			CacheStatus:       defaultString(log.CacheStatus, CacheStatusBypass),
-			CacheType:         defaultString(log.CacheType, CacheTypeNone),
-			CacheKeyHash:      log.CacheKeyHash,
-			CacheHitRequestID: log.CacheHitRequestID,
+			CacheStatus:                 defaultString(log.CacheStatus, CacheStatusBypass),
+			CacheOutcome:                legacyCacheOutcome(log.CacheStatus),
+			CacheType:                   defaultString(log.CacheType, CacheTypeNone),
+			CacheKeyHash:                log.CacheKeyHash,
+			CacheHitRequestID:           log.CacheHitRequestID,
+			CacheDecisionReason:         log.CacheDecisionReason,
+			SemanticCacheHit:            log.SemanticCacheHit,
+			SemanticSimilarity:          log.SemanticSimilarity,
+			SemanticMatchedRequestID:    log.SemanticMatchedRequestID,
+			SemanticCacheThreshold:      log.SemanticCacheThreshold,
+			SemanticCachePolicyVersion:  log.SemanticCachePolicyVersion,
+			SemanticCacheDecisionReason: log.SemanticCacheDecisionReason,
+			EmbeddingProvider:           log.EmbeddingProvider,
+			PromptCategory:              log.PromptCategory,
 		},
 		Routing: RoutingFields{
-			RoutingReason:    log.RoutingReason,
-			RoutingRuleID:    log.RoutingRuleID,
-			SelectedProvider: log.SelectedProvider,
-			SelectedModel:    log.SelectedModel,
+			RoutingReason:          log.RoutingReason,
+			RoutingRuleID:          log.RoutingRuleID,
+			SelectedProvider:       log.SelectedProvider,
+			SelectedProviderID:     log.SelectedProviderID,
+			SelectedModel:          log.SelectedModel,
+			SelectedModelID:        log.SelectedModelID,
+			RoutingPolicyHash:      log.RoutingPolicyHash,
+			RoutingDecisionKeyHash: log.RoutingDecisionKeyHash,
 		},
 		Masking: MaskingFields{
-			MaskingAction:         defaultString(log.MaskingAction, "none"),
-			MaskingDetectedTypes:  append([]string(nil), log.MaskingDetectedTypes...),
-			MaskingDetectedCount:  log.MaskingDetectedCount,
-			RedactedPromptPreview: log.RedactedPromptPreview,
+			MaskingAction:           defaultString(log.MaskingAction, "none"),
+			MaskingDetectedTypes:    append([]string(nil), log.MaskingDetectedTypes...),
+			MaskingDetectedCount:    log.MaskingDetectedCount,
+			PolicyAllowedTypes:      append([]string(nil), domainOutcomes.Safety.PolicyAllowedTypes...),
+			MandatoryProtectedTypes: append([]string(nil), domainOutcomes.Safety.MandatoryProtectedTypes...),
+			RedactedPromptPreview:   log.RedactedPromptPreview,
 		},
 		SafetySummary:   safetySummary,
+		PromptCapture:   normalizePromptCaptureFields(log.PromptCapture),
+		ResponseCapture: normalizeResponseCaptureFields(log.ResponseCapture),
 		RuntimeSnapshot: runtimeSnapshotPointer(log.RuntimeSnapshot, log.CreatedAt),
 		Error: ErrorFields{
 			ErrorCode:    log.ErrorCode,
@@ -536,6 +744,61 @@ func ToRequestDetail(log LlmInvocationLog) RequestDetail {
 		CreatedAt:   log.CreatedAt,
 		CompletedAt: log.CompletedAt,
 	}
+}
+
+func normalizePromptCaptureFields(fields PromptCaptureFields) PromptCaptureFields {
+	fields.Mode = strings.TrimSpace(fields.Mode)
+	fields.Visibility = strings.TrimSpace(fields.Visibility)
+	fields.CapturedPrompt = strings.TrimSpace(fields.CapturedPrompt)
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	if !fields.Enabled {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+		fields.CapturedPrompt = ""
+		fields.Truncated = false
+	}
+	if fields.Visibility == "" {
+		fields.Visibility = PromptCaptureVisibilityAdminRequestDetail
+	}
+	return fields
+}
+
+func normalizeResponseCaptureFields(fields ResponseCaptureFields) ResponseCaptureFields {
+	fields.Mode = strings.TrimSpace(fields.Mode)
+	fields.Visibility = strings.TrimSpace(fields.Visibility)
+	fields.CapturedResponse = strings.TrimSpace(fields.CapturedResponse)
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
+	}
+	if !fields.Enabled {
+		fields.Mode = runtimeconfig.ResponseCaptureModeDisabled
+		fields.Visibility = ResponseCaptureVisibilityAdminRequestDetail
+		fields.CapturedResponse = ""
+		fields.Truncated = false
+	}
+	if fields.Visibility == "" {
+		fields.Visibility = ResponseCaptureVisibilityAdminRequestDetail
+	}
+	return fields
+}
+
+func requestDetailProviderCalled(log LlmInvocationLog) bool {
+	if log.ProviderCalled {
+		return true
+	}
+	if defaultString(log.CacheStatus, CacheStatusBypass) == CacheStatusHit {
+		return false
+	}
+	switch NormalizeTerminalStatus(firstNonEmptyString(log.TerminalStatus, log.Status)) {
+	case StatusBlocked, StatusRateLimited, StatusCancelled:
+		return false
+	}
+	if log.ProviderLatencyMs != nil {
+		return true
+	}
+	return strings.TrimSpace(log.Provider) != "" || strings.TrimSpace(log.SelectedProvider) != ""
 }
 
 func runtimeSnapshotPointer(snapshot runtimeconfig.RuntimeSnapshotProvenance, createdAt time.Time) *runtimeconfig.RuntimeSnapshotProvenance {
@@ -584,6 +847,12 @@ func normalizeDomainOutcomeDefaults(outcomes DomainOutcomes) DomainOutcomes {
 	if outcomes.Safety.DetectedTypes == nil {
 		outcomes.Safety.DetectedTypes = []string{}
 	}
+	if outcomes.Safety.PolicyAllowedTypes == nil {
+		outcomes.Safety.PolicyAllowedTypes = []string{}
+	}
+	if outcomes.Safety.MandatoryProtectedTypes == nil {
+		outcomes.Safety.MandatoryProtectedTypes = []string{}
+	}
 	outcomes.Routing.Outcome = defaultString(outcomes.Routing.Outcome, "not_checked")
 	outcomes.Cache.Outcome = defaultString(outcomes.Cache.Outcome, "not_used")
 	outcomes.Provider.Outcome = defaultString(outcomes.Provider.Outcome, "not_called")
@@ -601,6 +870,8 @@ func legacyCacheOutcome(cacheStatus string) string {
 		return "miss"
 	case CacheStatusError:
 		return "error"
+	case CacheStatusStoreSkipped:
+		return "store_skipped"
 	case CacheStatusBypass:
 		return "bypassed"
 	default:
@@ -634,11 +905,13 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		SafetyOutcomeCounts:   defaultSafetyOutcomeCounts(),
 		CacheOutcomeCounts:    defaultCacheOutcomeCounts(),
 		FallbackOutcomeCounts: defaultFallbackOutcomeCounts(),
+		BudgetOutcomeCounts:   defaultBudgetOutcomeCounts(),
 	}
 	routingCounts := map[dashboardModelKey]int64{}
 	costCounts := map[dashboardModelKey]CostByModel{}
 	budgetCounts := map[budgetScopeKey]BudgetScopeBreakdown{}
 	applicationCounts := map[applicationKey]ApplicationBreakdown{}
+	projectCounts := map[projectKey]ProjectBreakdown{}
 
 	for _, log := range logs {
 		resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, log.ApplicationID)
@@ -651,6 +924,10 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		incrementCount(aggregate.SafetyOutcomeCounts, domainOutcomes.Safety.Outcome)
 		incrementCount(aggregate.CacheOutcomeCounts, domainOutcomes.Cache.Outcome)
 		incrementCount(aggregate.FallbackOutcomeCounts, domainOutcomes.Fallback.Outcome)
+		incrementCount(aggregate.BudgetOutcomeCounts, domainOutcomes.Budget.Outcome)
+		if strings.TrimSpace(log.RoutingReason) == routing.ReasonBudgetHighQualityDowngrade {
+			aggregate.BudgetDowngradedRequests++
+		}
 		if isSuccessfulStatus(terminalStatus) {
 			aggregate.SuccessfulRequests++
 		}
@@ -669,7 +946,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 		if domainOutcomes.Fallback.Outcome == "success" {
 			aggregate.FallbackSuccessCount++
 		}
-		if isCacheEligible(log.CacheStatus) {
+		if isExactCacheEligible(log.CacheStatus, log.CacheType) {
 			aggregate.CacheEligibleRequests++
 		}
 		if isExactCacheHit(log.CacheStatus, log.CacheType) {
@@ -699,6 +976,17 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 			applicationItem.RequestCount++
 			applicationItem.CostMicroUSD += log.CostMicroUSD
 			applicationCounts[appKey] = applicationItem
+		}
+		if log.ProjectID != "" {
+			projectKey := projectKey{projectID: log.ProjectID}
+			projectItem := projectCounts[projectKey]
+			projectItem.ProjectID = log.ProjectID
+			projectItem.RequestCount++
+			projectItem.PromptTokens += log.PromptTokens
+			projectItem.CompletionTokens += log.CompletionTokens
+			projectItem.TotalTokens += log.TotalTokens
+			projectItem.CostMicroUSD += log.CostMicroUSD
+			projectCounts[projectKey] = projectItem
 		}
 		if isLatencyEligibleStatus(terminalStatus) {
 			latencies = append(latencies, log.LatencyMs)
@@ -752,6 +1040,7 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 	aggregate.CostByModel = costCountsFromMap(costCounts)
 	aggregate.BudgetScopeBreakdown = budgetScopeBreakdownsFromMap(budgetCounts)
 	aggregate.ApplicationBreakdown = applicationBreakdownsFromMap(applicationCounts)
+	aggregate.ProjectBreakdown = projectBreakdownsFromMap(projectCounts)
 
 	return BuildDashboardOverviewFromAggregate(aggregate)
 }
@@ -759,34 +1048,37 @@ func BuildDashboardOverview(logs []LlmInvocationLog) DashboardOverviewFields {
 func BuildDashboardOverviewFromAggregate(aggregate DashboardOverviewAggregate) DashboardOverviewFields {
 	generatedAt := generatedAtOrNow(aggregate.GeneratedAt)
 	overview := DashboardOverviewFields{
-		TotalRequests:         aggregate.TotalRequests,
-		SuccessfulRequests:    aggregate.SuccessfulRequests,
-		FailedRequests:        aggregate.FailedRequests,
-		BlockedRequests:       aggregate.BlockedRequests,
-		RateLimitedRequests:   aggregate.RateLimitedRequests,
-		CancelledRequests:     aggregate.CancelledRequests,
-		CacheHitRequests:      aggregate.CacheHitRequests,
-		CacheEligibleRequests: aggregate.CacheEligibleRequests,
-		FallbackSuccessCount:  aggregate.FallbackSuccessCount,
-		PromptTokens:          aggregate.PromptTokens,
-		CompletionTokens:      aggregate.CompletionTokens,
-		TotalTokens:           aggregate.TotalTokens,
-		TotalCostMicroUSD:     aggregate.TotalCostMicroUSD,
-		TotalCostUSD:          FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
-		SavedCostMicroUSD:     aggregate.SavedCostMicroUSD,
-		SavedCostUSD:          FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
-		AverageLatencyMs:      aggregate.AverageLatencyMs,
-		P95LatencyMs:          aggregate.P95LatencyMs,
-		AverageResponseTimeMs: aggregate.AverageLatencyMs,
-		MaskingActionCounts:   mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
-		RoutingCountByModel:   append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
-		StatusCounts:          mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
-		SafetyOutcomeCounts:   mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
-		CacheOutcomeCounts:    mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
-		FallbackOutcomeCounts: mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
-		ApplicationBreakdown:  normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
-		CostByModel:           normalizedCostByModel(aggregate.CostByModel),
-		BudgetScopeBreakdown:  normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
+		TotalRequests:            aggregate.TotalRequests,
+		SuccessfulRequests:       aggregate.SuccessfulRequests,
+		FailedRequests:           aggregate.FailedRequests,
+		BlockedRequests:          aggregate.BlockedRequests,
+		RateLimitedRequests:      aggregate.RateLimitedRequests,
+		CancelledRequests:        aggregate.CancelledRequests,
+		CacheHitRequests:         aggregate.CacheHitRequests,
+		CacheEligibleRequests:    aggregate.CacheEligibleRequests,
+		FallbackSuccessCount:     aggregate.FallbackSuccessCount,
+		PromptTokens:             aggregate.PromptTokens,
+		CompletionTokens:         aggregate.CompletionTokens,
+		TotalTokens:              aggregate.TotalTokens,
+		TotalCostMicroUSD:        aggregate.TotalCostMicroUSD,
+		TotalCostUSD:             FormatCostUSDFromMicroUSD(aggregate.TotalCostMicroUSD),
+		SavedCostMicroUSD:        aggregate.SavedCostMicroUSD,
+		SavedCostUSD:             FormatCostUSDFromMicroUSD(aggregate.SavedCostMicroUSD),
+		AverageLatencyMs:         aggregate.AverageLatencyMs,
+		P95LatencyMs:             aggregate.P95LatencyMs,
+		AverageResponseTimeMs:    aggregate.AverageLatencyMs,
+		MaskingActionCounts:      mergeDefaultCounts(defaultMaskingActionCounts(), aggregate.MaskingActionCounts),
+		RoutingCountByModel:      append([]RoutingCountByModel(nil), aggregate.RoutingCountByModel...),
+		StatusCounts:             mergeDefaultCounts(defaultStatusCounts(), aggregate.StatusCounts),
+		SafetyOutcomeCounts:      mergeDefaultCounts(defaultSafetyOutcomeCounts(), aggregate.SafetyOutcomeCounts),
+		CacheOutcomeCounts:       mergeDefaultCounts(defaultCacheOutcomeCounts(), aggregate.CacheOutcomeCounts),
+		FallbackOutcomeCounts:    mergeDefaultCounts(defaultFallbackOutcomeCounts(), aggregate.FallbackOutcomeCounts),
+		BudgetOutcomeCounts:      mergeDefaultCounts(defaultBudgetOutcomeCounts(), aggregate.BudgetOutcomeCounts),
+		BudgetDowngradedRequests: aggregate.BudgetDowngradedRequests,
+		ProjectBreakdown:         normalizedProjectBreakdowns(aggregate.ProjectBreakdown),
+		ApplicationBreakdown:     normalizedApplicationBreakdowns(aggregate.ApplicationBreakdown),
+		CostByModel:              normalizedCostByModel(aggregate.CostByModel),
+		BudgetScopeBreakdown:     normalizedBudgetScopeBreakdowns(aggregate.BudgetScopeBreakdown),
 		DataFreshness: DashboardDataFreshness{
 			Source:           "postgresql_request_log",
 			RecordCount:      aggregate.TotalRequests,
@@ -884,8 +1176,16 @@ func isLatencyEligibleStatus(status string) bool {
 	return status == StatusSuccess || status == StatusFailed
 }
 
-func isCacheEligible(cacheStatus string) bool {
-	return defaultString(cacheStatus, CacheStatusBypass) != CacheStatusBypass
+func isExactCacheEligible(cacheStatus string, cacheType string) bool {
+	if defaultString(cacheType, CacheTypeNone) != CacheTypeExact {
+		return false
+	}
+	switch defaultString(cacheStatus, CacheStatusBypass) {
+	case CacheStatusHit, CacheStatusMiss, CacheStatusError:
+		return true
+	default:
+		return false
+	}
 }
 
 func isExactCacheHit(cacheStatus string, cacheType string) bool {
@@ -955,6 +1255,16 @@ func defaultFallbackOutcomeCounts() map[string]int64 {
 	}
 }
 
+func defaultBudgetOutcomeCounts() map[string]int64 {
+	return map[string]int64{
+		budget.OutcomeAllowed:    0,
+		budget.OutcomeWarned:     0,
+		budget.OutcomeDegraded:   0,
+		budget.OutcomeBlocked:    0,
+		budget.OutcomeNotUsed:    0,
+		budget.OutcomeNotChecked: 0,
+	}
+}
 func mergeDefaultCounts(defaults map[string]int64, values map[string]int64) map[string]int64 {
 	merged := make(map[string]int64, len(defaults)+len(values))
 	for key, value := range defaults {
@@ -1050,6 +1360,33 @@ func applicationBreakdownsFromMap(counts map[applicationKey]ApplicationBreakdown
 		items = append(items, item)
 	}
 	return normalizedApplicationBreakdowns(items)
+}
+
+func projectBreakdownsFromMap(counts map[projectKey]ProjectBreakdown) []ProjectBreakdown {
+	items := make([]ProjectBreakdown, 0, len(counts))
+	for _, item := range counts {
+		items = append(items, item)
+	}
+	return normalizedProjectBreakdowns(items)
+}
+
+func normalizedProjectBreakdowns(items []ProjectBreakdown) []ProjectBreakdown {
+	normalized := make([]ProjectBreakdown, 0, len(items))
+	for _, item := range items {
+		item.ProjectID = strings.TrimSpace(item.ProjectID)
+		if item.ProjectID == "" {
+			continue
+		}
+		item.CostUSD = FormatCostUSDFromMicroUSD(item.CostMicroUSD)
+		normalized = append(normalized, item)
+	}
+	sort.Slice(normalized, func(i int, j int) bool {
+		if normalized[i].CostMicroUSD != normalized[j].CostMicroUSD {
+			return normalized[i].CostMicroUSD > normalized[j].CostMicroUSD
+		}
+		return normalized[i].ProjectID < normalized[j].ProjectID
+	})
+	return normalized
 }
 
 func normalizedApplicationBreakdowns(items []ApplicationBreakdown) []ApplicationBreakdown {

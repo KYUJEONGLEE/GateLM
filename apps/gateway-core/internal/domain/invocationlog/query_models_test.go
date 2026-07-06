@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/budget"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
@@ -31,7 +32,7 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 		CacheType:             CacheTypeExact,
 		RoutingReason:         "low_cost",
 		MaskingAction:         "redacted",
-		RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
+		RedactedPromptPreview: "Send a reply to [EMAIL_1].",
 		MaskingDetectedTypes:  []string{"email"},
 		MaskingDetectedCount:  1,
 		CreatedAt:             createdAt,
@@ -82,6 +83,14 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 		MaskingAction:         "none",
 		MaskingDetectedTypes:  []string{},
 		RedactedPromptPreview: "Write a short refund response.",
+		PromptCapture: PromptCaptureFields{
+			Enabled:        true,
+			Mode:           runtimeconfig.PromptCaptureModeLogSafeFull,
+			Visibility:     PromptCaptureVisibilityAdminRequestDetail,
+			CapturedPrompt: "Write a short refund response.",
+			Truncated:      false,
+			MaxChars:       8000,
+		},
 		RuntimeSnapshot: runtimeconfig.RuntimeSnapshotProvenance{
 			RuntimeSnapshotID:      "runtime_snapshot_query_test",
 			RuntimeSnapshotVersion: 2,
@@ -111,6 +120,9 @@ func TestToRequestDetailMapsCacheRoutingMaskingAndCost(t *testing.T) {
 	if detail.Masking.RedactedPromptPreview != "Write a short refund response." {
 		t.Fatalf("unexpected redacted prompt preview: %+v", detail.Masking)
 	}
+	if !detail.PromptCapture.Enabled || detail.PromptCapture.CapturedPrompt != "Write a short refund response." {
+		t.Fatalf("unexpected prompt capture detail: %+v", detail.PromptCapture)
+	}
 	if detail.Latency.ProviderLatencyMs == nil || *detail.Latency.ProviderLatencyMs != 86 {
 		t.Fatalf("unexpected provider latency: %+v", detail.Latency)
 	}
@@ -131,20 +143,29 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	logs := []LlmInvocationLog{
 		{
 			Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			ProjectID:     "project_alpha",
 			ApplicationID: "app_demo",
-			PromptTokens:  10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
-			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
-			MaskingAction: "none", CreatedAt: createdAt,
+			BudgetScope: budget.Scope{
+				Type:       budget.ScopeTypeTeam,
+				ID:         "team_demo",
+				ResolvedBy: budget.ResolvedByControlPlaneRule,
+			},
+			PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, CostMicroUSD: 100,
+			LatencyMs: 100, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: routing.ReasonBudgetHighQualityDowngrade,
+			MaskingAction: "none", DomainOutcomes: DomainOutcomes{Budget: BudgetOutcome{Outcome: budget.OutcomeWarned}}, CreatedAt: createdAt,
 		},
 		{
 			Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact,
+			ProjectID:         "project_alpha",
 			ApplicationID:     "app_demo",
+			BudgetScope:       budget.Scope{Type: budget.ScopeTypeTeam, ID: "team_demo", ResolvedBy: budget.ResolvedByControlPlaneRule},
 			SavedCostMicroUSD: 50, LatencyMs: 20, SelectedProvider: "mock", SelectedModel: "mock-fast", RoutingReason: "short_prompt_low_cost",
 			MaskingAction: "none", CreatedAt: createdAt.Add(time.Second),
 		},
 		{Status: StatusBlocked, CacheStatus: CacheStatusBypass, CacheType: CacheTypeNone, MaskingAction: "blocked", CreatedAt: createdAt.Add(2 * time.Second)},
 		{
 			Status: StatusFailed, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact,
+			ProjectID:    "project_beta",
 			PromptTokens: 3, TotalTokens: 3, LatencyMs: 70, SelectedProvider: "mock", SelectedModel: "mock-balanced",
 			MaskingAction: "redacted", CreatedAt: createdAt.Add(3 * time.Second),
 		},
@@ -178,17 +199,43 @@ func TestBuildDashboardOverviewCountsV1Statuses(t *testing.T) {
 	if overview.MaskingActionCounts["none"] != 4 || overview.MaskingActionCounts["redacted"] != 1 || overview.MaskingActionCounts["blocked"] != 1 {
 		t.Fatalf("unexpected masking counts: %+v", overview.MaskingActionCounts)
 	}
-	if len(overview.RoutingCountByModel) != 2 || overview.RoutingCountByModel[0].SelectedModel != "mock-fast" || overview.RoutingCountByModel[0].RequestCount != 2 {
+	if overview.BudgetOutcomeCounts[budget.OutcomeWarned] != 1 || overview.BudgetDowngradedRequests != 1 {
+		t.Fatalf("unexpected budget outcome counts: counts=%+v downgraded=%d", overview.BudgetOutcomeCounts, overview.BudgetDowngradedRequests)
+	}
+	if len(overview.RoutingCountByModel) != 3 || overview.RoutingCountByModel[1].RoutingReason != routing.ReasonBudgetHighQualityDowngrade {
 		t.Fatalf("unexpected routing count by model: %+v", overview.RoutingCountByModel)
 	}
 	if len(overview.CostByModel) != 2 || overview.CostByModel[0].SelectedModel != "mock-fast" || overview.CostByModel[0].RequestCount != 2 || overview.CostByModel[0].CostUSD != "0.000100" {
 		t.Fatalf("unexpected cost by model: %+v", overview.CostByModel)
 	}
-	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "app_demo" || overview.BudgetScopeBreakdown[0].RequestCount != 2 {
+	if len(overview.ProjectBreakdown) != 2 || overview.ProjectBreakdown[0].ProjectID != "project_alpha" || overview.ProjectBreakdown[0].RequestCount != 2 || overview.ProjectBreakdown[0].CostUSD != "0.000100" {
+		t.Fatalf("unexpected project breakdown: %+v", overview.ProjectBreakdown)
+	}
+	if len(overview.BudgetScopeBreakdown) != 1 || overview.BudgetScopeBreakdown[0].BudgetScope.Type != budget.ScopeTypeTeam || overview.BudgetScopeBreakdown[0].BudgetScope.ID != "team_demo" || overview.BudgetScopeBreakdown[0].RequestCount != 2 {
 		t.Fatalf("unexpected budget scope breakdown: %+v", overview.BudgetScopeBreakdown)
 	}
 	if overview.DataFreshness.Source != "postgresql_request_log" || overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(createdAt.Add(5*time.Second)) {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
+	}
+}
+
+func TestBuildDashboardOverviewCacheHitRateUsesOnlyExactCacheEligibleRequests(t *testing.T) {
+	createdAt := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
+	logs := []LlmInvocationLog{
+		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeExact, CreatedAt: createdAt},
+		{Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeExact, CreatedAt: createdAt.Add(time.Second)},
+		{Status: StatusSuccess, CacheStatus: CacheStatusMiss, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(2 * time.Second)},
+		{Status: StatusSuccess, CacheStatus: CacheStatusHit, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(3 * time.Second)},
+		{Status: StatusFailed, CacheStatus: CacheStatusError, CacheType: CacheTypeSemantic, CreatedAt: createdAt.Add(4 * time.Second)},
+	}
+
+	overview := BuildDashboardOverview(logs)
+
+	if overview.CacheHitRequests != 1 || overview.CacheEligibleRequests != 2 {
+		t.Fatalf("expected exact-only cache counts, got %+v", overview)
+	}
+	if overview.CacheHitRate == nil || !floatEquals(*overview.CacheHitRate, 0.5) {
+		t.Fatalf("expected exact-only cache hit rate 0.5, got %+v", overview.CacheHitRate)
 	}
 }
 

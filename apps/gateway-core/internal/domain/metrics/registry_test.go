@@ -27,12 +27,26 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		{Name: "endpoint", Value: "/v1/chat/completions"},
 	}, 1)
 	registry.ObserveHistogram(GatewayRequestDurationSeconds, labels, 0.02)
+	registry.GatewayStageDuration(GatewayStageDuration{Stage: "pii_masking", Status: "success", DurationSeconds: 0.003})
 	registry.AddCounter(CacheOperationsTotal, []Label{
 		{Name: "operation", Value: "lookup"},
 		{Name: "cache_status", Value: "miss"},
 		{Name: "cache_type", Value: "exact"},
 		{Name: "status", Value: "success\nwith \"quote\""},
 	}, 1)
+	registry.StreamStarted("mock", "mock-balanced")
+	registry.StreamTimeToFirstToken(StreamTimeToFirstToken{
+		SelectedProvider: "mock",
+		SelectedModel:    "mock-balanced",
+		DurationSeconds:  0.125,
+	})
+	registry.StreamFinished(StreamRelay{
+		SelectedProvider: "mock",
+		SelectedModel:    "mock-balanced",
+		Outcome:          "completed",
+		ErrorCode:        "none",
+		DurationSeconds:  1.25,
+	})
 
 	first := registry.RenderPrometheus()
 	second := registry.RenderPrometheus()
@@ -47,7 +61,12 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_bucket{endpoint="/v1/chat/completions",error_code="none",http_status="200",le="0.025",method="POST",status="success"} 1`)
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_bucket{endpoint="/v1/chat/completions",error_code="none",http_status="200",le="+Inf",method="POST",status="success"} 1`)
 	assertMetricsContains(t, first, `gatelm_gateway_request_duration_seconds_sum{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 0.02`)
+	assertMetricsContains(t, first, `gatelm_gateway_stage_duration_seconds_count{stage="pii_masking",status="success"} 1`)
 	assertMetricsContains(t, first, `gatelm_cache_operations_total{cache_status="miss",cache_type="exact",operation="lookup",status="success\nwith \"quote\""} 1`)
+	assertMetricsContains(t, first, `gatelm_streams_active{selected_model="mock-balanced",selected_provider="mock"} 0`)
+	assertMetricsContains(t, first, `gatelm_stream_relay_total{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
+	assertMetricsContains(t, first, `gatelm_stream_duration_seconds_count{error_code="none",selected_model="mock-balanced",selected_provider="mock",stream_outcome="completed"} 1`)
+	assertMetricsContains(t, first, `gatelm_stream_time_to_first_token_seconds_count{selected_model="mock-balanced",selected_provider="mock"} 1`)
 	assertMetricsDoesNotContainForbiddenLabels(t, first)
 }
 
@@ -56,6 +75,7 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 	for _, metricName := range []string{
 		GatewayRequestsTotal,
 		GatewayRequestDurationSeconds,
+		GatewayStageDurationSeconds,
 		GatewayInflightRequests,
 		ProviderRequestsTotal,
 		ProviderRequestDurationSeconds,
@@ -65,6 +85,16 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		MaskingActionsTotal,
 		LogWritesTotal,
 		LogWriteDurationSeconds,
+		AsyncLogEnqueueTotal,
+		AsyncLogEnqueueDurationSeconds,
+		AsyncLogQueueDepth,
+		AsyncLogDroppedTotal,
+		AsyncLogPersistTotal,
+		AsyncLogPersistDurationSeconds,
+		StreamsActive,
+		StreamRelayTotal,
+		StreamDurationSeconds,
+		StreamTimeToFirstTokenSeconds,
 	} {
 		assertMetricsContains(t, output, "# TYPE "+metricName)
 	}

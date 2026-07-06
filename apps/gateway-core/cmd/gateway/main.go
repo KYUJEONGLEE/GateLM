@@ -15,18 +15,27 @@ import (
 	postgresbudget "gatelm/apps/gateway-core/internal/adapters/budget/postgres"
 	rediscache "gatelm/apps/gateway-core/internal/adapters/cache/redis"
 	credentialenvmap "gatelm/apps/gateway-core/internal/adapters/credentials/envmap"
+	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
+	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
+	cachedprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/cached"
 	controlplaneprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/controlplane"
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
+	"gatelm/apps/gateway-core/internal/adapters/providers/anthropic"
 	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
 	"gatelm/apps/gateway-core/internal/adapters/providers/openai"
 	postgresratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/postgres"
+	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
+	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/app"
 	"gatelm/apps/gateway-core/internal/config"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
+	"gatelm/apps/gateway-core/internal/domain/invocationlog"
+	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
@@ -42,7 +51,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.LoadWithError()
+	if err != nil {
+		log.Fatalf("gateway-core configuration failed: %v", err)
+	}
 	if err := validateRuntimeSnapshotMode(cfg); err != nil {
 		log.Fatalf("gateway-core invalid GATEWAY_RUNTIME_SNAPSHOT_MODE: %v", err)
 	}
@@ -53,9 +65,11 @@ func main() {
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
-	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter)
+	anthropicAdapter := anthropic.NewAdapter(providerHTTPClient)
+	providers := provider.NewRegistry(providercatalog.AdapterTypeMock, mockAdapter, openAIAdapter, anthropicAdapter)
 	runtimeSnapshotProvider, providerCatalogResolver := buildRuntimePolicySources(cfg)
 	credentialResolver := credentialenvmap.NewResolver(credentialenvmap.ParseBindings(cfg.ProviderCredentialEnvMap))
+	metricsRegistry := metrics.NewRegistry()
 
 	postgresPool, err := pgxpool.New(context.Background(), config.DatabaseDriverURL(cfg.DatabaseURL))
 	if err != nil {
@@ -102,16 +116,30 @@ func main() {
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
-	terminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
+	postgresTerminalLogWriter := postgresinvocationlog.NewTerminalLogWriter(postgresPool, postgresinvocationlog.TerminalLogDefaults{
 		TenantID:      cfg.DemoTenantID,
 		ProjectID:     cfg.DemoProjectID,
 		ApplicationID: cfg.DemoApplicationID,
 	})
+	var terminalLogWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
+	var asyncTerminalLogWriter *asyncinvocationlog.TerminalLogWriter
+	if cfg.AsyncLogEnabled {
+		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
+			QueueSize:       cfg.AsyncLogQueueSize,
+			WorkerCount:     cfg.AsyncLogWorkerCount,
+			WriteTimeout:    cfg.AsyncLogWriteTimeout,
+			MetricsRegistry: metricsRegistry,
+		})
+		terminalLogWriter = asyncTerminalLogWriter
+	}
 	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
+	costCalculator := costing.NewCalculator(postgrespricing.NewReader(postgresPool))
 	routerOptions := []app.RouterOption{
 		app.WithAuthFailureLogWriter(authFailureLogWriter),
 		app.WithTerminalLogWriter(terminalLogWriter),
 		app.WithInvocationLogReader(invocationLogReader),
+		app.WithCostCalculator(costCalculator),
+		app.WithMetrics(metricsRegistry),
 		app.WithExactCache(
 			rediscache.NewStore(redisClient, cfg.ExactCacheTTL),
 			cachekey.NewExactKeyBuilder([]byte(cfg.ExactCacheKeySecret)),
@@ -122,19 +150,14 @@ func main() {
 		gatewayCredentials := postgresauth.NewStore(postgresPool)
 		routerOptions = append(routerOptions, app.WithGatewayAuth(gatewayCredentials, gatewayCredentials))
 	}
+	rateLimiter, err := buildRateLimiter(cfg, postgresPool, redisClient)
+	if err != nil {
+		log.Fatalf("gateway-core rate limiter configuration failed: %v", err)
+	}
 	runtimePolicyPipeline := pipeline.New(
 		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
-		ratelimitstage.NewStage(
-			postgresratelimit.NewLimiter(postgresPool),
-			ratelimit.Config{
-				Enabled:       cfg.RateLimitEnabled,
-				Scope:         ratelimit.ScopeApplication,
-				Algorithm:     ratelimit.AlgorithmFixedWindow,
-				WindowSeconds: cfg.RateLimitWindowSecs,
-				Limit:         cfg.RateLimitLimit,
-			},
-		),
+		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)
 
 	routerOptions = append(routerOptions, app.WithRuntimePolicyPipeline(runtimePolicyPipeline))
@@ -163,17 +186,74 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("gateway-core shutdown failed: %v", err)
 	}
+	if asyncTerminalLogWriter != nil {
+		logCloseCtx, logCloseCancel := context.WithTimeout(context.Background(), cfg.AsyncLogShutdownTimeout)
+		defer logCloseCancel()
+		if err := asyncTerminalLogWriter.Close(logCloseCtx); err != nil {
+			log.Printf("gateway-core async terminal log flush failed: %v", err)
+		}
+	}
 }
 
 func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvider, providercatalog.Resolver) {
 	if strings.TrimSpace(cfg.ControlPlaneBaseURL) != "" {
 		client := &http.Client{Timeout: cfg.ControlPlaneTimeout}
-		return controlplaneruntimeconfig.NewProvider(cfg.ControlPlaneBaseURL, client),
-			controlplaneprovidercatalog.NewResolver(cfg.ControlPlaneBaseURL, client)
+		var snapshotProvider runtimeconfig.SnapshotProvider = controlplaneruntimeconfig.NewProvider(cfg.ControlPlaneBaseURL, client)
+		if cfg.RuntimeSnapshotCache.Enabled {
+			snapshotProvider = cachedruntimeconfig.NewProvider(snapshotProvider, cachedruntimeconfig.Config{
+				FreshTTL: cfg.RuntimeSnapshotCache.TTL,
+				StaleTTL: cfg.RuntimeSnapshotCache.StaleTTL,
+			})
+		}
+		var catalogResolver providercatalog.Resolver = controlplaneprovidercatalog.NewResolver(cfg.ControlPlaneBaseURL, client)
+		if cfg.ProviderCatalogCache.Enabled {
+			catalogResolver = cachedprovidercatalog.NewResolver(catalogResolver, cachedprovidercatalog.Config{
+				FreshTTL: cfg.ProviderCatalogCache.TTL,
+				StaleTTL: cfg.ProviderCatalogCache.StaleTTL,
+			})
+		}
+		return snapshotProvider, catalogResolver
 	}
 
 	return staticruntimeconfig.NewProvider(buildStaticRuntimeConfig(cfg)),
 		staticprovidercatalog.NewResolver(buildStaticProviderCatalog(cfg))
+}
+
+func buildRateLimiter(cfg config.Config, postgresPool *pgxpool.Pool, redisClient redisratelimit.Client) (ratelimit.Limiter, error) {
+	backend := strings.TrimSpace(strings.ToLower(cfg.RateLimitBackend))
+	if backend == "" {
+		backend = config.RateLimitBackendRedis
+	}
+
+	switch backend {
+	case config.RateLimitBackendPostgres:
+		return postgresratelimit.NewLimiter(postgresPool), nil
+	case config.RateLimitBackendRedis:
+		if redisClient == nil {
+			return nil, fmt.Errorf("redis rate limit backend requires redis client")
+		}
+		return redisratelimit.NewLimiterWithKeyPrefix(redisClient, cfg.RateLimitRedisKeyPrefix), nil
+	default:
+		return nil, fmt.Errorf("unsupported rate limit backend %q", cfg.RateLimitBackend)
+	}
+}
+
+func buildRateLimitStageConfig(cfg config.Config) ratelimit.Config {
+	algorithm := strings.TrimSpace(strings.ToLower(cfg.RateLimitAlgorithm))
+	if algorithm == "" {
+		if strings.EqualFold(strings.TrimSpace(cfg.RateLimitBackend), config.RateLimitBackendPostgres) {
+			algorithm = ratelimit.AlgorithmFixedWindow
+		} else {
+			algorithm = ratelimit.AlgorithmTokenBucket
+		}
+	}
+	return ratelimit.Config{
+		Enabled:       cfg.RateLimitEnabled,
+		Scope:         ratelimit.ScopeApplication,
+		Algorithm:     algorithm,
+		WindowSeconds: cfg.RateLimitWindowSecs,
+		Limit:         cfg.RateLimitLimit,
+	}
 }
 
 func isStrictRuntimeSnapshotMode(cfg config.Config) bool {
@@ -231,7 +311,7 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 		RateLimit: ratelimit.Config{
 			Enabled:       cfg.RateLimitEnabled,
 			Scope:         ratelimit.ScopeApplication,
-			Algorithm:     ratelimit.AlgorithmFixedWindow,
+			Algorithm:     buildRateLimitStageConfig(cfg).Algorithm,
 			WindowSeconds: cfg.RateLimitWindowSecs,
 			Limit:         cfg.RateLimitLimit,
 		},
@@ -243,6 +323,8 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			DefaultModel:        cfg.DefaultModel,
 			LowCostProvider:     cfg.DefaultProvider,
 			LowCostModel:        cfg.LowCostModel,
+			HighQualityProvider: cfg.DefaultProvider,
+			HighQualityModel:    cfg.HighQualityModel,
 			FallbackProvider:    cfg.DefaultProvider,
 			FallbackModel:       cfg.DefaultModel,
 			ShortPromptMaxChars: cfg.ShortPromptMaxChars,
@@ -254,7 +336,31 @@ func buildStaticRuntimeConfig(cfg config.Config) runtimeconfig.ActiveConfig {
 			TTLSeconds:      int(cfg.ExactCacheTTL.Seconds()),
 			CachePolicyHash: cfg.CachePolicyHash,
 		},
+		PromptCapture: runtimeconfig.PromptCapturePolicy{
+			Enabled:  cfg.PromptCaptureEnabled,
+			Mode:     staticPromptCaptureMode(cfg.PromptCaptureEnabled),
+			MaxChars: cfg.PromptCaptureMaxChars,
+		},
+		ResponseCapture: runtimeconfig.ResponseCapturePolicy{
+			Enabled:  cfg.ResponseCaptureEnabled,
+			Mode:     staticResponseCaptureMode(cfg.ResponseCaptureEnabled),
+			MaxChars: cfg.ResponseCaptureMaxChars,
+		},
 	}
+}
+
+func staticPromptCaptureMode(enabled bool) string {
+	if enabled {
+		return runtimeconfig.PromptCaptureModeLogSafeFull
+	}
+	return runtimeconfig.PromptCaptureModeDisabled
+}
+
+func staticResponseCaptureMode(enabled bool) string {
+	if enabled {
+		return runtimeconfig.ResponseCaptureModeRawFull
+	}
+	return runtimeconfig.ResponseCaptureModeDisabled
 }
 
 func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {
@@ -348,7 +454,7 @@ func mockCatalogModel(modelID string, displayName string, fallbackPriority int) 
 		DisplayName: displayName,
 		Enabled:     true,
 		Capabilities: providercatalog.ModelCapabilities{
-			StreamingSupported: false,
+			StreamingSupported: true,
 			SupportsJSONMode:   false,
 			MaxInputTokens:     4096,
 			MaxOutputTokens:    1024,

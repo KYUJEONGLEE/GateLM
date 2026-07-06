@@ -117,6 +117,40 @@ services:
             })
             data["lastCalls"] = data["lastCalls"][-20:]
 
+        def stream_chunks(model):
+            created = int(time.time())
+            return [
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                },
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": "GateLM mock streaming 응답입니다. "}, "finish_reason": None}],
+                },
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": "실제 Provider 비용 없이 SSE relay를 확인합니다."}, "finish_reason": None}],
+                },
+                {
+                    "id": "mock_chatcmpl_stream_local",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 32, "completion_tokens": 24, "total_tokens": 56},
+                },
+            ]
+
         class Handler(BaseHTTPRequestHandler):
             def send_json(self, status, payload):
                 body = json.dumps(payload).encode("utf-8")
@@ -125,6 +159,21 @@ services:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+
+            def send_stream(self, model):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("X-Accel-Buffering", "no")
+                self.end_headers()
+                for chunk in stream_chunks(model):
+                    data = json.dumps(chunk, ensure_ascii=False)
+                    self.wfile.write(("data: " + data + "\n\n").encode("utf-8"))
+                    self.wfile.flush()
+                    time.sleep(0.02)
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
 
             def do_GET(self):
                 if self.path == "/healthz":
@@ -163,9 +212,6 @@ services:
                     if not isinstance(payload, dict):
                         self.send_json(400, {"error": {"code": "invalid_request"}})
                         return
-                    if payload.get("stream") is True:
-                        self.send_json(400, {"error": {"code": "streaming_not_supported", "message": "Streaming is not supported in P0."}})
-                        return
                     time.sleep(latency_ms / 1000)
                     model = str(payload.get("model") or "mock-balanced").strip() or "mock-balanced"
                     messages = payload.get("messages") or []
@@ -177,6 +223,9 @@ services:
                         self.send_json(status, {"error": {"code": code, "message": "Synthetic provider failure for GateLM evidence."}})
                         return
                     record_call(self.headers.get("X-GateLM-Request-Id", ""), model, prompt)
+                    if payload.get("stream") is True:
+                        self.send_stream(model)
+                        return
                     self.send_json(200, {
                         "id": "mock_chatcmpl_local",
                         "object": "chat.completion",
@@ -197,6 +246,52 @@ services:
       timeout: 3s
       retries: 10
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-24h}
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
   node-toolbox:
     profiles: ["tools"]
     build:
@@ -210,6 +305,10 @@ services:
       DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
       REDIS_URL: redis://redis:6379
       CONTROL_PLANE_ADMIN_AUTH_MODE: ${CONTROL_PLANE_ADMIN_AUTH_MODE:-demo_admin_placeholder}
+      CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP: ${CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP:-}
+      GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP: ${GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     ports:
       - "${CONTROL_PLANE_PORT:-3001}:${CONTROL_PLANE_PORT:-3001}"
     working_dir: /workspace
@@ -229,9 +328,21 @@ services:
       GATEWAY_PORT: ${GATEWAY_PORT:-8080}
       GATEWAY_DEFAULT_PROVIDER: ${GATEWAY_DEFAULT_PROVIDER:-mock}
       GATEWAY_DEFAULT_MODEL: ${GATEWAY_DEFAULT_MODEL:-mock-balanced}
+      GATEWAY_LOW_COST_MODEL: ${GATEWAY_LOW_COST_MODEL:-mock-fast}
+      GATEWAY_HIGH_QUALITY_MODEL: ${GATEWAY_HIGH_QUALITY_MODEL:-mock-smart}
+      GATEWAY_PROVIDER_TIMEOUT_MS: ${GATEWAY_PROVIDER_TIMEOUT_MS:-5000}
       GATEWAY_MAX_REQUEST_BODY_BYTES: ${GATEWAY_MAX_REQUEST_BODY_BYTES:-4194304}
-      GATEWAY_CONTROL_PLANE_BASE_URL: ${GATEWAY_CONTROL_PLANE_BASE_URL:-}
+      GATEWAY_CONTROL_PLANE_BASE_URL: ${GATEWAY_CONTROL_PLANE_BASE_URL:-http://host.docker.internal:${CONTROL_PLANE_PORT:-3001}}
       GATEWAY_CONTROL_PLANE_TIMEOUT_MS: ${GATEWAY_CONTROL_PLANE_TIMEOUT_MS:-2000}
+      GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP: ${GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP:-}
+      GATEWAY_AI_SAFETY_SIDECAR_ENABLED: ${GATEWAY_AI_SAFETY_SIDECAR_ENABLED:-false}
+      GATEWAY_AI_SAFETY_SIDECAR_URL: ${GATEWAY_AI_SAFETY_SIDECAR_URL:-http://host.docker.internal:8001/internal/ai-safety/v1/detect}
+      GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS: ${GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS:-300}
+      GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID: ${GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID:-openai/privacy-filter}
+      GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET: ${GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET:-privacy-filter-default}
+      GATEWAY_AI_SAFETY_SIDECAR_LOCALE: ${GATEWAY_AI_SAFETY_SIDECAR_LOCALE:-ko-KR}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       DATABASE_URL: postgresql://gatelm:gatelm@postgres:5432/gatelm?schema=public
       REDIS_URL: redis://redis:6379
       MOCK_PROVIDER_BASE_URL: http://mock-provider:8090
@@ -252,6 +363,18 @@ services:
       args:
         PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
     working_dir: /workspace
+    environment:
+      AI_SERVICE_HOST: ${AI_SERVICE_HOST:-0.0.0.0}
+      AI_SERVICE_PORT: ${AI_SERVICE_PORT:-8001}
+      AI_SERVICE_ACCESS_LOG_ENABLED: ${AI_SERVICE_ACCESS_LOG_ENABLED:-false}
+      AI_SERVICE_TRANSFORMERS_OFFLINE: ${AI_SERVICE_TRANSFORMERS_OFFLINE:-1}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-1}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: ${AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME:-onnx}
+      AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: ${AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID:-.cache/onnx/openai--privacy-filter}
+      AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ${AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS:-.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized}
+    ports:
+      - "${AI_SERVICE_PORT:-8001}:${AI_SERVICE_PORT:-8001}"
     volumes:
       - .:/workspace
       - python_pip_cache:/root/.cache/pip
@@ -260,6 +383,8 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
   node_pnpm_store:
   go_pkg_cache:
   go_build_cache:

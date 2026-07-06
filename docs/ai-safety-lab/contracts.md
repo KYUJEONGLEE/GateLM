@@ -47,10 +47,10 @@ prompt
 -> overlap merge / dedupe
 -> policy evaluator
 -> redaction engine
--> downstream cache/routing/provider path
+-> downstream routing/cache/provider path
 ```
 
-Request-side safety는 downstream cache, routing, provider call, streaming start보다 먼저 완료되어야 한다.
+Request-side safety는 downstream routing, cache, provider call, streaming start보다 먼저 완료되어야 한다.
 
 초기 ML detector는 `shadow`로 시작한다. regex/rule detector가 초기 enforcement baseline이며, ML detector의 enforce 승격은 evaluation evidence와 별도 계약 판단 이후에만 한다.
 
@@ -99,6 +99,7 @@ phone_number
 postal_address
 date_of_birth
 person_name
+organization_name
 customer_id
 employee_id
 account_id
@@ -125,7 +126,6 @@ passport_number
 driver_license
 secret
 address
-organization_name
 unknown_pii
 ```
 
@@ -164,6 +164,12 @@ Initial `openai/privacy-filter` label mapping:
 
 `secret` from `openai/privacy-filter` maps to `secret`. Existing regex/rule secret detectors remain the enforce baseline for critical block behavior.
 
+Additional `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
+
+| Model Label | GateLM Detector Type | Default Action Candidate |
+|---|---|---|
+| `ORG-B` / `ORG-I` | `organization_name` | `redact` |
+
 ## 9. Request-Level Action
 
 Policy evaluator는 detector 결과를 request-level action으로 접는다.
@@ -181,6 +187,7 @@ block > redact > allow
 - `postal_address`
 - `date_of_birth`
 - `person_name`
+- `organization_name`
 - `customer_id`
 - `employee_id`
 - `account_id`
@@ -220,6 +227,7 @@ Redaction placeholder 후보:
 [EMAIL_REDACTED]
 [PHONE_NUMBER_REDACTED]
 [PERSON_NAME_REDACTED]
+[ORGANIZATION_NAME_REDACTED]
 [ADDRESS_REDACTED]
 [DATE_OF_BIRTH_REDACTED]
 [CUSTOMER_ID_REDACTED]
@@ -300,9 +308,21 @@ schemas/safety-detection.schema.json
 schemas/safety-summary.schema.json
 schemas/detector-sidecar-response.schema.json
 schemas/eval-case.schema.json
+schemas/master-eval-case.schema.json
 ```
 
 이 schema들은 Lab draft 검증용이다. 기존 v2 schema/fixture 계약을 대체하지 않는다.
+
+`master-eval-case.schema.json` is the single master corpus row contract for
+synthetic AI Safety Lab evaluation. A master row keeps one `inputTemplate` and
+separates target-specific expectations under `expectations.gateway`,
+and `expectations.detector`. Runners must read only the expectation block they
+evaluate. This keeps Gateway enforce checks and sidecar detector checks aligned
+without forcing them to share one final outcome.
+
+The master corpus is the broad shadow evaluation dataset and currently targets
+1000 synthetic cases. Normal unit/integration tests should stay on small
+representative sidecar responses rather than the full eval corpus.
 
 ## 15. Evidence And Metrics
 

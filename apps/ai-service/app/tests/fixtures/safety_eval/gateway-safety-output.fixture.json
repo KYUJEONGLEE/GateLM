@@ -36,7 +36,7 @@
           "email"
         ],
         "maskingDetectedCount": 1,
-        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED].",
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_1].",
         "promptHash": "hash_email_redacts_before_provider"
       },
       "gatewayEffects": {
@@ -59,7 +59,7 @@
           "email"
         ],
         "maskingDetectedCount": 2,
-        "redactedPromptPreview": "Send a short support reply to [EMAIL_REDACTED] and cc [EMAIL_REDACTED].",
+        "redactedPromptPreview": "Send a short support reply to [EMAIL_1] and cc [EMAIL_1].",
         "promptHash": "hash_repeated_email_redacts_count"
       },
       "gatewayEffects": {
@@ -82,7 +82,7 @@
           "phone_number"
         ],
         "maskingDetectedCount": 1,
-        "redactedPromptPreview": "Draft a callback note for [PHONE_NUMBER_REDACTED].",
+        "redactedPromptPreview": "Draft a callback note for [PHONE_NUMBER_1].",
         "promptHash": "hash_phone_redacts_before_provider"
       },
       "gatewayEffects": {
@@ -243,7 +243,7 @@
           "postal_address"
         ],
         "maskingDetectedCount": 1,
-        "redactedPromptPreview": "Prepare a delivery note for address [ADDRESS_REDACTED].",
+        "redactedPromptPreview": "Prepare a delivery note for address [ADDRESS_1].",
         "promptHash": "hash_postal_address_redacts_before_provider"
       },
       "gatewayEffects": {
@@ -335,7 +335,7 @@
           "person_name"
         ],
         "maskingDetectedCount": 1,
-        "redactedPromptPreview": "Draft a reply for customer name [PERSON_NAME_REDACTED].",
+        "redactedPromptPreview": "Draft a reply for customer name [PERSON_1].",
         "promptHash": "hash_person_name_redacts_label_based"
       },
       "gatewayEffects": {

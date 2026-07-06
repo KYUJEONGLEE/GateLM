@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import subprocess
 import sys
@@ -15,6 +16,7 @@ from app.domain.ai_safety_benchmark.resources import ResourceSampler
 from app.domain.ai_safety_benchmark.runner import run_benchmark
 from app.domain.ai_safety_benchmark.targets import (
     BenchmarkTarget,
+    GatewayHttpBenchmarkTarget,
     HttpBenchmarkTarget,
     InProcessBenchmarkTarget,
 )
@@ -24,6 +26,7 @@ from app.domain.ai_safety_benchmark.types import (
     DEFAULT_RUNTIME_PROFILE,
     DEFAULT_TIMEOUT_MS,
     DEFAULT_WARMUP_REQUESTS,
+    MODEL_ID,
     RUNTIME_PROFILES,
     BenchmarkError,
 )
@@ -42,9 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run AI Safety Lab resource/latency benchmark.")
     parser.add_argument(
         "--target",
-        choices=["http", "in_process"],
+        choices=["http", "in_process", "gateway_http"],
         default="http",
-        help="Benchmark target. Use http for the local sidecar endpoint or in_process for the service harness.",
+        help=(
+            "Benchmark target. Use http for the local sidecar endpoint, in_process for the service "
+            "harness, or gateway_http for Gateway /v1/chat/completions."
+        ),
     )
     parser.add_argument(
         "--endpoint-url",
@@ -110,6 +116,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional model revision metadata.",
     )
     parser.add_argument(
+        "--model-id",
+        default=default_model_id(),
+        help="Model id represented by this benchmark run.",
+    )
+    parser.add_argument(
+        "--gateway-model",
+        default="auto",
+        help="Gateway model field used when --target gateway_http.",
+    )
+    parser.add_argument(
+        "--gateway-api-key",
+        default=None,
+        help="Optional Gateway API key for --target gateway_http. Defaults to environment/demo config.",
+    )
+    parser.add_argument(
+        "--gateway-app-token",
+        default=None,
+        help="Optional Gateway app token for --target gateway_http. Defaults to environment/demo config.",
+    )
+    parser.add_argument(
         "--git-sha",
         default=None,
         help="Optional git sha override for reproducible tests.",
@@ -163,6 +189,7 @@ def run(
             run_id=args.run_id or default_run_id(),
             git_sha=args.git_sha or git_sha(),
             model_revision=args.model_revision,
+            model_id=args.model_id,
             generated_at=generated_at,
             hardware=platform.machine(),
             os_name=platform.platform(),
@@ -212,10 +239,24 @@ def validate_args(args: argparse.Namespace) -> None:
 
 def build_target(args: argparse.Namespace) -> BenchmarkTarget:
     if args.target == "http":
-        return HttpBenchmarkTarget(endpoint_url=args.endpoint_url)
+        return HttpBenchmarkTarget(endpoint_url=args.endpoint_url, model_id=args.model_id)
     if args.target == "in_process":
-        return InProcessBenchmarkTarget.create()
+        return InProcessBenchmarkTarget.create(model_id=args.model_id)
+    if args.target == "gateway_http":
+        return GatewayHttpBenchmarkTarget(
+            endpoint_url=args.endpoint_url,
+            model=args.gateway_model,
+            api_key=args.gateway_api_key,
+            app_token=args.gateway_app_token,
+        )
     raise BenchmarkError(f"unsupported target {args.target!r}")
+
+
+def default_model_id() -> str:
+    value = os.environ.get("AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID", "").strip()
+    if value == "" or any(char.isspace() for char in value):
+        return MODEL_ID
+    return value
 
 
 def default_run_id() -> str:

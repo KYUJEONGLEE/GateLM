@@ -20,6 +20,18 @@ import {
 export const RUNTIME_CONFIG_VERSION_PATTERN = /^[a-zA-Z0-9._-]+$/;
 const RUNTIME_CONFIG_VERSION_MESSAGE =
   'must contain only alphanumeric characters, dashes, underscores, or dots.';
+export const RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES = [
+  'email',
+  'phone_number',
+  'person_name',
+  'postal_address',
+  'organization_name',
+  'resident_registration_number',
+  'api_key',
+  'authorization_header',
+  'jwt',
+  'private_key',
+] as const;
 
 export type RuntimeConfigPublishStateDto =
   | 'draft'
@@ -35,6 +47,8 @@ export type CredentialStatusDto =
 export type ProviderStatusDto = 'active' | 'disabled' | 'degraded';
 export type ModelStatusDto = 'active' | 'disabled';
 export type RuntimeConfigCredentialType = 'api_key' | 'app_token';
+export type RuntimeConfigSafetyDetectorType =
+  (typeof RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES)[number];
 
 export class RuntimeConfigRateLimitDto {
   @IsOptional()
@@ -64,6 +78,10 @@ export class RuntimeConfigBudgetPolicyDto {
   @Min(0)
   @Max(100)
   warningThresholdPercent?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  restrictHighQualityOnBudgetRisk?: boolean;
 }
 
 export class RuntimeConfigCachePolicyDto {
@@ -77,6 +95,40 @@ export class RuntimeConfigCachePolicyDto {
   @Min(1)
   @Max(86400)
   ttlSeconds?: number;
+}
+
+export class RuntimeConfigPromptCapturePolicyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(['disabled', 'log_safe_full'])
+  mode?: 'disabled' | 'log_safe_full';
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20000)
+  maxChars?: number;
+}
+
+export class RuntimeConfigResponseCapturePolicyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(['disabled', 'raw_full'])
+  mode?: 'disabled' | 'raw_full';
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20000)
+  maxChars?: number;
 }
 
 export class RuntimeConfigRoutingPolicyDto {
@@ -108,6 +160,18 @@ export class RuntimeConfigRoutingPolicyDto {
   @IsString()
   @MinLength(1)
   @MaxLength(80)
+  highQualityProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  highQualityModel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
   fallbackProvider?: string;
 
   @IsOptional()
@@ -125,23 +189,8 @@ export class RuntimeConfigRoutingPolicyDto {
 }
 
 export class RuntimeConfigSafetyDetectorDto {
-  @IsIn([
-    'email',
-    'phone_number',
-    'resident_registration_number',
-    'api_key',
-    'authorization_header',
-    'jwt',
-    'private_key',
-  ])
-  type!:
-    | 'email'
-    | 'phone_number'
-    | 'resident_registration_number'
-    | 'api_key'
-    | 'authorization_header'
-    | 'jwt'
-    | 'private_key';
+  @IsIn(RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES)
+  type!: RuntimeConfigSafetyDetectorType;
 
   @IsBoolean()
   enabled!: boolean;
@@ -261,6 +310,16 @@ export class UpsertRuntimeConfigDraftDto {
   @ValidateNested()
   @Type(() => RuntimeConfigCachePolicyDto)
   cachePolicy?: RuntimeConfigCachePolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuntimeConfigPromptCapturePolicyDto)
+  promptCapturePolicy?: RuntimeConfigPromptCapturePolicyDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuntimeConfigResponseCapturePolicyDto)
+  responseCapturePolicy?: RuntimeConfigResponseCapturePolicyDto;
 
   @IsOptional()
   @ValidateNested()
@@ -410,6 +469,7 @@ export interface RuntimeConfigBudgetPolicyResponseDto {
   enabled: boolean;
   enforcementMode: 'warn' | 'block' | 'disabled';
   warningThresholdPercent: number;
+  restrictHighQualityOnBudgetRisk: boolean;
 }
 
 export interface RuntimeConfigSafetyDetectorResponseDto {
@@ -435,6 +495,18 @@ export interface RuntimeConfigCachePolicyResponseDto {
   ttlSeconds: number;
 }
 
+export interface RuntimeConfigPromptCapturePolicyResponseDto {
+  enabled: boolean;
+  mode: 'disabled' | 'log_safe_full';
+  maxChars: number;
+}
+
+export interface RuntimeConfigResponseCapturePolicyResponseDto {
+  enabled: boolean;
+  mode: 'disabled' | 'raw_full';
+  maxChars: number;
+}
+
 export interface RuntimeConfigRoutingPolicyResponseDto {
   type: 'simple';
   autoModel: 'auto';
@@ -442,6 +514,8 @@ export interface RuntimeConfigRoutingPolicyResponseDto {
   defaultModel: string;
   lowCostProvider: string;
   lowCostModel: string;
+  highQualityProvider?: string;
+  highQualityModel?: string;
   fallbackProvider: string;
   fallbackModel: string;
   shortPromptMaxChars: number;
@@ -513,6 +587,8 @@ export interface ActiveRuntimeConfigResponseDto {
   budgetPolicy: RuntimeConfigBudgetPolicyResponseDto;
   safetyPolicy: RuntimeConfigSafetyPolicyResponseDto;
   cachePolicy: RuntimeConfigCachePolicyResponseDto;
+  promptCapturePolicy: RuntimeConfigPromptCapturePolicyResponseDto;
+  responseCapturePolicy: RuntimeConfigResponseCapturePolicyResponseDto;
   routingPolicy: RuntimeConfigRoutingPolicyResponseDto;
   pricingRules: RuntimeConfigPricingRuleResponseDto[];
   hashing: RuntimeConfigHashingDto;
@@ -545,7 +621,10 @@ export interface ProviderCatalogCredentialRefDto {
 }
 
 export interface ProviderCatalogAdapterConfigDto {
-  requestFormat: 'openai_chat_completions' | 'mock_chat_completions';
+  requestFormat:
+    | 'openai_chat_completions'
+    | 'anthropic_messages'
+    | 'mock_chat_completions';
   apiVersion?: string;
 }
 
@@ -609,6 +688,10 @@ export interface RuntimeSnapshotRoutingPolicyDto {
   defaultRequestedModel: string;
   defaultProvider: string;
   defaultModel: string;
+  lowCostProvider: string;
+  lowCostModel: string;
+  highQualityProvider?: string;
+  highQualityModel?: string;
   routingPolicyHash: string;
 }
 
@@ -616,6 +699,18 @@ export interface RuntimeSnapshotCachePolicyDto {
   exactCacheEnabled: boolean;
   semanticCacheMode: 'evidence_only' | 'disabled';
   cachePolicyHash: string;
+}
+
+export interface RuntimeSnapshotPromptCapturePolicyDto {
+  enabled: boolean;
+  mode: 'disabled' | 'log_safe_full';
+  maxChars: number;
+}
+
+export interface RuntimeSnapshotResponseCapturePolicyDto {
+  enabled: boolean;
+  mode: 'disabled' | 'raw_full';
+  maxChars: number;
 }
 
 export interface RuntimeSnapshotRateLimitPolicyDto {
@@ -629,6 +724,7 @@ export interface RuntimeSnapshotBudgetPolicyDto {
   enabled: boolean;
   enforcementMode: 'warn' | 'block' | 'disabled';
   warningThresholdPercent: number;
+  restrictHighQualityOnBudgetRisk: boolean;
 }
 
 export interface RuntimeSnapshotFallbackPolicyDto {
@@ -647,6 +743,8 @@ export interface RuntimeSnapshotPoliciesDto {
   safety: RuntimeSnapshotSafetyPolicyDto;
   routing: RuntimeSnapshotRoutingPolicyDto;
   cache: RuntimeSnapshotCachePolicyDto;
+  promptCapture: RuntimeSnapshotPromptCapturePolicyDto;
+  responseCapture: RuntimeSnapshotResponseCapturePolicyDto;
   rateLimit: RuntimeSnapshotRateLimitPolicyDto;
   budget: RuntimeSnapshotBudgetPolicyDto;
   fallback: RuntimeSnapshotFallbackPolicyDto;

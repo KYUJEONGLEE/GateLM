@@ -105,32 +105,36 @@ type dashboardFilterResponse struct {
 }
 
 type dashboardTotalsResponse struct {
-	TotalRequests         int64                          `json:"totalRequests"`
-	SuccessfulRequests    int64                          `json:"successfulRequests"`
-	FailedRequests        int64                          `json:"failedRequests"`
-	BlockedRequests       int64                          `json:"blockedRequests"`
-	RateLimitedRequests   int64                          `json:"rateLimitedRequests"`
-	CancelledRequests     int64                          `json:"cancelledRequests"`
-	CacheHitRequests      int64                          `json:"cacheHitRequests"`
-	CacheEligibleRequests int64                          `json:"cacheEligibleRequests"`
-	CacheHitRate          *float64                       `json:"cacheHitRate"`
-	ExactCacheHitRate     *float64                       `json:"exactCacheHitRate"`
-	FallbackSuccessCount  int64                          `json:"fallbackSuccessCount"`
-	PromptTokens          int64                          `json:"promptTokens"`
-	CompletionTokens      int64                          `json:"completionTokens"`
-	TotalTokens           int64                          `json:"totalTokens"`
-	TotalCostMicroUSD     int64                          `json:"totalCostMicroUsd"`
-	TotalCostUSD          string                         `json:"totalCostUsd"`
-	SavedCostMicroUSD     int64                          `json:"savedCostMicroUsd"`
-	SavedCostUSD          string                         `json:"savedCostUsd"`
-	AverageLatencyMs      *float64                       `json:"averageLatencyMs"`
-	P95LatencyMs          *float64                       `json:"p95LatencyMs"`
-	AverageResponseTimeMs *float64                       `json:"averageResponseTimeMs"`
-	MaskingActionCounts   map[string]int64               `json:"maskingActionCounts"`
-	RoutingCountByModel   []routingCountByModelResponse  `json:"routingCountByModel"`
-	StatusCounts          map[string]int64               `json:"statusCounts"`
-	CostByModel           []costByModelResponse          `json:"costByModel"`
-	BudgetScopeBreakdown  []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
+	TotalRequests            int64                          `json:"totalRequests"`
+	SuccessfulRequests       int64                          `json:"successfulRequests"`
+	FailedRequests           int64                          `json:"failedRequests"`
+	BlockedRequests          int64                          `json:"blockedRequests"`
+	RateLimitedRequests      int64                          `json:"rateLimitedRequests"`
+	CancelledRequests        int64                          `json:"cancelledRequests"`
+	CacheHitRequests         int64                          `json:"cacheHitRequests"`
+	CacheEligibleRequests    int64                          `json:"cacheEligibleRequests"`
+	CacheHitRate             *float64                       `json:"cacheHitRate"`
+	ExactCacheHitRate        *float64                       `json:"exactCacheHitRate"`
+	FallbackSuccessCount     int64                          `json:"fallbackSuccessCount"`
+	BudgetDowngradedRequests int64                          `json:"budgetDowngradedRequests"`
+	PromptTokens             int64                          `json:"promptTokens"`
+	CompletionTokens         int64                          `json:"completionTokens"`
+	TotalTokens              int64                          `json:"totalTokens"`
+	TotalCostMicroUSD        int64                          `json:"totalCostMicroUsd"`
+	TotalCostUSD             string                         `json:"totalCostUsd"`
+	SavedCostMicroUSD        int64                          `json:"savedCostMicroUsd"`
+	SavedCostUSD             string                         `json:"savedCostUsd"`
+	AverageLatencyMs         *float64                       `json:"averageLatencyMs"`
+	P95LatencyMs             *float64                       `json:"p95LatencyMs"`
+	AverageResponseTimeMs    *float64                       `json:"averageResponseTimeMs"`
+	MaskingActionCounts      map[string]int64               `json:"maskingActionCounts"`
+	RoutingCountByModel      []routingCountByModelResponse  `json:"routingCountByModel"`
+	StatusCounts             map[string]int64               `json:"statusCounts"`
+	BudgetOutcomeCounts      map[string]int64               `json:"budgetOutcomeCounts"`
+	CostByProject            []projectBreakdownResponse     `json:"costByProject"`
+	CostByModel              []costByModelResponse          `json:"costByModel"`
+	CostByBudgetScope        []budgetScopeBreakdownResponse `json:"costByBudgetScope"`
+	BudgetScopeBreakdown     []budgetScopeBreakdownResponse `json:"budgetScopeBreakdown"`
 }
 
 type dashboardDataFreshnessResponse struct {
@@ -163,13 +167,25 @@ type dashboardPerformanceResponse struct {
 }
 
 type dashboardBreakdownsResponse struct {
+	ByProject         []projectBreakdownResponse       `json:"byProject"`
 	ByApplication     []applicationBreakdownResponse   `json:"byApplication"`
 	ByBudgetScope     []budgetScopeBreakdownResponse   `json:"byBudgetScope"`
 	ByProviderModel   []providerModelBreakdownResponse `json:"byProviderModel"`
 	BySafetyOutcome   []outcomeBreakdownResponse       `json:"bySafetyOutcome"`
 	ByCacheOutcome    []outcomeBreakdownResponse       `json:"byCacheOutcome"`
 	ByFallbackOutcome []outcomeBreakdownResponse       `json:"byFallbackOutcome"`
+	ByBudgetOutcome   []outcomeBreakdownResponse       `json:"byBudgetOutcome"`
 	ByTerminalStatus  []outcomeBreakdownResponse       `json:"byTerminalStatus"`
+}
+
+type projectBreakdownResponse struct {
+	ProjectID        string `json:"projectId"`
+	RequestCount     int64  `json:"requestCount"`
+	PromptTokens     int64  `json:"promptTokens"`
+	CompletionTokens int64  `json:"completionTokens"`
+	TotalTokens      int64  `json:"totalTokens"`
+	CostMicroUSD     int64  `json:"costMicroUsd"`
+	CostUSD          string `json:"costUsd"`
 }
 
 type applicationBreakdownResponse struct {
@@ -254,6 +270,7 @@ type requestDetailDataResponse struct {
 	Model           string                             `json:"model"`
 	RequestedModel  string                             `json:"requestedModel"`
 	SelectedModel   string                             `json:"selectedModel"`
+	ProviderCalled  bool                               `json:"providerCalled"`
 	Usage           usageResponse                      `json:"usage"`
 	UsageSummary    usageSummaryResponse               `json:"usageSummary"`
 	Cost            costResponse                       `json:"cost"`
@@ -263,15 +280,21 @@ type requestDetailDataResponse struct {
 	Routing         routingResponse                    `json:"routing"`
 	Masking         maskingResponse                    `json:"masking"`
 	SafetySummary   safetySummaryResponse              `json:"safetySummary"`
+	PromptCapture   promptCaptureResponse              `json:"promptCapture"`
+	ResponseCapture responseCaptureResponse            `json:"responseCapture"`
 	Error           detailErrorResponse                `json:"error"`
 	CreatedAt       time.Time                          `json:"createdAt"`
 	CompletedAt     *time.Time                         `json:"completedAt"`
 }
 
 type outcomeResponse struct {
-	Outcome string  `json:"outcome"`
-	Reason  *string `json:"reason"`
-	Code    *string `json:"code"`
+	Outcome           string   `json:"outcome"`
+	Reason            *string  `json:"reason"`
+	Code              *string  `json:"code"`
+	LimitMicroUSD     *int64   `json:"limitMicroUsd,omitempty"`
+	UsedMicroUSD      *int64   `json:"usedMicroUsd,omitempty"`
+	RemainingMicroUSD *int64   `json:"remainingMicroUsd,omitempty"`
+	UsagePercent      *float64 `json:"usagePercent,omitempty"`
 }
 
 type domainOutcomesResponse struct {
@@ -320,31 +343,60 @@ type latencySummaryResponse struct {
 }
 
 type cacheResponse struct {
-	CacheStatus       string  `json:"cacheStatus"`
-	CacheType         string  `json:"cacheType"`
-	CacheKeyHash      *string `json:"cacheKeyHash"`
-	CacheHitRequestID *string `json:"cacheHitRequestId"`
+	CacheStatus         string  `json:"cacheStatus"`
+	CacheOutcome        string  `json:"cacheOutcome"`
+	CacheType           string  `json:"cacheType"`
+	CacheKeyHash        *string `json:"cacheKeyHash"`
+	CacheHitRequestID   *string `json:"cacheHitRequestId"`
+	CacheDecisionReason *string `json:"cacheDecisionReason"`
+	PromptCategory      *string `json:"promptCategory"`
 }
 
 type routingResponse struct {
-	RoutingReason    *string `json:"routingReason"`
-	RoutingRuleID    *string `json:"routingRuleId"`
-	SelectedProvider *string `json:"selectedProvider"`
-	SelectedModel    *string `json:"selectedModel"`
+	RoutingReason          *string `json:"routingReason"`
+	RoutingRuleID          *string `json:"routingRuleId"`
+	SelectedProvider       *string `json:"selectedProvider"`
+	SelectedProviderID     *string `json:"selectedProviderId"`
+	SelectedModel          *string `json:"selectedModel"`
+	SelectedModelID        *string `json:"selectedModelId"`
+	RoutingPolicyHash      *string `json:"routingPolicyHash"`
+	RoutingDecisionKeyHash *string `json:"routingDecisionKeyHash"`
 }
 
 type maskingResponse struct {
-	MaskingAction         string   `json:"maskingAction"`
-	MaskingDetectedTypes  []string `json:"maskingDetectedTypes"`
-	MaskingDetectedCount  int      `json:"maskingDetectedCount"`
-	RedactedPromptPreview *string  `json:"redactedPromptPreview"`
+	MaskingAction           string   `json:"maskingAction"`
+	MaskingDetectedTypes    []string `json:"maskingDetectedTypes"`
+	MaskingDetectedCount    int      `json:"maskingDetectedCount"`
+	PolicyAllowedTypes      []string `json:"policyAllowedTypes"`
+	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes"`
+	RedactedPromptPreview   *string  `json:"redactedPromptPreview"`
 }
 
 type safetySummaryResponse struct {
-	Outcome            string   `json:"outcome"`
-	DetectedCount      int      `json:"detectedCount"`
-	DetectorCategories []string `json:"detectorCategories"`
-	MaskingAction      string   `json:"maskingAction"`
+	Outcome                 string   `json:"outcome"`
+	DetectedCount           int      `json:"detectedCount"`
+	DetectorCategories      []string `json:"detectorCategories"`
+	PolicyAllowedTypes      []string `json:"policyAllowedTypes"`
+	MandatoryProtectedTypes []string `json:"mandatoryProtectedTypes"`
+	MaskingAction           string   `json:"maskingAction"`
+}
+
+type promptCaptureResponse struct {
+	Enabled        bool    `json:"enabled"`
+	Mode           string  `json:"mode"`
+	Visibility     string  `json:"visibility"`
+	CapturedPrompt *string `json:"capturedPrompt"`
+	Truncated      bool    `json:"truncated"`
+	MaxChars       int     `json:"maxChars"`
+}
+
+type responseCaptureResponse struct {
+	Enabled          bool    `json:"enabled"`
+	Mode             string  `json:"mode"`
+	Visibility       string  `json:"visibility"`
+	CapturedResponse *string `json:"capturedResponse"`
+	Truncated        bool    `json:"truncated"`
+	MaxChars         int     `json:"maxChars"`
 }
 
 type detailErrorResponse struct {
@@ -564,32 +616,36 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 			ResolvedBy:      stringPointerOrNil(filter.BudgetScope.ResolvedBy),
 		},
 		Totals: dashboardTotalsResponse{
-			TotalRequests:         overview.TotalRequests,
-			SuccessfulRequests:    overview.SuccessfulRequests,
-			FailedRequests:        overview.FailedRequests,
-			BlockedRequests:       overview.BlockedRequests,
-			RateLimitedRequests:   overview.RateLimitedRequests,
-			CancelledRequests:     overview.CancelledRequests,
-			CacheHitRequests:      overview.CacheHitRequests,
-			CacheEligibleRequests: overview.CacheEligibleRequests,
-			CacheHitRate:          overview.CacheHitRate,
-			ExactCacheHitRate:     overview.CacheHitRate,
-			FallbackSuccessCount:  overview.FallbackSuccessCount,
-			PromptTokens:          overview.PromptTokens,
-			CompletionTokens:      overview.CompletionTokens,
-			TotalTokens:           overview.TotalTokens,
-			TotalCostMicroUSD:     overview.TotalCostMicroUSD,
-			TotalCostUSD:          overview.TotalCostUSD,
-			SavedCostMicroUSD:     overview.SavedCostMicroUSD,
-			SavedCostUSD:          overview.SavedCostUSD,
-			AverageLatencyMs:      overview.AverageLatencyMs,
-			P95LatencyMs:          overview.P95LatencyMs,
-			AverageResponseTimeMs: overview.AverageResponseTimeMs,
-			MaskingActionCounts:   copyInt64Map(overview.MaskingActionCounts),
-			RoutingCountByModel:   routingCountByModelResponses(overview.RoutingCountByModel),
-			StatusCounts:          copyInt64Map(overview.StatusCounts),
-			CostByModel:           costByModelResponses(overview.CostByModel),
-			BudgetScopeBreakdown:  budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+			TotalRequests:            overview.TotalRequests,
+			SuccessfulRequests:       overview.SuccessfulRequests,
+			FailedRequests:           overview.FailedRequests,
+			BlockedRequests:          overview.BlockedRequests,
+			RateLimitedRequests:      overview.RateLimitedRequests,
+			CancelledRequests:        overview.CancelledRequests,
+			CacheHitRequests:         overview.CacheHitRequests,
+			CacheEligibleRequests:    overview.CacheEligibleRequests,
+			CacheHitRate:             overview.CacheHitRate,
+			ExactCacheHitRate:        overview.CacheHitRate,
+			FallbackSuccessCount:     overview.FallbackSuccessCount,
+			BudgetDowngradedRequests: overview.BudgetDowngradedRequests,
+			PromptTokens:             overview.PromptTokens,
+			CompletionTokens:         overview.CompletionTokens,
+			TotalTokens:              overview.TotalTokens,
+			TotalCostMicroUSD:        overview.TotalCostMicroUSD,
+			TotalCostUSD:             overview.TotalCostUSD,
+			SavedCostMicroUSD:        overview.SavedCostMicroUSD,
+			SavedCostUSD:             overview.SavedCostUSD,
+			AverageLatencyMs:         overview.AverageLatencyMs,
+			P95LatencyMs:             overview.P95LatencyMs,
+			AverageResponseTimeMs:    overview.AverageResponseTimeMs,
+			MaskingActionCounts:      copyInt64Map(overview.MaskingActionCounts),
+			RoutingCountByModel:      routingCountByModelResponses(overview.RoutingCountByModel),
+			StatusCounts:             copyInt64Map(overview.StatusCounts),
+			BudgetOutcomeCounts:      copyInt64Map(overview.BudgetOutcomeCounts),
+			CostByProject:            projectBreakdownResponses(overview.ProjectBreakdown),
+			CostByModel:              costByModelResponses(overview.CostByModel),
+			CostByBudgetScope:        budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
+			BudgetScopeBreakdown:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 		},
 		DataFreshness: dashboardDataFreshnessResponse{
 			Source:           overview.DataFreshness.Source,
@@ -617,6 +673,7 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 		Model:           detail.Model,
 		RequestedModel:  detail.RequestedModel,
 		SelectedModel:   detail.SelectedModel,
+		ProviderCalled:  detail.ProviderCalled,
 		Usage: usageResponse{
 			PromptTokens:     detail.Usage.PromptTokens,
 			CompletionTokens: detail.Usage.CompletionTokens,
@@ -644,29 +701,42 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 			TotalLatencyMs:           detail.LatencySummary.TotalLatencyMs,
 		},
 		Cache: cacheResponse{
-			CacheStatus:       detail.Cache.CacheStatus,
-			CacheType:         detail.Cache.CacheType,
-			CacheKeyHash:      stringPointerOrNil(detail.Cache.CacheKeyHash),
-			CacheHitRequestID: stringPointerOrNil(detail.Cache.CacheHitRequestID),
+			CacheStatus:         detail.Cache.CacheStatus,
+			CacheOutcome:        detail.Cache.CacheOutcome,
+			CacheType:           detail.Cache.CacheType,
+			CacheKeyHash:        stringPointerOrNil(detail.Cache.CacheKeyHash),
+			CacheHitRequestID:   stringPointerOrNil(detail.Cache.CacheHitRequestID),
+			CacheDecisionReason: stringPointerOrNil(detail.Cache.CacheDecisionReason),
+			PromptCategory:      stringPointerOrNil(detail.Cache.PromptCategory),
 		},
 		Routing: routingResponse{
-			RoutingReason:    stringPointerOrNil(detail.Routing.RoutingReason),
-			RoutingRuleID:    stringPointerOrNil(detail.Routing.RoutingRuleID),
-			SelectedProvider: stringPointerOrNil(detail.Routing.SelectedProvider),
-			SelectedModel:    stringPointerOrNil(detail.Routing.SelectedModel),
+			RoutingReason:          stringPointerOrNil(detail.Routing.RoutingReason),
+			RoutingRuleID:          stringPointerOrNil(detail.Routing.RoutingRuleID),
+			SelectedProvider:       stringPointerOrNil(detail.Routing.SelectedProvider),
+			SelectedProviderID:     stringPointerOrNil(detail.Routing.SelectedProviderID),
+			SelectedModel:          stringPointerOrNil(detail.Routing.SelectedModel),
+			SelectedModelID:        stringPointerOrNil(detail.Routing.SelectedModelID),
+			RoutingPolicyHash:      stringPointerOrNil(detail.Routing.RoutingPolicyHash),
+			RoutingDecisionKeyHash: stringPointerOrNil(detail.Routing.RoutingDecisionKeyHash),
 		},
 		Masking: maskingResponse{
-			MaskingAction:         detail.Masking.MaskingAction,
-			MaskingDetectedTypes:  append([]string(nil), detail.Masking.MaskingDetectedTypes...),
-			MaskingDetectedCount:  detail.Masking.MaskingDetectedCount,
-			RedactedPromptPreview: stringPointerOrNil(detail.Masking.RedactedPromptPreview),
+			MaskingAction:           detail.Masking.MaskingAction,
+			MaskingDetectedTypes:    append([]string(nil), detail.Masking.MaskingDetectedTypes...),
+			MaskingDetectedCount:    detail.Masking.MaskingDetectedCount,
+			PolicyAllowedTypes:      append([]string(nil), detail.Masking.PolicyAllowedTypes...),
+			MandatoryProtectedTypes: append([]string(nil), detail.Masking.MandatoryProtectedTypes...),
+			RedactedPromptPreview:   stringPointerOrNil(detail.Masking.RedactedPromptPreview),
 		},
 		SafetySummary: safetySummaryResponse{
-			Outcome:            detail.SafetySummary.Outcome,
-			DetectedCount:      detail.SafetySummary.DetectedCount,
-			DetectorCategories: append([]string(nil), detail.SafetySummary.DetectorCategories...),
-			MaskingAction:      detail.SafetySummary.MaskingAction,
+			Outcome:                 detail.SafetySummary.Outcome,
+			DetectedCount:           detail.SafetySummary.DetectedCount,
+			DetectorCategories:      append([]string(nil), detail.SafetySummary.DetectorCategories...),
+			PolicyAllowedTypes:      append([]string(nil), detail.SafetySummary.PolicyAllowedTypes...),
+			MandatoryProtectedTypes: append([]string(nil), detail.SafetySummary.MandatoryProtectedTypes...),
+			MaskingAction:           detail.SafetySummary.MaskingAction,
 		},
+		PromptCapture:   promptCaptureResponseFromDomain(detail.PromptCapture),
+		ResponseCapture: responseCaptureResponseFromDomain(detail.ResponseCapture),
 		Error: detailErrorResponse{
 			ErrorCode:    stringPointerOrNil(detail.Error.ErrorCode),
 			ErrorMessage: stringPointerOrNil(detail.Error.ErrorMessage),
@@ -715,7 +785,7 @@ func domainOutcomesResponseFromDomain(outcomes invocationlog.DomainOutcomes) dom
 		Auth:      outcomeResponseWithCode(normalized.Auth.Outcome, normalized.Auth.ErrorCode),
 		Runtime:   outcomeResponseFromOutcome(normalized.Runtime.Outcome),
 		RateLimit: outcomeResponseFromOutcome(normalized.RateLimit.Outcome),
-		Budget:    outcomeResponseFromOutcome(normalized.Budget.Outcome),
+		Budget:    outcomeResponseWithBudget(normalized.Budget),
 		Safety:    outcomeResponseFromOutcome(normalized.Safety.Outcome),
 		Routing:   outcomeResponseFromOutcome(normalized.Routing.Outcome),
 		Cache:     outcomeResponseFromOutcome(normalized.Cache.Outcome),
@@ -746,16 +816,44 @@ func outcomeResponseWithReason(outcome string, reason *string) outcomeResponse {
 	}
 }
 
+func outcomeResponseWithBudget(outcome invocationlog.BudgetOutcome) outcomeResponse {
+	return outcomeResponse{
+		Outcome:           outcome.Outcome,
+		Reason:            outcome.Reason,
+		LimitMicroUSD:     outcome.LimitMicroUSD,
+		UsedMicroUSD:      outcome.UsedMicroUSD,
+		RemainingMicroUSD: outcome.RemainingMicroUSD,
+		UsagePercent:      outcome.UsagePercent,
+	}
+}
 func dashboardBreakdowns(overview invocationlog.DashboardOverviewFields) dashboardBreakdownsResponse {
 	return dashboardBreakdownsResponse{
+		ByProject:         projectBreakdownResponses(overview.ProjectBreakdown),
 		ByApplication:     applicationBreakdownResponses(overview.ApplicationBreakdown),
 		ByBudgetScope:     budgetScopeBreakdownResponses(overview.BudgetScopeBreakdown),
 		ByProviderModel:   providerModelBreakdownResponses(overview.CostByModel, overview.Performance.P95ProviderLatencyMs),
 		BySafetyOutcome:   outcomeBreakdownResponses(overview.SafetyOutcomeCounts),
 		ByCacheOutcome:    outcomeBreakdownResponses(overview.CacheOutcomeCounts),
 		ByFallbackOutcome: outcomeBreakdownResponses(overview.FallbackOutcomeCounts),
+		ByBudgetOutcome:   outcomeBreakdownResponses(overview.BudgetOutcomeCounts),
 		ByTerminalStatus:  outcomeBreakdownResponses(overview.StatusCounts),
 	}
+}
+
+func projectBreakdownResponses(items []invocationlog.ProjectBreakdown) []projectBreakdownResponse {
+	responses := make([]projectBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, projectBreakdownResponse{
+			ProjectID:        item.ProjectID,
+			RequestCount:     item.RequestCount,
+			PromptTokens:     item.PromptTokens,
+			CompletionTokens: item.CompletionTokens,
+			TotalTokens:      item.TotalTokens,
+			CostMicroUSD:     item.CostMicroUSD,
+			CostUSD:          item.CostUSD,
+		})
+	}
+	return responses
 }
 
 func applicationBreakdownResponses(items []invocationlog.ApplicationBreakdown) []applicationBreakdownResponse {
@@ -917,6 +1015,54 @@ func runtimeSnapshotResponse(snapshot *runtimeconfig.RuntimeSnapshotProvenance) 
 		}
 	}
 	return response
+}
+
+func promptCaptureResponseFromDomain(fields invocationlog.PromptCaptureFields) promptCaptureResponse {
+	if strings.TrimSpace(fields.Mode) == "" {
+		fields.Mode = runtimeconfig.PromptCaptureModeDisabled
+	}
+	if strings.TrimSpace(fields.Visibility) == "" {
+		fields.Visibility = invocationlog.PromptCaptureVisibilityAdminRequestDetail
+	}
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.PromptCaptureDefaultMaxChars
+	}
+	var capturedPrompt *string
+	if fields.Enabled && strings.TrimSpace(fields.CapturedPrompt) != "" {
+		capturedPrompt = stringPointerOrNil(fields.CapturedPrompt)
+	}
+	return promptCaptureResponse{
+		Enabled:        fields.Enabled,
+		Mode:           fields.Mode,
+		Visibility:     fields.Visibility,
+		CapturedPrompt: capturedPrompt,
+		Truncated:      fields.Truncated,
+		MaxChars:       fields.MaxChars,
+	}
+}
+
+func responseCaptureResponseFromDomain(fields invocationlog.ResponseCaptureFields) responseCaptureResponse {
+	if strings.TrimSpace(fields.Mode) == "" {
+		fields.Mode = runtimeconfig.ResponseCaptureModeDisabled
+	}
+	if strings.TrimSpace(fields.Visibility) == "" {
+		fields.Visibility = invocationlog.ResponseCaptureVisibilityAdminRequestDetail
+	}
+	if fields.MaxChars <= 0 {
+		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
+	}
+	var capturedResponse *string
+	if fields.Enabled && strings.TrimSpace(fields.CapturedResponse) != "" {
+		capturedResponse = stringPointerOrNil(fields.CapturedResponse)
+	}
+	return responseCaptureResponse{
+		Enabled:          fields.Enabled,
+		Mode:             fields.Mode,
+		Visibility:       fields.Visibility,
+		CapturedResponse: capturedResponse,
+		Truncated:        fields.Truncated,
+		MaxChars:         fields.MaxChars,
+	}
 }
 
 func copyInt64Map(values map[string]int64) map[string]int64 {

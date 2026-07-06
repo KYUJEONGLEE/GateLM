@@ -18,6 +18,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/routing"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -156,8 +157,8 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	if resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected selected route: %#v", resp.GateLM)
 	}
-	if resp.GateLM.RoutingReason != "short_prompt_low_cost" {
-		t.Fatalf("expected short_prompt_low_cost, got %s", resp.GateLM.RoutingReason)
+	if resp.GateLM.RoutingReason != routing.ReasonSupportRefundLowCost {
+		t.Fatalf("expected %s, got %s", routing.ReasonSupportRefundLowCost, resp.GateLM.RoutingReason)
 	}
 }
 
@@ -488,6 +489,31 @@ func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
 	}
 }
 
+func TestNewRouterPanicsWhenSemanticIntentPolicyPathInvalid(t *testing.T) {
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatalf("Semantic Cache intent policy path가 잘못되면 startup에서 실패해야 함")
+		}
+		if !strings.Contains(fmt.Sprint(recovered), "missing-semantic-cache-policy.json") {
+			t.Fatalf("panic에는 잘못된 policy path가 포함되어야 함: %v", recovered)
+		}
+	}()
+
+	_ = NewRouter(config.Config{
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+		SemanticCache: config.SemanticCacheConfig{
+			Enabled:           true,
+			Store:             config.SemanticCacheStoreInMemory,
+			MaxEntries:        10,
+			EmbeddingProvider: config.SemanticCacheEmbeddingProviderFake,
+			EmbeddingModel:    "fake-test",
+			IntentPolicyPath:  "missing-semantic-cache-policy.json",
+		},
+	}, provider.NewRegistry("mock"), nil)
+}
+
 func writeRouterTestJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -556,6 +582,10 @@ func (r *routerTestInvocationLogReader) GetRequestDetail(_ context.Context, filt
 func (r *routerTestInvocationLogReader) GetDashboardOverview(_ context.Context, filter invocationlog.DashboardOverviewFilter) (invocationlog.DashboardOverviewFields, error) {
 	r.dashboardFilter = filter
 	return r.overview, nil
+}
+
+func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
+	return invocationlog.CostReportFields{}, nil
 }
 
 type routerTestAPIKeyAuthenticator struct {

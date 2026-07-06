@@ -11,7 +11,7 @@ export type ProviderConnectionRecord = {
   credentialPreview: ProviderCredentialPreview;
   displayName: string;
   id: string;
-  projectId: string;
+  projectId: string | null;
   provider: string;
   providerConfig: Record<string, unknown> | null;
   resolver: string;
@@ -21,12 +21,56 @@ export type ProviderConnectionRecord = {
   updatedAt: string;
 };
 
-export type ProviderConnectionFormValues = {
+export type ProviderPresetRecord = {
+  adapterType: string;
   baseUrl: string;
+  credentialRequired: boolean;
+  defaultResolver: string;
+  defaultTimeoutMs: number;
+  displayName: string;
+  modelsEndpointPath: string;
+  providerConfig: Record<string, unknown> | null;
+  providerKey: string;
+};
+
+export type ProviderDiscoveredModel = {
+  createdAt: string | null;
+  displayName: string;
+  modelName: string;
+  object: string;
+  ownedBy: string | null;
+  provider: string;
+  providerId: string;
+};
+
+export type ProviderModelDiscovery = {
+  adapterType: string;
+  baseUrl: string;
+  credentialRequired: boolean;
+  discoveredAt: string;
+  modelCount: number;
+  models: ProviderDiscoveredModel[];
+  provider: string;
+  providerId: string;
+};
+
+export type ProviderConnectionFormValues = {
+  adapterType: string;
+  apiVersion: string;
+  baseUrl: string;
+  credentialRequired: boolean;
   credentialLast4: string;
   credentialPrefix: string;
   displayName: string;
+  failureMode: "fail_closed" | "fail_open_to_fallback";
+  isEdit?: boolean;
+  models: string;
+  modelsEndpointPath: string;
   provider: string;
+  requestFormat:
+    | "openai_chat_completions"
+    | "anthropic_messages"
+    | "mock_chat_completions";
   resolver: string;
   secretRef: string;
   status: ProviderConnectionStatus;
@@ -37,6 +81,11 @@ export type ProviderConnectionsModel = {
   controlPlaneBaseUrl: string;
   controlPlaneProjectId: string;
   loadError: string | null;
+  providerPresets: {
+    items: ProviderPresetRecord[];
+    loadError: string | null;
+    source: "control-plane" | "fallback";
+  };
   providers: ProviderConnectionRecord[];
   routeTenantId: string;
   source: "control-plane" | "fixture";

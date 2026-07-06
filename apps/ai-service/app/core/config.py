@@ -7,6 +7,14 @@ from dataclasses import dataclass
 REMOTE_SAFETY_MODE_DISABLED = "disabled"
 REMOTE_SAFETY_MODE_SHADOW = "shadow"
 REMOTE_SAFETY_MODES = {REMOTE_SAFETY_MODE_DISABLED, REMOTE_SAFETY_MODE_SHADOW}
+DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID = "openai/privacy-filter"
+DEFAULT_AI_SAFETY_DETECTOR_RUNTIME = "onnx"
+AI_SAFETY_DETECTOR_RUNTIME_TRANSFORMERS = "transformers"
+AI_SAFETY_DETECTOR_RUNTIME_ONNX = "onnx"
+AI_SAFETY_DETECTOR_RUNTIMES = {
+    AI_SAFETY_DETECTOR_RUNTIME_TRANSFORMERS,
+    AI_SAFETY_DETECTOR_RUNTIME_ONNX,
+}
 
 
 @dataclass(frozen=True)
@@ -16,6 +24,9 @@ class Settings:
     log_level: str = "INFO"
     remote_safety_mode: str = REMOTE_SAFETY_MODE_DISABLED
     access_log_enabled: bool = False
+    ai_safety_detector_model_id: str = DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID
+    ai_safety_additional_detector_model_ids: tuple[str, ...] = ()
+    ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
 
 
 def load_settings() -> Settings:
@@ -25,6 +36,14 @@ def load_settings() -> Settings:
         log_level=_env_string("AI_SERVICE_LOG_LEVEL", "INFO"),
         remote_safety_mode=_env_remote_safety_mode(),
         access_log_enabled=_env_bool("AI_SERVICE_ACCESS_LOG_ENABLED", False),
+        ai_safety_detector_model_id=_env_model_id(
+            "AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID",
+            DEFAULT_AI_SAFETY_DETECTOR_MODEL_ID,
+        ),
+        ai_safety_additional_detector_model_ids=_env_model_ids(
+            "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS",
+        ),
+        ai_safety_detector_runtime=_env_ai_safety_detector_runtime(),
     )
 
 
@@ -33,6 +52,16 @@ def _env_remote_safety_mode() -> str:
     if mode not in REMOTE_SAFETY_MODES:
         return REMOTE_SAFETY_MODE_DISABLED
     return mode
+
+
+def _env_ai_safety_detector_runtime() -> str:
+    runtime = _env_string(
+        "AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME",
+        DEFAULT_AI_SAFETY_DETECTOR_RUNTIME,
+    ).strip().lower()
+    if runtime not in AI_SAFETY_DETECTOR_RUNTIMES:
+        return DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
+    return runtime
 
 
 def _env_string(key: str, fallback: str) -> str:
@@ -65,3 +94,27 @@ def _env_bool(key: str, fallback: bool) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     return fallback
+
+
+def _env_model_id(key: str, fallback: str) -> str:
+    value = _env_string(key, fallback).strip()
+    if value == "" or any(char.isspace() for char in value):
+        return fallback
+    return value
+
+
+def _env_model_ids(key: str) -> tuple[str, ...]:
+    value = os.environ.get(key)
+    if value is None or value.strip() == "":
+        return ()
+    model_ids: list[str] = []
+    seen: set[str] = set()
+    for raw_item in value.split(","):
+        model_id = raw_item.strip()
+        if model_id == "" or any(char.isspace() for char in model_id):
+            continue
+        if model_id in seen:
+            continue
+        model_ids.append(model_id)
+        seen.add(model_id)
+    return tuple(model_ids)

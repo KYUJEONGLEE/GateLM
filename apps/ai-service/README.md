@@ -53,6 +53,19 @@ python -m pip install -e ".[ml,test]"
 
 `PrivacyFilterAdapter` lazy-loads `transformers.pipeline(task="token-classification")` and is not wired into the default evaluator unless it is explicitly injected. It returns only in-memory `Detection` objects with `detector_type`, `source`, `start`, `end`, and `confidence`; it does not return or store `word`, raw detected values, raw prompt fragments, or offsets through the FastAPI response. The current `/internal/v1/safety/evaluate` response contract still exposes only the existing sanitized decision and metadata shape.
 
+The primary sidecar detector model defaults to `openai/privacy-filter`. For lightweight local Korean privacy NER experiments, keep the primary model and add the quantized KoELECTRA ONNX artifact as an additional detector:
+
+```bash
+AI_SERVICE_TRANSFORMERS_OFFLINE=1
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized
+```
+
+Both models are loaded through local ONNX Runtime pipelines and their detections are merged through the same sanitized GateLM policy path. Keep both model directories mounted or copied into `.cache/onnx` for network-free sidecar startup. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
+
+KoELECTRA `ORG-B` / `ORG-I` labels normalize to the GateLM detector type `organization_name`, use the `koelectra_privacy_ner` source, and redact with `[ORGANIZATION_NAME_REDACTED]`. The `amoeba04--koelectra-small-v3-privacy-ner-quantized` local artifact keeps the same public model identity and sanitized source as the non-quantized KoELECTRA detector.
+
 ## AI Safety Detector Sidecar
 
 The local detector sidecar endpoint is available at:
@@ -61,7 +74,7 @@ The local detector sidecar endpoint is available at:
 POST /internal/ai-safety/v1/detect
 ```
 
-It uses the `ai-safety-detector.v1` draft contract and returns `redactedPrompt`, `detectorSummary`, and sanitized `detections`. The endpoint is `shadow` mode by default and uses a CPU-only local `openai/privacy-filter` adapter. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
+It uses the `ai-safety-detector.v1` draft contract and returns `redactedPrompt`, `detectorSummary`, and sanitized `detections`. The endpoint is `shadow` mode by default and uses CPU-only local token-classification adapters. `openai/privacy-filter` remains the primary default adapter, and additional adapters such as KoELECTRA can be enabled through configuration. It does not return model `word`, raw detected values, raw prompt fragments, or offsets.
 
 Example request shape:
 
@@ -80,12 +93,36 @@ Example request shape:
 }
 ```
 
-Run locally with ML dependencies installed:
+Run locally with ONNX dependencies installed:
 
 ```bash
 cd apps/ai-service
-python -m pip install -e ".[ml,test]"
+python -m pip install -e ".[onnx,test]"
+AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
 python -m app.main
+```
+
+Use ONNX Runtime for an exported token-classification model by installing the optional ONNX dependencies and pointing the model id at the exported model directory:
+
+```bash
+cd apps/ai-service
+python -m pip install -e ".[onnx,test]"
+AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
+AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
+AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID=.cache/onnx/openai--privacy-filter \
+AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=.cache/onnx/amoeba04--koelectra-small-v3-privacy-ner-quantized \
+python -m app.main
+```
+
+Build an AI service image with local ML dependencies when running the detector in a container:
+
+```bash
+docker build -f infra/docker/ai-service.Dockerfile \
+  --build-arg AI_SERVICE_INSTALL_ML_DEPS=true \
+  -t gatelm/ai-service:ml-local .
 ```
 
 ## Resource / Latency Benchmark Runner

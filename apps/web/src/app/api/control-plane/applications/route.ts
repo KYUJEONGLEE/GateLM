@@ -4,6 +4,7 @@ import {
   updateApplication
 } from "@/lib/control-plane/applications-client";
 import type {
+  ApplicationBudgetLimitMode,
   ApplicationFormValues,
   ApplicationStatus,
   ApplicationUpdateValues
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     application: result.data,
+    policyError: "policyError" in result ? result.policyError : undefined,
     status: result.status
   });
 }
@@ -60,7 +62,20 @@ function isApplicationFormValues(value: unknown): value is ApplicationFormValues
   return (
     typeof record.name === "string"
     && typeof record.description === "string"
+    && isApplicationBudgetLimitMode(record.budgetLimitMode)
+    && isBudgetNumber(record.budgetLimitUsd, 100000000)
+    && isBudgetNumber(record.budgetLimitPercent, 100)
     && (record.projectId === undefined || typeof record.projectId === "string")
+    && (
+      record.providerConnectionIds === undefined ||
+      (
+        Array.isArray(record.providerConnectionIds) &&
+        record.providerConnectionIds.every((providerConnectionId) =>
+          typeof providerConnectionId === "string"
+        )
+      )
+    )
+    && (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string")
   );
 }
 
@@ -76,4 +91,19 @@ function isApplicationUpdateValues(value: unknown): value is ApplicationUpdateVa
 
 function isApplicationStatus(value: unknown): value is ApplicationStatus {
   return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED";
+}
+
+function isApplicationBudgetLimitMode(
+  value: unknown
+): value is ApplicationBudgetLimitMode {
+  return value === "FIXED" || value === "PERCENT";
+}
+
+function isBudgetNumber(value: unknown, max: number) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= max
+  );
 }

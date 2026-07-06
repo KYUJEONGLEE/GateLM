@@ -2,6 +2,7 @@
 
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { GatewayMetricsModel, MetricsFamily, MetricsSample } from "@/lib/gateway/metrics-types";
@@ -92,15 +93,15 @@ export function MetricsOverview({ locale, model }: MetricsOverviewProps) {
       </section>
 
       {model.loadError ? (
-        <p className="policy-alert" data-status="error">
-          {text.gatewayUnavailable}: {model.loadError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{text.gatewayUnavailable}: {model.loadError}</AlertDescription>
+        </Alert>
       ) : null}
 
       {model.summary.forbiddenLabelNames.length > 0 ? (
-        <p className="policy-alert" data-status="error">
-          {text.forbiddenLabels}: {model.summary.forbiddenLabelNames.join(", ")}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{text.forbiddenLabels}: {model.summary.forbiddenLabelNames.join(", ")}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section className="metric-grid">

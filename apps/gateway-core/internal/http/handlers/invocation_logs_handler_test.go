@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
@@ -275,7 +276,23 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 				MaskingAction:         "redacted",
 				MaskingDetectedTypes:  []string{"email"},
 				MaskingDetectedCount:  1,
-				RedactedPromptPreview: "Send a reply to [EMAIL_REDACTED].",
+				RedactedPromptPreview: "Send a reply to [EMAIL_1].",
+			},
+			PromptCapture: invocationlog.PromptCaptureFields{
+				Enabled:        true,
+				Mode:           runtimeconfig.PromptCaptureModeLogSafeFull,
+				Visibility:     invocationlog.PromptCaptureVisibilityAdminRequestDetail,
+				CapturedPrompt: "Send a reply to [EMAIL_REDACTED].",
+				Truncated:      false,
+				MaxChars:       8000,
+			},
+			ResponseCapture: invocationlog.ResponseCaptureFields{
+				Enabled:          true,
+				Mode:             runtimeconfig.ResponseCaptureModeRawFull,
+				Visibility:       invocationlog.ResponseCaptureVisibilityAdminRequestDetail,
+				CapturedResponse: "Mock response",
+				Truncated:        false,
+				MaxChars:         8000,
 			},
 			RuntimeSnapshot: &runtimeconfig.RuntimeSnapshotProvenance{
 				RuntimeSnapshotID:      "runtime_snapshot_detail_test",
@@ -322,8 +339,20 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 	if response.Data.RequestID != "request_001" || response.Data.Routing.SelectedModel == nil || *response.Data.Routing.SelectedModel != "mock-fast" {
 		t.Fatalf("unexpected detail response: %+v", response.Data)
 	}
-	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_REDACTED]." {
+	if response.Data.Masking.RedactedPromptPreview == nil || *response.Data.Masking.RedactedPromptPreview != "Send a reply to [EMAIL_1]." {
 		t.Fatalf("expected redacted prompt preview, got %+v", response.Data.Masking)
+	}
+	if !response.Data.PromptCapture.Enabled ||
+		response.Data.PromptCapture.CapturedPrompt == nil ||
+		*response.Data.PromptCapture.CapturedPrompt != "Send a reply to [EMAIL_REDACTED]." ||
+		response.Data.PromptCapture.Visibility != invocationlog.PromptCaptureVisibilityAdminRequestDetail {
+		t.Fatalf("unexpected prompt capture response: %+v", response.Data.PromptCapture)
+	}
+	if !response.Data.ResponseCapture.Enabled ||
+		response.Data.ResponseCapture.CapturedResponse == nil ||
+		*response.Data.ResponseCapture.CapturedResponse != "Mock response" ||
+		response.Data.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail {
+		t.Fatalf("unexpected response capture response: %+v", response.Data.ResponseCapture)
 	}
 	if response.Data.Cache.CacheHitRequestID != nil || response.Data.Error.ErrorCode != nil {
 		t.Fatalf("expected empty optional fields to be null, got cache=%+v error=%+v", response.Data.Cache, response.Data.Error)
@@ -493,6 +522,21 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 				CostMicroUSD:     256,
 				CostUSD:          "0.000256",
 			}},
+			ProjectBreakdown: []invocationlog.ProjectBreakdown{{
+				ProjectID:        "project_demo",
+				RequestCount:     6,
+				PromptTokens:     78,
+				CompletionTokens: 115,
+				TotalTokens:      193,
+				CostMicroUSD:     256,
+				CostUSD:          "0.000256",
+			}},
+			BudgetScopeBreakdown: []invocationlog.BudgetScopeBreakdown{{
+				BudgetScope:  budget.Scope{Type: budget.ScopeTypeTeam, ID: "team_demo", ResolvedBy: budget.ResolvedByControlPlaneRule},
+				RequestCount: 6,
+				CostMicroUSD: 256,
+				CostUSD:      "0.000256",
+			}},
 			DataFreshness: invocationlog.DashboardDataFreshness{
 				Source:           "postgresql_request_log",
 				RecordCount:      6,
@@ -545,6 +589,12 @@ func TestDashboardOverviewHandlerGetsOverviewWithTenantAndOptionalProjectScope(t
 	}
 	if len(response.Data.Totals.CostByModel) != 1 || response.Data.Totals.CostByModel[0].CostUSD != "0.000256" {
 		t.Fatalf("unexpected cost by model: %+v", response.Data.Totals.CostByModel)
+	}
+	if len(response.Data.Totals.CostByProject) != 1 || response.Data.Totals.CostByProject[0].ProjectID != "project_demo" || response.Data.Totals.CostByProject[0].CostUSD != "0.000256" {
+		t.Fatalf("unexpected cost by project: %+v", response.Data.Totals.CostByProject)
+	}
+	if len(response.Data.Breakdowns.ByProject) != 1 || response.Data.Breakdowns.ByProject[0].ProjectID != "project_demo" {
+		t.Fatalf("unexpected project breakdown response: %+v", response.Data.Breakdowns.ByProject)
 	}
 	if response.Data.DataFreshness.Source != "postgresql_request_log" || response.Data.DataFreshness.RecordCount != 6 || response.Data.DataFreshness.LastLogCreatedAt == nil || !response.Data.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || !response.Data.DataFreshness.GeneratedAt.Equal(generatedAt) {
 		t.Fatalf("unexpected data freshness: %+v", response.Data.DataFreshness)

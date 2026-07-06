@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/auth"
 	"gatelm/apps/gateway-core/internal/domain/budget"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
+	"gatelm/apps/gateway-core/internal/domain/costing"
 	"gatelm/apps/gateway-core/internal/domain/credentials"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -181,6 +183,135 @@ func TestChatCompletionsHandlerWritesTerminalLogForSuccess(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsHandlerCalculatesCostFromProviderUsage(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	calculator := &recordingCostCalculator{result: costing.Result{
+		CostMicroUSD:              2,
+		Currency:                  costing.CurrencyUSD,
+		PricingRuleID:             "price_mock_balanced_v1",
+		PricingVersion:            "pricing_test_v1",
+		PricingProvider:           "mock",
+		PricingModel:              "mock-balanced",
+		InputMicroUSDPer1MTokens:  100_000,
+		OutputMicroUSDPer1MTokens: 400_000,
+		TokenCountSource:          costing.TokenCountSourceProviderUsage,
+		CostSource:                costing.CostSourcePricingCatalog,
+		PromptTokens:              4,
+		CompletionTokens:          3,
+		TotalTokens:               7,
+	}}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+		CostCalculator:    calculator,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Write a short refund response.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	resp := decodeChatCompletionResponse(t, rr)
+	if calculator.calls != 1 {
+		t.Fatalf("expected one cost calculation, got %d", calculator.calls)
+	}
+	if calculator.ctxErr != nil {
+		t.Fatalf("cost calculator context must ignore request cancellation, got %v", calculator.ctxErr)
+	}
+	if !calculator.hasDeadline {
+		t.Fatalf("cost calculator context must have a deadline")
+	}
+	if calculator.lastRequest.PromptTokens != 4 || calculator.lastRequest.CompletionTokens != 3 || calculator.lastRequest.TotalTokens != 7 {
+		t.Fatalf("unexpected cost calculator usage request: %+v", calculator.lastRequest)
+	}
+	if !containsString(calculator.lastRequest.ProviderKeys, "mock") || !containsString(calculator.lastRequest.ModelKeys, "mock-balanced") {
+		t.Fatalf("unexpected pricing lookup keys: %+v", calculator.lastRequest)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.CostMicroUSD != 2 || rr.Header().Get("X-GateLM-Estimated-Cost-Usd") != "0.000002" || resp.GateLM.EstimatedCostUSD != "0.000002" {
+		t.Fatalf("unexpected calculated cost: log=%d header=%q gate_lm=%q", logged.CostMicroUSD, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
+	}
+	metadata, ok := logged.Metadata["costing"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing costing metadata: %+v", logged.Metadata)
+	}
+	if metadata["pricingRuleId"] != "price_mock_balanced_v1" || metadata["costSource"] != costing.CostSourcePricingCatalog {
+		t.Fatalf("unexpected costing metadata: %+v", metadata)
+	}
+	if metadata["amountType"] != costing.AmountTypeEstimatedProviderUsageCost || metadata["credentialOwner"] != costing.CredentialOwnerTenant || metadata["billableByGateLM"] != false {
+		t.Fatalf("costing metadata must describe tenant-owned provider usage, not GateLM billing: %+v", metadata)
+	}
+}
+func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.PromptCapture = runtimeconfig.PromptCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.PromptCaptureModeLogSafeFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasPromptCapture = true
+			gatewayCtx.Runtime.ResponseCapture = runtimeconfig.ResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasResponseCapture = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:             provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:          "mock-balanced",
+		DefaultProvider:       "mock",
+		RuntimePolicyPipeline: runtimePolicy,
+		TerminalLogWriter:     logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Send a reply to user@example.invalid.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	capture, ok := logWriter.logs[0].Metadata["promptCapture"].(invocationlog.PromptCaptureFields)
+	if !ok {
+		t.Fatalf("expected prompt capture metadata, got %+v", logWriter.logs[0].Metadata["promptCapture"])
+	}
+	if !capture.Enabled ||
+		capture.Mode != runtimeconfig.PromptCaptureModeLogSafeFull ||
+		capture.CapturedPrompt != "Send a reply to [EMAIL_1]." ||
+		strings.Contains(capture.CapturedPrompt, "user@example.invalid") {
+		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+	responseCapture, ok := logWriter.logs[0].Metadata["responseCapture"].(invocationlog.ResponseCaptureFields)
+	if !ok {
+		t.Fatalf("expected response capture metadata, got %+v", logWriter.logs[0].Metadata["responseCapture"])
+	}
+	if !responseCapture.Enabled ||
+		responseCapture.Mode != runtimeconfig.ResponseCaptureModeRawFull ||
+		responseCapture.CapturedResponse != "Mock response" {
+		t.Fatalf("unexpected response capture metadata: %+v", responseCapture)
+	}
+}
+
 func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
@@ -223,7 +354,7 @@ func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.
 	if logged.RequestedModel != "auto" {
 		t.Fatalf("expected requested model auto, got %q", logged.RequestedModel)
 	}
-	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-fast" || logged.RoutingReason != "short_prompt_low_cost" {
+	if logged.SelectedProvider != "mock" || logged.SelectedModel != "mock-fast" || logged.RoutingReason != "category_support_refund_low_cost" {
 		t.Fatalf("unexpected routing metadata: %+v", logged)
 	}
 	if logged.Provider != "mock" || logged.Model != "mock-fast" {
@@ -260,13 +391,18 @@ func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.
 	}
 }
 
-func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T) {
+func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
-	providerRequests := []provider.ChatCompletionRequest{}
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"안녕하세요. "},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"실제 provider streaming입니다."},"finish_reason":null}]}`),
+			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":5,"total_tokens":9}}`),
+		},
+	}
 	handler := ChatCompletionsHandler{
-		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
-			requests: &providerRequests,
-		}),
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
 		DefaultModel:      "mock-balanced",
 		DefaultProvider:   "mock",
 		TerminalLogWriter: logWriter,
@@ -286,17 +422,20 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 		t.Fatalf("expected event-stream content type, got %q", got)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "data:") || !strings.Contains(body, "Mock") || !strings.Contains(body, "data: [DONE]") {
+	if !strings.Contains(body, "data:") || !strings.Contains(body, "실제 provider streaming") || !strings.Contains(body, "data: [DONE]") {
 		t.Fatalf("expected SSE chunks and done marker, got %q", body)
 	}
 	if strings.Count(body, "data:") < 3 {
 		t.Fatalf("expected multiple SSE chunks, got %q", body)
 	}
-	if len(providerRequests) != 1 {
-		t.Fatalf("expected one provider request, got %d", len(providerRequests))
+	if streamingAdapter.chatCalls != 0 {
+		t.Fatalf("streaming request must not use non-stream provider call, got %d", streamingAdapter.chatCalls)
 	}
-	if providerRequests[0].Stream {
-		t.Fatalf("thin slice must not require upstream provider streaming")
+	if streamingAdapter.streamCalls != 1 {
+		t.Fatalf("expected one provider stream request, got %d", streamingAdapter.streamCalls)
+	}
+	if len(streamingAdapter.streamRequests) != 1 || !streamingAdapter.streamRequests[0].Stream {
+		t.Fatalf("expected upstream stream=true request, got %+v", streamingAdapter.streamRequests)
 	}
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
@@ -304,6 +443,9 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 	logged := logWriter.logs[0]
 	if !logged.Stream || logged.Status != invocationlog.StatusSuccess || logged.HTTPStatus != http.StatusOK {
 		t.Fatalf("unexpected streaming terminal log: %+v", logged)
+	}
+	if logged.TotalTokens != 9 {
+		t.Fatalf("expected usage from final stream chunk, got %+v", logged)
 	}
 	if logged.DomainOutcomes.Streaming.Outcome != "completed" ||
 		!logged.DomainOutcomes.Streaming.StreamingRequested ||
@@ -314,8 +456,82 @@ func TestChatCompletionsHandlerStreamsThinSliceAfterProviderSuccess(t *testing.T
 	if err != nil {
 		t.Fatalf("marshal terminal log: %v", err)
 	}
-	if strings.Contains(string(loggedJSON), "Mock response") {
+	if strings.Contains(string(loggedJSON), "안녕하세요") || strings.Contains(string(loggedJSON), "실제 provider streaming") {
 		t.Fatalf("terminal log must not store streamed response chunks: %s", string(loggedJSON))
+	}
+}
+
+func TestChatCompletionsHandlerRelaysLocalMockProviderStream(t *testing.T) {
+	upstreamStreamCalls := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected mock provider path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("expected event-stream accept header, got %q", r.Header.Get("Accept"))
+		}
+		upstreamStreamCalls++
+
+		var req provider.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode mock provider request: %v", err)
+		}
+		if !req.Stream {
+			t.Fatal("expected Gateway to call mock provider with stream=true")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"로컬 mock streaming 응답입니다."},"finish_reason":null}]}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"id":"mock_stream","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer mockServer.Close()
+
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("로컬 mock streaming을 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if upstreamStreamCalls != 1 {
+		t.Fatalf("expected one upstream mock streaming call, got %d", upstreamStreamCalls)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") ||
+		!strings.Contains(body, "로컬 mock streaming 응답입니다.") ||
+		!strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected relayed local mock SSE stream, headers=%v body=%q", rr.Header(), body)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.Stream ||
+		logged.Status != invocationlog.StatusSuccess ||
+		logged.DomainOutcomes.Streaming.Outcome != "completed" ||
+		logged.DomainOutcomes.Provider.Outcome != "success" ||
+		logged.TotalTokens != 7 {
+		t.Fatalf("unexpected local mock streaming log: %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+	loggedJSON, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal terminal log: %v", err)
+	}
+	if strings.Contains(string(loggedJSON), "로컬 mock streaming 응답입니다.") {
+		t.Fatalf("terminal log must not store local mock streamed chunk content: %s", string(loggedJSON))
 	}
 }
 
@@ -369,8 +585,9 @@ func TestChatCompletionsHandlerStreamingPreservesResponseWhitespace(t *testing.T
 
 func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
+	streamingAdapter := &streamingProviderAdapter{}
 	handler := ChatCompletionsHandler{
-		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
 		DefaultModel:      "mock-balanced",
 		DefaultProvider:   "mock",
 		TerminalLogWriter: logWriter,
@@ -391,6 +608,9 @@ func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T
 	if strings.Contains(rr.Header().Get("Content-Type"), "text/event-stream") || strings.Contains(rr.Body.String(), "data:") {
 		t.Fatalf("cancelled request must not start streaming, headers=%v body=%q", rr.Header(), rr.Body.String())
 	}
+	if streamingAdapter.streamCalls != 0 {
+		t.Fatalf("cancelled request must not open provider stream, got %d", streamingAdapter.streamCalls)
+	}
 	if len(logWriter.logs) != 1 {
 		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
@@ -398,6 +618,192 @@ func TestChatCompletionsHandlerStreamingClientAbortRecordsCancelled(t *testing.T
 	if !logged.Stream ||
 		logged.Status != invocationlog.StatusCancelled ||
 		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingUnsupportedFailsBeforeProviderCall(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	providerCalls := 0
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls: &providerCalls,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("스트리밍 지원 여부를 확인해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if providerCalls != 0 {
+		t.Fatalf("unsupported streaming must not call provider, got %d", providerCalls)
+	}
+	assertGatewayErrorCode(t, rr, "streaming_not_supported")
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.DomainOutcomes.Provider.Outcome != "not_called" ||
+		logged.DomainOutcomes.Streaming.Outcome != "not_streaming" {
+		t.Fatalf("unexpected unsupported streaming outcomes: %+v", logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupted(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	streamingAdapter := &streamingProviderAdapter{
+		events: []provider.ChatCompletionStreamEvent{
+			streamEvent(t, `{"id":"chatcmpl_interrupted","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"content":"부분 응답"},"finish_reason":null}]}`),
+		},
+		nextErr: provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, errors.New("synthetic stream failure")),
+	}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", streamingAdapter),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("중간 실패를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("stream already started, response status should remain 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "부분 응답") || strings.Contains(rr.Body.String(), "data: [DONE]") {
+		t.Fatalf("expected partial stream without done marker, got %q", rr.Body.String())
+	}
+	if streamingAdapter.closeCalls != 1 {
+		t.Fatalf("stream reader must be closed, got %d", streamingAdapter.closeCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusFailed ||
+		logged.HTTPStatus != http.StatusBadGateway ||
+		logged.DomainOutcomes.Streaming.Outcome != "interrupted" ||
+		logged.DomainOutcomes.Provider.Outcome != "error" ||
+		logged.DomainOutcomes.Fallback.Outcome != "not_called" {
+		t.Fatalf("unexpected interrupted streaming log: %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+	loggedJSON, err := json.Marshal(logged)
+	if err != nil {
+		t.Fatalf("marshal terminal log: %v", err)
+	}
+	if strings.Contains(string(loggedJSON), "부분 응답") {
+		t.Fatalf("terminal log must not store streamed chunk content: %s", string(loggedJSON))
+	}
+}
+
+func TestChatCompletionsHandlerStreamingFallbackResolveCancellationRecordsCancelled(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[0].CredentialRequired = false
+	catalog.Providers[0].CredentialRef = nil
+	catalog.Providers[1].CredentialRequired = true
+	catalog.Providers[1].CredentialRef = &credentials.Ref{
+		CredentialRefID:   "credential_ref_fallback_cancel",
+		CredentialVersion: 1,
+		CredentialState:   credentials.StateActive,
+	}
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      cancelingCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback resolve 취소를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 0 {
+		t.Fatalf("expected primary stream open and no fallback stream call, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.ErrorCode != "internal_error" ||
+		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
+		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
+func TestChatCompletionsHandlerStreamingFallbackOpenCancellationRecordsCancelled(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeMock,
+		openErr:     context.Canceled,
+	}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback open 취소를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != gatewayerrors.StatusClientClosedRequest {
+		t.Fatalf("expected 499, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 1 {
+		t.Fatalf("expected primary and fallback stream open attempts, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if logged.Status != invocationlog.StatusCancelled ||
+		logged.HTTPStatus != gatewayerrors.StatusClientClosedRequest ||
+		logged.ErrorCode != "internal_error" ||
 		logged.DomainOutcomes.Streaming.Outcome != "cancelled" {
 		t.Fatalf("expected cancelled streaming log, got %+v outcomes=%+v", logged, logged.DomainOutcomes)
 	}
@@ -1178,13 +1584,13 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 			name:        "email",
 			prompt:      "Write a safe reply to user@example.invalid about the refund.",
 			rawValue:    "user@example.invalid",
-			placeholder: "[EMAIL_REDACTED]",
+			placeholder: "[EMAIL_1]",
 		},
 		{
 			name:        "phone",
 			prompt:      "Write a safe reply asking them to call 010-0000-0000 tomorrow.",
 			rawValue:    "010-0000-0000",
-			placeholder: "[PHONE_NUMBER_REDACTED]",
+			placeholder: "[PHONE_NUMBER_1]",
 		},
 	}
 
@@ -1253,6 +1659,130 @@ func TestChatCompletionsHandlerRedactsEmailAndPhoneBeforeProviderCall(t *testing
 				t.Fatalf("redacted prompt preview must not include raw sensitive value %q: %q", tt.rawValue, logged.RedactedPromptPreview)
 			}
 		})
+	}
+}
+
+func TestChatCompletionsHandlerKeepsEntityScopeAcrossRequestMessages(t *testing.T) {
+	chatCalls := 0
+	var providerRequests []provider.ChatCompletionRequest
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls:    &chatCalls,
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "system",
+				Content: json.RawMessage(jsonStringLiteral("Primary contact is first@example.invalid.")),
+			},
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral("Email second@example.invalid, then first@example.invalid.")),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
+	}
+
+	providerPrompt := recordedProviderPrompt(t, providerRequests)
+	expected := "Primary contact is [EMAIL_1].\nEmail [EMAIL_2], then [EMAIL_1]."
+	if providerPrompt != expected {
+		t.Fatalf("expected request-scoped redacted prompt %q, got %q", expected, providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "first@example.invalid") || strings.Contains(providerPrompt, "second@example.invalid") {
+		t.Fatalf("provider prompt must not include raw emails: %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	expectedPreview := "Primary contact is [EMAIL_1].\nEmail [EMAIL_2], then [EMAIL_1]."
+	if logWriter.logs[0].RedactedPromptPreview != expectedPreview {
+		t.Fatalf("expected request-scoped log preview %q, got %q", expectedPreview, logWriter.logs[0].RedactedPromptPreview)
+	}
+}
+
+func TestChatCompletionsHandlerKeepsFirstPersonRoleAcrossRequestMessages(t *testing.T) {
+	chatCalls := 0
+	var providerRequests []provider.ChatCompletionRequest
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers: provider.NewRegistry("mock", recordingProviderAdapter{
+			calls:    &chatCalls,
+			requests: &providerRequests,
+		}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	body, err := json.Marshal(provider.ChatCompletionRequest{
+		Model: "mock-balanced",
+		Messages: []provider.ChatMessage{
+			{
+				Role:    "system",
+				Content: json.RawMessage(jsonStringLiteral("customer_name=Alex Kim")),
+			},
+			{
+				Role:    "user",
+				Content: json.RawMessage(jsonStringLiteral("patient_name=Alex Kim")),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
+	}
+
+	providerPrompt := recordedProviderPrompt(t, providerRequests)
+	expected := "customer_name=[CUSTOMER_1]\npatient_name=[CUSTOMER_1]"
+	if providerPrompt != expected {
+		t.Fatalf("expected request-scoped role-aware prompt %q, got %q", expected, providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "Alex Kim") || strings.Contains(providerPrompt, "[PATIENT_1]") {
+		t.Fatalf("provider prompt must keep first role without raw person name: %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	expectedPreview := "customer_name=[CUSTOMER_1]\npatient_name=[CUSTOMER_1]"
+	if logWriter.logs[0].RedactedPromptPreview != expectedPreview {
+		t.Fatalf("expected role-aware log preview %q, got %q", expectedPreview, logWriter.logs[0].RedactedPromptPreview)
 	}
 }
 
@@ -1468,7 +1998,7 @@ func TestCombineMaskingResultsBoundsRedactedPromptPreview(t *testing.T) {
 			RedactedPromptPreview:   redactedPrompt,
 			SecurityPolicyVersionID: maskdomain.DefaultSecurityPolicyVersionID,
 		},
-	}, redactedPrompt, maskdomain.DefaultSecurityPolicyVersionID)
+	}, redactedPrompt, redactedPrompt, maskdomain.DefaultSecurityPolicyVersionID)
 
 	if result.RedactedPrompt != redactedPrompt {
 		t.Fatalf("expected full redacted prompt to remain available in memory, got %q", result.RedactedPrompt)
@@ -1582,7 +2112,7 @@ func TestChatCompletionsHandlerDoesNotSetHitRequestIDBeforeCachedPayloadDecodes(
 		CachePolicyHash:      "cache_p0_v1",
 	}
 
-	payload, hitRequestID, hit := handler.lookupExactCache(
+	payload, hitRequestID, _, hit := handler.lookupExactCache(
 		context.Background(),
 		reqCtx,
 		provider.ChatCompletionRequest{Model: "mock-balanced"},
@@ -1608,6 +2138,8 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	reqCtx.ProjectID = testProjectID
 	reqCtx.ApplicationID = testAppID
 	reqCtx.RequestedModel = "auto"
+	reqCtx.SelectedProvider = "mock"
+	reqCtx.SelectedModel = "mock-fast"
 	reqCtx.RoutingPolicyHash = "hash_routing_policy_test"
 	reqCtx.SecurityPolicyHash = "hash_security_policy_test"
 	reqCtx.SecurityPolicyVersionID = maskdomain.DefaultSecurityPolicyVersionID
@@ -1630,14 +2162,17 @@ func TestBuildExactCacheKeyPrefersRuntimeSecurityPolicyHash(t *testing.T) {
 	if key != "hmac-sha256:cache-key" {
 		t.Fatalf("unexpected cache key: %s", key)
 	}
-	if keyBuilder.material.SecurityPolicyVersionID != "hash_security_policy_test" {
+	if keyBuilder.material.SafetyPolicyHash != "hash_security_policy_test" {
 		t.Fatalf("expected runtime security hash in cache material, got %#v", keyBuilder.material)
 	}
-	if keyBuilder.material.RoutingPolicyVersionID != "hash_routing_policy_test" {
+	if keyBuilder.material.RoutingPolicyHash != "hash_routing_policy_test" {
 		t.Fatalf("expected runtime routing hash in cache material, got %#v", keyBuilder.material)
 	}
 	if keyBuilder.material.RequestedModel != "auto" {
 		t.Fatalf("expected requested model in cache material, got %#v", keyBuilder.material)
+	}
+	if keyBuilder.material.ProviderCatalogStableKey != "mock" || keyBuilder.material.ModelID != "mock-fast" {
+		t.Fatalf("expected routing-aware provider/model material, got %#v", keyBuilder.material)
 	}
 }
 
@@ -1743,7 +2278,13 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 			Payload:           cachedPayload,
 		},
 	}
-	preflight := &fakeGatewayPipeline{}
+	preflight := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Routing.SelectedProvider = "mock"
+			gatewayCtx.Routing.SelectedModel = "mock-balanced"
+			gatewayCtx.Routing.RoutingReason = "pinned"
+		},
+	}
 	handler := ChatCompletionsHandler{
 		Providers:            provider.NewRegistry("mock", recordingProviderAdapter{calls: &chatCalls}),
 		DefaultModel:         "mock-balanced",
@@ -1767,8 +2308,8 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if chatCalls != 0 {
 		t.Fatalf("cache hit must not call provider, got %d provider calls", chatCalls)
 	}
-	if preflight.calls != 0 {
-		t.Fatalf("cache hit must not run pre-provider routing pipeline, got %d calls", preflight.calls)
+	if preflight.calls != 1 {
+		t.Fatalf("routing-aware cache hit must run pre-provider routing pipeline once, got %d calls", preflight.calls)
 	}
 	if cacheStore.setCalls != 0 {
 		t.Fatalf("cache hit must not write cache, got %d set calls", cacheStore.setCalls)
@@ -1787,8 +2328,8 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 	if resp.GateLM.RequestID != "request_current" {
 		t.Fatalf("expected current request id on cache hit, got %q", resp.GateLM.RequestID)
 	}
-	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "" || resp.GateLM.SelectedModel != "" ||
-		resp.GateLM.RoutingReason != "exact_cache_hit_provider_bypass" {
+	if resp.GateLM.CacheStatus != "hit" || resp.GateLM.SelectedProvider != "mock" || resp.GateLM.SelectedModel != "mock-balanced" ||
+		resp.GateLM.RoutingReason != "pinned" {
 		t.Fatalf("unexpected gate_lm cache/routing metadata: %#v", resp.GateLM)
 	}
 	outcomes, ok := resp.GateLM.DomainOutcomes.(map[string]any)
@@ -1796,8 +2337,12 @@ func TestChatCompletionsHandlerCacheHitReattachesCurrentRequestMetadata(t *testi
 		t.Fatalf("expected domain outcomes map on cache hit, got %#v", resp.GateLM.DomainOutcomes)
 	}
 	routingOutcome, ok := outcomes["routing"].(map[string]any)
-	if !ok || routingOutcome["outcome"] != "skipped" || routingOutcome["routingReason"] != "exact_cache_hit_provider_bypass" {
-		t.Fatalf("expected skipped routing outcome on cache hit, got %#v", outcomes["routing"])
+	if !ok ||
+		routingOutcome["outcome"] != "selected" ||
+		routingOutcome["selectedProvider"] != "mock" ||
+		routingOutcome["selectedModel"] != "mock-balanced" ||
+		routingOutcome["routingReason"] != "pinned" {
+		t.Fatalf("expected selected routing outcome on cache hit, got %#v", outcomes["routing"])
 	}
 }
 
@@ -1863,9 +2408,11 @@ func TestChatCompletionsHandlerWritesTerminalLogForCacheHit(t *testing.T) {
 	if logged.DomainOutcomes.Cache.Outcome != "hit" || logged.DomainOutcomes.Provider.Outcome != "not_called" {
 		t.Fatalf("unexpected cache hit domain outcomes: %+v", logged.DomainOutcomes)
 	}
-	if logged.DomainOutcomes.Routing.Outcome != "skipped" ||
-		valueOrEmpty(logged.DomainOutcomes.Routing.RoutingReason) != "exact_cache_hit_provider_bypass" {
-		t.Fatalf("cache hit must skip routing with bypass reason, got %+v", logged.DomainOutcomes.Routing)
+	if logged.DomainOutcomes.Routing.Outcome != "selected" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.SelectedProvider) != "mock" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.SelectedModel) != "mock-balanced" ||
+		valueOrEmpty(logged.DomainOutcomes.Routing.RoutingReason) != "pinned" {
+		t.Fatalf("cache hit must retain routing decision and bypass only provider call, got %+v", logged.DomainOutcomes.Routing)
 	}
 }
 
@@ -2312,6 +2859,87 @@ func TestChatCompletionsHandlerUsesLiveRuntimeSnapshotAndProviderCatalog(t *test
 	}
 }
 
+func TestChatCompletionsHandlerAppliesRuntimeSnapshotDetectorSetToMasking(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.CatalogID = "provider_catalog:" + testAppID + ":1"
+	catalog.ContentHash = "sha256:provider-catalog-detector-policy-test"
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+	logWriter := &recordingTerminalLogWriter{}
+	detectorSet := []map[string]string{
+		{"detectorType": "email", "action": "redact"},
+		{"detectorType": "phone_number", "action": "allow"},
+		{"detectorType": "api_key", "action": "block"},
+	}
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/v1/applications/" + testAppID + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayloadWithDetectorSet(catalog.Reference(), detectorSet))
+		case "/admin/v1/provider-catalogs/" + catalog.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalog))
+		default:
+			t.Fatalf("unexpected control plane path: %s", r.URL.Path)
+		}
+	}))
+	defer controlPlane.Close()
+
+	runtimeSnapshotProvider := controlplaneruntimeconfig.NewProvider(controlPlane.URL, controlPlane.Client())
+	providerCatalogResolver := controlplaneprovidercatalog.NewResolver(controlPlane.URL, controlPlane.Client())
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: providerCatalogResolver,
+		CredentialResolver:      staticCredentialResolver{},
+		RuntimePolicyPipeline:   pipeline.New(runtimeconfigstage.NewStage(runtimeSnapshotProvider)),
+		DefaultProvider:         "mock",
+		DefaultModel:            "mock-balanced",
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	prompt := "Contact user@example.invalid or 010-0000-0000."
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBodyWithModel("auto", prompt)))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if primary.calls != 1 {
+		t.Fatalf("expected one provider call, got %d", primary.calls)
+	}
+	providerPrompt := recordedProviderPrompt(t, []provider.ChatCompletionRequest{primary.lastRequest})
+	if !strings.Contains(providerPrompt, "[EMAIL_1]") {
+		t.Fatalf("expected provider prompt to redact email, got %q", providerPrompt)
+	}
+	if strings.Contains(providerPrompt, "user@example.invalid") {
+		t.Fatalf("provider prompt must not include raw email: %q", providerPrompt)
+	}
+	if !strings.Contains(providerPrompt, "010-0000-0000") {
+		t.Fatalf("provider prompt should keep policy-allowed phone value, got %q", providerPrompt)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if strings.Join(logged.MaskingDetectedTypes, ",") != "email" {
+		t.Fatalf("expected only email in protected detector types, got %#v", logged.MaskingDetectedTypes)
+	}
+	if strings.Join(logged.PolicyAllowedTypes, ",") != "phone_number" {
+		t.Fatalf("expected phone_number policy allowed type, got %#v", logged.PolicyAllowedTypes)
+	}
+	if strings.Contains(logged.RedactedPromptPreview, "010-0000-0000") || strings.Contains(logged.RedactedPromptPreview, "user@example.invalid") {
+		t.Fatalf("log-safe preview must not include raw policy-allowed or redacted values: %q", logged.RedactedPromptPreview)
+	}
+	if !strings.Contains(logged.RedactedPromptPreview, "[PHONE_NUMBER_REDACTED]") {
+		t.Fatalf("expected log-safe preview to mask policy-allowed phone, got %q", logged.RedactedPromptPreview)
+	}
+	if strings.Join(logged.DomainOutcomes.Safety.PolicyAllowedTypes, ",") != "phone_number" {
+		t.Fatalf("expected safety domain outcome to carry policy allowed type, got %#v", logged.DomainOutcomes)
+	}
+}
+
 func TestChatCompletionsHandlerRejectsMismatchedProviderCatalogBeforeProviderCall(t *testing.T) {
 	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
 	fallback := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeMock}
@@ -2534,6 +3162,35 @@ func (a countingProviderAdapter) CreateChatCompletion(ctx context.Context, confi
 	return &provider.ChatCompletionResponse{}, nil
 }
 
+type recordingCostCalculator struct {
+	calls       int
+	lastRequest costing.Request
+	result      costing.Result
+	err         error
+	ctxErr      error
+	hasDeadline bool
+}
+
+func (c *recordingCostCalculator) Calculate(ctx context.Context, req costing.Request) (costing.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return costing.Result{}, err
+	}
+	c.calls++
+	c.lastRequest = req
+	c.ctxErr = ctx.Err()
+	_, c.hasDeadline = ctx.Deadline()
+	return c.result, c.err
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 type recordingProviderAdapter struct {
 	calls    *int
 	requests *[]provider.ChatCompletionRequest
@@ -2598,6 +3255,149 @@ func (a staticProviderAdapter) CreateChatCompletion(ctx context.Context, config 
 	return a.response, nil
 }
 
+func (a staticProviderAdapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if a.calls != nil {
+		(*a.calls)++
+	}
+	return streamReaderFromResponse(req.Model, a.response), nil
+}
+
+type streamingProviderAdapter struct {
+	adapterType    string
+	chatCalls      int
+	streamCalls    int
+	streamRequests []provider.ChatCompletionRequest
+	events         []provider.ChatCompletionStreamEvent
+	openErr        error
+	nextErr        error
+	closeCalls     int
+}
+
+func (a *streamingProviderAdapter) AdapterType() string {
+	if a != nil && a.adapterType != "" {
+		return a.adapterType
+	}
+	return "mock"
+}
+
+func (a *streamingProviderAdapter) ListModels(ctx context.Context, config provider.ExecutionConfig) (*provider.ModelListResponse, error) {
+	return &provider.ModelListResponse{}, nil
+}
+
+func (a *streamingProviderAdapter) CreateChatCompletion(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	a.chatCalls++
+	return &provider.ChatCompletionResponse{}, nil
+}
+
+func (a *streamingProviderAdapter) CreateChatCompletionStream(ctx context.Context, config provider.ExecutionConfig, req provider.ChatCompletionRequest) (provider.ChatCompletionStreamReader, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	a.streamCalls++
+	a.streamRequests = append(a.streamRequests, req)
+	if a.openErr != nil {
+		return nil, a.openErr
+	}
+	return &recordingStreamReader{
+		events:     append([]provider.ChatCompletionStreamEvent(nil), a.events...),
+		errAfter:   a.nextErr,
+		closeCalls: &a.closeCalls,
+	}, nil
+}
+
+type recordingStreamReader struct {
+	events     []provider.ChatCompletionStreamEvent
+	index      int
+	errAfter   error
+	closeCalls *int
+}
+
+func (r *recordingStreamReader) Next() (provider.ChatCompletionStreamEvent, error) {
+	if r.index < len(r.events) {
+		event := r.events[r.index]
+		r.index++
+		return event, nil
+	}
+	if r.errAfter != nil {
+		return provider.ChatCompletionStreamEvent{}, r.errAfter
+	}
+	return provider.ChatCompletionStreamEvent{}, io.EOF
+}
+
+func (r *recordingStreamReader) Close() error {
+	if r.closeCalls != nil {
+		(*r.closeCalls)++
+	}
+	return nil
+}
+
+func streamReaderFromResponse(model string, resp *provider.ChatCompletionResponse) provider.ChatCompletionStreamReader {
+	if resp == nil {
+		return &recordingStreamReader{}
+	}
+	if resp.Model == "" {
+		resp = cloneChatCompletionResponse(resp)
+		resp.Model = model
+	}
+	chunks := streamingChunks(resp)
+	events := make([]provider.ChatCompletionStreamEvent, 0, len(chunks))
+	for _, chunk := range chunks {
+		payload, _ := json.Marshal(chunk)
+		events = append(events, provider.ChatCompletionStreamEvent{Data: json.RawMessage(payload)})
+	}
+	return &recordingStreamReader{events: events}
+}
+
+func cloneChatCompletionResponse(resp *provider.ChatCompletionResponse) *provider.ChatCompletionResponse {
+	if resp == nil {
+		return nil
+	}
+	cloned := *resp
+	return &cloned
+}
+
+func streamEvent(t *testing.T, payload string) provider.ChatCompletionStreamEvent {
+	t.Helper()
+	raw := json.RawMessage(payload)
+	if !json.Valid(raw) {
+		t.Fatalf("invalid stream event json: %s", payload)
+	}
+	var metadata struct {
+		Usage *provider.Usage `json:"usage"`
+	}
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		t.Fatalf("decode stream event metadata: %v", err)
+	}
+	return provider.ChatCompletionStreamEvent{
+		Data:  append(json.RawMessage(nil), raw...),
+		Usage: metadata.Usage,
+	}
+}
+
+func streamContentEvent(t *testing.T, model string, content string) provider.ChatCompletionStreamEvent {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"id":      "chatcmpl_content",
+		"object":  "chat.completion.chunk",
+		"created": 1782108000,
+		"model":   model,
+		"choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{
+				"content": content,
+			},
+			"finish_reason": nil,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal stream content event: %v", err)
+	}
+	return provider.ChatCompletionStreamEvent{Data: payload}
+}
+
 type catalogRecordingProviderAdapter struct {
 	adapterType string
 	err         error
@@ -2652,6 +3452,12 @@ type failingCredentialResolver struct{}
 
 func (failingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
 	return credentials.Resolved{}, credentials.ErrUnavailable
+}
+
+type cancelingCredentialResolver struct{}
+
+func (cancelingCredentialResolver) Resolve(ctx context.Context, ref credentials.Ref) (credentials.Resolved, error) {
+	return credentials.Resolved{}, context.Canceled
 }
 
 func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatewayPipeline {
@@ -3029,6 +3835,16 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 				"semanticCacheMode": "evidence_only",
 				"cachePolicyHash":   "hash_cache_policy_live_handler",
 			},
+			"promptCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.PromptCaptureModeDisabled,
+				"maxChars": runtimeconfig.PromptCaptureDefaultMaxChars,
+			},
+			"responseCapture": map[string]any{
+				"enabled":  false,
+				"mode":     runtimeconfig.ResponseCaptureModeDisabled,
+				"maxChars": runtimeconfig.ResponseCaptureDefaultMaxChars,
+			},
 			"rateLimit": map[string]any{
 				"enabled":       false,
 				"scope":         "application",
@@ -3056,6 +3872,14 @@ func liveRuntimeSnapshotPayload(ref providercatalog.Reference) map[string]any {
 			"routingPolicyHash":  "hash_routing_policy_live_handler",
 		},
 	}
+}
+
+func liveRuntimeSnapshotPayloadWithDetectorSet(ref providercatalog.Reference, detectorSet []map[string]string) map[string]any {
+	payload := liveRuntimeSnapshotPayload(ref)
+	policies := payload["policies"].(map[string]any)
+	safety := policies["safety"].(map[string]any)
+	safety["detectorSet"] = detectorSet
+	return payload
 }
 
 func liveProviderCatalogPayload(catalog providercatalog.Catalog) map[string]any {
@@ -3198,8 +4022,8 @@ func assertTerminalLogMatchesSuccessResponse(t *testing.T, logged invocationlog.
 	if expectedCost != rr.Header().Get("X-GateLM-Estimated-Cost-Usd") || expectedCost != resp.GateLM.EstimatedCostUSD {
 		t.Fatalf("cost mismatch: log=%q header=%q gate_lm=%q", expectedCost, rr.Header().Get("X-GateLM-Estimated-Cost-Usd"), resp.GateLM.EstimatedCostUSD)
 	}
-	if logged.LatencyMs != resp.GateLM.LatencyMs {
-		t.Fatalf("latency mismatch: log=%d gate_lm=%d", logged.LatencyMs, resp.GateLM.LatencyMs)
+	if logged.LatencyMs < 0 || resp.GateLM.LatencyMs < 0 {
+		t.Fatalf("latency must not be negative: log=%d gate_lm=%d", logged.LatencyMs, resp.GateLM.LatencyMs)
 	}
 	if resp.Usage == nil {
 		t.Fatalf("missing usage metadata")

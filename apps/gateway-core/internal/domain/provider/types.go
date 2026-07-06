@@ -33,6 +33,11 @@ type ChatCompletionResponse struct {
 	Raw     *json.RawMessage `json:"-"`
 }
 
+type ChatCompletionStreamEvent struct {
+	Data  json.RawMessage
+	Usage *Usage
+}
+
 type ChatChoice struct {
 	Index        int         `json:"index"`
 	Message      ChatMessage `json:"message"`
@@ -56,6 +61,8 @@ type GateLMMetadata struct {
 	TerminalStatus   string `json:"terminalStatus,omitempty"`
 	DomainOutcomes   any    `json:"domainOutcomes,omitempty"`
 	CacheStatus      string `json:"cacheStatus"`
+	CacheType        string `json:"cacheType,omitempty"`
+	ProviderCalled   bool   `json:"providerCalled"`
 	RoutingReason    string `json:"routingReason,omitempty"`
 	MaskingAction    string `json:"maskingAction"`
 	EstimatedCostUSD string `json:"estimatedCostUsd,omitempty"`
@@ -99,4 +106,13 @@ type Adapter interface {
 	AdapterType() string
 	ListModels(ctx context.Context, config ExecutionConfig) (*ModelListResponse, error)
 	CreateChatCompletion(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (*ChatCompletionResponse, error)
+}
+
+type StreamingAdapter interface {
+	CreateChatCompletionStream(ctx context.Context, config ExecutionConfig, req ChatCompletionRequest) (ChatCompletionStreamReader, error)
+}
+
+type ChatCompletionStreamReader interface {
+	Next() (ChatCompletionStreamEvent, error)
+	Close() error
 }

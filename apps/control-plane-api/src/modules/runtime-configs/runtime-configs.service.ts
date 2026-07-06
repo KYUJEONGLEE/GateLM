@@ -39,8 +39,10 @@ import {
   RuntimeConfigHistoryResponseDto,
   RuntimeConfigModelResponseDto,
   RuntimeConfigPricingRuleResponseDto,
+  RuntimeConfigPromptCapturePolicyResponseDto,
   RuntimeConfigProviderDto,
   RuntimeConfigRateLimitResponseDto,
+  RuntimeConfigResponseCapturePolicyResponseDto,
   RuntimeConfigRoutingPolicyResponseDto,
   RuntimeConfigSafetyDetectorResponseDto,
   RuntimeConfigSafetyPolicyResponseDto,
@@ -59,6 +61,8 @@ const DEFAULT_PUBLISHED_BY = 'control_plane';
 const DEFAULT_GATEWAY_INSTANCE_ID = 'gateway_core_static';
 const DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT = 80;
 const PROVIDER_CATALOG_ID_PREFIX = 'provider_catalog';
+const DEFAULT_PROMPT_CAPTURE_MAX_CHARS = 8000;
+const DEFAULT_RESPONSE_CAPTURE_MAX_CHARS = 8000;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
@@ -71,6 +75,13 @@ const FORBIDDEN_RUNTIME_CONFIG_KEYS = new Set([
   'apiKeySecret',
   'appTokenSecret',
   'providerKey',
+]);
+const MANDATORY_SAFETY_DETECTORS = new Set([
+  'resident_registration_number',
+  'api_key',
+  'authorization_header',
+  'jwt',
+  'private_key',
 ]);
 
 type RuntimeApplicationContext = NonNullable<
@@ -653,7 +664,7 @@ export class RuntimeConfigsService {
     const [apiKey, appToken, providers] = await Promise.all([
       this.getActiveApiKeyOrThrow(context.projectId, args.now),
       this.getActiveAppTokenOrThrow(context.id, args.now),
-      this.getProvidersOrThrow(context.projectId),
+      this.getApplicationProvidersOrThrow(context.id),
     ]);
     const activeProvider = this.getPrimaryActiveProvider(providers);
     const models = this.resolveModels(args.dto.models, providers);
@@ -667,19 +678,32 @@ export class RuntimeConfigsService {
       args.dto.routingPolicy?.lowCostProvider ?? defaultModel.provider,
       args.dto.routingPolicy?.lowCostModel,
     );
+    const highQualityModel =
+      (args.dto.routingPolicy?.highQualityProvider ||
+        args.dto.routingPolicy?.highQualityModel)
+        ? this.resolveModelForProvider(
+            models,
+            args.dto.routingPolicy?.highQualityProvider ??
+              defaultModel.provider,
+            args.dto.routingPolicy?.highQualityModel,
+          )
+        : undefined;
     const fallbackModel = this.resolveModelForProvider(
       models,
       args.dto.routingPolicy?.fallbackProvider ?? defaultModel.provider,
       args.dto.routingPolicy?.fallbackModel,
     );
-    this.assertSelectedProviderConnectionsActive(providers, [
+    const selectedProviders = [
       defaultModel.provider,
       lowCostModel.provider,
+      ...(highQualityModel ? [highQualityModel.provider] : []),
       fallbackModel.provider,
-    ]);
+    ];
+    this.assertSelectedProviderConnectionsActive(providers, selectedProviders);
     this.assertSelectedModelsActive([
       defaultModel,
       lowCostModel,
+      ...(highQualityModel ? [highQualityModel] : []),
       fallbackModel,
     ]);
     const effectiveAt = args.dto.effectiveAt
@@ -693,6 +717,7 @@ export class RuntimeConfigsService {
       dto: args.dto,
       defaultModel,
       lowCostModel,
+      highQualityModel,
       fallbackModel,
     });
     const providersResponse = providers.map((provider) =>
@@ -704,6 +729,7 @@ export class RuntimeConfigsService {
         [
           defaultModel.provider,
           lowCostModel.provider,
+          ...(highQualityModel ? [highQualityModel.provider] : []),
           fallbackModel.provider,
         ],
       );
@@ -747,6 +773,12 @@ export class RuntimeConfigsService {
       budgetPolicy: this.resolveBudgetPolicy(args.dto.budgetPolicy),
       safetyPolicy,
       cachePolicy: this.resolveCachePolicy(args.dto.cachePolicy),
+      promptCapturePolicy: this.resolvePromptCapturePolicy(
+        args.dto.promptCapturePolicy,
+      ),
+      responseCapturePolicy: this.resolveResponseCapturePolicy(
+        args.dto.responseCapturePolicy,
+      ),
       routingPolicy,
       pricingRules,
       hashing: this.resolveHashing(),
@@ -896,14 +928,24 @@ export class RuntimeConfigsService {
       document.fallbackProvider,
       document.routingPolicy.defaultProvider,
       document.routingPolicy.lowCostProvider,
+      document.routingPolicy.highQualityProvider,
       document.routingPolicy.fallbackProvider,
-    ]);
-    const currentProviders = await this.prisma.providerConnection.findMany({
-      where: {
-        projectId: context.projectId,
-        provider: { in: [...selectedProviderNames] },
-      },
-    });
+    ].filter((providerName): providerName is string => Boolean(providerName)));
+    const currentProviderConnections =
+      await this.prisma.applicationProviderConnection.findMany({
+        where: {
+          applicationId: context.id,
+          providerConnection: {
+            provider: { in: [...selectedProviderNames] },
+          },
+        },
+        include: {
+          providerConnection: true,
+        },
+      });
+    const currentProviders = currentProviderConnections.map(
+      (connection) => connection.providerConnection,
+    );
     const currentByName = new Map(
       currentProviders.map((provider) => [provider.provider, provider]),
     );
@@ -956,6 +998,16 @@ export class RuntimeConfigsService {
       document.routingPolicy.lowCostProvider,
       document.routingPolicy.lowCostModel,
     );
+    if (
+      document.routingPolicy.highQualityProvider ||
+      document.routingPolicy.highQualityModel
+    ) {
+      this.assertSelectedModelIsExecutable(
+        document,
+        document.routingPolicy.highQualityProvider ?? '',
+        document.routingPolicy.highQualityModel ?? '',
+      );
+    }
     this.assertSelectedModelIsExecutable(
       document,
       document.routingPolicy.fallbackProvider,
@@ -972,6 +1024,8 @@ export class RuntimeConfigsService {
       document.cachePolicy.type !== 'exact' ||
       !Number.isInteger(document.cachePolicy.ttlSeconds) ||
       document.cachePolicy.ttlSeconds < 1 ||
+      !this.isExecutablePromptCapturePolicy(document.promptCapturePolicy) ||
+      !this.isExecutableResponseCapturePolicy(document.responseCapturePolicy) ||
       document.safetyPolicy.mode !== 'rule_based' ||
       !document.safetyPolicy.securityPolicyHash ||
       !Array.isArray(document.safetyPolicy.detectors) ||
@@ -986,6 +1040,7 @@ export class RuntimeConfigsService {
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
       );
     }
+    this.assertSafetyDetectorsExecutable(document.safetyPolicy.detectors);
   }
 
   private assertRuntimeConfigRequiredPolicyShape(
@@ -1004,6 +1059,8 @@ export class RuntimeConfigsService {
       !document.rateLimit ||
       !document.budgetPolicy ||
       !document.cachePolicy ||
+      !document.promptCapturePolicy ||
+      !document.responseCapturePolicy ||
       !document.safetyPolicy ||
       !document.routingPolicy ||
       !Array.isArray(document.pricingRules)
@@ -1038,6 +1095,18 @@ export class RuntimeConfigsService {
       throw new ConflictException(
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
       );
+    }
+  }
+
+  private assertSafetyDetectorsExecutable(
+    detectors: RuntimeConfigSafetyDetectorResponseDto[],
+  ): void {
+    for (const detector of detectors) {
+      if (MANDATORY_SAFETY_DETECTORS.has(detector.type) && !detector.enabled) {
+        throw new ConflictException(
+          `Safety detector ${detector.type} is mandatory and cannot be disabled.`,
+        );
+      }
     }
   }
 
@@ -1192,17 +1261,24 @@ export class RuntimeConfigsService {
     return appToken;
   }
 
-  private async getProvidersOrThrow(
-    projectId: string,
+  private async getApplicationProvidersOrThrow(
+    applicationId: string,
   ): Promise<ProviderConnection[]> {
-    const providers = await this.prisma.providerConnection.findMany({
-      where: { projectId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+    const connections =
+      await this.prisma.applicationProviderConnection.findMany({
+        where: { applicationId },
+        include: {
+          providerConnection: true,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+    const providers = connections.map(
+      (connection) => connection.providerConnection,
+    );
 
     if (providers.length === 0) {
       throw new ConflictException(
-        'Runtime Config requires at least one provider connection.',
+        'Runtime Config requires at least one application provider connection.',
       );
     }
 
@@ -1424,6 +1500,8 @@ export class RuntimeConfigsService {
       warningThresholdPercent:
         dto?.warningThresholdPercent ??
         DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+      restrictHighQualityOnBudgetRisk:
+        dto?.restrictHighQualityOnBudgetRisk ?? true,
     };
   }
 
@@ -1437,12 +1515,65 @@ export class RuntimeConfigsService {
     };
   }
 
+  private resolvePromptCapturePolicy(
+    dto: UpsertRuntimeConfigDraftDto['promptCapturePolicy'],
+  ): RuntimeConfigPromptCapturePolicyResponseDto {
+    const enabled = dto?.enabled ?? false;
+    const mode = enabled ? dto?.mode ?? 'log_safe_full' : 'disabled';
+    if (enabled && mode !== 'log_safe_full') {
+      throw new ConflictException(
+        'Runtime Config prompt capture policy is invalid.',
+      );
+    }
+    if (!enabled && dto?.mode && dto.mode !== 'disabled') {
+      throw new ConflictException(
+        'Runtime Config prompt capture policy is invalid.',
+      );
+    }
+
+    return {
+      enabled,
+      mode,
+      maxChars: dto?.maxChars ?? DEFAULT_PROMPT_CAPTURE_MAX_CHARS,
+    };
+  }
+
+  private resolveResponseCapturePolicy(
+    dto: UpsertRuntimeConfigDraftDto['responseCapturePolicy'],
+  ): RuntimeConfigResponseCapturePolicyResponseDto {
+    const enabled = dto?.enabled ?? false;
+    const mode = enabled ? dto?.mode ?? 'raw_full' : 'disabled';
+    if (enabled && mode !== 'raw_full') {
+      throw new ConflictException(
+        'Runtime Config response capture policy is invalid.',
+      );
+    }
+    if (!enabled && dto?.mode && dto.mode !== 'disabled') {
+      throw new ConflictException(
+        'Runtime Config response capture policy is invalid.',
+      );
+    }
+
+    return {
+      enabled,
+      mode,
+      maxChars: dto?.maxChars ?? DEFAULT_RESPONSE_CAPTURE_MAX_CHARS,
+    };
+  }
+
   private resolveSafetyPolicy(
     dto: UpsertRuntimeConfigDraftDto['safetyPolicy'],
   ): RuntimeConfigSafetyPolicyResponseDto {
     const detectors = dto?.detectors?.length
       ? dto.detectors
       : this.defaultSafetyDetectors();
+    for (const detector of detectors) {
+      if (MANDATORY_SAFETY_DETECTORS.has(detector.type) && !detector.enabled) {
+        throw new ConflictException(
+          `Safety detector ${detector.type} is mandatory and cannot be disabled.`,
+        );
+      }
+    }
     const mappedDetectors = detectors.map((detector) => ({
       type: detector.type,
       enabled: detector.enabled,
@@ -1470,6 +1601,7 @@ export class RuntimeConfigsService {
     dto: UpsertRuntimeConfigDraftDto;
     defaultModel: RuntimeConfigModelResponseDto;
     lowCostModel: RuntimeConfigModelResponseDto;
+    highQualityModel?: RuntimeConfigModelResponseDto;
     fallbackModel: RuntimeConfigModelResponseDto;
   }): RuntimeConfigRoutingPolicyResponseDto {
     const routingPolicyWithoutHash = {
@@ -1479,6 +1611,12 @@ export class RuntimeConfigsService {
       defaultModel: args.defaultModel.model,
       lowCostProvider: args.lowCostModel.provider,
       lowCostModel: args.lowCostModel.model,
+      ...(args.highQualityModel
+        ? {
+            highQualityProvider: args.highQualityModel.provider,
+            highQualityModel: args.highQualityModel.model,
+          }
+        : {}),
       fallbackProvider: args.fallbackModel.provider,
       fallbackModel: args.fallbackModel.model,
       shortPromptMaxChars:
@@ -1540,6 +1678,8 @@ export class RuntimeConfigsService {
         'budgetPolicy',
         'safetyPolicy',
         'cachePolicy',
+        'promptCapturePolicy',
+        'responseCapturePolicy',
         'routingPolicy',
         'pricingRules',
       ],
@@ -1669,6 +1809,15 @@ export class RuntimeConfigsService {
           defaultRequestedModel: document.routingPolicy.autoModel,
           defaultProvider: document.routingPolicy.defaultProvider,
           defaultModel: document.routingPolicy.defaultModel,
+          lowCostProvider: document.routingPolicy.lowCostProvider,
+          lowCostModel: document.routingPolicy.lowCostModel,
+          ...(document.routingPolicy.highQualityProvider &&
+          document.routingPolicy.highQualityModel
+            ? {
+                highQualityProvider: document.routingPolicy.highQualityProvider,
+                highQualityModel: document.routingPolicy.highQualityModel,
+              }
+            : {}),
           routingPolicyHash: document.routingPolicy.routingPolicyHash,
         },
         cache: {
@@ -1679,6 +1828,16 @@ export class RuntimeConfigsService {
           cachePolicyHash: this.sha256(
             this.canonicalJson(document.cachePolicy),
           ),
+        },
+        promptCapture: {
+          enabled: document.promptCapturePolicy.enabled,
+          mode: document.promptCapturePolicy.mode,
+          maxChars: document.promptCapturePolicy.maxChars,
+        },
+        responseCapture: {
+          enabled: document.responseCapturePolicy.enabled,
+          mode: document.responseCapturePolicy.mode,
+          maxChars: document.responseCapturePolicy.maxChars,
         },
         rateLimit: {
           enabled: document.rateLimit.enabled,
@@ -1691,6 +1850,8 @@ export class RuntimeConfigsService {
           enforcementMode: document.budgetPolicy.enforcementMode,
           warningThresholdPercent:
             document.budgetPolicy.warningThresholdPercent,
+          restrictHighQualityOnBudgetRisk:
+            document.budgetPolicy.restrictHighQualityOnBudgetRisk,
         },
         fallback: {
           enabled: true,
@@ -1968,6 +2129,10 @@ export class RuntimeConfigsService {
   private toRuntimeProviderAdapterConfig(
     adapterType: string,
   ): ProviderCatalogResponseDto['providers'][number]['adapterConfig'] {
+    if (adapterType === 'anthropic') {
+      return { requestFormat: 'anthropic_messages' };
+    }
+
     return {
       requestFormat:
         adapterType === 'mock'
@@ -1979,12 +2144,20 @@ export class RuntimeConfigsService {
   private toAdapterRequestFormat(
     value: unknown,
     adapterType: string,
-  ): 'openai_chat_completions' | 'mock_chat_completions' {
+  ):
+    | 'openai_chat_completions'
+    | 'anthropic_messages'
+    | 'mock_chat_completions' {
     if (
       value === 'openai_chat_completions' ||
+      value === 'anthropic_messages' ||
       value === 'mock_chat_completions'
     ) {
       return value;
+    }
+
+    if (adapterType === 'anthropic') {
+      return 'anthropic_messages';
     }
 
     return adapterType === 'mock'
@@ -2053,6 +2226,14 @@ export class RuntimeConfigsService {
     ) {
       return 'low';
     }
+    if (
+      document.routingPolicy.highQualityProvider &&
+      document.routingPolicy.highQualityModel &&
+      model.provider === document.routingPolicy.highQualityProvider &&
+      model.model === document.routingPolicy.highQualityModel
+    ) {
+      return 'premium';
+    }
 
     return 'balanced';
   }
@@ -2072,6 +2253,14 @@ export class RuntimeConfigsService {
       model.model === document.routingPolicy.defaultModel
     ) {
       return 1;
+    }
+    if (
+      document.routingPolicy.highQualityProvider &&
+      document.routingPolicy.highQualityModel &&
+      model.provider === document.routingPolicy.highQualityProvider &&
+      model.model === document.routingPolicy.highQualityModel
+    ) {
+      return 2;
     }
     if (
       model.provider === document.routingPolicy.fallbackProvider &&
@@ -2131,7 +2320,7 @@ export class RuntimeConfigsService {
           provider.credentialRef ??
           (provider.secretRef
             ? {
-                credentialRefId: `provider_credential:${provider.providerId}`,
+                credentialRefId: provider.secretRef,
                 credentialVersion: 1,
                 credentialState:
                   provider.status === 'active' ? 'active' : 'disabled',
@@ -2164,7 +2353,7 @@ export class RuntimeConfigsService {
       return null;
     }
     return {
-      credentialRefId: `provider_credential:${provider.id}`,
+      credentialRefId: provider.secretRef,
       credentialVersion: 1,
       credentialState:
         provider.status === ProviderConnectionStatus.ACTIVE
@@ -2232,16 +2421,35 @@ export class RuntimeConfigsService {
         enforcementMode: document.budgetPolicy.enforcementMode,
         warningThresholdPercent:
           document.budgetPolicy.warningThresholdPercent,
+        restrictHighQualityOnBudgetRisk:
+          document.budgetPolicy.restrictHighQualityOnBudgetRisk,
       },
       cachePolicy: {
         enabled: document.cachePolicy.enabled,
         ttlSeconds: document.cachePolicy.ttlSeconds,
+      },
+      promptCapturePolicy: {
+        enabled: document.promptCapturePolicy.enabled,
+        mode: document.promptCapturePolicy.mode,
+        maxChars: document.promptCapturePolicy.maxChars,
+      },
+      responseCapturePolicy: {
+        enabled: document.responseCapturePolicy.enabled,
+        mode: document.responseCapturePolicy.mode,
+        maxChars: document.responseCapturePolicy.maxChars,
       },
       routingPolicy: {
         defaultProvider: document.routingPolicy.defaultProvider,
         defaultModel: document.routingPolicy.defaultModel,
         lowCostProvider: document.routingPolicy.lowCostProvider,
         lowCostModel: document.routingPolicy.lowCostModel,
+        ...(document.routingPolicy.highQualityProvider &&
+        document.routingPolicy.highQualityModel
+          ? {
+              highQualityProvider: document.routingPolicy.highQualityProvider,
+              highQualityModel: document.routingPolicy.highQualityModel,
+            }
+          : {}),
         fallbackProvider: document.routingPolicy.fallbackProvider,
         fallbackModel: document.routingPolicy.fallbackModel,
         shortPromptMaxChars: document.routingPolicy.shortPromptMaxChars,
@@ -2324,6 +2532,10 @@ export class RuntimeConfigsService {
       budgetPolicy: this.normalizeRuntimeConfigBudgetPolicy(
         runtimeDocument,
       ),
+      promptCapturePolicy:
+        this.normalizeRuntimeConfigPromptCapturePolicy(runtimeDocument),
+      responseCapturePolicy:
+        this.normalizeRuntimeConfigResponseCapturePolicy(runtimeDocument),
     };
   }
 
@@ -2332,6 +2544,7 @@ export class RuntimeConfigsService {
       enabled: false,
       enforcementMode: 'disabled',
       warningThresholdPercent: DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT,
+      restrictHighQualityOnBudgetRisk: true,
     };
   }
 
@@ -2347,9 +2560,40 @@ export class RuntimeConfigsService {
       Number.isInteger(budgetPolicy.warningThresholdPercent) &&
       budgetPolicy.warningThresholdPercent >= 0 &&
       budgetPolicy.warningThresholdPercent <= 100 &&
+      typeof budgetPolicy.restrictHighQualityOnBudgetRisk === 'boolean' &&
       (budgetPolicy.enabled
         ? budgetPolicy.enforcementMode !== 'disabled'
         : budgetPolicy.enforcementMode === 'disabled')
+    );
+  }
+
+  private isExecutablePromptCapturePolicy(
+    policy: RuntimeConfigPromptCapturePolicyResponseDto,
+  ): boolean {
+    return (
+      Boolean(policy) &&
+      typeof policy.enabled === 'boolean' &&
+      Number.isInteger(policy.maxChars) &&
+      policy.maxChars >= 1 &&
+      policy.maxChars <= 20000 &&
+      (policy.enabled
+        ? policy.mode === 'log_safe_full'
+        : policy.mode === 'disabled')
+    );
+  }
+
+  private isExecutableResponseCapturePolicy(
+    policy: RuntimeConfigResponseCapturePolicyResponseDto,
+  ): boolean {
+    return (
+      Boolean(policy) &&
+      typeof policy.enabled === 'boolean' &&
+      Number.isInteger(policy.maxChars) &&
+      policy.maxChars >= 1 &&
+      policy.maxChars <= 20000 &&
+      (policy.enabled
+        ? policy.mode === 'raw_full'
+        : policy.mode === 'disabled')
     );
   }
 
@@ -2381,6 +2625,12 @@ export class RuntimeConfigsService {
     )
       ? candidate.warningThresholdPercent
       : DEFAULT_BUDGET_WARNING_THRESHOLD_PERCENT;
+    const restrictHighQualityOnBudgetRisk = Object.prototype.hasOwnProperty.call(
+      candidate,
+      'restrictHighQualityOnBudgetRisk',
+    )
+      ? candidate.restrictHighQualityOnBudgetRisk
+      : true;
     const normalized: RuntimeConfigBudgetPolicyResponseDto = {
       enabled:
         candidate.enabled as RuntimeConfigBudgetPolicyResponseDto['enabled'],
@@ -2388,6 +2638,8 @@ export class RuntimeConfigsService {
         candidate.enforcementMode as RuntimeConfigBudgetPolicyResponseDto['enforcementMode'],
       warningThresholdPercent:
         warningThresholdPercent as RuntimeConfigBudgetPolicyResponseDto['warningThresholdPercent'],
+      restrictHighQualityOnBudgetRisk:
+        restrictHighQualityOnBudgetRisk as RuntimeConfigBudgetPolicyResponseDto['restrictHighQualityOnBudgetRisk'],
     };
 
     if (!this.isExecutableBudgetPolicy(normalized)) {
@@ -2395,6 +2647,94 @@ export class RuntimeConfigsService {
     }
 
     return normalized;
+  }
+
+  private normalizeRuntimeConfigPromptCapturePolicy(
+    runtimeDocument: Record<string, unknown>,
+  ): RuntimeConfigPromptCapturePolicyResponseDto {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        runtimeDocument,
+        'promptCapturePolicy',
+      )
+    ) {
+      return this.defaultRuntimeConfigPromptCapturePolicy();
+    }
+
+    const policy = runtimeDocument.promptCapturePolicy;
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    const candidate = policy as Record<string, unknown>;
+    const enabled = candidate.enabled === true;
+    const mode = enabled ? candidate.mode ?? 'log_safe_full' : 'disabled';
+    const normalized: RuntimeConfigPromptCapturePolicyResponseDto = {
+      enabled,
+      mode: mode as RuntimeConfigPromptCapturePolicyResponseDto['mode'],
+      maxChars:
+        typeof candidate.maxChars === 'number'
+          ? candidate.maxChars
+          : DEFAULT_PROMPT_CAPTURE_MAX_CHARS,
+    };
+
+    if (!this.isExecutablePromptCapturePolicy(normalized)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    return normalized;
+  }
+
+  private defaultRuntimeConfigPromptCapturePolicy(): RuntimeConfigPromptCapturePolicyResponseDto {
+    return {
+      enabled: false,
+      mode: 'disabled',
+      maxChars: DEFAULT_PROMPT_CAPTURE_MAX_CHARS,
+    };
+  }
+
+  private normalizeRuntimeConfigResponseCapturePolicy(
+    runtimeDocument: Record<string, unknown>,
+  ): RuntimeConfigResponseCapturePolicyResponseDto {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        runtimeDocument,
+        'responseCapturePolicy',
+      )
+    ) {
+      return this.defaultRuntimeConfigResponseCapturePolicy();
+    }
+
+    const policy = runtimeDocument.responseCapturePolicy;
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    const candidate = policy as Record<string, unknown>;
+    const enabled = candidate.enabled === true;
+    const mode = enabled ? candidate.mode ?? 'raw_full' : 'disabled';
+    const normalized: RuntimeConfigResponseCapturePolicyResponseDto = {
+      enabled,
+      mode: mode as RuntimeConfigResponseCapturePolicyResponseDto['mode'],
+      maxChars:
+        typeof candidate.maxChars === 'number'
+          ? candidate.maxChars
+          : DEFAULT_RESPONSE_CAPTURE_MAX_CHARS,
+    };
+
+    if (!this.isExecutableResponseCapturePolicy(normalized)) {
+      throw new ConflictException(ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE);
+    }
+
+    return normalized;
+  }
+
+  private defaultRuntimeConfigResponseCapturePolicy(): RuntimeConfigResponseCapturePolicyResponseDto {
+    return {
+      enabled: false,
+      mode: 'disabled',
+      maxChars: DEFAULT_RESPONSE_CAPTURE_MAX_CHARS,
+    };
   }
 
   private toInputJsonObject(value: object): Prisma.InputJsonObject {
@@ -2509,6 +2849,24 @@ export class RuntimeConfigsService {
         enabled: true,
         action: 'redact',
         placeholder: '[PHONE_NUMBER_REDACTED]',
+      },
+      {
+        type: 'person_name',
+        enabled: true,
+        action: 'redact',
+        placeholder: '[PERSON_NAME_REDACTED]',
+      },
+      {
+        type: 'postal_address',
+        enabled: true,
+        action: 'redact',
+        placeholder: '[POSTAL_ADDRESS_REDACTED]',
+      },
+      {
+        type: 'organization_name',
+        enabled: true,
+        action: 'redact',
+        placeholder: '[ORGANIZATION_NAME_REDACTED]',
       },
       {
         type: 'resident_registration_number',

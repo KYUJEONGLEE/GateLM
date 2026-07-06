@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveDashboardOverviewResponse = {
@@ -120,17 +121,32 @@ type LiveDashboardOverviewResponse = {
   };
 };
 
-const LIVE_RANGE_HOURS = 24;
+export type LiveDashboardRange = "15m" | "1h" | "1d" | "1w";
+
+export type LiveDashboardOverviewFilters = {
+  budgetScopeId?: string;
+  budgetScopeType?: string;
+  projectId?: string;
+  range?: LiveDashboardRange;
+  resolvedBy?: string;
+};
 
 export async function getLiveDashboardOverview(
-  tenantId: string
+  tenantId: string,
+  filters: LiveDashboardOverviewFilters = {}
 ): Promise<DashboardOverview | undefined> {
   const config = getLiveGatewayConfig();
-  const { from, to } = getLiveRange();
+  const { from, to } = getDashboardLiveRange(filters.range);
+  const gatewayTenantId = toGatewayTenantId(tenantId);
   const query = new URLSearchParams({
     from,
+    tenantId: gatewayTenantId,
     to
   });
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "projectId", filters.projectId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const response = await fetch(`${config.baseUrl}/api/dashboard/overview?${query.toString()}`, {
     headers: {
@@ -152,14 +168,45 @@ export async function getLiveDashboardOverview(
   return toDashboardOverview(payload.data, tenantId, from, to);
 }
 
-function getLiveRange() {
+function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {
+  const normalized = value?.trim();
+  if (normalized) {
+    query.set(key, normalized);
+  }
+}
+
+function toGatewayTenantId(tenantId: string) {
+  return isUuid(tenantId) ? tenantId : getControlPlaneTenantId();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function getDashboardLiveRange(range: LiveDashboardRange = "15m") {
   const to = new Date();
-  const from = new Date(to.getTime() - LIVE_RANGE_HOURS * 60 * 60 * 1000);
+  const from = new Date(to.getTime() - dashboardRangeToMs(range));
 
   return {
     from: from.toISOString(),
     to: to.toISOString()
   };
+}
+
+function dashboardRangeToMs(range: LiveDashboardRange) {
+  if (range === "1w") {
+    return 7 * 24 * 60 * 60 * 1000;
+  }
+
+  if (range === "1d") {
+    return 24 * 60 * 60 * 1000;
+  }
+
+  if (range === "1h") {
+    return 60 * 60 * 1000;
+  }
+
+  return 15 * 60 * 1000;
 }
 
 function toDashboardOverview(
@@ -255,7 +302,7 @@ function toDashboardOverview(
     },
     queryBudget: {
       status: data.queryBudget?.status ?? "ok",
-      maxRangeHours: data.queryBudget?.maxRangeHours ?? LIVE_RANGE_HOURS,
+      maxRangeHours: data.queryBudget?.maxRangeHours ?? 24,
       maxBreakdownItems: data.queryBudget?.maxBreakdownItems ?? 50,
       guidance: data.queryBudget?.guidance ?? null
     },

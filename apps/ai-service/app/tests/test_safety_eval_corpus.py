@@ -36,6 +36,36 @@ class SafetyEvalCorpusTests(unittest.TestCase):
         with self.assertRaisesRegex(SafetyEvalError, "placeholders"):
             parse_corpus_case(raw_case, 1)
 
+    def test_parse_accepts_v2_organization_detector_type(self) -> None:
+        raw_case = {
+            "caseId": "organization_name_redacts",
+            "inputTemplate": "Draft a note for {SYNTHETIC_ORGANIZATION_NAME}.",
+            "placeholderBindings": {
+                "SYNTHETIC_ORGANIZATION_NAME": "organization_name",
+            },
+            "expectedSafetyDecision": {
+                "action": "redacted",
+                "detectedTypes": ["organization_name"],
+                "detectedCount": 1,
+                "redactedPromptPreview": "Draft a note for [ORGANIZATION_1].",
+                "blockReason": None,
+                "securityPolicyHash": "sec_v1_safety_baseline",
+            },
+            "expectedGatewayEffects": {
+                "providerCalled": True,
+                "cacheLookup": True,
+                "terminalStatus": "success",
+                "httpStatus": 200,
+                "errorCode": None,
+            },
+            "tags": ["ai-safety-lab", "organization_name"],
+        }
+
+        case = parse_corpus_case(raw_case, 1)
+
+        self.assertEqual(case.expected_safety_decision.detected_types, ("organization_name",))
+        self.assertEqual(case.expected_type_counts, {"organization_name": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

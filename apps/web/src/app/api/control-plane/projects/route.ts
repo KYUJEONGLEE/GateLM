@@ -54,7 +54,13 @@ function isProjectFormValues(value: unknown): value is ProjectFormValues {
 
   const record = value as Partial<ProjectFormValues>;
 
-  return typeof record.name === "string" && typeof record.description === "string";
+  return (
+    typeof record.name === "string" &&
+    typeof record.description === "string" &&
+    typeof record.totalBudgetUsd === "number" &&
+    Number.isFinite(record.totalBudgetUsd) &&
+    record.totalBudgetUsd >= 0
+  );
 }
 
 function isProjectUpdateValues(value: unknown): value is ProjectUpdateValues {

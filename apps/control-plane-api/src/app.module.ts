@@ -7,10 +7,14 @@ import { DatabaseModule } from './infrastructure/database/database.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { AppTokensModule } from './modules/app-tokens/app-tokens.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { BudgetOperationsModule } from './modules/budget-operations/budget-operations.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
+import { TeamsModule } from './modules/teams/teams.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
@@ -27,7 +31,11 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ProviderConnectionsModule,
     ApiKeysModule,
     AppTokensModule,
+    AuthModule,
+    BudgetOperationsModule,
+    ConversationsModule,
     RuntimeConfigsModule,
+    TeamsModule,
     HealthModule,
   ],
 })

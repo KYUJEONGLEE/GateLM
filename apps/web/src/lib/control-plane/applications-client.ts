@@ -11,6 +11,7 @@ import type {
   ApplicationsModel,
   ApplicationUpdateValues
 } from "@/lib/control-plane/applications-types";
+import { publishRuntimePolicyModelSelectionForApplication } from "@/lib/control-plane/runtime-policy-client";
 
 type RuntimeConfigFixture = {
   runtimeConfig: {
@@ -26,6 +27,7 @@ type ApplicationRequestResult =
   | {
       data: ApplicationRecord;
       ok: true;
+      policyError?: string;
       status: number;
     }
   | {
@@ -93,7 +95,23 @@ export async function createApplication(
       }
     );
 
-    return readApplicationResponse(response);
+    const result = await readApplicationResponse(response);
+
+    if (!result.ok || !values.selectedModelKey?.trim()) {
+      return result;
+    }
+
+    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+      result.data.id,
+      values.selectedModelKey
+    );
+
+    return runtimePolicy.ok
+      ? result
+      : {
+          ...result,
+          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+        };
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -111,6 +129,9 @@ export async function updateApplication(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(values.applicationId)}`,
       {
         body: JSON.stringify({
+          budgetLimitMode: values.budgetLimitMode,
+          budgetLimitPercent: values.budgetLimitPercent,
+          budgetLimitUsd: values.budgetLimitUsd,
           description: values.description.trim(),
           name: values.name.trim(),
           status: values.status
@@ -154,8 +175,12 @@ async function listApplications(projectId: string): Promise<ApplicationListResul
 
 function toApplicationPayload(values: ApplicationFormValues) {
   return {
+    budgetLimitMode: values.budgetLimitMode,
+    budgetLimitPercent: values.budgetLimitPercent,
+    budgetLimitUsd: values.budgetLimitUsd,
     description: values.description.trim() || undefined,
-    name: values.name.trim()
+    name: values.name.trim(),
+    providerConnectionIds: values.providerConnectionIds ?? []
   };
 }
 
@@ -268,8 +293,12 @@ function getFixtureApplication(): ApplicationRecord {
   const timestamp = runtimeConfig.generatedAt;
 
   return {
+    budgetLimitMode: "FIXED",
+    budgetLimitPercent: null,
+    budgetLimitUsd: 0,
     createdAt: timestamp,
     description: "Customer-facing chat application from the v1 runtime config fixture.",
+    effectiveBudgetLimitUsd: 0,
     id: runtimeConfig.applicationId,
     name: "Customer Demo App",
     projectId: runtimeConfig.projectId,
@@ -300,8 +329,12 @@ function toApplicationRecord(value: unknown): ApplicationRecord | null {
   }
 
   return {
+    budgetLimitMode: normalizeBudgetLimitMode(record.budgetLimitMode),
+    budgetLimitPercent: normalizeNullableNumber(record.budgetLimitPercent),
+    budgetLimitUsd: normalizeNullableNumber(record.budgetLimitUsd),
     createdAt: record.createdAt,
     description: typeof record.description === "string" ? record.description : null,
+    effectiveBudgetLimitUsd: normalizeNumber(record.effectiveBudgetLimitUsd, 0),
     id: record.id,
     name: record.name,
     projectId: record.projectId,
@@ -309,6 +342,40 @@ function toApplicationRecord(value: unknown): ApplicationRecord | null {
     tenantId: record.tenantId,
     updatedAt: record.updatedAt
   };
+}
+
+function normalizeBudgetLimitMode(value: unknown): ApplicationRecord["budgetLimitMode"] {
+  return value === "PERCENT" ? "PERCENT" : "FIXED";
+}
+
+function normalizeNullableNumber(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function normalizeNumber(value: unknown, fallback: number) {
+  return normalizeNullableNumber(value) ?? fallback;
 }
 
 function normalizeApplicationStatus(value: unknown): ApplicationRecord["status"] | null {
