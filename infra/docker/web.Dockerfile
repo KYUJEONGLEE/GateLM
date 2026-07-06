@@ -24,14 +24,13 @@ RUN pnpm install --frozen-lockfile --filter @gatelm/web...
 FROM deps AS builder
 
 COPY apps/web apps/web
-COPY docs/v1.0.0/fixtures docs/v1.0.0/fixtures
 
 RUN pnpm --filter @gatelm/web build
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runner
 
 LABEL org.opencontainers.image.title="GateLM Web"
-LABEL org.opencontainers.image.version="2.1.0"
+LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.description="GateLM self-host Web Console production image"
 
 ENV HOSTNAME=0.0.0.0

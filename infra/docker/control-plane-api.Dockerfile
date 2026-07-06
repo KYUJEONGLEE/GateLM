@@ -33,7 +33,7 @@ RUN pnpm --filter @gatelm/control-plane-api db:generate \
 FROM base AS runner
 
 LABEL org.opencontainers.image.title="GateLM Control Plane API"
-LABEL org.opencontainers.image.version="2.1.0"
+LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.description="GateLM self-host Control Plane API production image"
 
 ENV CONTROL_PLANE_PORT=3001

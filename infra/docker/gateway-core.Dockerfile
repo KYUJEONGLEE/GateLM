@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/gateway
 FROM debian:bookworm-slim AS runner
 
 LABEL org.opencontainers.image.title="GateLM Gateway Core"
-LABEL org.opencontainers.image.version="2.1.0"
+LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.description="GateLM self-host Gateway Core production image"
 
 RUN apt-get update \

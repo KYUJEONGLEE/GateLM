@@ -19,8 +19,8 @@ import (
 const (
 	defaultClassifierName    = "rule_based_category_classifier"
 	defaultClassifierVersion = "rule_based_category_classifier_v1"
-	defaultDatasetPath       = "docs/v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
-	defaultProbeDatasetPath  = "docs/v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
+	defaultDatasetPath       = "docs/drafts/gateway-v2.1.0/fixtures/category-evaluation-dataset.fixture.jsonl"
+	defaultProbeDatasetPath  = "docs/drafts/gateway-v2.1.0/fixtures/routing-random-probe.fixture.jsonl"
 	defaultLatencyIterations = 20
 
 	tierCostLowCost     = 1

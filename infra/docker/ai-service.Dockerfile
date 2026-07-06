@@ -27,7 +27,7 @@ RUN if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runner
 
 LABEL org.opencontainers.image.title="GateLM AI Service"
-LABEL org.opencontainers.image.version="2.1.0"
+LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.description="GateLM self-host AI Service production image"
 
 ENV AI_SERVICE_HOST=0.0.0.0

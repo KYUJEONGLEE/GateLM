@@ -146,13 +146,15 @@ The runner writes sanitized aggregate-only reports to `reports/ai-safety-lab/res
 
 ## Safety Eval Runner
 
+These commands still use the archived v1 safety-eval corpus as legacy compatibility input. Current Gateway contract decisions live under `specs/gateway/v2.0.0/`.
+
 Run detector-output fixture evaluation:
 
 ```bash
 cd apps/ai-service
 python -m app.services.safety_eval_runner \
   --mode detector-output \
-  --corpus ../../docs/v1.0.0/fixtures/safety-eval-corpus.jsonl \
+  --corpus ../../docs/archive/v1.0.0/fixtures/safety-eval-corpus.jsonl \
   --fixture app/tests/fixtures/safety_eval/detector-output.fixture.json \
   --out ../../reports/safety-eval
 ```
@@ -163,7 +165,7 @@ Run gateway-safety-output fixture evaluation:
 cd apps/ai-service
 python -m app.services.safety_eval_runner \
   --mode gateway-safety-output \
-  --corpus ../../docs/v1.0.0/fixtures/safety-eval-corpus.jsonl \
+  --corpus ../../docs/archive/v1.0.0/fixtures/safety-eval-corpus.jsonl \
   --fixture app/tests/fixtures/safety_eval/gateway-safety-output.fixture.json \
   --out ../../reports/safety-eval
 ```

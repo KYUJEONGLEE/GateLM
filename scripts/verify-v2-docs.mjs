@@ -55,6 +55,12 @@ const draftDocs = [
 
 const entryDocs = ["AGENTS.md", "README.md", "docs/README.md"];
 
+const activePathRoots = ["apps", "infra", "scripts", "specs", ".github"];
+const ignoredScanDirs = new Set(["node_modules", ".next", "dist", "build", "coverage", "reports"]);
+const staleVersionedDocsPathPattern = /docs[\\/](v1\.0\.0|v2\.0\.0|v2\.1\.0)[\\/]/;
+const scannableFilePattern =
+  /(^Dockerfile$|\.Dockerfile$|\.(md|txt|ts|tsx|js|mjs|cjs|json|jsonl|go|ps1|yml|yaml|toml|prisma|env|example)$)/i;
+
 const entryDocRequiredRefs = {
   "AGENTS.md": sourceOfTruthDocs,
   "docs/README.md": sourceOfTruthDocs,
@@ -117,6 +123,25 @@ function listJsonFiles(relativeDir, suffix) {
     .filter((fileName) => fileName.endsWith(suffix))
     .sort()
     .map((fileName) => path.posix.join(relativeDir.replaceAll("\\", "/"), fileName));
+}
+
+function listFilesRecursive(relativeDir) {
+  const dir = toAbsolute(relativeDir);
+  if (!existsSync(dir)) {
+    return [];
+  }
+
+  const files = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!ignoredScanDirs.has(entry.name)) {
+        files.push(...listFilesRecursive(path.posix.join(relativeDir, entry.name)));
+      }
+    } else if (entry.isFile()) {
+      files.push(path.posix.join(relativeDir, entry.name));
+    }
+  }
+  return files;
 }
 
 function baseName(relativePath, suffix) {
@@ -186,6 +211,21 @@ function assertCiGate() {
   ]) {
     if (!workflow.includes(expectedText)) {
       fail(`${workflowPath}: missing CI gate "${expectedText}"`);
+    }
+  }
+}
+
+function assertNoStaleVersionedDocsPaths() {
+  for (const root of activePathRoots) {
+    for (const filePath of listFilesRecursive(root)) {
+      if (!scannableFilePattern.test(path.basename(filePath))) {
+        continue;
+      }
+
+      const text = readText(filePath);
+      if (staleVersionedDocsPathPattern.test(text)) {
+        fail(`${filePath}: use specs/, docs/archive/, or docs/drafts/ instead of stale docs/v* paths`);
+      }
     }
   }
 }
@@ -486,6 +526,7 @@ function main() {
   assertRuntimeBaseline();
   assertEntryDocs();
   assertCiGate();
+  assertNoStaleVersionedDocsPaths();
   assertSchemaFixturePairs();
   assertRuntimeSnapshotGuardrails();
   for (const failure of verifyCategoryEvaluationDataset({ rootDir })) {
