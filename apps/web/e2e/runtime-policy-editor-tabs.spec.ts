@@ -129,6 +129,33 @@ test("policy draft values survive tab changes and submit current payload", async
   expect(asRecord(runtimeConfigPosts[1]?.values).budgetWarningThresholdPercent).toBe(73);
 });
 
+test("legacy draft responses without safety policy keep default detector set", async ({
+  page
+}) => {
+  const runtimeConfigPosts = await prepareRuntimeConfigPostRoute(page, (payload) => {
+    const runtimeConfig = createRuntimeConfigResponse(payload) as JsonRecord;
+    delete runtimeConfig.safetyPolicy;
+
+    return runtimeConfig;
+  });
+  await page.goto(policyPath);
+
+  await page.getByRole("button", { exact: true, name: "Save draft" }).click();
+  await expect.poll(() => runtimeConfigPosts.length).toBe(1);
+  await expect(page.getByText("Draft saved.")).toBeVisible();
+
+  const safetyPanel = page.getByRole("tabpanel", { exact: true, name: "Safety" });
+  const detectorRows = safetyPanel.locator(".policy-detector-row");
+
+  await expect(detectorRows).toHaveCount(
+    selectableDetectorTypes.length + mandatoryDetectorTypes.length
+  );
+
+  for (const detectorType of [...selectableDetectorTypes, ...mandatoryDetectorTypes]) {
+    await expect(detectorRows.filter({ hasText: detectorType })).toBeVisible();
+  }
+});
+
 test("policy tabs scroll inside the control on narrow screens", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);
   await page.setViewportSize({ height: 844, width: 390 });
@@ -149,7 +176,10 @@ test("policy tabs scroll inside the control on narrow screens", async ({ page })
   expect(layout.tabScrollWidth).toBeGreaterThan(layout.tabClientWidth);
 });
 
-async function prepareRuntimeConfigPostRoute(page: Page) {
+async function prepareRuntimeConfigPostRoute(
+  page: Page,
+  createResponse: (payload: JsonRecord) => JsonRecord = createRuntimeConfigResponse
+) {
   const runtimeConfigPosts: JsonRecord[] = [];
 
   await page.route("**/api/control-plane/runtime-config", async (route) => {
@@ -158,7 +188,7 @@ async function prepareRuntimeConfigPostRoute(page: Page) {
 
     await route.fulfill({
       body: JSON.stringify({
-        runtimeConfig: createRuntimeConfigResponse(payload),
+        runtimeConfig: createResponse(payload),
         status: 200
       }),
       contentType: "application/json",

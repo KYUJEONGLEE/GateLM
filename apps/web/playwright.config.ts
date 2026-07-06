@@ -28,7 +28,7 @@ export default defineConfig({
     command: nextDevCommand,
     gracefulShutdown: {
       signal: "SIGTERM",
-      timeout: 500
+      timeout: 2000
     },
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

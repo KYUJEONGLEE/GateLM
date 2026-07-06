@@ -110,10 +110,10 @@ export type RuntimePolicyConfig = {
     routingPolicyHash: string;
     shortPromptMaxChars: number;
   };
-  safetyPolicy: {
-    detectors: RuntimePolicyDetector[];
-    mode: "rule_based";
-    securityPolicyHash: string;
+  safetyPolicy?: {
+    detectors?: RuntimePolicyDetector[];
+    mode?: "rule_based";
+    securityPolicyHash?: string;
   };
   tenantId: string;
 };
@@ -355,7 +355,7 @@ export function getRuntimePolicyDraftValues(
     cacheEnabled: config.cachePolicy.enabled,
     cacheTtlSeconds: config.cachePolicy.ttlSeconds,
     configVersion: config.configVersion,
-    detectors: mergeRuntimePolicyDetectors(config.safetyPolicy.detectors),
+    detectors: mergeRuntimePolicyDetectors(config.safetyPolicy?.detectors),
     models: config.models.map((model) => ({ ...model })),
     pricingRules: config.pricingRules.map((rule) => ({
       completionTokenMicroUsd: rule.completionTokenMicroUsd,
@@ -381,10 +381,11 @@ export function getRuntimePolicyDraftValues(
 }
 
 function mergeRuntimePolicyDetectors(
-  detectors: RuntimePolicyDetector[]
+  detectors?: RuntimePolicyDetector[] | null
 ): RuntimePolicyDetector[] {
+  const safeDetectors = detectors ?? [];
   const configuredByType = new Map(
-    detectors.map((detector) => [detector.type, detector])
+    safeDetectors.map((detector) => [detector.type, detector])
   );
   const defaultTypes = new Set(
     defaultRuntimePolicyDetectors.map((detector) => detector.type)
@@ -393,7 +394,7 @@ function mergeRuntimePolicyDetectors(
     ...defaultDetector,
     ...configuredByType.get(defaultDetector.type)
   }));
-  const configuredExtras = detectors
+  const configuredExtras = safeDetectors
     .filter((detector) => !defaultTypes.has(detector.type))
     .map((detector) => ({ ...detector }));
 

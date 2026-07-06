@@ -1157,7 +1157,7 @@ function getRuntimeConfigHistoryDetailSummary(
   return {
     configHash: item.configHash,
     configVersion: item.configVersion,
-    detectorCount: runtimeConfig.safetyPolicy.detectors.length,
+    detectorCount: runtimeConfig.safetyPolicy?.detectors?.length ?? 0,
     modelCount: runtimeConfig.models.length,
     providerCount: runtimeConfig.providers.length,
     publishState: item.publishState

@@ -1116,13 +1116,13 @@ export function RuntimePolicyEditor({
               <dl className="policy-summary-list">
                 <div>
                   <dt>{text.enabled}</dt>
-                  <dd>{formatEnabled(model.runtimeSnapshot.snapshot.policies.streaming.enabled)}</dd>
+                  <dd>{formatEnabled(model.runtimeSnapshot.snapshot.policies?.streaming?.enabled)}</dd>
                 </div>
                 <div>
                   <dt>thin slice</dt>
                   <dd>
                     {formatEnabled(
-                      model.runtimeSnapshot.snapshot.policies.streaming.thinSliceOnly
+                      model.runtimeSnapshot.snapshot.policies?.streaming?.thinSliceOnly
                     )}
                   </dd>
                 </div>
@@ -1466,8 +1466,8 @@ function RuntimeSnapshotDetail({
         <div>
           <dt>{text.streaming}</dt>
           <dd>
-            {formatEnabled(snapshot.policies.streaming.enabled)} / thin slice{" "}
-            {formatEnabled(snapshot.policies.streaming.thinSliceOnly)}
+            {formatEnabled(snapshot.policies?.streaming?.enabled)} / thin slice{" "}
+            {formatEnabled(snapshot.policies?.streaming?.thinSliceOnly)}
           </dd>
         </div>
       </dl>
@@ -1475,7 +1475,7 @@ function RuntimeSnapshotDetail({
   );
 }
 
-function formatEnabled(value: boolean) {
+function formatEnabled(value?: boolean | null) {
   return value ? "enabled" : "disabled";
 }
 
