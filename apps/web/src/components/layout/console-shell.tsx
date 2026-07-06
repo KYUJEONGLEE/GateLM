@@ -335,7 +335,7 @@ export function ConsoleShell({
         >
           <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
         </button>
-        <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+        <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
           <span className="console-brand-mark">G</span>
           <span className="console-brand-copy">
             <strong>GateLM</strong>
@@ -359,7 +359,7 @@ export function ConsoleShell({
       />
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
-          <Link className="console-brand" href="/" aria-label="GateLM Web Console home">
+          <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
             <span className="console-brand-mark">G</span>
             <span className="console-brand-copy">
               <strong>GateLM</strong>

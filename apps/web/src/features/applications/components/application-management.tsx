@@ -425,31 +425,17 @@ export function ApplicationManagement({
         {applications.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table project-table">
-              <thead>
-                <tr>
-                  <th>{text.name}</th>
-                  <th>{text.description}</th>
-                  <th>{text.budget}</th>
-                  <th>{text.status}</th>
-                  <th>{text.policy}</th>
-                  <th>{text.updated}</th>
-                  <th>{text.applicationId}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((application) => {
-                  const rowValues =
-                    editingRows[application.id] ?? getApplicationUpdateValues(application);
-                  const policySummary = policySummariesByApplicationId[application.id] ?? null;
-                  const policyHref = `/tenants/${tenantId}/projects/${model.controlPlaneProjectId}/applications/${application.id}/policies`;
+          <div className="application-row-list">
+            {applications.map((application) => {
+              const rowValues =
+                editingRows[application.id] ?? getApplicationUpdateValues(application);
+              const policySummary = policySummariesByApplicationId[application.id] ?? null;
+              const policyHref = `/tenants/${tenantId}/projects/${model.controlPlaneProjectId}/applications/${application.id}/policies`;
 
-                  return (
-                    <tr key={application.id}>
-                      <td>
-                        <label className="policy-field project-table-field">
+              return (
+                <article className="application-row" key={application.id}>
+                  <div className="application-row-main">
+                    <label className="policy-field project-table-field application-name-field">
                           <span>{text.name}</span>
                           <input
                             maxLength={120}
@@ -459,10 +445,8 @@ export function ApplicationManagement({
                             type="text"
                             value={rowValues.name}
                           />
-                        </label>
-                      </td>
-                      <td>
-                        <label className="policy-field project-table-field">
+                    </label>
+                    <label className="policy-field project-table-field application-description-field">
                           <span>{text.description}</span>
                           <textarea
                             maxLength={500}
@@ -471,9 +455,8 @@ export function ApplicationManagement({
                             }
                             value={rowValues.description}
                           />
-                        </label>
-                      </td>
-                      <td>
+                    </label>
+                    <div className="application-budget-cell">
                         <ApplicationBudgetFields
                           budgetLimitMode={rowValues.budgetLimitMode}
                           budgetLimitPercent={rowValues.budgetLimitPercent}
@@ -484,16 +467,8 @@ export function ApplicationManagement({
                         <small className="project-muted">
                           {formatBudgetLimit(application)}
                         </small>
-                      </td>
-                      <td>
-                        <div className="project-status-cell">
-                          <Badge
-                            className="project-status-badge"
-                            data-status={application.status}
-                            variant="outline"
-                          >
-                            {formatApplicationStatus(application.status)}
-                          </Badge>
+                    </div>
+                    <div className="project-status-cell application-status-cell">
                           <label className="policy-field project-table-field">
                             <span>{text.status}</span>
                             <select
@@ -511,10 +486,19 @@ export function ApplicationManagement({
                               ))}
                             </select>
                           </label>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="application-policy-cell">
+                          <Badge
+                            className="project-status-badge"
+                            data-status={application.status}
+                            variant="outline"
+                          >
+                            {formatApplicationStatus(application.status)}
+                          </Badge>
+                    </div>
+                  </div>
+
+                  <div className="application-row-meta">
+                    <div className="application-policy-cell">
+                      <span className="application-row-label">{text.policy}</span>
                           <Badge
                             className="project-status-badge"
                             data-status={policySummary ? "ACTIVE" : "DISABLED"}
@@ -537,19 +521,19 @@ export function ApplicationManagement({
                             <Settings aria-hidden="true" />
                             {text.policyConfigure}
                           </Link>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="project-muted">{formatDateTime(application.updatedAt)}</span>
-                        <small className="project-muted">
-                          {text.created}: {formatDateTime(application.createdAt)}
-                        </small>
-                      </td>
-                      <td>
-                        <code className="project-code">{application.id}</code>
-                      </td>
-                      <td>
-                        <div className="project-row-actions">
+                    </div>
+                    <div className="application-row-detail">
+                      <span className="application-row-label">{text.updated}</span>
+                      <span className="project-muted">{formatDateTime(application.updatedAt)}</span>
+                      <small className="project-muted">
+                        {text.created}: {formatDateTime(application.createdAt)}
+                      </small>
+                    </div>
+                    <div className="application-row-detail">
+                      <span className="application-row-label">{text.applicationId}</span>
+                      <code className="project-code">{application.id}</code>
+                    </div>
+                    <div className="project-row-actions application-row-actions">
                           <Button
                             disabled={pendingAction !== null}
                             onClick={() => void submitUpdateApplication(application.id)}
@@ -573,13 +557,11 @@ export function ApplicationManagement({
                             <Trash2 aria-hidden="true" />
                             {text.delete}
                           </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

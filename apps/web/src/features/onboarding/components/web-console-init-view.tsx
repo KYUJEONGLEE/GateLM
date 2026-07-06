@@ -4,11 +4,12 @@ import {
   Building2,
   CheckCircle2,
   Crown,
-  House,
   KeyRound,
   LogIn,
+  LogOut,
   MailCheck,
   Route,
+  Send,
   ShieldCheck,
   UserPlus,
   X
@@ -19,12 +20,14 @@ import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { Locale } from "@/lib/i18n/locale";
 
 const defaultTenantId = "tenant_demo_acme";
+const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
 
 type WebConsoleInitViewProps = {
   locale: Locale;
 };
 
 type AuthMode = "login" | "signup";
+type AuthStatus = "anonymous" | "authenticated" | "checking";
 type SignupStepId = "account" | "verify" | "organization" | "ready";
 
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
@@ -36,15 +39,51 @@ const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
   verify: MailCheck
 };
 
+function getDashboardHref() {
+  return `/tenants/${defaultTenantId}/dashboard`;
+}
+
+function redirectToDashboard(replace = false) {
+  const href = getDashboardHref();
+  if (replace) {
+    window.location.replace(href);
+    return;
+  }
+
+  window.location.assign(href);
+}
+
+function hasStayOnLandingHistoryState() {
+  const state = window.history.state;
+
+  return Boolean(
+    state &&
+      typeof state === "object" &&
+      (state as Record<string, unknown>)[stayOnLandingHistoryStateKey] === true
+  );
+}
+
+function replaceLandingUrl() {
+  const state = window.history.state;
+  const nextState =
+    state && typeof state === "object"
+      ? { ...(state as Record<string, unknown>), [stayOnLandingHistoryStateKey]: true }
+      : { [stayOnLandingHistoryStateKey]: true };
+
+  window.history.replaceState(nextState, "", "/");
+}
+
 const initText: Record<
   Locale,
   {
     actions: {
       chat: string;
       dashboard: string;
+      gatewayRequest: string;
       googleLogin: string;
       login: string;
       loginSubmit: string;
+      logout: string;
       onboarding: string;
       requestLogs: string;
       signup: string;
@@ -131,9 +170,11 @@ const initText: Record<
     actions: {
       chat: "Employee Chat",
       dashboard: "Open Dashboard",
+      gatewayRequest: "Gateway request",
       googleLogin: "Continue with Google",
       login: "Login",
       loginSubmit: "Login",
+      logout: "Logout",
       onboarding: "Management",
       requestLogs: "Request logs",
       signup: "Sign up",
@@ -261,6 +302,8 @@ const initText: Record<
   },
   ko: {
     actions: {
+      gatewayRequest: "Gateway 요청",
+      logout: "로그아웃",
       chat: "직원 Chat 확인",
       dashboard: "대시보드 열기",
       googleLogin: "Google로 계속하기",
@@ -393,51 +436,13 @@ const initText: Record<
   }
 };
 
-const consoleInitText: Record<
-  Locale,
-  {
-    actions: {
-      chat: string;
-      dashboard: string;
-      landing: string;
-      onboarding: string;
-      requestLogs: string;
-    };
-    language: string;
-    title: string;
-  }
-> = {
-  en: {
-    actions: {
-      chat: "Gateway request",
-      dashboard: "Dashboard",
-      landing: "Landing",
-      onboarding: "Management",
-      requestLogs: "Request logs"
-    },
-    language: "Console language",
-    title: "Web Console"
-  },
-  ko: {
-    actions: {
-      landing: "랜딩",
-      chat: "Gateway 요청",
-      dashboard: "대시보드",
-      onboarding: "관리",
-      requestLogs: "요청 로그"
-    },
-    language: "콘솔 언어",
-    title: "웹 콘솔"
-  }
-};
-
 export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
-  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
@@ -450,13 +455,13 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     const params = new URLSearchParams(window.location.search);
     if (params.get("auth") === "organization") {
       window.history.replaceState(null, "", "/");
-      setIsConsoleOpen(true);
+      redirectToDashboard(true);
       return;
     }
-    if (params.get("view") === "landing") {
-      window.history.replaceState(null, "", "/");
-      setIsConsoleOpen(false);
-      return;
+    const hasLandingViewParam = params.get("view") === "landing";
+    const shouldStayOnLanding = hasLandingViewParam || hasStayOnLandingHistoryState();
+    if (hasLandingViewParam) {
+      replaceLandingUrl();
     }
 
     let isMounted = true;
@@ -467,7 +472,12 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           credentials: "include"
         });
 
-        if (!response.ok || !isMounted) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (!response.ok) {
+          setAuthStatus("anonymous");
           return;
         }
 
@@ -483,14 +493,20 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           return;
         }
 
-        if (
+        const hasConsoleSession =
           body.data?.session?.kind === "full" ||
-          body.data?.session?.kind === "onboarding"
-        ) {
-          setIsConsoleOpen(true);
+          body.data?.session?.kind === "onboarding";
+
+        setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
+
+        if (hasConsoleSession && !shouldStayOnLanding) {
+          redirectToDashboard(true);
         }
       } catch {
         // Anonymous visitors should still see the landing page.
+        if (isMounted) {
+          setAuthStatus("anonymous");
+        }
       }
     }
 
@@ -517,13 +533,25 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     setAuthNotice(null);
   }
 
+  async function logout() {
+    setIsAuthPanelOpen(false);
+    setAuthError(null);
+    setAuthNotice(null);
+    setAuthStatus("anonymous");
+    window.history.replaceState(null, "", "/");
+    await fetch("/api/auth/logout", {
+      credentials: "include",
+      method: "POST"
+    }).catch(() => undefined);
+  }
+
   function completeAuth() {
     setIsAuthPanelOpen(false);
     setAuthError(null);
     setAuthNotice(null);
     setSignupStep("account");
-    window.history.replaceState(null, "", "/");
-    setIsConsoleOpen(true);
+    setAuthStatus("authenticated");
+    redirectToDashboard();
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -611,22 +639,19 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     window.location.assign("/api/auth/google/start");
   }
 
-  function returnToLanding() {
-    window.history.replaceState(null, "", "/");
-    setIsConsoleOpen(false);
-  }
-
-  if (isConsoleOpen) {
-    return <ConsoleInitPanel locale={locale} onReturnToLanding={returnToLanding} />;
-  }
-
   return (
     <main className="landing-shell">
       <nav className="landing-topbar" aria-label="GateLM landing navigation">
-        <Link className="landing-brand" href="/" aria-label="GateLM home">
-          <span className="landing-brand-mark">G</span>
-          <strong>GateLM</strong>
-        </Link>
+        <div className="landing-brand-cluster">
+          <Link className="landing-brand" href="/" aria-label="GateLM home">
+            <span className="landing-brand-mark">G</span>
+            <strong>GateLM</strong>
+          </Link>
+          <Link className="landing-auth-button landing-gateway-request-button" href="/application">
+            <Send aria-hidden="true" size={16} strokeWidth={2.4} />
+            <span>{text.actions.gatewayRequest}</span>
+          </Link>
+        </div>
         <div className="landing-nav-links">
           <a href="#gateway">{text.nav.gateway}</a>
           <a href="#policies">{text.nav.policies}</a>
@@ -635,22 +660,38 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         </div>
         <div className="landing-top-actions">
           <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          <button
-            className="landing-auth-button"
-            onClick={() => openAuthPanel("login")}
-            type="button"
-          >
-            <LogIn aria-hidden="true" size={17} strokeWidth={2.4} />
-            <span>{text.actions.login}</span>
-          </button>
-          <button
-            className="landing-auth-button landing-auth-button-primary"
-            onClick={() => openAuthPanel("signup")}
-            type="button"
-          >
-            <UserPlus aria-hidden="true" size={17} strokeWidth={2.4} />
-            <span>{text.actions.signup}</span>
-          </button>
+          {authStatus === "authenticated" ? (
+            <>
+              <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
+                <Route aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.dashboard}</span>
+              </Link>
+              <button className="landing-auth-button" onClick={logout} type="button">
+                <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.logout}</span>
+              </button>
+            </>
+          ) : null}
+          {authStatus === "anonymous" ? (
+            <>
+              <button
+                className="landing-auth-button"
+                onClick={() => openAuthPanel("login")}
+                type="button"
+              >
+                <LogIn aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.login}</span>
+              </button>
+              <button
+                className="landing-auth-button landing-auth-button-primary"
+                onClick={() => openAuthPanel("signup")}
+                type="button"
+              >
+                <UserPlus aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.signup}</span>
+              </button>
+            </>
+          ) : null}
         </div>
       </nav>
 
@@ -790,52 +831,6 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           </section>
         </div>
       ) : null}
-    </main>
-  );
-}
-
-function ConsoleInitPanel({
-  locale,
-  onReturnToLanding
-}: {
-  locale: Locale;
-  onReturnToLanding: () => void;
-}) {
-  const text = consoleInitText[locale];
-
-  return (
-    <main className="init-shell">
-      <section className="init-panel" aria-labelledby="init-title">
-        <div>
-          <div className="init-heading-row">
-            <p className="init-label">GateLM</p>
-            <LanguageSwitcher ariaLabel={text.language} locale={locale} />
-          </div>
-          <h1 id="init-title">{text.title}</h1>
-          <div className="init-actions">
-            <button
-              className="primary-link init-landing-button"
-              onClick={onReturnToLanding}
-              type="button"
-            >
-              <House aria-hidden="true" size={16} strokeWidth={2.4} />
-              <span>{text.actions.landing}</span>
-            </button>
-            <Link className="primary-link" href="/application">
-              {text.actions.chat}
-            </Link>
-            <Link className="primary-link" href={`/tenants/${defaultTenantId}/onboarding`}>
-              {text.actions.onboarding}
-            </Link>
-            <Link className="primary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
-              {text.actions.dashboard}
-            </Link>
-            <Link className="back-link" href={`/tenants/${defaultTenantId}/request-logs`}>
-              {text.actions.requestLogs}
-            </Link>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }
