@@ -97,6 +97,9 @@ func (r *Resolver) lookup(ctx context.Context, credentialRefID string) (storedCr
 		if errors.Is(err, pgx.ErrNoRows) {
 			return storedCredential{}, credentials.ErrUnavailable
 		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return storedCredential{}, ctxErr
+		}
 		return storedCredential{}, fmt.Errorf("%w: query provider credential", credentials.ErrUnavailable)
 	}
 	return row, nil
@@ -124,6 +127,9 @@ func decryptCredential(key []byte, row storedCredential) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(nonce) != gcm.NonceSize() {
+		return "", fmt.Errorf("incorrect nonce length")
+	}
 	ciphertext, err := base64.StdEncoding.DecodeString(row.ciphertext)
 	if err != nil {
 		return "", err
@@ -133,10 +139,8 @@ func decryptCredential(key []byte, row storedCredential) (string, error) {
 		return "", err
 	}
 
-	sealed := make([]byte, len(ciphertext)+len(tag))
-	copy(sealed, ciphertext)
-	copy(sealed[len(ciphertext):], tag)
-	plaintext, err := gcm.Open(nil, nonce, sealed, []byte(row.refID))
+	ciphertext = append(ciphertext, tag...)
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, []byte(row.refID))
 	if err != nil {
 		return "", err
 	}
