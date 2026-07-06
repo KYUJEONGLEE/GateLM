@@ -46,14 +46,66 @@ type SubmitState =
       status: "success";
     };
 
-type PolicySection = "general" | "cache";
+type PolicySection =
+  | "safety"
+  | "routing"
+  | "budget"
+  | "rateLimit"
+  | "cache"
+  | "streaming"
+  | "providerModel";
 
 type RoutingProviderOption = {
   provider: string;
   providerId: string;
 };
 
-const hiddenPolicySectionStyle = { display: "none" } as const;
+type PolicySectionLabelText = {
+  budgetTab: string;
+  cacheTab: string;
+  providerModelTab: string;
+  rateLimitTab: string;
+  routing: string;
+  safetyTab: string;
+  streaming: string;
+};
+
+const policySections: PolicySection[] = [
+  "routing",
+  "budget",
+  "rateLimit",
+  "cache",
+  "safety",
+  "streaming",
+  "providerModel"
+];
+
+function getPolicyTabId(section: PolicySection) {
+  return `policy-tab-${section}`;
+}
+
+function getPolicyPanelId(section: PolicySection) {
+  return `policy-panel-${section}`;
+}
+
+function getPolicySectionLabel(section: PolicySection, text: PolicySectionLabelText) {
+  switch (section) {
+    case "safety":
+      return text.safetyTab;
+    case "routing":
+      return text.routing;
+    case "budget":
+      return text.budgetTab;
+    case "rateLimit":
+      return text.rateLimitTab;
+    case "cache":
+      return text.cacheTab;
+    case "streaming":
+      return text.streaming;
+    case "providerModel":
+      return text.providerModelTab;
+  }
+}
 
 const policyText: Record<
   Locale,
@@ -67,13 +119,16 @@ const policyText: Record<
     appTokenIssued: string;
     budget: string;
     budgetEnforcement: string;
+    budgetTab: string;
     budgetWarning: string;
     cache: string;
     cacheEnabled: string;
     cacheSection: string;
+    cacheTab: string;
     cacheTtl: string;
     catalogVersion: string;
     configVersion: string;
+    configuredModels: string;
     completionPrice: string;
     defaultRoute: string;
     detectors: string;
@@ -107,10 +162,12 @@ const policyText: Record<
     providerConnectionMissing: string;
     providerCount: string;
     providerCatalog: string;
+    providerModelTab: string;
     publish: string;
     publishedAt: string;
     history: string;
     rateLimit: string;
+    rateLimitTab: string;
     remove: string;
     rollback: string;
     routing: string;
@@ -122,6 +179,7 @@ const policyText: Record<
     saveDraft: string;
     saveProviders: string;
     savingProviders: string;
+    safetyTab: string;
     issueAppToken: string;
     issuingAppToken: string;
     shortPrompt: string;
@@ -132,6 +190,8 @@ const policyText: Record<
     semanticCacheEvidenceOnly: string;
     semanticCacheNote: string;
     streaming: string;
+    streamingNote: string;
+    streamingUnavailable: string;
     templateFallback: string;
     title: string;
     tokens: string;
@@ -150,13 +210,16 @@ const policyText: Record<
       "Active App Token prepared. The token plaintext is not displayed on this policy screen.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
+    budgetTab: "Budget",
     budgetWarning: "Warning threshold",
     cache: "Exact cache",
     cacheEnabled: "Cache enabled",
     cacheSection: "Cache",
+    cacheTab: "Cache",
     cacheTtl: "TTL seconds",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
+    configuredModels: "Configured models",
     completionPrice: "Completion micro USD",
     defaultRoute: "Default route",
     detectors: "Safety detectors",
@@ -193,10 +256,12 @@ const policyText: Record<
       "Connect at least one provider with configured models before saving or publishing this policy.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
+    providerModelTab: "Provider/Model",
     publish: "Publish active config",
     publishedAt: "Published",
     history: "Runtime history",
     rateLimit: "Rate limit",
+    rateLimitTab: "Rate Limit",
     remove: "Remove",
     rollback: "Rollback",
     routing: "Routing",
@@ -209,6 +274,7 @@ const policyText: Record<
     saveDraft: "Save draft",
     saveProviders: "Save providers",
     savingProviders: "Saving...",
+    safetyTab: "Safety",
     issueAppToken: "Issue App Token",
     issuingAppToken: "Issuing...",
     shortPrompt: "Short prompt threshold",
@@ -220,6 +286,9 @@ const policyText: Record<
     semanticCacheNote:
       "Current Control Plane derives semantic cache evidence mode from the cache policy. It is not a live response path.",
     streaming: "Streaming",
+    streamingNote:
+      "Streaming is a v2 thin slice. Request-side safety completes before streaming starts, and stream=true bypasses Exact Cache until a streaming cache contract is defined.",
+    streamingUnavailable: "No active RuntimeSnapshot streaming state returned.",
     templateFallback:
       "This application does not have an active policy yet. Configure and publish this policy to enable the Gateway path.",
     title: "Policies",
@@ -238,13 +307,16 @@ const policyText: Record<
       "Active App Token이 준비되었습니다. 이 정책 화면에서는 token 원문을 표시하지 않습니다.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
+    budgetTab: "Budget",
     budgetWarning: "Warning threshold",
     cache: "Exact cache",
     cacheEnabled: "캐시 사용",
     cacheSection: "캐시",
+    cacheTab: "Cache",
     cacheTtl: "TTL 초",
     catalogVersion: "Catalog version",
     configVersion: "Config version",
+    configuredModels: "Configured models",
     completionPrice: "Completion micro USD",
     defaultRoute: "Default route",
     detectors: "Safety detector",
@@ -281,10 +353,12 @@ const policyText: Record<
       "정책을 저장하거나 게시하려면 model이 설정된 provider를 하나 이상 연결해야 합니다.",
     providerCount: "Providers",
     providerCatalog: "Provider catalog",
+    providerModelTab: "Provider/Model",
     publish: "Active config 게시",
     publishedAt: "게시 시각",
     history: "Runtime history",
     rateLimit: "Rate limit",
+    rateLimitTab: "Rate Limit",
     remove: "삭제",
     rollback: "Rollback",
     routing: "Routing",
@@ -297,6 +371,7 @@ const policyText: Record<
     saveDraft: "Draft 저장",
     saveProviders: "Provider 저장",
     savingProviders: "저장 중...",
+    safetyTab: "Safety",
     issueAppToken: "App Token 발급",
     issuingAppToken: "발급 중...",
     shortPrompt: "Short prompt 기준",
@@ -308,6 +383,9 @@ const policyText: Record<
     semanticCacheNote:
       "현재 Control Plane은 cache policy에서 semantic cache evidence mode를 파생합니다. 실시간 응답 경로는 아닙니다.",
     streaming: "Streaming",
+    streamingNote:
+      "Streaming은 v2 thin slice입니다. request-side safety가 streaming 시작 전에 완료되고, stream=true 요청은 streaming cache 계약 전까지 Exact Cache를 우회합니다.",
+    streamingUnavailable: "활성 RuntimeSnapshot streaming 상태가 없습니다.",
     templateFallback:
       "이 애플리케이션에는 아직 활성 정책이 없습니다. 정책을 설정하고 게시하면 Gateway 경로에 적용됩니다.",
     title: "정책",
@@ -333,7 +411,7 @@ export function RuntimePolicyEditor({
     message: "",
     status: "idle"
   });
-  const [activePolicySection, setActivePolicySection] = useState<PolicySection>("general");
+  const [activePolicySection, setActivePolicySection] = useState<PolicySection>("safety");
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isIssuingAppToken, setIsIssuingAppToken] = useState(false);
   const [isSavingProviders, setIsSavingProviders] = useState(false);
@@ -354,10 +432,6 @@ export function RuntimePolicyEditor({
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
       : model.activeConfig;
-  const generalSectionStyle =
-    activePolicySection === "general" ? undefined : hiddenPolicySectionStyle;
-  const cacheSectionStyle =
-    activePolicySection === "cache" ? undefined : hiddenPolicySectionStyle;
   const hasActiveAppToken = activeAppTokenCount > 0;
   const providerOptions = model.activeConfig.providers;
   const selectedProviderIdSet = useMemo(
@@ -683,389 +757,480 @@ export function RuntimePolicyEditor({
       ) : null}
 
       <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
-        {(["general", "cache"] as const).map((section) => (
-          <button
-            aria-selected={activePolicySection === section}
-            data-active={activePolicySection === section}
-            key={section}
-            onClick={() => setActivePolicySection(section)}
-            role="tab"
-            type="button"
-          >
-            {section === "general" ? text.general : text.cacheSection}
-          </button>
-        ))}
+        {policySections.map((section) => {
+          const label = getPolicySectionLabel(section, text);
+          const isActive = activePolicySection === section;
+
+          return (
+            <button
+              aria-controls={getPolicyPanelId(section)}
+              aria-selected={isActive}
+              data-active={isActive}
+              id={getPolicyTabId(section)}
+              key={section}
+              onClick={() => setActivePolicySection(section)}
+              role="tab"
+              type="button"
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       <section className="policy-layout policy-settings-list">
-        <article
-          className="console-panel policy-editor-panel wide-panel"
-          style={generalSectionStyle}
+        <div
+          aria-labelledby={getPolicyTabId("safety")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "safety"}
+          id={getPolicyPanelId("safety")}
+          role="tabpanel"
+          tabIndex={0}
         >
-          <div className="panel-heading">
-            <h3>{text.applicationProviders}</h3>
-            <Button
-              disabled={!hasProviderSelectionChanged || isSavingProviders}
-              onClick={() => void saveApplicationProviders()}
-              type="button"
-              variant="outline"
-            >
-              {isSavingProviders ? text.savingProviders : text.saveProviders}
-            </Button>
-          </div>
-          <p className="project-muted">{text.applicationProvidersHint}</p>
-          {model.providerConnections.loadError ? (
-            <p className="project-muted">{model.providerConnections.loadError}</p>
-          ) : null}
-          <div className="policy-provider-list">
-            {model.providerConnections.available.length === 0 ? (
-              <p className="project-muted">{text.providerConnectionMissing}</p>
-            ) : null}
-            {model.providerConnections.available.map((providerConnection) => {
-              const providerModels = getProviderConnectionModels(providerConnection);
-              const isSelectable = providerModels.length > 0;
-
-              return (
-                <label
-                  aria-disabled={!isSelectable}
-                  className="policy-provider-option"
-                  data-disabled={!isSelectable}
-                  key={providerConnection.id}
-                >
-                  <input
-                    checked={selectedProviderIdSet.has(providerConnection.id)}
-                    disabled={!isSelectable || isSavingProviders}
-                    onChange={() => toggleProviderSelection(providerConnection)}
-                    type="checkbox"
-                  />
-                  <span>
-                    <strong>{providerConnection.displayName}</strong>
-                    <small>
-                      {providerConnection.provider}
-                      {" · "}
-                      {isSelectable ? providerModels.join(", ") : text.noProviderModels}
-                    </small>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </article>
-
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.responseCapture}</h3>
-          </div>
-          <label aria-disabled="true" className="policy-toggle-row">
-            <Switch checked={draftValues.responseCaptureEnabled} disabled readOnly />
-            <span>
-              {draftValues.responseCaptureEnabled ? text.enabled : text.disabled}
-            </span>
-          </label>
-          <p className="project-muted">{text.responseCaptureHint}</p>
-          <dl className="policy-summary-list">
-            <div>
-              <dt>{text.responseCaptureMaxChars}</dt>
-              <dd>{draftValues.responseCaptureMaxChars}</dd>
+          <article className="console-panel policy-editor-panel wide-panel">
+            <div className="panel-heading">
+              <h3>{text.detectors}</h3>
             </div>
-          </dl>
-        </article>
+            <div className="policy-alert" data-status="warning">
+              <strong>{text.mandatoryProtection}</strong>
+              {" "}
+              <span>{text.mandatoryProtectionHint}</span>
+            </div>
+            <div className="policy-detector-list">
+              {draftValues.detectors.map((detector, index) => (
+                <DetectorEditor
+                  detector={detector}
+                  key={detector.type}
+                  labels={text}
+                  onChange={(nextDetector) =>
+                    setDraftValues((current) => ({
+                      ...current,
+                      detectors: current.detectors.map((item, itemIndex) =>
+                        itemIndex === index ? nextDetector : item
+                      )
+                    }))
+                  }
+                />
+              ))}
+            </div>
+          </article>
 
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.budget}</h3>
-          </div>
-          <label className="policy-toggle-row">
-            <Switch
-              checked={draftValues.budgetEnabled}
-              onCheckedChange={(checked) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  budgetEnabled: checked,
-                  budgetEnforcementMode: checked
-                    ? current.budgetEnforcementMode === "disabled"
-                      ? "warn"
-                      : current.budgetEnforcementMode
-                    : "disabled"
-                }))
-              }
-            />
-            <span>{text.enabled}</span>
-          </label>
-          <label className="policy-field">
-            <span>{text.budgetEnforcement}</span>
-            <select
-              disabled={!draftValues.budgetEnabled}
-              onChange={(event) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  budgetEnforcementMode:
-                    event.target.value === "block" || event.target.value === "warn"
-                      ? event.target.value
-                      : "disabled"
-                }))
-              }
-              value={draftValues.budgetEnforcementMode}
-            >
-              <option value="warn">warn</option>
-              <option value="block">block</option>
-              <option value="disabled">disabled</option>
-            </select>
-          </label>
-          <PolicyNumberField
-            label={text.budgetWarning}
-            max={100}
-            min={0}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                budgetWarningThresholdPercent: value
-              }))
-            }
-            value={draftValues.budgetWarningThresholdPercent}
-          />
-        </article>
-
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.rateLimit}</h3>
-          </div>
-          <label className="policy-toggle-row">
-            <Switch
-              checked={draftValues.rateLimitEnabled}
-              onCheckedChange={(checked) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  rateLimitEnabled: checked
-                }))
-              }
-            />
-            <span>{text.enabled}</span>
-          </label>
-          <PolicyNumberField
-            label={text.limit}
-            max={100000}
-            min={1}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                rateLimitLimit: value
-              }))
-            }
-            value={draftValues.rateLimitLimit}
-          />
-        </article>
-
-        <article
-          className="console-panel policy-editor-panel wide-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.detectors}</h3>
-          </div>
-          <p className="project-muted">
-            <strong>{text.mandatoryProtection}</strong> {text.mandatoryProtectionHint}
-          </p>
-          <div className="policy-detector-list">
-            {draftValues.detectors.map((detector, index) => (
-              <DetectorEditor
-                detector={detector}
-                key={detector.type}
-                labels={text}
-                onChange={(nextDetector) =>
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.promptCapture}</h3>
+            </div>
+            <label className="policy-toggle-row">
+              <Switch
+                checked={draftValues.promptCaptureEnabled}
+                onCheckedChange={(checked) =>
                   setDraftValues((current) => ({
                     ...current,
-                    detectors: current.detectors.map((item, itemIndex) =>
-                      itemIndex === index ? nextDetector : item
-                    )
+                    promptCaptureEnabled: checked
                   }))
                 }
               />
-            ))}
-          </div>
-        </article>
-
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.promptCapture}</h3>
-          </div>
-          <label className="policy-toggle-row">
-            <Switch
-              checked={draftValues.promptCaptureEnabled}
-              onCheckedChange={(checked) =>
+              <span>{text.promptCaptureEnabled}</span>
+            </label>
+            <p className="project-muted">{text.logSafeCaptureHint}</p>
+            <PolicyNumberField
+              label={text.promptCaptureMaxChars}
+              max={20000}
+              min={1}
+              onChange={(value) =>
                 setDraftValues((current) => ({
                   ...current,
-                  promptCaptureEnabled: checked
+                  promptCaptureMaxChars: value
                 }))
               }
+              value={draftValues.promptCaptureMaxChars}
             />
-            <span>{text.promptCaptureEnabled}</span>
-          </label>
-          <p className="project-muted">{text.logSafeCaptureHint}</p>
-          <PolicyNumberField
-            label={text.promptCaptureMaxChars}
-            max={20000}
-            min={1}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                promptCaptureMaxChars: value
-              }))
-            }
-            value={draftValues.promptCaptureMaxChars}
-          />
-        </article>
+          </article>
 
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.routing}</h3>
-          </div>
-          <div className="policy-routing-grid">
-            <RoutingPairEditor
-              label={text.defaultRoute}
-              modelOptionsByProvider={modelOptionsByProvider}
-              onModelChange={(modelName) => updateRoutingModel("default", modelName)}
-              onProviderChange={(provider) => updateRoutingProvider("default", provider)}
-              provider={draftValues.routingDefaultProvider}
-              providerOptions={routingProviderOptions}
-              selectedModel={draftValues.routingDefaultModel}
-            />
-            <RoutingPairEditor
-              label={text.lowCostRoute}
-              modelOptionsByProvider={modelOptionsByProvider}
-              onModelChange={(modelName) => updateRoutingModel("lowCost", modelName)}
-              onProviderChange={(provider) => updateRoutingProvider("lowCost", provider)}
-              provider={draftValues.routingLowCostProvider}
-              providerOptions={routingProviderOptions}
-              selectedModel={draftValues.routingLowCostModel}
-            />
-            <RoutingPairEditor
-              label={text.fallbackRoute}
-              modelOptionsByProvider={modelOptionsByProvider}
-              onModelChange={(modelName) => updateRoutingModel("fallback", modelName)}
-              onProviderChange={(provider) => updateRoutingProvider("fallback", provider)}
-              provider={draftValues.routingFallbackProvider}
-              providerOptions={routingProviderOptions}
-              selectedModel={draftValues.routingFallbackModel}
-            />
-          </div>
-        </article>
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.responseCapture}</h3>
+            </div>
+            <label aria-disabled="true" className="policy-toggle-row">
+              <Switch checked={draftValues.responseCaptureEnabled} disabled readOnly />
+              <span>
+                {draftValues.responseCaptureEnabled ? text.enabled : text.disabled}
+              </span>
+            </label>
+            <p className="project-muted">{text.responseCaptureHint}</p>
+            <dl className="policy-summary-list">
+              <div>
+                <dt>{text.responseCaptureMaxChars}</dt>
+                <dd>{draftValues.responseCaptureMaxChars}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
 
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
+        <div
+          aria-labelledby={getPolicyTabId("routing")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "routing"}
+          id={getPolicyPanelId("routing")}
+          role="tabpanel"
+          tabIndex={0}
         >
-          <div className="panel-heading">
-            <h3>{text.routingAdvanced}</h3>
-          </div>
-          <PolicyNumberField
-            label={text.shortPrompt}
-            max={100000}
-            min={1}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                routingShortPromptMaxChars: value
-              }))
-            }
-            value={draftValues.routingShortPromptMaxChars}
-          />
-        </article>
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.routing}</h3>
+            </div>
+            <div className="policy-routing-grid">
+              <RoutingPairEditor
+                label={text.defaultRoute}
+                modelOptionsByProvider={modelOptionsByProvider}
+                onModelChange={(modelName) => updateRoutingModel("default", modelName)}
+                onProviderChange={(provider) => updateRoutingProvider("default", provider)}
+                provider={draftValues.routingDefaultProvider}
+                providerOptions={routingProviderOptions}
+                selectedModel={draftValues.routingDefaultModel}
+              />
+              <RoutingPairEditor
+                label={text.lowCostRoute}
+                modelOptionsByProvider={modelOptionsByProvider}
+                onModelChange={(modelName) => updateRoutingModel("lowCost", modelName)}
+                onProviderChange={(provider) => updateRoutingProvider("lowCost", provider)}
+                provider={draftValues.routingLowCostProvider}
+                providerOptions={routingProviderOptions}
+                selectedModel={draftValues.routingLowCostModel}
+              />
+              <RoutingPairEditor
+                label={text.fallbackRoute}
+                modelOptionsByProvider={modelOptionsByProvider}
+                onModelChange={(modelName) => updateRoutingModel("fallback", modelName)}
+                onProviderChange={(provider) => updateRoutingProvider("fallback", provider)}
+                provider={draftValues.routingFallbackProvider}
+                providerOptions={routingProviderOptions}
+                selectedModel={draftValues.routingFallbackModel}
+              />
+            </div>
+          </article>
 
-        <article
-          className="console-panel policy-editor-panel"
-          style={cacheSectionStyle}
-        >
-          <div className="panel-heading">
-            <h3>{text.cache}</h3>
-          </div>
-          <label className="policy-toggle-row">
-            <Switch
-              checked={draftValues.cacheEnabled}
-              onCheckedChange={(checked) =>
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.routingAdvanced}</h3>
+            </div>
+            <PolicyNumberField
+              label={text.shortPrompt}
+              max={100000}
+              min={1}
+              onChange={(value) =>
                 setDraftValues((current) => ({
                   ...current,
-                  cacheEnabled: checked
+                  routingShortPromptMaxChars: value
                 }))
               }
+              value={draftValues.routingShortPromptMaxChars}
             />
-            <span>{text.cacheEnabled}</span>
-          </label>
-          <PolicyNumberField
-            label={text.cacheTtl}
-            max={86400}
-            min={1}
-            onChange={(value) =>
-              setDraftValues((current) => ({
-                ...current,
-                cacheTtlSeconds: value
-              }))
-            }
-            value={draftValues.cacheTtlSeconds}
-          />
-        </article>
+          </article>
+        </div>
 
-        <article
-          className="console-panel policy-editor-panel"
-          style={cacheSectionStyle}
+        <div
+          aria-labelledby={getPolicyTabId("budget")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "budget"}
+          id={getPolicyPanelId("budget")}
+          role="tabpanel"
+          tabIndex={0}
         >
-          <div className="panel-heading">
-            <h3>{text.semanticCache}</h3>
-          </div>
-          <label aria-disabled="true" className="policy-toggle-row">
-            <Switch checked={draftValues.cacheEnabled} disabled readOnly />
-            <span>
-              {draftValues.cacheEnabled
-                ? text.semanticCacheEvidenceOnly
-                : text.semanticCacheDisabled}
-            </span>
-          </label>
-          <dl className="policy-summary-list">
-            <div>
-              <dt>{text.mode}</dt>
-              <dd>
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.budget}</h3>
+            </div>
+            <label className="policy-toggle-row">
+              <Switch
+                checked={draftValues.budgetEnabled}
+                onCheckedChange={(checked) =>
+                  setDraftValues((current) => ({
+                    ...current,
+                    budgetEnabled: checked,
+                    budgetEnforcementMode: checked
+                      ? current.budgetEnforcementMode === "disabled"
+                        ? "warn"
+                        : current.budgetEnforcementMode
+                      : "disabled"
+                  }))
+                }
+              />
+              <span>{text.enabled}</span>
+            </label>
+            <label className="policy-field">
+              <span>{text.budgetEnforcement}</span>
+              <select
+                disabled={!draftValues.budgetEnabled}
+                onChange={(event) =>
+                  setDraftValues((current) => ({
+                    ...current,
+                    budgetEnforcementMode:
+                      event.target.value === "block" || event.target.value === "warn"
+                        ? event.target.value
+                        : "disabled"
+                  }))
+                }
+                value={draftValues.budgetEnforcementMode}
+              >
+                <option value="warn">warn</option>
+                <option value="block">block</option>
+                <option value="disabled">disabled</option>
+              </select>
+            </label>
+            <PolicyNumberField
+              label={text.budgetWarning}
+              max={100}
+              min={0}
+              onChange={(value) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  budgetWarningThresholdPercent: value
+                }))
+              }
+              value={draftValues.budgetWarningThresholdPercent}
+            />
+          </article>
+        </div>
+
+        <div
+          aria-labelledby={getPolicyTabId("rateLimit")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "rateLimit"}
+          id={getPolicyPanelId("rateLimit")}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.rateLimit}</h3>
+            </div>
+            <label className="policy-toggle-row">
+              <Switch
+                checked={draftValues.rateLimitEnabled}
+                onCheckedChange={(checked) =>
+                  setDraftValues((current) => ({
+                    ...current,
+                    rateLimitEnabled: checked
+                  }))
+                }
+              />
+              <span>{text.enabled}</span>
+            </label>
+            <PolicyNumberField
+              label={text.limit}
+              max={100000}
+              min={1}
+              onChange={(value) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  rateLimitLimit: value
+                }))
+              }
+              value={draftValues.rateLimitLimit}
+            />
+          </article>
+        </div>
+
+        <div
+          aria-labelledby={getPolicyTabId("cache")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "cache"}
+          id={getPolicyPanelId("cache")}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.cache}</h3>
+            </div>
+            <label className="policy-toggle-row">
+              <Switch
+                checked={draftValues.cacheEnabled}
+                onCheckedChange={(checked) =>
+                  setDraftValues((current) => ({
+                    ...current,
+                    cacheEnabled: checked
+                  }))
+                }
+              />
+              <span>{text.cacheEnabled}</span>
+            </label>
+            <PolicyNumberField
+              label={text.cacheTtl}
+              max={86400}
+              min={1}
+              onChange={(value) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  cacheTtlSeconds: value
+                }))
+              }
+              value={draftValues.cacheTtlSeconds}
+            />
+          </article>
+
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.semanticCache}</h3>
+            </div>
+            <label aria-disabled="true" className="policy-toggle-row">
+              <Switch checked={draftValues.cacheEnabled} disabled readOnly />
+              <span>
                 {draftValues.cacheEnabled
                   ? text.semanticCacheEvidenceOnly
                   : text.semanticCacheDisabled}
-              </dd>
-            </div>
-          </dl>
-          <p className="project-muted">{text.semanticCacheNote}</p>
-        </article>
+              </span>
+            </label>
+            <dl className="policy-summary-list">
+              <div>
+                <dt>{text.mode}</dt>
+                <dd>
+                  {draftValues.cacheEnabled
+                    ? text.semanticCacheEvidenceOnly
+                    : text.semanticCacheDisabled}
+                </dd>
+              </div>
+            </dl>
+            <p className="project-muted">{text.semanticCacheNote}</p>
+          </article>
+        </div>
 
-        <article
-          className="console-panel policy-editor-panel"
-          style={generalSectionStyle}
+        <div
+          aria-labelledby={getPolicyTabId("streaming")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "streaming"}
+          id={getPolicyPanelId("streaming")}
+          role="tabpanel"
+          tabIndex={0}
         >
-          <div className="panel-heading">
-            <h3>{text.activeConfig}</h3>
-          </div>
-          <dl className="policy-summary-list">
-            <div>
-              <dt>{text.configVersion}</dt>
-              <dd>{displayConfig.configVersion}</dd>
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.streaming}</h3>
             </div>
-            <div>
-              <dt>{text.publishedAt}</dt>
-              <dd>{formatDateTime(displayConfig.publishedAt)}</dd>
+            {model.runtimeSnapshot.loadError ? (
+              <Alert variant="warning">
+                <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {model.runtimeSnapshot.snapshot ? (
+              <dl className="policy-summary-list">
+                <div>
+                  <dt>{text.enabled}</dt>
+                  <dd>{formatEnabled(model.runtimeSnapshot.snapshot.policies?.streaming?.enabled)}</dd>
+                </div>
+                <div>
+                  <dt>thin slice</dt>
+                  <dd>
+                    {formatEnabled(
+                      model.runtimeSnapshot.snapshot.policies?.streaming?.thinSliceOnly
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="project-muted">{text.streamingUnavailable}</p>
+            )}
+            <p className="project-muted">{text.streamingNote}</p>
+          </article>
+        </div>
+
+        <div
+          aria-labelledby={getPolicyTabId("providerModel")}
+          className="policy-tab-panel"
+          hidden={activePolicySection !== "providerModel"}
+          id={getPolicyPanelId("providerModel")}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          <article className="console-panel policy-editor-panel wide-panel">
+            <div className="panel-heading">
+              <h3>{text.applicationProviders}</h3>
+              <Button
+                disabled={!hasProviderSelectionChanged || isSavingProviders}
+                onClick={() => void saveApplicationProviders()}
+                type="button"
+                variant="outline"
+              >
+                {isSavingProviders ? text.savingProviders : text.saveProviders}
+              </Button>
             </div>
-          </dl>
-        </article>
+            <p className="project-muted">{text.applicationProvidersHint}</p>
+            {model.providerConnections.loadError ? (
+              <p className="project-muted">{model.providerConnections.loadError}</p>
+            ) : null}
+            <div className="policy-provider-list">
+              {model.providerConnections.available.length === 0 ? (
+                <p className="project-muted">{text.providerConnectionMissing}</p>
+              ) : null}
+              {model.providerConnections.available.map((providerConnection) => {
+                const providerModels = getProviderConnectionModels(providerConnection);
+                const isSelectable = providerModels.length > 0;
+
+                return (
+                  <label
+                    aria-disabled={!isSelectable}
+                    className="policy-provider-option"
+                    data-disabled={!isSelectable}
+                    key={providerConnection.id}
+                  >
+                    <input
+                      checked={selectedProviderIdSet.has(providerConnection.id)}
+                      disabled={!isSelectable || isSavingProviders}
+                      onChange={() => toggleProviderSelection(providerConnection)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>{providerConnection.displayName}</strong>
+                      <small>
+                        {providerConnection.provider}
+                        {" · "}
+                        {isSelectable ? providerModels.join(", ") : text.noProviderModels}
+                      </small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </article>
+
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.configuredModels}</h3>
+            </div>
+            {draftValues.models.length > 0 ? (
+              <dl className="policy-summary-list">
+                {draftValues.models.map((item) => (
+                  <div key={`${item.provider}:${item.model}`}>
+                    <dt>{item.provider}</dt>
+                    <dd>
+                      {item.model} / {item.contextWindowTokens} {text.tokens} /{" "}
+                      {text.jsonMode} {formatEnabled(item.supportsJsonMode)} /{" "}
+                      {text.streaming} {formatEnabled(item.supportsStreaming)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="project-muted">{text.noProviderModels}</p>
+            )}
+          </article>
+
+          <article className="console-panel policy-editor-panel">
+            <div className="panel-heading">
+              <h3>{text.activeConfig}</h3>
+            </div>
+            <dl className="policy-summary-list">
+              <div>
+                <dt>{text.configVersion}</dt>
+                <dd>{displayConfig.configVersion}</dd>
+              </div>
+              <div>
+                <dt>{text.publishedAt}</dt>
+                <dd>{formatDateTime(displayConfig.publishedAt)}</dd>
+              </div>
+            </dl>
+          </article>
+        </div>
       </section>
 
       {isDetailOpen ? (
@@ -1301,8 +1466,8 @@ function RuntimeSnapshotDetail({
         <div>
           <dt>{text.streaming}</dt>
           <dd>
-            {formatEnabled(snapshot.policies.streaming.enabled)} / thin slice{" "}
-            {formatEnabled(snapshot.policies.streaming.thinSliceOnly)}
+            {formatEnabled(snapshot.policies?.streaming?.enabled)} / thin slice{" "}
+            {formatEnabled(snapshot.policies?.streaming?.thinSliceOnly)}
           </dd>
         </div>
       </dl>
@@ -1310,7 +1475,7 @@ function RuntimeSnapshotDetail({
   );
 }
 
-function formatEnabled(value: boolean) {
+function formatEnabled(value?: boolean | null) {
   return value ? "enabled" : "disabled";
 }
 
@@ -1489,9 +1654,14 @@ function DetectorEditor({
   const actionValue = isMandatory ? "block" : detector.action;
 
   return (
-    <div className="policy-detector-row">
+    <div
+      className="policy-detector-row"
+      data-detector-type={detector.type}
+      data-mandatory={isMandatory}
+    >
       <label className="policy-toggle-row">
         <Switch
+          aria-label={`${detector.type} ${labels.enabled}`}
           checked={isMandatory || detector.enabled}
           disabled={isMandatory}
           onCheckedChange={(checked) =>

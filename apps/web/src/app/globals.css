@@ -1732,10 +1732,19 @@ select {
   width: min(100%, 1020px);
   background: transparent;
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 
-.policy-settings-list > .policy-editor-panel {
+.policy-tab-panel {
+  display: block;
+  width: 100%;
+}
+
+.policy-tab-panel[hidden] {
+  display: none;
+}
+
+.policy-settings-list .policy-tab-panel > .policy-editor-panel {
   display: grid;
   grid-template-columns: 195px minmax(0, 1fr);
   column-gap: 40px;
@@ -1749,16 +1758,16 @@ select {
   border-radius: 0;
 }
 
-.policy-settings-list > .policy-editor-panel:last-child {
+.policy-settings-list .policy-tab-panel > .policy-editor-panel:last-child {
   border-bottom: 0;
 }
 
-.policy-settings-list > .policy-editor-panel > .panel-heading {
+.policy-settings-list .policy-tab-panel > .policy-editor-panel > .panel-heading {
   grid-column: 1;
   margin-bottom: 0;
 }
 
-.policy-settings-list > .policy-editor-panel > :not(.panel-heading) {
+.policy-settings-list .policy-tab-panel > .policy-editor-panel > :not(.panel-heading) {
   grid-column: 2;
   width: 100%;
 }
@@ -1946,6 +1955,20 @@ select {
   max-width: none;
 }
 
+.policy-settings-list .policy-detector-row[data-mandatory="true"] [data-slot="switch"] {
+  background: var(--text-muted) !important;
+  border-color: var(--border-strong);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1 !important;
+}
+
+.policy-settings-list
+  .policy-detector-row[data-mandatory="true"]
+  [data-slot="switch"][data-checked] {
+  background: var(--text-muted) !important;
+}
+
 .policy-settings-list .policy-routing-pair:first-child,
 .policy-settings-list .policy-detector-row:first-child {
   padding-top: 0;
@@ -1964,16 +1987,21 @@ select {
 }
 
 .policy-section-tabs {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  width: fit-content;
+  width: 100%;
+  max-width: 100%;
   padding: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
+  scrollbar-width: thin;
 }
 
 .policy-section-tabs button {
+  flex: 0 0 auto;
   min-width: 94px;
   padding: 8px 14px;
   color: var(--text-muted);
@@ -1981,8 +2009,9 @@ select {
   font-weight: var(--font-weight-semibold);
   background: transparent;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .policy-section-tabs button[data-active="true"] {
@@ -6996,14 +7025,14 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
     border-bottom: 0;
   }
 
-  .policy-settings-list > .policy-editor-panel {
+  .policy-settings-list .policy-tab-panel > .policy-editor-panel {
     grid-template-columns: 1fr;
     gap: 14px;
     padding: 22px 0;
   }
 
-  .policy-settings-list > .policy-editor-panel > .panel-heading,
-  .policy-settings-list > .policy-editor-panel > :not(.panel-heading) {
+  .policy-settings-list .policy-tab-panel > .policy-editor-panel > .panel-heading,
+  .policy-settings-list .policy-tab-panel > .policy-editor-panel > :not(.panel-heading) {
     grid-column: 1;
   }
 

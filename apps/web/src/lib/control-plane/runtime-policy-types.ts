@@ -7,6 +7,8 @@ export type RuntimePolicyDetector = {
   type:
     | "email"
     | "phone_number"
+    | "person_name"
+    | "postal_address"
     | "resident_registration_number"
     | "api_key"
     | "authorization_header"
@@ -108,10 +110,10 @@ export type RuntimePolicyConfig = {
     routingPolicyHash: string;
     shortPromptMaxChars: number;
   };
-  safetyPolicy: {
-    detectors: RuntimePolicyDetector[];
-    mode: "rule_based";
-    securityPolicyHash: string;
+  safetyPolicy?: {
+    detectors?: RuntimePolicyDetector[];
+    mode?: "rule_based";
+    securityPolicyHash?: string;
   };
   tenantId: string;
 };
@@ -274,6 +276,69 @@ export type RuntimePolicyModel = {
   source: "control-plane" | "fixture" | "template";
 };
 
+const defaultRuntimePolicyDetectors: RuntimePolicyDetector[] = [
+  {
+    type: "email",
+    enabled: true,
+    action: "redact",
+    placeholder: "[EMAIL_REDACTED]"
+  },
+  {
+    type: "phone_number",
+    enabled: true,
+    action: "redact",
+    placeholder: "[PHONE_NUMBER_REDACTED]"
+  },
+  {
+    type: "person_name",
+    enabled: true,
+    action: "redact",
+    placeholder: "[PERSON_NAME_REDACTED]"
+  },
+  {
+    type: "postal_address",
+    enabled: true,
+    action: "redact",
+    placeholder: "[POSTAL_ADDRESS_REDACTED]"
+  },
+  {
+    type: "organization_name",
+    enabled: true,
+    action: "redact",
+    placeholder: "[ORGANIZATION_NAME_REDACTED]"
+  },
+  {
+    type: "resident_registration_number",
+    enabled: true,
+    action: "block",
+    placeholder: "[RESIDENT_REGISTRATION_NUMBER_REDACTED]"
+  },
+  {
+    type: "api_key",
+    enabled: true,
+    action: "block",
+    placeholder: "[API_KEY_REDACTED]"
+  },
+  {
+    type: "authorization_header",
+    enabled: true,
+    action: "block",
+    placeholder: "[AUTHORIZATION_HEADER_REDACTED]"
+  },
+  {
+    type: "jwt",
+    enabled: true,
+    action: "block",
+    placeholder: "[JWT_REDACTED]"
+  },
+  {
+    type: "private_key",
+    enabled: true,
+    action: "block",
+    placeholder: "[SECRET_REDACTED]"
+  }
+];
+
 export function getRuntimePolicyDraftValues(
   config: RuntimePolicyConfig
 ): RuntimePolicyDraftValues {
@@ -290,7 +355,7 @@ export function getRuntimePolicyDraftValues(
     cacheEnabled: config.cachePolicy.enabled,
     cacheTtlSeconds: config.cachePolicy.ttlSeconds,
     configVersion: config.configVersion,
-    detectors: config.safetyPolicy.detectors.map((detector) => ({ ...detector })),
+    detectors: mergeRuntimePolicyDetectors(config.safetyPolicy?.detectors),
     models: config.models.map((model) => ({ ...model })),
     pricingRules: config.pricingRules.map((rule) => ({
       completionTokenMicroUsd: rule.completionTokenMicroUsd,
@@ -313,6 +378,27 @@ export function getRuntimePolicyDraftValues(
     routingLowCostProvider: config.routingPolicy.lowCostProvider,
     routingShortPromptMaxChars: config.routingPolicy.shortPromptMaxChars
   };
+}
+
+function mergeRuntimePolicyDetectors(
+  detectors?: RuntimePolicyDetector[] | null
+): RuntimePolicyDetector[] {
+  const safeDetectors = detectors ?? [];
+  const configuredByType = new Map(
+    safeDetectors.map((detector) => [detector.type, detector])
+  );
+  const defaultTypes = new Set(
+    defaultRuntimePolicyDetectors.map((detector) => detector.type)
+  );
+  const mergedDefaults = defaultRuntimePolicyDetectors.map((defaultDetector) => ({
+    ...defaultDetector,
+    ...configuredByType.get(defaultDetector.type)
+  }));
+  const configuredExtras = safeDetectors
+    .filter((detector) => !defaultTypes.has(detector.type))
+    .map((detector) => ({ ...detector }));
+
+  return [...mergedDefaults, ...configuredExtras];
 }
 
 export function getDefaultRuntimePolicyBudgetPolicy(): RuntimePolicyBudgetPolicy {

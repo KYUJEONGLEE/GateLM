@@ -2851,6 +2851,24 @@ export class RuntimeConfigsService {
         placeholder: '[PHONE_NUMBER_REDACTED]',
       },
       {
+        type: 'person_name',
+        enabled: true,
+        action: 'redact',
+        placeholder: '[PERSON_NAME_REDACTED]',
+      },
+      {
+        type: 'postal_address',
+        enabled: true,
+        action: 'redact',
+        placeholder: '[POSTAL_ADDRESS_REDACTED]',
+      },
+      {
+        type: 'organization_name',
+        enabled: true,
+        action: 'redact',
+        placeholder: '[ORGANIZATION_NAME_REDACTED]',
+      },
+      {
         type: 'resident_registration_number',
         enabled: true,
         action: 'block',
