@@ -20,6 +20,18 @@ import {
 export const RUNTIME_CONFIG_VERSION_PATTERN = /^[a-zA-Z0-9._-]+$/;
 const RUNTIME_CONFIG_VERSION_MESSAGE =
   'must contain only alphanumeric characters, dashes, underscores, or dots.';
+export const RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES = [
+  'email',
+  'phone_number',
+  'person_name',
+  'postal_address',
+  'organization_name',
+  'resident_registration_number',
+  'api_key',
+  'authorization_header',
+  'jwt',
+  'private_key',
+] as const;
 
 export type RuntimeConfigPublishStateDto =
   | 'draft'
@@ -35,6 +47,8 @@ export type CredentialStatusDto =
 export type ProviderStatusDto = 'active' | 'disabled' | 'degraded';
 export type ModelStatusDto = 'active' | 'disabled';
 export type RuntimeConfigCredentialType = 'api_key' | 'app_token';
+export type RuntimeConfigSafetyDetectorType =
+  (typeof RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES)[number];
 
 export class RuntimeConfigRateLimitDto {
   @IsOptional()
@@ -175,23 +189,8 @@ export class RuntimeConfigRoutingPolicyDto {
 }
 
 export class RuntimeConfigSafetyDetectorDto {
-  @IsIn([
-    'email',
-    'phone_number',
-    'resident_registration_number',
-    'api_key',
-    'authorization_header',
-    'jwt',
-    'private_key',
-  ])
-  type!:
-    | 'email'
-    | 'phone_number'
-    | 'resident_registration_number'
-    | 'api_key'
-    | 'authorization_header'
-    | 'jwt'
-    | 'private_key';
+  @IsIn(RUNTIME_CONFIG_SAFETY_DETECTOR_TYPES)
+  type!: RuntimeConfigSafetyDetectorType;
 
   @IsBoolean()
   enabled!: boolean;
