@@ -158,6 +158,28 @@ export async function upsertProviderConnection(
   }
 }
 
+export async function deleteProviderConnection(provider: string): Promise<ProviderRequestResult> {
+  const tenantId = getControlPlaneTenantId();
+
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(provider)}`,
+      {
+        cache: "no-store",
+        method: "DELETE"
+      }
+    );
+
+    return readProviderResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
 export async function discoverProviderModels(provider: string): Promise<ProviderDiscoveryResult> {
   const tenantId = getControlPlaneTenantId();
 
@@ -231,6 +253,7 @@ export async function removeProviderModel({
       "credentialRequired",
       providerConnection.resolver !== "none"
     ),
+    credentialValue: "",
     displayName: providerConnection.displayName,
     failureMode: getProviderFailureMode(providerConnection.providerConfig),
     isEdit: true,
@@ -364,11 +387,13 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
   const secretRef =
     values.secretRef.trim() ||
     (values.isEdit ? "" : getDefaultProviderSecretRef(values));
+  const credentialValue = values.credentialValue?.trim() ?? "";
 
   return {
     baseUrl: values.baseUrl.trim(),
     credentialLast4: values.credentialLast4.trim() || undefined,
     credentialPrefix: values.credentialPrefix.trim() || undefined,
+    credentialValue: credentialValue || undefined,
     displayName: values.displayName.trim(),
     provider: values.provider.trim(),
     providerConfig,

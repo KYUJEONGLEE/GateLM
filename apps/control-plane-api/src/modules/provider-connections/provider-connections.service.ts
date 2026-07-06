@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ConflictException,
   GatewayTimeoutException,
   Injectable,
   Logger,
@@ -14,6 +15,10 @@ import {
   ResourceStatus,
 } from '@prisma/client';
 
+import {
+  decryptProviderCredential,
+  encryptProviderCredential,
+} from '@/common/security/provider-credential-encryption';
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -43,9 +48,30 @@ type ProviderModelRecord = {
   type?: unknown;
 };
 
+type ProviderCredentialFields = {
+  credentialLast4?: string;
+  credentialPrefix?: string;
+  secretRef?: string;
+};
+
+type ProviderCredentialStoreClient = Pick<
+  PrismaService,
+  '$executeRaw' | '$queryRaw'
+>;
+
+type StoredProviderCredentialRow = {
+  credentialRefId: string;
+  encryptedValue: string;
+  encryptionKeyVersion: string;
+  encryptionNonce: string;
+  encryptionTag: string;
+  status: string;
+};
+
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/;
 const SAFE_CATALOG_TOKEN_PATTERN = /^[a-z][a-z0-9_:-]{0,79}$/;
 const SAFE_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,127}$/;
+const PROVIDED_CREDENTIAL_PREFIX = 'provided_';
 const FORBIDDEN_BASE_URL_QUERY_KEYS = new Set([
   'api_key',
   'api-key',
@@ -73,38 +99,52 @@ export class ProviderConnectionsService {
   ): Promise<ProviderResponseDto> {
     const project = await this.getProjectOrThrow(projectId);
     const providerConfig = this.toJsonObject(dto.providerConfig);
-    const optionalCredentialUpdate = this.toOptionalCredentialUpdate(dto);
+    const credentialValue = this.toCredentialValue(dto);
+    const optionalCredentialUpdate = credentialValue
+      ? {}
+      : this.toCredentialUpdate(dto);
 
-    const providerConnection = await this.prisma.providerConnection.upsert({
-      where: {
-        projectId_provider: {
-          projectId,
-          provider: dto.provider,
+    const providerConnection = await this.prisma.$transaction(async (tx) => {
+      const savedProviderConnection = await tx.providerConnection.upsert({
+        where: {
+          projectId_provider: {
+            projectId,
+            provider: dto.provider,
+          },
         },
-      },
-      create: {
-        tenantId: project.tenantId,
-        projectId: project.id,
-        provider: dto.provider,
-        displayName: dto.displayName,
-        status: dto.status,
-        baseUrl: dto.baseUrl,
-        timeoutMs: dto.timeoutMs,
-        secretRef: dto.secretRef,
-        credentialPrefix: dto.credentialPrefix,
-        credentialLast4: dto.credentialLast4,
-        resolver: dto.resolver,
-        providerConfig,
-      },
-      update: {
-        displayName: dto.displayName,
-        status: dto.status,
-        baseUrl: dto.baseUrl,
-        timeoutMs: dto.timeoutMs,
-        resolver: dto.resolver,
-        providerConfig,
-        ...optionalCredentialUpdate,
-      },
+        create: {
+          tenantId: project.tenantId,
+          projectId: project.id,
+          provider: dto.provider,
+          displayName: dto.displayName,
+          status: dto.status,
+          baseUrl: dto.baseUrl,
+          timeoutMs: dto.timeoutMs,
+          ...optionalCredentialUpdate,
+          resolver: dto.resolver,
+          providerConfig,
+        },
+        update: {
+          displayName: dto.displayName,
+          status: dto.status,
+          baseUrl: dto.baseUrl,
+          timeoutMs: dto.timeoutMs,
+          resolver: dto.resolver,
+          providerConfig,
+          ...optionalCredentialUpdate,
+        },
+      });
+
+      if (!credentialValue) {
+        return savedProviderConnection;
+      }
+
+      return this.attachStoredProviderCredential(
+        tx as unknown as ProviderCredentialStoreClient,
+        savedProviderConnection,
+        dto,
+        credentialValue,
+      );
     });
 
     return this.toProviderResponse(providerConnection);
@@ -116,7 +156,10 @@ export class ProviderConnectionsService {
   ): Promise<ProviderResponseDto> {
     const tenant = await this.getTenantOrThrow(tenantId);
     const providerConfig = this.toJsonObject(dto.providerConfig);
-    const optionalCredentialUpdate = this.toOptionalCredentialUpdate(dto);
+    const credentialValue = this.toCredentialValue(dto);
+    const optionalCredentialUpdate = credentialValue
+      ? {}
+      : this.toCredentialUpdate(dto);
 
     const providerConnection = await this.prisma.$transaction(async (tx) => {
       const existingProvider = await tx.providerConnection.findFirst({
@@ -128,7 +171,7 @@ export class ProviderConnectionsService {
       });
 
       if (existingProvider) {
-        return tx.providerConnection.update({
+        const savedProviderConnection = await tx.providerConnection.update({
           where: { id: existingProvider.id },
           data: {
             displayName: dto.displayName,
@@ -140,9 +183,20 @@ export class ProviderConnectionsService {
             ...optionalCredentialUpdate,
           },
         });
+
+        if (!credentialValue) {
+          return savedProviderConnection;
+        }
+
+        return this.attachStoredProviderCredential(
+          tx as unknown as ProviderCredentialStoreClient,
+          savedProviderConnection,
+          dto,
+          credentialValue,
+        );
       }
 
-      return tx.providerConnection.create({
+      const savedProviderConnection = await tx.providerConnection.create({
         data: {
           tenantId: tenant.id,
           projectId: null,
@@ -151,13 +205,22 @@ export class ProviderConnectionsService {
           status: dto.status,
           baseUrl: dto.baseUrl,
           timeoutMs: dto.timeoutMs,
-          secretRef: dto.secretRef,
-          credentialPrefix: dto.credentialPrefix,
-          credentialLast4: dto.credentialLast4,
+          ...optionalCredentialUpdate,
           resolver: dto.resolver,
           providerConfig,
         },
       });
+
+      if (!credentialValue) {
+        return savedProviderConnection;
+      }
+
+      return this.attachStoredProviderCredential(
+        tx as unknown as ProviderCredentialStoreClient,
+        savedProviderConnection,
+        dto,
+        credentialValue,
+      );
     });
 
     return this.toProviderResponse(providerConnection);
@@ -213,6 +276,47 @@ export class ProviderConnectionsService {
         hasMore,
       },
     };
+  }
+
+  async deleteTenantProvider(
+    tenantId: string,
+    provider: string,
+  ): Promise<ProviderResponseDto> {
+    const tenant = await this.getTenantOrThrow(tenantId);
+    const providerKey = this.toProviderKeyOrThrow(provider);
+
+    const deletedProviderConnection = await this.prisma.$transaction(
+      async (tx) => {
+        const providerConnection = await tx.providerConnection.findFirst({
+          where: {
+            tenantId: tenant.id,
+            provider: providerKey,
+            projectId: null,
+          },
+        });
+
+        if (!providerConnection) {
+          throw new NotFoundException('Provider connection not found.');
+        }
+
+        const applicationConnectionCount =
+          await tx.applicationProviderConnection.count({
+            where: { providerConnectionId: providerConnection.id },
+          });
+
+        if (applicationConnectionCount > 0) {
+          throw new ConflictException(
+            'Provider connection is assigned to an application and cannot be deleted.',
+          );
+        }
+
+        return tx.providerConnection.delete({
+          where: { id: providerConnection.id },
+        });
+      },
+    );
+
+    return this.toProviderResponse(deletedProviderConnection);
   }
 
   async listApplicationProviders(
@@ -343,7 +447,7 @@ export class ProviderConnectionsService {
       adapterType,
     );
     const credential = credentialRequired
-      ? this.resolveProviderCredential(providerConnection)
+      ? await this.resolveProviderCredential(providerConnection)
       : null;
     const endpoint = this.toModelsEndpoint(providerConnection);
     const payload = await this.fetchProviderModels({
@@ -419,7 +523,7 @@ export class ProviderConnectionsService {
       adapterType,
     );
     const credential = credentialRequired
-      ? this.resolveProviderCredential(providerConnection)
+      ? await this.resolveProviderCredential(providerConnection)
       : null;
     const endpoint = this.toModelsEndpoint(providerConnection);
     const payload = await this.fetchProviderModels({
@@ -514,16 +618,21 @@ export class ProviderConnectionsService {
     return adapterType !== 'mock';
   }
 
-  private resolveProviderCredential(
+  private async resolveProviderCredential(
     providerConnection: ProviderConnection,
-  ): string {
-    if (providerConnection.resolver.trim().toLowerCase() !== 'environment') {
-      throw new BadRequestException(
-        'Provider model discovery supports environment credential references only.',
-      );
+  ): Promise<string> {
+    const credentialRefs = this.toCredentialRefCandidates(providerConnection);
+    const storedCredential =
+      await this.resolveStoredProviderCredential(credentialRefs);
+
+    if (storedCredential) {
+      return storedCredential;
     }
 
-    const credentialRefs = this.toCredentialRefCandidates(providerConnection);
+    return this.resolveEnvironmentProviderCredential(credentialRefs);
+  }
+
+  private resolveEnvironmentProviderCredential(credentialRefs: string[]): string {
     const bindings = this.parseCredentialEnvMap(
       process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP?.trim() ||
         process.env.GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP?.trim() ||
@@ -559,6 +668,56 @@ export class ProviderConnectionsService {
     throw new BadRequestException(
       'Provider credential reference is not bound to an available environment variable.',
     );
+  }
+
+  private async resolveStoredProviderCredential(
+    credentialRefs: string[],
+  ): Promise<string | null> {
+    if (credentialRefs.length === 0) {
+      return null;
+    }
+
+    const credentialRefList = Prisma.join(credentialRefs);
+    const rows = await this.prisma.$queryRaw<StoredProviderCredentialRow[]>(
+      Prisma.sql`
+        SELECT
+          "credentialRefId",
+          status::text AS status,
+          "encryptedValue",
+          "encryptionNonce",
+          "encryptionTag",
+          "encryptionKeyVersion"
+        FROM "provider_credentials"
+        WHERE "credentialRefId" IN (${credentialRefList})
+        ORDER BY array_position(ARRAY[${credentialRefList}]::text[], "credentialRefId")
+        LIMIT 1
+      `,
+    );
+    const row = rows[0];
+
+    if (!row) {
+      return null;
+    }
+
+    if (row.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        'Provider credential reference is not active.',
+      );
+    }
+
+    try {
+      return decryptProviderCredential({
+        credentialRefId: row.credentialRefId,
+        encryptedValue: row.encryptedValue,
+        encryptionNonce: row.encryptionNonce,
+        encryptionTag: row.encryptionTag,
+        encryptionKeyVersion: row.encryptionKeyVersion,
+      });
+    } catch {
+      throw new BadRequestException(
+        'Provider credential reference could not be resolved.',
+      );
+    }
   }
 
   private toCredentialRefCandidates(
@@ -834,16 +993,20 @@ export class ProviderConnectionsService {
     return code;
   }
 
-  private toOptionalCredentialUpdate(
+  private toCredentialUpdate(
     dto: UpsertProviderDto,
-  ): Pick<
-    Prisma.ProviderConnectionUpdateInput,
-    'secretRef' | 'credentialPrefix' | 'credentialLast4'
-  > {
-    const update: Pick<
-      Prisma.ProviderConnectionUpdateInput,
-      'secretRef' | 'credentialPrefix' | 'credentialLast4'
-    > = {};
+  ): ProviderCredentialFields {
+    const update: ProviderCredentialFields = {};
+    const credentialValue = dto.credentialValue?.trim();
+
+    if (credentialValue) {
+      if (dto.secretRef !== undefined) {
+        update.secretRef = dto.secretRef;
+      }
+      update.credentialPrefix = PROVIDED_CREDENTIAL_PREFIX;
+      update.credentialLast4 = this.toCredentialLast4(credentialValue);
+      return update;
+    }
 
     if (dto.secretRef !== undefined) {
       update.secretRef = dto.secretRef;
@@ -856,6 +1019,122 @@ export class ProviderConnectionsService {
     }
 
     return update;
+  }
+
+  private async attachStoredProviderCredential(
+    tx: ProviderCredentialStoreClient,
+    providerConnection: ProviderConnection,
+    dto: UpsertProviderDto,
+    credentialValue: string,
+  ): Promise<ProviderConnection> {
+    const credentialRefId = this.toStoredCredentialRefId(providerConnection, dto);
+    const credentialPrefix = PROVIDED_CREDENTIAL_PREFIX;
+    const credentialLast4 = this.toCredentialLast4(credentialValue);
+
+    await this.upsertEncryptedProviderCredential(tx, {
+      credentialLast4,
+      credentialPrefix,
+      credentialRefId,
+      credentialValue,
+      providerConnectionId: providerConnection.id,
+      tenantId: providerConnection.tenantId,
+    });
+
+    return (tx as unknown as Prisma.TransactionClient).providerConnection.update({
+      where: { id: providerConnection.id },
+      data: {
+        credentialLast4,
+        credentialPrefix,
+        resolver: 'credential_store',
+        secretRef: credentialRefId,
+      },
+    });
+  }
+
+  private async upsertEncryptedProviderCredential(
+    tx: ProviderCredentialStoreClient,
+    args: {
+      credentialLast4: string;
+      credentialPrefix: string;
+      credentialRefId: string;
+      credentialValue: string;
+      providerConnectionId: string;
+      tenantId: string;
+    },
+  ): Promise<void> {
+    let encryptedCredential: ReturnType<typeof encryptProviderCredential>;
+
+    try {
+      encryptedCredential = encryptProviderCredential(
+        args.credentialValue,
+        args.credentialRefId,
+      );
+    } catch {
+      throw new BadRequestException(
+        'Provider credential encryption backend is not configured.',
+      );
+    }
+
+    await tx.$executeRaw`
+      INSERT INTO "provider_credentials" (
+        "id",
+        "tenantId",
+        "providerConnectionId",
+        "credentialRefId",
+        "status",
+        "encryptedValue",
+        "encryptionNonce",
+        "encryptionTag",
+        "encryptionKeyVersion",
+        "credentialPrefix",
+        "credentialLast4",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        gen_random_uuid(),
+        ${args.tenantId}::uuid,
+        ${args.providerConnectionId}::uuid,
+        ${args.credentialRefId},
+        'ACTIVE'::"CredentialStatus",
+        ${encryptedCredential.encryptedValue},
+        ${encryptedCredential.encryptionNonce},
+        ${encryptedCredential.encryptionTag},
+        ${encryptedCredential.encryptionKeyVersion},
+        ${args.credentialPrefix},
+        ${args.credentialLast4},
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT ("credentialRefId") DO UPDATE SET
+        "tenantId" = EXCLUDED."tenantId",
+        "providerConnectionId" = EXCLUDED."providerConnectionId",
+        "status" = 'ACTIVE'::"CredentialStatus",
+        "encryptedValue" = EXCLUDED."encryptedValue",
+        "encryptionNonce" = EXCLUDED."encryptionNonce",
+        "encryptionTag" = EXCLUDED."encryptionTag",
+        "encryptionKeyVersion" = EXCLUDED."encryptionKeyVersion",
+        "credentialPrefix" = EXCLUDED."credentialPrefix",
+        "credentialLast4" = EXCLUDED."credentialLast4",
+        "rotatedAt" = CURRENT_TIMESTAMP,
+        "revokedAt" = NULL,
+        "updatedAt" = CURRENT_TIMESTAMP
+    `;
+  }
+
+  private toStoredCredentialRefId(
+    providerConnection: ProviderConnection,
+    dto: UpsertProviderDto,
+  ): string {
+    return dto.secretRef?.trim() || `provider_credential:${providerConnection.id}`;
+  }
+
+  private toCredentialValue(dto: UpsertProviderDto): string | null {
+    return dto.credentialValue?.trim() || null;
+  }
+
+  private toCredentialLast4(credentialValue: string): string {
+    return credentialValue.length >= 4 ? credentialValue.slice(-4) : '****';
   }
 
   private toJsonObject(

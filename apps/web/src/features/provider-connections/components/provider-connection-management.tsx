@@ -1,6 +1,6 @@
 "use client";
 
-import { PlugZap, Save } from "lucide-react";
+import { PlugZap, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -53,6 +53,7 @@ const emptyProviderForm: ProviderConnectionFormValues = {
   credentialRequired: true,
   credentialLast4: "",
   credentialPrefix: "",
+  credentialValue: "",
   displayName: "",
   failureMode: "fail_closed",
   models: "",
@@ -73,9 +74,12 @@ const providerText: Record<
     baseUrl: string;
     created: string;
     credential: string;
+    deleteProvider: string;
     credentialRequired: string;
     credentialLast4: string;
     credentialPrefix: string;
+    credentialValue: string;
+    credentialValuePlaceholder: string;
     displayName: string;
     discoverModels: string;
     discoveryOpenAiOnly: string;
@@ -104,6 +108,7 @@ const providerText: Record<
 > = {
   en: {
     adapterType: "Adapter type",
+    deleteProvider: "Delete",
     apiVersion: "API version",
     baseUrl: "Base URL",
     created: "Created",
@@ -111,6 +116,8 @@ const providerText: Record<
     credentialRequired: "Credential required",
     credentialLast4: "Credential last 4",
     credentialPrefix: "Credential prefix",
+    credentialValue: "API key registration",
+    credentialValuePlaceholder: "Paste provider API key",
     displayName: "Display name",
     discoverModels: "Discover models",
     discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible and Anthropic providers.",
@@ -138,6 +145,7 @@ const providerText: Record<
   },
   ko: {
     adapterType: "Adapter type",
+    deleteProvider: "삭제",
     apiVersion: "API version",
     baseUrl: "Base URL",
     created: "생성",
@@ -145,6 +153,8 @@ const providerText: Record<
     credentialRequired: "Credential required",
     credentialLast4: "Credential last 4",
     credentialPrefix: "Credential prefix",
+    credentialValue: "API key 등록",
+    credentialValuePlaceholder: "Provider API key 입력",
     displayName: "표시 이름",
     discoverModels: "모델 조회",
     discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 및 Anthropic Provider에서 활성화됩니다.",
@@ -224,6 +234,10 @@ export function ProviderConnectionManagement({
     const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
 
     if (!response.ok || !payload.provider) {
+      setFormValues((current) => ({
+        ...current,
+        credentialValue: ""
+      }));
       setSubmitState({
         message: payload.error ?? "Provider registration failed.",
         status: "error"
@@ -434,6 +448,81 @@ export function ProviderConnectionManagement({
     setSubmitState({ message: "", status: "idle" });
   }
 
+  async function deleteProvider(provider: ProviderConnectionRecord) {
+    if (!canDeleteProvider(provider, model.source)) {
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? "Tenant-level provider만 삭제할 수 있습니다."
+            : "Only tenant-level provider connections can be deleted.",
+        status: "error"
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      locale === "ko"
+        ? `${provider.displayName} provider connection을 삭제할까요? Application에 연결되어 있으면 삭제되지 않습니다.`
+        : `Delete ${provider.displayName}? Provider connections assigned to applications cannot be deleted.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingAction(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/provider-connections", {
+      body: JSON.stringify({
+        action: "delete-provider",
+        values: {
+          provider: provider.provider
+        }
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
+
+    if (!response.ok || !payload.provider) {
+      setSubmitState({
+        message: payload.error ?? "Provider deletion failed.",
+        status: "error"
+      });
+      setPendingAction(false);
+      return;
+    }
+
+    const deletedProvider = payload.provider;
+
+    setProviders((current) => current.filter((item) => item.id !== deletedProvider.id));
+    setModelOptionsByProvider((current) => {
+      const next = { ...current };
+      delete next[deletedProvider.provider];
+      return next;
+    });
+    setDiscoveryByProvider((current) => {
+      const next = { ...current };
+      delete next[deletedProvider.provider];
+      return next;
+    });
+    if (formValues.provider === deletedProvider.provider) {
+      setFormValues(emptyProviderForm);
+    }
+    setSubmitState({
+      message:
+        locale === "ko"
+          ? `${deletedProvider.provider} provider를 삭제했습니다.`
+          : `Deleted provider ${deletedProvider.provider}.`,
+      status: "success"
+    });
+    setPendingAction(false);
+    router.refresh();
+  }
+
   function applyProviderPreset(providerKey: string) {
     const preset = model.providerPresets.items.find((item) => item.providerKey === providerKey);
 
@@ -626,6 +715,22 @@ export function ProviderConnectionManagement({
             </div>
           </div>
           <label className="policy-field provider-wide-field">
+            <span>{text.credentialValue}</span>
+            <input
+              autoComplete="off"
+              maxLength={8192}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  credentialValue: event.target.value
+                }))
+              }
+              placeholder={text.credentialValuePlaceholder}
+              type="password"
+              value={formValues.credentialValue}
+            />
+          </label>
+          <label className="policy-field provider-wide-field">
             <span>{locale === "ko" ? "사용 모델 선택" : "Model selection"}</span>
             <div className="provider-model-selection">
               {availableModels.length > 0 ? (
@@ -791,6 +896,26 @@ export function ProviderConnectionManagement({
                                 ? "..."
                                 : text.discoverModels}
                             </Button>
+                            <Button
+                              disabled={
+                                pendingAction ||
+                                discoveringProvider !== null ||
+                                !canDeleteProvider(provider, model.source)
+                              }
+                              onClick={() => void deleteProvider(provider)}
+                              title={
+                                canDeleteProvider(provider, model.source)
+                                  ? text.deleteProvider
+                                  : locale === "ko"
+                                    ? "Tenant-level provider만 삭제할 수 있습니다."
+                                    : "Only tenant-level provider connections can be deleted."
+                              }
+                              type="button"
+                              variant="destructive"
+                            >
+                              <Trash2 aria-hidden="true" />
+                              {text.deleteProvider}
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -895,6 +1020,7 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     ),
     credentialLast4: nullableText(provider.credentialPreview?.last4, ""),
     credentialPrefix: nullableText(provider.credentialPreview?.prefix, ""),
+    credentialValue: "",
     displayName: provider.displayName,
     failureMode: getProviderConfigFailureMode(providerConfig),
     models: getProviderConfigModels(provider.providerConfig)
@@ -962,6 +1088,13 @@ function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: s
   const normalizedProvider = provider.trim();
 
   return providers.some((item) => item.provider === normalizedProvider);
+}
+
+function canDeleteProvider(
+  provider: ProviderConnectionRecord,
+  source: ProviderConnectionsModel["source"]
+) {
+  return source === "control-plane" && provider.projectId === null;
 }
 
 const nonChatModelNameTokens = [

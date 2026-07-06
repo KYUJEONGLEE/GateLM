@@ -107,6 +107,8 @@ function readSmtpTlsMode(env: RawEnv): string | undefined {
 
 export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
   const emailTransport = readEmailTransport(config);
+  const defaultDevAutoVerify =
+    emailTransport === 'dev_memory' ? 'true' : 'false';
   if (emailTransport === 'smtp') {
     requireString(config, 'SMTP_HOST');
     requireString(config, 'SMTP_FROM');
@@ -126,7 +128,8 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     CONTROL_PLANE_AUTH_COOKIE_SECURE:
       readBooleanString(config, 'CONTROL_PLANE_AUTH_COOKIE_SECURE') ?? 'false',
     CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY:
-      readBooleanString(config, 'CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY') ?? 'false',
+      readBooleanString(config, 'CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY') ??
+      defaultDevAutoVerify,
     DATABASE_URL: requireString(config, 'DATABASE_URL'),
     CONTROL_PLANE_WEB_ORIGIN:
       config.CONTROL_PLANE_WEB_ORIGIN ?? DEFAULT_CONTROL_PLANE_WEB_ORIGIN,

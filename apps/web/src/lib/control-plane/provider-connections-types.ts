@@ -59,6 +59,7 @@ export type ProviderConnectionFormValues = {
   apiVersion: string;
   baseUrl: string;
   credentialRequired: boolean;
+  credentialValue?: string;
   credentialLast4: string;
   credentialPrefix: string;
   displayName: string;

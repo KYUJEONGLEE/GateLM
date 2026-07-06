@@ -230,6 +230,16 @@ export function ApplicationManagement({
       return;
     }
 
+    const createBudgetUsd = getApplicationBudgetLimitUsd(createValues, projectBudgetUsd);
+
+    if (createBudgetUsd > remainingBudgetUsd) {
+      setSubmitState({
+        message: formatApplicationBudgetConflictMessage(remainingBudgetUsd),
+        status: "error"
+      });
+      return;
+    }
+
     setPendingAction("create");
     setSubmitState({ message: "", status: "idle" });
 
@@ -334,6 +344,23 @@ export function ApplicationManagement({
       setSubmitState({
         message:
           locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
+        status: "error"
+      });
+      return;
+    }
+
+    const currentApplication = applications.find((application) => application.id === applicationId);
+    const currentBudgetUsd =
+      currentApplication && currentApplication.status !== "ARCHIVED"
+        ? currentApplication.effectiveBudgetLimitUsd
+        : 0;
+    const availableBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd + currentBudgetUsd);
+    const nextBudgetUsd =
+      values.status === "ARCHIVED" ? 0 : getApplicationBudgetLimitUsd(values, projectBudgetUsd);
+
+    if (nextBudgetUsd > availableBudgetUsd) {
+      setSubmitState({
+        message: formatApplicationBudgetConflictMessage(availableBudgetUsd),
         status: "error"
       });
       return;
@@ -752,6 +779,26 @@ function isValidApplicationBudgetValues(values: ApplicationFormValues) {
   }
 
   return Number.isFinite(values.budgetLimitUsd) && values.budgetLimitUsd >= 0;
+}
+
+function getApplicationBudgetLimitUsd(
+  values: Pick<
+    ApplicationFormValues,
+    "budgetLimitMode" | "budgetLimitPercent" | "budgetLimitUsd"
+  >,
+  projectBudgetUsd: number
+) {
+  if (values.budgetLimitMode === "PERCENT") {
+    return (projectBudgetUsd * values.budgetLimitPercent) / 100;
+  }
+
+  return values.budgetLimitUsd;
+}
+
+function formatApplicationBudgetConflictMessage(availableBudgetUsd: number) {
+  return `Application budget exceeds remaining project budget (${formatBudgetUsd(
+    availableBudgetUsd
+  )} available).`;
 }
 
 function ApplicationBudgetFields({
