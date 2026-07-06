@@ -1,6 +1,6 @@
-import controlPlaneAdminApiFixture from "../../../../../docs/archive/v1.0.0/fixtures/control-plane-admin-api.fixture.json";
-import credentialLifecycleFixture from "../../../../../docs/archive/v1.0.0/fixtures/credential-lifecycle.fixture.json";
-import runtimeConfigFixture from "../../../../../docs/archive/v1.0.0/fixtures/runtime-config.fixture.json";
+import controlPlaneAdminApiFixture from "@/lib/fixtures/legacy-v1/control-plane-admin-api.fixture.json";
+import credentialLifecycleFixture from "@/lib/fixtures/legacy-v1/credential-lifecycle.fixture.json";
+import runtimeConfigFixture from "@/lib/fixtures/legacy-v1/runtime-config.fixture.json";
 
 export type AdminEndpoint = {
   operationId: string;

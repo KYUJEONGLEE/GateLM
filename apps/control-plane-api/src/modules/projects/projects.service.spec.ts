@@ -39,7 +39,9 @@ describe('ProjectsService', () => {
         create: jest.fn(),
       },
     };
-    prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+    prisma.$transaction.mockImplementation(async (arg) =>
+      typeof arg === 'function' ? arg(prisma) : Promise.all(arg),
+    );
 
     return {
       service: new ProjectsService(prisma as unknown as PrismaService),

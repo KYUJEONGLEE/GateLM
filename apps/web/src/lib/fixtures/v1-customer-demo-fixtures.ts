@@ -1,5 +1,5 @@
-import credentialLifecycleFixture from "../../../../../docs/archive/v1.0.0/fixtures/credential-lifecycle.fixture.json";
-import runtimeConfigFixture from "../../../../../docs/archive/v1.0.0/fixtures/runtime-config.fixture.json";
+import credentialLifecycleFixture from "@/lib/fixtures/legacy-v1/credential-lifecycle.fixture.json";
+import runtimeConfigFixture from "@/lib/fixtures/legacy-v1/runtime-config.fixture.json";
 import type {
   CustomerDemoExchange,
   CustomerDemoHeader,

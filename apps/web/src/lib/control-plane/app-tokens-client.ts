@@ -1,6 +1,6 @@
 import "server-only";
 
-import credentialLifecycleFixture from "../../../../../docs/archive/v1.0.0/fixtures/credential-lifecycle.fixture.json";
+import credentialLifecycleFixture from "@/lib/fixtures/legacy-v1/credential-lifecycle.fixture.json";
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl
