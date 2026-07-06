@@ -89,7 +89,11 @@ test("console brand link keeps authenticated users on the landing page", async (
 
   const topbar = page.getByRole("navigation", { exact: true, name: "GateLM landing navigation" });
   await expect(topbar).toBeVisible();
-  await expect(topbar.locator(".landing-top-actions .landing-auth-button")).toHaveCount(1);
+  await expect(topbar.locator(".landing-top-actions .landing-auth-button")).toHaveCount(2);
+  await expect(topbar.getByRole("link", { name: /Open Dashboard|대시보드 열기/ })).toHaveAttribute(
+    "href",
+    dashboardPath
+  );
   await expect(page).toHaveURL(/\/$/);
 });
 
@@ -114,11 +118,19 @@ test("anonymous landing topbar exposes gateway request and login actions without
   await expect(topbar.getByRole("button", { name: /Logout|로그아웃/ })).toBeHidden();
 });
 
-test("authenticated landing topbar shows only logout and returns to login actions after logout", async ({
+test("authenticated landing topbar shows dashboard and logout actions before logout", async ({
   page
 }) => {
   await prepareFullSessionRoute(page);
+  let completeLogout: (() => void) | undefined;
+  const logoutCompleted = new Promise<void>((resolve) => {
+    completeLogout = resolve;
+  });
+  let logoutRequestCount = 0;
+
   await page.route("**/api/auth/logout", async (route) => {
+    logoutRequestCount += 1;
+    await logoutCompleted;
     await route.fulfill({
       body: "",
       status: 204
@@ -129,15 +141,26 @@ test("authenticated landing topbar shows only logout and returns to login action
 
   const topbar = page.getByRole("navigation", { exact: true, name: "GateLM landing navigation" });
   const authButtons = topbar.locator(".landing-top-actions .landing-auth-button");
-  await expect(authButtons).toHaveCount(1);
+  const dashboardLink = topbar.getByRole("link", { name: /Open Dashboard|대시보드 열기/ });
+  const logoutButton = topbar.getByRole("button", { name: /Logout|로그아웃/ });
+
+  await expect(authButtons).toHaveCount(2);
+  await expect(dashboardLink).toHaveAttribute("href", dashboardPath);
 
   const logoutRequest = page.waitForRequest(
     (request) => request.url().includes("/api/auth/logout") && request.method() === "POST"
   );
-  const logoutButton = topbar.getByRole("button", { name: /Logout|로그아웃/ });
+  const logoutResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/auth/logout") && response.request().method() === "POST"
+  );
   await logoutButton.click();
   await logoutRequest;
 
-  await expect(authButtons).toHaveCount(2);
   await expect(logoutButton).toBeHidden();
+  await expect(dashboardLink).toBeHidden();
+  await expect(authButtons).toHaveCount(2);
+  await expect.poll(() => logoutRequestCount).toBe(1);
+
+  completeLogout?.();
+  await logoutResponse;
 });

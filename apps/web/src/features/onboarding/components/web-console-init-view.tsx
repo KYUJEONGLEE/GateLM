@@ -537,12 +537,12 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     setIsAuthPanelOpen(false);
     setAuthError(null);
     setAuthNotice(null);
+    setAuthStatus("anonymous");
+    window.history.replaceState(null, "", "/");
     await fetch("/api/auth/logout", {
       credentials: "include",
       method: "POST"
     }).catch(() => undefined);
-    setAuthStatus("anonymous");
-    window.history.replaceState(null, "", "/");
   }
 
   function completeAuth() {
@@ -661,10 +661,16 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         <div className="landing-top-actions">
           <LanguageSwitcher ariaLabel={text.language} locale={locale} />
           {authStatus === "authenticated" ? (
-            <button className="landing-auth-button" onClick={logout} type="button">
-              <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
-              <span>{text.actions.logout}</span>
-            </button>
+            <>
+              <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
+                <Route aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.dashboard}</span>
+              </Link>
+              <button className="landing-auth-button" onClick={logout} type="button">
+                <LogOut aria-hidden="true" size={17} strokeWidth={2.4} />
+                <span>{text.actions.logout}</span>
+              </button>
+            </>
           ) : null}
           {authStatus === "anonymous" ? (
             <>
