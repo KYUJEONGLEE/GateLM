@@ -121,12 +121,14 @@ export async function POST(request: Request) {
 
   const scenarioId = payload.scenarioId;
   const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+  const streamRequested =
+    payload.stream && (payload.surface !== "application" || (model.applicationChatStreamingEnabled ?? true));
 
   if (!scenario) {
     return NextResponse.json({ error: "Customer demo scenario is not configured." }, { status: 404 });
   }
 
-  if (payload.stream && payload.surface === "application") {
+  if (streamRequested && payload.surface === "application") {
     return streamLiveScenario({
       model,
       payload,
@@ -138,7 +140,7 @@ export async function POST(request: Request) {
   try {
     const gatewayResult = await executeLiveScenario(
       scenarioId,
-      payload.stream,
+      streamRequested,
       payload.message,
       payload.surface,
       payload.conversationId,
