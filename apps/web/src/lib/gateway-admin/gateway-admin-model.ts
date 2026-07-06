@@ -259,6 +259,7 @@ function buildProjectUsageRows(
       description: null,
       id: projectId,
       name: "Unknown project",
+      runtimeApplicationId: null,
       status: "ACTIVE" as const,
       tenantId: "",
       totalBudgetUsd: 0,

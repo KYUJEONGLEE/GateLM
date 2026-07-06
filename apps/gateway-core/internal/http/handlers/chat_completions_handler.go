@@ -3557,9 +3557,18 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	}
 
 	reqCtx.APIKeyID = apiKeyIdentity.APIKeyID
-	reqCtx.TenantID = apiKeyIdentity.TenantID
-	reqCtx.ProjectID = apiKeyIdentity.ProjectID
-	reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
+	if err := mergeAuthenticatedScope(&reqCtx.TenantID, apiKeyIdentity.TenantID); err != nil {
+		return err
+	}
+	if err := mergeAuthenticatedScope(&reqCtx.ProjectID, apiKeyIdentity.ProjectID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(apiKeyIdentity.ApplicationID) == "" {
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway default application is not configured for this project.", nil)
+	}
+	if err := mergeAuthenticatedScope(&reqCtx.ApplicationID, apiKeyIdentity.ApplicationID); err != nil {
+		return err
+	}
 	if reqCtx.ApplicationID == "" {
 		return gatewayerrors.InternalError(authenticate.StageName, "Gateway default application is not configured for this project.", nil)
 	}
@@ -3575,6 +3584,25 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	}
 	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
 
+	return nil
+}
+
+func mergeAuthenticatedScope(current *string, authenticated string) error {
+	next := strings.TrimSpace(authenticated)
+	if next == "" {
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway API key scope is incomplete.", nil)
+	}
+
+	existing := strings.TrimSpace(*current)
+	if existing == "" {
+		*current = next
+		return nil
+	}
+	if existing != next {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+
+	*current = existing
 	return nil
 }
 

@@ -1,7 +1,6 @@
 import "server-only";
 
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
-import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import {
   getControlPlaneBaseUrl,
   getControlPlaneTenantId
@@ -96,22 +95,17 @@ export async function createProject(values: ProjectFormValues): Promise<ProjectR
       return result;
     }
 
-    const applicationsModel = await getApplicationsModel(tenantId, result.data.id);
-    const runtimeApplication =
-      applicationsModel.source === "control-plane"
-        ? applicationsModel.applications.find((application) => application.status === "ACTIVE") ??
-          applicationsModel.applications.find((application) => application.status !== "ARCHIVED")
-        : null;
+    const runtimeApplicationId = result.data.runtimeApplicationId;
 
-    if (!runtimeApplication) {
+    if (!runtimeApplicationId) {
       return {
         ...result,
-        policyError: applicationsModel.loadError ?? "Runtime boundary was not created."
+        policyError: "Runtime boundary was not created."
       };
     }
 
     const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
-      runtimeApplication.id,
+      runtimeApplicationId,
       values.selectedModelKey,
       {
         warningThresholdPercent: values.warningThresholdPercent
@@ -303,6 +297,7 @@ function getFixtureProject(): ProjectRecord {
     description: "Customer support Gateway project from the v1 runtime config fixture.",
     id: runtimeConfig.projectId,
     name: "Customer Support",
+    runtimeApplicationId: null,
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
     totalBudgetUsd: 100,
@@ -334,6 +329,10 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     id: record.id,
     name: record.name,
+    runtimeApplicationId:
+      typeof record.runtimeApplicationId === "string" && record.runtimeApplicationId.trim()
+        ? record.runtimeApplicationId
+        : null,
     status,
     tenantId: record.tenantId,
     totalBudgetUsd: normalizeNumber(record.totalBudgetUsd, 100),

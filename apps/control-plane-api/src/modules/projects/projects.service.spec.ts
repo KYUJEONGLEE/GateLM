@@ -15,7 +15,7 @@ describe('ProjectsService', () => {
     prisma: {
       $transaction: jest.Mock;
       budgetAuditLog: { create: jest.Mock };
-      application: { create: jest.Mock };
+      application: { create: jest.Mock; findMany: jest.Mock };
       applicationProviderConnection: { createMany: jest.Mock };
       providerConnection: { findMany: jest.Mock };
       tenant: { findUnique: jest.Mock };
@@ -34,6 +34,7 @@ describe('ProjectsService', () => {
       },
       application: {
         create: jest.fn(),
+        findMany: jest.fn(),
       },
       applicationProviderConnection: {
         createMany: jest.fn(),
@@ -80,6 +81,9 @@ describe('ProjectsService', () => {
       projects: [{ totalBudgetUsd: new Prisma.Decimal(50) }],
     });
     prisma.project.create.mockResolvedValue(project(projectId));
+    prisma.application.create.mockResolvedValue({
+      id: '00000000-0000-4000-8000-000000000301',
+    });
 
     const result = await service.createProject(tenantId, {
       name: 'New Project',
@@ -105,6 +109,9 @@ describe('ProjectsService', () => {
       },
     });
     expect(result.totalBudgetUsd).toBe(100);
+    expect(result.runtimeApplicationId).toBe(
+      '00000000-0000-4000-8000-000000000301',
+    );
   });
 
   it('creates the hidden default runtime application with project values in the same transaction', async () => {
@@ -133,7 +140,7 @@ describe('ProjectsService', () => {
       description: 'Ops runtime boundary',
       status: ResourceStatus.ACTIVE,
       budgetLimitMode: 'PERCENT',
-      budgetLimitPercent: new Prisma.Decimal(100),
+      budgetLimitPercent: new Prisma.Decimal(75),
       budgetLimitUsd: null,
       createdAt,
       updatedAt: createdAt,
@@ -163,7 +170,7 @@ describe('ProjectsService', () => {
         name: 'Operations',
         description: 'Ops runtime boundary',
         budgetLimitMode: 'PERCENT',
-        budgetLimitPercent: 100,
+        budgetLimitPercent: 75,
         budgetLimitUsd: null,
       },
     });
@@ -179,6 +186,7 @@ describe('ProjectsService', () => {
       skipDuplicates: true,
     });
     expect(result.totalBudgetUsd).toBe(200);
+    expect(result.runtimeApplicationId).toBe(defaultApplicationId);
   });
 
   it('rejects a project budget that exceeds the tenant budget', async () => {
@@ -206,13 +214,48 @@ describe('ProjectsService', () => {
       project('00000000-0000-4000-8000-000000000202'),
       project('00000000-0000-4000-8000-000000000203'),
     ]);
+    prisma.application.findMany.mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000302',
+        projectId: '00000000-0000-4000-8000-000000000202',
+        status: ResourceStatus.DISABLED,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000301',
+        projectId: '00000000-0000-4000-8000-000000000201',
+        status: ResourceStatus.ACTIVE,
+      },
+    ]);
 
     const result = await service.listProjects(tenantId, { limit: 2 });
 
     expect(prisma.project.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 3 }),
     );
+    expect(prisma.application.findMany).toHaveBeenCalledWith({
+      where: {
+        projectId: {
+          in: [
+            '00000000-0000-4000-8000-000000000201',
+            '00000000-0000-4000-8000-000000000202',
+          ],
+        },
+        status: {
+          not: ResourceStatus.ARCHIVED,
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+      },
+    });
     expect(result.data).toHaveLength(2);
+    expect(result.data.map((item) => item.runtimeApplicationId)).toEqual([
+      '00000000-0000-4000-8000-000000000301',
+      '00000000-0000-4000-8000-000000000302',
+    ]);
     expect(result.pagination).toEqual({
       limit: 2,
       nextCursor: '00000000-0000-4000-8000-000000000202',

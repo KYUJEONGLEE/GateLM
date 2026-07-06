@@ -5,6 +5,7 @@ export type ProjectRecord = {
   description: string | null;
   id: string;
   name: string;
+  runtimeApplicationId: string | null;
   status: ProjectStatus;
   tenantId: string;
   totalBudgetUsd: number;

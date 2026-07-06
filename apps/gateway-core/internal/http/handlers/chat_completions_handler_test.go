@@ -1144,6 +1144,55 @@ func TestChatCompletionsHandlerAuthenticatesProjectAPIKeyWithoutAppToken(t *test
 	assertGatewayErrorCode(t, rr, "invalid_request_error")
 }
 
+func TestChatCompletionsHandlerAuthenticateRequestRejectsPreResolvedApplicationMismatch(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		APIKeyAuthenticator: newTestCredentialStore(),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	setValidGatewayAuthHeaders(req)
+	reqCtx := &pipeline.RequestContext{
+		TenantID:      testTenantID,
+		ProjectID:     testProjectID,
+		ApplicationID: "other_app",
+	}
+
+	err := handler.authenticateRequest(context.Background(), req, reqCtx)
+
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected gateway error, got %v", err)
+	}
+	if gatewayErr.Code != "scope_mismatch" {
+		t.Fatalf("expected scope_mismatch, got %+v", gatewayErr)
+	}
+	if reqCtx.ApplicationID != "other_app" {
+		t.Fatalf("expected existing application scope to remain unchanged, got %q", reqCtx.ApplicationID)
+	}
+}
+
+func TestChatCompletionsHandlerAuthenticateRequestNormalizesBudgetScopeAfterApplicationResolution(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		APIKeyAuthenticator: newTestCredentialStore(),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	setValidGatewayAuthHeaders(req)
+	reqCtx := &pipeline.RequestContext{}
+
+	err := handler.authenticateRequest(context.Background(), req, reqCtx)
+
+	if err != nil {
+		t.Fatalf("authenticate request: %v", err)
+	}
+	if reqCtx.TenantID != testTenantID || reqCtx.ProjectID != testProjectID || reqCtx.ApplicationID != testAppID {
+		t.Fatalf("unexpected authenticated scope: %+v", reqCtx)
+	}
+	if reqCtx.BudgetScope.Type != budget.ScopeTypeApplication ||
+		reqCtx.BudgetScope.ID != testAppID ||
+		reqCtx.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
+		t.Fatalf("unexpected budget scope: %+v", reqCtx.BudgetScope)
+	}
+}
+
 func TestChatCompletionsHandlerReturnsInternalErrorForAPIKeyStoreFailure(t *testing.T) {
 	chatCalls := 0
 	store := newTestCredentialStore()

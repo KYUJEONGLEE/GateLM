@@ -99,6 +99,7 @@ export interface ProjectResponseDto {
   description: string | null;
   status: ResourceStatus;
   totalBudgetUsd: number;
+  runtimeApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
 }
