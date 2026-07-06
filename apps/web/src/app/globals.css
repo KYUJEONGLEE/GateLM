@@ -5665,6 +5665,7 @@ select {
   border-radius: var(--radius-3xl);
   color: #171717;
   font-weight: var(--font-weight-semibold);
+  white-space: pre-wrap;
 }
 
 .customer-chat-markdown {
@@ -5915,13 +5916,15 @@ select {
   min-width: 0;
   align-items: center;
   gap: 8px;
-  height: 44px;
+  min-height: 44px;
   color: #171717;
 }
 
-.customer-chat-input input {
+.customer-chat-input textarea {
   width: 100%;
+  max-height: 132px;
   min-width: 0;
+  min-height: 24px;
   background: transparent;
   border: 0;
   outline: 0;
@@ -5929,9 +5932,12 @@ select {
   font: inherit;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+  overflow-y: auto;
+  resize: none;
 }
 
-.customer-chat-input input::placeholder {
+.customer-chat-input textarea::placeholder {
   color: #9ca3af;
 }
 
@@ -5991,7 +5997,7 @@ html[data-theme="dark"] .customer-chat-empty-state,
 html[data-theme="dark"] .customer-chat-markdown,
 html[data-theme="dark"] .customer-chat-message-body p,
 html[data-theme="dark"] .customer-chat-input,
-html[data-theme="dark"] .customer-chat-input input {
+html[data-theme="dark"] .customer-chat-input textarea {
   color: #ececec;
 }
 
@@ -6671,10 +6677,10 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   }
 
   .customer-chat-input {
-    height: 36px;
+    min-height: 36px;
   }
 
-  .customer-chat-input input {
+  .customer-chat-input textarea {
     font-size: var(--font-size-base);
   }
 
