@@ -44,6 +44,7 @@ model Tenant {
   projects            Project[]
   applications        Application[]
   providerConnections ProviderConnection[]
+  providerCredentials  ProviderCredential[]
   applicationProviderConnections ApplicationProviderConnection[]
   apiKeys             GatewayApiKey[]
   appTokens           AppToken[]
@@ -273,10 +274,38 @@ model ProviderConnection {
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
   applicationProviderConnections ApplicationProviderConnection[]
+  providerCredentials ProviderCredential[]
 
   @@index([tenantId])
   @@unique([projectId, provider])
   @@map("provider_connections")
+}
+
+model ProviderCredential {
+  id                   String           @id @default(uuid()) @db.Uuid
+  tenantId             String           @db.Uuid
+  providerConnectionId String           @db.Uuid
+  credentialRefId      String
+  status               CredentialStatus @default(ACTIVE)
+  encryptedValue       String
+  encryptionNonce      String
+  encryptionTag        String
+  encryptionKeyVersion String           @default("v1")
+  credentialPrefix     String?
+  credentialLast4      String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  rotatedAt            DateTime?
+  revokedAt            DateTime?
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id])
+  providerConnection ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([credentialRefId])
+  @@index([tenantId])
+  @@index([providerConnectionId])
+  @@index([status])
+  @@map("provider_credentials")
 }
 
 model ApplicationProviderConnection {

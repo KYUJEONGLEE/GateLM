@@ -13,6 +13,8 @@ describe('ProjectsService', () => {
   function createService(): {
     service: ProjectsService;
     prisma: {
+      $transaction: jest.Mock;
+      budgetAuditLog: { create: jest.Mock };
       tenant: { findUnique: jest.Mock };
       project: {
         create: jest.Mock;
@@ -23,6 +25,10 @@ describe('ProjectsService', () => {
     };
   } {
     const prisma = {
+      $transaction: jest.fn(),
+      budgetAuditLog: {
+        create: jest.fn(),
+      },
       tenant: {
         findUnique: jest.fn(),
       },
@@ -33,6 +39,7 @@ describe('ProjectsService', () => {
         update: jest.fn(),
       },
     };
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
 
     return {
       service: new ProjectsService(prisma as unknown as PrismaService),

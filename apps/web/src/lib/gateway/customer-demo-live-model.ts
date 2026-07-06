@@ -1,18 +1,15 @@
-import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
+import {
+  getControlPlaneApplicationId,
+  getControlPlaneProjectId,
+  getControlPlaneTenantId
+} from "@/lib/control-plane/control-plane-config";
 import type {
   CustomerDemoExchange,
   CustomerDemoModel,
   CustomerDemoRequest,
   CustomerDemoScenarioId
 } from "@/lib/gateway/customer-demo-client";
-
-type RuntimeConfigFixture = {
-  runtimeConfig: {
-    applicationId: string;
-    projectId: string;
-    tenantId: string;
-  };
-};
+import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type LiveScenarioTemplate = {
   cacheStatus: string;
@@ -65,19 +62,19 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
     status: "blocked",
     title: "Blocked"
   },
-	{
-		cacheStatus: "hit",
-		description: "Same safe request resolves to exact cache hit and provider bypass.",
+  {
+    cacheStatus: "hit",
+    description: "Same safe request resolves to exact cache hit and provider bypass.",
     detectedTypes: [],
     httpStatus: 200,
     maskingAction: "none",
     promptPreview:
       "Write a concise support reply for a delayed shipment. Keep it under three sentences.",
-		providerCall: "skipped",
-		scenarioId: "cache-hit",
-		status: "success",
-		title: "Cache hit"
-	},
+    providerCall: "skipped",
+    scenarioId: "cache-hit",
+    status: "success",
+    title: "Cache hit"
+  },
   {
     cacheStatus: "bypass",
     description: "Application-scoped rate limit stops the request before provider cost.",
@@ -117,17 +114,21 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
 ];
 
 export function getCustomerDemoLiveModel(): CustomerDemoModel {
-  const runtimeConfig = (runtimeConfigFixture as RuntimeConfigFixture).runtimeConfig;
+  const tenantId = getControlPlaneTenantId();
+  const projectId = getControlPlaneProjectId();
+  const applicationId = getControlPlaneApplicationId();
+  const gatewayConfig = getLiveGatewayConfig();
 
   return {
-    applicationId: runtimeConfig.applicationId,
+    applicationId,
+    applicationChatStreamingEnabled: gatewayConfig.applicationChatStreamingEnabled,
     integrationMode: "gateway",
-    projectId: runtimeConfig.projectId,
+    projectId,
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>
-      buildLiveScenario(template, runtimeConfig.tenantId)
+      buildLiveScenario(template, tenantId)
     ),
     surface: "demo",
-    tenantId: runtimeConfig.tenantId
+    tenantId
   };
 }
 

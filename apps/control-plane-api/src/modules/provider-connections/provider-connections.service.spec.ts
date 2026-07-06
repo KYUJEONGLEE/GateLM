@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Prisma, ProviderConnectionStatus } from '@prisma/client';
 
+import { encryptProviderCredential } from '@/common/security/provider-credential-encryption';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import { ProviderConnectionsService } from './provider-connections.service';
@@ -9,6 +10,7 @@ describe('ProviderConnectionsService', () => {
   const projectId = '00000000-0000-4000-8000-000000000200';
   const tenantId = '00000000-0000-4000-8000-000000000100';
   const createdAt = new Date('2026-06-27T00:00:00.000Z');
+  const encryptionKey = '12345678901234567890123456789012';
   const originalEnv = { ...process.env };
   const originalFetch = global.fetch;
 
@@ -22,27 +24,54 @@ describe('ProviderConnectionsService', () => {
     service: ProviderConnectionsService;
     prisma: {
       project: { findUnique: jest.Mock };
+      tenant: { findUnique: jest.Mock };
       providerPreset: { findMany: jest.Mock };
       providerConnection: {
+        create: jest.Mock;
+        delete: jest.Mock;
+        findFirst: jest.Mock;
         findMany: jest.Mock;
         findUnique: jest.Mock;
+        update: jest.Mock;
         upsert: jest.Mock;
       };
+      applicationProviderConnection: {
+        count: jest.Mock;
+      };
+      $executeRaw: jest.Mock;
+      $queryRaw: jest.Mock;
+      $transaction: jest.Mock;
     };
   } {
     const prisma = {
+      $transaction: jest.fn(),
+      $executeRaw: jest.fn(),
+      $queryRaw: jest.fn(),
       project: {
+        findUnique: jest.fn(),
+      },
+      tenant: {
         findUnique: jest.fn(),
       },
       providerPreset: {
         findMany: jest.fn(),
       },
       providerConnection: {
+        create: jest.fn(),
+        delete: jest.fn(),
+        findFirst: jest.fn(),
         findUnique: jest.fn(),
+        update: jest.fn(),
         upsert: jest.fn(),
         findMany: jest.fn(),
       },
+      applicationProviderConnection: {
+        count: jest.fn(),
+      },
     };
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+    prisma.$executeRaw.mockResolvedValue(1);
+    prisma.$queryRaw.mockResolvedValue([]);
 
     return {
       service: new ProviderConnectionsService(
@@ -89,6 +118,209 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
+  it('stores a one-time provider credential in the encrypted credential backend without persisting plaintext', async () => {
+    const { service, prisma } = createService();
+    process.env.GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = encryptionKey;
+    const credentialValue = 'synthetic_provider_key_ABCDEFGH1234';
+    const providerId = '00000000-0000-4000-8000-000000000919';
+    const credentialRefId = `provider_credential:${providerId}`;
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.upsert.mockResolvedValue({
+      id: providerId,
+      tenantId,
+      projectId,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 30000,
+      secretRef: null,
+      credentialPrefix: null,
+      credentialLast4: null,
+      resolver: 'none',
+      providerConfig: { adapterType: 'openai_compatible' },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    prisma.providerConnection.update.mockResolvedValue({
+      id: providerId,
+      tenantId,
+      projectId,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 30000,
+      secretRef: credentialRefId,
+      credentialPrefix: 'provided_',
+      credentialLast4: '1234',
+      resolver: 'credential_store',
+      providerConfig: { adapterType: 'openai_compatible' },
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    const result = await service.upsertProvider(projectId, {
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      baseUrl: 'https://api.openai.com/v1',
+      credentialValue,
+      resolver: 'environment',
+    });
+    const providerConnectionPayload = JSON.stringify([
+      prisma.providerConnection.upsert.mock.calls,
+      prisma.providerConnection.update.mock.calls,
+    ]);
+    const credentialStorePayload = JSON.stringify(
+      prisma.$executeRaw.mock.calls,
+    );
+
+    expect(prisma.providerConnection.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: providerId },
+        data: expect.objectContaining({
+          credentialLast4: '1234',
+          credentialPrefix: 'provided_',
+          resolver: 'credential_store',
+          secretRef: credentialRefId,
+        }),
+      }),
+    );
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(providerConnectionPayload).not.toContain(credentialValue);
+    expect(credentialStorePayload).not.toContain(credentialValue);
+    expect(credentialStorePayload).toContain(credentialRefId);
+    expect(JSON.stringify(result)).not.toContain(credentialValue);
+    expect(result.credentialPreview).toEqual({
+      prefix: 'provided_',
+      last4: '1234',
+    });
+  });
+
+  it('derives provider credential preview for tenant provider registration', async () => {
+    const { service, prisma } = createService();
+    process.env.GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = encryptionKey;
+    const credentialValue = 'synthetic_provider_key_ABCDEFGH9876';
+    const providerId = '00000000-0000-4000-8000-000000000920';
+    const credentialRefId = `provider_credential:${providerId}`;
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
+      id: providerId,
+      tenantId,
+      projectId: null,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 30000,
+      secretRef: null,
+      credentialPrefix: null,
+      credentialLast4: null,
+      resolver: 'none',
+      providerConfig: { adapterType: 'openai_compatible' },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    prisma.providerConnection.update.mockResolvedValue({
+      id: providerId,
+      tenantId,
+      projectId: null,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 30000,
+      secretRef: credentialRefId,
+      credentialPrefix: 'provided_',
+      credentialLast4: '9876',
+      resolver: 'credential_store',
+      providerConfig: { adapterType: 'openai_compatible' },
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    const result = await service.upsertTenantProvider(tenantId, {
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      baseUrl: 'https://api.openai.com/v1',
+      credentialValue,
+      resolver: 'environment',
+    });
+    const providerConnectionPayload = JSON.stringify([
+      prisma.providerConnection.create.mock.calls,
+      prisma.providerConnection.update.mock.calls,
+    ]);
+    const credentialStorePayload = JSON.stringify(
+      prisma.$executeRaw.mock.calls,
+    );
+
+    expect(prisma.providerConnection.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: providerId },
+        data: expect.objectContaining({
+          credentialLast4: '9876',
+          credentialPrefix: 'provided_',
+          resolver: 'credential_store',
+          secretRef: credentialRefId,
+        }),
+      }),
+    );
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(providerConnectionPayload).not.toContain(credentialValue);
+    expect(credentialStorePayload).not.toContain(credentialValue);
+    expect(credentialStorePayload).toContain(credentialRefId);
+    expect(JSON.stringify(result)).not.toContain(credentialValue);
+    expect(result.credentialPreview).toEqual({
+      prefix: 'provided_',
+      last4: '9876',
+    });
+  });
+
+  it('rejects a stored provider credential ref owned by another tenant', async () => {
+    const { service, prisma } = createService();
+    process.env.GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = encryptionKey;
+    const credentialValue = 'synthetic_provider_key_ABCDEFGH2468';
+    const providerId = '00000000-0000-4000-8000-000000000922';
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
+      id: providerId,
+      tenantId,
+      projectId: null,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: 'https://api.openai.com/v1',
+      timeoutMs: 30000,
+      secretRef: null,
+      credentialPrefix: null,
+      credentialLast4: null,
+      resolver: 'none',
+      providerConfig: { adapterType: 'openai_compatible' },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    prisma.$executeRaw.mockResolvedValue(0);
+
+    await expect(
+      service.upsertTenantProvider(tenantId, {
+        provider: 'openai-main',
+        displayName: 'OpenAI Main',
+        baseUrl: 'https://api.openai.com/v1',
+        credentialValue,
+        resolver: 'environment',
+        secretRef: 'provider_credential:shared-ref',
+      }),
+    ).rejects.toThrow(
+      'Provider credential reference is already owned by another tenant.',
+    );
+    expect(prisma.providerConnection.update).not.toHaveBeenCalled();
+    expect(JSON.stringify(prisma.$executeRaw.mock.calls)).not.toContain(
+      credentialValue,
+    );
+  });
+
   it('lists provider presets without credential material', async () => {
     const { service, prisma } = createService();
     prisma.providerPreset.findMany.mockResolvedValue([
@@ -131,6 +363,69 @@ describe('ProviderConnectionsService', () => {
     ]);
     expect(JSON.stringify(result)).not.toContain('Authorization');
     expect(JSON.stringify(result)).not.toContain('Bearer ');
+  });
+
+  it('deletes an unassigned tenant-level provider connection without exposing credential material', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000930';
+    const tenantProvider = providerConnection(providerId, {
+      projectId: null,
+      provider: 'openai-main',
+      displayName: 'OpenAI Main',
+      resolver: 'credential_store',
+      secretRef: `provider_credential:${providerId}`,
+      credentialPrefix: 'provided_',
+      credentialLast4: '1234',
+    });
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst.mockResolvedValue(tenantProvider);
+    prisma.applicationProviderConnection.count.mockResolvedValue(0);
+    prisma.providerConnection.delete.mockResolvedValue(tenantProvider);
+
+    const result = await service.deleteTenantProvider(
+      tenantId,
+      'openai-main',
+    );
+
+    expect(prisma.providerConnection.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId,
+        provider: 'openai-main',
+        projectId: null,
+      },
+    });
+    expect(prisma.applicationProviderConnection.count).toHaveBeenCalledWith({
+      where: { providerConnectionId: providerId },
+    });
+    expect(prisma.providerConnection.delete).toHaveBeenCalledWith({
+      where: { id: providerId },
+    });
+    expect(result).toMatchObject({
+      id: providerId,
+      projectId: null,
+      provider: 'openai-main',
+    });
+    expect(JSON.stringify(result)).not.toContain(`provider_credential:${providerId}`);
+  });
+
+  it('rejects deleting a tenant provider that is assigned to an application', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000931';
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst.mockResolvedValue(
+      providerConnection(providerId, {
+        projectId: null,
+        provider: 'openai-main',
+      }),
+    );
+    prisma.applicationProviderConnection.count.mockResolvedValue(1);
+
+    await expect(
+      service.deleteTenantProvider(tenantId, 'openai-main'),
+    ).rejects.toThrow(
+      'Provider connection is assigned to an application and cannot be deleted.',
+    );
+    expect(prisma.providerConnection.delete).not.toHaveBeenCalled();
   });
 
   it('sets provider preset pagination cursor from the last returned provider key', async () => {
@@ -203,7 +498,62 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
-  it('discovers provider models with an environment credential binding', async () => {
+  it('discovers provider models with an encrypted credential backend reference', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000921';
+    const credentialRefId = `provider_credential:${providerId}`;
+    const providerCredential = 'synthetic-provider-credential-from-store';
+    process.env.GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY = encryptionKey;
+    const encrypted = encryptProviderCredential(
+      providerCredential,
+      credentialRefId,
+    );
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        credentialRefId,
+        status: 'ACTIVE',
+        encryptedValue: encrypted.encryptedValue,
+        encryptionNonce: encrypted.encryptionNonce,
+        encryptionTag: encrypted.encryptionTag,
+        encryptionKeyVersion: encrypted.encryptionKeyVersion,
+      },
+    ]);
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        resolver: 'credential_store',
+        secretRef: credentialRefId,
+        providerConfig: { adapterType: 'openai_compatible' },
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [{ id: 'gpt-4o-mini', object: 'model' }],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(
+      projectId,
+      'openai-main',
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/models',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${providerCredential}`,
+        }),
+        method: 'GET',
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain(providerCredential);
+  });
+
+  it('discovers provider models with an environment credential binding fallback', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000905';
     const providerCredential = 'test-provider-credential';
@@ -264,6 +614,40 @@ describe('ProviderConnectionsService', () => {
       providerId,
     });
     expect(JSON.stringify(result)).not.toContain(providerCredential);
+  });
+
+  it('does not fall back to env-map when a stored provider credential is inactive', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000923';
+    const credentialRefId = `provider_credential:${providerId}`;
+    process.env.CONTROL_PLANE_PROVIDER_CREDENTIAL_ENV_MAP = `${credentialRefId}=OPENAI_API_KEY`;
+    process.env.OPENAI_API_KEY = 'synthetic-env-fallback-credential';
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        credentialRefId,
+        status: 'REVOKED',
+        encryptedValue: 'redacted',
+        encryptionNonce: 'redacted',
+        encryptionTag: 'redacted',
+        encryptionKeyVersion: 'v1',
+      },
+    ]);
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        resolver: 'credential_store',
+        secretRef: credentialRefId,
+        providerConfig: { adapterType: 'openai_compatible' },
+      }),
+    );
+    global.fetch = jest.fn();
+
+    await expect(
+      service.discoverProviderModels(projectId, 'openai-main'),
+    ).rejects.toThrow('Provider credential reference is not active.');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('discovers provider models from a host-only OpenAI-compatible base URL', async () => {
@@ -783,7 +1167,7 @@ describe('ProviderConnectionsService', () => {
     credentialPrefix: string | null;
     displayName: string;
     id: string;
-    projectId: string;
+    projectId: string | null;
     provider: string;
     providerConfig: Prisma.JsonValue;
     resolver: string;

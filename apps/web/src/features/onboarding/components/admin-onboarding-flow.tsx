@@ -1,17 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { AdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
-import {
-  formatDisplayIdentifier,
-  formatTenantDisplayName
-} from "@/lib/formatting/display-identifiers";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type { ProjectRecord, ProjectStatus } from "@/lib/control-plane/projects-types";
 import type { Locale } from "@/lib/i18n/locale";
+
+const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
 
 type AdminOnboardingFlowProps = {
   activeStepId: OnboardingStepId;
@@ -117,6 +115,7 @@ type OnboardingDraft = {
   projectStatus: string;
   runtimePublishState: string;
   safetyMode: string;
+  tenantName: string;
 };
 
 type ProjectSetupState = {
@@ -148,6 +147,7 @@ export function AdminOnboardingFlow({
   );
   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
   const [draft, setDraft] = useState<OnboardingDraft>(() => buildInitialDraft(model));
+  const [isTenantNameLocked, setIsTenantNameLocked] = useState(false);
   const [savedStepIds, setSavedStepIds] = useState<Set<OnboardingStepId>>(() => new Set());
   const [projectSetupState, setProjectSetupState] = useState<ProjectSetupState>({
     apiKey: null,
@@ -163,7 +163,9 @@ export function AdminOnboardingFlow({
   const isCreatingCredential = projectSetupState.status === "saving";
   const isProjectStepIncomplete =
     activeStep.id === "project" &&
-    (draft.projectName.trim().length === 0 || !isValidBudgetInput(draft.projectTotalBudgetUsd));
+    (draft.tenantName.trim().length === 0 ||
+      draft.projectName.trim().length === 0 ||
+      !isValidBudgetInput(draft.projectTotalBudgetUsd));
   const isReviewIncomplete =
     activeStep.id === "runtime-config" && projectSetupState.status !== "issued";
   const isPrimaryActionDisabled =
@@ -173,9 +175,34 @@ export function AdminOnboardingFlow({
   const isCreateApiKeyDisabled =
     isCreatingCredential ||
     projectSetupState.status === "issued" ||
+    draft.tenantName.trim().length === 0 ||
     draft.projectName.trim().length === 0 ||
     !isValidBudgetInput(draft.projectTotalBudgetUsd) ||
     draft.apiKeyDisplayName.trim().length === 0;
+
+  useEffect(() => {
+    let storedTenantName = "";
+
+    try {
+      storedTenantName =
+        window.sessionStorage
+          .getItem(`${createdTenantDisplayNameStorageKeyPrefix}${model.tenantId}`)
+          ?.trim() ?? "";
+    } catch {
+      storedTenantName = "";
+    }
+
+    if (!storedTenantName) {
+      setIsTenantNameLocked(false);
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      tenantName: storedTenantName
+    }));
+    setIsTenantNameLocked(true);
+  }, [model.tenantId]);
 
   function updateDraft(field: keyof OnboardingDraft, value: string) {
     setDraft((current) => ({
@@ -374,8 +401,8 @@ export function AdminOnboardingFlow({
                 activeStepId: activeStep.id,
                 draft,
                 isCreateApiKeyDisabled,
+                isTenantNameLocked,
                 locale,
-                model,
                 onCreateApiKey: createProjectAndIssueApiKey,
                 projectSetupState,
                 text,
@@ -417,8 +444,8 @@ function renderStepContent({
   activeStepId,
   draft,
   isCreateApiKeyDisabled,
+  isTenantNameLocked,
   locale,
-  model,
   onCreateApiKey,
   projectSetupState,
   text,
@@ -427,8 +454,8 @@ function renderStepContent({
   activeStepId: OnboardingStepId;
   draft: OnboardingDraft;
   isCreateApiKeyDisabled: boolean;
+  isTenantNameLocked: boolean;
   locale: Locale;
-  model: AdminOnboardingModel;
   onCreateApiKey: () => void;
   projectSetupState: ProjectSetupState;
   text: (typeof onboardingText)[Locale];
@@ -437,10 +464,12 @@ function renderStepContent({
   if (activeStepId === "project") {
     return (
       <div className="onboarding-stack">
-        <ReadonlySummary
-          rows={[
-            ["Tenant", formatTenantDisplayName(model.tenantId)]
-          ]}
+        <OnboardingField
+          disabled={isTenantNameLocked}
+          field="tenantName"
+          label="Tenant"
+          onChange={updateDraft}
+          value={draft.tenantName}
         />
         <OnboardingField
           field="projectName"
@@ -560,12 +589,14 @@ function ApiKeyIssueReview({
 }
 
 function OnboardingField({
+  disabled = false,
   field,
   inputMode,
   label,
   onChange,
   value
 }: {
+  disabled?: boolean;
   field: keyof OnboardingDraft;
   inputMode?: "decimal" | "numeric";
   label: string;
@@ -576,6 +607,7 @@ function OnboardingField({
     <label className="onboarding-field">
       <span>{label}</span>
       <input
+        disabled={disabled}
         inputMode={inputMode}
         onChange={(event) => onChange(field, event.target.value)}
         required
@@ -609,19 +641,6 @@ function OnboardingSelect({
         ))}
       </select>
     </label>
-  );
-}
-
-function ReadonlySummary({ rows }: { rows: Array<[string, string]> }) {
-  return (
-    <dl className="onboarding-detail-grid">
-      {rows.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{formatDisplayIdentifier(value)}</dd>
-        </div>
-      ))}
-    </dl>
   );
 }
 
@@ -671,6 +690,7 @@ function buildInitialDraft(model: AdminOnboardingModel): OnboardingDraft {
     projectTotalBudgetUsd: "100",
     projectStatus: normalizeDraftProjectStatus(model.project.status),
     runtimePublishState: model.runtimeConfig.publishState,
-    safetyMode: model.runtimeConfig.safetyMode
+    safetyMode: model.runtimeConfig.safetyMode,
+    tenantName: ""
   };
 }

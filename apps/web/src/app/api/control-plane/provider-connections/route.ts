@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  deleteProviderConnection,
   discoverProviderModels,
   removeProviderModel,
   upsertProviderConnection
@@ -41,6 +42,31 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       discovery: result.data,
+      status: result.status
+    });
+  }
+
+  if (payload.action === "delete-provider") {
+    const provider = getProviderFromPayload(payload.values);
+
+    if (!provider) {
+      return NextResponse.json({ error: "Invalid provider deletion payload." }, { status: 400 });
+    }
+
+    const result = await deleteProviderConnection(provider);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: result.error,
+          status: result.status
+        },
+        { status: result.status > 0 ? result.status : 502 }
+      );
+    }
+
+    return NextResponse.json({
+      provider: result.data,
       status: result.status
     });
   }
@@ -126,6 +152,8 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     (record.isEdit === undefined || typeof record.isEdit === "boolean") &&
     typeof record.credentialPrefix === "string" &&
     typeof record.credentialLast4 === "string" &&
+    (record.credentialValue === undefined ||
+      (typeof record.credentialValue === "string" && record.credentialValue.length <= 8192)) &&
     typeof record.modelsEndpointPath === "string" &&
     isProviderStatus(record.status)
   );

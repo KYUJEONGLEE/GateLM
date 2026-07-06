@@ -8,6 +8,7 @@ It differs from `deploy/selfhost` on purpose:
 - no ECR, ECS, RDS, ElastiCache, ALB, Route53, or Secrets Manager is required
 - PostgreSQL, Redis, mock provider, AI service, Control Plane, Gateway, and Web run on one Docker network
 - PostgreSQL, Redis, mock provider, and AI service are not published to the EC2 host
+- the customer application runs on port 3002 so Web Console application/chat links do not fall back to localhost
 - the default provider mode is mock
 
 ## EC2 Setup
@@ -30,6 +31,7 @@ Replace:
 
 - `GATELM_PUBLIC_DOMAIN`
 - `GATELM_PUBLIC_BASE_URL`
+- `GATELM_APPLICATION_BASE_URL`
 - `POSTGRES_PASSWORD`
 - `GATEWAY_EXACT_CACHE_KEY_SECRET`
 - `GATELM_DEMO_API_KEY`
@@ -39,6 +41,14 @@ Use simple generated values for secrets so the interpolated database URL stays v
 
 ```bash
 openssl rand -hex 32
+```
+
+Optional Google login for the main landing page uses the Web Console auth proxy and Control Plane OAuth handler. Configure these only after creating a Google Cloud OAuth client for the exact callback URL:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=http://<ec2-public-ip>:3000/api/auth/google/callback
 ```
 
 ## Build
@@ -78,7 +88,7 @@ docker compose --env-file .env run --rm --no-deps control-plane-api node dist/pr
 ## Start
 
 ```bash
-docker compose --env-file .env up -d ai-service control-plane-api gateway-core web
+docker compose --env-file .env up -d ai-service control-plane-api gateway-core application web
 docker compose --env-file .env ps
 ```
 
@@ -89,12 +99,14 @@ curl -fsS http://127.0.0.1:3001/healthz
 curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8080/readyz
 curl -fsS http://127.0.0.1:3000/
+curl -fsS http://127.0.0.1:3002/
 ```
 
 Browser checks from your machine:
 
 ```text
 http://<ec2-public-ip>:3000
+http://<ec2-public-ip>:3002
 http://<ec2-public-ip>:3001/healthz
 http://<ec2-public-ip>:8080/healthz
 ```

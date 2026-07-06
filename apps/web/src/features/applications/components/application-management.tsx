@@ -61,6 +61,11 @@ type OneTimeAppTokenState = {
 };
 
 const applicationStatuses: ApplicationStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
+const budgetLimitUsdPrecision = 1_000_000;
+
+function roundBudgetUsd(value: number): number {
+  return Math.round(value * budgetLimitUsdPrecision) / budgetLimitUsdPrecision;
+}
 
 const applicationText: Record<
   Locale,
@@ -196,7 +201,10 @@ export function ApplicationManagement({
   const allocatedBudgetUsd = applications
     .filter((application) => application.status !== "ARCHIVED")
     .reduce((total, application) => total + application.effectiveBudgetLimitUsd, 0);
-  const remainingBudgetUsd = Math.max(0, projectBudgetUsd - allocatedBudgetUsd);
+  const roundedAllocatedBudgetUsd = roundBudgetUsd(allocatedBudgetUsd);
+  const remainingBudgetUsd = roundBudgetUsd(
+    Math.max(0, projectBudgetUsd - roundedAllocatedBudgetUsd)
+  );
 
   function openCreateModal() {
     setCreateValues(getEmptyApplicationForm(selectableModels));
@@ -225,6 +233,16 @@ export function ApplicationManagement({
       setSubmitState({
         message:
           locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
+        status: "error"
+      });
+      return;
+    }
+
+    const createBudgetUsd = getApplicationBudgetLimitUsd(createValues, projectBudgetUsd);
+
+    if (createBudgetUsd > remainingBudgetUsd) {
+      setSubmitState({
+        message: formatApplicationBudgetConflictMessage(remainingBudgetUsd),
         status: "error"
       });
       return;
@@ -334,6 +352,25 @@ export function ApplicationManagement({
       setSubmitState({
         message:
           locale === "ko" ? "앱 예산 한도를 확인하세요." : "Check the application budget limit.",
+        status: "error"
+      });
+      return;
+    }
+
+    const currentApplication = applications.find((application) => application.id === applicationId);
+    const currentBudgetUsd =
+      currentApplication && currentApplication.status !== "ARCHIVED"
+        ? roundBudgetUsd(currentApplication.effectiveBudgetLimitUsd)
+        : 0;
+    const availableBudgetUsd = roundBudgetUsd(
+      Math.max(0, projectBudgetUsd - roundedAllocatedBudgetUsd + currentBudgetUsd)
+    );
+    const nextBudgetUsd =
+      values.status === "ARCHIVED" ? 0 : getApplicationBudgetLimitUsd(values, projectBudgetUsd);
+
+    if (nextBudgetUsd > availableBudgetUsd) {
+      setSubmitState({
+        message: formatApplicationBudgetConflictMessage(availableBudgetUsd),
         status: "error"
       });
       return;
@@ -752,6 +789,27 @@ function isValidApplicationBudgetValues(values: ApplicationFormValues) {
   }
 
   return Number.isFinite(values.budgetLimitUsd) && values.budgetLimitUsd >= 0;
+}
+
+function getApplicationBudgetLimitUsd(
+  values: Pick<
+    ApplicationFormValues,
+    "budgetLimitMode" | "budgetLimitPercent" | "budgetLimitUsd"
+  >,
+  projectBudgetUsd: number
+) {
+  if (values.budgetLimitMode === "PERCENT") {
+    const calculatedBudgetLimitUsd = (projectBudgetUsd * values.budgetLimitPercent) / 100;
+    return roundBudgetUsd(calculatedBudgetLimitUsd);
+  }
+
+  return values.budgetLimitUsd;
+}
+
+function formatApplicationBudgetConflictMessage(availableBudgetUsd: number) {
+  return `Application budget exceeds remaining project budget (${formatBudgetUsd(
+    availableBudgetUsd
+  )} available).`;
 }
 
 function ApplicationBudgetFields({
