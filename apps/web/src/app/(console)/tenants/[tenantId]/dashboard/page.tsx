@@ -141,7 +141,7 @@ function normalizeOptionalText(value: string | undefined) {
 
 function getMonthToDateRange() {
   const to = new Date();
-  const from = new Date(to.getFullYear(), to.getMonth(), 1);
+  const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
 
   return {
     from: from.toISOString(),

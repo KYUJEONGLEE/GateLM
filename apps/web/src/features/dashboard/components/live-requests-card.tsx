@@ -63,8 +63,16 @@ const compactUsdFormatter = new Intl.NumberFormat("en-US", {
 const integerFormatter = new Intl.NumberFormat("en-US");
 
 export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardProps) {
-  const [rows, setRows] = useState<LiveRequestRow[]>(initialPayload?.rows ?? []);
-  const [modelOptions, setModelOptions] = useState<string[]>(initialPayload?.modelOptions ?? []);
+  const {
+    budgetScopeId,
+    budgetScopeType,
+    projectId,
+    range,
+    resolvedBy,
+    tenantId
+  } = filters;
+  const [rows, setRows] = useState<LiveRequestRow[]>(() => normalizeLiveRequestRows(initialPayload?.rows));
+  const [modelOptions, setModelOptions] = useState<string[]>(() => normalizeModelOptions(initialPayload?.modelOptions));
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
   const [isLoading, setIsLoading] = useState(!initialPayload);
@@ -72,6 +80,36 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   const [copiedRequestId, setCopiedRequestId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const copyTimerRef = useRef<number | null>(null);
+  const rowCountRef = useRef(rows.length);
+  const requestQueryString = useMemo(
+    () =>
+      liveRequestsApiQuery(
+        {
+          budgetScopeId,
+          budgetScopeType,
+          projectId,
+          range,
+          resolvedBy,
+          tenantId
+        },
+        statusFilter,
+        modelFilter
+      ),
+    [
+      budgetScopeId,
+      budgetScopeType,
+      projectId,
+      range,
+      resolvedBy,
+      tenantId,
+      modelFilter,
+      statusFilter
+    ]
+  );
+
+  useEffect(() => {
+    rowCountRef.current = rows.length;
+  }, [rows.length]);
 
   const loadRequests = useCallback(
     async ({ silent }: { silent: boolean }) => {
@@ -79,12 +117,12 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
       const controller = new AbortController();
       abortRef.current = controller;
 
-      if (!silent && rows.length === 0) {
+      if (!silent && rowCountRef.current === 0) {
         setIsLoading(true);
       }
 
       try {
-        const response = await fetch(liveRequestsApiUrl(filters, statusFilter, modelFilter), {
+        const response = await fetch(`/api/dashboard/live-requests?${requestQueryString}`, {
           cache: "no-store",
           signal: controller.signal
         });
@@ -94,7 +132,9 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
           throw new Error(payload.error ?? "Failed to load live requests");
         }
 
-        setRows(payload.data.rows);
+        const nextRows = normalizeLiveRequestRows(payload.data.rows);
+        rowCountRef.current = nextRows.length;
+        setRows(nextRows);
         setModelOptions(mergeModelOptions(payload.data.modelOptions, modelFilter));
         setError(null);
       } catch (fetchError) {
@@ -111,7 +151,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
         setIsLoading(false);
       }
     },
-    [filters, modelFilter, rows.length, statusFilter]
+    [modelFilter, requestQueryString]
   );
 
   useEffect(() => {
@@ -135,8 +175,8 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   }, []);
 
   const viewAllLogsHref = useMemo(
-    () => requestLogsHref(filters.tenantId, filters.range, statusFilter, modelFilter),
-    [filters.range, filters.tenantId, modelFilter, statusFilter]
+    () => requestLogsHref(tenantId, range, statusFilter, modelFilter),
+    [modelFilter, range, statusFilter, tenantId]
   );
 
   async function copyRequestId(requestId: string) {
@@ -282,7 +322,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
                   <Link
                     aria-label={`Open request log ${row.requestId}`}
                     className="dashboard-live-action-link"
-                    href={requestLogsHref(filters.tenantId, filters.range, statusFilter, modelFilter, row.requestId)}
+                    href={requestLogsHref(tenantId, range, statusFilter, modelFilter, row.requestId)}
                   >
                     <Eye aria-hidden="true" size={15} strokeWidth={2.2} />
                   </Link>
@@ -318,7 +358,7 @@ function OptionalBadge({
   );
 }
 
-function liveRequestsApiUrl(
+function liveRequestsApiQuery(
   filters: LiveRequestsCardFilters,
   status: LiveRequestStatusFilter,
   model: string
@@ -334,7 +374,7 @@ function liveRequestsApiUrl(
   appendQuery(query, "status", status);
   appendQuery(query, "model", model);
 
-  return `/api/dashboard/live-requests?${query.toString()}`;
+  return query.toString();
 }
 
 function requestLogsHref(
@@ -377,13 +417,28 @@ function requestLogsCreatedRange(range: string) {
   return "24h";
 }
 
-function mergeModelOptions(options: string[], selectedModel: string) {
-  const merged = new Set(options);
+function mergeModelOptions(options: string[] | undefined, selectedModel: string) {
+  const merged = new Set(normalizeModelOptions(options));
   if (selectedModel.trim()) {
     merged.add(selectedModel.trim());
   }
 
   return Array.from(merged).sort((first, second) => first.localeCompare(second));
+}
+
+function normalizeLiveRequestRows(rows: LiveRequestRow[] | undefined) {
+  return Array.isArray(rows) ? rows : [];
+}
+
+function normalizeModelOptions(options: string[] | undefined) {
+  if (!Array.isArray(options)) {
+    return [];
+  }
+
+  return options
+    .filter((option): option is string => typeof option === "string")
+    .map((option) => option.trim())
+    .filter(Boolean);
 }
 
 function formatLiveTime(value: string) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { RefreshCw, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export type AiInsightsPanelProps = {
   averageLatencyMs: number;
@@ -56,8 +56,9 @@ export function AiInsightsPanel({
   successRate,
   totalRequests
 }: AiInsightsPanelProps) {
-  const [generatedAt, setGeneratedAt] = useState(() => new Date());
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const analyzeTimerRef = useRef<number | null>(null);
   const insights = useMemo(
     () =>
       buildMockAiInsights({
@@ -88,15 +89,27 @@ export function AiInsightsPanel({
     setGeneratedAt(new Date());
   }, [insights]);
 
+  useEffect(() => {
+    return () => {
+      if (analyzeTimerRef.current !== null) {
+        window.clearTimeout(analyzeTimerRef.current);
+      }
+    };
+  }, []);
+
   function analyzeAgain() {
     if (isAnalyzing) {
       return;
     }
 
     setIsAnalyzing(true);
-    window.setTimeout(() => {
+    if (analyzeTimerRef.current !== null) {
+      window.clearTimeout(analyzeTimerRef.current);
+    }
+    analyzeTimerRef.current = window.setTimeout(() => {
       setGeneratedAt(new Date());
       setIsAnalyzing(false);
+      analyzeTimerRef.current = null;
     }, 450);
   }
 
@@ -175,13 +188,13 @@ export function AiInsightsPanel({
 
       <footer className="dashboard-ai-insights-footer">
         <span>외부 LLM 호출 없음</span>
-        <time dateTime={generatedAt.toISOString()}>{formatGeneratedAt(generatedAt)}</time>
+        <GeneratedAtTime generatedAt={generatedAt} />
       </footer>
     </section>
   );
 }
 
-function AiInsightsEmptyState({ generatedAt }: { generatedAt: Date }) {
+function AiInsightsEmptyState({ generatedAt }: { generatedAt: Date | null }) {
   return (
     <div className="dashboard-ai-insights-empty">
       <strong>아직 분석할 데이터가 부족합니다</strong>
@@ -191,9 +204,17 @@ function AiInsightsEmptyState({ generatedAt }: { generatedAt: Date }) {
         <li>트래픽 생성 후 Live Requests 영역을 확인하세요.</li>
         <li>최근 요청이 쌓이면 인사이트가 자동으로 갱신됩니다.</li>
       </ul>
-      <time dateTime={generatedAt.toISOString()}>{formatGeneratedAt(generatedAt)}</time>
+      <GeneratedAtTime generatedAt={generatedAt} />
     </div>
   );
+}
+
+function GeneratedAtTime({ generatedAt }: { generatedAt: Date | null }) {
+  if (!generatedAt) {
+    return <span>분석 대기</span>;
+  }
+
+  return <time dateTime={generatedAt.toISOString()}>{formatGeneratedAt(generatedAt)}</time>;
 }
 
 function buildMockAiInsights({

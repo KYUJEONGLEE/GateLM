@@ -30,10 +30,37 @@ export function CostOverTimeCard({
   initialSummary,
   rangeLabel
 }: CostOverTimeCardProps) {
-  const queryString = useMemo(() => buildCostOverTimeQuery(filters), [filters]);
-  const [summary, setSummary] = useState<CostOverTimeSummary | undefined>(initialSummary);
-  const [status, setStatus] = useState<CostOverTimeStatus>(initialSummary ? "success" : "loading");
-  const latestSummaryRef = useRef<CostOverTimeSummary | undefined>(initialSummary);
+  const {
+    budgetScopeId,
+    budgetScopeType,
+    projectId,
+    range,
+    resolvedBy,
+    tenantId
+  } = filters;
+  const queryString = useMemo(
+    () =>
+      buildCostOverTimeQuery({
+        budgetScopeId,
+        budgetScopeType,
+        projectId,
+        range,
+        resolvedBy,
+        tenantId
+      }),
+    [
+      budgetScopeId,
+      budgetScopeType,
+      projectId,
+      range,
+      resolvedBy,
+      tenantId
+    ]
+  );
+  const normalizedInitialSummary = useMemo(() => normalizeCostOverTimeSummary(initialSummary), [initialSummary]);
+  const [summary, setSummary] = useState<CostOverTimeSummary | undefined>(() => normalizedInitialSummary);
+  const [status, setStatus] = useState<CostOverTimeStatus>(normalizedInitialSummary ? "success" : "loading");
+  const latestSummaryRef = useRef<CostOverTimeSummary | undefined>(normalizedInitialSummary);
   const hasCostData = summary?.points.some((point) => point.spendUsd > 0) ?? false;
 
   useEffect(() => {
@@ -41,10 +68,10 @@ export function CostOverTimeCard({
   }, [summary]);
 
   useEffect(() => {
-    setSummary(initialSummary);
-    latestSummaryRef.current = initialSummary;
-    setStatus(initialSummary ? "success" : "loading");
-  }, [initialSummary, queryString]);
+    setSummary(normalizedInitialSummary);
+    latestSummaryRef.current = normalizedInitialSummary;
+    setStatus(normalizedInitialSummary ? "success" : "loading");
+  }, [normalizedInitialSummary, queryString]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -71,14 +98,15 @@ export function CostOverTimeCard({
           throw new Error("Failed to load cost data");
         }
 
-        const payload = (await response.json()) as { data?: CostOverTimeSummary };
-        if (!payload.data) {
+        const payload = (await response.json().catch(() => ({}))) as { data?: CostOverTimeSummary };
+        const nextSummary = normalizeCostOverTimeSummary(payload.data);
+        if (!nextSummary) {
           throw new Error("Cost data is missing");
         }
 
         if (!cancelled) {
-          latestSummaryRef.current = payload.data;
-          setSummary(payload.data);
+          latestSummaryRef.current = nextSummary;
+          setSummary(nextSummary);
           setStatus("success");
         }
       } catch {
@@ -90,7 +118,7 @@ export function CostOverTimeCard({
       }
     }
 
-    void refreshCostData(!initialSummary);
+    void refreshCostData(!normalizedInitialSummary);
     const intervalId = window.setInterval(() => {
       void refreshCostData(false);
     }, COST_OVER_TIME_POLLING_INTERVAL_MS);
@@ -100,7 +128,7 @@ export function CostOverTimeCard({
       controller.abort();
       window.clearInterval(intervalId);
     };
-  }, [initialSummary, queryString]);
+  }, [normalizedInitialSummary, queryString]);
 
   return (
     <section className="dashboard-cost-over-time-panel" aria-label="Cost over time">
@@ -161,4 +189,29 @@ function formatUsd(value: number) {
     minimumFractionDigits: 2,
     style: "currency"
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+function normalizeCostOverTimeSummary(summary: CostOverTimeSummary | undefined): CostOverTimeSummary | undefined {
+  if (!summary || !Array.isArray(summary.points)) {
+    return undefined;
+  }
+
+  return {
+    ...summary,
+    averageSpendUsd: normalizeNonNegativeNumber(summary.averageSpendUsd),
+    points: summary.points
+      .filter((point) => point && typeof point.bucket === "string" && typeof point.label === "string")
+      .map((point) => ({
+        ...point,
+        spendUsd: normalizeNonNegativeNumber(point.spendUsd)
+      }))
+  };
+}
+
+function normalizeNonNegativeNumber(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, value);
 }
