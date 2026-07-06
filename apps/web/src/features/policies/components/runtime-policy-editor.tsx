@@ -1752,12 +1752,12 @@ function groupRoutingModelsByProvider(
 function getRoutingProviderOptions(
   providerConnections: ProviderConnectionRecord[],
   _models: RuntimePolicyModelConfig[],
-  selectedProviders: string[]
+  selectedProviders: Array<string | null | undefined>
 ): RoutingProviderOption[] {
   const providerOptions = new Map<string, RoutingProviderOption>();
 
   for (const providerConnection of providerConnections) {
-    const providerName = providerConnection.provider.trim();
+    const providerName = normalizePolicyText(providerConnection.provider);
 
     if (providerName && getProviderConnectionModels(providerConnection).length > 0) {
       providerOptions.set(providerName, {
@@ -1768,12 +1768,14 @@ function getRoutingProviderOptions(
   }
 
   for (const provider of selectedProviders) {
-    const providerName = provider.trim();
+    const providerName = normalizePolicyText(provider);
 
     if (
       providerName &&
       !providerOptions.has(providerName) &&
-      providerConnections.some((providerConnection) => providerConnection.provider === providerName)
+      providerConnections.some(
+        (providerConnection) => normalizePolicyText(providerConnection.provider) === providerName
+      )
     ) {
       providerOptions.set(providerName, {
         provider: providerName,
@@ -1791,7 +1793,7 @@ function getSelectedRoutingProviderConnections(
 ) {
   const providerConnectionsByProvider = new Map(
     providerConnections.map((providerConnection) => [
-      providerConnection.provider.trim(),
+      normalizePolicyText(providerConnection.provider),
       providerConnection
     ])
   );
@@ -1812,7 +1814,7 @@ function getSelectedRoutingProviderNames(values: RuntimePolicyDraftValues) {
         values.routingLowCostProvider,
         values.routingFallbackProvider
       ]
-        .map((provider) => provider.trim())
+        .map((provider) => normalizePolicyText(provider))
         .filter(Boolean)
     )
   );
@@ -1870,13 +1872,13 @@ function mergeRuntimePolicyModels(
   const merged = new Map<string, RuntimePolicyModelConfig>();
 
   for (const model of [...models, ...nextModels]) {
-    const provider = model.provider.trim();
-    const modelName = model.model.trim();
+    const provider = normalizePolicyText(model.provider);
+    const modelName = normalizePolicyText(model.model);
 
     if (provider && modelName) {
       merged.set(`${provider}::${modelName}`, {
         ...model,
-        displayName: model.displayName.trim() || modelName,
+        displayName: normalizePolicyText(model.displayName) || modelName,
         model: modelName,
         provider
       });
@@ -1886,8 +1888,8 @@ function mergeRuntimePolicyModels(
   return Array.from(merged.values());
 }
 
-function runtimePolicyModelKey(provider: string, model: string) {
-  return `${provider.trim()}::${model.trim()}`;
+function runtimePolicyModelKey(provider: unknown, model: unknown) {
+  return `${normalizePolicyText(provider)}::${normalizePolicyText(model)}`;
 }
 
 function mergeRuntimePolicyPricingRules(
@@ -1897,8 +1899,8 @@ function mergeRuntimePolicyPricingRules(
   const merged = new Map<string, RuntimePolicyDraftValues["pricingRules"][number]>();
 
   for (const pricingRule of pricingRules) {
-    const provider = pricingRule.provider.trim();
-    const model = pricingRule.model.trim();
+    const provider = normalizePolicyText(pricingRule.provider);
+    const model = normalizePolicyText(pricingRule.model);
 
     if (provider && model) {
       merged.set(`${provider}::${model}`, {
@@ -1910,8 +1912,8 @@ function mergeRuntimePolicyPricingRules(
   }
 
   for (const model of models) {
-    const provider = model.provider.trim();
-    const modelName = model.model.trim();
+    const provider = normalizePolicyText(model.provider);
+    const modelName = normalizePolicyText(model.model);
     const key = `${provider}::${modelName}`;
 
     if (provider && modelName && !merged.has(key)) {
@@ -1929,16 +1931,24 @@ function mergeRuntimePolicyPricingRules(
 }
 
 function hasRoutingModelSelection(
-  provider: string,
-  model: string,
+  provider: string | null | undefined,
+  model: string | null | undefined,
   modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>
 ) {
+  const trimmedProvider = normalizePolicyText(provider);
+  const trimmedModel = normalizePolicyText(model);
+
+  if (!trimmedProvider || !trimmedModel) {
+    return false;
+  }
+
   return Boolean(
-    provider.trim() &&
-      model.trim() &&
-      modelOptionsByProvider
-        .get(provider)
-        ?.some((option) => option.model === model && option.status === "active")
+    modelOptionsByProvider
+      .get(trimmedProvider)
+      ?.some(
+        (option) =>
+          normalizePolicyText(option.model) === trimmedModel && option.status === "active"
+      )
   );
 }
 
@@ -1956,4 +1966,8 @@ function getProviderConnectionModels(providerConnection: ProviderConnectionRecor
         .filter(Boolean)
     )
   );
+}
+
+function normalizePolicyText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
