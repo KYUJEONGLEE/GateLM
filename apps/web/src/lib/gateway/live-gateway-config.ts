@@ -9,7 +9,6 @@ const MAX_APPLICATION_CHAT_MAX_TOKENS = 4096;
 
 export type LiveGatewayConfig = {
   apiKey: string;
-  appToken: string;
   applicationChatMaxTokens: number;
   applicationChatModel: string;
   applicationChatStreamingEnabled: boolean;
@@ -22,14 +21,10 @@ export type LiveGatewayConfig = {
 
 export function getLiveGatewayConfig(): LiveGatewayConfig {
   return {
-    apiKey: firstEnv("GATELM_DEMO_API_KEY", "GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY")
+    apiKey: firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY")
       ?? "glm_api_test_redacted",
-    appToken:
-      firstEnv("GATELM_DEMO_APP_TOKEN", "GATELM_GATEWAY_APP_TOKEN", "GATEWAY_APP_TOKEN")
-      ?? "glm_app_token_test_redacted",
     applicationChatMaxTokens: getApplicationChatMaxTokens(),
-    applicationChatModel:
-      firstEnv("GATELM_APPLICATION_CHAT_MODEL", "GATEWAY_APPLICATION_CHAT_MODEL") ?? "auto",
+    applicationChatModel: "auto",
     applicationChatStreamingEnabled: getApplicationChatStreamingEnabled(),
     baseUrl: normalizeBaseUrl(
       firstEnv("GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL")

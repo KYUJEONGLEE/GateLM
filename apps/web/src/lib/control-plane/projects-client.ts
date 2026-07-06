@@ -5,7 +5,9 @@ import {
   getControlPlaneBaseUrl,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
 import type {
+  ProjectBudgetThresholdRecord,
   ProjectFormValues,
   ProjectRecord,
   ProjectsModel,
@@ -45,6 +47,8 @@ type ProjectListResult =
       status: number;
     };
 
+const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
+
 export async function getProjectsModel(routeTenantId: string): Promise<ProjectsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneTenantId = getControlPlaneTenantId();
@@ -69,6 +73,12 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
     routeTenantId,
     source: "fixture"
   };
+}
+
+export async function getProjectBudgetThresholds(
+  projects: ProjectRecord[]
+): Promise<ProjectBudgetThresholdRecord[]> {
+  return Promise.all(projects.map(getProjectBudgetThreshold));
 }
 
 export async function createProject(values: ProjectFormValues): Promise<ProjectRequestResult> {
@@ -126,6 +136,32 @@ export async function updateProject(values: ProjectUpdateValues): Promise<Projec
   }
 }
 
+async function getProjectBudgetThreshold(
+  project: ProjectRecord
+): Promise<ProjectBudgetThresholdRecord> {
+  if (!project.runtimeApplicationId) {
+    return {
+      projectId: project.id,
+      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
+    };
+  }
+
+  try {
+    const config = await getRuntimePolicyConfigForApplication(project.runtimeApplicationId);
+    const warningThresholdPercent = config?.budgetPolicy?.warningThresholdPercent;
+
+    return {
+      projectId: project.id,
+      warningThresholdPercent: normalizeWarningThresholdPercent(warningThresholdPercent)
+    };
+  } catch {
+    return {
+      projectId: project.id,
+      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
+    };
+  }
+}
+
 async function listProjects(tenantId: string): Promise<ProjectListResult> {
   try {
     const response = await fetch(
@@ -143,6 +179,12 @@ async function listProjects(tenantId: string): Promise<ProjectListResult> {
       status: 0
     };
   }
+}
+
+function normalizeWarningThresholdPercent(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100
+    ? value
+    : DEFAULT_WARNING_THRESHOLD_PERCENT;
 }
 
 function toProjectPayload(values: ProjectFormValues) {
@@ -266,6 +308,7 @@ function getFixtureProject(): ProjectRecord {
     description: "Customer support Gateway project from the v1 runtime config fixture.",
     id: runtimeConfig.projectId,
     name: "Customer Support",
+    runtimeApplicationId: null,
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
     totalBudgetUsd: 100,
@@ -297,6 +340,10 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     id: record.id,
     name: record.name,
+    runtimeApplicationId:
+      typeof record.runtimeApplicationId === "string" && record.runtimeApplicationId.trim()
+        ? record.runtimeApplicationId
+        : null,
     status,
     tenantId: record.tenantId,
     totalBudgetUsd: normalizeNumber(record.totalBudgetUsd, 100),

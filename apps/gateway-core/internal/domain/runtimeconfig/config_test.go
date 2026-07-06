@@ -19,12 +19,6 @@ func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
 				config.APIKeyID = ""
 			},
 		},
-		{
-			name: "missing app token binding",
-			mutate: func(config *ActiveConfig) {
-				config.AppTokenID = ""
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -41,6 +35,16 @@ func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
 				t.Fatalf("expected missing credential binding, got %v", err)
 			}
 		})
+	}
+}
+
+func TestActiveConfigValidateActiveAllowsMissingLegacyAppTokenBinding(t *testing.T) {
+	config := testActiveConfig()
+	config.AppTokenID = ""
+	config.AppTokenStatus = ""
+
+	if err := config.ValidateActive(); err != nil {
+		t.Fatalf("expected missing legacy app token binding to be allowed, got %v", err)
 	}
 }
 
@@ -127,6 +131,28 @@ func TestResponseCapturePolicyNormalizeAndValidate(t *testing.T) {
 	}
 	if !errors.Is(config.ValidateActive(), ErrInvalidResponseCapture) {
 		t.Fatalf("expected invalid response capture policy to fail active validation")
+	}
+}
+
+func TestSafetyPolicyValidateAcceptsPiiAndMandatoryDetectorSet(t *testing.T) {
+	policy := SafetyPolicy{
+		SecurityPolicyHash: "hash_security_policy_test",
+		DetectorSet: []DetectorPolicy{
+			{DetectorType: "email", Action: DetectorActionRedact},
+			{DetectorType: "phone_number", Action: DetectorActionRedact},
+			{DetectorType: "person_name", Action: DetectorActionRedact},
+			{DetectorType: "postal_address", Action: DetectorActionRedact},
+			{DetectorType: "organization_name", Action: DetectorActionRedact},
+			{DetectorType: "resident_registration_number", Action: DetectorActionBlock},
+			{DetectorType: "api_key", Action: DetectorActionBlock},
+			{DetectorType: "authorization_header", Action: DetectorActionBlock},
+			{DetectorType: "jwt", Action: DetectorActionBlock},
+			{DetectorType: "private_key", Action: DetectorActionBlock},
+		},
+	}
+
+	if err := policy.Validate(); err != nil {
+		t.Fatalf("expected v2 safety detector set to validate, got %v", err)
 	}
 }
 

@@ -377,7 +377,6 @@ async function callGateway(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-App-Token": config.appToken,
       "X-GateLM-End-User-Id": "customer_user_demo_live",
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
@@ -447,7 +446,6 @@ async function callGatewayStreaming(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-App-Token": config.appToken,
       "X-GateLM-End-User-Id": "customer_user_demo_live",
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
@@ -570,53 +568,61 @@ async function prepareConversationGatewayContext({
   }
 
   const contextRetentionEnabled = options.contextRetentionEnabled ?? false;
-  const model = getCustomerDemoLiveModel();
-  const conversation =
-    options.conversationId
-      ? await updateExistingConversation({
-          contextRetentionEnabled,
-          conversationId: options.conversationId
-        })
-      : await createApplicationConversation({
-          contextRetentionEnabled
-        });
-
-  const messageResult = await createChatConversationMessage({
-    applicationId: model.applicationId,
-    content: message ?? definition.gatewayPrompt,
-    conversationId: conversation.id,
-    projectId: model.projectId,
-    requestId,
-    role: "user",
-    systemMessage: DEFAULT_SYSTEM_MESSAGE,
-    tenantId: model.tenantId
-  });
-
-  if (!messageResult.ok) {
-    throw new Error(messageResult.error);
+  if (!contextRetentionEnabled) {
+    return null;
   }
 
-  return {
-    contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
-    conversationId: conversation.id,
-    messages: withRawCurrentUserMessage(
-      messageResult.data.context.messages,
-      message ?? definition.gatewayPrompt
-    ),
-    userMessageId: messageResult.data.message.id
-  };
+  try {
+    const model = getCustomerDemoLiveModel();
+    const conversation =
+      options.conversationId
+        ? await updateExistingConversation({
+            contextRetentionEnabled,
+            conversationId: options.conversationId
+          })
+        : await createApplicationConversation({
+            contextRetentionEnabled
+          });
+
+    const messageResult = await createChatConversationMessage({
+      applicationId: model.applicationId,
+      content: message ?? definition.gatewayPrompt,
+      conversationId: conversation.id,
+      projectId: model.projectId,
+      requestId,
+      role: "user",
+      systemMessage: DEFAULT_SYSTEM_MESSAGE,
+      tenantId: model.tenantId
+    });
+
+    if (!messageResult.ok) {
+      return null;
+    }
+
+    return {
+      contextRetentionEnabled: messageResult.data.context.contextRetentionEnabled,
+      conversationId: conversation.id,
+      messages: withRawCurrentUserMessage(
+        messageResult.data.context.messages,
+        message ?? definition.gatewayPrompt
+      ),
+      userMessageId: messageResult.data.message.id
+    };
+  } catch {
+    return null;
+  }
 }
 
 function withRawCurrentUserMessage(
-  messages: GatewayContextMessage[],
+  messages: GatewayContextMessage[] | null | undefined,
   currentContent: string
 ): GatewayContextMessage[] {
   const normalizedCurrentContent = currentContent.trim();
   if (!normalizedCurrentContent) {
-    return messages;
+    return messages ?? [];
   }
 
-  const nextMessages = messages.map((message) => ({ ...message }));
+  const nextMessages = (messages ?? []).map((message) => ({ ...message }));
   const currentMessageIndex = nextMessages.length - 1;
   const currentMessage = nextMessages[currentMessageIndex];
 
@@ -1145,10 +1151,6 @@ function buildDisplayRequestHeaders(requestId: string): CustomerDemoHeader[] {
     {
       name: "Authorization",
       value: "Bearer <redacted>"
-    },
-    {
-      name: "X-GateLM-App-Token",
-      value: "<redacted>"
     },
     {
       name: "X-GateLM-End-User-Id",

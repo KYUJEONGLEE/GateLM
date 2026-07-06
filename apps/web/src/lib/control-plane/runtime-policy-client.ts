@@ -11,6 +11,7 @@ import {
   listApplicationProviderConnections,
   listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
+import { applyInitialRuntimePolicyModelSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import { getRuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type {
@@ -432,13 +433,26 @@ export async function getRuntimePolicyConfigForApplication(
 
 export async function publishRuntimePolicyModelSelectionForApplication(
   applicationId: string,
-  selectedModelKey: string
+  selectedModelKey: string,
+  options: {
+    warningThresholdPercent?: number;
+  } = {}
 ): Promise<{ error?: string; ok: boolean }> {
   const selected = parseRuntimePolicyModelKey(selectedModelKey);
 
   if (!selected) {
     return {
       error: "Selected model is invalid.",
+      ok: false
+    };
+  }
+
+  if (
+    options.warningThresholdPercent !== undefined &&
+    !isWarningThresholdPercent(options.warningThresholdPercent)
+  ) {
+    return {
+      error: "Warning threshold must be an integer between 0 and 100.",
       ok: false
     };
   }
@@ -464,11 +478,9 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   }
 
   const draftValues = getRuntimePolicyDraftValues(activeConfig);
-  const nextValues: RuntimePolicyDraftValues = {
-    ...draftValues,
-    routingDefaultModel: selectedModel.model,
-    routingDefaultProvider: selectedModel.provider
-  };
+  const nextValues = applyInitialRuntimePolicyModelSelection(draftValues, selectedModel, {
+    warningThresholdPercent: options.warningThresholdPercent
+  });
   const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
   const draft = await writeRuntimeConfig("draft", nextValues, {
     applicationId,
@@ -864,6 +876,10 @@ function parseRuntimePolicyModelKey(value: string) {
     model: model.trim(),
     provider: provider.trim()
   };
+}
+
+function isWarningThresholdPercent(value: number) {
+  return Number.isInteger(value) && value >= 0 && value <= 100;
 }
 
 function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string) {

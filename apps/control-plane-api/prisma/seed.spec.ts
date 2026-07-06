@@ -11,7 +11,9 @@ import {
   DEMO_APPLICATION_ID,
   DEMO_MOCK_PROVIDER_ID,
   DEMO_OPENAI_PROVIDER_ID,
+  DEMO_PROJECT_ID,
   DEMO_RUNTIME_CONFIG_VERSION,
+  DEMO_TENANT_ID,
   PROVIDER_PRESETS,
   seedDemoData,
 } from './seed';
@@ -207,12 +209,39 @@ describe('Control Plane demo seed baseline', () => {
     );
   });
 
+  it('connects the demo application to the mock provider in mock mode', async () => {
+    const tx = createMockTransaction();
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await seedDemoData(client as unknown as PrismaClient);
+
+    expect(tx.applicationProviderConnection.upsert).toHaveBeenCalledTimes(1);
+    expect(tx.applicationProviderConnection.upsert).toHaveBeenCalledWith({
+      where: {
+        applicationId_providerConnectionId: {
+          applicationId: DEMO_APPLICATION_ID,
+          providerConnectionId: DEMO_MOCK_PROVIDER_ID,
+        },
+      },
+      update: {
+        tenantId: DEMO_TENANT_ID,
+        projectId: DEMO_PROJECT_ID,
+      },
+      create: {
+        tenantId: DEMO_TENANT_ID,
+        projectId: DEMO_PROJECT_ID,
+        applicationId: DEMO_APPLICATION_ID,
+        providerConnectionId: DEMO_MOCK_PROVIDER_ID,
+      },
+    });
+  });
+
   it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
     const tx = createMockTransaction();
-    tx.providerConnection.upsert.mockImplementation(
-      (args: { create?: { id?: string } }) =>
-        Promise.resolve({ id: args.create?.id ?? 'provider-demo-id' }),
-    );
     const client = {
       $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
         callback(tx),
@@ -223,11 +252,18 @@ describe('Control Plane demo seed baseline', () => {
       await seedDemoData(client as unknown as PrismaClient);
     });
 
-    expect(tx.providerConnection.upsert).toHaveBeenCalledTimes(2);
-    expect(tx.providerConnection.upsert).toHaveBeenCalledWith(
+    expect(tx.providerConnection.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: '00000000-0000-4000-8000-000000000100',
+        provider: 'openai-main',
+      },
+    });
+    expect(tx.providerConnection.create).toHaveBeenCalledTimes(2);
+    expect(tx.providerConnection.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
+        data: expect.objectContaining({
           id: DEMO_OPENAI_PROVIDER_ID,
+          projectId: null,
           provider: 'openai-main',
           resolver: 'environment',
           secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
@@ -249,6 +285,27 @@ describe('Control Plane demo seed baseline', () => {
         }),
       }),
     );
+    expect(tx.applicationProviderConnection.upsert).toHaveBeenCalledTimes(2);
+    expect(tx.applicationProviderConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          applicationId_providerConnectionId: {
+            applicationId: DEMO_APPLICATION_ID,
+            providerConnectionId: DEMO_MOCK_PROVIDER_ID,
+          },
+        },
+      }),
+    );
+    expect(tx.applicationProviderConnection.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          applicationId_providerConnectionId: {
+            applicationId: DEMO_APPLICATION_ID,
+            providerConnectionId: DEMO_OPENAI_PROVIDER_ID,
+          },
+        },
+      }),
+    );
   });
 });
 
@@ -259,7 +316,16 @@ function createMockTransaction() {
     application: { upsert: jest.fn() },
     providerPreset: { updateMany: jest.fn(), upsert: jest.fn() },
     providerConnection: {
-      upsert: jest.fn().mockResolvedValue({ id: 'provider-demo-id' }),
+      create: jest.fn((args: { data: { id?: string } }) =>
+        Promise.resolve({ id: args.data.id ?? 'provider-demo-id' }),
+      ),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve({ id: args.where.id }),
+      ),
+    },
+    applicationProviderConnection: {
+      upsert: jest.fn(),
     },
     gatewayApiKey: { upsert: jest.fn() },
     appToken: { upsert: jest.fn() },

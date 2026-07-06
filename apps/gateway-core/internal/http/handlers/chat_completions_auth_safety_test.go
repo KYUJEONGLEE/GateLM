@@ -85,7 +85,7 @@ func TestChatCompletionsHandlerRejectsMissingAuthorizationBeforeProviderCall(t *
 	}
 }
 
-func TestChatCompletionsHandlerAuthSafetyRejectsInvalidAppTokenBeforeProviderCall(t *testing.T) {
+func TestChatCompletionsHandlerAuthSafetyIgnoresLegacyAppTokenValidatorBeforeProviderCall(t *testing.T) {
 	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
 	defer closeServer()
 
@@ -108,19 +108,21 @@ func TestChatCompletionsHandlerAuthSafetyRejectsInvalidAppTokenBeforeProviderCal
 
 	handler.ServeHTTP(rr, req)
 
-	assertGatewayError(t, rr, http.StatusForbidden, "invalid_app_token")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
 	if apiAuth.calls != 1 {
 		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
 	}
-	if appValidator.calls != 1 {
-		t.Fatalf("expected app token validator to be called once, got %d", appValidator.calls)
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
-	if *chatCalls != 0 {
-		t.Fatalf("expected no mock provider calls, got %d", *chatCalls)
+	if *chatCalls != 1 {
+		t.Fatalf("expected one mock provider call, got %d", *chatCalls)
 	}
 }
 
-func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeProviderCall(t *testing.T) {
+func TestChatCompletionsHandlerAcceptsProjectAPIKeyWithoutAppToken(t *testing.T) {
 	chatCalls, registry, closeServer := authSafetyProviderRegistry(t)
 	defer closeServer()
 
@@ -144,15 +146,17 @@ func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeProviderCall(t *testi
 
 	handler.ServeHTTP(rr, req)
 
-	assertGatewayError(t, rr, http.StatusForbidden, "invalid_app_token")
-	if apiAuth.calls != 0 {
-		t.Fatalf("expected API key authenticator not to be called, got %d", apiAuth.calls)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if apiAuth.calls != 1 {
+		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
 	}
 	if appValidator.calls != 0 {
 		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
-	if *chatCalls != 0 {
-		t.Fatalf("expected no mock provider calls, got %d", *chatCalls)
+	if *chatCalls != 1 {
+		t.Fatalf("expected one mock provider call, got %d", *chatCalls)
 	}
 }
 
@@ -161,15 +165,15 @@ func TestChatCompletionsHandlerAuthSafetyRejectsScopeMismatchBeforeProviderCall(
 	defer closeServer()
 
 	apiAuth := &fakeAPIKeyAuthenticator{
-		identity: validAPIKeyIdentity(),
-	}
-	appValidator := &fakeAppTokenValidator{
-		identity: auth.AppTokenIdentity{
-			AppTokenID:    "app_token_demo",
+		identity: auth.APIKeyIdentity{
+			APIKeyID:      "api_key_demo",
 			TenantID:      "tenant_demo",
 			ProjectID:     "other_project",
 			ApplicationID: "app_demo",
 		},
+	}
+	appValidator := &fakeAppTokenValidator{
+		identity: validAppTokenIdentity(),
 	}
 	handler := ChatCompletionsHandler{
 		Providers:           registry,
@@ -177,6 +181,7 @@ func TestChatCompletionsHandlerAuthSafetyRejectsScopeMismatchBeforeProviderCall(
 		DefaultProvider:     "mock",
 		APIKeyAuthenticator: apiAuth,
 		AppTokenValidator:   appValidator,
+		ExpectedProjectID:   "project_demo",
 	}
 
 	req := authSafetyRequest()
@@ -188,8 +193,8 @@ func TestChatCompletionsHandlerAuthSafetyRejectsScopeMismatchBeforeProviderCall(
 	if apiAuth.calls != 1 {
 		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
 	}
-	if appValidator.calls != 1 {
-		t.Fatalf("expected app token validator to be called once, got %d", appValidator.calls)
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
 	if *chatCalls != 0 {
 		t.Fatalf("expected no mock provider calls, got %d", *chatCalls)
@@ -228,11 +233,8 @@ func TestChatCompletionsHandlerCallsProviderWithValidAuth(t *testing.T) {
 	if apiAuth.bearerToken != "glm_api_test_redacted" {
 		t.Fatalf("unexpected bearer token passed to authenticator: %s", apiAuth.bearerToken)
 	}
-	if appValidator.calls != 1 {
-		t.Fatalf("expected app token validator to be called once, got %d", appValidator.calls)
-	}
-	if appValidator.appToken != "glm_app_token_test_redacted" {
-		t.Fatalf("unexpected app token passed to validator: %s", appValidator.appToken)
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
 	if *chatCalls != 1 {
 		t.Fatalf("expected one mock provider call, got %d", *chatCalls)

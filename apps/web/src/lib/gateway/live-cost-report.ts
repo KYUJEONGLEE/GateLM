@@ -15,17 +15,39 @@ export type LiveCostOverTimeFilters = {
   to?: string;
 };
 
+export type ProjectMonthlyCost = {
+  costMicroUsd: number;
+  projectId: string;
+  requestCount: number;
+};
+
+export type ProjectMonthlyCostReport = {
+  generatedAt: string | null;
+  loadError: string | null;
+  projectCosts: ProjectMonthlyCost[];
+  source: "gateway" | "unavailable";
+};
+
 type LiveCostReportResponse = {
   data?: {
+    breakdowns?: {
+      byProject?: ProjectMonthlyCostResponseRow[];
+    };
     buckets?: Array<{
-      costMicroUsd?: number;
+      costMicroUsd?: number | string;
       costUsd?: string;
       periodStart?: string;
-      requestCount?: number;
+      requestCount?: number | string;
     }>;
     generatedAt?: string;
     period?: string;
   };
+};
+
+type ProjectMonthlyCostResponseRow = {
+  costMicroUsd?: number | string;
+  projectId?: string;
+  requestCount?: number | string;
 };
 
 export async function getLiveCostOverTime(
@@ -38,11 +60,10 @@ export async function getLiveCostOverTime(
       ? { from: filters.from, to: filters.to }
       : getDashboardLiveRange(filters.range);
   const period = costReportPeriodForRange(filters.range);
-  const gatewayTenantId = toGatewayTenantId(tenantId);
   const query = new URLSearchParams({
     from: liveRange.from,
     period,
-    tenantId: gatewayTenantId,
+    tenantId: toGatewayTenantId(tenantId),
     to: liveRange.to
   });
   appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
@@ -66,6 +87,46 @@ export async function getLiveCostOverTime(
   return toCostOverTimeSummary(payload.data, period);
 }
 
+export async function getLiveMonthlyProjectCostReport(
+  tenantId: string
+): Promise<ProjectMonthlyCostReport> {
+  const config = getLiveGatewayConfig();
+  const { from, to } = getCurrentUtcMonthRange();
+  const query = new URLSearchParams({
+    from,
+    period: "month",
+    tenantId: toGatewayTenantId(tenantId),
+    to
+  });
+
+  const response = await fetch(`${config.baseUrl}/api/reports/costs?${query.toString()}`, {
+    cache: "no-store",
+    headers: {
+      "X-GateLM-Request-Id": `request_web_project_costs_${Date.now()}`
+    }
+  }).catch(() => undefined);
+
+  if (!response?.ok) {
+    return unavailableCostReport("Gateway cost report unavailable.");
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as LiveCostReportResponse;
+  const rows = payload.data?.breakdowns?.byProject;
+
+  if (!Array.isArray(rows)) {
+    return unavailableCostReport("Gateway cost report did not include project breakdowns.");
+  }
+
+  return {
+    generatedAt: typeof payload.data?.generatedAt === "string" ? payload.data.generatedAt : null,
+    loadError: null,
+    projectCosts: rows
+      .map(toProjectMonthlyCost)
+      .filter((row): row is ProjectMonthlyCost => row !== null),
+    source: "gateway"
+  };
+}
+
 function costReportPeriodForRange(range: LiveDashboardRange | undefined): "hour" | "day" {
   return range === "1w" ? "day" : "hour";
 }
@@ -75,6 +136,43 @@ function appendOptionalQuery(query: URLSearchParams, key: string, value: string 
   if (normalized) {
     query.set(key, normalized);
   }
+}
+
+function unavailableCostReport(loadError: string): ProjectMonthlyCostReport {
+  return {
+    generatedAt: null,
+    loadError,
+    projectCosts: [],
+    source: "unavailable"
+  };
+}
+
+function toProjectMonthlyCost(row: ProjectMonthlyCostResponseRow): ProjectMonthlyCost | null {
+  if (!row || typeof row !== "object" || typeof row.projectId !== "string") {
+    return null;
+  }
+
+  const projectId = row.projectId.trim();
+
+  if (!projectId) {
+    return null;
+  }
+
+  return {
+    costMicroUsd: normalizeNonNegativeNumber(row.costMicroUsd),
+    projectId,
+    requestCount: normalizeNonNegativeNumber(row.requestCount)
+  };
+}
+
+function getCurrentUtcMonthRange() {
+  const to = new Date();
+  const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
+
+  return {
+    from: from.toISOString(),
+    to: to.toISOString()
+  };
 }
 
 function toGatewayTenantId(tenantId: string) {
@@ -97,7 +195,7 @@ function toCostOverTimeSummary(
     .filter((bucket) => bucket.periodStart)
     .map((bucket) => {
       const bucketStart = bucket.periodStart ?? "";
-      const spendUsd = microUsdToUsd(bucket.costMicroUsd ?? 0);
+      const spendUsd = microUsdToUsd(normalizeNonNegativeNumber(bucket.costMicroUsd));
 
       return {
         bucket: bucketStart,
@@ -140,4 +238,14 @@ function formatCostBucketLabel(value: string, period: "hour" | "day") {
     month: "short",
     timeZone: "Asia/Seoul"
   }).format(date);
+}
+
+function normalizeNonNegativeNumber(value: number | string | undefined) {
+  const parsed = typeof value === "string" ? Number(value) : value;
+
+  if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.max(0, parsed);
 }

@@ -11,7 +11,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { Button } from "@/components/ui/button";
-import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
@@ -225,12 +224,16 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     setIsLoading(true);
 
     try {
-      const conversation = await client.createConversation({
-        contextRetentionEnabled
-      });
+      if (contextRetentionEnabled) {
+        const conversation = await client.createConversation({
+          contextRetentionEnabled
+        });
 
-      setConversationId(conversation.id);
-      setContextRetentionEnabled(conversation.contextRetentionEnabled);
+        setConversationId(conversation.id);
+        setContextRetentionEnabled(conversation.contextRetentionEnabled);
+      } else {
+        setConversationId(null);
+      }
       setExchange(buildInitialExchange(model));
       setInputValue("");
       setLoadError(null);
@@ -416,7 +419,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
           <span>{text.sidebar.application}</span>
           <div className="customer-chat-sidebar-card">
             <strong>{text.appName}</strong>
-            <small>{formatDisplayIdentifier(model.applicationId)}</small>
+            <small>{text.chatPreview}</small>
           </div>
 
           <button
@@ -690,10 +693,6 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
         {
           name: "Authorization",
           value: "Bearer <redacted>"
-        },
-        {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
         },
         {
           name: "Content-Type",

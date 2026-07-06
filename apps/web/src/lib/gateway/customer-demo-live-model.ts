@@ -156,10 +156,6 @@ function buildLiveScenario(
           value: "Bearer <redacted>"
         },
         {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
-        },
-        {
           name: "X-GateLM-End-User-Id",
           value: "customer_user_demo_live"
         },

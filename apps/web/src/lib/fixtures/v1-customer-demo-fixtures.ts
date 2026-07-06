@@ -117,21 +117,15 @@ function formatEstimatedCost(costMicroUsd: number) {
 
 function buildRequestHeaders({
   apiKey,
-  appToken,
   record
 }: {
   apiKey: CredentialListItem;
-  appToken: CredentialListItem;
   record: InvocationLogRecord;
 }): CustomerDemoHeader[] {
   return [
     {
       name: "Authorization",
       value: `Bearer ${displaySecret(apiKey.prefix, apiKey.last4)}`
-    },
-    {
-      name: "X-GateLM-App-Token",
-      value: displaySecret(appToken.prefix, appToken.last4)
     },
     {
       name: "X-GateLM-End-User-Id",
@@ -265,19 +259,17 @@ function buildResponseBody(config: ScenarioConfig, record: InvocationLogRecord) 
 
 function buildExchange({
   apiKey,
-  appToken,
   config,
   record
 }: {
   apiKey: CredentialListItem;
-  appToken: CredentialListItem;
   config: ScenarioConfig;
   record: InvocationLogRecord;
 }): CustomerDemoExchange {
   const request: CustomerDemoRequest = {
     endpoint: "/v1/chat/completions",
     method: "POST",
-    headers: buildRequestHeaders({ apiKey, appToken, record }),
+    headers: buildRequestHeaders({ apiKey, record }),
     body: buildRequestBody(config, record)
   };
 
@@ -330,7 +322,6 @@ export function getCustomerDemoModel(): CustomerDemoModel {
 
       return buildExchange({
         apiKey: credentials.credentialLifecycle.apiKey.listItemExample,
-        appToken: credentials.credentialLifecycle.appToken.listItemExample,
         config,
         record
       });

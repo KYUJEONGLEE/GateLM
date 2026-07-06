@@ -870,9 +870,7 @@ describe('RuntimeConfigsService', () => {
     expect(prisma.gatewayApiKey.findUnique).toHaveBeenCalledWith({
       where: { id: apiKeyId },
     });
-    expect(prisma.appToken.findUnique).toHaveBeenCalledWith({
-      where: { id: appTokenId },
-    });
+    expect(prisma.appToken.findUnique).not.toHaveBeenCalled();
     expect(result).toEqual(activeDocument);
   });
 
@@ -2157,8 +2155,8 @@ describe('RuntimeConfigsService', () => {
       applicationStatus: 'active',
       apiKeyId,
       apiKeyStatus: 'active',
-      appTokenId,
-      appTokenStatus: 'active',
+      appTokenId: null,
+      appTokenStatus: null,
       apiKey: {
         id: apiKeyId,
         type: 'api_key',
@@ -2169,16 +2167,7 @@ describe('RuntimeConfigsService', () => {
         expiresAt: null,
         verification: 'prefix_then_hash_compare',
       },
-      appToken: {
-        id: appTokenId,
-        type: 'app_token',
-        status: 'active',
-        prefix: 'gat_app_',
-        last4: '4tK2',
-        scopes: ['gateway:invoke'],
-        expiresAt: null,
-        verification: 'prefix_then_hash_compare',
-      },
+      appToken: null,
       providers: [
         {
           providerId,

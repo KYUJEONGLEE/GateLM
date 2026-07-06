@@ -146,20 +146,21 @@ test("email signup opens the tenant Projects management page", async ({ page }) 
 
   await createProjectLink.click();
   await expect(page).toHaveURL(/\/tenants\/tenant_signup_acme\/onboarding$/);
-  const tenantField = page.getByRole("textbox", { name: "Tenant" });
-  await expect(tenantField).toHaveValue("Acme AI Operations");
-  await expect(tenantField).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Tenant" })).toHaveCount(0);
+  const budgetFieldShell = page.locator(".onboarding-field").filter({
+    has: page.getByRole("textbox", { name: "Project budget" })
+  });
+  await expect(budgetFieldShell.locator(".onboarding-field-unit")).toHaveText("$");
 });
 
-test("create project allows manual tenant input without an email signup tenant", async ({ page }) => {
+test("create project hides tenant input and shows project budget currency", async ({ page }) => {
   await page.goto("/tenants/tenant_demo_acme/onboarding");
 
-  const tenantField = page.getByRole("textbox", { name: "Tenant" });
-  await expect(tenantField).toBeEnabled();
-  await expect(tenantField).toHaveValue("");
-
-  await tenantField.fill("Google Workspace Tenant");
-  await expect(tenantField).toHaveValue("Google Workspace Tenant");
+  await expect(page.getByRole("textbox", { name: "Tenant" })).toHaveCount(0);
+  const budgetField = page.getByRole("textbox", { name: "Project budget" });
+  await expect(budgetField).toHaveValue("100");
+  const budgetFieldShell = page.locator(".onboarding-field").filter({ has: budgetField });
+  await expect(budgetFieldShell.locator(".onboarding-field-unit")).toHaveText("$");
 });
 
 test("restored full session goes directly to the tenant dashboard", async ({ page }) => {

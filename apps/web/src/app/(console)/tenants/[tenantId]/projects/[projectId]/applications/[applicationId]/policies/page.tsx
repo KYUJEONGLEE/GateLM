@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
-import { listAppTokensForApplication } from "@/lib/control-plane/app-tokens-client";
+import { listApiKeysForProject } from "@/lib/control-plane/api-keys-client";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyModelForApplication } from "@/lib/control-plane/runtime-policy-client";
@@ -35,9 +35,9 @@ export default async function ApplicationPoliciesPage({
   }
 
   const model = await getRuntimePolicyModelForApplication(tenantId, application.id, project.id);
-  const appTokensResult = await listAppTokensForApplication(application.id);
-  const activeAppTokenCount = appTokensResult.ok
-    ? appTokensResult.data.filter((appToken) => isActiveAppToken(appToken.status, appToken.expiresAt))
+  const apiKeysResult = await listApiKeysForProject(project.id);
+  const activeApiKeyCount = apiKeysResult.ok
+    ? apiKeysResult.data.filter((apiKey) => isActiveCredential(apiKey.status, apiKey.expiresAt))
         .length
     : 0;
 
@@ -49,10 +49,11 @@ export default async function ApplicationPoliciesPage({
       tenantId={tenantId}
     >
       <RuntimePolicyEditor
-        appTokenReadiness={{
-          activeAppTokenCount,
-          applicationName: application.name,
-          loadError: appTokensResult.ok ? null : appTokensResult.error
+        apiKeyReadiness={{
+          activeApiKeyCount,
+          loadError: apiKeysResult.ok ? null : apiKeysResult.error,
+          projectId: project.id,
+          projectName: project.name
         }}
         breadcrumbItems={[
           {
@@ -77,7 +78,7 @@ export default async function ApplicationPoliciesPage({
   );
 }
 
-function isActiveAppToken(status: string, expiresAt: string | null) {
+function isActiveCredential(status: string, expiresAt: string | null) {
   if (status !== "active") {
     return false;
   }
