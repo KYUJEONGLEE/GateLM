@@ -3,40 +3,51 @@ import { expect, test } from "@playwright/test";
 const tenantId = "tenant_demo_acme";
 const projectsPath = `/tenants/${tenantId}/projects`;
 
-test("project list rows expose edit and policy edit links", async ({ page }) => {
+test("project cards expose sorting and action links", async ({ page }) => {
   await page.goto(projectsPath);
 
-  const row = page.locator("tbody tr").first();
-  const editLink = row.getByRole("link", { exact: true, name: "Edit" });
-  const policyLink = row.getByRole("link", { exact: true, name: "Edit policy" });
+  const usageSort = page.getByRole("button", { exact: true, name: "Usage" });
+  const budgetSort = page.getByRole("button", { exact: true, name: "Budget" });
+
+  await expect(usageSort).toHaveAttribute("aria-pressed", "true");
+  await budgetSort.click();
+  await expect(budgetSort).toHaveAttribute("aria-pressed", "true");
+
+  const projectCard = page.getByTestId("project-card").first();
+  const editLink = projectCard.getByRole("link", { exact: true, name: "Edit" });
+  const policyLink = projectCard.getByRole("link", { exact: true, name: "Edit policy" });
   const projectDetailPattern = new RegExp(`^${escapeRegExp(projectsPath)}/[^/]+$`);
-  const policyPattern = new RegExp(
-    `^${escapeRegExp(projectsPath)}/[^/]+/applications/[^/]+/policies$`
-  );
+  const policyPattern = new RegExp(`^${escapeRegExp(projectsPath)}/[^/]+/policies$`);
 
   await expect(editLink).toHaveAttribute("href", projectDetailPattern);
   await expect(policyLink).toHaveAttribute("href", policyPattern);
-  await expect(row).not.toHaveAttribute("role", "link");
-  await expect(row).not.toHaveAttribute("tabindex", "0");
+  await expect(projectCard).not.toHaveAttribute("role", "link");
+  await expect(projectCard).not.toHaveAttribute("tabindex", "0");
 
   const editHref = await editLink.getAttribute("href");
   const policyHref = await policyLink.getAttribute("href");
 
   expect(editHref).toBeTruthy();
   expect(policyHref).toBeTruthy();
+  expect(policyHref).not.toContain("/applications/");
 
-  await row.locator("td").first().click();
+  await projectCard.getByRole("heading").click();
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(projectsPath)}$`));
 
   await editLink.click();
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(editHref ?? "")}$`));
 
   await page.goto(projectsPath);
-  await page.locator("tbody tr").first().getByRole("link", {
+  const currentPolicyLink = page.getByTestId("project-card").first().getByRole("link", {
     exact: true,
     name: "Edit policy"
-  }).click();
-  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(policyHref ?? "")}$`));
+  });
+  const currentPolicyHref = await currentPolicyLink.getAttribute("href");
+
+  expect(currentPolicyHref).toBeTruthy();
+
+  await currentPolicyLink.click();
+  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(projectsPath)}/[^/]+/policies$`));
 });
 
 function escapeRegExp(value: string) {

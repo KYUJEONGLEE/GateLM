@@ -12,6 +12,11 @@ export type ProjectRecord = {
   updatedAt: string;
 };
 
+export type ProjectBudgetThresholdRecord = {
+  projectId: string;
+  warningThresholdPercent: number;
+};
+
 export type ProjectBaseValues = {
   description: string;
   name: string;
