@@ -11,13 +11,19 @@ export type ProjectRecord = {
   updatedAt: string;
 };
 
-export type ProjectFormValues = {
+export type ProjectBaseValues = {
   description: string;
   name: string;
   totalBudgetUsd: number;
 };
 
-export type ProjectUpdateValues = ProjectFormValues & {
+export type ProjectFormValues = ProjectBaseValues & {
+  providerConnectionIds?: string[];
+  selectedModelKey?: string;
+  warningThresholdPercent: number;
+};
+
+export type ProjectUpdateValues = ProjectBaseValues & {
   projectId: string;
   status: ProjectStatus;
 };

@@ -661,9 +661,8 @@ export class RuntimeConfigsService {
     const context = await this.getApplicationContextOrThrow(args.applicationId);
     this.assertActiveContext(context);
 
-    const [apiKey, appToken, providers] = await Promise.all([
+    const [apiKey, providers] = await Promise.all([
       this.getActiveApiKeyOrThrow(context.projectId, args.now),
-      this.getActiveAppTokenOrThrow(context.id, args.now),
       this.getApplicationProvidersOrThrow(context.id),
     ]);
     const activeProvider = this.getPrimaryActiveProvider(providers);
@@ -757,10 +756,10 @@ export class RuntimeConfigsService {
       applicationStatus: this.toResourceStatus(context.status),
       apiKeyId: apiKey.id,
       apiKeyStatus: this.toCredentialStatus(apiKey.status),
-      appTokenId: appToken.id,
-      appTokenStatus: this.toCredentialStatus(appToken.status),
+      appTokenId: null,
+      appTokenStatus: null,
       apiKey: this.toCredentialRef(apiKey, 'api_key'),
-      appToken: this.toCredentialRef(appToken, 'app_token'),
+      appToken: null,
       providers: providersResponse,
       models,
       defaultProvider: defaultModel.provider,
@@ -820,7 +819,6 @@ export class RuntimeConfigsService {
 
     await Promise.all([
       this.assertCurrentApiKeyExecutable(args.document, context, args.now),
-      this.assertCurrentAppTokenExecutable(args.document, context, args.now),
       this.assertCurrentRoutingProvidersExecutable(args.document, context),
     ]);
   }
@@ -885,32 +883,6 @@ export class RuntimeConfigsService {
       apiKey.tenantId !== context.tenantId ||
       apiKey.projectId !== context.projectId ||
       !this.isCredentialCurrentlyActive(apiKey, now)
-    ) {
-      throw new ConflictException(
-        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
-      );
-    }
-  }
-
-  private async assertCurrentAppTokenExecutable(
-    document: ActiveRuntimeConfigResponseDto,
-    context: RuntimeApplicationContext,
-    now: Date,
-  ): Promise<void> {
-    const appToken = await this.prisma.appToken.findUnique({
-      where: { id: document.appTokenId },
-    });
-
-    if (
-      !appToken ||
-      document.appToken.id !== document.appTokenId ||
-      document.appToken.type !== 'app_token' ||
-      document.appTokenStatus !== 'active' ||
-      document.appToken.status !== 'active' ||
-      appToken.tenantId !== context.tenantId ||
-      appToken.projectId !== context.projectId ||
-      appToken.applicationId !== context.id ||
-      !this.isCredentialCurrentlyActive(appToken, now)
     ) {
       throw new ConflictException(
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
@@ -1049,9 +1021,7 @@ export class RuntimeConfigsService {
     const runtimeDocument = document as unknown as Record<string, unknown>;
     if (
       !this.isNonEmptyString(runtimeDocument.apiKeyId) ||
-      !this.isNonEmptyString(runtimeDocument.appTokenId) ||
       !this.isCredentialRefShape(runtimeDocument.apiKey, 'api_key') ||
-      !this.isCredentialRefShape(runtimeDocument.appToken, 'app_token') ||
       !Array.isArray(document.providers) ||
       document.providers.length === 0 ||
       !Array.isArray(document.models) ||
@@ -1237,28 +1207,6 @@ export class RuntimeConfigsService {
     }
 
     return apiKey;
-  }
-
-  private async getActiveAppTokenOrThrow(
-    applicationId: string,
-    now: Date,
-  ): Promise<AppToken> {
-    const appToken = await this.prisma.appToken.findFirst({
-      where: {
-        applicationId,
-        status: CredentialStatus.ACTIVE,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
-
-    if (!appToken) {
-      throw new ConflictException(
-        'Runtime Config requires an active App Token.',
-      );
-    }
-
-    return appToken;
   }
 
   private async getApplicationProvidersOrThrow(

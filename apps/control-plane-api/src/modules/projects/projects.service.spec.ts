@@ -15,6 +15,9 @@ describe('ProjectsService', () => {
     prisma: {
       $transaction: jest.Mock;
       budgetAuditLog: { create: jest.Mock };
+      application: { create: jest.Mock };
+      applicationProviderConnection: { createMany: jest.Mock };
+      providerConnection: { findMany: jest.Mock };
       tenant: { findUnique: jest.Mock };
       project: {
         create: jest.Mock;
@@ -28,6 +31,15 @@ describe('ProjectsService', () => {
       $transaction: jest.fn(),
       budgetAuditLog: {
         create: jest.fn(),
+      },
+      application: {
+        create: jest.fn(),
+      },
+      applicationProviderConnection: {
+        createMany: jest.fn(),
+      },
+      providerConnection: {
+        findMany: jest.fn(),
       },
       tenant: {
         findUnique: jest.fn(),
@@ -81,7 +93,92 @@ describe('ProjectsService', () => {
         totalBudgetUsd: 100,
       },
     });
+    expect(prisma.application.create).toHaveBeenCalledWith({
+      data: {
+        tenantId,
+        projectId,
+        name: 'New Project',
+        description: null,
+        budgetLimitMode: 'PERCENT',
+        budgetLimitPercent: 100,
+        budgetLimitUsd: null,
+      },
+    });
     expect(result.totalBudgetUsd).toBe(100);
+  });
+
+  it('creates the hidden default runtime application with project values in the same transaction', async () => {
+    const { service, prisma } = createService();
+    const providerConnectionId = '00000000-0000-4000-8000-000000000601';
+    const defaultApplicationId = '00000000-0000-4000-8000-000000000301';
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      totalBudgetUsd: new Prisma.Decimal(300),
+      projects: [],
+    });
+    prisma.providerConnection.findMany.mockResolvedValue([
+      { id: providerConnectionId },
+    ]);
+    prisma.project.create.mockResolvedValue({
+      ...project(projectId),
+      name: 'Operations',
+      description: 'Ops runtime boundary',
+      totalBudgetUsd: new Prisma.Decimal(200),
+    });
+    prisma.application.create.mockResolvedValue({
+      id: defaultApplicationId,
+      tenantId,
+      projectId,
+      name: 'Operations',
+      description: 'Ops runtime boundary',
+      status: ResourceStatus.ACTIVE,
+      budgetLimitMode: 'PERCENT',
+      budgetLimitPercent: new Prisma.Decimal(100),
+      budgetLimitUsd: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    const result = await service.createProject(tenantId, {
+      budgetLimitPercent: 75,
+      description: 'Ops runtime boundary',
+      name: 'Operations',
+      providerConnectionIds: [providerConnectionId],
+      totalBudgetUsd: 200,
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.project.create).toHaveBeenCalledWith({
+      data: {
+        tenantId,
+        name: 'Operations',
+        description: 'Ops runtime boundary',
+        totalBudgetUsd: 200,
+      },
+    });
+    expect(prisma.application.create).toHaveBeenCalledWith({
+      data: {
+        tenantId,
+        projectId,
+        name: 'Operations',
+        description: 'Ops runtime boundary',
+        budgetLimitMode: 'PERCENT',
+        budgetLimitPercent: 100,
+        budgetLimitUsd: null,
+      },
+    });
+    expect(prisma.applicationProviderConnection.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          applicationId: defaultApplicationId,
+          projectId,
+          providerConnectionId,
+          tenantId,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(result.totalBudgetUsd).toBe(200);
   });
 
   it('rejects a project budget that exceeds the tenant budget', async () => {

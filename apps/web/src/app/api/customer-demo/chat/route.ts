@@ -375,7 +375,6 @@ async function callGateway(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-App-Token": config.appToken,
       "X-GateLM-End-User-Id": "customer_user_demo_live",
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
@@ -445,7 +444,6 @@ async function callGatewayStreaming(
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      "X-GateLM-App-Token": config.appToken,
       "X-GateLM-End-User-Id": "customer_user_demo_live",
       "X-GateLM-Feature-Id": "support-reply",
       "X-GateLM-Request-Id": requestId
@@ -1110,10 +1108,6 @@ function buildDisplayRequestHeaders(requestId: string): CustomerDemoHeader[] {
     {
       name: "Authorization",
       value: "Bearer <redacted>"
-    },
-    {
-      name: "X-GateLM-App-Token",
-      value: "<redacted>"
     },
     {
       name: "X-GateLM-End-User-Id",

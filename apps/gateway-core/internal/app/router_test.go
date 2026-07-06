@@ -162,11 +162,16 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	}
 }
 
-func TestNewRouterWritesAuthFailureLogForInvalidAppToken(t *testing.T) {
+func TestNewRouterIgnoresLegacyAppTokenValidator(t *testing.T) {
 	chatCalls := 0
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		chatCalls++
-		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{
+			ID:      "mock_chatcmpl_router_auth_safety",
+			Object:  "chat.completion",
+			Created: 1782108000,
+			Model:   "mock-balanced",
+		})
 	}))
 	defer mockServer.Close()
 
@@ -194,27 +199,20 @@ func TestNewRouterWritesAuthFailureLogForInvalidAppToken(t *testing.T) {
 
 	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if apiAuth.calls != 1 {
 		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
 	}
-	if appValidator.calls != 1 {
-		t.Fatalf("expected app token validator to be called once, got %d", appValidator.calls)
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
-	if chatCalls != 0 {
-		t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+	if chatCalls != 1 {
+		t.Fatalf("expected one mock provider call, got %d", chatCalls)
 	}
-	if len(authFailureWriter.logs) != 1 {
-		t.Fatalf("expected one auth failure log, got %d", len(authFailureWriter.logs))
-	}
-	authFailureLog := authFailureWriter.logs[0]
-	if authFailureLog.ErrorCode != invocationlog.ErrorCodeInvalidAppToken || authFailureLog.ErrorStage != invocationlog.StageValidateAppToken {
-		t.Fatalf("unexpected auth failure log: %+v", authFailureLog)
-	}
-	if authFailureLog.APIKeyID != "api_key_demo" || authFailureLog.TenantID != "tenant_demo" || authFailureLog.ProjectID != "project_demo" {
-		t.Fatalf("expected known API key identity to be logged, got %+v", authFailureLog)
+	if len(authFailureWriter.logs) != 0 {
+		t.Fatalf("expected no auth failure logs, got %d", len(authFailureWriter.logs))
 	}
 }
 

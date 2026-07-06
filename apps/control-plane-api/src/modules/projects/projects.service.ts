@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, Project, ResourceStatus } from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
@@ -13,6 +18,7 @@ import {
 
 const DEFAULT_TENANT_BUDGET_USD = 1000;
 const DEFAULT_PROJECT_BUDGET_USD = 100;
+const DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT = 100;
 
 @Injectable()
 export class ProjectsService {
@@ -23,6 +29,11 @@ export class ProjectsService {
     dto: CreateProjectDto,
   ): Promise<ProjectResponseDto> {
     const totalBudgetUsd = dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD;
+    const budgetLimitPercent = DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT;
+    const providerConnectionIds = await this.getValidProviderConnectionIdsOrThrow(
+      tenantId,
+      dto.providerConnectionIds ?? [],
+    );
 
     await this.assertTenantBudgetCanCoverProjects({
       tenantId,
@@ -31,13 +42,40 @@ export class ProjectsService {
       status: ResourceStatus.ACTIVE,
     });
 
-    const project = await this.prisma.project.create({
-      data: {
-        tenantId,
-        name: dto.name,
-        description: this.toNullableDescription(dto.description),
-        totalBudgetUsd,
-      },
+    const project = await this.prisma.$transaction(async (tx) => {
+      const createdProject = await tx.project.create({
+        data: {
+          tenantId,
+          name: dto.name,
+          description: this.toNullableDescription(dto.description),
+          totalBudgetUsd,
+        },
+      });
+      const runtimeApplication = await tx.application.create({
+        data: {
+          tenantId,
+          projectId: createdProject.id,
+          name: dto.name,
+          description: this.toNullableDescription(dto.description),
+          budgetLimitMode: 'PERCENT',
+          budgetLimitPercent,
+          budgetLimitUsd: null,
+        },
+      });
+
+      if (providerConnectionIds.length > 0) {
+        await tx.applicationProviderConnection.createMany({
+          data: providerConnectionIds.map((providerConnectionId) => ({
+            applicationId: runtimeApplication.id,
+            projectId: createdProject.id,
+            providerConnectionId,
+            tenantId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return createdProject;
     });
 
     return this.toProjectResponse(project);
@@ -190,6 +228,33 @@ export class ProjectsService {
     }
 
     return project;
+  }
+
+  private async getValidProviderConnectionIdsOrThrow(
+    tenantId: string,
+    rawProviderConnectionIds: string[],
+  ): Promise<string[]> {
+    const providerConnectionIds = [...new Set(rawProviderConnectionIds)];
+
+    if (providerConnectionIds.length === 0) {
+      return [];
+    }
+
+    const providers = await this.prisma.providerConnection.findMany({
+      where: {
+        id: { in: providerConnectionIds },
+        tenantId,
+      },
+      select: { id: true },
+    });
+
+    if (providers.length !== providerConnectionIds.length) {
+      throw new BadRequestException(
+        'Runtime providers must belong to the same tenant.',
+      );
+    }
+
+    return providerConnectionIds;
   }
 
   private toNullableDescription(value: string | undefined): string | null {

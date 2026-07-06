@@ -671,10 +671,6 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
           value: "Bearer <redacted>"
         },
         {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
-        },
-        {
           name: "Content-Type",
           value: "application/json"
         }

@@ -33,7 +33,6 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
-	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
 	cachestage "gatelm/apps/gateway-core/internal/pipeline/stages/cache"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
@@ -3540,17 +3539,13 @@ func (h *ChatCompletionsHandler) recordLogWrite(operation string, err error, dur
 }
 
 func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
-	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
+	if h.APIKeyAuthenticator == nil {
 		return gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication is not initialized.", nil)
 	}
 
 	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
 	if !ok {
 		return gatewayerrors.InvalidAPIKey(authenticate.StageName)
-	}
-	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
-	if appToken == "" {
-		return gatewayerrors.InvalidAppToken(appauth.StageName)
 	}
 
 	apiKeyIdentity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
@@ -3564,38 +3559,9 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	reqCtx.APIKeyID = apiKeyIdentity.APIKeyID
 	reqCtx.TenantID = apiKeyIdentity.TenantID
 	reqCtx.ProjectID = apiKeyIdentity.ProjectID
-	if apiKeyIdentity.ApplicationID != "" {
-		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
-	}
-	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
-
-	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidAppToken) {
-			return gatewayerrors.InvalidAppToken(appauth.StageName)
-		}
-		return err
-	}
-
-	if reqCtx.TenantID != "" && reqCtx.TenantID != appTokenIdentity.TenantID {
-		return gatewayerrors.ScopeMismatch(appauth.StageName)
-	}
-	if reqCtx.ProjectID != "" && reqCtx.ProjectID != appTokenIdentity.ProjectID {
-		return gatewayerrors.ScopeMismatch(appauth.StageName)
-	}
-	if reqCtx.ApplicationID != "" && reqCtx.ApplicationID != appTokenIdentity.ApplicationID {
-		return gatewayerrors.ScopeMismatch(appauth.StageName)
-	}
-
-	reqCtx.AppTokenID = appTokenIdentity.AppTokenID
-	if reqCtx.TenantID == "" {
-		reqCtx.TenantID = appTokenIdentity.TenantID
-	}
-	if reqCtx.ProjectID == "" {
-		reqCtx.ProjectID = appTokenIdentity.ProjectID
-	}
+	reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
 	if reqCtx.ApplicationID == "" {
-		reqCtx.ApplicationID = appTokenIdentity.ApplicationID
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway default application is not configured for this project.", nil)
 	}
 
 	if h.ExpectedTenantID != "" && reqCtx.TenantID != h.ExpectedTenantID {

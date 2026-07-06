@@ -19,12 +19,6 @@ func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
 				config.APIKeyID = ""
 			},
 		},
-		{
-			name: "missing app token binding",
-			mutate: func(config *ActiveConfig) {
-				config.AppTokenID = ""
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -41,6 +35,16 @@ func TestActiveConfigValidateActiveRequiresCredentialBindings(t *testing.T) {
 				t.Fatalf("expected missing credential binding, got %v", err)
 			}
 		})
+	}
+}
+
+func TestActiveConfigValidateActiveAllowsMissingLegacyAppTokenBinding(t *testing.T) {
+	config := testActiveConfig()
+	config.AppTokenID = ""
+	config.AppTokenStatus = ""
+
+	if err := config.ValidateActive(); err != nil {
+		t.Fatalf("expected missing legacy app token binding to be allowed, got %v", err)
 	}
 }
 

@@ -84,7 +84,6 @@ export async function getModelCatalogModel(routeTenantId: string): Promise<Model
   try {
     const response = await requestGatewayModels({
       apiKey: gatewayConfig.apiKey,
-      appToken: gatewayConfig.appToken,
       baseUrl: gatewayBaseUrl,
       requestId: buildRequestId()
     });
@@ -139,12 +138,10 @@ export async function getModelCatalogModel(routeTenantId: string): Promise<Model
 
 function requestGatewayModels({
   apiKey,
-  appToken,
   baseUrl,
   requestId
 }: {
   apiKey: string;
-  appToken: string;
   baseUrl: string;
   requestId: string;
 }): Promise<GatewayModelsHttpResponse> {
@@ -156,7 +153,6 @@ function requestGatewayModels({
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "X-GateLM-App-Token": appToken,
           "X-GateLM-Request-Id": requestId
         },
         method: "GET"

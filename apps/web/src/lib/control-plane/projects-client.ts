@@ -1,10 +1,12 @@
 import "server-only";
 
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
+import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import {
   getControlPlaneBaseUrl,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import { publishRuntimePolicyModelSelectionForApplication } from "@/lib/control-plane/runtime-policy-client";
 import type {
   ProjectFormValues,
   ProjectRecord,
@@ -25,6 +27,7 @@ type ProjectRequestResult =
   | {
       data: ProjectRecord;
       ok: true;
+      policyError?: string;
       status: number;
     }
   | {
@@ -87,7 +90,40 @@ export async function createProject(values: ProjectFormValues): Promise<ProjectR
       }
     );
 
-    return readProjectResponse(response);
+    const result = await readProjectResponse(response);
+
+    if (!result.ok || !values.selectedModelKey?.trim()) {
+      return result;
+    }
+
+    const applicationsModel = await getApplicationsModel(tenantId, result.data.id);
+    const runtimeApplication =
+      applicationsModel.source === "control-plane"
+        ? applicationsModel.applications.find((application) => application.status === "ACTIVE") ??
+          applicationsModel.applications.find((application) => application.status !== "ARCHIVED")
+        : null;
+
+    if (!runtimeApplication) {
+      return {
+        ...result,
+        policyError: applicationsModel.loadError ?? "Runtime boundary was not created."
+      };
+    }
+
+    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+      runtimeApplication.id,
+      values.selectedModelKey,
+      {
+        warningThresholdPercent: values.warningThresholdPercent
+      }
+    );
+
+    return runtimePolicy.ok
+      ? result
+      : {
+          ...result,
+          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+        };
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -149,6 +185,7 @@ function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
+    providerConnectionIds: values.providerConnectionIds ?? [],
     totalBudgetUsd: values.totalBudgetUsd
   };
 }
