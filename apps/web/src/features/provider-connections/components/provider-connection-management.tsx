@@ -542,6 +542,16 @@ export function ProviderConnectionManagement({
     setSubmitState({ message: "", status: "idle" });
   }
 
+  function toggleProvider(providerId: string) {
+    setExpandedProviderId((current) => {
+      const nextProviderId = current === providerId ? null : providerId;
+
+      setEditingProviderId(null);
+
+      return nextProviderId;
+    });
+  }
+
   function openCredentialModal(provider: ProviderConnectionRecord) {
     setProviderModal({ mode: "credential", provider: provider.provider });
     setFormValues({
@@ -616,6 +626,8 @@ export function ProviderConnectionManagement({
   }
 
   function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
+    const savedModelNames = splitModelNames(formValues.models);
+
     return (
       <div className="provider-discovery-panel provider-inline-edit-panel">
         <div className="provider-form-grid provider-inline-edit-grid">
@@ -716,16 +728,34 @@ export function ProviderConnectionManagement({
                   </div>
                 </>
               ) : (
-                <textarea
-                  onChange={(event) =>
-                    setFormValues((current) => ({
-                      ...current,
-                      models: event.target.value
-                    }))
-                  }
-                  rows={4}
-                  value={formValues.models}
-                />
+                <>
+                  {savedModelNames.length > 0 ? (
+                    <div className="provider-discovery-model-list provider-saved-model-list">
+                      {savedModelNames.map((modelName) => (
+                        <span key={modelName} className="provider-saved-model-item">
+                          {modelName}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="project-muted">
+                      {locale === "ko"
+                        ? "저장된 chat 모델이 없습니다. 모델 조회 후 선택하거나 직접 입력하세요."
+                        : "No saved chat models. Discover models to select them or enter model names manually."}
+                    </span>
+                  )}
+                  <textarea
+                    aria-label={text.models}
+                    onChange={(event) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        models: event.target.value
+                      }))
+                    }
+                    rows={3}
+                    value={formValues.models}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -899,24 +929,20 @@ export function ProviderConnectionManagement({
                 isChatCompletionModelName
               ).length;
 
+              const isEditing = editingProviderId === provider.id;
+
               return (
                 <section className="provider-card" data-expanded={expanded} key={provider.id}>
                   <div
                     className="provider-card-row"
-                    onClick={() =>
-                      setExpandedProviderId((current) =>
-                        current === provider.id ? null : provider.id
-                      )
-                    }
+                    onClick={() => toggleProvider(provider.id)}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter" && event.key !== " ") {
                         return;
                       }
 
                       event.preventDefault();
-                      setExpandedProviderId((current) =>
-                        current === provider.id ? null : provider.id
-                      );
+                      toggleProvider(provider.id);
                     }}
                     role="button"
                     tabIndex={0}
@@ -974,18 +1000,6 @@ export function ProviderConnectionManagement({
                       <strong>{modelCount}</strong>
                     </div>
                     <div className="provider-card-actions">
-                      <Button
-                        disabled={pendingAction || discoveringProvider !== null}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openEditModal(provider);
-                        }}
-                        type="button"
-                        variant="outline"
-                      >
-                        <Pencil aria-hidden="true" />
-                        {text.edit}
-                      </Button>
                       <button
                         aria-expanded={expanded}
                         aria-label={
@@ -1000,9 +1014,7 @@ export function ProviderConnectionManagement({
                         className="provider-expand-button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setExpandedProviderId((current) =>
-                            current === provider.id ? null : provider.id
-                          );
+                          toggleProvider(provider.id);
                         }}
                         type="button"
                       >
@@ -1011,9 +1023,27 @@ export function ProviderConnectionManagement({
                     </div>
                   </div>
                   {expanded ? (
-                    <div className="provider-card-models">{renderProviderModels(provider)}</div>
+                    <div className="provider-card-models">
+                      {isEditing ? (
+                        renderProviderInlineEditor(provider)
+                      ) : (
+                        <>
+                          {renderProviderModels(provider)}
+                          <div className="provider-card-expanded-actions">
+                            <Button
+                              disabled={pendingAction || discoveringProvider !== null}
+                              onClick={() => openEditModal(provider)}
+                              type="button"
+                              variant="outline"
+                            >
+                              <Pencil aria-hidden="true" />
+                              {text.edit}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   ) : null}
-                  {editingProviderId === provider.id ? renderProviderInlineEditor(provider) : null}
                 </section>
               );
             })}

@@ -5612,7 +5612,7 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: nowrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .provider-card-actions .button,
@@ -5657,7 +5657,14 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .provider-card-models {
+  display: grid;
+  gap: 12px;
   padding: 0 20px 18px;
+}
+
+.provider-card-expanded-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .provider-model-table-wrap {
@@ -5925,6 +5932,25 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   gap: 8px;
   max-height: 240px;
   overflow: auto;
+}
+
+.provider-saved-model-list {
+  max-height: 180px;
+}
+
+.provider-saved-model-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
 }
 
 .provider-model-edit {
@@ -10691,13 +10717,12 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
   }
 
   .provider-card-actions {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    justify-content: flex-start;
   }
 
-  .provider-card-actions button:not(.provider-expand-button),
   .provider-card-actions .provider-expand-button {
-    width: 100%;
+    width: 40px;
     min-width: 0;
   }
 
