@@ -1401,6 +1401,96 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
   });
 
+  it('exposes selected custom model names in RuntimeSnapshot and Provider Catalog', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const selectedModel = 'mock-custom-model-x';
+    const baseDocument = activeRuntimeConfigDocument();
+    const baseProvider = baseDocument.providers[0];
+    if (!baseProvider) {
+      throw new Error('runtime config fixture provider is missing');
+    }
+    const activeDocument: ActiveRuntimeConfigResponseDto = {
+      ...baseDocument,
+      providers: [
+        {
+          ...baseProvider,
+          models: [selectedModel, 'mock-custom-model-y'],
+        },
+      ],
+      models: [
+        {
+          provider: 'mock',
+          model: selectedModel,
+          displayName: 'Mock Custom Model X',
+          status: 'active' as const,
+          contextWindowTokens: 16384,
+          supportsStreaming: true,
+          supportsJsonMode: true,
+        },
+        {
+          provider: 'mock',
+          model: 'mock-custom-model-y',
+          displayName: 'Mock Custom Model Y',
+          status: 'active' as const,
+          contextWindowTokens: 16384,
+          supportsStreaming: true,
+          supportsJsonMode: true,
+        },
+      ],
+      defaultModel: selectedModel,
+      lowCostModel: selectedModel,
+      fallbackModel: selectedModel,
+      routingPolicy: {
+        ...baseDocument.routingPolicy,
+        defaultModel: selectedModel,
+        lowCostModel: selectedModel,
+        fallbackModel: selectedModel,
+      },
+      pricingRules: [
+        {
+          pricingRuleId: `price_mock_${selectedModel}_v1`,
+          provider: 'mock',
+          model: selectedModel,
+          pricingVersion: '2026-06-27.mock.v1',
+          currency: 'USD' as const,
+          unit: 'token' as const,
+          promptTokenMicroUsd: 1,
+          completionTokenMicroUsd: 2,
+          effectiveAt: now.toISOString(),
+        },
+      ],
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const catalogModel = catalog.providers[0]?.models.find(
+      (model) => model.modelName === selectedModel,
+    );
+
+    expect(snapshot.policies.routing).toEqual(
+      expect.objectContaining({
+        defaultModel: selectedModel,
+        lowCostModel: selectedModel,
+      }),
+    );
+    expect(snapshot.policies.fallback.fallbackModel).toBe(selectedModel);
+    expect(catalogModel).toMatchObject({
+      modelId: `${providerId}:${selectedModel}`,
+      modelName: selectedModel,
+      enabled: true,
+      routing: expect.objectContaining({
+        autoRoutingEligible: true,
+      }),
+    });
+  });
+
   it('returns active Provider Catalog from persisted RuntimeSnapshot before revalidating active Runtime Config', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
