@@ -6,6 +6,7 @@ import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type ApplicationChatPageProps = {
   searchParams?: Promise<{
+    name?: string | string[];
     profile?: string | string[];
   }>;
 };
@@ -14,11 +15,12 @@ export default async function ApplicationChatPage({ searchParams }: ApplicationC
   const locale = await getRequestLocale();
   const params = await searchParams;
   const profileId = firstQueryValue(params?.profile);
+  const userName = normalizeDisplayName(firstQueryValue(params?.name));
   const integrationMode = getCustomerDemoIntegrationMode();
   const model =
     integrationMode === "fixture"
       ? getCustomerDemoModel()
-      : getCustomerDemoLiveModel({ profileId });
+      : await getCustomerDemoLiveModel({ profileId });
   const applicationModel = {
     ...model,
     surface: "application" as const
@@ -26,9 +28,10 @@ export default async function ApplicationChatPage({ searchParams }: ApplicationC
 
   return (
     <CustomerDemoApp
-      key={`${applicationModel.tenantId}:${applicationModel.projectId}:${applicationModel.applicationId}:${applicationModel.selectedChatProfileId ?? "fixture"}`}
+      key={`${applicationModel.tenantId}:${applicationModel.projectId}:${applicationModel.applicationId}:${applicationModel.selectedChatProfileId ?? "fixture"}:${userName ?? "anonymous"}`}
       locale={locale}
       model={applicationModel}
+      userName={userName}
     />
   );
 }
@@ -43,4 +46,10 @@ function firstQueryValue(value: string | string[] | undefined) {
   }
 
   return value;
+}
+
+function normalizeDisplayName(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed ? trimmed.slice(0, 80) : undefined;
 }

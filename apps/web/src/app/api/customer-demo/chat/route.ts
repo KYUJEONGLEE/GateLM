@@ -86,6 +86,7 @@ const RESPONSE_HEADER_NAMES = [
 const SAFE_PROMPT =
   "Write a concise support reply for a delayed shipment. Keep it under three sentences.";
 const APPLICATION_END_USER_ID = "customer_user_demo_live";
+const DEFAULT_CONTEXT_RETENTION_ENABLED = true;
 const DEFAULT_SYSTEM_MESSAGE = "You are a helpful customer support assistant.";
 
 const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
@@ -123,14 +124,14 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
 
 export async function POST(request: Request) {
   const payload = await readRequestPayload(request);
-  const profileResult = getRequestProfile(payload.profileId);
+  const profileResult = await getRequestProfile(payload.profileId);
 
   if (!profileResult.ok) {
     return NextResponse.json({ error: profileResult.error }, { status: 400 });
   }
 
   const profile = profileResult.profile;
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -215,6 +216,8 @@ function streamLiveScenario({
           scenarioId,
           "1",
           {
+            contextRetentionEnabled: payload.contextRetentionEnabled,
+            conversationId: payload.conversationId,
             message: payload.message,
             profile,
             stream: true,
@@ -270,7 +273,7 @@ async function readRequestPayload(request: Request) {
     contextRetentionEnabled:
       typeof payload.contextRetentionEnabled === "boolean"
         ? payload.contextRetentionEnabled
-        : undefined,
+        : DEFAULT_CONTEXT_RETENTION_ENABLED,
     conversationId:
       typeof payload.conversationId === "string" && payload.conversationId.trim()
         ? payload.conversationId.trim()
@@ -301,11 +304,11 @@ function normalizeCustomerDemoSurface(value: unknown): CustomerDemoSurface {
   return value === "application" ? "application" : "demo";
 }
 
-function getRequestProfile(profileId: string): RequestProfileResult {
+async function getRequestProfile(profileId: string): Promise<RequestProfileResult> {
   try {
     return {
       ok: true,
-      profile: resolveApplicationChatProfile(profileId)
+      profile: await resolveApplicationChatProfile(profileId)
     };
   } catch (error) {
     return {
@@ -623,13 +626,14 @@ async function prepareConversationGatewayContext({
     return null;
   }
 
-  const contextRetentionEnabled = options.contextRetentionEnabled ?? false;
+  const contextRetentionEnabled =
+    options.contextRetentionEnabled ?? DEFAULT_CONTEXT_RETENTION_ENABLED;
   if (!contextRetentionEnabled) {
     return null;
   }
 
   try {
-    const model = getCustomerDemoLiveModel({ profileId: profile.id });
+    const model = await getCustomerDemoLiveModel({ profileId: profile.id });
     const conversation =
       options.conversationId
         ? await updateExistingConversation({
@@ -708,7 +712,7 @@ async function createApplicationConversation({
   contextRetentionEnabled: boolean;
   profile: ResolvedApplicationChatProfile;
 }): Promise<{ contextRetentionEnabled: boolean; id: string }> {
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
   const conversation = await createChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled,
@@ -733,7 +737,7 @@ async function updateExistingConversation({
   conversationId: string;
   profile: ResolvedApplicationChatProfile;
 }): Promise<{ contextRetentionEnabled: boolean; id: string }> {
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
   const conversation = await updateChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled,
@@ -774,7 +778,7 @@ async function retainAssistantMessage({
     return;
   }
 
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
   await createChatConversationMessage({
     applicationId: model.applicationId,
     content,

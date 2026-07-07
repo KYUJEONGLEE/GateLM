@@ -58,7 +58,7 @@ const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
 export async function getProjectsModel(routeTenantId: string): Promise<ProjectsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
-  const listResult = await listProjects(controlPlaneTenantId);
+  const listResult = await listControlPlaneProjects(controlPlaneTenantId);
 
   if (listResult.ok) {
     return {
@@ -79,6 +79,27 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
     routeTenantId,
     source: "fixture"
   };
+}
+
+export async function listControlPlaneProjects(
+  tenantId: string
+): Promise<ProjectListResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects?limit=50`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    return readProjectListResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
 }
 
 export async function getProjectBudgetThresholds(
@@ -125,6 +146,7 @@ export async function createProject(
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        routeTenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
     );
@@ -144,7 +166,10 @@ export async function createProject(
   }
 }
 
-export async function updateProject(values: ProjectUpdateValues): Promise<ProjectRequestResult> {
+export async function updateProject(
+  values: ProjectUpdateValues,
+  routeTenantId?: string
+): Promise<ProjectRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}`,
@@ -196,6 +221,7 @@ export async function updateProject(values: ProjectUpdateValues): Promise<Projec
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        routeTenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
     );
@@ -237,25 +263,6 @@ async function getProjectBudgetThreshold(
     return {
       projectId: project.id,
       warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
-    };
-  }
-}
-
-async function listProjects(tenantId: string): Promise<ProjectListResult> {
-  try {
-    const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects?limit=50`,
-      {
-        cache: "no-store"
-      }
-    );
-
-    return readProjectListResponse(response);
-  } catch {
-    return {
-      error: "Control Plane unavailable.",
-      ok: false,
-      status: 0
     };
   }
 }

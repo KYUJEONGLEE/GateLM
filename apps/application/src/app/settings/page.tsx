@@ -19,7 +19,7 @@ export default async function ApplicationSettingsPage() {
   return (
     <main className="application-launcher-shell">
       <section className="application-launcher-main" aria-labelledby="application-settings-title">
-        <header className="application-launcher-header">
+        <header className="application-launcher-header application-settings-header">
           <div>
             <p>{text.eyebrow}</p>
             <h1 id="application-settings-title">{text.title}</h1>

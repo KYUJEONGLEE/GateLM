@@ -6,6 +6,7 @@ import type {
 } from "@/lib/gateway/customer-demo-client";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
+import { MessageCircle } from "lucide-react";
 import { ApplicationLauncherForm } from "./application-launcher-form";
 
 export default async function ApplicationPage() {
@@ -18,9 +19,13 @@ export default async function ApplicationPage() {
     <main className="application-launcher-shell">
       <section className="application-launcher-main" aria-labelledby="application-title">
         <header className="application-launcher-header">
-          <div>
+          <span className="application-launcher-header-icon" aria-hidden="true">
+            <MessageCircle size={34} strokeWidth={2.6} />
+          </span>
+          <div className="application-launcher-header-copy">
             <p>{text.eyebrow}</p>
             <h1 id="application-title">{text.title}</h1>
+            <small>{text.subtitle}</small>
           </div>
         </header>
 
@@ -38,7 +43,7 @@ async function getLauncherModel(): Promise<CustomerDemoModel> {
 
   return integrationMode === "fixture"
     ? getCustomerDemoModel()
-    : getCustomerDemoLiveModel();
+    : await getCustomerDemoLiveModel();
 }
 
 function getCustomerDemoIntegrationMode(): CustomerDemoIntegrationMode {
@@ -67,8 +72,8 @@ function getLauncherProfiles(
 
 const copy = {
   en: {
-    defaultProject: "Default Project",
-    eyebrow: "Applications",
+    defaultProject: "Test Project",
+    eyebrow: "CHATTING",
     launcher: {
       chatStart: "Start chat",
       nameLabel: "Name",
@@ -78,11 +83,12 @@ const copy = {
       profilePlaceholder: "Select a project",
       settings: "Settings"
     },
-    title: "Choose an application"
+    subtitle: "Choose a name and project, then start a new conversation.",
+    title: "Start chatting"
   },
   ko: {
-    defaultProject: "기본 프로젝트",
-    eyebrow: "Applications",
+    defaultProject: "테스트 프로젝트",
+    eyebrow: "CHATTING",
     launcher: {
       chatStart: "채팅 시작하기",
       nameLabel: "이름",
@@ -92,6 +98,7 @@ const copy = {
       profilePlaceholder: "프로젝트를 선택하세요",
       settings: "설정"
     },
-    title: "애플리케이션 선택"
+    subtitle: "이름과 프로젝트를 선택하고 새로운 대화를 시작해보세요.",
+    title: "채팅 시작하기"
   }
 };

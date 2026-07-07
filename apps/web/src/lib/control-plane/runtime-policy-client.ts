@@ -4,8 +4,8 @@ import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-co
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId,
-  getControlPlaneProjectId
+  getControlPlaneProjectId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
   listApplicationProviderConnections,
@@ -122,6 +122,7 @@ export async function getRuntimePolicyModelForApplication(
   void projectId;
 
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const fallbackConfig = getFixtureRuntimeConfig();
 
   const [
@@ -137,7 +138,7 @@ export async function getRuntimePolicyModelForApplication(
     fetchActiveRuntimeSnapshot(applicationId),
     fetchActiveProviderCatalog(applicationId),
     listApplicationProviderConnections(applicationId),
-    listTenantProviderConnections(getControlPlaneTenantId())
+    listTenantProviderConnections(controlPlaneTenantId)
   ]);
   const providerConnectionState = toProviderConnectionState(
     tenantProviderConnections,
@@ -492,6 +493,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   applicationId: string,
   selectedModelKey: string,
   options: {
+    routeTenantId?: string;
     warningThresholdPercent?: number;
   } = {}
 ): Promise<{ error?: string; ok: boolean }> {
@@ -514,7 +516,10 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const activeConfig = await fetchRuntimeConfigForModelSelection(applicationId);
+  const activeConfig = await fetchRuntimeConfigForModelSelection(
+    applicationId,
+    options.routeTenantId
+  );
 
   if (!activeConfig) {
     return {
@@ -566,19 +571,22 @@ export async function publishRuntimePolicyModelSelectionForApplication(
 }
 
 async function fetchRuntimeConfigForModelSelection(
-  applicationId: string
+  applicationId: string,
+  routeTenantId?: string
 ): Promise<RuntimePolicyConfig | null> {
   const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
+  const providerConnections = await listApplicationProviderConnections(applicationId);
 
   if (targetActiveConfig.ok) {
-    return targetActiveConfig.data;
+    return mergeProviderConnectionCandidates(
+      targetActiveConfig.data,
+      providerConnections.ok ? providerConnections.data : []
+    );
   }
 
-  if (targetActiveConfig.status !== 404) {
+  if (targetActiveConfig.status !== 404 && targetActiveConfig.status !== 409) {
     return null;
   }
-
-  const providerConnections = await listApplicationProviderConnections(applicationId);
 
   if (!providerConnections.ok) {
     return null;
@@ -586,7 +594,7 @@ async function fetchRuntimeConfigForModelSelection(
 
   return makeRuntimePolicyConfigTemplate(
     getFixtureRuntimeConfig(),
-    getControlPlaneTenantId(),
+    resolveControlPlaneTenantId(routeTenantId),
     applicationId,
     providerConnections.data
   );

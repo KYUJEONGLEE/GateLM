@@ -17,13 +17,13 @@ const APPLICATION_END_USER_ID = "customer_user_demo_live";
 
 export async function POST(request: Request) {
   const payload = await readPayload(request);
-  const profileResult = getRequestProfile(payload.profileId);
+  const profileResult = await getRequestProfile(payload.profileId);
 
   if (!profileResult.ok) {
     return NextResponse.json({ error: profileResult.error }, { status: 400 });
   }
 
-  const model = getCustomerDemoLiveModel({ profileId: profileResult.profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profileResult.profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -48,13 +48,13 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const payload = await readPayload(request);
-  const profileResult = getRequestProfile(payload.profileId);
+  const profileResult = await getRequestProfile(payload.profileId);
 
   if (!profileResult.ok) {
     return NextResponse.json({ error: profileResult.error }, { status: 400 });
   }
 
-  const model = getCustomerDemoLiveModel({ profileId: profileResult.profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profileResult.profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -95,11 +95,11 @@ async function readPayload(request: Request) {
   };
 }
 
-function getRequestProfile(profileId: string) {
+async function getRequestProfile(profileId: string) {
   try {
     return {
       ok: true as const,
-      profile: resolveApplicationChatProfile(profileId)
+      profile: await resolveApplicationChatProfile(profileId)
     };
   } catch (error) {
     return {

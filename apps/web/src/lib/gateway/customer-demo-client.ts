@@ -13,6 +13,7 @@ export type CustomerDemoSurface = "application" | "demo";
 export type CustomerDemoChatProfile = {
   applicationId: string;
   configured: boolean;
+  disabledReason?: string;
   id: string;
   isDefault: boolean;
   label: string;
@@ -89,6 +90,7 @@ export type CustomerDemoExchange = {
 
 export type CustomerDemoModel = {
   applicationId: string;
+  applicationChatProfileLoadError?: string | null;
   applicationChatStreamingEnabled?: boolean;
   chatProfiles?: CustomerDemoChatProfile[];
   integrationMode: CustomerDemoIntegrationMode;
@@ -133,6 +135,7 @@ export interface GatewayChatClient {
 
 export class FixtureGatewayChatClient implements GatewayChatClient {
   private readonly scenarioMap: Map<CustomerDemoScenarioId, CustomerDemoExchange>;
+  private static readonly defaultContextRetentionEnabled = true;
 
   constructor(scenarios: CustomerDemoExchange[]) {
     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
@@ -142,7 +145,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     options: { contextRetentionEnabled?: boolean } = {}
   ): Promise<CustomerDemoConversation> {
     return {
-      contextRetentionEnabled: options.contextRetentionEnabled ?? false,
+      contextRetentionEnabled:
+        options.contextRetentionEnabled ?? FixtureGatewayChatClient.defaultContextRetentionEnabled,
       id: `fixture-conversation-${Date.now()}`
     };
   }
@@ -215,7 +219,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     options: { contextRetentionEnabled?: boolean }
   ): Promise<CustomerDemoConversation> {
     return {
-      contextRetentionEnabled: options.contextRetentionEnabled ?? false,
+      contextRetentionEnabled:
+        options.contextRetentionEnabled ?? FixtureGatewayChatClient.defaultContextRetentionEnabled,
       id: conversationId
     };
   }
