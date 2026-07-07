@@ -24,11 +24,12 @@ const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
 const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
 
 type WebConsoleInitViewProps = {
+  initialAuthStatus: AuthStatus;
   locale: Locale;
 };
 
 type AuthMode = "login" | "signup";
-type AuthStatus = "anonymous" | "authenticated" | "checking";
+type AuthStatus = "anonymous" | "authenticated";
 type SignupStepId = "account" | "verify" | "organization" | "ready";
 
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
@@ -463,12 +464,12 @@ const initText: Record<
   }
 };
 
-export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
+export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInitViewProps) {
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(initialAuthStatus);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
@@ -489,6 +490,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     const shouldStayOnLanding = hasLandingViewParam || hasStayOnLandingHistoryState();
     if (hasLandingViewParam) {
       replaceLandingUrl();
+    }
+
+    if (initialAuthStatus === "anonymous") {
+      return;
     }
 
     let isMounted = true;
@@ -542,7 +547,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialAuthStatus]);
 
   function openAuthPanel(mode: AuthMode) {
     setAuthError(null);
