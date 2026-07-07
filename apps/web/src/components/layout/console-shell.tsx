@@ -26,8 +26,8 @@ import {
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
-type ConsoleSection = "dashboard" | "management" | "analytics";
-type ExpandableConsoleSection = "management" | "analytics";
+type ConsoleSection = "monitoring" | "management";
+type ExpandableConsoleSection = "management" | "monitoring";
 type ConsoleTheme = "light" | "dark";
 type NotificationSeverity = "critical" | "info" | "warning";
 type NotificationCategory = "Budget" | "Cache" | "Cost" | "Provider" | "Rate Limit" | "Safety" | "System";
@@ -58,38 +58,40 @@ export type ManagementNavItem =
   | "project"
   | "provider"
   | "teams";
-export type AnalyticsNavItem = "health" | "request-logs";
+export type MonitoringNavItem = "alerts" | "analytics" | "live-logs" | "overview";
 
 const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
-  analytics: Activity,
-  dashboard: LayoutDashboard,
+  monitoring: LayoutDashboard,
   management: FolderKanban
 };
 
-const childIcons: Record<AnalyticsNavItem | ManagementNavItem, typeof LayoutDashboard> = {
+const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
   "api-keys": SettingsIcon,
   "app-tokens": SettingsIcon,
-  health: Activity,
+  alerts: Bell,
+  analytics: Activity,
+  "live-logs": ScrollText,
+  overview: LayoutDashboard,
   policies: ScrollText,
   project: FolderKanban,
   provider: Plug,
-  "request-logs": ScrollText,
   teams: Users
 };
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
   children: ReactNode;
-  activeAnalyticsItem?: AnalyticsNavItem;
   activeManagementItem?: ManagementNavItem;
+  activeMonitoringItem?: MonitoringNavItem;
   locale: Locale;
   tenantId: string;
 };
 
 type ChildNavigationItem = {
+  badge?: string;
   disabled?: boolean;
   labels: Record<Locale, string>;
-  item: AnalyticsNavItem | ManagementNavItem;
+  item: ManagementNavItem | MonitoringNavItem;
   path?: (tenantId: string) => string;
 };
 
@@ -102,11 +104,45 @@ const navigationItems: Array<{
 }> = [
   {
     labels: {
-      en: "Dashboard",
-      ko: "대시보드"
+      en: "Monitoring",
+      ko: "모니터링"
     },
-    section: "dashboard",
-    path: (tenantId) => `/tenants/${tenantId}/dashboard`
+    children: [
+      {
+        labels: {
+          en: "Overview",
+          ko: "개요"
+        },
+        item: "overview",
+        path: (tenantId) => `/tenants/${tenantId}/dashboard`
+      },
+      {
+        labels: {
+          en: "Live Logs",
+          ko: "실시간 로그"
+        },
+        item: "live-logs",
+        path: (tenantId) => `/tenants/${tenantId}/request-logs`
+      },
+      {
+        labels: {
+          en: "Analytics",
+          ko: "분석"
+        },
+        item: "analytics",
+        path: (tenantId) => `/tenants/${tenantId}/analytics`
+      },
+      {
+        badge: "3",
+        labels: {
+          en: "Alerts",
+          ko: "알림"
+        },
+        item: "alerts",
+        path: (tenantId) => `/tenants/${tenantId}/alerts`
+      }
+    ],
+    section: "monitoring"
   },
   {
     labels: {
@@ -140,32 +176,6 @@ const navigationItems: Array<{
       }
     ],
     section: "management"
-  },
-  {
-    labels: {
-      en: "Analytics",
-      ko: "분석"
-    },
-    children: [
-      {
-        labels: {
-          en: "Health",
-          ko: "Health"
-        },
-        item: "health",
-        path: (tenantId) => `/tenants/${tenantId}/health`
-      },
-      {
-        labels: {
-          en: "Request logs",
-          ko: "요청 로그"
-        },
-        item: "request-logs",
-        path: (tenantId) => `/tenants/${tenantId}/request-logs`
-      }
-    ],
-    path: (tenantId) => `/tenants/${tenantId}/request-logs`,
-    section: "analytics"
   }
 ];
 
@@ -260,8 +270,8 @@ const previewNotificationSeeds: Array<Omit<AdminNotification, "read">> = [
 ];
 
 export function ConsoleShell({
-  activeAnalyticsItem,
   activeManagementItem,
+  activeMonitoringItem,
   activeSection,
   children,
   locale,
@@ -405,8 +415,8 @@ export function ConsoleShell({
   }
 
   function isChildActive(child: ChildNavigationItem) {
-    if (child.item === "health" || child.item === "request-logs") {
-      return child.item === activeAnalyticsItem;
+    if (isMonitoringNavItem(child.item)) {
+      return child.item === activeMonitoringItem;
     }
 
     return child.item === activeManagementItem;
@@ -427,6 +437,7 @@ export function ConsoleShell({
           >
             <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
             <span>{childLabel}</span>
+            {child.badge ? <span className="console-nav-badge">{child.badge}</span> : null}
             <small>{text.planned}</small>
           </span>
         );
@@ -443,6 +454,7 @@ export function ConsoleShell({
         >
           <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
           <span>{childLabel}</span>
+          {child.badge ? <span className="console-nav-badge">{child.badge}</span> : null}
         </Link>
       );
     });
@@ -958,7 +970,11 @@ function getActiveOpenSections(activeSection: ConsoleSection): ExpandableConsole
 }
 
 function isExpandableSection(section: ConsoleSection): section is ExpandableConsoleSection {
-  return section === "management" || section === "analytics";
+  return section === "management" || section === "monitoring";
+}
+
+function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {
+  return item === "alerts" || item === "analytics" || item === "live-logs" || item === "overview";
 }
 
 function mergeOpenSections(

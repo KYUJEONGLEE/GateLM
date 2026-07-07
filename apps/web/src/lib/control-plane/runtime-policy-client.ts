@@ -196,7 +196,7 @@ export async function getRuntimePolicyModelForApplication(
       fallbackConfig,
       routeTenantId,
       applicationId,
-      providerConnections.ok ? providerConnections.data : []
+      getTemplateProviderConnections(providerConnections, tenantProviderConnections)
     );
 
     return {
@@ -253,12 +253,30 @@ export async function getRuntimePolicyModelForApplication(
   };
 }
 
+function getTemplateProviderConnections(
+  applicationProviderConnections: ProviderListLikeResult,
+  tenantProviderConnections: ProviderListLikeResult
+) {
+  return getWritableProviderConnections(
+    applicationProviderConnections.ok ? applicationProviderConnections.data : [],
+    tenantProviderConnections.ok ? tenantProviderConnections.data : []
+  );
+}
+
 function toProviderConnectionState(
   tenantProviderConnections: ProviderListLikeResult,
   applicationProviderConnections: ProviderListLikeResult
 ): RuntimePolicyModel["providerConnections"] {
+  const applicationConnections = applicationProviderConnections.ok
+    ? applicationProviderConnections.data
+    : [];
+  const writableConnections = getWritableProviderConnections(
+    applicationConnections,
+    tenantProviderConnections.ok ? tenantProviderConnections.data : []
+  );
+
   return {
-    available: tenantProviderConnections.ok ? tenantProviderConnections.data : [],
+    available: writableConnections,
     loadError: [
       tenantProviderConnections.ok ? null : tenantProviderConnections.error,
       applicationProviderConnections.ok ? null : applicationProviderConnections.error
@@ -266,9 +284,44 @@ function toProviderConnectionState(
       .filter(Boolean)
       .join(" "),
     selectedIds: applicationProviderConnections.ok
-      ? applicationProviderConnections.data.map((providerConnection) => providerConnection.id)
+      ? applicationConnections
+          .filter(isTenantLevelProviderConnection)
+          .map((providerConnection) => providerConnection.id)
       : []
   };
+}
+
+function getWritableProviderConnections(
+  primaryConnections: ProviderConnectionRecord[],
+  fallbackConnections: ProviderConnectionRecord[]
+) {
+  const merged = new Map<string, ProviderConnectionRecord>();
+
+  for (const providerConnection of [...primaryConnections, ...fallbackConnections].filter(
+    isTenantLevelProviderConnection
+  )) {
+    const providerKey = typeof providerConnection.provider === "string" ? providerConnection.provider.trim() : "";
+
+    if (!providerKey) {
+      continue;
+    }
+
+    const existing = merged.get(providerKey);
+
+    if (!existing || (!hasProviderConfigModels(existing) && hasProviderConfigModels(providerConnection))) {
+      merged.set(providerKey, providerConnection);
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function isTenantLevelProviderConnection(providerConnection: ProviderConnectionRecord) {
+  return providerConnection.projectId === null;
+}
+
+function hasProviderConfigModels(providerConnection: ProviderConnectionRecord) {
+  return getProviderConfigModels(providerConnection.providerConfig).length > 0;
 }
 
 type ProviderListLikeResult =

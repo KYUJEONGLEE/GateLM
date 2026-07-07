@@ -383,7 +383,10 @@ export function RuntimePolicyEditor({
     apiKeyReadiness?.activeApiKeyCount ?? 1
   );
   const [draftValues, setDraftValues] = useState<RuntimePolicyDraftValues>(() =>
-    getRuntimePolicyDraftValues(model.activeConfig)
+    getWritableRuntimePolicyDraftValues(
+      model.activeConfig,
+      model.providerConnections.available
+    )
   );
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
@@ -396,8 +399,13 @@ export function RuntimePolicyEditor({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   useEffect(() => {
-    setDraftValues(getRuntimePolicyDraftValues(model.activeConfig));
-  }, [model.activeConfig, model.applicationId]);
+    setDraftValues(
+      getWritableRuntimePolicyDraftValues(
+        model.activeConfig,
+        model.providerConnections.available
+      )
+    );
+  }, [model.activeConfig, model.applicationId, model.providerConnections.available]);
   const displayConfig =
     submitState.status === "success" && "runtimeConfig" in submitState
       ? submitState.runtimeConfig
@@ -1607,6 +1615,71 @@ function DetectorEditor({
       </label>
     </div>
   );
+}
+
+function getWritableRuntimePolicyDraftValues(
+  config: RuntimePolicyConfig,
+  providerConnections: ProviderConnectionRecord[]
+) {
+  return normalizeDraftRoutingForProviderConnections(
+    getRuntimePolicyDraftValues(config),
+    providerConnections
+  );
+}
+
+function normalizeDraftRoutingForProviderConnections(
+  values: RuntimePolicyDraftValues,
+  providerConnections: ProviderConnectionRecord[]
+): RuntimePolicyDraftValues {
+  const modelOptionsByProvider = groupRoutingModelsByProvider(values.models, providerConnections);
+  const runtimeModels = getProviderConnectionRuntimeModels(providerConnections);
+  const firstActiveModel = runtimeModels.find((model) => model.status === "active") ?? runtimeModels[0];
+
+  if (!firstActiveModel) {
+    return values;
+  }
+
+  const defaultRouteAvailable = hasRoutingModelSelection(
+    values.routingDefaultProvider,
+    values.routingDefaultModel,
+    modelOptionsByProvider
+  );
+  const lowCostRouteAvailable = hasRoutingModelSelection(
+    values.routingLowCostProvider,
+    values.routingLowCostModel,
+    modelOptionsByProvider
+  );
+  const fallbackRouteAvailable = hasRoutingModelSelection(
+    values.routingFallbackProvider,
+    values.routingFallbackModel,
+    modelOptionsByProvider
+  );
+
+  if (defaultRouteAvailable && lowCostRouteAvailable && fallbackRouteAvailable) {
+    return values;
+  }
+
+  return {
+    ...values,
+    routingDefaultModel: defaultRouteAvailable
+      ? values.routingDefaultModel
+      : firstActiveModel.model,
+    routingDefaultProvider: defaultRouteAvailable
+      ? values.routingDefaultProvider
+      : firstActiveModel.provider,
+    routingFallbackModel: fallbackRouteAvailable
+      ? values.routingFallbackModel
+      : firstActiveModel.model,
+    routingFallbackProvider: fallbackRouteAvailable
+      ? values.routingFallbackProvider
+      : firstActiveModel.provider,
+    routingLowCostModel: lowCostRouteAvailable
+      ? values.routingLowCostModel
+      : firstActiveModel.model,
+    routingLowCostProvider: lowCostRouteAvailable
+      ? values.routingLowCostProvider
+      : firstActiveModel.provider
+  };
 }
 
 function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {

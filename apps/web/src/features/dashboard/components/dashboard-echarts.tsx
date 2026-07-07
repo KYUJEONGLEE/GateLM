@@ -255,6 +255,7 @@ export function DashboardCostOverTimeEChart({
   const labels = points.map((point) => point.label);
   const values = points.map((point) => point.spendUsd);
   const averageValues = points.map(() => averageSpendUsd);
+  const xAxisLabelInterval = readableCategoryInterval(labels.length);
   const option = useMemo<EChartOption>(
     () => ({
       animation: false,
@@ -290,7 +291,8 @@ export function DashboardCostOverTimeEChart({
           color: "#94a3b8",
           fontSize: 12,
           fontWeight: 700,
-          hideOverlap: true
+          hideOverlap: true,
+          interval: xAxisLabelInterval
         },
         axisLine: {
           lineStyle: {
@@ -367,7 +369,7 @@ export function DashboardCostOverTimeEChart({
         }
       ]
     }),
-    [averageSpendUsd, labels, values, averageValues]
+    [averageSpendUsd, averageValues, labels, values, xAxisLabelInterval]
   );
 
   return <DashboardEChart ariaLabel={ariaLabel} className="dashboard-cost-over-time-chart" option={option} />;
@@ -438,6 +440,14 @@ function compactAxisNumber(value: string | number) {
 
 function formatCostAxisValue(value: string | number) {
   return formatCostUsd(Number(value ?? 0));
+}
+
+function readableCategoryInterval(count: number) {
+  if (count <= 8) {
+    return 0;
+  }
+
+  return Math.max(0, Math.ceil(count / 6) - 1);
 }
 
 function formatCostUsd(value: number) {

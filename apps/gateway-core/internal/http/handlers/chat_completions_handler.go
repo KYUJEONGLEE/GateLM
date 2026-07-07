@@ -3104,9 +3104,10 @@ func (h *ChatCompletionsHandler) applyProviderUsageCost(ctx context.Context, req
 
 func providerPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTarget) []string {
 	if reqCtx == nil {
-		return uniqueNonEmpty(target.ProviderName, target.ProviderID, target.AdapterType, target.ExecutionConfig.ProviderName, target.ExecutionConfig.ProviderID, target.ExecutionConfig.AdapterType)
+		return uniquePricingKeys(providerPricingAliases, target.ProviderName, target.ProviderID, target.AdapterType, target.ExecutionConfig.ProviderName, target.ExecutionConfig.ProviderID, target.ExecutionConfig.AdapterType)
 	}
-	return uniqueNonEmpty(
+	return uniquePricingKeys(
+		providerPricingAliases,
 		target.ProviderName,
 		target.ProviderID,
 		target.AdapterType,
@@ -3122,26 +3123,90 @@ func providerPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTar
 
 func modelPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTarget) []string {
 	if reqCtx == nil {
-		return uniqueNonEmpty(target.ModelID, target.ModelName)
+		return uniquePricingKeys(modelPricingAliases, target.ModelID, target.ModelName)
 	}
-	return uniqueNonEmpty(target.ModelID, target.ModelName, reqCtx.SelectedModelID, reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
+	return uniquePricingKeys(modelPricingAliases, target.ModelID, target.ModelName, reqCtx.SelectedModelID, reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
 }
 
 func uniqueNonEmpty(values ...string) []string {
+	return uniquePricingKeys(nil, values...)
+}
+
+func uniquePricingKeys(aliasFn func(string) []string, values ...string) []string {
 	seen := map[string]struct{}{}
 	result := make([]string, 0, len(values))
 	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
+		result = appendUniquePricingKey(result, seen, value)
+		if aliasFn == nil {
 			continue
 		}
-		if _, exists := seen[value]; exists {
-			continue
+		for _, alias := range aliasFn(value) {
+			result = appendUniquePricingKey(result, seen, alias)
 		}
-		seen[value] = struct{}{}
-		result = append(result, value)
 	}
 	return result
+}
+
+func appendUniquePricingKey(result []string, seen map[string]struct{}, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return result
+	}
+	if _, exists := seen[value]; exists {
+		return result
+	}
+	seen[value] = struct{}{}
+	return append(result, value)
+}
+
+func providerPricingAliases(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if strings.HasSuffix(value, "-main") {
+		alias := strings.TrimSuffix(value, "-main")
+		if alias != value {
+			return []string{alias}
+		}
+		return nil
+	}
+	if strings.ContainsAny(value, ":/_") || looksLikeUUID(value) {
+		return nil
+	}
+	return []string{value + "-main"}
+}
+
+func modelPricingAliases(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if index := strings.LastIndex(value, ":"); index >= 0 && index+1 < len(value) {
+		alias := strings.TrimSpace(value[index+1:])
+		if alias != "" && alias != value {
+			return []string{alias}
+		}
+	}
+	return nil
+}
+
+func looksLikeUUID(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for index, char := range value {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID string) provider.ChatCompletionRequest {
 	req := chatReq

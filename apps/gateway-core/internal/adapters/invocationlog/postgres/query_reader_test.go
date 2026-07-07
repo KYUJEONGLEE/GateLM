@@ -399,6 +399,273 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	}
 }
 
+func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T) {
+	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	to := from.Add(24 * time.Hour)
+	lastLogCreatedAt := from.Add(23 * time.Hour)
+	db := &fakeQueryer{
+		rowQueue: []fakeRow{{
+			values: []any{
+				int64(3),
+				sql.NullFloat64{Float64: 100, Valid: true},
+				sql.NullFloat64{Float64: 300, Valid: true},
+				sql.NullFloat64{Float64: 300, Valid: true},
+				sql.NullFloat64{Float64: 1.0 / 3.0, Valid: true},
+				sql.NullTime{Time: lastLogCreatedAt, Valid: true},
+			},
+		}},
+		rowsQueue: []*fakeRows{
+			{values: [][]any{{
+				"OpenAI",
+				"gpt-4o-mini",
+				int64(2),
+				sql.NullFloat64{Float64: 100, Valid: true},
+				sql.NullFloat64{Float64: 300, Valid: true},
+				sql.NullFloat64{Float64: 300, Valid: true},
+				sql.NullFloat64{Float64: 0.5, Valid: true},
+				int64(1200000),
+				sql.NullFloat64{Float64: 0.25, Valid: true},
+			}}},
+			{values: [][]any{{
+				"OpenAI",
+				sql.NullFloat64{Float64: 300, Valid: true},
+				int64(2),
+			}}},
+			{values: [][]any{{
+				from,
+				int64(2),
+				sql.NullFloat64{Float64: 80, Valid: true},
+				sql.NullFloat64{Float64: 300, Valid: true},
+				sql.NullFloat64{Float64: 300, Valid: true},
+			}}},
+			{values: [][]any{{
+				"request_slow_001",
+				"project_demo",
+				"OpenAI",
+				"gpt-4o-mini",
+				int64(300),
+				500,
+				invocationlog.StatusFailed,
+				lastLogCreatedAt,
+			}}},
+		},
+	}
+
+	reader := NewQueryReader(db)
+	performance, err := reader.GetAnalyticsPerformance(context.Background(), invocationlog.AnalyticsPerformanceFilter{
+		TenantID:  "tenant_demo",
+		ProjectID: "project_demo",
+		Provider:  "OpenAI",
+		Model:     "gpt-4o-mini",
+		From:      from,
+		To:        to,
+	})
+	if err != nil {
+		t.Fatalf("expected analytics performance to succeed, got %v", err)
+	}
+	if performance.Summary.TotalRequests != 3 || performance.Summary.P95LatencyMs == nil || *performance.Summary.P95LatencyMs != 300 {
+		t.Fatalf("unexpected analytics summary: %+v", performance.Summary)
+	}
+	if performance.Summary.ThroughputPerMinute == nil || !floatEquals(*performance.Summary.ThroughputPerMinute, 3.0/1440.0) {
+		t.Fatalf("unexpected throughput: %+v", performance.Summary.ThroughputPerMinute)
+	}
+	if len(performance.ProviderModelPerformance) != 1 || performance.ProviderModelPerformance[0].TotalCostUSD != "1.200000" {
+		t.Fatalf("unexpected provider/model performance: %+v", performance.ProviderModelPerformance)
+	}
+	if performance.ProviderModelPerformance[0].CostPerRequestUSD == nil || !floatEquals(*performance.ProviderModelPerformance[0].CostPerRequestUSD, 0.6) {
+		t.Fatalf("unexpected cost per request: %+v", performance.ProviderModelPerformance[0].CostPerRequestUSD)
+	}
+	if len(performance.P95LatencyByProvider) != 1 || performance.P95LatencyByProvider[0].Provider != "OpenAI" {
+		t.Fatalf("unexpected provider latency: %+v", performance.P95LatencyByProvider)
+	}
+	if len(performance.LatencyDistribution) != 24 || !performance.LatencyDistribution[0].Bucket.Equal(from) {
+		t.Fatalf("unexpected latency distribution: %+v", performance.LatencyDistribution)
+	}
+	if performance.BucketInterval != "1h" || performance.ExpectedBucketCount != 24 {
+		t.Fatalf("unexpected analytics bucket metadata: interval=%s count=%d", performance.BucketInterval, performance.ExpectedBucketCount)
+	}
+	if performance.LatencyDistribution[0].P95LatencyMs == nil || *performance.LatencyDistribution[0].P95LatencyMs != 300 {
+		t.Fatalf("expected first latency bucket to keep p95 value, got %+v", performance.LatencyDistribution[0])
+	}
+	if performance.LatencyDistribution[1].Requests != 0 || performance.LatencyDistribution[1].P95LatencyMs != nil {
+		t.Fatalf("expected empty latency bucket to keep null latency, got %+v", performance.LatencyDistribution[1])
+	}
+	if len(performance.SlowestRequests) != 1 || performance.SlowestRequests[0].RequestID != "request_slow_001" || performance.SlowestRequests[0].TerminalStatus != invocationlog.StatusFailed {
+		t.Fatalf("unexpected slowest requests: %+v", performance.SlowestRequests)
+	}
+	if performance.DataFreshness.RecordCount != 3 || performance.DataFreshness.LastLogCreatedAt == nil || !performance.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) {
+		t.Fatalf("unexpected freshness: %+v", performance.DataFreshness)
+	}
+	if len(db.queries) != 5 {
+		t.Fatalf("expected five analytics queries, got %d", len(db.queries))
+	}
+	joinedQueries := strings.Join(db.queries, "\n")
+	for _, expected := range []string{
+		"from p0_llm_invocation_logs",
+		"tenant_id = $3",
+		"project_id = $4",
+		"coalesce(nullif(selected_provider, ''), nullif(provider, '')) = $5",
+		"coalesce(nullif(selected_model, ''), nullif(model, '')) = $6",
+		"percentile_disc(0.95)",
+		"provider_key",
+		"model_key",
+	} {
+		if !strings.Contains(joinedQueries, expected) {
+			t.Fatalf("expected analytics query to contain %q, got %s", expected, joinedQueries)
+		}
+	}
+	for _, forbidden := range []string{
+		"raw_prompt",
+		"raw_response",
+		"provider_api_key",
+		"api_key_plaintext",
+		"app_token_plaintext",
+		"authorization_header",
+		"cookie",
+		"raw_provider_error_body",
+	} {
+		if strings.Contains(strings.ToLower(joinedQueries), strings.ToLower(forbidden)) {
+			t.Fatalf("analytics query must not select forbidden field %q: %s", forbidden, joinedQueries)
+		}
+	}
+}
+
+func TestQueryReaderGetCostReportFillsExpectedTimeSeriesBuckets(t *testing.T) {
+	cases := []struct {
+		name             string
+		duration         time.Duration
+		expectedInterval string
+		expectedCount    int
+		expectedUnitSQL  string
+	}{
+		{name: "last 15 minutes", duration: 15 * time.Minute, expectedInterval: "1m", expectedCount: 15, expectedUnitSQL: "date_trunc('minute', created_at)"},
+		{name: "last 1 hour", duration: time.Hour, expectedInterval: "5m", expectedCount: 12, expectedUnitSQL: "interval '5 minutes'"},
+		{name: "last 24 hours", duration: 24 * time.Hour, expectedInterval: "1h", expectedCount: 24, expectedUnitSQL: "date_trunc('hour', created_at)"},
+		{name: "last 7 days", duration: 7 * 24 * time.Hour, expectedInterval: "1d", expectedCount: 7, expectedUnitSQL: "date_trunc('day', created_at)"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			to := time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)
+			from := to.Add(-tc.duration)
+			config := invocationlog.TimeSeriesBucketConfigForRange(from, to)
+			firstBucket := invocationlog.AlignTimeSeriesBucketStart(to.Add(-time.Nanosecond), config).
+				Add(-time.Duration(config.ExpectedBucketCount-1) * config.Interval)
+			lastLogCreatedAt := firstBucket.Add(30 * time.Second)
+			db := &fakeQueryer{
+				rowsQueue: []*fakeRows{
+					{values: [][]any{{
+						firstBucket,
+						int64(2),
+						int64(10),
+						int64(20),
+						int64(30),
+						int64(2500),
+						int64(100),
+						sql.NullTime{Time: lastLogCreatedAt, Valid: true},
+					}}},
+					{},
+					{},
+					{},
+					{},
+				},
+			}
+
+			reader := NewQueryReader(db)
+			report, err := reader.GetCostReport(context.Background(), invocationlog.CostReportFilter{
+				TenantID: "tenant_demo",
+				Period:   "hour",
+				From:     from,
+				To:       to,
+			})
+			if err != nil {
+				t.Fatalf("expected cost report to succeed, got %v", err)
+			}
+
+			if report.BucketInterval != tc.expectedInterval || report.ExpectedBucketCount != tc.expectedCount {
+				t.Fatalf("unexpected bucket metadata: interval=%s count=%d", report.BucketInterval, report.ExpectedBucketCount)
+			}
+			if len(report.Buckets) != tc.expectedCount {
+				t.Fatalf("expected %d buckets, got %d: %+v", tc.expectedCount, len(report.Buckets), report.Buckets)
+			}
+			if !report.Buckets[0].PeriodStart.Equal(firstBucket) || report.Buckets[0].RequestCount != 2 || report.Buckets[0].CostMicroUSD != 2500 {
+				t.Fatalf("expected first bucket to retain aggregate values, got %+v", report.Buckets[0])
+			}
+			if report.Buckets[1].RequestCount != 0 || report.Buckets[1].CostMicroUSD != 0 || report.Buckets[1].CostUSD != "0.000000" {
+				t.Fatalf("expected empty cost bucket to be zero-filled, got %+v", report.Buckets[1])
+			}
+			if !strings.Contains(db.queries[0], tc.expectedUnitSQL) {
+				t.Fatalf("expected cost bucket query to contain %q, got %s", tc.expectedUnitSQL, db.queries[0])
+			}
+		})
+	}
+}
+
+func TestQueryReaderGetAnalyticsPerformanceFillsExpectedLatencyBuckets(t *testing.T) {
+	cases := []struct {
+		name             string
+		duration         time.Duration
+		expectedInterval string
+		expectedCount    int
+		expectedUnitSQL  string
+	}{
+		{name: "last 15 minutes", duration: 15 * time.Minute, expectedInterval: "1m", expectedCount: 15, expectedUnitSQL: "date_trunc('minute', created_at)"},
+		{name: "last 1 hour", duration: time.Hour, expectedInterval: "5m", expectedCount: 12, expectedUnitSQL: "interval '5 minutes'"},
+		{name: "last 24 hours", duration: 24 * time.Hour, expectedInterval: "1h", expectedCount: 24, expectedUnitSQL: "date_trunc('hour', created_at)"},
+		{name: "last 7 days", duration: 7 * 24 * time.Hour, expectedInterval: "1d", expectedCount: 7, expectedUnitSQL: "date_trunc('day', created_at)"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			to := time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)
+			from := to.Add(-tc.duration)
+			db := &fakeQueryer{
+				rowQueue: []fakeRow{{
+					values: []any{
+						int64(0),
+						sql.NullFloat64{},
+						sql.NullFloat64{},
+						sql.NullFloat64{},
+						sql.NullFloat64{},
+						sql.NullTime{},
+					},
+				}},
+				rowsQueue: []*fakeRows{
+					{},
+					{},
+					{},
+					{},
+				},
+			}
+
+			reader := NewQueryReader(db)
+			performance, err := reader.GetAnalyticsPerformance(context.Background(), invocationlog.AnalyticsPerformanceFilter{
+				TenantID: "tenant_demo",
+				From:     from,
+				To:       to,
+			})
+			if err != nil {
+				t.Fatalf("expected analytics performance to succeed, got %v", err)
+			}
+
+			if performance.BucketInterval != tc.expectedInterval || performance.ExpectedBucketCount != tc.expectedCount {
+				t.Fatalf("unexpected analytics bucket metadata: interval=%s count=%d", performance.BucketInterval, performance.ExpectedBucketCount)
+			}
+			if len(performance.LatencyDistribution) != tc.expectedCount {
+				t.Fatalf("expected %d latency buckets, got %d: %+v", tc.expectedCount, len(performance.LatencyDistribution), performance.LatencyDistribution)
+			}
+			for _, bucket := range performance.LatencyDistribution {
+				if bucket.Requests != 0 || bucket.P50LatencyMs != nil || bucket.P95LatencyMs != nil || bucket.P99LatencyMs != nil {
+					t.Fatalf("expected empty latency bucket to keep null latency values, got %+v", bucket)
+				}
+			}
+			if !strings.Contains(db.queries[3], tc.expectedUnitSQL) {
+				t.Fatalf("expected latency bucket query to contain %q, got %s", tc.expectedUnitSQL, db.queries[3])
+			}
+		})
+	}
+}
+
 func TestQueryReaderGetRequestDetailMapsNoRowsToDomainNotFound(t *testing.T) {
 	for _, noRowsErr := range []error{pgx.ErrNoRows, sql.ErrNoRows} {
 		reader := NewQueryReader(&fakeQueryer{row: fakeRow{err: noRowsErr}})
@@ -418,15 +685,26 @@ func floatEquals(a float64, b float64) bool {
 }
 
 type fakeQueryer struct {
-	query string
-	args  []any
-	rows  *fakeRows
-	row   fakeRow
+	query     string
+	args      []any
+	queries   []string
+	argsList  [][]any
+	rows      *fakeRows
+	rowsQueue []*fakeRows
+	row       fakeRow
+	rowQueue  []fakeRow
 }
 
 func (q *fakeQueryer) Query(_ context.Context, query string, arguments ...any) (Rows, error) {
 	q.query = query
 	q.args = append([]any(nil), arguments...)
+	q.queries = append(q.queries, query)
+	q.argsList = append(q.argsList, append([]any(nil), arguments...))
+	if len(q.rowsQueue) > 0 {
+		rows := q.rowsQueue[0]
+		q.rowsQueue = q.rowsQueue[1:]
+		return rows, nil
+	}
 	if q.rows == nil {
 		q.rows = &fakeRows{}
 	}
@@ -436,6 +714,13 @@ func (q *fakeQueryer) Query(_ context.Context, query string, arguments ...any) (
 func (q *fakeQueryer) QueryRow(_ context.Context, query string, arguments ...any) Row {
 	q.query = query
 	q.args = append([]any(nil), arguments...)
+	q.queries = append(q.queries, query)
+	q.argsList = append(q.argsList, append([]any(nil), arguments...))
+	if len(q.rowQueue) > 0 {
+		row := q.rowQueue[0]
+		q.rowQueue = q.rowQueue[1:]
+		return row
+	}
 	return q.row
 }
 

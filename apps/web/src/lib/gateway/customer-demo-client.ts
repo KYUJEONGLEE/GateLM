@@ -10,6 +10,15 @@ export type CustomerDemoScenarioId =
 export type CustomerDemoIntegrationMode = "fixture" | "gateway";
 export type CustomerDemoSurface = "application" | "demo";
 
+export type CustomerDemoChatProfile = {
+  applicationId: string;
+  configured: boolean;
+  id: string;
+  isDefault: boolean;
+  label: string;
+  projectId: string;
+};
+
 export type CustomerDemoHeader = {
   name: string;
   value: string;
@@ -81,9 +90,12 @@ export type CustomerDemoExchange = {
 export type CustomerDemoModel = {
   applicationId: string;
   applicationChatStreamingEnabled?: boolean;
+  chatProfiles?: CustomerDemoChatProfile[];
   integrationMode: CustomerDemoIntegrationMode;
   projectId: string;
   scenarios: CustomerDemoExchange[];
+  selectedChatProfileId?: string;
+  selectedChatProfileLabel?: string;
   surface: CustomerDemoSurface;
   tenantId: string;
 };
@@ -212,7 +224,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
 export class RouteGatewayChatClient implements GatewayChatClient {
   constructor(
     private readonly tenantId: string,
-    private readonly surface: CustomerDemoSurface
+    private readonly surface: CustomerDemoSurface,
+    private readonly profileId?: string
   ) {}
 
   async sendChatCompletion(
@@ -234,6 +247,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
         contextRetentionEnabled: options.contextRetentionEnabled,
         conversationId: options.conversationId,
         scenarioId,
+        profileId: this.profileId,
         surface: this.surface,
         stream: options.stream === true,
         tenantId: this.tenantId
@@ -271,6 +285,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
         contextRetentionEnabled: options.contextRetentionEnabled,
         conversationId: options.conversationId,
         scenarioId,
+        profileId: this.profileId,
         surface: this.surface,
         stream: true,
         tenantId: this.tenantId
@@ -374,6 +389,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
       },
       body: JSON.stringify({
         contextRetentionEnabled: options.contextRetentionEnabled,
+        profileId: this.profileId,
         tenantId: this.tenantId
       })
     });
@@ -401,6 +417,7 @@ export class RouteGatewayChatClient implements GatewayChatClient {
       body: JSON.stringify({
         contextRetentionEnabled: options.contextRetentionEnabled,
         conversationId,
+        profileId: this.profileId,
         tenantId: this.tenantId
       })
     });

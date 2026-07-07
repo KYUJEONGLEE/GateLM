@@ -24,6 +24,10 @@ export async function getProjectRuntimePolicyModel(
     return null;
   }
 
+  if (project.status !== "ACTIVE") {
+    return null;
+  }
+
   const applicationsModel = await getApplicationsModel(routeTenantId, project.id);
   const runtimeApplicationId = resolveProjectRuntimeApplicationId(
     project,

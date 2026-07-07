@@ -1,8 +1,11 @@
 import {
   getControlPlaneApplicationId,
-  getControlPlaneProjectId,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import {
+  getPublicApplicationChatProfiles,
+  getSelectedPublicApplicationChatProfile
+} from "@/lib/gateway/application-chat-profiles";
 import type {
   CustomerDemoExchange,
   CustomerDemoModel,
@@ -113,20 +116,27 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
   }
 ];
 
-export function getCustomerDemoLiveModel(): CustomerDemoModel {
+export function getCustomerDemoLiveModel(
+  options: { profileId?: string | null } = {}
+): CustomerDemoModel {
   const tenantId = getControlPlaneTenantId();
-  const projectId = getControlPlaneProjectId();
-  const applicationId = getControlPlaneApplicationId();
+  const selectedProfile = getSelectedPublicApplicationChatProfile(options.profileId);
+  const profiles = getPublicApplicationChatProfiles();
+  const projectId = selectedProfile.projectId;
+  const applicationId = selectedProfile.applicationId || getControlPlaneApplicationId();
   const gatewayConfig = getLiveGatewayConfig();
 
   return {
     applicationId,
     applicationChatStreamingEnabled: gatewayConfig.applicationChatStreamingEnabled,
+    chatProfiles: profiles,
     integrationMode: "gateway",
     projectId,
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>
       buildLiveScenario(template, tenantId)
     ),
+    selectedChatProfileId: selectedProfile.id,
+    selectedChatProfileLabel: selectedProfile.label,
     surface: "demo",
     tenantId
   };

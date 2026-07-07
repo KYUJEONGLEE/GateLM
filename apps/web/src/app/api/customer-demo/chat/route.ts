@@ -5,6 +5,10 @@ import {
   updateChatConversation
 } from "@/lib/control-plane/conversations-client";
 import type { GatewayContextMessage } from "@/lib/control-plane/conversations-types";
+import {
+  resolveApplicationChatProfile,
+  type ResolvedApplicationChatProfile
+} from "@/lib/gateway/application-chat-profiles";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
 import type {
@@ -58,6 +62,16 @@ type ConversationGatewayContext = {
   userMessageId: string | null;
 };
 
+type RequestProfileResult =
+  | {
+      ok: true;
+      profile: ResolvedApplicationChatProfile;
+    }
+  | {
+      error: string;
+      ok: false;
+    };
+
 const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Request-Id",
   "X-GateLM-Cache-Status",
@@ -109,7 +123,14 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
 
 export async function POST(request: Request) {
   const payload = await readRequestPayload(request);
-  const model = getCustomerDemoLiveModel();
+  const profileResult = getRequestProfile(payload.profileId);
+
+  if (!profileResult.ok) {
+    return NextResponse.json({ error: profileResult.error }, { status: 400 });
+  }
+
+  const profile = profileResult.profile;
+  const model = getCustomerDemoLiveModel({ profileId: profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -132,6 +153,7 @@ export async function POST(request: Request) {
     return streamLiveScenario({
       model,
       payload,
+      profile,
       scenario,
       scenarioId
     });
@@ -144,7 +166,8 @@ export async function POST(request: Request) {
       payload.message,
       payload.surface,
       payload.conversationId,
-      payload.contextRetentionEnabled
+      payload.contextRetentionEnabled,
+      profile
     );
 
     return NextResponse.json({
@@ -165,11 +188,13 @@ export async function POST(request: Request) {
 function streamLiveScenario({
   model,
   payload,
+  profile,
   scenario,
   scenarioId
 }: {
   model: CustomerDemoModel;
   payload: Awaited<ReturnType<typeof readRequestPayload>>;
+  profile: ResolvedApplicationChatProfile;
   scenario: CustomerDemoExchange;
   scenarioId: CustomerDemoScenarioId;
 }) {
@@ -181,6 +206,7 @@ function streamLiveScenario({
         if (scenarioId === "cache-hit") {
           await callGateway("cache-hit", "warmup", {
             message: payload.message,
+            profile,
             surface: payload.surface
           });
         }
@@ -190,6 +216,7 @@ function streamLiveScenario({
           "1",
           {
             message: payload.message,
+            profile,
             stream: true,
             surface: payload.surface
           },
@@ -231,6 +258,7 @@ async function readRequestPayload(request: Request) {
     contextRetentionEnabled?: unknown;
     conversationId?: unknown;
     message?: unknown;
+    profileId?: unknown;
     scenarioId?: unknown;
     stream?: unknown;
     surface?: unknown;
@@ -247,6 +275,7 @@ async function readRequestPayload(request: Request) {
       typeof payload.conversationId === "string" && payload.conversationId.trim()
         ? payload.conversationId.trim()
         : null,
+    profileId: typeof payload.profileId === "string" ? payload.profileId : "",
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
     stream: payload.stream === true,
     surface: normalizeCustomerDemoSurface(payload.surface),
@@ -272,17 +301,32 @@ function normalizeCustomerDemoSurface(value: unknown): CustomerDemoSurface {
   return value === "application" ? "application" : "demo";
 }
 
+function getRequestProfile(profileId: string): RequestProfileResult {
+  try {
+    return {
+      ok: true,
+      profile: resolveApplicationChatProfile(profileId)
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Application chat profile is invalid.",
+      ok: false
+    };
+  }
+}
+
 async function executeLiveScenario(
   scenarioId: CustomerDemoScenarioId,
   stream: boolean,
   message: string | undefined,
   surface: CustomerDemoSurface,
   conversationId: string | null,
-  contextRetentionEnabled: boolean | undefined
+  contextRetentionEnabled: boolean | undefined,
+  profile: ResolvedApplicationChatProfile
 ) {
   if (scenarioId === "cache-hit") {
-    await callGateway("cache-hit", "warmup", { contextRetentionEnabled, conversationId, message, surface });
-    return callGateway("cache-hit", "hit", { contextRetentionEnabled, conversationId, message, stream, surface });
+    await callGateway("cache-hit", "warmup", { contextRetentionEnabled, conversationId, message, profile, surface });
+    return callGateway("cache-hit", "hit", { contextRetentionEnabled, conversationId, message, profile, stream, surface });
   }
 
   if (scenarioId === "rate-limited") {
@@ -295,6 +339,7 @@ async function executeLiveScenario(
         contextRetentionEnabled,
         conversationId,
         message,
+        profile,
         stream,
         surface
       });
@@ -310,17 +355,18 @@ async function executeLiveScenario(
   }
 
   if (scenarioId === "provider-timeout") {
-    return executeProviderFailureScenario(scenarioId, "timeout");
+    return executeProviderFailureScenario(scenarioId, "timeout", profile);
   }
 
   if (scenarioId === "provider-fallback") {
-    return executeProviderFailureScenario(scenarioId, "error");
+    return executeProviderFailureScenario(scenarioId, "error", profile);
   }
 
   return callGateway(scenarioId, "1", {
     contextRetentionEnabled,
     conversationId,
     message,
+    profile,
     stream,
     surface
   });
@@ -328,14 +374,15 @@ async function executeLiveScenario(
 
 async function executeProviderFailureScenario(
   scenarioId: CustomerDemoScenarioId,
-  mode: ProviderFailureMode
+  mode: ProviderFailureMode,
+  profile: ResolvedApplicationChatProfile
 ) {
   const config = getLiveGatewayConfig();
 
   await configureProviderFailureControl(mode);
 
   try {
-    return await callGateway(scenarioId, mode, { stream: false });
+    return await callGateway(scenarioId, mode, { profile, stream: false });
   } finally {
     await resetProviderFailureControl(config).catch(() => undefined);
   }
@@ -348,17 +395,19 @@ async function callGateway(
     contextRetentionEnabled?: boolean;
     conversationId?: string | null;
     message?: string;
+    profile: ResolvedApplicationChatProfile;
     stream?: boolean;
     surface?: CustomerDemoSurface;
-  } = {}
+  }
 ): Promise<GatewayCallResult> {
-  const config = getLiveGatewayConfig();
+  const config = getLiveGatewayConfig({ apiKey: options.profile.apiKey });
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
   const conversationContext = await prepareConversationGatewayContext({
     definition,
     message: options.message,
     options,
+    profile: options.profile,
     requestId
   });
   const requestBody = buildGatewayRequestBody(
@@ -391,6 +440,7 @@ async function callGateway(
   await retainAssistantMessage({
     body,
     conversationContext,
+    profile: options.profile,
     requestId,
     status: response.status
   });
@@ -416,18 +466,20 @@ async function callGatewayStreaming(
     contextRetentionEnabled?: boolean;
     conversationId?: string | null;
     message?: string;
+    profile: ResolvedApplicationChatProfile;
     stream?: boolean;
     surface?: CustomerDemoSurface;
   },
   onDelta: (content: string) => void
 ): Promise<GatewayCallResult> {
-  const config = getLiveGatewayConfig();
+  const config = getLiveGatewayConfig({ apiKey: options.profile.apiKey });
   const definition = LIVE_SCENARIOS[scenarioId];
   const requestId = buildRequestId(scenarioId, requestIdSuffix);
   const conversationContext = await prepareConversationGatewayContext({
     definition,
     message: options.message,
     options,
+    profile: options.profile,
     requestId
   });
   const requestBody = buildGatewayRequestBody(
@@ -460,6 +512,7 @@ async function callGatewayStreaming(
     await retainAssistantMessage({
       body,
       conversationContext,
+      profile: options.profile,
       requestId,
       status: response.status
     });
@@ -484,6 +537,7 @@ async function callGatewayStreaming(
     assistantContent: summary.assistantContent,
     body,
     conversationContext,
+    profile: options.profile,
     requestId,
     status: response.status
   });
@@ -552,6 +606,7 @@ async function prepareConversationGatewayContext({
   definition,
   message,
   options,
+  profile,
   requestId
 }: {
   definition: LiveScenarioDefinition;
@@ -561,6 +616,7 @@ async function prepareConversationGatewayContext({
     conversationId?: string | null;
     surface?: CustomerDemoSurface;
   };
+  profile: ResolvedApplicationChatProfile;
   requestId: string;
 }): Promise<ConversationGatewayContext | null> {
   if ((options.surface ?? "demo") !== "application") {
@@ -573,15 +629,17 @@ async function prepareConversationGatewayContext({
   }
 
   try {
-    const model = getCustomerDemoLiveModel();
+    const model = getCustomerDemoLiveModel({ profileId: profile.id });
     const conversation =
       options.conversationId
         ? await updateExistingConversation({
             contextRetentionEnabled,
-            conversationId: options.conversationId
+            conversationId: options.conversationId,
+            profile
           })
         : await createApplicationConversation({
-            contextRetentionEnabled
+            contextRetentionEnabled,
+            profile
           });
 
     const messageResult = await createChatConversationMessage({
@@ -644,11 +702,13 @@ function withRawCurrentUserMessage(
 }
 
 async function createApplicationConversation({
-  contextRetentionEnabled
+  contextRetentionEnabled,
+  profile
 }: {
   contextRetentionEnabled: boolean;
+  profile: ResolvedApplicationChatProfile;
 }): Promise<{ contextRetentionEnabled: boolean; id: string }> {
-  const model = getCustomerDemoLiveModel();
+  const model = getCustomerDemoLiveModel({ profileId: profile.id });
   const conversation = await createChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled,
@@ -666,12 +726,14 @@ async function createApplicationConversation({
 
 async function updateExistingConversation({
   contextRetentionEnabled,
-  conversationId
+  conversationId,
+  profile
 }: {
   contextRetentionEnabled: boolean;
   conversationId: string;
+  profile: ResolvedApplicationChatProfile;
 }): Promise<{ contextRetentionEnabled: boolean; id: string }> {
-  const model = getCustomerDemoLiveModel();
+  const model = getCustomerDemoLiveModel({ profileId: profile.id });
   const conversation = await updateChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled,
@@ -691,12 +753,14 @@ async function retainAssistantMessage({
   assistantContent,
   body,
   conversationContext,
+  profile,
   requestId,
   status
 }: {
   assistantContent?: string;
   body: JsonRecord;
   conversationContext: ConversationGatewayContext | null;
+  profile: ResolvedApplicationChatProfile;
   requestId: string;
   status: number;
 }) {
@@ -710,7 +774,7 @@ async function retainAssistantMessage({
     return;
   }
 
-  const model = getCustomerDemoLiveModel();
+  const model = getCustomerDemoLiveModel({ profileId: profile.id });
   await createChatConversationMessage({
     applicationId: model.applicationId,
     content,
