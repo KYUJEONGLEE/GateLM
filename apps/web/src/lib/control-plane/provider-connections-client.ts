@@ -111,6 +111,7 @@ export async function getProviderConnectionsModel(
     return {
       controlPlaneBaseUrl,
       controlPlaneProjectId,
+      controlPlaneTenantId,
       loadError: null,
       providerPresets,
       providers: listResult.data,
@@ -122,6 +123,7 @@ export async function getProviderConnectionsModel(
   return {
     controlPlaneBaseUrl,
     controlPlaneProjectId,
+    controlPlaneTenantId,
     loadError: listResult.error,
     providerPresets,
     providers: getFixtureProviders(),
@@ -383,9 +385,7 @@ async function listProviderPresets(): Promise<ProviderPresetListResult> {
 function toProviderPayload(values: ProviderConnectionFormValues) {
   const models = splitProviderModels(values.models);
   const providerConfig = toProviderConfig(values, models);
-  const secretRef =
-    values.secretRef.trim() ||
-    (values.isEdit ? "" : getDefaultProviderSecretRef(values));
+  const secretRef = values.secretRef.trim();
   const credentialValue = values.credentialValue?.trim() ?? "";
   const provider = values.provider.trim();
   const previousProvider = values.previousProvider?.trim();
@@ -405,26 +405,6 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     status: values.status,
     timeoutMs: values.timeoutMs
   };
-}
-
-function getDefaultProviderSecretRef(values: ProviderConnectionFormValues) {
-  if (
-    !values.credentialRequired ||
-    values.resolver.trim().toLowerCase() !== "environment"
-  ) {
-    return "";
-  }
-
-  const provider = values.provider.trim().toLowerCase();
-  if (!provider) {
-    return "";
-  }
-
-  if (provider === "openai" || provider === "openai-main") {
-    return "credential_ref_openai_main";
-  }
-
-  return `credential_ref_${provider.replace(/[^a-z0-9]+/g, "_")}_main`;
 }
 
 function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {

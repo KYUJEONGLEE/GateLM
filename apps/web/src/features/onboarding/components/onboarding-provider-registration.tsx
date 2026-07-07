@@ -3,6 +3,11 @@
 import { Check, KeyRound, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  getProviderConnectionFamily,
+  getProviderFamilyFromKey,
+  ProviderFamilyIcon
+} from "@/features/provider-connections/components/provider-family-icon";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
@@ -34,6 +39,8 @@ type ProviderResponsePayload = {
 type ProviderDisplayRow = {
   connection: ProviderConnectionRecord | null;
   displayName: string;
+  family: string;
+  kind: "registered" | "unregistered";
   modelSummary: string;
   models: string[];
   providerKey: string;
@@ -120,6 +127,12 @@ const onboardingProviderText: Record<
 
 const preferredProviderOrder = ["openai", "claude", "anthropic", "gemini", "cohere", "local", "mock"];
 const providerModelSummaryVisibleCount = 3;
+const onboardingPresetProviderKeys = ["openai", "gemini"];
+const onboardingProviderModelPageSize = 10;
+const onboardingDefaultProviderModels: Record<string, string[]> = {
+  gemini: ["gemini-3.5-flash", "gemini-2.5-pro"],
+  openai: ["chat-latest", "gpt-4o", "gpt-4o-mini"]
+};
 
 export function OnboardingProviderRegistration({
   locale,
@@ -128,18 +141,28 @@ export function OnboardingProviderRegistration({
 }: OnboardingProviderRegistrationProps) {
   const text = onboardingProviderText[locale];
   const [providers, setProviders] = useState<ProviderConnectionRecord[]>(model.providers);
+  const registeredProviderRows = useMemo(
+    () => getProviderRows(providers, model.providerPresets.items, locale, model.controlPlaneTenantId),
+    [locale, model.controlPlaneTenantId, model.providerPresets.items, providers]
+  );
+  const presetProviderRows = useMemo(
+    () => getPresetProviderRows(model.providerPresets.items),
+    [model.providerPresets.items]
+  );
   const providerRows = useMemo(
-    () => getProviderRows(providers, model.providerPresets.items, locale),
-    [locale, model.providerPresets.items, providers]
+    () => [...presetProviderRows, ...registeredProviderRows],
+    [registeredProviderRows, presetProviderRows]
   );
   const [selectedProviderKey, setSelectedProviderKey] = useState(
-    () => providerRows[0]?.providerKey ?? ""
+    () => presetProviderRows[0]?.providerKey ?? registeredProviderRows[0]?.providerKey ?? ""
   );
   const selectedRow =
     providerRows.find((row) => row.providerKey === selectedProviderKey) ?? providerRows[0] ?? null;
   const [selectedModel, setSelectedModel] = useState(() => selectedRow?.models[0] ?? "");
   const [formValues, setFormValues] = useState<ProviderConnectionFormValues>(() =>
-    selectedRow ? getProviderFormValuesForRow(selectedRow, selectedRow.models[0] ?? "") : emptyProviderForm
+    selectedRow
+      ? getProviderFormValuesForRow(selectedRow, selectedRow.models[0] ?? "", providers)
+      : emptyProviderForm
   );
   const [pendingAction, setPendingAction] = useState(false);
   const [submitState, setSubmitState] = useState<SubmitState>({
@@ -149,8 +172,16 @@ export function OnboardingProviderRegistration({
   const [discoveryPreviewByProvider, setDiscoveryPreviewByProvider] = useState<
     Record<string, ProviderDiscoveryPreview>
   >({});
+  const [visibleModelCountByProvider, setVisibleModelCountByProvider] = useState<Record<string, number>>({});
   const discoveryPreview = selectedProviderKey
     ? discoveryPreviewByProvider[selectedProviderKey] ?? null
+    : null;
+  const discoveryModelList = discoveryPreview
+    ? getModelDisplayList(
+        discoveryPreview.chatModels,
+        selectedRow?.family ?? getProviderFamilyFromKey(discoveryPreview.providerKey),
+        visibleModelCountByProvider[discoveryPreview.providerKey] ?? onboardingProviderModelPageSize
+      )
     : null;
 
   function selectProvider(row: ProviderDisplayRow) {
@@ -160,8 +191,17 @@ export function OnboardingProviderRegistration({
 
     setSelectedProviderKey(row.providerKey);
     setSelectedModel(nextModel);
-    setFormValues(getProviderFormValuesForRow(row, nextModel));
+    setFormValues(getProviderFormValuesForRow(row, nextModel, providers));
     setSubmitState({ message: "", status: "idle" });
+
+    if (row.kind === "registered" && row.connection) {
+      onProviderSaved({
+        provider: row.connection,
+        selectedModelKey: nextModel.trim()
+          ? `${row.connection.provider}::${nextModel.trim()}`
+          : ""
+      });
+    }
   }
 
   async function submitProvider() {
@@ -170,10 +210,20 @@ export function OnboardingProviderRegistration({
       return;
     }
 
+    if (selectedRow.kind === "registered" && selectedRow.connection) {
+      onProviderSaved({
+        provider: selectedRow.connection,
+        selectedModelKey: `${selectedRow.connection.provider}::${selectedModel.trim()}`
+      });
+      setSubmitState({ message: text.registered, status: "success" });
+      return;
+    }
+
     const registeringProvider = providers.find(
       (provider) => provider.provider === formValues.provider.trim()
     );
     const requiresCredential =
+      selectedRow.kind === "unregistered" &&
       formValues.credentialRequired && !hasProviderKeyRegistered(registeringProvider);
 
     if (requiresCredential && !formValues.credentialValue?.trim()) {
@@ -184,6 +234,11 @@ export function OnboardingProviderRegistration({
     setPendingAction(true);
     setSubmitState({ message: "", status: "idle" });
 
+    const selectedModels = getOnboardingDefaultSelectedModels(
+      formValues.presetProviderKey || selectedRow.family,
+      selectedModel
+    );
+
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
@@ -191,7 +246,7 @@ export function OnboardingProviderRegistration({
         values: {
           ...formValues,
           isEdit: isRegisteredProvider(providers, formValues.provider),
-          models: selectedModel
+          models: selectedModels.join(", ")
         }
       }),
       headers: {
@@ -215,7 +270,7 @@ export function OnboardingProviderRegistration({
     }
 
     const savedProvider = payload.provider;
-    const savedModel = selectedModel.trim();
+    const savedModel = selectedModels[0] ?? selectedModel.trim();
 
     setProviders((current) => [
       ...current.filter((provider) => provider.provider !== savedProvider.provider),
@@ -224,7 +279,7 @@ export function OnboardingProviderRegistration({
     setFormValues({
       ...getProviderFormValues(savedProvider),
       credentialValue: "",
-      models: savedModel
+      models: selectedModels.join(", ")
     });
     setSelectedProviderKey(savedProvider.provider);
     setSelectedModel(savedModel);
@@ -275,7 +330,16 @@ export function OnboardingProviderRegistration({
       normalizeDiscoveredModelName(item.modelName)
     );
     const chatModels = getUniqueChatModels(discoveredModels);
-    const selectedModels = defaultModel && chatModels.includes(defaultModel) ? [defaultModel] : [];
+    const preferredModels = getPreferredVisibleModels(
+      chatModels,
+      getProviderFamilyFromKey(provider.provider, provider.baseUrl)
+    );
+    const selectedModels =
+      defaultModel && chatModels.includes(defaultModel)
+        ? [defaultModel]
+        : preferredModels.length > 0
+          ? preferredModels
+          : chatModels.slice(0, getDefaultVisibleModelLimit(provider.provider));
 
     setDiscoveryPreviewByProvider((current) => ({
       ...current,
@@ -286,6 +350,13 @@ export function OnboardingProviderRegistration({
         selectedModels,
         skippedModelCount: discoveredModels.length - chatModels.length
       }
+    }));
+    setVisibleModelCountByProvider((current) => ({
+      ...current,
+      [provider.provider]: getInitialVisibleModelCount(
+        chatModels,
+        getProviderFamilyFromKey(provider.provider, provider.baseUrl)
+      )
     }));
     return true;
   }
@@ -454,6 +525,7 @@ export function OnboardingProviderRegistration({
               aria-label={`Choose ${row.displayName}`}
               aria-pressed={isSelected}
               className="onboarding-provider-option"
+              data-kind={row.kind}
               data-selected={isSelected}
               key={row.providerKey}
               onClick={() => selectProvider(row)}
@@ -462,22 +534,24 @@ export function OnboardingProviderRegistration({
               <span className="onboarding-provider-radio" aria-hidden="true">
                 {isSelected ? <Check aria-hidden="true" /> : null}
               </span>
-              <span className="onboarding-provider-logo" aria-hidden="true">
-                {getProviderLogoText(row.providerKey, row.displayName)}
-              </span>
+              <ProviderFamilyIcon className="onboarding-provider-logo" family={row.family} size={24} />
               <span className="onboarding-provider-copy">
                 <strong>{row.displayName}</strong>
-                <small>{row.modelSummary}</small>
+                {row.kind === "registered" && row.modelSummary ? (
+                  <small>{row.modelSummary}</small>
+                ) : null}
               </span>
-              <span className="onboarding-provider-choice">
-                {isSelected ? text.selected : text.choose}
-              </span>
+              {row.kind === "unregistered" ? (
+                <span className="onboarding-provider-choice">
+                  {isSelected ? text.selected : text.choose}
+                </span>
+              ) : null}
             </button>
           );
         })}
       </div>
 
-      {formValues.credentialRequired ? (
+      {selectedRow?.kind === "unregistered" && formValues.credentialRequired ? (
         <label className="onboarding-field">
           <span>{text.apiKey}</span>
           <input
@@ -489,24 +563,28 @@ export function OnboardingProviderRegistration({
                 credentialValue: event.target.value
               }))
             }
-            placeholder={getProviderKeyPlaceholder(selectedRow?.providerKey ?? "")}
+            placeholder={getProviderKeyPlaceholder(formValues.presetProviderKey)}
             type="password"
             value={formValues.credentialValue}
           />
         </label>
       ) : null}
 
-      <p className="onboarding-provider-note">{text.apiKeyHelp}</p>
+      <p className="onboarding-provider-note">
+        {selectedRow?.kind === "unregistered" ? text.apiKeyHelp : text.apiKeyRegistered}
+      </p>
 
-      <button
-        className="primary-button onboarding-provider-submit"
-        disabled={pendingAction || !selectedModel.trim()}
-        onClick={() => void submitProvider()}
-        type="button"
-      >
-        <Sparkles aria-hidden="true" />
-        {pendingAction ? text.saving : text.save}
-      </button>
+      {selectedRow?.kind === "unregistered" ? (
+        <button
+          className="primary-button onboarding-provider-submit"
+          disabled={pendingAction || !selectedModel.trim()}
+          onClick={() => void submitProvider()}
+          type="button"
+        >
+          <Sparkles aria-hidden="true" />
+          {pendingAction ? text.saving : text.save}
+        </button>
+      ) : null}
 
       {discoveryPreview ? (
         <section
@@ -534,18 +612,108 @@ export function OnboardingProviderRegistration({
               </button>
             </div>
           </div>
-          <div className="provider-discovery-model-list">
+          <div className="provider-discovery-model-list provider-model-selection-table onboarding-provider-model-selection-table">
             {discoveryPreview.chatModels.length > 0 ? (
-              discoveryPreview.chatModels.map((modelName) => (
-                <label className="provider-model-checkbox" key={modelName}>
-                  <input
-                    checked={discoveryPreview.selectedModels.includes(modelName)}
-                    onChange={(event) => toggleDiscoveredModel(modelName, event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span>{modelName}</span>
-                </label>
-              ))
+              <div className="provider-model-table-wrap provider-model-selection-table-wrap onboarding-provider-model-table-wrap">
+                <table className="provider-model-table">
+                  <thead>
+                    <tr>
+                      <th>{locale === "ko" ? "모델" : "Model"}</th>
+                      <th>{locale === "ko" ? "기능" : "Capabilities"}</th>
+                      <th>{locale === "ko" ? "컨텍스트" : "Context"}</th>
+                      <th>{locale === "ko" ? "추천" : "Recommended"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {discoveryModelList?.visibleModels.map((modelName) => {
+                      const isSelected = discoveryPreview.selectedModels.includes(modelName);
+                      const isRecommended = isRecommendedModel(
+                        modelName,
+                        selectedRow?.family ?? getProviderFamilyFromKey(discoveryPreview.providerKey)
+                      );
+                      const capabilities = getModelCapabilities(modelName);
+
+                      return (
+                        <tr
+                          className="provider-model-select-row"
+                          data-selected={isSelected}
+                          key={modelName}
+                          onClick={() => toggleDiscoveredModel(modelName, !isSelected)}
+                          onKeyDown={(event) => {
+                            if (event.target instanceof HTMLInputElement) {
+                              return;
+                            }
+
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              toggleDiscoveredModel(modelName, !isSelected);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <td>
+                            <span className="provider-model-name-with-check">
+                              <input
+                                checked={isSelected}
+                                onChange={(event) =>
+                                  toggleDiscoveredModel(modelName, event.target.checked)
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                type="checkbox"
+                              />
+                              <strong>{modelName}</strong>
+                            </span>
+                          </td>
+                          <td>
+                            <span className="provider-model-capability-list">
+                              {capabilities.map((capability) => (
+                                <em key={capability}>{capability}</em>
+                              ))}
+                            </span>
+                          </td>
+                          <td>{getModelContextWindow(modelName)}</td>
+                          <td>
+                            <span className="provider-model-route" data-enabled={isRecommended}>
+                              {isRecommended
+                                ? locale === "ko"
+                                  ? "추천"
+                                  : "Recommended"
+                                : "-"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {discoveryModelList && discoveryModelList.remainingCount > 0 ? (
+                      <tr className="provider-model-more-table-row">
+                        <td colSpan={4}>
+                          <button
+                            className="provider-model-more-button"
+                            onClick={() =>
+                              setVisibleModelCountByProvider((current) => ({
+                                ...current,
+                                [discoveryPreview.providerKey]:
+                                  (current[discoveryPreview.providerKey] ??
+                                    onboardingProviderModelPageSize) +
+                                  onboardingProviderModelPageSize
+                              }))
+                            }
+                            type="button"
+                          >
+                            {locale === "ko" ? "10개 더보기" : "Show 10 more"}
+                            <span>
+                              {locale === "ko"
+                                ? `${discoveryModelList.remainingCount}개 남음`
+                                : `${discoveryModelList.remainingCount} remaining`}
+                            </span>
+                          </button>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <p className="provider-model-empty">
                 {locale === "ko"
@@ -573,41 +741,62 @@ export function OnboardingProviderRegistration({
 function getProviderRows(
   providers: ProviderConnectionRecord[],
   presets: ProviderPresetRecord[],
-  locale: Locale
+  locale: Locale,
+  controlPlaneTenantId: string
 ): ProviderDisplayRow[] {
-  const providerMap = new Map(providers.map((provider) => [provider.provider, provider]));
-  const rows = presets.map((preset) => {
-    const connection = providerMap.get(preset.providerKey) ?? null;
-    const models = getDisplayModels(connection, preset);
-
-    return {
-      connection,
-      displayName: getProviderDisplayName(preset.providerKey, connection?.displayName ?? preset.displayName),
-      modelSummary: formatProviderModelSummary(models, locale),
-      models,
-      providerKey: preset.providerKey,
-      preset
-    };
-  });
-  const presetKeys = new Set(presets.map((preset) => preset.providerKey));
-  const extraRows = providers
-    .filter((provider) => !presetKeys.has(provider.provider))
+  return providers
+    .filter((provider) => isTenantLevelProviderConnection(provider, controlPlaneTenantId))
+    .filter(hasProviderKeyRegistered)
     .map((provider) => {
-      const models = getDisplayModels(provider, null);
+      const family = getProviderConnectionFamily(provider);
+      const preset = getProviderPresetByFamily(family, presets);
+      const models = getDisplayModels(provider, preset);
 
       return {
         connection: provider,
-        displayName: getProviderDisplayName(provider.provider, provider.displayName),
+        displayName: provider.displayName || getProviderDisplayName(family, preset?.displayName ?? provider.provider),
+        family,
+        kind: "registered" as const,
         modelSummary: formatProviderModelSummary(models, locale),
         models,
         providerKey: provider.provider,
-        preset: null
+        preset
       };
-    });
+    })
+    .sort((left, right) => {
+      const orderDelta = getProviderOrder(left.family) - getProviderOrder(right.family);
 
-  return [...rows, ...extraRows].sort(
-    (left, right) => getProviderOrder(left.providerKey) - getProviderOrder(right.providerKey)
-  );
+      return orderDelta !== 0
+        ? orderDelta
+        : left.displayName.localeCompare(right.displayName);
+    });
+}
+
+function isTenantLevelProviderConnection(
+  provider: ProviderConnectionRecord,
+  controlPlaneTenantId: string
+) {
+  return provider.projectId === null && provider.tenantId === controlPlaneTenantId;
+}
+
+function getPresetProviderRows(presets: ProviderPresetRecord[]): ProviderDisplayRow[] {
+  return presets
+    .filter((preset) => onboardingPresetProviderKeys.includes(preset.providerKey))
+    .map((preset) => {
+      const models = getDisplayModels(null, preset);
+
+      return {
+        connection: null,
+        displayName: getProviderDisplayName(preset.providerKey, preset.displayName),
+        family: preset.providerKey,
+        kind: "unregistered" as const,
+        modelSummary: "",
+        models,
+        providerKey: `preset:${preset.providerKey}`,
+        preset
+      };
+    })
+    .sort((left, right) => getProviderOrder(left.family) - getProviderOrder(right.family));
 }
 
 function formatProviderModelSummary(models: string[], locale: Locale) {
@@ -631,6 +820,10 @@ function formatProviderModelSummary(models: string[], locale: Locale) {
 function getProviderOrder(providerKey: string) {
   const index = preferredProviderOrder.indexOf(providerKey);
   return index === -1 ? preferredProviderOrder.length : index;
+}
+
+function getProviderPresetByFamily(providerFamily: string, presets: ProviderPresetRecord[]) {
+  return presets.find((preset) => preset.providerKey === providerFamily) ?? null;
 }
 
 function getProviderDisplayName(providerKey: string, fallback: string) {
@@ -662,7 +855,11 @@ function getDisplayModels(
     : getPresetModelOptions(preset?.providerKey ?? connection?.provider ?? "");
 }
 
-function getProviderFormValuesForRow(row: ProviderDisplayRow, selectedModel: string) {
+function getProviderFormValuesForRow(
+  row: ProviderDisplayRow,
+  selectedModel: string,
+  providers: ProviderConnectionRecord[]
+) {
   if (row.connection) {
     return {
       ...getProviderFormValues(row.connection),
@@ -671,16 +868,18 @@ function getProviderFormValuesForRow(row: ProviderDisplayRow, selectedModel: str
   }
 
   if (row.preset) {
+    const provider = getNextProviderConnectionKey(row.preset.providerKey, providers);
+
     return {
       ...emptyProviderForm,
       adapterType: row.preset.adapterType,
       baseUrl: row.preset.baseUrl,
       credentialRequired: row.preset.credentialRequired,
-      displayName: row.preset.displayName,
+      displayName: getDefaultProviderDisplayName(row.preset, provider),
       models: selectedModel,
       modelsEndpointPath: row.preset.modelsEndpointPath,
       presetProviderKey: row.preset.providerKey,
-      provider: row.preset.providerKey,
+      provider,
       requestFormat: getPresetRequestFormat(row.preset),
       resolver: row.preset.defaultResolver,
       timeoutMs: row.preset.defaultTimeoutMs
@@ -740,11 +939,11 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
 
 function getPresetModelOptions(providerKey: string) {
   if (providerKey === "openai") {
-    return ["gpt-4o-mini", "gpt-4o"];
+    return onboardingDefaultProviderModels.openai;
   }
 
   if (providerKey === "gemini") {
-    return ["gemini-1.5-flash", "gemini-1.5-pro"];
+    return onboardingDefaultProviderModels.gemini;
   }
 
   if (providerKey === "claude" || providerKey === "anthropic") {
@@ -780,6 +979,145 @@ function getUniqueChatModels(models: string[]) {
   return Array.from(
     new Set(models.map((model) => normalizeDiscoveredModelName(model)).filter(Boolean))
   ).filter(isChatCompletionModelName);
+}
+
+function getModelDisplayList(
+  models: string[],
+  providerFamily: string,
+  visibleCount: number
+) {
+  const preferredModels = getPreferredVisibleModels(models, providerFamily);
+  const preferredModelSet = new Set(preferredModels);
+  const orderedModels = [
+    ...preferredModels,
+    ...models.filter((model) => !preferredModelSet.has(model))
+  ];
+  const normalizedVisibleCount = Math.max(
+    getInitialVisibleModelCount(models, providerFamily),
+    visibleCount
+  );
+  const visibleModels = orderedModels.slice(0, normalizedVisibleCount);
+
+  return {
+    remainingCount: Math.max(orderedModels.length - visibleModels.length, 0),
+    visibleModels
+  };
+}
+
+function getInitialVisibleModelCount(models: string[], providerFamily: string) {
+  return getPreferredVisibleModels(models, providerFamily).length || onboardingProviderModelPageSize;
+}
+
+function getPreferredVisibleModels(models: string[], providerFamily: string) {
+  const family = getProviderFamilyFromKey(providerFamily);
+  const usedModels = new Set<string>();
+  const preferredModels: string[] = [];
+  const modelRules = getPreferredModelRules(family);
+
+  for (const rule of modelRules) {
+    const matchedModel = models.find(
+      (model) => !usedModels.has(model) && rule.matches(model.toLowerCase())
+    );
+
+    if (matchedModel) {
+      preferredModels.push(matchedModel);
+      usedModels.add(matchedModel);
+    }
+  }
+
+  return preferredModels;
+}
+
+function getDefaultVisibleModelLimit(providerFamily: string) {
+  return getProviderFamilyFromKey(providerFamily) === "gemini" ? 3 : 4;
+}
+
+function isRecommendedModel(modelName: string, providerFamily: string) {
+  const normalizedModelName = normalizeDiscoveredModelName(modelName).toLowerCase();
+
+  return getPreferredModelRules(getProviderFamilyFromKey(providerFamily)).some((rule) =>
+    rule.matches(normalizedModelName)
+  );
+}
+
+function getPreferredModelRules(providerFamily: string) {
+  if (providerFamily === "gemini") {
+    return [
+      { matches: (model: string) => isSameOrVariantModel(model, "gemini-3.5-flash") },
+      { matches: (model: string) => isSameOrVariantModel(model, "gemini-2.5-pro") },
+      { matches: (model: string) => isSameOrVariantModel(model, "gemini-2.5-flash") }
+    ];
+  }
+
+  if (providerFamily === "openai") {
+    return [
+      {
+        matches: (model: string) =>
+          model === "chat latest" ||
+          model === "chat-latest" ||
+          model === "chatgpt-4o-latest" ||
+          model === "gpt-4o-latest"
+      },
+      { matches: (model: string) => model === "gpt-4o" },
+      { matches: (model: string) => model === "gpt-4o-mini" },
+      { matches: (model: string) => isSameOrVariantModel(model, "gpt-5.5") }
+    ];
+  }
+
+  return [];
+}
+
+function getOnboardingDefaultSelectedModels(providerFamily: string, selectedModel: string) {
+  const normalizedFamily = getProviderFamilyFromKey(providerFamily);
+  const defaultModels = onboardingDefaultProviderModels[normalizedFamily] ?? [];
+
+  if (defaultModels.length > 0) {
+    return defaultModels;
+  }
+
+  return selectedModel.trim() ? [selectedModel.trim()] : [];
+}
+
+function isSameOrVariantModel(model: string, target: string) {
+  return model === target || model.startsWith(`${target}-`);
+}
+
+function getModelCapabilities(modelName: string) {
+  const normalized = modelName.toLowerCase();
+  const capabilities = ["chat"];
+
+  if (
+    normalized.includes("4o") ||
+    normalized.includes("vision") ||
+    normalized.includes("gemini") ||
+    normalized.includes("claude")
+  ) {
+    capabilities.push("vision");
+  }
+
+  return capabilities;
+}
+
+function getModelContextWindow(modelName: string) {
+  const normalized = modelName.toLowerCase();
+
+  if (normalized.includes("embedding")) {
+    return "1k";
+  }
+
+  if (normalized.includes("gemini")) {
+    return "1M";
+  }
+
+  if (normalized.includes("claude")) {
+    return "200k";
+  }
+
+  if (normalized.includes("4o") || normalized.includes("o3") || normalized.includes("o4")) {
+    return "128k";
+  }
+
+  return "-";
 }
 
 function isChatCompletionModelName(modelName: string) {
@@ -899,20 +1237,35 @@ function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: s
   return providers.some((item) => item.provider === normalizedProvider);
 }
 
-function getProviderLogoText(providerKey: string, displayName: string) {
-  if (providerKey === "openai") {
-    return "◎";
+function getNextProviderConnectionKey(
+  providerFamily: string,
+  providers: ProviderConnectionRecord[]
+) {
+  const usedProviders = new Set(providers.map((provider) => provider.provider));
+  const normalizedFamily = providerFamily.replace(/[^a-z0-9_-]/g, "") || "provider";
+  const mainProvider = `${normalizedFamily}-main`;
+
+  if (!usedProviders.has(mainProvider)) {
+    return mainProvider;
   }
 
-  if (providerKey === "gemini") {
-    return "✦";
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${normalizedFamily}-${index}`;
+
+    if (!usedProviders.has(candidate)) {
+      return candidate;
+    }
   }
 
-  if (providerKey === "claude" || providerKey === "anthropic") {
-    return "AI";
+  return `${normalizedFamily}-${Date.now().toString(36)}`;
+}
+
+function getDefaultProviderDisplayName(preset: ProviderPresetRecord, provider: string) {
+  if (provider.endsWith("-main")) {
+    return `${preset.displayName} Main`;
   }
 
-  return (displayName ?? "").slice(0, 2).toUpperCase();
+  return `${preset.displayName} ${provider.split("-").at(-1) ?? ""}`.trim();
 }
 
 function getProviderKeyPlaceholder(providerKey: string) {

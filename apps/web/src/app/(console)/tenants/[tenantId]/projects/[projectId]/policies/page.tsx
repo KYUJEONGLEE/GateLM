@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
+import {
+  getCurrentConsoleAuth,
+  resolveConsoleTenantIdForAuth
+} from "@/lib/auth/current-console-auth";
 import { getProjectRuntimePolicyModel } from "@/lib/control-plane/project-runtime-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -13,8 +17,12 @@ type ProjectPoliciesPageProps = {
 
 export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPageProps) {
   const { projectId, tenantId } = await params;
-  const locale = await getRequestLocale();
-  const projectRuntime = await getProjectRuntimePolicyModel(tenantId, projectId);
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const projectRuntime = await getProjectRuntimePolicyModel(effectiveTenantId, projectId);
 
   if (!projectRuntime) {
     notFound();
@@ -25,16 +33,16 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
       activeManagementItem="project"
       activeSection="management"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <RuntimePolicyEditor
         breadcrumbItems={[
           {
-            href: `/tenants/${tenantId}/projects`,
+            href: `/tenants/${effectiveTenantId}/projects`,
             label: "Projects"
           },
           {
-            href: `/tenants/${tenantId}/projects/${projectRuntime.project.id}`,
+            href: `/tenants/${effectiveTenantId}/projects/${projectRuntime.project.id}`,
             label: projectRuntime.project.name
           },
           {

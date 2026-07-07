@@ -2,7 +2,8 @@ import "server-only";
 
 import {
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId
+  getControlPlaneTenantId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import type {
   ProjectTeamMutationValues,
@@ -64,7 +65,7 @@ type ProjectTeamListResult =
 
 export async function getTeamsModel(routeTenantId: string): Promise<TeamsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const controlPlaneTenantId = getControlPlaneTenantId();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const listResult = await listTeams(controlPlaneTenantId);
 
   if (listResult.ok) {
@@ -92,7 +93,8 @@ export async function getProjectTeamsModel(
   routeTenantId: string,
   projectId: string
 ): Promise<ProjectTeamsModel> {
-  const teamsResult = await listTeams(getControlPlaneTenantId());
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
+  const teamsResult = await listTeams(controlPlaneTenantId);
   const projectTeamsResult = await listProjectTeams(projectId);
 
   if (teamsResult.ok && projectTeamsResult.ok) {
@@ -106,7 +108,7 @@ export async function getProjectTeamsModel(
     };
   }
 
-  const fixtureTeams = getFixtureTeams(getControlPlaneTenantId());
+  const fixtureTeams = getFixtureTeams(controlPlaneTenantId);
   const loadError = !teamsResult.ok
     ? teamsResult.error
     : !projectTeamsResult.ok
@@ -124,7 +126,7 @@ export async function getProjectTeamsModel(
 }
 
 export async function createTeam(values: TeamFormValues): Promise<TeamRequestResult> {
-  const tenantId = getControlPlaneTenantId();
+  const tenantId = values.tenantId?.trim() || getControlPlaneTenantId();
 
   try {
     const response = await fetch(

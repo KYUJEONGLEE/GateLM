@@ -7,10 +7,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  getProviderConnectionFamily,
+  ProviderFamilyIcon
+} from "@/features/provider-connections/components/provider-family-icon";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { applyPrimaryRuntimePolicyRouteSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
+  getRateLimitRefillTokensPerSecond,
+  getRateLimitWindowSeconds,
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
   type RuntimePolicyDetector,
@@ -62,9 +68,13 @@ type PolicySection =
   | "streaming";
 
 type RoutingProviderOption = {
+  displayName: string;
+  family: string;
   provider: string;
   providerId: string;
 };
+
+type RoutingPriorityRoute = "default" | "fallback" | "lowCost";
 
 type PolicySectionLabelText = {
   budgetTab: string;
@@ -144,6 +154,7 @@ const policyText: Record<
     logSafeCaptureHint: string;
     mandatoryProtection: string;
     mandatoryProtectionHint: string;
+    maxBucketTokens: string;
     mode: string;
     model: string;
     models: string;
@@ -164,7 +175,9 @@ const policyText: Record<
     publishedAt: string;
     history: string;
     rateLimit: string;
+    rateLimitInfo: string;
     rateLimitTab: string;
+    refillRate: string;
     remove: string;
     rollback: string;
     routing: string;
@@ -229,6 +242,7 @@ const policyText: Record<
     mandatoryProtection: "Mandatory sensitive data protection: always active",
     mandatoryProtectionHint:
       "API key, JWT, Authorization header, private key, and RRN stay protected regardless of PII masking settings.",
+    maxBucketTokens: "Max bucket tokens",
     mode: "Mode",
     model: "Model",
     models: "Models",
@@ -250,7 +264,10 @@ const policyText: Record<
     publishedAt: "Published",
     history: "Runtime history",
     rateLimit: "Rate limit",
+    rateLimitInfo:
+      "Rate limit prevents request bursts. Each request uses one token, and tokens refill every second by the configured amount. Tokens never accumulate above the max bucket size; when tokens run out, the request is blocked before the Provider call.",
     rateLimitTab: "Rate Limit",
+    refillRate: "Refill tokens / sec",
     remove: "Remove",
     rollback: "Rollback",
     routing: "Routing",
@@ -318,6 +335,7 @@ const policyText: Record<
     mandatoryProtection: "중요 민감정보 보호: 항상 활성화",
     mandatoryProtectionHint:
       "API key, JWT, Authorization header, private key, 주민등록번호는 PII masking 설정과 관계없이 항상 보호됩니다.",
+    maxBucketTokens: "최대 버킷 토큰",
     mode: "모드",
     model: "Model",
     models: "Models",
@@ -339,7 +357,10 @@ const policyText: Record<
     publishedAt: "게시 시각",
     history: "Runtime history",
     rateLimit: "Rate limit",
+    rateLimitInfo:
+      "요청 폭주를 막기 위한 제한입니다. 요청 1건은 토큰 1개를 사용하고, 토큰은 매초 설정한 수만큼 다시 채워집니다. 최대 버킷 토큰 수를 넘어서 쌓이지 않으며, 토큰이 부족하면 Provider 호출 전에 차단됩니다.",
     rateLimitTab: "Rate Limit",
+    refillRate: "초당 충전 토큰",
     remove: "삭제",
     rollback: "Rollback",
     routing: "Routing",
@@ -457,10 +478,7 @@ export function RuntimePolicyEditor({
       modelOptionsByProvider
     );
 
-  function updateRoutingProvider(
-    route: "default" | "fallback" | "lowCost",
-    provider: string
-  ) {
+  function updateRoutingProvider(route: RoutingPriorityRoute, provider: string) {
     const nextModel = modelOptionsByProvider.get(provider)?.[0]?.model ?? "";
 
     setDraftValues((current) => {
@@ -486,7 +504,7 @@ export function RuntimePolicyEditor({
     });
   }
 
-  function updateRoutingModel(route: "default" | "fallback" | "lowCost", modelName: string) {
+  function updateRoutingModel(route: RoutingPriorityRoute, modelName: string) {
     setDraftValues((current) => {
       if (route === "default") {
         return applyPrimaryRuntimePolicyRouteSelection(current, {
@@ -693,7 +711,6 @@ export function RuntimePolicyEditor({
       <section className="dashboard-hero">
         <div>
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
-          <p className="console-kicker">management</p>
           <h2>{text.title}</h2>
         </div>
         <div className="policy-actions">
@@ -891,35 +908,37 @@ export function RuntimePolicyEditor({
             <div className="panel-heading">
               <h3>{text.routing}</h3>
             </div>
-            <div className="policy-routing-grid">
-              <RoutingPairEditor
-                label={text.defaultRoute}
-                modelOptionsByProvider={modelOptionsByProvider}
-                onModelChange={(modelName) => updateRoutingModel("default", modelName)}
-                onProviderChange={(provider) => updateRoutingProvider("default", provider)}
-                provider={draftValues.routingDefaultProvider}
-                providerOptions={routingProviderOptions}
-                selectedModel={draftValues.routingDefaultModel}
-              />
-              <RoutingPairEditor
-                label={text.lowCostRoute}
-                modelOptionsByProvider={modelOptionsByProvider}
-                onModelChange={(modelName) => updateRoutingModel("lowCost", modelName)}
-                onProviderChange={(provider) => updateRoutingProvider("lowCost", provider)}
-                provider={draftValues.routingLowCostProvider}
-                providerOptions={routingProviderOptions}
-                selectedModel={draftValues.routingLowCostModel}
-              />
-              <RoutingPairEditor
-                label={text.fallbackRoute}
-                modelOptionsByProvider={modelOptionsByProvider}
-                onModelChange={(modelName) => updateRoutingModel("fallback", modelName)}
-                onProviderChange={(provider) => updateRoutingProvider("fallback", provider)}
-                provider={draftValues.routingFallbackProvider}
-                providerOptions={routingProviderOptions}
-                selectedModel={draftValues.routingFallbackModel}
-              />
-            </div>
+            <RoutingPriorityTable
+              modelOptionsByProvider={modelOptionsByProvider}
+              onModelChange={updateRoutingModel}
+              onProviderChange={updateRoutingProvider}
+              providerOptions={routingProviderOptions}
+              rows={[
+                {
+                  priority: "High",
+                  provider: draftValues.routingLowCostProvider,
+                  route: "lowCost",
+                  selectedModel: draftValues.routingLowCostModel
+                },
+                {
+                  priority: "Default",
+                  provider: draftValues.routingDefaultProvider,
+                  route: "default",
+                  selectedModel: draftValues.routingDefaultModel
+                },
+                {
+                  priority: "Fallback",
+                  provider: draftValues.routingFallbackProvider,
+                  route: "fallback",
+                  selectedModel: draftValues.routingFallbackModel
+                }
+              ]}
+              text={{
+                model: text.model,
+                noProviderModels: text.noProviderModels,
+                provider: text.provider
+              }}
+            />
           </article>
 
           <article className="console-panel policy-editor-panel">
@@ -1015,7 +1034,22 @@ export function RuntimePolicyEditor({
         >
           <article className="console-panel policy-editor-panel">
             <div className="panel-heading">
-              <h3>{text.rateLimit}</h3>
+              <div className="policy-heading-with-info">
+                <h3>{text.rateLimit}</h3>
+                <span className="policy-info-tooltip">
+                  <button
+                    aria-label={text.rateLimitInfo}
+                    className="policy-info-trigger"
+                    title={text.rateLimitInfo}
+                    type="button"
+                  >
+                    i
+                  </button>
+                  <span className="policy-info-content" role="tooltip">
+                    {text.rateLimitInfo}
+                  </span>
+                </span>
+              </div>
             </div>
             <label className="policy-toggle-row">
               <Switch
@@ -1030,13 +1064,33 @@ export function RuntimePolicyEditor({
               <span>{text.enabled}</span>
             </label>
             <PolicyNumberField
-              label={text.limit}
+              label={text.refillRate}
               max={100000}
               min={1}
               onChange={(value) =>
                 setDraftValues((current) => ({
                   ...current,
-                  rateLimitLimit: value
+                  rateLimitRefillTokensPerSecond: value,
+                  rateLimitWindowSeconds: getRateLimitWindowSeconds(
+                    current.rateLimitLimit,
+                    value
+                  )
+                }))
+              }
+              value={draftValues.rateLimitRefillTokensPerSecond}
+            />
+            <PolicyNumberField
+              label={text.maxBucketTokens}
+              max={100000}
+              min={1}
+              onChange={(value) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  rateLimitLimit: value,
+                  rateLimitWindowSeconds: getRateLimitWindowSeconds(
+                    value,
+                    current.rateLimitRefillTokensPerSecond
+                  )
                 }))
               }
               value={draftValues.rateLimitLimit}
@@ -1335,8 +1389,12 @@ function RuntimeSnapshotDetail({
           <dt>{text.rateLimit}</dt>
           <dd>
             {formatEnabled(snapshot.policies.rateLimit.enabled)} /{" "}
-            {snapshot.policies.rateLimit.scope} / {snapshot.policies.rateLimit.limit} per{" "}
-            {snapshot.policies.rateLimit.windowSeconds}s
+            {snapshot.policies.rateLimit.scope} / {text.maxBucketTokens}:{" "}
+            {snapshot.policies.rateLimit.limit} / {text.refillRate}:{" "}
+            {getRateLimitRefillTokensPerSecond(
+              snapshot.policies.rateLimit.limit,
+              snapshot.policies.rateLimit.windowSeconds
+            )}
           </dd>
         </div>
         <div>
@@ -1471,67 +1529,141 @@ function RuntimeHistoryTable({
   );
 }
 
-function RoutingPairEditor({
-  label,
+function RoutingPriorityTable({
   modelOptionsByProvider,
   onModelChange,
   onProviderChange,
-  provider,
   providerOptions,
-  selectedModel
+  rows,
+  text
 }: {
-  label: string;
   modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>;
-  onModelChange: (model: string) => void;
-  onProviderChange: (provider: string) => void;
-  provider: string;
+  onModelChange: (route: RoutingPriorityRoute, model: string) => void;
+  onProviderChange: (route: RoutingPriorityRoute, provider: string) => void;
   providerOptions: RoutingProviderOption[];
-  selectedModel: string;
+  rows: Array<{
+    priority: string;
+    provider: string;
+    route: RoutingPriorityRoute;
+    selectedModel: string;
+  }>;
+  text: {
+    model: string;
+    noProviderModels: string;
+    provider: string;
+  };
 }) {
-  const modelOptions = modelOptionsByProvider.get(provider) ?? [];
+  return (
+    <div className="policy-routing-table" role="table" aria-label="Routing priority">
+      <div className="policy-routing-table-head" role="row">
+        <span role="columnheader">Priority</span>
+        <span role="columnheader">{text.provider}</span>
+        <span role="columnheader">{text.model}</span>
+      </div>
+      {rows.map((row) => (
+        <RoutingPriorityRow
+          key={row.route}
+          modelOptionsByProvider={modelOptionsByProvider}
+          onModelChange={onModelChange}
+          onProviderChange={onProviderChange}
+          providerOptions={providerOptions}
+          row={row}
+          text={text}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RoutingPriorityRow({
+  modelOptionsByProvider,
+  onModelChange,
+  onProviderChange,
+  providerOptions,
+  row,
+  text
+}: {
+  modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>;
+  onModelChange: (route: RoutingPriorityRoute, model: string) => void;
+  onProviderChange: (route: RoutingPriorityRoute, provider: string) => void;
+  providerOptions: RoutingProviderOption[];
+  row: {
+    priority: string;
+    provider: string;
+    route: RoutingPriorityRoute;
+    selectedModel: string;
+  };
+  text: {
+    model: string;
+    noProviderModels: string;
+    provider: string;
+  };
+}) {
+  const selectedProvider = getRoutingProviderOption(providerOptions, row.provider);
+  const modelOptions = modelOptionsByProvider.get(row.provider) ?? [];
   const hasProviderOptions = providerOptions.length > 0;
-  const selectedModelAvailable = modelOptions.some((option) => option.model === selectedModel);
+  const selectedModelAvailable = modelOptions.some((option) => option.model === row.selectedModel);
 
   return (
-    <fieldset className="policy-routing-pair">
-      <legend>{label}</legend>
-      <label className="policy-field">
-        <span>Provider</span>
+    <div className="policy-routing-table-row" role="row">
+      <div className="policy-routing-priority" role="cell">
+        {row.priority}
+      </div>
+      <label className="policy-routing-provider-cell">
+        <span className="sr-only">{row.priority} {text.provider}</span>
+        {selectedProvider ? (
+          <ProviderFamilyIcon
+            className="policy-routing-provider-icon"
+            family={selectedProvider.family}
+            size={26}
+          />
+        ) : (
+          <span className="policy-routing-provider-icon" aria-hidden="true">
+            -
+          </span>
+        )}
         <select
-          aria-label={`${label} Provider`}
+          aria-label={`${row.priority} ${text.provider}`}
           disabled={!hasProviderOptions}
-          onChange={(event) => onProviderChange(event.target.value)}
-          value={hasProviderOptions ? provider : ""}
+          onChange={(event) => onProviderChange(row.route, event.target.value)}
+          value={hasProviderOptions ? row.provider : ""}
         >
-          {!hasProviderOptions ? <option value="">No providers</option> : null}
+          {!hasProviderOptions ? <option value="">{text.noProviderModels}</option> : null}
           {providerOptions.map((option) => (
             <option key={option.providerId} value={option.provider}>
-              {option.provider}
+              {option.displayName}
             </option>
           ))}
         </select>
       </label>
-      <label className="policy-field">
-        <span>Model</span>
+      <label className="policy-routing-model-cell">
+        <span className="sr-only">{row.priority} {text.model}</span>
         <select
-          aria-label={`${label} Model`}
+          aria-label={`${row.priority} ${text.model}`}
           disabled={modelOptions.length === 0}
-          onChange={(event) => onModelChange(event.target.value)}
-          value={modelOptions.length === 0 || !selectedModelAvailable ? "" : selectedModel}
+          onChange={(event) => onModelChange(row.route, event.target.value)}
+          value={modelOptions.length === 0 || !selectedModelAvailable ? "" : row.selectedModel}
         >
-          {modelOptions.length === 0 ? <option value="">No models</option> : null}
+          {modelOptions.length === 0 ? <option value="">{text.noProviderModels}</option> : null}
           {modelOptions.length > 0 && !selectedModelAvailable ? (
             <option value="">Select a registered model</option>
           ) : null}
           {modelOptions.map((option) => (
             <option key={`${option.provider}:${option.model}`} value={option.model}>
-              {option.model}
+              {option.displayName || option.model}
             </option>
           ))}
         </select>
       </label>
-    </fieldset>
+    </div>
   );
+}
+
+function getRoutingProviderOption(
+  providerOptions: RoutingProviderOption[],
+  provider: string
+) {
+  return providerOptions.find((option) => option.provider === provider) ?? null;
 }
 
 function PolicyNumberField({
@@ -1539,12 +1671,14 @@ function PolicyNumberField({
   max,
   min,
   onChange,
+  readOnly = false,
   value
 }: {
   label: string;
   max: number;
   min: number;
   onChange: (value: number) => void;
+  readOnly?: boolean;
   value: number;
 }) {
   return (
@@ -1554,6 +1688,7 @@ function PolicyNumberField({
         max={max}
         min={min}
         onChange={(event) => onChange(parseBoundedInteger(event.target.value, min, max))}
+        readOnly={readOnly}
         type="number"
         value={value}
       />
@@ -1742,9 +1877,12 @@ function getRoutingProviderOptions(
 
   for (const providerConnection of providerConnections) {
     const providerName = normalizePolicyText(providerConnection.provider);
+    const displayName = normalizePolicyText(providerConnection.displayName) || providerName;
 
     if (providerName && getProviderConnectionModels(providerConnection).length > 0) {
       providerOptions.set(providerName, {
+        displayName,
+        family: getProviderConnectionFamily(providerConnection),
         provider: providerName,
         providerId: providerConnection.id
       });
@@ -1753,15 +1891,18 @@ function getRoutingProviderOptions(
 
   for (const provider of selectedProviders) {
     const providerName = normalizePolicyText(provider);
+    const providerConnection = providerConnections.find(
+      (connection) => normalizePolicyText(connection.provider) === providerName
+    );
 
     if (
       providerName &&
       !providerOptions.has(providerName) &&
-      providerConnections.some(
-        (providerConnection) => normalizePolicyText(providerConnection.provider) === providerName
-      )
+      providerConnection
     ) {
       providerOptions.set(providerName, {
+        displayName: normalizePolicyText(providerConnection.displayName) || providerName,
+        family: getProviderConnectionFamily(providerConnection),
         provider: providerName,
         providerId: `selected-provider-${providerName}`
       });

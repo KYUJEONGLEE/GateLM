@@ -4,6 +4,7 @@ import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
   isProjectScopedForTenant,
+  resolveConsoleTenantIdForAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import {
@@ -46,17 +47,18 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const liveRange = getDashboardLiveRange(dashboardFilters.range);
   const monthToDateRange = getMonthToDateRange();
   const suppressContentMotion = resolvedSearchParams?.motion === "none";
-  const [locale, auth, projectsModel] = await Promise.all([
+  const [locale, auth] = await Promise.all([
     getRequestLocale(),
-    getCurrentConsoleAuth(),
-    getProjectsModel(tenantId)
+    getCurrentConsoleAuth()
   ]);
-  const projectScoped = isProjectScopedForTenant(auth, tenantId);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const projectsModel = await getProjectsModel(effectiveTenantId);
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,
     requestedProjectId: liveFilters.projectId,
-    routeTenantId: tenantId
+    routeTenantId: effectiveTenantId
   });
 
   if (effectiveProjectId === null) {
@@ -71,21 +73,21 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     ...dashboardFilters,
     projectId: effectiveProjectId ?? dashboardFilters.projectId
   };
-  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, tenantId);
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
   const [overview, monthToDateOverview, costOverTime, liveRequests, recentRecords] = await Promise.all([
-    getLiveDashboardOverview(tenantId, scopedLiveFilters),
-    getLiveDashboardOverview(tenantId, {
+    getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters),
+    getLiveDashboardOverview(effectiveTenantId, {
       ...scopedLiveFilters,
       from: monthToDateRange.from,
       to: monthToDateRange.to
     }),
-    getLiveCostOverTime(tenantId, scopedLiveFilters),
-    getLiveOverviewRequests(tenantId, scopedLiveFilters),
+    getLiveCostOverTime(effectiveTenantId, scopedLiveFilters),
+    getLiveOverviewRequests(effectiveTenantId, scopedLiveFilters),
     getLiveGatewayRequestLogs({
       from: liveRange.from,
       limit: 100,
       projectId: scopedLiveFilters.projectId,
-      tenantId,
+      tenantId: effectiveTenantId,
       to: liveRange.to
     })
   ]);
@@ -96,7 +98,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         activeMonitoringItem="overview"
         activeSection="monitoring"
         locale={locale}
-        tenantId={tenantId}
+        tenantId={effectiveTenantId}
       >
         <main className="console-content">
           <section className="dashboard-hero">
@@ -111,7 +113,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     );
   }
 
-  if (tenantId !== overview.filters.tenantId) {
+  if (effectiveTenantId !== overview.filters.tenantId) {
     notFound();
   }
 
@@ -120,7 +122,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       activeMonitoringItem="overview"
       activeSection="monitoring"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <DashboardOverviewView
         locale={locale}

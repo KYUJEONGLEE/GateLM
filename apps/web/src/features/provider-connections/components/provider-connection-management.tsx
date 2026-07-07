@@ -1,12 +1,16 @@
 "use client";
 
 import { ChevronDown, KeyRound, Pencil, PlugZap, Plus, Trash2, X } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  getProviderConnectionFamily,
+  getProviderFamilyFromKey,
+  ProviderFamilyIcon
+} from "@/features/provider-connections/components/provider-family-icon";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
@@ -31,6 +35,7 @@ type SubmitState = {
 type ProviderDiscoveryPreview = {
   chatModels: string[];
   discoveredAt: string;
+  modelReleaseDates: Record<string, string | null>;
   selectedModels: string[];
   skippedModelCount: number;
 };
@@ -54,6 +59,7 @@ type ProviderModalState =
 const providerKeyPattern = /^[a-z][a-z0-9_-]{1,63}$/;
 const minProviderTimeoutMs = 1000;
 const maxProviderTimeoutMs = 120000;
+const providerModelPageSize = 10;
 
 const emptyProviderForm: ProviderConnectionFormValues = {
   adapterType: "openai_compatible",
@@ -216,6 +222,7 @@ export function ProviderConnectionManagement({
     () => getInitialModelOptions(model.providers)
   );
   const [discoveryByProvider, setDiscoveryByProvider] = useState<Record<string, ProviderDiscoveryPreview>>({});
+  const [visibleModelCountByProvider, setVisibleModelCountByProvider] = useState<Record<string, number>>({});
   const [pendingAction, setPendingAction] = useState(false);
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
@@ -394,11 +401,26 @@ export function ProviderConnectionManagement({
     const discoveredModels = payload.discovery.models.map((item) =>
       normalizeDiscoveredModelName(item.modelName)
     );
+    const modelReleaseDates = Object.fromEntries(
+      payload.discovery.models.map((item) => [
+        normalizeDiscoveredModelName(item.modelName),
+        item.createdAt
+      ])
+    );
     const chatModels = filterChatCompletionModels(discoveredModels);
     const existingSelectedModels = splitModelNames(baseValues.models).filter((modelName) =>
       chatModels.includes(modelName)
     );
-    const selectedModels = existingSelectedModels.length > 0 ? existingSelectedModels : chatModels;
+    const preferredModels = getPreferredVisibleModels(
+      chatModels,
+      getProviderFamilyFromKey(normalizedProvider, baseValues.baseUrl)
+    );
+    const selectedModels =
+      existingSelectedModels.length > 0
+        ? existingSelectedModels
+        : preferredModels.length > 0
+          ? preferredModels
+          : chatModels.slice(0, getDefaultVisibleModelLimit(normalizedProvider));
     const skippedModelCount = discoveredModels.length - chatModels.length;
 
     setModelOptionsByProvider((current) => ({
@@ -410,9 +432,17 @@ export function ProviderConnectionManagement({
       [normalizedProvider]: {
         chatModels,
         discoveredAt: payload.discovery?.discoveredAt ?? new Date().toISOString(),
+        modelReleaseDates,
         selectedModels,
         skippedModelCount
       }
+    }));
+    setVisibleModelCountByProvider((current) => ({
+      ...current,
+      [normalizedProvider]: getInitialVisibleModelCount(
+        chatModels,
+        getProviderFamilyFromKey(normalizedProvider, baseValues.baseUrl)
+      )
     }));
     if (applyToForm) {
       setFormValues((current) => {
@@ -624,141 +654,194 @@ export function ProviderConnectionManagement({
   }
 
   function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
-    const savedModelNames = Array.from(new Set(splitModelNames(formValues.models)));
+    const activeProviderFamily = getProviderFamilyFromKey(activeDiscoveryKey, formValues.baseUrl);
+    const activeDiscoveryModelList = activeDiscovery
+      ? getModelDisplayList(
+          activeDiscovery.chatModels,
+          activeProviderFamily,
+          visibleModelCountByProvider[activeDiscoveryKey] ?? providerModelPageSize
+        )
+      : null;
 
     return (
-      <div className="provider-discovery-panel provider-inline-edit-panel">
-        <div className="provider-form-grid provider-inline-edit-grid">
-          <label className="policy-field">
-            <span>{text.displayName}</span>
-            <input
-              autoComplete="off"
-              maxLength={120}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  displayName: event.target.value
-                }))
-              }
-              value={formValues.displayName}
-            />
-          </label>
-          <div className="policy-field provider-model-edit-field">
-            <span>{text.models}</span>
-            <div className="provider-model-edit">
-              <div className="provider-model-selection-toolbar">
-                <strong>
-                  {activeDiscovery
-                    ? locale === "ko"
-                      ? `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length}개 선택`
-                      : `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length} selected`
-                    : locale === "ko"
-                      ? "저장된 모델 목록"
-                      : "Saved model list"}
-                </strong>
-                <Button
-                  disabled={
-                    pendingAction ||
-                    discoveringProvider !== null ||
-                    !isDiscoverSupportedProvider(formValues.adapterType)
-                  }
-                  onClick={() =>
-                    void discoverModels(formValues.previousProvider || formValues.provider, {
-                      applyToForm: true
-                    })
-                  }
-                  type="button"
-                  variant="outline"
-                >
-                  {discoveringProvider === (formValues.previousProvider || formValues.provider)
-                    ? "..."
-                    : text.discoverModels}
-                </Button>
-              </div>
+      <>
+        <div className="provider-model-edit provider-card-inline-edit">
+          <div className="provider-model-selection-toolbar provider-card-model-toolbar">
+            <strong>
+              {activeDiscovery
+                ? locale === "ko"
+                  ? `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length}개 선택`
+                  : `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length} selected`
+                : locale === "ko"
+                  ? "모델 목록"
+                  : "Model list"}
+            </strong>
+            <div>
               {activeDiscovery ? (
                 <>
-                  <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar">
-                    <span className="project-muted">
-                      {locale === "ko"
-                        ? `제외된 비채팅 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
-                        : `${activeDiscovery.skippedModelCount} non-chat models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
-                    </span>
-                    <div>
-                      <button
-                        onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)}
-                        type="button"
-                      >
-                        {locale === "ko" ? "전체 선택" : "Select all"}
-                      </button>
-                      <button
-                        onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)}
-                        type="button"
-                      >
-                        {locale === "ko" ? "전체 해제" : "Clear"}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="provider-discovery-model-list">
-                    {activeDiscovery.chatModels.length > 0 ? (
-                      activeDiscovery.chatModels.map((modelName) => (
-                        <label key={modelName} className="provider-model-checkbox">
-                          <input
-                            checked={activeDiscovery.selectedModels.includes(modelName)}
-                            onChange={(event) =>
-                              toggleDiscoveredModel(
-                                activeDiscoveryKey,
-                                modelName,
-                                event.target.checked
-                              )
-                            }
-                            type="checkbox"
-                          />
-                          <span>{modelName}</span>
-                        </label>
-                      ))
-                    ) : (
-                      <span className="project-muted">
-                        {locale === "ko"
-                          ? "반영 가능한 chat 모델이 없습니다."
-                          : "No chat models available to apply."}
-                      </span>
-                    )}
-                  </div>
+                  <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)} type="button">
+                    {locale === "ko" ? "전체 선택" : "Select all"}
+                  </button>
+                  <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)} type="button">
+                    {locale === "ko" ? "전체 해제" : "Clear"}
+                  </button>
                 </>
-              ) : (
-                <>
-                  {savedModelNames.length > 0 ? (
-                    <div className="provider-discovery-model-list provider-saved-model-list">
-                      {savedModelNames.map((modelName) => (
-                        <span key={modelName} className="provider-saved-model-item">
-                          {modelName}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="project-muted">
-                      {locale === "ko"
-                        ? "저장된 chat 모델이 없습니다. 모델 조회 후 선택하거나 직접 입력하세요."
-                        : "No saved chat models. Discover models to select them or enter model names manually."}
-                    </span>
-                  )}
-                  <textarea
-                    aria-label={text.models}
-                    onChange={(event) =>
-                      setFormValues((current) => ({
-                        ...current,
-                        models: event.target.value
-                      }))
-                    }
-                    rows={3}
-                    value={formValues.models}
-                  />
-                </>
-              )}
+              ) : null}
+              <Button
+                disabled={
+                  pendingAction ||
+                  discoveringProvider !== null ||
+                  !isDiscoverSupportedProvider(formValues.adapterType)
+                }
+                onClick={() =>
+                  void discoverModels(formValues.previousProvider || formValues.provider, {
+                    applyToForm: true
+                  })
+                }
+                type="button"
+                variant="outline"
+              >
+                {discoveringProvider === (formValues.previousProvider || formValues.provider)
+                  ? "..."
+                  : text.discoverModels}
+              </Button>
             </div>
-          </div>
         </div>
-        <div className="provider-discovery-actions">
+          {activeDiscovery ? (
+            <>
+              <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar provider-card-model-discovery-note">
+                <span className="project-muted">
+                  {locale === "ko"
+                    ? `제외된 비채팅 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
+                    : `${activeDiscovery.skippedModelCount} non-chat models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
+                </span>
+              </div>
+              <div className="provider-discovery-model-list provider-model-selection-table">
+                {activeDiscovery.chatModels.length > 0 ? (
+                  <div className="provider-model-table-wrap provider-model-selection-table-wrap">
+                    <table className="provider-model-table">
+                      <thead>
+                        <tr>
+                          <th>{locale === "ko" ? "모델" : "Model"}</th>
+                          <th>{locale === "ko" ? "기능" : "Capabilities"}</th>
+                          <th>{locale === "ko" ? "컨텍스트" : "Context"}</th>
+                          <th>{locale === "ko" ? "추천" : "Recommended"}</th>
+                          <th>{locale === "ko" ? "출시날짜" : "Release date"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeDiscoveryModelList?.visibleModels.map((modelName) => {
+                          const isSelected = activeDiscovery.selectedModels.includes(modelName);
+                          const isRecommended = isRecommendedModel(modelName, activeProviderFamily);
+                          const capabilities = getModelCapabilities(modelName);
+
+                          return (
+                            <tr
+                              className="provider-model-select-row"
+                              data-selected={isSelected}
+                              key={modelName}
+                              onClick={() =>
+                                toggleDiscoveredModel(activeDiscoveryKey, modelName, !isSelected)
+                              }
+                              onKeyDown={(event) => {
+                                if (event.target instanceof HTMLInputElement) {
+                                  return;
+                                }
+
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  toggleDiscoveredModel(activeDiscoveryKey, modelName, !isSelected);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                            >
+                              <td>
+                                <span className="provider-model-name-with-check">
+                                  <input
+                                    checked={isSelected}
+                                    onChange={(event) =>
+                                      toggleDiscoveredModel(
+                                        activeDiscoveryKey,
+                                        modelName,
+                                        event.target.checked
+                                      )
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    type="checkbox"
+                                  />
+                                  <strong>{modelName}</strong>
+                                </span>
+                              </td>
+                              <td>
+                                <span className="provider-model-capability-list">
+                                  {capabilities.map((capability) => (
+                                    <em key={capability}>{capability}</em>
+                                  ))}
+                                </span>
+                              </td>
+                              <td>{getModelContextWindow(modelName)}</td>
+                              <td>
+                                <span className="provider-model-route" data-enabled={isRecommended}>
+                                  {isRecommended
+                                    ? locale === "ko"
+                                      ? "추천"
+                                      : "Recommended"
+                                    : "-"}
+                                </span>
+                              </td>
+                              <td>
+                                {formatModelReleaseDate(
+                                  modelName,
+                                  activeDiscovery.modelReleaseDates,
+                                  locale
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {activeDiscoveryModelList && activeDiscoveryModelList.remainingCount > 0 ? (
+                          <tr className="provider-model-more-table-row">
+                            <td colSpan={5}>
+                              <button
+                                className="provider-model-more-button"
+                                onClick={() =>
+                                  setVisibleModelCountByProvider((current) => ({
+                                    ...current,
+                                    [activeDiscoveryKey]:
+                                      (current[activeDiscoveryKey] ?? providerModelPageSize) +
+                                      providerModelPageSize
+                                  }))
+                                }
+                                type="button"
+                              >
+                                {locale === "ko" ? "10개 더보기" : "Show 10 more"}
+                                <span>
+                                  {locale === "ko"
+                                    ? `${activeDiscoveryModelList.remainingCount}개 남음`
+                                    : `${activeDiscoveryModelList.remainingCount} remaining`}
+                                </span>
+                              </button>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <span className="project-muted">
+                    {locale === "ko"
+                      ? "반영 가능한 chat 모델이 없습니다."
+                      : "No chat models available to apply."}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            renderProviderModels(provider)
+          )}
+        </div>
+        <div className="provider-discovery-actions provider-card-edit-actions">
           <Button
             className="provider-delete-action"
             disabled={
@@ -803,7 +886,7 @@ export function ProviderConnectionManagement({
             {text.saveChanges}
           </Button>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -816,7 +899,6 @@ export function ProviderConnectionManagement({
           : getProviderConfigModels(provider.providerConfig).filter(isChatCompletionModelName)
       )
     );
-    const discoveredAt = discovery?.discoveredAt ?? provider.updatedAt;
 
     if (modelNames.length === 0) {
       return (
@@ -834,26 +916,22 @@ export function ProviderConnectionManagement({
           <thead>
             <tr>
               <th>{locale === "ko" ? "모델" : "Model"}</th>
-              <th>{locale === "ko" ? "상태" : "Status"}</th>
               <th>{locale === "ko" ? "기능" : "Capabilities"}</th>
               <th>{locale === "ko" ? "컨텍스트" : "Context"}</th>
-              <th>{locale === "ko" ? "라우팅" : "Route usage"}</th>
-              <th>{locale === "ko" ? "최근 조회" : "Last discovered"}</th>
+              <th>{locale === "ko" ? "추천" : "Recommended"}</th>
+              <th>{locale === "ko" ? "출시날짜" : "Release date"}</th>
             </tr>
           </thead>
           <tbody>
             {modelNames.map((modelName) => {
               const capabilities = getModelCapabilities(modelName);
+              const providerFamily = getProviderConnectionFamily(provider);
+              const isRecommended = isRecommendedModel(modelName, providerFamily);
 
               return (
                 <tr key={modelName}>
                   <td>
                     <strong>{modelName}</strong>
-                  </td>
-                  <td>
-                    <span className="provider-model-status" data-enabled="true">
-                      {locale === "ko" ? "허용" : "Allowed"}
-                    </span>
                   </td>
                   <td>
                     <span className="provider-model-capability-list">
@@ -864,11 +942,17 @@ export function ProviderConnectionManagement({
                   </td>
                   <td>{getModelContextWindow(modelName)}</td>
                   <td>
-                    <span className="provider-model-route" data-enabled="true">
-                      {locale === "ko" ? "라우팅 후보" : "Routing candidate"}
+                    <span className="provider-model-route" data-enabled={isRecommended}>
+                      {isRecommended
+                        ? locale === "ko"
+                          ? "추천"
+                          : "Recommended"
+                        : "-"}
                     </span>
                   </td>
-                  <td>{formatDateTime(discoveredAt)}</td>
+                  <td>
+                    {formatModelReleaseDate(modelName, discovery?.modelReleaseDates, locale)}
+                  </td>
                 </tr>
               );
             })}
@@ -923,10 +1007,9 @@ export function ProviderConnectionManagement({
           <div className="provider-card-list">
             {providers.map((provider) => {
               const hasRegisteredKey = hasProviderKeyRegistered(provider);
-              const family = getProviderFamily(provider);
+              const family = getProviderConnectionFamily(provider);
               const preset = getProviderPreset(family, model.providerPresets.items);
               const expanded = expandedProviderId === provider.id;
-              const providerIconSrc = getProviderFamilyIconSrc(family);
               const modelCount = getProviderConfigModels(provider.providerConfig).filter(
                 isChatCompletionModelName
               ).length;
@@ -940,22 +1023,26 @@ export function ProviderConnectionManagement({
                     onClick={() => toggleProvider(provider.id)}
                   >
                     <div className="provider-card-identity">
-                      <span className="provider-card-icon" data-family={family}>
-                        {providerIconSrc ? (
-                          <Image
-                            alt=""
-                            aria-hidden="true"
-                            height={28}
-                            src={providerIconSrc}
-                            width={28}
-                          />
-                        ) : (
-                          getProviderFamilyInitial(family)
-                        )}
-                      </span>
+                      <ProviderFamilyIcon className="provider-card-icon" family={family} />
                       <div>
                         <div className="provider-card-title-row">
-                          <strong className="provider-name">{provider.displayName}</strong>
+                          {isEditing ? (
+                            <input
+                              autoComplete="off"
+                              className="provider-name-input"
+                              maxLength={120}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  displayName: event.target.value
+                                }))
+                              }
+                              onClick={(event) => event.stopPropagation()}
+                              value={formValues.displayName}
+                            />
+                          ) : (
+                            <strong className="provider-name">{provider.displayName}</strong>
+                          )}
                           <Badge className="provider-family-badge" variant="outline">
                             {preset?.displayName ?? getProviderFamilyLabel(family)}
                           </Badge>
@@ -1016,24 +1103,20 @@ export function ProviderConnectionManagement({
                   </div>
                   {expanded ? (
                     <div className="provider-card-models">
-                      {isEditing ? (
-                        renderProviderInlineEditor(provider)
-                      ) : (
-                        <>
-                          {renderProviderModels(provider)}
-                          <div className="provider-card-expanded-actions">
-                            <Button
-                              disabled={pendingAction || discoveringProvider !== null}
-                              onClick={() => openEditModal(provider)}
-                              type="button"
-                              variant="outline"
-                            >
-                              <Pencil aria-hidden="true" />
-                              {text.edit}
-                            </Button>
-                          </div>
-                        </>
-                      )}
+                      {isEditing ? renderProviderInlineEditor(provider) : renderProviderModels(provider)}
+                      {!isEditing ? (
+                        <div className="provider-card-expanded-actions">
+                          <Button
+                            disabled={pendingAction || discoveringProvider !== null}
+                            onClick={() => openEditModal(provider)}
+                            type="button"
+                            variant="outline"
+                          >
+                            <Pencil aria-hidden="true" />
+                            {text.edit}
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </section>
@@ -1190,7 +1273,7 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
       .filter(isChatCompletionModelName)
       .join(", "),
     modelsEndpointPath: getProviderConfigString(providerConfig, "modelsEndpointPath", "/models"),
-    presetProviderKey: getProviderFamily(provider),
+    presetProviderKey: getProviderConnectionFamily(provider),
     provider: provider.provider,
     previousProvider: provider.provider,
     requestFormat: getProviderConfigRequestFormat(providerConfig, provider),
@@ -1208,35 +1291,6 @@ function getInitialModelOptions(providers: ProviderConnectionRecord[]) {
       getProviderConfigModels(provider.providerConfig).filter(isChatCompletionModelName)
     ])
   );
-}
-
-function getProviderFamily(provider: ProviderConnectionRecord) {
-  const configuredFamily = getProviderConfigString(provider.providerConfig, "providerFamily", "");
-
-  if (configuredFamily) {
-    return configuredFamily;
-  }
-
-  const providerKey = provider.provider.toLowerCase();
-  const baseUrl = provider.baseUrl.toLowerCase();
-
-  if (providerKey.includes("gemini") || baseUrl.includes("generativelanguage.googleapis.com")) {
-    return "gemini";
-  }
-
-  if (
-    providerKey.includes("claude") ||
-    providerKey.includes("anthropic") ||
-    baseUrl.includes("anthropic.com")
-  ) {
-    return "claude";
-  }
-
-  if (providerKey === "mock") {
-    return "mock";
-  }
-
-  return "openai";
 }
 
 function getProviderPreset(providerFamily: string, presets: ProviderPresetRecord[]) {
@@ -1261,30 +1315,6 @@ function getProviderFamilyLabel(providerFamily: string) {
   }
 
   return providerFamily;
-}
-
-function getProviderFamilyInitial(providerFamily: string) {
-  if (providerFamily === "claude") {
-    return "AI";
-  }
-
-  if (providerFamily === "mock") {
-    return "M";
-  }
-
-  return providerFamily.slice(0, 2).toUpperCase();
-}
-
-function getProviderFamilyIconSrc(providerFamily: string) {
-  if (providerFamily === "openai") {
-    return "/openai-streamline.png";
-  }
-
-  if (providerFamily === "gemini") {
-    return "/gemini-provider-icon.webp";
-  }
-
-  return null;
 }
 
 function getProviderFormValuesFromPreset(
@@ -1429,6 +1459,144 @@ function filterChatCompletionModels(modelNames: string[]) {
   );
 }
 
+function getModelDisplayList(
+  models: string[],
+  providerFamily: string,
+  visibleCount: number
+) {
+  const preferredModels = getPreferredVisibleModels(models, providerFamily);
+  const preferredModelSet = new Set(preferredModels);
+  const orderedModels = [
+    ...preferredModels,
+    ...models.filter((model) => !preferredModelSet.has(model))
+  ];
+  const normalizedVisibleCount = Math.max(
+    getInitialVisibleModelCount(models, providerFamily),
+    visibleCount
+  );
+  const visibleModels = orderedModels.slice(0, normalizedVisibleCount);
+
+  return {
+    remainingCount: Math.max(orderedModels.length - visibleModels.length, 0),
+    visibleModels
+  };
+}
+
+function getInitialVisibleModelCount(models: string[], providerFamily: string) {
+  return getPreferredVisibleModels(models, providerFamily).length || providerModelPageSize;
+}
+
+function getPreferredVisibleModels(models: string[], providerFamily: string) {
+  const family = getProviderFamilyFromKey(providerFamily);
+  const usedModels = new Set<string>();
+  const preferredModels: string[] = [];
+  const modelRules = getPreferredModelRules(family);
+
+  for (const rule of modelRules) {
+    const matchedModel = models.find(
+      (model) => !usedModels.has(model) && rule.matches(model.toLowerCase())
+    );
+
+    if (matchedModel) {
+      preferredModels.push(matchedModel);
+      usedModels.add(matchedModel);
+    }
+  }
+
+  return preferredModels;
+}
+
+function getDefaultVisibleModelLimit(providerFamily: string) {
+  return getProviderFamilyFromKey(providerFamily) === "gemini" ? 3 : 4;
+}
+
+function isRecommendedModel(modelName: string, providerFamily: string) {
+  const normalizedModelName = normalizeDiscoveredModelName(modelName).toLowerCase();
+
+  return getPreferredModelRules(getProviderFamilyFromKey(providerFamily)).some((rule) =>
+    rule.matches(normalizedModelName)
+  );
+}
+
+function formatModelReleaseDate(
+  modelName: string,
+  releaseDatesByModel: Record<string, string | null> | undefined,
+  locale: Locale
+) {
+  const releaseDate =
+    releaseDatesByModel?.[modelName] ?? getKnownModelReleaseDate(modelName);
+
+  if (!releaseDate) {
+    return "-";
+  }
+
+  const date = new Date(releaseDate);
+
+  if (Number.isNaN(date.getTime())) {
+    return releaseDate;
+  }
+
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric"
+  }).format(date);
+}
+
+function getKnownModelReleaseDate(modelName: string) {
+  const normalizedModelName = normalizeDiscoveredModelName(modelName).toLowerCase();
+
+  if (normalizedModelName === "gpt-4o-mini") {
+    return "2024-07-18";
+  }
+
+  if (normalizedModelName === "gpt-4o") {
+    return "2024-05-13";
+  }
+
+  if (
+    normalizedModelName === "chat-latest" ||
+    normalizedModelName === "chatgpt-4o-latest" ||
+    normalizedModelName === "gpt-4o-latest"
+  ) {
+    return "2024-08-06";
+  }
+
+  return null;
+}
+
+function getPreferredModelRules(providerFamily: string) {
+  if (providerFamily === "gemini") {
+    return [
+      { matches: (model: string) => isSameOrVariantModel(model, "gemini-3.5-flash") },
+      { matches: (model: string) => isSameOrVariantModel(model, "gemini-2.5-pro") },
+      { matches: (model: string) => isSameOrVariantModel(model, "gemini-2.5-flash") }
+    ];
+  }
+
+  if (providerFamily === "openai") {
+    return [
+      {
+        matches: (model: string) =>
+          model === "chat latest" ||
+          model === "chat-latest" ||
+          model === "chatgpt-4o-latest" ||
+          model === "gpt-4o-latest"
+      },
+      { matches: (model: string) => model === "gpt-4o-mini" },
+      { matches: (model: string) => model === "gpt-4o" },
+      { matches: (model: string) => isSameOrVariantModel(model, "gpt-5.5") }
+    ];
+  }
+
+  return [];
+}
+
+function isSameOrVariantModel(model: string, target: string) {
+  return model === target || model.startsWith(`${target}-`);
+}
+
 function normalizeDiscoveredModelName(modelName: string) {
   const normalized = modelName.trim();
 
@@ -1453,7 +1621,8 @@ function isChatCompletionModelName(modelName: string) {
     normalizedModelName.startsWith("o4") ||
     normalizedModelName.startsWith("claude-") ||
     normalizedModelName.startsWith("gemini-") ||
-    normalizedModelName.startsWith("chat-")
+    normalizedModelName.startsWith("chat-") ||
+    normalizedModelName.startsWith("chatgpt-")
   );
 }
 

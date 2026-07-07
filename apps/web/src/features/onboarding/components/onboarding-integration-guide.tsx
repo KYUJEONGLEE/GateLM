@@ -9,6 +9,7 @@ import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type OnboardingIntegrationGuideProps = {
+  apiKeyStepContent: ReactNode;
   gatewayBaseUrl: string;
   locale: Locale;
   project: ProjectRecord | null;
@@ -22,6 +23,8 @@ const integrationText: Record<
   Locale,
   {
     after: string;
+    apiKeySave: string;
+    apiKeySaveDescription: string;
     appInfo: string;
     before: string;
     budget: string;
@@ -41,6 +44,8 @@ const integrationText: Record<
 > = {
   en: {
     after: "After",
+    apiKeySave: "Save API Key",
+    apiKeySaveDescription: "Create the Project API Key and store the one-time value before changing the application.",
     appInfo: "Project",
     before: "Before",
     budget: "Budget",
@@ -60,6 +65,8 @@ const integrationText: Record<
   },
   ko: {
     after: "변경 후",
+    apiKeySave: "API Key 저장",
+    apiKeySaveDescription: "애플리케이션 연동 전에 Project API Key를 발급하고 1회 표시 값을 저장하세요.",
     appInfo: "Project",
     before: "변경 전",
     budget: "예산",
@@ -80,6 +87,7 @@ const integrationText: Record<
 };
 
 export function OnboardingIntegrationGuide({
+  apiKeyStepContent,
   gatewayBaseUrl,
   locale,
   project,
@@ -121,7 +129,14 @@ export function OnboardingIntegrationGuide({
 
       <div className="integration-guide-layout">
         <section className="integration-guide-steps" aria-label={text.title}>
-          <GuideStep number={1} title={text.endpoint}>
+          <GuideStep number={1} title={text.apiKeySave}>
+            <div className="integration-guide-step-copy">
+              <p>{text.apiKeySaveDescription}</p>
+            </div>
+            {apiKeyStepContent}
+          </GuideStep>
+
+          <GuideStep number={2} title={text.endpoint}>
             <div className="integration-value-table">
               <GuideCopyRow
                 copied={copiedTarget === "before-endpoint"}
@@ -143,7 +158,7 @@ export function OnboardingIntegrationGuide({
             </div>
           </GuideStep>
 
-          <GuideStep number={2} title={text.header}>
+          <GuideStep number={3} title={text.header}>
             <div className="integration-header-list">
               <GuideCopyRow
                 copied={copiedTarget === "auth-header"}
@@ -159,7 +174,7 @@ export function OnboardingIntegrationGuide({
             </div>
           </GuideStep>
 
-          <GuideStep number={3} title={text.test}>
+          <GuideStep number={4} title={text.test}>
             <div className="integration-code-block">
               <div>
                 <span>Gateway request</span>

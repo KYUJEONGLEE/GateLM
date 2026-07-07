@@ -599,26 +599,42 @@ function compareProjectsBySortMode(
   rightUsage: ProjectUsage
 ) {
   if (sortMode === "budget") {
-    return compareDescending(left.totalBudgetUsd, right.totalBudgetUsd) || left.name.localeCompare(right.name);
+    return compareDescending(left.totalBudgetUsd, right.totalBudgetUsd) || compareProjectIdentity(left, right);
   }
 
   if (sortMode === "limitRisk") {
     return (
       compareNullableAscending(leftUsage.remainingBudgetUsd, rightUsage.remainingBudgetUsd) ||
       compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
-      left.name.localeCompare(right.name)
+      compareProjectIdentity(left, right)
     );
   }
 
   return (
     compareNullableDescending(leftUsage.usagePercent, rightUsage.usagePercent) ||
     compareNullableDescending(leftUsage.costMicroUsd, rightUsage.costMicroUsd) ||
-    left.name.localeCompare(right.name)
+    compareProjectIdentity(left, right)
   );
 }
 
 function compareDescending(left: number, right: number) {
   return right - left;
+}
+
+function compareProjectIdentity(left: ProjectRecord, right: ProjectRecord) {
+  return compareStableText(left.name, right.name) || compareStableText(left.id, right.id);
+}
+
+function compareStableText(left: string, right: string) {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }
 
 function compareNullableAscending(left: number | null, right: number | null) {

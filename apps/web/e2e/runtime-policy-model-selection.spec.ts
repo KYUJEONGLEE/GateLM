@@ -97,6 +97,8 @@ function createDraftValues(): RuntimePolicyDraftValues {
     promptCaptureMaxChars: 8000,
     rateLimitEnabled: true,
     rateLimitLimit: 1000,
+    rateLimitRefillTokensPerSecond: 100,
+    rateLimitWindowSeconds: 10,
     responseCaptureEnabled: false,
     responseCaptureMaxChars: 8000,
     routingDefaultModel: "default-v1",

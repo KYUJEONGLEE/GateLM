@@ -192,10 +192,10 @@ export async function getRuntimePolicyModelForApplication(
     };
   }
 
-  if (activeConfig.status === 404) {
+  if (shouldUseRuntimePolicyTemplate(activeConfig)) {
     const templateConfig = makeRuntimePolicyConfigTemplate(
       fallbackConfig,
-      routeTenantId,
+      controlPlaneTenantId,
       applicationId,
       getTemplateProviderConnections(providerConnections, tenantProviderConnections)
     );
@@ -252,6 +252,10 @@ export async function getRuntimePolicyModelForApplication(
     },
     source: "fixture"
   };
+}
+
+function shouldUseRuntimePolicyTemplate(result: ControlPlaneRequestResult) {
+  return !result.ok && (result.status === 404 || result.status === 409);
 }
 
 function getTemplateProviderConnections(
@@ -584,7 +588,7 @@ async function fetchRuntimeConfigForModelSelection(
     );
   }
 
-  if (targetActiveConfig.status !== 404 && targetActiveConfig.status !== 409) {
+  if (!shouldUseRuntimePolicyTemplate(targetActiveConfig)) {
     return null;
   }
 
