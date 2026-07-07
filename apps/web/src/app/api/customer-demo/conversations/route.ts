@@ -11,6 +11,7 @@ type ConversationRequestPayload = {
   conversationId?: unknown;
   profileId?: unknown;
   tenantId?: unknown;
+  userName?: unknown;
 };
 
 const APPLICATION_END_USER_ID = "customer_user_demo_live";
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
   const result = await createChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled: payload.contextRetentionEnabled,
-    endUserId: APPLICATION_END_USER_ID,
+    endUserId: payload.userName ?? APPLICATION_END_USER_ID,
     projectId: model.projectId,
     tenantId: model.tenantId
   });
@@ -91,8 +92,19 @@ async function readPayload(request: Request) {
         : undefined,
     conversationId: typeof payload.conversationId === "string" ? payload.conversationId : "",
     profileId: typeof payload.profileId === "string" ? payload.profileId : "",
-    tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
+    tenantId: typeof payload.tenantId === "string" ? payload.tenantId : "",
+    userName: normalizeEndUserId(payload.userName)
   };
+}
+
+function normalizeEndUserId(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.replace(/[\r\n\t]+/g, " ").trim().replace(/\s+/g, " ");
+
+  return normalized.length > 0 ? Array.from(normalized).slice(0, 160).join("") : undefined;
 }
 
 async function getRequestProfile(profileId: string) {

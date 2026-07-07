@@ -397,6 +397,39 @@ func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.
 	}
 }
 
+func TestChatCompletionsHandlerUsesMetadataEndUserIDForTerminalLog(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"metadata": {"endUserId": " 윤지\nKim "},
+		"stream": false
+	}`))
+	setValidGatewayAuthHeaders(req)
+	req.Header.Set("X-GateLM-End-User-Id", "customer_user_demo_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].EndUserID != "윤지 Kim" {
+		t.Fatalf("unexpected end user id: %+v", logWriter.logs[0])
+	}
+}
+
 func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{

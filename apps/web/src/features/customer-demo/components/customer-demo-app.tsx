@@ -161,12 +161,13 @@ export function CustomerDemoApp({ locale, model, userName }: CustomerDemoAppProp
       return new RouteGatewayChatClient(
         model.tenantId,
         model.surface,
-        model.selectedChatProfileId
+        model.selectedChatProfileId,
+        userName
       );
     }
 
     return new FixtureGatewayChatClient(model.scenarios);
-  }, [model.integrationMode, model.scenarios, model.selectedChatProfileId, model.surface, model.tenantId]);
+  }, [model.integrationMode, model.scenarios, model.selectedChatProfileId, model.surface, model.tenantId, userName]);
   const [, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");

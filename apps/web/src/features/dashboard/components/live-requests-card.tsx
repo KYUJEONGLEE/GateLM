@@ -259,6 +259,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
               <th>Time</th>
               <th>Request ID</th>
               <th>Project</th>
+              <th>Name</th>
               <th>Provider</th>
               <th>Model</th>
               <th>Status</th>
@@ -273,7 +274,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
           <tbody>
             {isLoading && rows.length === 0 ? (
               <tr>
-                <td className="dashboard-live-requests-state" colSpan={12}>
+                <td className="dashboard-live-requests-state" colSpan={13}>
                   <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
                   Loading live requests
                 </td>
@@ -281,7 +282,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
             ) : null}
             {!isLoading && rows.length === 0 ? (
               <tr>
-                <td className="dashboard-live-requests-state" colSpan={12}>
+                <td className="dashboard-live-requests-state" colSpan={13}>
                   No recent requests for selected filters
                 </td>
               </tr>
@@ -314,6 +315,13 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
                   >
                     {row.projectName}
                   </span>
+                </td>
+                <td>
+                  {row.userName ? (
+                    <span title={row.userName}>{row.userName}</span>
+                  ) : (
+                    <span className="dashboard-live-muted-value">-</span>
+                  )}
                 </td>
                 <td>
                   <span className="dashboard-live-provider" data-provider={row.provider}>

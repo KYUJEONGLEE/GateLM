@@ -1161,6 +1161,7 @@ select
   request_id,
   project_id::text,
   application_id::text,
+  end_user_id,
   %s as budget_scope_type,
   %s as budget_scope_id,
   %s as budget_scope_resolved_by,
@@ -1472,6 +1473,7 @@ limit 1`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL)
 func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var log invocationlog.LlmInvocationLog
 	var applicationID sql.NullString
+	var endUserID sql.NullString
 	var budgetScopeType sql.NullString
 	var budgetScopeID sql.NullString
 	var budgetScopeResolvedBy sql.NullString
@@ -1483,6 +1485,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.RequestID,
 		&log.ProjectID,
 		&applicationID,
+		&endUserID,
 		&budgetScopeType,
 		&budgetScopeID,
 		&budgetScopeResolvedBy,
@@ -1508,6 +1511,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	}
 
 	log.ApplicationID = nullableString(applicationID)
+	log.EndUserID = nullableString(endUserID)
 	log.BudgetScope = budget.NormalizeScope(budget.Scope{
 		Type:       nullableString(budgetScopeType),
 		ID:         nullableString(budgetScopeID),

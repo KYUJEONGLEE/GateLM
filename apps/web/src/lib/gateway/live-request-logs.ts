@@ -294,7 +294,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     budgetScope,
     apiKeyId: "live_gateway_api_key",
     appTokenId: "live_gateway_app_token",
-    endUserId: item.userRef ?? null,
+    endUserId: normalizeUserRef(item.userRef),
     featureId: null,
     endpoint: "/v1/chat/completions",
     method: "POST",
@@ -366,6 +366,12 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
       }
     }
   };
+}
+
+function normalizeUserRef(value: string | null | undefined) {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : null;
 }
 
 function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {

@@ -72,6 +72,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				"request_001",
 				"project_demo",
 				sql.NullString{String: "app_demo", Valid: true},
+				sql.NullString{String: "Yoonji", Valid: true},
 				sql.NullString{String: "application", Valid: true},
 				sql.NullString{String: "app_demo", Valid: true},
 				sql.NullString{String: "default_application", Valid: true},
@@ -113,6 +114,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	item := items[0]
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
+	}
+	if item.UserRef != "Yoonji" {
+		t.Fatalf("unexpected user ref: %+v", item)
 	}
 	if item.BudgetScope.Type != "application" || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope: %+v", item.BudgetScope)
