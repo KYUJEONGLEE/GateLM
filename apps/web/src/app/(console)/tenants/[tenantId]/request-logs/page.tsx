@@ -38,7 +38,6 @@ type RequestLogsPageProps = {
     page?: string;
     projectId?: string;
     provider?: string;
-    projectId?: string;
     requestId?: string;
     resolvedBy?: string;
     searchRequestId?: string;
@@ -147,7 +146,6 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const projectId = normalizeOptionalText(searchParams?.projectId);
   const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
   const applicationId = normalizeOptionalText(searchParams?.applicationId);
-  const projectId = normalizeOptionalText(searchParams?.projectId);
   const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
   const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
   const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
@@ -179,7 +177,6 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       model: model || undefined,
       projectId: projectId || undefined,
       provider: provider || undefined,
-      projectId: projectId || undefined,
       requestId: requestId || undefined,
       resolvedBy: resolvedBy || undefined,
       status: status || undefined,

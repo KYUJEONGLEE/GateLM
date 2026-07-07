@@ -440,6 +440,7 @@ export function AdminOnboardingFlow({
         const projectResponse = await fetch("/api/control-plane/projects", {
           body: JSON.stringify({
             action: "create",
+            tenantId: model.tenantId,
             values: {
               description: draft.projectDescription,
               name: draft.projectName,

@@ -22,6 +22,12 @@ export function getControlPlaneTenantId() {
   );
 }
 
+export function resolveControlPlaneTenantId(routeTenantId?: string | null) {
+  return routeTenantId && isUuid(routeTenantId)
+    ? routeTenantId
+    : getControlPlaneTenantId();
+}
+
 export function getControlPlaneProjectId() {
   return (
     firstEnv("GATELM_CONTROL_PLANE_PROJECT_ID", "GATELM_DEMO_PROJECT_ID")
@@ -54,4 +60,8 @@ function normalizeBaseUrl(value: string) {
 
 function defaultControlPlaneHost() {
   return existsSync("/.dockerenv") ? "host.docker.internal" : "localhost";
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }

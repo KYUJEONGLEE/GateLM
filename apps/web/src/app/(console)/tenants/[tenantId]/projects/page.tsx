@@ -3,7 +3,8 @@ import { ProjectManagement } from "@/features/projects/components/project-manage
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
-  isTenantAdminForTenant
+  isTenantAdminForTenant,
+  resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectBudgetThresholds, getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveMonthlyProjectCostReport } from "@/lib/gateway/live-cost-report";
@@ -17,22 +18,25 @@ type ProjectsPageProps = {
 
 export default async function ProjectsPage({ params }: ProjectsPageProps) {
   const { tenantId } = await params;
-  const [locale, auth, projectsModel, monthlyCostReport] = await Promise.all([
+  const [locale, auth] = await Promise.all([
     getRequestLocale(),
-    getCurrentConsoleAuth(),
-    getProjectsModel(tenantId),
-    getLiveMonthlyProjectCostReport(tenantId)
+    getCurrentConsoleAuth()
   ]);
-  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, tenantId);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const [projectsModel, monthlyCostReport] = await Promise.all([
+    getProjectsModel(effectiveTenantId),
+    getLiveMonthlyProjectCostReport(effectiveTenantId)
+  ]);
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
   const budgetThresholds = await getProjectBudgetThresholds(visibleProjects);
-  const canCreateProject = isTenantAdminForTenant(auth, tenantId);
+  const canCreateProject = isTenantAdminForTenant(auth, effectiveTenantId);
 
   return (
     <ConsoleShell
       activeManagementItem="project"
       activeSection="management"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <ProjectManagement
         budgetThresholds={budgetThresholds}

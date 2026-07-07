@@ -3,7 +3,8 @@ import "server-only";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId
+  getControlPlaneTenantId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
   getRuntimePolicyConfigForApplication,
@@ -56,7 +57,7 @@ const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
 
 export async function getProjectsModel(routeTenantId: string): Promise<ProjectsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
-  const controlPlaneTenantId = getControlPlaneTenantId();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const listResult = await listProjects(controlPlaneTenantId);
 
   if (listResult.ok) {
@@ -86,8 +87,11 @@ export async function getProjectBudgetThresholds(
   return Promise.all(projects.map(getProjectBudgetThreshold));
 }
 
-export async function createProject(values: ProjectFormValues): Promise<ProjectRequestResult> {
-  const tenantId = getControlPlaneTenantId();
+export async function createProject(
+  values: ProjectFormValues,
+  routeTenantId?: string
+): Promise<ProjectRequestResult> {
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(

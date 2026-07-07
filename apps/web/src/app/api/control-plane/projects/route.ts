@@ -10,6 +10,7 @@ import type {
 
 type RequestPayload = {
   action?: unknown;
+  tenantId?: unknown;
   values?: unknown;
 };
 
@@ -20,9 +21,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown project action." }, { status: 400 });
   }
 
+  const routeTenantId = typeof payload.tenantId === "string"
+    ? payload.tenantId
+    : getControlPlaneTenantId();
+
   if (payload.action === "create") {
     const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
-    if (!isTenantAdminForTenant(auth, getControlPlaneTenantId())) {
+    if (!isTenantAdminForTenant(auth, routeTenantId)) {
       return NextResponse.json({ error: "Only tenant admins can create projects." }, { status: 403 });
     }
   }
@@ -30,7 +35,7 @@ export async function POST(request: Request) {
   const result =
     payload.action === "create"
       ? isProjectFormValues(payload.values)
-        ? await createProject(payload.values)
+        ? await createProject(payload.values, routeTenantId)
         : null
       : isProjectUpdateValues(payload.values)
         ? await updateProject(payload.values)

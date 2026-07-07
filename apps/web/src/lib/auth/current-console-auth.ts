@@ -54,6 +54,20 @@ export function isTenantAdminForTenant(auth: CurrentConsoleAuth, routeTenantId: 
   });
 }
 
+export function resolveConsoleTenantIdForAuth(auth: CurrentConsoleAuth, routeTenantId: string) {
+  if (isUuid(routeTenantId)) {
+    return routeTenantId;
+  }
+
+  const tenantAdminMembership = auth.memberships.find((membership) => {
+    return membership.tenantId && membership.status === 'active' && membership.role === 'tenant_admin';
+  });
+  if (tenantAdminMembership?.tenantId) {
+    return tenantAdminMembership.tenantId;
+  }
+
+  return auth.projectAdmins[0]?.tenantId ?? getControlPlaneTenantId();
+}
 export function getProjectAdminProjectIdsForTenant(auth: CurrentConsoleAuth, routeTenantId: string) {
   const tenantId = toControlPlaneTenantId(routeTenantId);
   return Array.from(new Set(auth.projectAdmins
