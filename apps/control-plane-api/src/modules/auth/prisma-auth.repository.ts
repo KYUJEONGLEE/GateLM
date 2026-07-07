@@ -47,7 +47,7 @@ export class PrismaAuthRepository implements AuthRepository {
         throw new Error('Project admin invitation not found.');
       }
 
-      const existingMembership = await tx.tenantMembership.findFirst({
+      const existingActiveMembership = await tx.tenantMembership.findFirst({
         where: {
           deletedAt: null,
           status: 'active',
@@ -55,16 +55,37 @@ export class PrismaAuthRepository implements AuthRepository {
           userId: input.userId,
         },
       });
-      if (!existingMembership) {
-        await tx.tenantMembership.create({
-          data: {
-            joinedAt: input.acceptedAt,
-            role: 'project_admin',
-            status: 'active',
+
+      if (!existingActiveMembership) {
+        const existingMembership = await tx.tenantMembership.findFirst({
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          where: {
             tenantId: invitation.tenantId,
             userId: input.userId,
           },
         });
+
+        if (existingMembership) {
+          await tx.tenantMembership.update({
+            data: {
+              deletedAt: null,
+              joinedAt: input.acceptedAt,
+              role: 'project_admin',
+              status: 'active',
+            },
+            where: { id: existingMembership.id },
+          });
+        } else {
+          await tx.tenantMembership.create({
+            data: {
+              joinedAt: input.acceptedAt,
+              role: 'project_admin',
+              status: 'active',
+              tenantId: invitation.tenantId,
+              userId: input.userId,
+            },
+          });
+        }
       }
 
       await tx.projectAdmin.upsert({

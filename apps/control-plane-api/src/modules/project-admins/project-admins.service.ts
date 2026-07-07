@@ -1,4 +1,4 @@
-﻿import {
+import {
   BadRequestException,
   Inject,
   Injectable,
@@ -17,23 +17,6 @@ import {
   ProjectAdminInvitationResponseDto,
   ProjectAdminListItemDto,
 } from './dto/project-admin-invitation.dto';
-
-type PendingProjectAdminInvitationRow = {
-  createdAt: Date;
-  email: string;
-  id: string;
-  name: string | null;
-  projectId: string;
-  tenantId: string;
-};
-
-type CreatedProjectAdminInvitationRow = {
-  email: string;
-  expiresAt: Date;
-  id: string;
-  name: string;
-  status: string;
-};
 
 @Injectable()
 export class ProjectAdminsService {
@@ -60,11 +43,24 @@ export class ProjectAdminsService {
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         where: { projectId },
       }),
-      this.prisma.$queryRawUnsafe(
-        `SELECT "id", "email", "name", "createdAt", "projectId", "tenantId" FROM "project_admin_invitations" WHERE "acceptedAt" IS NULL AND "expiresAt" > $1 AND "projectId" = CAST($2 AS uuid) AND "revokedAt" IS NULL AND "status" = 'pending' ORDER BY "createdAt" ASC, "id" ASC`,
-        now,
-        projectId,
-      ) as Promise<PendingProjectAdminInvitationRow[]>,
+      this.prisma.projectAdminInvitation.findMany({
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          createdAt: true,
+          email: true,
+          id: true,
+          name: true,
+          projectId: true,
+          tenantId: true,
+        },
+        where: {
+          acceptedAt: null,
+          expiresAt: { gt: now },
+          projectId,
+          revokedAt: null,
+          status: 'pending',
+        },
+      }),
     ]);
 
     return [
@@ -137,20 +133,23 @@ export class ProjectAdminsService {
 
     const token = createOpaqueToken();
     const signupUrl = this.buildSignupUrl(token);
-    const [invitation] = await (this.prisma.$queryRawUnsafe(
-      'INSERT INTO "project_admin_invitations" ("email", "name", "expiresAt", "projectId", "tenantId", "tokenHash", "updatedAt") VALUES ($1, $2, $3, CAST($4 AS uuid), CAST($5 AS uuid), $6, $7) RETURNING "id", "email", "name", "status", "expiresAt"',
-      email,
-      name,
-      expiresAt,
-      project.id,
-      project.tenantId,
-      hashSecret(token),
-      now,
-    ) as Promise<CreatedProjectAdminInvitationRow[]>);
-
-    if (!invitation) {
-      throw new InternalServerErrorException('Project admin invitation was not created.');
-    }
+    const invitation = await this.prisma.projectAdminInvitation.create({
+      data: {
+        email,
+        expiresAt,
+        name,
+        projectId: project.id,
+        tenantId: project.tenantId,
+        tokenHash: hashSecret(token),
+      },
+      select: {
+        email: true,
+        expiresAt: true,
+        id: true,
+        name: true,
+        status: true,
+      },
+    });
 
     try {
       await this.emailSender.sendProjectAdminInvitationEmail({

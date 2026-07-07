@@ -40,6 +40,7 @@ export type ProjectAdminRemoveValues = {
 
 export type ProjectAdminInvitationRevokeValues = {
   invitationId: string;
+  projectId: string;
 };
 
 export type ProjectAdminsModel = {

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { getControlPlaneBaseUrl, getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import type {
@@ -141,7 +141,7 @@ export async function revokeProjectAdminInvitation(
   }
 }
 
-async function listProjectAdmins(projectId: string): Promise<ProjectAdminListResult> {
+export async function listProjectAdmins(projectId: string): Promise<ProjectAdminListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/project-admins`,

@@ -191,7 +191,7 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
       body: JSON.stringify({
         action,
         values: projectAdmin.invitationId
-          ? { invitationId: projectAdmin.invitationId }
+          ? { invitationId: projectAdmin.invitationId, projectId: projectAdmin.projectId }
           : { projectId: model.projectId, userId: projectAdmin.userId }
       }),
       headers: {
