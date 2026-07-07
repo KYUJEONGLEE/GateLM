@@ -1,5 +1,10 @@
-import { notFound } from "next/navigation";
+﻿import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
+import {
+  getCurrentConsoleAuth,
+  getVisibleProjectsForConsoleAuth,
+  resolveProjectIdForConsoleAuth
+} from "@/lib/auth/current-console-auth";
 import {
   type DashboardRange,
   type DashboardFilterState,
@@ -40,18 +45,47 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const liveRange = getDashboardLiveRange(dashboardFilters.range);
   const monthToDateRange = getMonthToDateRange();
   const suppressContentMotion = resolvedSearchParams?.motion === "none";
-  const [locale, overview, monthToDateOverview, costOverTime, liveRequests, recentRecords, projectsModel] = await Promise.all([
+  const [locale, auth, projectsModel] = await Promise.all([
     getRequestLocale(),
-    getLiveDashboardOverview(tenantId, liveFilters),
+    getCurrentConsoleAuth(),
+    getProjectsModel(tenantId)
+  ]);
+  const effectiveProjectId = resolveProjectIdForConsoleAuth({
+    auth,
+    projects: projectsModel.projects,
+    requestedProjectId: liveFilters.projectId,
+    routeTenantId: tenantId
+  });
+
+  if (effectiveProjectId === null) {
+    notFound();
+  }
+
+  const scopedLiveFilters = {
+    ...liveFilters,
+    projectId: effectiveProjectId ?? liveFilters.projectId
+  };
+  const scopedDashboardFilters = {
+    ...dashboardFilters,
+    projectId: effectiveProjectId ?? dashboardFilters.projectId
+  };
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, tenantId);
+  const [overview, monthToDateOverview, costOverTime, liveRequests, recentRecords] = await Promise.all([
+    getLiveDashboardOverview(tenantId, scopedLiveFilters),
     getLiveDashboardOverview(tenantId, {
-      ...liveFilters,
+      ...scopedLiveFilters,
       from: monthToDateRange.from,
       to: monthToDateRange.to
     }),
-    getLiveCostOverTime(tenantId, liveFilters),
-    getLiveOverviewRequests(tenantId, liveFilters),
-    getLiveGatewayRequestLogs({ from: liveRange.from, limit: 100, tenantId, to: liveRange.to }),
-    getProjectsModel(tenantId)
+    getLiveCostOverTime(tenantId, scopedLiveFilters),
+    getLiveOverviewRequests(tenantId, scopedLiveFilters),
+    getLiveGatewayRequestLogs({
+      from: liveRange.from,
+      limit: 100,
+      projectId: scopedLiveFilters.projectId,
+      tenantId,
+      to: liveRange.to
+    })
   ]);
 
   if (!overview) {
@@ -79,11 +113,11 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       <DashboardOverviewView
         locale={locale}
         costOverTime={costOverTime}
-        filters={dashboardFilters}
+        filters={scopedDashboardFilters}
         liveRequests={liveRequests}
         monthToDateOverview={monthToDateOverview}
         overview={overview}
-        projects={projectsModel.projects.filter((project) => project.status !== "ARCHIVED")}
+        projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
         recentRecords={recentRecords ?? []}
         suppressContentMotion={suppressContentMotion}
       />

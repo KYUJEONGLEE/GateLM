@@ -133,6 +133,7 @@ export class ProjectAdminsService {
     if (existingPendingInvitation) {
       throw new BadRequestException('Project admin invitation already exists.');
     }
+    this.assertProjectAdminInvitationEmailDeliveryConfigured();
 
     const token = createOpaqueToken();
     const signupUrl = this.buildSignupUrl(token);
@@ -315,6 +316,16 @@ export class ProjectAdminsService {
     }
 
     return project;
+  }
+
+  private assertProjectAdminInvitationEmailDeliveryConfigured(): void {
+    if (this.config.get<string>('AUTH_EMAIL_TRANSPORT') === 'smtp') {
+      return;
+    }
+
+    throw new InternalServerErrorException(
+      'Project admin invitation email delivery requires AUTH_EMAIL_TRANSPORT=smtp.',
+    );
   }
 
   private buildSignupUrl(token: string): string {

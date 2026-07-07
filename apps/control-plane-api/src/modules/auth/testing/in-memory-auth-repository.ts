@@ -1,5 +1,6 @@
 import {
   AuthProject,
+  AuthProjectAdmin,
   AuthProjectAdminInvitation,
   AuthRepository,
   AuthSession,
@@ -18,14 +19,7 @@ interface AuthRepositoryState {
   emailVerificationCodes: EmailVerificationCode[];
   oauthAccounts: OAuthAccount[];
   projectAdminInvitations: AuthProjectAdminInvitation[];
-  projectAdmins: Array<{
-    createdAt: Date;
-    id: string;
-    projectId: string;
-    tenantId: string;
-    updatedAt: Date;
-    userId: string;
-  }>;
+  projectAdmins: AuthProjectAdmin[];
   projects: AuthProject[];
   tenantAdmins: Array<{
     createdAt: Date;
@@ -377,6 +371,15 @@ export function createInMemoryAuthRepository(): AuthRepository & {
           item.status === 'active' &&
           item.deletedAt === null,
       );
+    },
+
+    async findProjectAdminsByUserId(userId) {
+      return state.projectAdmins
+        .filter((item) => item.userId === userId)
+        .map((item) => ({
+          ...item,
+          project: state.projects.find((project) => project.id === item.projectId),
+        }));
     },
 
     async findOAuthAccount(provider, providerSubject) {

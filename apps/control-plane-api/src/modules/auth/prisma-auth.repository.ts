@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
+  AuthProjectAdmin,
   AuthProjectAdminInvitation,
   AuthRepository,
   AuthSession,
@@ -302,6 +303,18 @@ export class PrismaAuthRepository implements AuthRepository {
       where: {
         deletedAt: null,
         status: 'active',
+        userId,
+      },
+    });
+  }
+
+  async findProjectAdminsByUserId(userId: string): Promise<AuthProjectAdmin[]> {
+    return this.prisma.projectAdmin.findMany({
+      include: {
+        project: true,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      where: {
         userId,
       },
     });

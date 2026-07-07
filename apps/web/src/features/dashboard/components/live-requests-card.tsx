@@ -175,8 +175,8 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   }, []);
 
   const viewAllLogsHref = useMemo(
-    () => requestLogsHref(tenantId, range, statusFilter, modelFilter),
-    [modelFilter, range, statusFilter, tenantId]
+    () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId),
+    [modelFilter, projectId, range, statusFilter, tenantId]
   );
 
   async function copyRequestId(requestId: string) {
@@ -322,7 +322,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
                   <Link
                     aria-label={`Open request log ${row.requestId}`}
                     className="dashboard-live-action-link"
-                    href={requestLogsHref(tenantId, range, statusFilter, modelFilter, row.requestId)}
+                    href={requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId, row.requestId)}
                   >
                     <Eye aria-hidden="true" size={15} strokeWidth={2.2} />
                   </Link>
@@ -382,6 +382,7 @@ function requestLogsHref(
   range: string,
   status: LiveRequestStatusFilter,
   model: string,
+  projectId?: string,
   requestId?: string
 ) {
   const query = new URLSearchParams();
@@ -392,6 +393,7 @@ function requestLogsHref(
   }
   appendQuery(query, "status", status);
   appendQuery(query, "model", model);
+  appendQuery(query, "projectId", projectId);
   appendQuery(query, "requestId", requestId);
 
   const queryString = query.toString();

@@ -20,6 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type ProjectManagementProps = {
   budgetThresholds: ProjectBudgetThresholdRecord[];
+  canCreateProject: boolean;
   locale: Locale;
   model: ProjectsModel;
   monthlyCostReport: ProjectMonthlyCostReport;
@@ -122,42 +123,43 @@ const projectText: Record<
   },
   ko: {
     actions: "작업",
-    createProject: "Create Project",
-    created: "생성",
+    createProject: "프로젝트 생성",
+    created: "생성일",
     description: "설명",
-    edit: "편집",
+    edit: "수정",
     editPolicy: "정책 수정",
     empty: "프로젝트가 없습니다.",
     budgetAlert: "한도 초과",
     budgetWarning: "주의",
     costReportFallback: "월간 사용량을 불러올 수 없습니다.",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
-    detailSaved: "Project가 저장되었습니다.",
+    detailSaved: "프로젝트가 저장되었습니다.",
     general: "일반",
     management: "관리",
     name: "이름",
-    operating: "운영중",
-    project: "Project",
-    projectId: "Project ID",
+    operating: "운영 중",
+    project: "프로젝트",
+    projectId: "프로젝트 ID",
     save: "저장",
     delete: "삭제",
-    deleteConfirm: "이 Project를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+    deleteConfirm: "이 프로젝트를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
     sortBudget: "예산순",
     sortLabel: "정렬 기준",
-    sortLimitRisk: "한도 임박순",
+    sortLimitRisk: "한도 위험순",
     sortUsage: "사용량순",
     totalBudget: "프로젝트 예산",
-    deleted: "Project가 삭제되었습니다.",
+    deleted: "프로젝트가 삭제되었습니다.",
     source: "출처",
     status: "상태",
     title: "프로젝트",
-    updated: "수정",
+    updated: "수정일",
     usage: "사용률"
   }
 };
 
 export function ProjectManagement({
   budgetThresholds,
+  canCreateProject,
   locale,
   model,
   monthlyCostReport
@@ -201,12 +203,14 @@ export function ProjectManagement({
           <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
         </div>
-        <div className="dashboard-hero-actions">
-          <Link className="primary-button" href={`/tenants/${model.routeTenantId}/onboarding`}>
-            <Plus aria-hidden="true" />
-            {text.createProject}
-          </Link>
-        </div>
+        {canCreateProject ? (
+          <div className="dashboard-hero-actions">
+            <Link className="primary-button" href={`/tenants/${model.routeTenantId}/onboarding`}>
+              <Plus aria-hidden="true" />
+              {text.createProject}
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       {model.source === "fixture" ? (
@@ -360,7 +364,7 @@ export function ProjectDetailManagement({
     if (!Number.isFinite(values.totalBudgetUsd) || values.totalBudgetUsd < 0) {
       setSubmitState({
         message:
-          locale === "ko" ? "프로젝트 예산을 0 이상으로 입력하세요." : "Project budget must be 0 or more.",
+          locale === "ko" ? "프로젝트 예산은 0 이상으로 입력하세요." : "Project budget must be 0 or more.",
         status: "error"
       });
       return;

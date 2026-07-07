@@ -15,6 +15,7 @@ import {
   verifyPassword,
 } from './auth.crypto';
 import {
+  AuthProjectAdmin,
   AuthProjectAdminInvitation,
   AuthRepository,
   AuthSessionKind,
@@ -49,6 +50,14 @@ interface PublicMembership {
   id: string;
   role: string;
   status: string;
+  tenantId: string;
+  userId: string;
+}
+
+interface PublicProjectAdmin {
+  id: string;
+  projectId: string;
+  projectName: string | null;
   tenantId: string;
   userId: string;
 }
@@ -340,17 +349,22 @@ export class AuthService {
 
   async me(token: string | undefined): Promise<{
     memberships: PublicMembership[];
+    projectAdmins: PublicProjectAdmin[];
     session: { kind: string };
     user: PublicUser;
   }> {
     const session = await this.requireSession(token);
-    const memberships = await this.repository.findMembershipsByUserId(
-      session.user.id,
-    );
+    const [memberships, projectAdmins] = await Promise.all([
+      this.repository.findMembershipsByUserId(session.user.id),
+      this.repository.findProjectAdminsByUserId(session.user.id),
+    ]);
 
     return {
       memberships: memberships.map((membership) =>
         this.toPublicMembership(membership),
+      ),
+      projectAdmins: projectAdmins.map((projectAdmin) =>
+        this.toPublicProjectAdmin(projectAdmin),
       ),
       session: { kind: session.kind },
       user: this.toPublicUser(session.user),
@@ -509,6 +523,18 @@ export class AuthService {
     }
 
     return session;
+  }
+
+  private toPublicProjectAdmin(
+    projectAdmin: AuthProjectAdmin,
+  ): PublicProjectAdmin {
+    return {
+      id: projectAdmin.id,
+      projectId: projectAdmin.projectId,
+      projectName: projectAdmin.project?.name ?? null,
+      tenantId: projectAdmin.tenantId,
+      userId: projectAdmin.userId,
+    };
   }
 
   private toPublicMembership(

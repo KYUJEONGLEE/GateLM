@@ -1,4 +1,9 @@
 import { ConsoleShell } from "@/components/layout/console-shell";
+import {
+  getCurrentConsoleAuth,
+  getProjectAdminProjectIdsForTenant,
+  isProjectScopedForTenant
+} from "@/lib/auth/current-console-auth";
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
 import {
   type RequestLogCreatedFilter,
@@ -31,6 +36,7 @@ type RequestLogsPageProps = {
     model?: string;
     page?: string;
     provider?: string;
+    projectId?: string;
     requestId?: string;
     resolvedBy?: string;
     searchRequestId?: string;
@@ -43,19 +49,35 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const resolvedSearchParams = await searchParams;
   const selectedRequestId = resolvedSearchParams?.requestId;
   const { filters, logFilters } = buildRequestLogFilters(resolvedSearchParams);
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const projectScoped = isProjectScopedForTenant(auth, tenantId);
+  const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, tenantId) : undefined;
+  const scopedLogFilters: LiveGatewayRequestLogFilters = {
+    ...logFilters,
+    projectIds: allowedProjectIds
+  };
   const shouldLoadUnfilteredOptions = hasNarrowingFilters(filters);
   const optionRecordsPromise = shouldLoadUnfilteredOptions
-    ? getLiveGatewayRequestLogs({ from: logFilters.from, limit: 100, tenantId, to: logFilters.to })
+    ? getLiveGatewayRequestLogs({
+        from: logFilters.from,
+        limit: 100,
+        projectIds: allowedProjectIds,
+        tenantId,
+        to: logFilters.to
+      })
     : Promise.resolve(undefined);
-  const [locale, records, optionRecords] = await Promise.all([
-    getRequestLocale(),
-    getLiveGatewayRequestLogs({ ...logFilters, tenantId }),
+  const [records, optionRecords] = await Promise.all([
+    getLiveGatewayRequestLogs({ ...scopedLogFilters, tenantId }),
     optionRecordsPromise
   ]);
   const selectedRecord = selectedRequestId
     ? (records ?? []).find((record) => record.requestId === selectedRequestId)
     : undefined;
-  const selectedDetail = selectedRequestId
+  const canLoadSelectedDetail = Boolean(selectedRequestId && (!projectScoped || selectedRecord));
+  const selectedDetail = selectedRequestId && canLoadSelectedDetail
     ? await getLiveGatewayRequestDetail(selectedRequestId, {
         projectId: selectedRecord?.projectId,
         tenantId
@@ -117,6 +139,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const status = normalizeStatusFilter(searchParams?.status);
   const model = normalizeModelFilter(searchParams?.model);
   const provider = normalizeOptionalText(searchParams?.provider);
+  const projectId = normalizeOptionalText(searchParams?.projectId);
   const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
   const applicationId = normalizeOptionalText(searchParams?.applicationId);
   const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
@@ -149,6 +172,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       limit: 100,
       model: model || undefined,
       provider: provider || undefined,
+      projectId: projectId || undefined,
       requestId: requestId || undefined,
       resolvedBy: resolvedBy || undefined,
       status: status || undefined,

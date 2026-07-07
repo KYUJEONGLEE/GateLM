@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getCurrentConsoleAuth, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { createProject, updateProject } from "@/lib/control-plane/projects-client";
 import type {
   ProjectFormValues,
@@ -16,6 +18,13 @@ export async function POST(request: Request) {
 
   if (payload.action !== "create" && payload.action !== "update") {
     return NextResponse.json({ error: "Unknown project action." }, { status: 400 });
+  }
+
+  if (payload.action === "create") {
+    const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+    if (!isTenantAdminForTenant(auth, getControlPlaneTenantId())) {
+      return NextResponse.json({ error: "Only tenant admins can create projects." }, { status: 403 });
+    }
   }
 
   const result =

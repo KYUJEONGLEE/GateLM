@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  getCurrentConsoleAuth,
+  resolveProjectIdForConsoleAuth
+} from "@/lib/auth/current-console-auth";
+import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import type { LiveDashboardRange } from "@/lib/gateway/live-dashboard-overview";
 
@@ -13,10 +18,26 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const requestedProjectId = optionalQueryValue(query, "projectId");
+  const [auth, projectsModel] = await Promise.all([
+    getCurrentConsoleAuth(request.headers.get("cookie")),
+    getProjectsModel(tenantId)
+  ]);
+  const effectiveProjectId = resolveProjectIdForConsoleAuth({
+    auth,
+    projects: projectsModel.projects,
+    requestedProjectId,
+    routeTenantId: tenantId
+  });
+
+  if (effectiveProjectId === null) {
+    return NextResponse.json({ error: "Project access denied" }, { status: 403 });
+  }
+
   const summary = await getLiveCostOverTime(tenantId, {
     budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
     budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
-    projectId: optionalQueryValue(query, "projectId"),
+    projectId: effectiveProjectId ?? requestedProjectId,
     range: normalizeRange(query.get("range")),
     resolvedBy: optionalQueryValue(query, "resolvedBy")
   });

@@ -31,6 +31,16 @@ export interface AuthProject {
   updatedAt: Date;
 }
 
+export interface AuthProjectAdmin {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  project?: AuthProject;
+}
+
 export interface AuthTenantMembership {
   id: string;
   tenantId: string;
@@ -165,6 +175,7 @@ export interface AuthRepository {
     now: Date,
   ): Promise<EmailVerificationCode | null>;
   findMembershipsByUserId(userId: string): Promise<AuthTenantMembership[]>;
+  findProjectAdminsByUserId(userId: string): Promise<AuthProjectAdmin[]>;
   findOAuthAccount(
     provider: string,
     providerSubject: string,
