@@ -640,6 +640,10 @@ export function OnboardingProviderRegistration({
                           key={modelName}
                           onClick={() => toggleDiscoveredModel(modelName, !isSelected)}
                           onKeyDown={(event) => {
+                            if (event.target instanceof HTMLInputElement) {
+                              return;
+                            }
+
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
                               toggleDiscoveredModel(modelName, !isSelected);

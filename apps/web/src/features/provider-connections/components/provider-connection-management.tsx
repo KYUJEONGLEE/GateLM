@@ -744,6 +744,10 @@ export function ProviderConnectionManagement({
                                 toggleDiscoveredModel(activeDiscoveryKey, modelName, !isSelected)
                               }
                               onKeyDown={(event) => {
+                                if (event.target instanceof HTMLInputElement) {
+                                  return;
+                                }
+
                                 if (event.key === "Enter" || event.key === " ") {
                                   event.preventDefault();
                                   toggleDiscoveredModel(activeDiscoveryKey, modelName, !isSelected);
