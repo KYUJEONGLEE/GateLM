@@ -1127,6 +1127,10 @@ function toModelCostTier(
   model: ActiveRuntimeConfigResponseDto['models'][number],
   document: ActiveRuntimeConfigResponseDto,
 ): 'low' | 'balanced' | 'premium' {
+  if (!document.routingPolicy) {
+    return 'balanced';
+  }
+
   if (
     model.provider === document.routingPolicy.lowCostProvider &&
     model.model === document.routingPolicy.lowCostModel
@@ -1143,6 +1147,10 @@ function isModelSelectedForRouting(
 ): boolean {
   if (model.status !== 'active') {
     return false;
+  }
+
+  if (!document.routingPolicy) {
+    return true;
   }
 
   return (
@@ -1163,6 +1171,10 @@ function toModelFallbackPriority(
   model: ActiveRuntimeConfigResponseDto['models'][number],
   document: ActiveRuntimeConfigResponseDto,
 ): number {
+  if (!document.routingPolicy) {
+    return 100;
+  }
+
   if (
     model.provider === document.routingPolicy.lowCostProvider &&
     model.model === document.routingPolicy.lowCostModel

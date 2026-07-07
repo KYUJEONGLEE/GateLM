@@ -1632,10 +1632,8 @@ function normalizeDraftRoutingForProviderConnections(
   providerConnections: ProviderConnectionRecord[]
 ): RuntimePolicyDraftValues {
   const modelOptionsByProvider = groupRoutingModelsByProvider(values.models, providerConnections);
-  const firstActiveModel =
-    getProviderConnectionRuntimeModels(providerConnections).find(
-      (model) => model.status === "active"
-    ) ?? getProviderConnectionRuntimeModels(providerConnections)[0];
+  const runtimeModels = getProviderConnectionRuntimeModels(providerConnections);
+  const firstActiveModel = runtimeModels.find((model) => model.status === "active") ?? runtimeModels[0];
 
   if (!firstActiveModel) {
     return values;

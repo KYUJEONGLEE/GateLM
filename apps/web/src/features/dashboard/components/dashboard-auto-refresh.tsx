@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-const DASHBOARD_AUTO_REFRESH_INTERVAL_MS = 3000;
+const DASHBOARD_AUTO_REFRESH_INTERVAL_MS = 30000;
 
 export function DashboardAutoRefresh() {
   const router = useRouter();

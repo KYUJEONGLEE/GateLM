@@ -300,7 +300,7 @@ function getWritableProviderConnections(
   for (const providerConnection of [...primaryConnections, ...fallbackConnections].filter(
     isTenantLevelProviderConnection
   )) {
-    const providerKey = providerConnection.provider.trim();
+    const providerKey = typeof providerConnection.provider === "string" ? providerConnection.provider.trim() : "";
 
     if (!providerKey) {
       continue;

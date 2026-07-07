@@ -2168,6 +2168,10 @@ export class RuntimeConfigsService {
     model: RuntimeConfigModelResponseDto,
     document: ActiveRuntimeConfigResponseDto,
   ): 'low' | 'balanced' | 'premium' {
+    if (!document.routingPolicy) {
+      return 'balanced';
+    }
+
     if (
       model.provider === document.routingPolicy.lowCostProvider &&
       model.model === document.routingPolicy.lowCostModel
@@ -2194,6 +2198,10 @@ export class RuntimeConfigsService {
       return false;
     }
 
+    if (!document.routingPolicy) {
+      return true;
+    }
+
     return (
       (model.provider === document.routingPolicy.lowCostProvider &&
         model.model === document.routingPolicy.lowCostModel) ||
@@ -2212,6 +2220,10 @@ export class RuntimeConfigsService {
     model: RuntimeConfigModelResponseDto,
     document: ActiveRuntimeConfigResponseDto,
   ): number {
+    if (!document.routingPolicy) {
+      return 100;
+    }
+
     if (
       model.provider === document.routingPolicy.lowCostProvider &&
       model.model === document.routingPolicy.lowCostModel
