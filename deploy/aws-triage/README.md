@@ -94,7 +94,7 @@ docker compose --env-file .env up -d postgres redis mock-provider
 Apply Control Plane Prisma migrations:
 
 ```bash
-docker compose --env-file .env run --rm --no-deps control-plane-api ./node_modules/.bin/prisma migrate deploy
+docker compose --env-file .env run --rm control-plane-api ./node_modules/.bin/prisma migrate deploy
 ```
 
 Apply Gateway runtime tables:
@@ -113,7 +113,7 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 Seed the current MVP demo tenant, project, application, credentials, provider, and active RuntimeSnapshot:
 
 ```bash
-docker compose --env-file .env run --rm --no-deps control-plane-api node dist/prisma/seed.js
+docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
 ```
 
 For an existing triage DB with old zero-cost successful logs, optionally backfill dashboard pricing metadata after the pricing seed:
@@ -138,7 +138,7 @@ The right side of each env-map entry is the environment variable name. Put the r
 Then rerun seed and recreate the runtime services:
 
 ```bash
-docker compose --env-file .env run --rm --no-deps control-plane-api node dist/prisma/seed.js
+docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
 docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core application web
 ```
 
@@ -203,11 +203,11 @@ From `deploy/aws-triage`, after pulling new repo changes:
 docker compose --env-file .env config --quiet
 docker compose --env-file .env build
 docker compose --env-file .env up -d postgres redis mock-provider
-docker compose --env-file .env run --rm --no-deps control-plane-api ./node_modules/.bin/prisma migrate deploy
+docker compose --env-file .env run --rm control-plane-api ./node_modules/.bin/prisma migrate deploy
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/001_gateway_runtime_tables.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
-docker compose --env-file .env run --rm --no-deps control-plane-api node dist/prisma/seed.js
+docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core application web
 docker compose --env-file .env ps
 ```
