@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
+import { listApiKeysForProject } from "@/lib/control-plane/api-keys-client";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyModelForApplication } from "@/lib/control-plane/runtime-policy-client";
@@ -34,6 +35,11 @@ export default async function ApplicationPoliciesPage({
   }
 
   const model = await getRuntimePolicyModelForApplication(tenantId, application.id, project.id);
+  const apiKeysResult = await listApiKeysForProject(project.id);
+  const activeApiKeyCount = apiKeysResult.ok
+    ? apiKeysResult.data.filter((apiKey) => isActiveCredential(apiKey.status, apiKey.expiresAt))
+        .length
+    : 0;
 
   return (
     <ConsoleShell
@@ -43,6 +49,12 @@ export default async function ApplicationPoliciesPage({
       tenantId={tenantId}
     >
       <RuntimePolicyEditor
+        apiKeyReadiness={{
+          activeApiKeyCount,
+          loadError: apiKeysResult.ok ? null : apiKeysResult.error,
+          projectId: project.id,
+          projectName: project.name
+        }}
         breadcrumbItems={[
           {
             href: `/tenants/${tenantId}/projects`,
@@ -61,4 +73,12 @@ export default async function ApplicationPoliciesPage({
       />
     </ConsoleShell>
   );
+}
+
+function isActiveCredential(status: string, expiresAt: string | null) {
+  if (status !== "active") {
+    return false;
+  }
+
+  return !expiresAt || new Date(expiresAt).getTime() > Date.now();
 }

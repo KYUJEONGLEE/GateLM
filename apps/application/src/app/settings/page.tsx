@@ -3,7 +3,6 @@ import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 const gatewayUrlKeys = ["GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL"] as const;
 const apiKeyKeys = ["GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY"] as const;
-const chatModelKeys = ["GATELM_APPLICATION_CHAT_MODEL", "GATEWAY_APPLICATION_CHAT_MODEL"] as const;
 const streamingKeys = [
   "GATELM_APPLICATION_CHAT_STREAMING_ENABLED",
   "GATEWAY_APPLICATION_CHAT_STREAMING_ENABLED"
@@ -14,9 +13,7 @@ export default async function ApplicationSettingsPage() {
   const text = locale === "ko" ? copy.ko : copy.en;
   const gatewayUrl = getEnvStatus(gatewayUrlKeys, "http://localhost:8080");
   const apiKey = getEnvStatus(apiKeyKeys);
-  const chatModel = getEnvStatus(chatModelKeys, "auto");
   const streaming = getEnvStatus(streamingKeys, "true");
-  const routingMode = chatModel.value === "auto" ? text.gatewayPolicyRouting : chatModel.value;
   const streamingMode = parseBooleanString(streaming.value, true) ? text.enabled : text.disabled;
 
   return (
@@ -45,8 +42,8 @@ export default async function ApplicationSettingsPage() {
           />
           <SettingRow
             label={text.routing}
-            status={chatModel.configured ? text.configured : text.defaulted}
-            value={routingMode}
+            status={text.policy}
+            value={text.gatewayPolicyRouting}
           />
           <SettingRow
             label={text.streaming}
@@ -125,6 +122,7 @@ const copy = {
     eyebrow: "Application settings",
     gatewayUrl: "Gateway URL",
     missing: "Missing",
+    policy: "Policy",
     routing: "Routing",
     gatewayPolicyRouting: "Gateway policy routing",
     secretConfigured: "Stored in server env",
@@ -143,6 +141,7 @@ const copy = {
     eyebrow: "Application settings",
     gatewayUrl: "Gateway URL",
     missing: "누락",
+    policy: "정책",
     routing: "Routing",
     gatewayPolicyRouting: "Gateway policy routing",
     secretConfigured: "서버 env에 저장됨",

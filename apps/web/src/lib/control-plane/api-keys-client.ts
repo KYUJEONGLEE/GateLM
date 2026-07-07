@@ -112,6 +112,10 @@ export async function getProjectApiKeysModel(
   };
 }
 
+export async function listApiKeysForProject(projectId: string): Promise<ApiKeyListResult> {
+  return listApiKeys(projectId);
+}
+
 export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApiKeyResult> {
   const projectId = values.projectId ?? getControlPlaneProjectId();
 
