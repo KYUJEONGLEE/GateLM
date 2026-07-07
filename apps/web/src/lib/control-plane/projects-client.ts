@@ -9,6 +9,7 @@ import {
   getRuntimePolicyConfigForApplication,
   publishRuntimePolicyModelSelectionForApplication
 } from "@/lib/control-plane/runtime-policy-client";
+import { setApplicationProviderConnections } from "@/lib/control-plane/provider-connections-client";
 import type {
   ProjectBudgetThresholdRecord,
   ProjectFormValues,
@@ -158,7 +159,49 @@ export async function updateProject(values: ProjectUpdateValues): Promise<Projec
       }
     );
 
-    return readProjectResponse(response);
+    const result = await readProjectResponse(response);
+
+    if (!result.ok || !values.selectedModelKey?.trim()) {
+      return result;
+    }
+
+    const runtimeApplicationId = result.data.runtimeApplicationId;
+
+    if (!runtimeApplicationId) {
+      return {
+        ...result,
+        policyError: "Runtime boundary was not created."
+      };
+    }
+
+    if (values.providerConnectionIds) {
+      const providerConnections = await setApplicationProviderConnections({
+        applicationId: runtimeApplicationId,
+        providerConnectionIds: values.providerConnectionIds
+      });
+
+      if (!providerConnections.ok) {
+        return {
+          ...result,
+          policyError: providerConnections.error ?? "Application provider assignment failed."
+        };
+      }
+    }
+
+    const runtimePolicy = await publishRuntimePolicyModelSelectionForApplication(
+      runtimeApplicationId,
+      values.selectedModelKey,
+      {
+        warningThresholdPercent: values.warningThresholdPercent
+      }
+    );
+
+    return runtimePolicy.ok
+      ? result
+      : {
+          ...result,
+          policyError: runtimePolicy.error ?? "Runtime Policy model selection failed."
+        };
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -224,6 +267,7 @@ function toProjectPayload(values: ProjectFormValues) {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
     providerConnectionIds: values.providerConnectionIds ?? [],
+    status: values.status,
     totalBudgetUsd: values.totalBudgetUsd
   };
 }
@@ -327,6 +371,14 @@ function getErrorMessage(payload: unknown, status: number) {
     if (typeof message === "string") {
       return message;
     }
+
+    if (message && typeof message === "object") {
+      const nestedMessage = (message as Record<string, unknown>).message;
+
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+        return nestedMessage;
+      }
+    }
   }
 
   return `Control Plane request failed with HTTP ${status}.`;
@@ -417,6 +469,10 @@ function normalizeProjectStatus(value: unknown): ProjectRecord["status"] | null 
 
   if (value === "DISABLED" || value === "disabled") {
     return "DISABLED";
+  }
+
+  if (value === "DRAFT" || value === "draft") {
+    return "DRAFT";
   }
 
   return null;

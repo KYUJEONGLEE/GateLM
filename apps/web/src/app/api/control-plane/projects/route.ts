@@ -74,6 +74,7 @@ function isProjectFormValues(value: unknown): value is ProjectFormValues {
         )
       )
     ) &&
+    (record.status === undefined || isProjectStatus(record.status)) &&
     (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string")
   );
 }
@@ -92,10 +93,29 @@ function isProjectUpdateValues(value: unknown): value is ProjectUpdateValues {
     Number.isFinite(record.totalBudgetUsd) &&
     record.totalBudgetUsd >= 0 &&
     typeof record.projectId === "string" &&
-    isProjectStatus(record.status)
+    isProjectStatus(record.status) &&
+    (
+      record.providerConnectionIds === undefined ||
+      (
+        Array.isArray(record.providerConnectionIds) &&
+        record.providerConnectionIds.every((providerConnectionId) =>
+          typeof providerConnectionId === "string"
+        )
+      )
+    ) &&
+    (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string") &&
+    (
+      record.warningThresholdPercent === undefined ||
+      (
+        typeof record.warningThresholdPercent === "number" &&
+        Number.isInteger(record.warningThresholdPercent) &&
+        record.warningThresholdPercent >= 0 &&
+        record.warningThresholdPercent <= 100
+      )
+    )
   );
 }
 
 function isProjectStatus(value: unknown): value is ProjectStatus {
-  return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED";
+  return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED" || value === "DRAFT";
 }

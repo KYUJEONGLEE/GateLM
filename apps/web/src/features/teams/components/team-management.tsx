@@ -651,7 +651,6 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
         <div className="team-section-header team-section-header-with-actions">
           <div>
             <h3>{text.attachedTeams}</h3>
-            <p>{text.projectTeamsDescription}</p>
           </div>
           <div className="team-attach-controls">
             <select

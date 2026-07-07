@@ -19,6 +19,7 @@ import {
 const DEFAULT_TENANT_BUDGET_USD = 1000;
 const DEFAULT_PROJECT_BUDGET_USD = 100;
 const DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT = 100;
+const DRAFT_RESOURCE_STATUS = 'DRAFT' as ResourceStatus;
 
 type RuntimeApplicationProjection = Pick<
   Application,
@@ -36,6 +37,7 @@ export class ProjectsService {
     const totalBudgetUsd = dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD;
     const budgetLimitPercent =
       dto.budgetLimitPercent ?? DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT;
+    const status = dto.status ?? ResourceStatus.ACTIVE;
     const providerConnectionIds = await this.getValidProviderConnectionIdsOrThrow(
       tenantId,
       dto.providerConnectionIds ?? [],
@@ -45,7 +47,7 @@ export class ProjectsService {
       tenantId,
       projectId: null,
       totalBudgetUsd,
-      status: ResourceStatus.ACTIVE,
+      status,
     });
 
     const { project, runtimeApplicationId } = await this.prisma.$transaction(
@@ -55,6 +57,7 @@ export class ProjectsService {
             tenantId,
             name: dto.name,
             description: this.toNullableDescription(dto.description),
+            ...(status !== ResourceStatus.ACTIVE ? { status } : {}),
             totalBudgetUsd,
           },
         });
@@ -304,7 +307,7 @@ export class ProjectsService {
                 }
               : {}),
             status: {
-              not: 'ARCHIVED',
+              notIn: [ResourceStatus.ARCHIVED, DRAFT_RESOURCE_STATUS],
             },
           },
           select: {
@@ -326,7 +329,8 @@ export class ProjectsService {
       0,
     );
     const nextBudgetUsd =
-      args.status === ResourceStatus.ARCHIVED
+      args.status === ResourceStatus.ARCHIVED ||
+      args.status === DRAFT_RESOURCE_STATUS
         ? 0
         : Math.max(0, args.totalBudgetUsd);
 

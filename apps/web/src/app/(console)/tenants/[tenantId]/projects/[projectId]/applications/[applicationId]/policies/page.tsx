@@ -53,9 +53,6 @@ export default async function ApplicationPoliciesPage({
             label: project.name
           },
           {
-            label: application.name
-          },
-          {
             label: "Policies"
           }
         ]}

@@ -4,7 +4,9 @@ import {
   ProjectDeleteManagement,
   ProjectDetailManagement
 } from "@/features/projects/components/project-management";
+import { ProjectGatewayApiKeySection } from "@/features/projects/components/project-gateway-api-key-section";
 import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
+import { getProjectApiKeysModel } from "@/lib/control-plane/api-keys-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getProjectTeamsModel } from "@/lib/control-plane/teams-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -26,7 +28,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     notFound();
   }
 
-  const projectTeamsModel = await getProjectTeamsModel(tenantId, project.id);
+  const [projectTeamsModel, projectApiKeysModel] = await Promise.all([
+    getProjectTeamsModel(tenantId, project.id),
+    getProjectApiKeysModel(tenantId, project.id)
+  ]);
 
   return (
     <ConsoleShell
@@ -50,6 +55,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         tenantId={tenantId}
       />
       <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />
+      <ProjectGatewayApiKeySection
+        locale={locale}
+        model={projectApiKeysModel}
+      />
       <ProjectDeleteManagement
         locale={locale}
         project={project}

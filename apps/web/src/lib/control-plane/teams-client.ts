@@ -558,6 +558,14 @@ function getErrorMessage(payload: unknown, status: number) {
     if (typeof message === "string") {
       return message;
     }
+
+    if (message && typeof message === "object") {
+      const nestedMessage = (message as Record<string, unknown>).message;
+
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+        return nestedMessage;
+      }
+    }
   }
 
   return `Control Plane request failed with HTTP ${status}.`;

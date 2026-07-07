@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
+import { OnboardingIntegrationGuide } from "@/features/onboarding/components/onboarding-integration-guide";
+import { OnboardingProviderRegistration } from "@/features/onboarding/components/onboarding-provider-registration";
 import { emptyTeamForm, TeamCreateModal } from "@/features/teams/components/team-management";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type {
@@ -18,6 +20,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type AdminOnboardingFlowProps = {
   activeStepId: OnboardingStepId;
+  gatewayBaseUrl: string;
   locale: Locale;
   model: AdminOnboardingModel;
   providerConnectionsModel: ProviderConnectionsModel;
@@ -26,7 +29,8 @@ type AdminOnboardingFlowProps = {
 
 export type OnboardingStepId =
   | "project"
-  | "runtime-config";
+  | "provider"
+  | "integration-guide";
 
 type OnboardingStep = {
   id: OnboardingStepId;
@@ -43,25 +47,46 @@ const onboardingSteps: OnboardingStep[] = [
     id: "project",
     labels: {
       en: {
-        label: "Project"
+        label: "Project 설정"
       },
       ko: {
-        label: "프로젝트"
+        label: "Project 설정"
       }
     }
   },
   {
-    id: "runtime-config",
+    id: "provider",
     labels: {
       en: {
-        label: "Review"
+        label: "Provider 연결"
       },
       ko: {
-        label: "검토"
+        label: "Provider 연결"
+      }
+    }
+  },
+  {
+    id: "integration-guide",
+    labels: {
+      en: {
+        label: "연동 가이드"
+      },
+      ko: {
+        label: "연동 가이드"
       }
     }
   }
 ];
+
+const onboardingFlowStepIds: OnboardingStepId[] = ["project", "provider", "integration-guide"];
+
+type ProjectCreationPaneId =
+  | "details"
+  | "gateway-api-key";
+
+type ProviderConnectionPaneId =
+  | "key-registration"
+  | "default-model";
 
 const onboardingText: Record<
   Locale,
@@ -77,7 +102,6 @@ const onboardingText: Record<
     next: string;
     noTeams: string;
     previous: string;
-    saved: string;
     saveNext: string;
     saveToProjects: string;
     savingProject: string;
@@ -98,7 +122,6 @@ const onboardingText: Record<
     next: "Next",
     noTeams: "No active teams available.",
     previous: "Previous",
-    saved: "Saved",
     saveNext: "Save and continue",
     saveToProjects: "Save and go to Projects",
     savingProject: "Creating project...",
@@ -118,7 +141,6 @@ const onboardingText: Record<
     next: "다음",
     noTeams: "No active teams available.",
     previous: "이전",
-    saved: "저장됨",
     saveNext: "저장 후 다음",
     saveToProjects: "저장 후 Projects로 이동",
     savingProject: "프로젝트 생성 중...",
@@ -149,6 +171,11 @@ type ProjectSetupState = {
   status: "error" | "idle" | "issued" | "saving";
 };
 
+type ProjectCompletionState = {
+  error: string;
+  status: "complete" | "error" | "idle" | "saving";
+};
+
 type ApiKeyIssuePayload = {
   apiKey?: OneTimeApiKeyResponse;
   error?: string;
@@ -156,6 +183,7 @@ type ApiKeyIssuePayload = {
 
 type ProjectResponsePayload = {
   error?: string;
+  policyError?: string;
   project?: ProjectRecord;
 };
 
@@ -182,6 +210,7 @@ type RuntimeModelOption = {
 
 export function AdminOnboardingFlow({
   activeStepId,
+  gatewayBaseUrl,
   locale,
   model,
   providerConnectionsModel,
@@ -189,12 +218,19 @@ export function AdminOnboardingFlow({
 }: AdminOnboardingFlowProps) {
   const router = useRouter();
   const initialActiveIndex = Math.max(
-    onboardingSteps.findIndex((step) => step.id === activeStepId),
+    onboardingFlowStepIds.findIndex((stepId) => stepId === activeStepId),
     0
   );
   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+  const [projectCreationPaneId, setProjectCreationPaneId] =
+    useState<ProjectCreationPaneId>("details");
+  const [providerConnectionPaneId, setProviderConnectionPaneId] =
+    useState<ProviderConnectionPaneId>("key-registration");
+  const [providerConnections, setProviderConnections] = useState<ProviderConnectionRecord[]>(
+    () => providerConnectionsModel.providers
+  );
   const selectableModels = getSelectableModelOptions(
-    providerConnectionsModel.providers,
+    providerConnections,
     model.provider.models
   );
   const [draft, setDraft] = useState<OnboardingDraft>(() =>
@@ -208,41 +244,59 @@ export function AdminOnboardingFlow({
     error: "",
     status: "idle"
   });
-  const [savedStepIds, setSavedStepIds] = useState<Set<OnboardingStepId>>(() => new Set());
   const [projectSetupState, setProjectSetupState] = useState<ProjectSetupState>({
     apiKey: null,
     error: "",
     project: null,
     status: "idle"
   });
-  const activeStep = onboardingSteps[activeIndex] ?? onboardingSteps[0];
-  const previousStep = onboardingSteps[activeIndex - 1];
-  const nextStep = onboardingSteps[activeIndex + 1];
+  const [projectCompletionState, setProjectCompletionState] = useState<ProjectCompletionState>({
+    error: "",
+    status: "idle"
+  });
+  const activeFlowStepId = onboardingFlowStepIds[activeIndex] ?? "project";
+  const visualActiveIndex = activeIndex;
   const text = onboardingText[locale];
   const activeTeams = teams.filter((team) => team.status === "ACTIVE");
   const isCreatingCredential = projectSetupState.status === "saving";
+  const isCompletingProject = projectCompletionState.status === "saving";
   const isCreatingTeam = teamCreateState.status === "saving";
   const isProjectStepIncomplete =
-    activeStep.id === "project" &&
+    activeFlowStepId === "project" &&
+    projectCreationPaneId === "details" &&
     (
       draft.projectName.trim().length === 0 ||
       !isValidBudgetInput(draft.projectTotalBudgetUsd) ||
-      !isValidPercentInput(draft.warningThresholdPercent) ||
-      !draft.selectedModelKey.trim()
+      !isValidPercentInput(draft.warningThresholdPercent)
     );
-  const isReviewIncomplete =
-    activeStep.id === "runtime-config" && projectSetupState.status !== "issued";
+  const isProjectGatewayStepIncomplete =
+    activeFlowStepId === "project" &&
+    projectCreationPaneId === "gateway-api-key" &&
+    projectSetupState.status !== "issued";
+  const isProviderDefaultModelIncomplete =
+    activeFlowStepId === "provider" &&
+    providerConnectionPaneId === "default-model" &&
+    !draft.selectedModelKey.trim();
   const isPrimaryActionDisabled =
-    isCreatingCredential || isProjectStepIncomplete || isReviewIncomplete;
+    isCreatingCredential ||
+    isCompletingProject ||
+    isProjectStepIncomplete ||
+    isProjectGatewayStepIncomplete ||
+    isProviderDefaultModelIncomplete;
   const isPreviousActionDisabled =
-    !previousStep || isCreatingCredential || projectSetupState.status === "issued";
+    isCreatingCredential ||
+    isCompletingProject ||
+    (activeFlowStepId === "project" && projectCreationPaneId === "details");
+  const shouldShowPreviousAction = !(
+    activeFlowStepId === "integration-guide" ||
+    (activeFlowStepId === "project" && projectCreationPaneId === "details")
+  );
   const isCreateApiKeyDisabled =
     isCreatingCredential ||
     projectSetupState.status === "issued" ||
     draft.projectName.trim().length === 0 ||
     !isValidBudgetInput(draft.projectTotalBudgetUsd) ||
     !isValidPercentInput(draft.warningThresholdPercent) ||
-    !draft.selectedModelKey.trim() ||
     draft.apiKeyDisplayName.trim().length === 0;
 
   function toggleTeamSelection(teamId: string) {
@@ -306,13 +360,48 @@ export function AdminOnboardingFlow({
     }));
   }
 
+  function redactOneTimeApiKey() {
+    setProjectSetupState((current) => {
+      if (!current.apiKey?.plaintext) {
+        return current;
+      }
+
+      return {
+        ...current,
+        apiKey: {
+          ...current.apiKey,
+          plaintext: ""
+        }
+      };
+    });
+  }
+
   async function saveCurrentStep(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (activeStep.id === "runtime-config") {
+    if (activeFlowStepId === "integration-guide") {
       if (projectSetupState.status === "issued") {
         router.push(`/tenants/${model.tenantId}/projects`);
         router.refresh();
+      }
+      return;
+    }
+
+    if (activeFlowStepId === "provider") {
+      if (providerConnectionPaneId === "key-registration") {
+        setProviderConnectionPaneId("default-model");
+        return;
+      }
+
+      if (projectCompletionState.status === "complete") {
+        setActiveIndex(2);
+        return;
+      }
+
+      const completed = await completeProjectSetup();
+
+      if (completed) {
+        setActiveIndex(2);
       }
       return;
     }
@@ -321,16 +410,21 @@ export function AdminOnboardingFlow({
       return;
     }
 
-    setSavedStepIds((current) => new Set(current).add(activeStep.id));
+    if (activeFlowStepId === "project" && projectCreationPaneId === "details") {
+      setProjectCreationPaneId("gateway-api-key");
+      return;
+    }
 
-    if (nextStep) {
-      setActiveIndex(activeIndex + 1);
+    if (activeFlowStepId === "project" && projectSetupState.status === "issued") {
+      redactOneTimeApiKey();
+      setProviderConnectionPaneId("key-registration");
+      setActiveIndex(1);
     }
   }
 
   async function createProjectAndIssueApiKey() {
     if (isCreateApiKeyDisabled) {
-      return;
+      return false;
     }
 
     setProjectSetupState((current) => ({
@@ -343,17 +437,13 @@ export function AdminOnboardingFlow({
 
     try {
       if (!project) {
-        const selectedModel = getSelectedModelOption(selectableModels, draft.selectedModelKey);
         const projectResponse = await fetch("/api/control-plane/projects", {
           body: JSON.stringify({
             action: "create",
             values: {
               description: draft.projectDescription,
               name: draft.projectName,
-              providerConnectionIds: selectedModel?.providerConnectionId
-                ? [selectedModel.providerConnectionId]
-                : [],
-              selectedModelKey: draft.selectedModelKey,
+              status: "DRAFT",
               totalBudgetUsd: Number(draft.projectTotalBudgetUsd),
               warningThresholdPercent: Number(draft.warningThresholdPercent)
             }
@@ -374,46 +464,10 @@ export function AdminOnboardingFlow({
             project: null,
             status: "error"
           });
-          return;
+          return false;
         }
 
         project = projectPayload.project;
-      }
-
-      const selectedProjectStatus = normalizeDraftProjectStatus(draft.projectStatus);
-
-      if (project.status !== selectedProjectStatus) {
-        const updateResponse = await fetch("/api/control-plane/projects", {
-          body: JSON.stringify({
-            action: "update",
-            values: {
-              description: project.description ?? "",
-              name: project.name,
-              projectId: project.id,
-              status: selectedProjectStatus,
-              totalBudgetUsd: Number(draft.projectTotalBudgetUsd)
-            }
-          }),
-          headers: {
-            "Content-Type": "application/json"
-          },
-          method: "POST"
-        });
-        const updatePayload = (await updateResponse
-          .json()
-          .catch(() => ({}))) as ProjectResponsePayload;
-
-        if (!updateResponse.ok || !updatePayload.project) {
-          setProjectSetupState({
-            apiKey: null,
-            error: updatePayload.error ?? text.createProjectError,
-            project,
-            status: "error"
-          });
-          return;
-        }
-
-        project = updatePayload.project;
       }
 
       for (const teamId of selectedTeamIds) {
@@ -441,7 +495,7 @@ export function AdminOnboardingFlow({
             project,
             status: "error"
           });
-          return;
+          return false;
         }
       }
 
@@ -469,7 +523,7 @@ export function AdminOnboardingFlow({
           project,
           status: "error"
         });
-        return;
+        return false;
       }
 
       setProjectSetupState({
@@ -478,7 +532,7 @@ export function AdminOnboardingFlow({
         project,
         status: "issued"
       });
-      setSavedStepIds((current) => new Set(current).add(activeStep.id));
+      return true;
     } catch {
       setProjectSetupState({
         apiKey: null,
@@ -486,7 +540,130 @@ export function AdminOnboardingFlow({
         project,
         status: "error"
       });
+      return false;
     }
+  }
+
+  async function completeProjectSetup() {
+    if (!projectSetupState.project || !draft.selectedModelKey.trim()) {
+      setProjectCompletionState({
+        error: text.createProjectError,
+        status: "error"
+      });
+      return false;
+    }
+
+    setProjectCompletionState({ error: "", status: "saving" });
+
+    const selectedModel = getSelectedModelOption(selectableModels, draft.selectedModelKey);
+
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          values: {
+            description: draft.projectDescription,
+            name: draft.projectName,
+            projectId: projectSetupState.project.id,
+            providerConnectionIds: selectedModel?.providerConnectionId
+              ? [selectedModel.providerConnectionId]
+              : [],
+            selectedModelKey: draft.selectedModelKey,
+            status: normalizeDraftProjectStatus(draft.projectStatus),
+            totalBudgetUsd: Number(draft.projectTotalBudgetUsd),
+            warningThresholdPercent: Number(draft.warningThresholdPercent)
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+
+      if (!response.ok || !payload.project || payload.policyError) {
+        setProjectCompletionState({
+          error: payload.policyError ?? payload.error ?? text.createProjectError,
+          status: "error"
+        });
+        return false;
+      }
+
+      setProjectSetupState((current) => ({
+        ...current,
+        error: "",
+        project: payload.project ?? current.project
+      }));
+      setProjectCompletionState({ error: "", status: "complete" });
+      return true;
+    } catch {
+      setProjectCompletionState({
+        error: text.createProjectError,
+        status: "error"
+      });
+      return false;
+    }
+  }
+
+  function completeProviderSetup(result: {
+    provider: ProviderConnectionRecord;
+    selectedModelKey: string;
+  }) {
+    setProviderConnections((current) => [
+      ...current.filter((provider) => provider.provider !== result.provider.provider),
+      result.provider
+    ]);
+    updateDraft("selectedModelKey", result.selectedModelKey);
+  }
+
+  function getPrimaryActionLabel() {
+    if (isCreatingCredential || isCompletingProject) {
+      return text.savingProject;
+    }
+
+    if (activeFlowStepId === "project" && projectCreationPaneId === "details") {
+      return text.saveNext;
+    }
+
+    if (activeFlowStepId === "project") {
+      return text.saveNext;
+    }
+
+    if (activeFlowStepId === "provider" && providerConnectionPaneId === "key-registration") {
+      return text.saveNext;
+    }
+
+    if (activeFlowStepId === "provider") {
+      return locale === "ko" ? "Project 생성" : "Create Project";
+    }
+
+    return text.saveToProjects;
+  }
+
+  function goToPreviousStep() {
+    redactOneTimeApiKey();
+
+    if (activeFlowStepId === "project" && projectCreationPaneId === "gateway-api-key") {
+      setProjectCreationPaneId("details");
+      return;
+    }
+
+    if (activeFlowStepId === "provider" && providerConnectionPaneId === "default-model") {
+      setProviderConnectionPaneId("key-registration");
+      return;
+    }
+
+    if (activeFlowStepId === "provider") {
+      setActiveIndex(0);
+      setProjectCreationPaneId("gateway-api-key");
+      return;
+    }
+
+    if (activeFlowStepId === "integration-guide") {
+      setProviderConnectionPaneId("default-model");
+    }
+
+    setActiveIndex((current) => Math.max(current - 1, 0));
   }
 
   return (
@@ -499,37 +676,48 @@ export function AdminOnboardingFlow({
       </section>
 
       <section className="onboarding-layout" aria-label="Create project flow">
-        <ol className="onboarding-rail" aria-label="Create project steps">
+        <ol
+          aria-label="Create project steps"
+          className="onboarding-rail"
+          data-active-index={visualActiveIndex}
+        >
           {onboardingSteps.map((step, index) => (
             <li
-              aria-current={step.id === activeStep.id ? "step" : undefined}
+              aria-current={index === visualActiveIndex ? "step" : undefined}
               className="onboarding-step"
-              data-active={step.id === activeStep.id}
-              data-position={index < activeIndex ? "previous" : "current-or-next"}
-              data-saved={savedStepIds.has(step.id)}
-              data-state={getStepState(index, activeIndex)}
+              data-active={index === visualActiveIndex}
+              data-position={index < visualActiveIndex ? "previous" : "current-or-next"}
+              data-state={getStepState(index, visualActiveIndex)}
               key={step.id}
             >
-              <span>{String(index + 1).padStart(2, "0")}</span>
+              <span>{index + 1}</span>
               <strong>{step.labels[locale].label}</strong>
-              {savedStepIds.has(step.id) ? <small>{text.saved}</small> : null}
             </li>
           ))}
         </ol>
 
         <div className="onboarding-main">
           <form className="onboarding-form" onSubmit={saveCurrentStep}>
-            <article className="onboarding-panel">
+            <article className={`onboarding-panel onboarding-panel-${activeFlowStepId}`}>
               {renderStepContent({
-                activeStepId: activeStep.id,
+                activeStepId: activeFlowStepId,
                 activeTeams,
                 draft,
+                gatewayBaseUrl,
                 isCreateApiKeyDisabled,
                 locale,
                 onCreateApiKey: createProjectAndIssueApiKey,
                 onOpenTeamCreate: () => setIsTeamCreateModalOpen(true),
+                onProviderSaved: completeProviderSetup,
                 onToggleTeam: toggleTeamSelection,
+                projectCompletionState,
+                projectCreationPaneId,
+                providerConnectionPaneId,
                 projectSetupState,
+                providerConnectionsModel: {
+                  ...providerConnectionsModel,
+                  providers: providerConnections
+                },
                 selectableModels,
                 selectedTeamIds,
                 teamCreateError: teamCreateState.error,
@@ -539,26 +727,22 @@ export function AdminOnboardingFlow({
             </article>
 
             <div className="onboarding-actions">
-              <button
-                className="secondary-button"
-                disabled={isPreviousActionDisabled}
-                onClick={() => setActiveIndex((current) => Math.max(current - 1, 0))}
-                type="button"
-              >
-                {text.previous}
-              </button>
+              {shouldShowPreviousAction ? (
+                <button
+                  className="secondary-button"
+                  disabled={isPreviousActionDisabled}
+                  onClick={goToPreviousStep}
+                  type="button"
+                >
+                  {text.previous}
+                </button>
+              ) : null}
               <button
                 className="primary-button"
                 disabled={isPrimaryActionDisabled}
                 type="submit"
               >
-                {isCreatingCredential
-                  ? text.savingProject
-                  : projectSetupState.status === "issued"
-                    ? text.saveToProjects
-                    : nextStep
-                      ? text.saveNext
-                      : text.complete}
+                {getPrimaryActionLabel()}
               </button>
             </div>
           </form>
@@ -593,12 +777,18 @@ function renderStepContent({
   activeStepId,
   activeTeams,
   draft,
+  gatewayBaseUrl,
   isCreateApiKeyDisabled,
   locale,
   onCreateApiKey,
   onOpenTeamCreate,
+  onProviderSaved,
   onToggleTeam,
+  projectCompletionState,
+  projectCreationPaneId,
+  providerConnectionPaneId,
   projectSetupState,
+  providerConnectionsModel,
   selectableModels,
   selectedTeamIds,
   teamCreateError,
@@ -608,19 +798,25 @@ function renderStepContent({
   activeStepId: OnboardingStepId;
   activeTeams: TeamRecord[];
   draft: OnboardingDraft;
+  gatewayBaseUrl: string;
   isCreateApiKeyDisabled: boolean;
   locale: Locale;
   onCreateApiKey: () => void;
   onOpenTeamCreate: () => void;
+  onProviderSaved: (result: { provider: ProviderConnectionRecord; selectedModelKey: string }) => void;
   onToggleTeam: (teamId: string) => void;
+  projectCompletionState: ProjectCompletionState;
+  projectCreationPaneId: ProjectCreationPaneId;
+  providerConnectionPaneId: ProviderConnectionPaneId;
   projectSetupState: ProjectSetupState;
+  providerConnectionsModel: ProviderConnectionsModel;
   selectableModels: RuntimeModelOption[];
   selectedTeamIds: Set<string>;
   teamCreateError: string;
   text: (typeof onboardingText)[Locale];
   updateDraft: (field: keyof OnboardingDraft, value: string) => void;
 }) {
-  if (activeStepId === "project") {
+  if (activeStepId === "project" && projectCreationPaneId === "details") {
     return (
       <div className="onboarding-stack">
         <OnboardingField
@@ -663,6 +859,83 @@ function renderStepContent({
           unit="%"
           value={draft.warningThresholdPercent}
         />
+        <OnboardingSelect
+          field="projectStatus"
+          label="Status"
+          onChange={updateDraft}
+          options={["ACTIVE", "DISABLED"]}
+          value={draft.projectStatus}
+        />
+      </div>
+    );
+  }
+
+  if (activeStepId === "project") {
+    return (
+      <div className="onboarding-stack">
+        <OnboardingField
+          field="apiKeyDisplayName"
+          label="API Key name"
+          onChange={updateDraft}
+          value={draft.apiKeyDisplayName}
+        />
+        <ApiKeyIssueReview
+          isCreateApiKeyDisabled={isCreateApiKeyDisabled}
+          issueState={projectSetupState}
+          locale={locale}
+          onCreateApiKey={onCreateApiKey}
+          text={text}
+        />
+        <OnboardingSelect
+          field="runtimePublishState"
+          label="Publish state"
+          onChange={updateDraft}
+          options={["published", "draft", "validation_failed"]}
+          value={draft.runtimePublishState}
+        />
+        <OnboardingSelect
+          field="cacheEnabled"
+          label="Cache"
+          onChange={updateDraft}
+          options={["enabled", "disabled"]}
+          value={draft.cacheEnabled}
+        />
+        <OnboardingSelect
+          field="cacheType"
+          label="Cache type"
+          onChange={updateDraft}
+          options={["exact"]}
+          value={draft.cacheType}
+        />
+        <OnboardingSelect
+          field="safetyMode"
+          label="Safety mode"
+          onChange={updateDraft}
+          options={["rule_based"]}
+          value={draft.safetyMode}
+        />
+      </div>
+    );
+  }
+
+  if (activeStepId === "provider") {
+    if (providerConnectionPaneId === "key-registration") {
+      return (
+        <div className="onboarding-stack">
+          <OnboardingProviderRegistration
+            locale={locale}
+            model={providerConnectionsModel}
+            onProviderSaved={onProviderSaved}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="onboarding-stack">
+        <div className="onboarding-provider-default-heading">
+          <h3>{locale === "ko" ? "Project default 모델 선택" : "Project default model"}</h3>
+        </div>
         {selectableModels.length > 0 ? (
           <OnboardingSelect
             field="selectedModelKey"
@@ -680,61 +953,23 @@ function renderStepContent({
             value="No runtime models available"
           />
         )}
-        <OnboardingSelect
-          field="projectStatus"
-          label="Status"
-          onChange={updateDraft}
-          options={["ACTIVE", "DISABLED"]}
-          value={draft.projectStatus}
-        />
+        {projectCompletionState.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{projectCompletionState.error}</AlertDescription>
+          </Alert>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="onboarding-stack">
-      <OnboardingField
-        field="apiKeyDisplayName"
-        label="API Key name"
-        onChange={updateDraft}
-        value={draft.apiKeyDisplayName}
-      />
-      <ApiKeyIssueReview
-        isCreateApiKeyDisabled={isCreateApiKeyDisabled}
-        issueState={projectSetupState}
-        locale={locale}
-        onCreateApiKey={onCreateApiKey}
-        text={text}
-      />
-      <OnboardingSelect
-        field="runtimePublishState"
-        label="Publish state"
-        onChange={updateDraft}
-        options={["published", "draft", "validation_failed"]}
-        value={draft.runtimePublishState}
-      />
-      <OnboardingSelect
-        field="cacheEnabled"
-        label="Cache"
-        onChange={updateDraft}
-        options={["enabled", "disabled"]}
-        value={draft.cacheEnabled}
-      />
-      <OnboardingSelect
-        field="cacheType"
-        label="Cache type"
-        onChange={updateDraft}
-        options={["exact"]}
-        value={draft.cacheType}
-      />
-      <OnboardingSelect
-        field="safetyMode"
-        label="Safety mode"
-        onChange={updateDraft}
-        options={["rule_based"]}
-        value={draft.safetyMode}
-      />
-    </div>
+    <OnboardingIntegrationGuide
+      gatewayBaseUrl={gatewayBaseUrl}
+      locale={locale}
+      project={projectSetupState.project}
+      selectedModelKey={draft.selectedModelKey}
+      tenantId={projectSetupState.project?.tenantId ?? ""}
+    />
   );
 }
 
@@ -1000,7 +1235,7 @@ function isValidPercentInput(value: string) {
 
 export function normalizeOnboardingStepId(value: string | string[] | undefined): OnboardingStepId {
   const stepId = Array.isArray(value) ? value[0] : value;
-  return onboardingSteps.some((step) => step.id === stepId)
+  return onboardingFlowStepIds.some((flowStepId) => flowStepId === stepId)
     ? (stepId as OnboardingStepId)
     : "project";
 }

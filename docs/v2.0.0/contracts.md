@@ -71,6 +71,8 @@ Gateway uses the Project API Key to resolve `tenantId/projectId`, then resolves 
 
 `App Token` remains a legacy/dormant credential lifecycle surface during migration, but it is not required for the default v2.0.0 Gateway invocation path and must not be shown as a required runtime readiness item in new UI.
 
+Project onboarding may create a Project record with `status=DRAFT` before provider/model selection is complete. A `DRAFT` Project is a Control Plane onboarding state only and is not runtime-ready. Gateway runtime execution must continue to require an active project and the trusted hidden default application before resolving a published RuntimeSnapshot.
+
 ### 3.2 Budget Scope
 
 비용, 쿼터, 대시보드 귀속은 `budgetScopeType`과 `budgetScopeId`로 표현한다.

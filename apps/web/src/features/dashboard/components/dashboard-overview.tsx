@@ -7,6 +7,8 @@ import {
 } from "@/features/dashboard/components/dashboard-echarts";
 import type { DashboardOverview, InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import {
+  formatBudgetScopeDisplayName,
+  formatBudgetScopeTypeDisplayName,
   formatDisplayIdentifier,
   formatModelDisplayName
 } from "@/lib/formatting/display-identifiers";
@@ -20,8 +22,6 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type DashboardOverviewProps = {
   activeTab?: DashboardTab;
-  applicationNames?: Record<string, string>;
-  applicationTokenRecords?: InvocationLogRecord[];
   detailPanel?: ReactNode;
   filters: DashboardFilterState;
   locale: Locale;
@@ -78,8 +78,8 @@ const dashboardText: Record<
       cacheHits: string;
       cacheRequests: string;
       cacheShare: string;
-      applicationTokens: string;
       modelShare: string;
+      projectBudgetAttribution: string;
       requests: string;
       requestTrend: string;
       successful: string;
@@ -109,8 +109,8 @@ const dashboardText: Record<
     costByModel: "Cost by model",
     filter: {
       apply: "Apply",
-      budgetScopeId: "ID",
-      budgetScopeType: "Scope type",
+      budgetScopeId: "Policy ID",
+      budgetScopeType: "Policy boundary",
       projectId: "Project",
       reset: "Reset",
       resolvedBy: "Resolved by"
@@ -120,8 +120,8 @@ const dashboardText: Record<
       cacheHits: "Cache hits",
       cacheRequests: "Cache requests",
       cacheShare: "Cache share",
-      applicationTokens: "Token usage by application",
       modelShare: "Model request share",
+      projectBudgetAttribution: "Project budget attribution",
       requests: "Requests",
       requestTrend: "Request trend",
       successful: "Successful",
@@ -131,7 +131,7 @@ const dashboardText: Record<
       averageLatency: "Average latency",
       averageP95Latency: "Average/P95 latency",
       budgetLedgerCost: "Budget ledger cost",
-      budgetScope: "Budget scope",
+      budgetScope: "Project budget",
       blocked: "Blocked",
       cacheHitRate: "Cache hit rate",
       cancelled: "Cancelled",
@@ -148,7 +148,7 @@ const dashboardText: Record<
       totalTokens: "Total tokens"
     },
     maskingActions: "Masking actions",
-    budgetScopeBreakdown: "Budget scope breakdown",
+    budgetScopeBreakdown: "Project policy/budget breakdown",
     queryBudget: "Query budget",
     rateLimitEvidence: "Rate limit evidence",
     routingByModel: "Routing by model",
@@ -169,8 +169,8 @@ const dashboardText: Record<
     costByModel: "모델별 비용",
     filter: {
       apply: "적용",
-      budgetScopeId: "ID",
-      budgetScopeType: "Scope type",
+      budgetScopeId: "Policy ID",
+      budgetScopeType: "Policy boundary",
       projectId: "Project",
       reset: "초기화",
       resolvedBy: "Resolved by"
@@ -180,8 +180,8 @@ const dashboardText: Record<
       cacheHits: "캐시 적중",
       cacheRequests: "캐시 요청",
       cacheShare: "캐시 비중",
-      applicationTokens: "앱별 토큰 사용량",
       modelShare: "모델 요청 비중",
+      projectBudgetAttribution: "Project 예산 귀속",
       requests: "Requests",
       requestTrend: "요청 추이",
       successful: "전송 성공",
@@ -191,7 +191,7 @@ const dashboardText: Record<
       averageLatency: "평균 지연",
       averageP95Latency: "평균/P95 지연",
       budgetLedgerCost: "Budget ledger 비용",
-      budgetScope: "Budget scope",
+      budgetScope: "Project budget",
       blocked: "차단",
       cacheHitRate: "캐시 적중률",
       cancelled: "취소",
@@ -208,7 +208,7 @@ const dashboardText: Record<
       totalTokens: "총 토큰"
     },
     maskingActions: "마스킹 동작",
-    budgetScopeBreakdown: "Budget scope 집계",
+    budgetScopeBreakdown: "Project 정책/예산 집계",
     queryBudget: "Query budget",
     rateLimitEvidence: "Rate limit 증거",
     routingByModel: "모델별 라우팅",
@@ -229,8 +229,6 @@ type DashboardCopy = (typeof dashboardText)[Locale];
 
 export function DashboardOverviewView({
   activeTab = "overview",
-  applicationNames = {},
-  applicationTokenRecords = [],
   detailPanel,
   filters,
   locale,
@@ -257,10 +255,7 @@ export function DashboardOverviewView({
   );
   const modelShareRows = getTopModelShareRows(overview);
   const cacheShareRows = getCacheShareRows(overview);
-  const applicationTokenShareRows = getApplicationTokenShareRows(
-    applicationTokenRecords,
-    applicationNames
-  );
+  const budgetScopeShareRows = getBudgetScopeShareRows(overview);
 
   return (
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
@@ -328,11 +323,11 @@ export function DashboardOverviewView({
 
         <article className="console-panel dashboard-chart-panel">
           <div className="panel-heading dashboard-chart-heading">
-            <h3>{text.charts.applicationTokens}</h3>
+            <h3>{text.charts.projectBudgetAttribution}</h3>
           </div>
           <PieShareChart
-            ariaLabel={text.charts.applicationTokens}
-            rows={applicationTokenShareRows}
+            ariaLabel={text.charts.projectBudgetAttribution}
+            rows={budgetScopeShareRows}
           />
         </article>
       </section>
@@ -454,9 +449,9 @@ function DashboardFilterBar({
           name="budgetScopeType"
         >
           <option value="">All</option>
-          <option value="application">application</option>
-          <option value="project">project</option>
-          <option value="team">team</option>
+          <option value="application">{formatBudgetScopeTypeDisplayName("application")}</option>
+          <option value="project">{formatBudgetScopeTypeDisplayName("project")}</option>
+          <option value="team">{formatBudgetScopeTypeDisplayName("team")}</option>
         </select>
       </label>
       <label className="request-log-filter-control">
@@ -700,7 +695,7 @@ function DashboardTabPanel({
       <div className="dashboard-focus-stats">
         <FocusStat label={text.metrics.rateLimited} value={formatInteger(overview.rateLimitedRequests)} />
         <FocusStat label="Limit status" value={overview.queryBudget?.status ?? "ok"} />
-        <FocusStat label={text.metrics.budgetScope} value={`${overview.filters.budgetScopeType}:${formatDisplayIdentifier(overview.filters.budgetScopeId)}`} />
+        <FocusStat label={text.metrics.budgetScope} value={formatBudgetScopeDisplayName(overview.filters)} />
         <FocusStat label={text.metrics.budgetLedgerCost} value={formatUsd(microUsdToUsdString(sumBudgetScopeCostMicroUsd(overview)))} />
       </div>
 
@@ -1000,8 +995,11 @@ function RateLimitEvidencePanel({
                   </Link>
                 </td>
                 <td>
-                  {record.rateLimitDecision.scope}:
-                  {formatDisplayIdentifier(record.rateLimitDecision.scopeId)}
+                  {formatBudgetScopeDisplayName({
+                    budgetScopeId: record.rateLimitDecision.scopeId,
+                    budgetScopeType: record.rateLimitDecision.scope,
+                    resolvedBy: record.budgetScope.resolvedBy
+                  })}
                 </td>
                 <td>{record.domainOutcomes?.rateLimit?.outcome ?? record.status}</td>
                 <td>{record.httpStatus}</td>
@@ -1032,7 +1030,7 @@ function BudgetScopeBreakdownTable({ overview, text }: { overview: DashboardOver
         <table className="data-table">
           <thead>
             <tr>
-              <th>Scope</th>
+              <th>Project policy/budget</th>
               <th>Resolved by</th>
               <th>Requests</th>
               <th>Ledger cost</th>
@@ -1041,9 +1039,7 @@ function BudgetScopeBreakdownTable({ overview, text }: { overview: DashboardOver
           <tbody>
             {rows.map((row) => (
               <tr key={`${row.budgetScopeType}-${row.budgetScopeId}-${row.resolvedBy}`}>
-                <td>
-                  {row.budgetScopeType}:{formatDisplayIdentifier(row.budgetScopeId)}
-                </td>
+                <td>{formatBudgetScopeDisplayName(row)}</td>
                 <td>{row.resolvedBy}</td>
                 <td>{formatInteger(row.requestCount)}</td>
                 <td>{formatUsd(microUsdToUsdString(row.estimatedCostMicroUsd))}</td>
@@ -1330,35 +1326,35 @@ function getCacheShareRows(overview: DashboardOverview) {
       ];
 }
 
-function getApplicationTokenShareRows(
-  records: InvocationLogRecord[],
-  applicationNames: Record<string, string>
-) {
-  const tokenByApplication = new Map<string, number>();
-
-  for (const record of records) {
-    const applicationId = record.applicationId || "unknown_application";
-    tokenByApplication.set(
-      applicationId,
-      (tokenByApplication.get(applicationId) ?? 0) + Math.max(record.totalTokens, 0)
-    );
-  }
-
-  const sortedRows = [...tokenByApplication.entries()]
-    .filter(([, totalTokens]) => totalTokens > 0)
-    .sort((left, right) => right[1] - left[1]);
-  const topRows = sortedRows.slice(0, 4).map(([applicationId, totalTokens], index) => ({
+function getBudgetScopeShareRows(overview: DashboardOverview) {
+  const sourceRows = overview.breakdowns?.byBudgetScope?.length
+    ? overview.breakdowns.byBudgetScope
+    : [
+        {
+          budgetScopeId: overview.filters.budgetScopeId,
+          budgetScopeType: overview.filters.budgetScopeType,
+          estimatedCostMicroUsd: overview.totalCostMicroUsd,
+          requestCount: overview.totalRequests,
+          resolvedBy: overview.filters.resolvedBy
+        }
+      ];
+  const sortedRows = [...sourceRows]
+    .filter((row) => row.estimatedCostMicroUsd > 0 || row.requestCount > 0)
+    .sort((left, right) => right.estimatedCostMicroUsd - left.estimatedCostMicroUsd);
+  const topRows = sortedRows.slice(0, 4).map((row, index) => ({
     color: chartColors[index] ?? chartColors[0],
-    label: applicationNames[applicationId] ?? formatDisplayIdentifier(applicationId),
-    value: totalTokens
+    label: formatBudgetScopeDisplayName(row),
+    value: row.estimatedCostMicroUsd || row.requestCount
   }));
-  const otherTokens = sortedRows.slice(4).reduce((sum, [, totalTokens]) => sum + totalTokens, 0);
+  const otherValue = sortedRows
+    .slice(4)
+    .reduce((sum, row) => sum + (row.estimatedCostMicroUsd || row.requestCount), 0);
 
-  if (otherTokens > 0) {
+  if (otherValue > 0) {
     topRows.push({
       color: chartColors[4] ?? chartColors[0],
       label: "other",
-      value: otherTokens
+      value: otherValue
     });
   }
 

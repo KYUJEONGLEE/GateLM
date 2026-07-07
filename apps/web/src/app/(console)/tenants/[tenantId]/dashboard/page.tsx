@@ -5,8 +5,6 @@ import {
   type DashboardFilterState,
   DashboardOverviewView
 } from "@/features/dashboard/components/dashboard-overview";
-import { getApplicationsModel } from "@/lib/control-plane/applications-client";
-import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
@@ -55,7 +53,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         ? requestedTab
         : "overview";
   const suppressContentMotion = activeTab === "overview" && resolvedSearchParams?.motion === "none";
-  const [locale, overview, recentRecords, rateLimitedRecords, applicationNames] = await Promise.all([
+  const [locale, overview, recentRecords, rateLimitedRecords] = await Promise.all([
     getRequestLocale(),
     getLiveDashboardOverview(tenantId, liveFilters),
     getLiveGatewayRequestLogs({ from: liveRange.from, limit: 100, tenantId, to: liveRange.to }),
@@ -65,8 +63,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       status: "rate_limited",
       tenantId,
       to: liveRange.to
-    }),
-    getDashboardApplicationNames(tenantId, dashboardFilters.projectId)
+    })
   ]);
   const selectedRecord = selectedRequestId
     ? recentRecords?.find((record) => record.requestId === selectedRequestId)
@@ -107,8 +104,6 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
       <DashboardOverviewView
         activeTab={activeTab}
-        applicationNames={applicationNames}
-        applicationTokenRecords={(recentRecords ?? []).map(toDisplayModelRecord)}
         detailPanel={
           displayScopedSelectedDetail ? (
             <RequestLogDetailAside
@@ -127,22 +122,6 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         suppressContentMotion={suppressContentMotion}
       />
     </ConsoleShell>
-  );
-}
-
-async function getDashboardApplicationNames(routeTenantId: string, projectId: string) {
-  const projectsResult = projectId ? null : await getProjectsModel(routeTenantId);
-  const projectIds = projectId
-    ? [projectId]
-    : (projectsResult?.projects ?? []).map((project) => project.id);
-  const applicationModels = await Promise.all(
-    projectIds.map((targetProjectId) => getApplicationsModel(routeTenantId, targetProjectId))
-  );
-
-  return Object.fromEntries(
-    applicationModels.flatMap((model) =>
-      (model?.applications ?? []).map((application) => [application.id, application.name])
-    )
   );
 }
 
