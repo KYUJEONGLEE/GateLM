@@ -15,9 +15,12 @@ import {
   verifyPassword,
 } from './auth.crypto';
 import {
+  AuthProjectAdmin,
+  AuthProjectAdminInvitation,
   AuthRepository,
   AuthSessionKind,
   AuthTenant,
+  AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
 } from './auth.repository';
@@ -56,6 +59,25 @@ interface PublicMembership {
   userId: string;
 }
 
+interface PublicProjectAdmin {
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  tenantId: string;
+  userId: string;
+}
+
+interface PublicProjectAdminInvitation {
+  acceptedAt?: string | null;
+  email: string;
+  expiresAt: string;
+  projectId: string;
+  projectName: string | null;
+  status: string;
+  tenantId: string;
+  tenantName: string | null;
+}
+
 const MAX_EMAIL_VERIFICATION_FAILURES = 5;
 
 export interface SessionIssue {
@@ -91,6 +113,8 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<{
+    acceptedProjectInvitation?: PublicProjectAdminInvitation;
+    session?: SessionIssue;
     signupDraft?: SignupDraftIssue;
     user: PublicUser;
     verificationRequired: boolean;
@@ -98,12 +122,72 @@ export class AuthService {
     const email = normalizeEmail(dto.email);
     const devAutoVerify = this.isDevAutoVerifyEnabled();
     const now = new Date();
+    if (dto.projectInviteToken) {
+      await this.getProjectAdminInvitationOrThrow(
+        dto.projectInviteToken,
+        email,
+        now,
+      );
+    }
+
     const existingUser = await this.repository.findUserByEmail(email);
     if (existingUser) {
       await this.ensureEmailCanStartLocalSignup(existingUser);
     }
 
     const passwordHash = await hashPassword(dto.password);
+
+    if (dto.projectInviteToken) {
+      if (existingUser) {
+        throw new ConflictException('Email is already registered.');
+      }
+
+      const user = await this.repository.createUser({
+        authProvider: 'local',
+        email,
+        emailVerifiedAt: devAutoVerify ? now : null,
+        name: dto.name,
+        passwordHash,
+        status: devAutoVerify ? 'active' : 'pending_email_verification',
+      });
+
+      if (devAutoVerify) {
+        const acceptedInvitation = await this.acceptProjectAdminInvitationOrThrow(
+          dto.projectInviteToken,
+          email,
+          user.id,
+          now,
+        );
+        const session = await this.issueSession(user.id, 'full');
+
+        return {
+          acceptedProjectInvitation:
+            this.toPublicProjectAdminInvitation(acceptedInvitation),
+          session,
+          user: this.toPublicUser(user),
+          verificationRequired: false,
+        };
+      }
+
+      const code = createVerificationCode();
+      const codeExpiresAt = addMinutes(now, 15);
+      await this.repository.createVerificationCode({
+        codeHash: hashSecret(code),
+        expiresAt: codeExpiresAt,
+        userId: user.id,
+      });
+      await this.emailSender.sendVerificationEmail({
+        code,
+        email,
+        expiresAt: codeExpiresAt,
+      });
+
+      return {
+        user: this.toPublicUser(user),
+        verificationRequired: true,
+      };
+    }
+
     const draft: SignupDraft = {
       email,
       emailVerifiedAt: devAutoVerify ? now.toISOString() : null,
@@ -146,9 +230,15 @@ export class AuthService {
     signupDraftToken: string | undefined,
     dto: VerifyEmailDto,
   ): Promise<{
-    signupDraft: SignupDraftIssue;
+    acceptedProjectInvitation?: PublicProjectAdminInvitation;
+    session?: SessionIssue;
+    signupDraft?: SignupDraftIssue;
     user: PublicUser;
   }> {
+    if (dto.projectInviteToken) {
+      return this.verifyProjectAdminInvitationEmail(dto);
+    }
+
     const email = normalizeEmail(dto.email);
     const draft = this.requireSignupDraft(signupDraftToken);
     if (draft.email !== email) {
@@ -208,6 +298,14 @@ export class AuthService {
       signupDraft: this.issueSignupDraft(verifiedDraft),
       user: this.toPublicSignupUser(verifiedDraft),
     };
+  }
+
+  async getProjectAdminInvitation(
+    token: string,
+  ): Promise<PublicProjectAdminInvitation> {
+    return this.toPublicProjectAdminInvitation(
+      await this.getProjectAdminInvitationOrThrow(token),
+    );
   }
 
   async createOrganization(
@@ -313,10 +411,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    const memberships = await this.repository.findMembershipsByUserId(
-      user.id,
+    const [memberships, tenantAdmins] = await Promise.all([
+      this.repository.findMembershipsByUserId(user.id),
+      this.repository.findTenantAdminsByUserId(user.id),
+    ]);
+    const mergedMemberships = this.mergeTenantAdminMemberships(
+      memberships,
+      tenantAdmins,
     );
-    if (memberships.length === 0) {
+    if (mergedMemberships.length === 0) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -324,9 +427,7 @@ export class AuthService {
     const session = await this.issueSession(user.id, 'full');
 
     return {
-      memberships: memberships.map((membership) =>
-        this.toPublicMembership(membership),
-      ),
+      memberships: mergedMemberships,
       session,
       user: this.toPublicUser(user),
     };
@@ -353,17 +454,21 @@ export class AuthService {
 
   async me(token: string | undefined): Promise<{
     memberships: PublicMembership[];
+    projectAdmins: PublicProjectAdmin[];
     session: { kind: string };
     user: PublicUser;
   }> {
     const session = await this.requireSession(token);
-    const memberships = await this.repository.findMembershipsByUserId(
-      session.user.id,
-    );
+    const [memberships, tenantAdmins, projectAdmins] = await Promise.all([
+      this.repository.findMembershipsByUserId(session.user.id),
+      this.repository.findTenantAdminsByUserId(session.user.id),
+      this.repository.findProjectAdminsByUserId(session.user.id),
+    ]);
 
     return {
-      memberships: memberships.map((membership) =>
-        this.toPublicMembership(membership),
+      memberships: this.mergeTenantAdminMemberships(memberships, tenantAdmins),
+      projectAdmins: projectAdmins.map((projectAdmin) =>
+        this.toPublicProjectAdmin(projectAdmin),
       ),
       session: { kind: session.kind },
       user: this.toPublicUser(session.user),
@@ -435,14 +540,131 @@ export class AuthService {
       }
     }
 
-    const memberships = await this.repository.findMembershipsByUserId(user.id);
-    const kind: AuthSessionKind = memberships.length > 0 ? 'full' : 'onboarding';
+    const [memberships, tenantAdmins] = await Promise.all([
+      this.repository.findMembershipsByUserId(user.id),
+      this.repository.findTenantAdminsByUserId(user.id),
+    ]);
+    const kind: AuthSessionKind =
+      memberships.length > 0 || tenantAdmins.length > 0 ? 'full' : 'onboarding';
     const session = await this.issueSession(user.id, kind);
 
     return {
       redirectUrl: this.webDashboardUrl(),
       session,
     };
+  }
+
+  private async verifyProjectAdminInvitationEmail(
+    dto: VerifyEmailDto,
+  ): Promise<{
+    acceptedProjectInvitation: PublicProjectAdminInvitation;
+    session: SessionIssue;
+    user: PublicUser;
+  }> {
+    const email = normalizeEmail(dto.email);
+    const now = new Date();
+    const user = await this.repository.findUserByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('Invalid verification code.');
+    }
+
+    await this.getProjectAdminInvitationOrThrow(
+      dto.projectInviteToken,
+      email,
+      now,
+    );
+
+    const verificationCode =
+      await this.repository.findLatestOpenVerificationCode(user.id, now);
+    if (!verificationCode) {
+      throw new UnauthorizedException('Invalid verification code.');
+    }
+    if (verificationCode.codeHash !== hashSecret(dto.code)) {
+      const nextFailedAttemptCount = verificationCode.failedAttemptCount + 1;
+      await this.repository.recordVerificationCodeFailure(verificationCode.id, {
+        consumedAt:
+          nextFailedAttemptCount >= MAX_EMAIL_VERIFICATION_FAILURES
+            ? now
+            : null,
+      });
+
+      throw new UnauthorizedException('Invalid verification code.');
+    }
+
+    await this.repository.consumeVerificationCode(verificationCode.id, now);
+    const verifiedUser = await this.repository.updateUserEmailVerified(
+      user.id,
+      now,
+    );
+    const acceptedInvitation = await this.acceptProjectAdminInvitationOrThrow(
+      dto.projectInviteToken,
+      email,
+      verifiedUser.id,
+      now,
+    );
+    const session = await this.issueSession(verifiedUser.id, 'full');
+
+    return {
+      acceptedProjectInvitation:
+        this.toPublicProjectAdminInvitation(acceptedInvitation),
+      session,
+      user: this.toPublicUser(verifiedUser),
+    };
+  }
+
+  private async acceptProjectAdminInvitationOrThrow(
+    token: string | undefined,
+    email: string,
+    userId: string,
+    now: Date,
+  ): Promise<AuthProjectAdminInvitation> {
+    if (!token) {
+      throw new UnauthorizedException(
+        'Invalid or expired project admin invitation.',
+      );
+    }
+
+    try {
+      return await this.repository.acceptProjectAdminInvitation({
+        acceptedAt: now,
+        email,
+        tokenHash: hashSecret(token),
+        userId,
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid or expired project admin invitation.',
+      );
+    }
+  }
+
+  private async getProjectAdminInvitationOrThrow(
+    token: string | undefined,
+    email?: string,
+    now = new Date(),
+  ): Promise<AuthProjectAdminInvitation> {
+    if (!token) {
+      throw new UnauthorizedException(
+        'Invalid or expired project admin invitation.',
+      );
+    }
+
+    const invitation = await this.repository.findProjectAdminInvitationByTokenHash(
+      hashSecret(token),
+      now,
+    );
+    if (!invitation) {
+      throw new UnauthorizedException(
+        'Invalid or expired project admin invitation.',
+      );
+    }
+    if (email && invitation.email !== email) {
+      throw new UnauthorizedException(
+        'Project admin invitation email does not match.',
+      );
+    }
+
+    return invitation;
   }
 
   private async issueSession(
@@ -496,6 +718,63 @@ export class AuthService {
     }
 
     return session;
+  }
+
+  private mergeTenantAdminMemberships(
+    memberships: AuthTenantMembership[],
+    tenantAdmins: AuthTenantAdmin[],
+  ): PublicMembership[] {
+    const publicMemberships = memberships.map((membership) =>
+      this.toPublicMembership(membership),
+    );
+    const membershipKeys = new Set(
+      publicMemberships.map(
+        (membership) => `${membership.tenantId}:${membership.userId}:tenant_admin`,
+      ),
+    );
+
+    for (const tenantAdmin of tenantAdmins) {
+      const key = `${tenantAdmin.tenantId}:${tenantAdmin.userId}:tenant_admin`;
+      if (membershipKeys.has(key)) {
+        continue;
+      }
+      publicMemberships.push({
+        id: tenantAdmin.id,
+        role: 'tenant_admin',
+        status: 'active',
+        tenantId: tenantAdmin.tenantId,
+        userId: tenantAdmin.userId,
+      });
+      membershipKeys.add(key);
+    }
+
+    return publicMemberships;
+  }
+  private toPublicProjectAdmin(
+    projectAdmin: AuthProjectAdmin,
+  ): PublicProjectAdmin {
+    return {
+      id: projectAdmin.id,
+      projectId: projectAdmin.projectId,
+      projectName: projectAdmin.project?.name ?? null,
+      tenantId: projectAdmin.tenantId,
+      userId: projectAdmin.userId,
+    };
+  }
+
+  private toPublicProjectAdminInvitation(
+    invitation: AuthProjectAdminInvitation,
+  ): PublicProjectAdminInvitation {
+    return {
+      acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
+      email: invitation.email,
+      expiresAt: invitation.expiresAt.toISOString(),
+      projectId: invitation.projectId,
+      projectName: invitation.project?.name ?? null,
+      status: invitation.status,
+      tenantId: invitation.tenantId,
+      tenantName: invitation.tenant?.name ?? null,
+    };
   }
 
   private toPublicMembership(

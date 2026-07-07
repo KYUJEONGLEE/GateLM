@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   Req,
@@ -44,9 +45,17 @@ export class AuthController {
     if (result.signupDraft) {
       this.setSignupDraftCookie(response, result.signupDraft);
     }
+    if (result.session) {
+      this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
+      this.setSessionCookie(response, result.session);
+    }
 
     return {
       data: {
+        acceptedProjectInvitation: result.acceptedProjectInvitation,
+        session: result.session
+          ? this.toSessionResponse(result.session)
+          : undefined,
         user: result.user,
         verificationRequired: result.verificationRequired,
       },
@@ -75,15 +84,33 @@ export class AuthController {
       }
       throw error;
     }
-    this.setSignupDraftCookie(response, result.signupDraft);
+    if (result.signupDraft) {
+      this.setSignupDraftCookie(response, result.signupDraft);
+    }
+    if (result.session) {
+      this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
+      this.setSessionCookie(response, result.session);
+    }
 
     return {
       data: {
+        acceptedProjectInvitation: result.acceptedProjectInvitation,
+        session: result.session
+          ? this.toSessionResponse(result.session)
+          : undefined,
         user: result.user,
       },
     };
   }
 
+  @Get('project-admin-invitations/:token')
+  async getProjectAdminInvitation(
+    @Param('token') token: string,
+  ): Promise<DataEnvelope<unknown>> {
+    return {
+      data: await this.authService.getProjectAdminInvitation(token),
+    };
+  }
   @Post('organizations')
   async createOrganization(
     @Body() body: CreateOrganizationDto,

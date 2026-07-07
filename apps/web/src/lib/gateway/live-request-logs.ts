@@ -60,6 +60,7 @@ export type LiveGatewayRequestLogFilters = {
   limit?: number;
   model?: string;
   projectId?: string;
+  projectIds?: string[];
   provider?: string;
   requestId?: string;
   resolvedBy?: string;
@@ -95,7 +96,12 @@ export async function getLiveGatewayRequestLogs(
   appendOptionalQuery(query, "provider", filters.provider);
   appendOptionalQuery(query, "requestId", filters.requestId);
 
-  const projectIds = await getLogProjectIds(filters.projectId, filters.tenantId, config.projectId);
+  const projectIds = await getLogProjectIds(
+    filters.projectId,
+    filters.projectIds,
+    filters.tenantId,
+    config.projectId
+  );
   const records = await fetchProjectLogsWithConcurrency(config.baseUrl, projectIds, query);
   const flattenedRecords = records.flatMap((projectRecords) => projectRecords ?? []);
 
@@ -153,17 +159,35 @@ async function fetchProjectLogs(
 
 async function getLogProjectIds(
   projectId: string | undefined,
+  scopedProjectIds: string[] | undefined,
   routeTenantId: string | undefined,
   fallbackProjectId: string
 ) {
-  if (projectId?.trim()) {
-    return [projectId.trim()];
+  const requestedProjectId = projectId?.trim();
+  const scopedIds = dedupeProjectIds(scopedProjectIds);
+
+  if (scopedIds.length > 0) {
+    return requestedProjectId
+      ? scopedIds.includes(requestedProjectId)
+        ? [requestedProjectId]
+        : []
+      : scopedIds;
+  }
+
+  if (requestedProjectId) {
+    return [requestedProjectId];
   }
 
   const projectsModel = await getProjectsModel(routeTenantId ?? getControlPlaneTenantId());
   const projectIds = projectsModel.projects.map((project) => project.id).filter(Boolean);
 
   return projectIds.length > 0 ? projectIds : [fallbackProjectId];
+}
+
+function dedupeProjectIds(projectIds: string[] | undefined) {
+  return Array.from(
+    new Set((projectIds ?? []).map((projectId) => projectId.trim()).filter(Boolean))
+  );
 }
 
 function appendOptionalQuery(query: URLSearchParams, key: string, value: string | undefined) {

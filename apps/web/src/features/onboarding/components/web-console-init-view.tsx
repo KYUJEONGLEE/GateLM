@@ -32,6 +32,17 @@ type AuthMode = "login" | "signup";
 type AuthStatus = "anonymous" | "authenticated";
 type SignupStepId = "account" | "verify" | "organization" | "ready";
 
+type AcceptedProjectInvitation = {
+  acceptedAt?: string | null;
+  email: string;
+  expiresAt: string;
+  projectId: string;
+  projectName?: string | null;
+  status: string;
+  tenantId: string;
+  tenantName?: string | null;
+};
+
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
 
 const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
@@ -41,16 +52,16 @@ const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
   verify: MailCheck
 };
 
-function getDashboardHref() {
-  return `/tenants/${defaultTenantId}/dashboard`;
+function getDashboardHref(tenantId = defaultTenantId) {
+  return `/tenants/${tenantId}/dashboard`;
 }
 
 function getProjectsHref(tenantId: string) {
   return `/tenants/${encodeURIComponent(tenantId)}/projects`;
 }
 
-function redirectToDashboard(replace = false) {
-  const href = getDashboardHref();
+function redirectToDashboard(replace = false, tenantId = defaultTenantId) {
+  const href = getDashboardHref(tenantId);
   if (replace) {
     window.location.replace(href);
     return;
@@ -361,8 +372,8 @@ const initText: Record<
     hero: {
       body:
         "고객사의 기존 서비스와 사내 UI를 유지한 채 모든 LLM 요청을 하나의 Gateway로 통과시켜 비용, 정책, 로그, 보안을 운영 레벨에서 관리합니다.",
-      chips: ["Cost Control", "Policy", "Gateway API"],
-      eyebrow: "B2B LLMOps Gateway for enterprise teams",
+      chips: [],
+      eyebrow: "",
       title: "기업의 LLM 사용을",
       titleAccent: "운영 가능한 Gateway로\n전환합니다."
     },
@@ -472,6 +483,8 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
   const [authStatus, setAuthStatus] = useState<AuthStatus>(initialAuthStatus);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
+  const [dashboardTenantId, setDashboardTenantId] = useState(defaultTenantId);
+  const [projectInviteToken, setProjectInviteToken] = useState<string | null>(null);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
 
@@ -486,9 +499,18 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
       redirectToProjects(defaultTenantId, true);
       return;
     }
+    const projectInvite = params.get("projectInvite") ?? params.get("invite");
+    if (projectInvite) {
+      setProjectInviteToken(projectInvite);
+      setAuthMode("signup");
+      setSignupStep("account");
+      setIsAuthPanelOpen(true);
+    }
+
     const hasLandingViewParam = params.get("view") === "landing";
-    const shouldStayOnLanding = hasLandingViewParam || hasStayOnLandingHistoryState();
-    if (hasLandingViewParam) {
+    const shouldStayOnLanding =
+      Boolean(projectInvite) || hasLandingViewParam || hasStayOnLandingHistoryState();
+    if (hasLandingViewParam || projectInvite) {
       replaceLandingUrl();
     }
 
@@ -583,7 +605,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     setAuthNotice(null);
     setSignupStep("account");
     setAuthStatus("authenticated");
-    redirectToDashboard();
+    redirectToDashboard(false, dashboardTenantId);
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -622,9 +644,17 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
         const result = await postAuth("signup", {
           email,
           name: readFormString(formData, "name"),
-          password: readFormString(formData, "password")
+          password: readFormString(formData, "password"),
+          ...(projectInviteToken ? { projectInviteToken } : {})
         });
         setSignupEmail(email);
+        const acceptedInvitation = result.data?.acceptedProjectInvitation;
+        if (acceptedInvitation) {
+          setDashboardTenantId(acceptedInvitation.tenantId);
+          setAuthNotice("Project admin invitation accepted.");
+          setSignupStep("ready");
+          return;
+        }
         if (result.data?.verificationRequired === false) {
           setAuthNotice("Email verification skipped in local fake mode. Create your tenant.");
           setSignupStep("organization");
@@ -636,10 +666,18 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
       }
 
       if (signupStep === "verify") {
-        await postAuth("email/verify", {
+        const result = await postAuth("email/verify", {
           code: readFormString(formData, "verificationCode"),
-          email: signupEmail
+          email: signupEmail,
+          ...(projectInviteToken ? { projectInviteToken } : {})
         });
+        const acceptedInvitation = result.data?.acceptedProjectInvitation;
+        if (acceptedInvitation) {
+          setDashboardTenantId(acceptedInvitation.tenantId);
+          setAuthNotice("Project admin access granted.");
+          setSignupStep("ready");
+          return;
+        }
         setAuthNotice("Email verified. Create your tenant.");
         setSignupStep("organization");
         return;
@@ -703,7 +741,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
             </Link>
           ) : null}
           {authStatus === "authenticated" ? (
-            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
+            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref(dashboardTenantId)}>
               <Route aria-hidden="true" size={17} strokeWidth={2.4} />
               <span>{text.actions.dashboard}</span>
             </Link>
@@ -749,7 +787,6 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
       <section className="landing-hero">
         <GatewayScene text={text.scene} />
         <div className="landing-hero-copy">
-          <p className="landing-eyebrow">{text.hero.eyebrow}</p>
           <div className="landing-chip-row">
             {text.hero.chips.map((chip) => (
               <span key={chip}>{chip}</span>
@@ -888,6 +925,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
             ) : (
               <SignupFlow
                 isSubmitting={isAuthSubmitting}
+                isProjectInviteSignup={Boolean(projectInviteToken)}
                 signupStep={signupStep}
                 text={text}
                 onGoogleLogin={startGoogleLogin}
@@ -944,6 +982,7 @@ function GatewayScene({ text }: { text: (typeof initText)[Locale]["scene"] }) {
 
 type AuthPostResponse = {
   data?: {
+    acceptedProjectInvitation?: AcceptedProjectInvitation;
     session?: {
       kind?: string;
     };
@@ -1094,25 +1133,30 @@ function LoginForm({
 }
 
 function SignupFlow({
+  isProjectInviteSignup,
   isSubmitting,
   onGoogleLogin,
   onSubmit,
   signupStep,
   text
 }: {
+  isProjectInviteSignup: boolean;
   isSubmitting: boolean;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   signupStep: SignupStepId;
   text: (typeof initText)[Locale];
 }) {
-  const activeIndex = signupStepOrder.indexOf(signupStep);
+  const visibleSignupSteps = isProjectInviteSignup
+    ? signupStepOrder.filter((step) => step !== "organization")
+    : signupStepOrder;
+  const activeIndex = visibleSignupSteps.indexOf(signupStep);
   const isReadyStep = signupStep === "ready";
 
   return (
     <form className="landing-auth-form" onSubmit={onSubmit}>
       <ol className="landing-signup-steps" aria-label={text.auth.signupTitle}>
-        {signupStepOrder.map((step, index) => {
+        {visibleSignupSteps.map((step, index) => {
           const StepIcon = signupStepIcons[step];
 
           return (
@@ -1184,18 +1228,22 @@ function SignupFlow({
         )}
         <span>{isReadyStep ? text.actions.loginSubmit : text.actions.signupSubmit}</span>
       </button>
-      <div className="landing-auth-divider" role="separator">
-        <span>or</span>
-      </div>
-      <button
-        className="landing-google-button"
-        disabled={isSubmitting}
-        onClick={onGoogleLogin}
-        type="button"
-      >
-        <GoogleMark />
-        <strong>{text.actions.googleLogin}</strong>
-      </button>
+      {!isProjectInviteSignup ? (
+        <>
+          <div className="landing-auth-divider" role="separator">
+            <span>or</span>
+          </div>
+          <button
+            className="landing-google-button"
+            disabled={isSubmitting}
+            onClick={onGoogleLogin}
+            type="button"
+          >
+            <GoogleMark />
+            <strong>{text.actions.googleLogin}</strong>
+          </button>
+        </>
+      ) : null}
     </form>
   );
 }

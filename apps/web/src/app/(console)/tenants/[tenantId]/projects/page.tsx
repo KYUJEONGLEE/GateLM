@@ -1,5 +1,11 @@
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { ProjectManagement } from "@/features/projects/components/project-management";
+import {
+  getCurrentConsoleAuth,
+  getVisibleProjectsForConsoleAuth,
+  isTenantAdminForTenant,
+  resolveConsoleTenantIdForAuth
+} from "@/lib/auth/current-console-auth";
 import { getProjectBudgetThresholds, getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveMonthlyProjectCostReport } from "@/lib/gateway/live-cost-report";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -12,24 +18,31 @@ type ProjectsPageProps = {
 
 export default async function ProjectsPage({ params }: ProjectsPageProps) {
   const { tenantId } = await params;
-  const locale = await getRequestLocale();
-  const [projectsModel, monthlyCostReport] = await Promise.all([
-    getProjectsModel(tenantId),
-    getLiveMonthlyProjectCostReport(tenantId)
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
   ]);
-  const budgetThresholds = await getProjectBudgetThresholds(projectsModel.projects);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const [projectsModel, monthlyCostReport] = await Promise.all([
+    getProjectsModel(effectiveTenantId),
+    getLiveMonthlyProjectCostReport(effectiveTenantId)
+  ]);
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
+  const budgetThresholds = await getProjectBudgetThresholds(visibleProjects);
+  const canCreateProject = isTenantAdminForTenant(auth, effectiveTenantId);
 
   return (
     <ConsoleShell
       activeManagementItem="project"
       activeSection="management"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <ProjectManagement
         budgetThresholds={budgetThresholds}
+        canCreateProject={canCreateProject}
         locale={locale}
-        model={projectsModel}
+        model={{ ...projectsModel, projects: visibleProjects }}
         monthlyCostReport={monthlyCostReport}
       />
     </ConsoleShell>

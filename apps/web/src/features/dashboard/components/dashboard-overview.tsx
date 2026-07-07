@@ -41,6 +41,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type DashboardOverviewProps = {
   activeTab?: DashboardTab;
+  allowAllProjects?: boolean;
   costOverTime?: CostOverTimeSummary;
   detailPanel?: ReactNode;
   filters: DashboardFilterState;
@@ -251,6 +252,7 @@ const dashboardText: Record<
 type DashboardCopy = (typeof dashboardText)[Locale];
 
 export function DashboardOverviewView({
+  allowAllProjects = true,
   costOverTime,
   detailPanel,
   filters,
@@ -319,6 +321,7 @@ export function DashboardOverviewView({
       <section className="dashboard-summary-bar" aria-label="Dashboard filters">
         <DashboardFilterForm
           actionPath={`/tenants/${overview.filters.tenantId}/dashboard`}
+          allowAllProjects={allowAllProjects}
           applyLabel={text.filter.apply}
           filters={filters}
           projects={projects}

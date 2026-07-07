@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
@@ -14,11 +15,13 @@ import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
 import { RequestLogScopeFilterControls } from "./request-log-scope-filter-controls";
 
 type RequestLogTableProps = {
+  allowAllProjects?: boolean;
   budgetScopeOptions: RequestLogBudgetScopeOption[];
   detailPanel?: ReactNode;
   filters: RequestLogFilterState;
   locale: Locale;
   modelOptions: string[];
+  projects?: ProjectRecord[];
   records: InvocationLogRecord[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
@@ -46,6 +49,7 @@ export type RequestLogFilterState = {
   created: RequestLogCreatedFilter;
   model: string;
   page: number;
+  projectId: string;
   provider: string;
   requestId: string;
   resolvedBy: string;
@@ -163,11 +167,13 @@ const requestLogText: Record<
 };
 
 export function RequestLogTable({
+  allowAllProjects = true,
   budgetScopeOptions,
   detailPanel,
   filters,
   locale,
   modelOptions,
+  projects = [],
   records,
   selectedRequestId,
   sourceState,
@@ -240,6 +246,20 @@ export function RequestLogTable({
                   </select>
                 </label>
 
+                <label className="request-log-filter-control">
+                  <span>Project</span>
+                  <div className="dashboard-filter-input">
+                    <Building2 aria-hidden="true" size={16} strokeWidth={2.1} />
+                    <select defaultValue={filters.projectId} name="projectId">
+                      {allowAllProjects ? <option value="">All projects</option> : null}
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
                 <label className="request-log-filter-control request-log-filter-control-cache">
                   <span>{text.cacheLabel}</span>
                   <select defaultValue={filters.cacheStatus} name="cacheStatus">
@@ -384,6 +404,7 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
     query.set("page", String(filters.page));
   }
   appendRequestLogQuery(query, "provider", filters.provider);
+  appendRequestLogQuery(query, "projectId", filters.projectId);
   appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
@@ -405,6 +426,7 @@ function requestLogPageHref(
   appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
   appendRequestLogQuery(query, "model", filters.model);
   appendRequestLogQuery(query, "provider", filters.provider);
+  appendRequestLogQuery(query, "projectId", filters.projectId);
   appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
   appendRequestLogQuery(query, "searchRequestId", filters.requestId);
   appendRequestLogQuery(query, "status", filters.status);
