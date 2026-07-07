@@ -263,7 +263,7 @@ export function OnboardingProviderRegistration({
       return false;
     }
 
-    const discoveredModels = payload.discovery.models.map((item) =>
+    const discoveredModels = (payload.discovery?.models ?? []).map((item) =>
       normalizeDiscoveredModelName(item.modelName)
     );
     const chatModels = getUniqueChatModels(discoveredModels);
