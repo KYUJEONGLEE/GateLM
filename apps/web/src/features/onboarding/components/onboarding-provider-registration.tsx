@@ -119,6 +119,7 @@ const onboardingProviderText: Record<
 };
 
 const preferredProviderOrder = ["openai", "claude", "anthropic", "gemini", "cohere", "local", "mock"];
+const providerModelSummaryVisibleCount = 3;
 
 export function OnboardingProviderRegistration({
   locale,
@@ -128,8 +129,8 @@ export function OnboardingProviderRegistration({
   const text = onboardingProviderText[locale];
   const [providers, setProviders] = useState<ProviderConnectionRecord[]>(model.providers);
   const providerRows = useMemo(
-    () => getProviderRows(providers, model.providerPresets.items),
-    [model.providerPresets.items, providers]
+    () => getProviderRows(providers, model.providerPresets.items, locale),
+    [locale, model.providerPresets.items, providers]
   );
   const [selectedProviderKey, setSelectedProviderKey] = useState(
     () => providerRows[0]?.providerKey ?? ""
@@ -169,7 +170,11 @@ export function OnboardingProviderRegistration({
       return;
     }
 
-    const requiresCredential = formValues.credentialRequired;
+    const registeringProvider = providers.find(
+      (provider) => provider.provider === formValues.provider.trim()
+    );
+    const requiresCredential =
+      formValues.credentialRequired && !hasProviderKeyRegistered(registeringProvider);
 
     if (requiresCredential && !formValues.credentialValue?.trim()) {
       setSubmitState({ message: text.providerRequired, status: "error" });
@@ -564,7 +569,8 @@ export function OnboardingProviderRegistration({
 
 function getProviderRows(
   providers: ProviderConnectionRecord[],
-  presets: ProviderPresetRecord[]
+  presets: ProviderPresetRecord[],
+  locale: Locale
 ): ProviderDisplayRow[] {
   const providerMap = new Map(providers.map((provider) => [provider.provider, provider]));
   const rows = presets.map((preset) => {
@@ -574,7 +580,7 @@ function getProviderRows(
     return {
       connection,
       displayName: getProviderDisplayName(preset.providerKey, connection?.displayName ?? preset.displayName),
-      modelSummary: models.length > 0 ? models.join(", ") : "model selection required",
+      modelSummary: formatProviderModelSummary(models, locale),
       models,
       providerKey: preset.providerKey,
       preset
@@ -589,7 +595,7 @@ function getProviderRows(
       return {
         connection: provider,
         displayName: getProviderDisplayName(provider.provider, provider.displayName),
-        modelSummary: models.length > 0 ? models.join(", ") : "model selection required",
+        modelSummary: formatProviderModelSummary(models, locale),
         models,
         providerKey: provider.provider,
         preset: null
@@ -599,6 +605,24 @@ function getProviderRows(
   return [...rows, ...extraRows].sort(
     (left, right) => getProviderOrder(left.providerKey) - getProviderOrder(right.providerKey)
   );
+}
+
+function formatProviderModelSummary(models: string[], locale: Locale) {
+  if (models.length === 0) {
+    return "model selection required";
+  }
+
+  const visibleModels = models.slice(0, providerModelSummaryVisibleCount);
+  const hiddenModelCount = models.length - visibleModels.length;
+
+  if (hiddenModelCount <= 0) {
+    return visibleModels.join(", ");
+  }
+
+  const hiddenSummary =
+    locale === "ko" ? `외 ${hiddenModelCount}개` : `+ ${hiddenModelCount} more`;
+
+  return `${visibleModels.join(", ")}, ${hiddenSummary}`;
 }
 
 function getProviderOrder(providerKey: string) {
@@ -787,6 +811,24 @@ function getProviderConfigBoolean(
   const value = providerConfig?.[key];
 
   return typeof value === "boolean" ? value : fallback;
+}
+
+function hasProviderKeyRegistered(provider: ProviderConnectionRecord | null | undefined) {
+  if (!provider) {
+    return false;
+  }
+
+  const credentialRequired = getProviderConfigBoolean(
+    provider.providerConfig,
+    "credentialRequired",
+    provider.resolver !== "none"
+  );
+
+  if (!credentialRequired) {
+    return true;
+  }
+
+  return Boolean(provider.credentialPreview?.prefix || provider.credentialPreview?.last4);
 }
 
 function getProviderConfigFailureMode(

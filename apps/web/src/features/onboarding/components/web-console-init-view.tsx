@@ -696,10 +696,12 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
             <span className="landing-brand-mark">G</span>
             <strong>GateLM</strong>
           </Link>
-          <Link className="landing-auth-button landing-gateway-request-button" href="/application">
-            <Send aria-hidden="true" size={16} strokeWidth={2.4} />
-            <span>{text.actions.gatewayRequest}</span>
-          </Link>
+          {authStatus === "authenticated" ? (
+            <Link className="landing-auth-button landing-gateway-request-button" href="/application">
+              <Send aria-hidden="true" size={16} strokeWidth={2.4} />
+              <span>{text.actions.gatewayRequest}</span>
+            </Link>
+          ) : null}
           {authStatus === "authenticated" ? (
             <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
               <Route aria-hidden="true" size={17} strokeWidth={2.4} />
@@ -777,14 +779,29 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
         </div>
         <p>{text.summary.body}</p>
         <div className="landing-summary-actions">
-          <Link className="landing-summary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
-            <Route aria-hidden="true" size={16} strokeWidth={2.3} />
-            <span>{text.actions.dashboard}</span>
-          </Link>
-          <Link className="landing-summary-link" href="/application">
-            <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
-            <span>{text.actions.chat}</span>
-          </Link>
+          {authStatus === "authenticated" ? (
+            <>
+              <Link className="landing-summary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
+                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.dashboard}</span>
+              </Link>
+              <Link className="landing-summary-link" href="/application">
+                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.chat}</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
+                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.dashboard}</span>
+              </button>
+              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
+                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.chat}</span>
+              </button>
+            </>
+          )}
         </div>
       </section>
 
@@ -1167,6 +1184,9 @@ function SignupFlow({
         )}
         <span>{isReadyStep ? text.actions.loginSubmit : text.actions.signupSubmit}</span>
       </button>
+      <div className="landing-auth-divider" role="separator">
+        <span>or</span>
+      </div>
       <button
         className="landing-google-button"
         disabled={isSubmitting}

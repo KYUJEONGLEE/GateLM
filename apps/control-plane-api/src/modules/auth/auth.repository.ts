@@ -104,6 +104,17 @@ export interface AuthRepository {
     sessionTokenHash: string;
     userId: string;
   }): Promise<AuthSession>;
+  createLocalUserTenantAndMembership(input: {
+    email: string;
+    emailVerifiedAt: Date;
+    name: string | null;
+    organizationName: string;
+    passwordHash: string;
+  }): Promise<{
+    membership: AuthTenantMembership;
+    tenant: AuthTenant;
+    user: AuthUser;
+  }>;
   createTenantAndMembership(input: {
     organizationName: string;
     userId: string;
