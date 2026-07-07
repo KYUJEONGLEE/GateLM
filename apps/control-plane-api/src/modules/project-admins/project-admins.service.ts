@@ -96,7 +96,7 @@ export class ProjectAdminsService {
   async createProjectAdminInvitation(
     projectId: string,
     dto: CreateProjectAdminInvitationDto,
-  ): Promise<ProjectAdminInvitationResponseDto> {
+  ): Promise<ProjectAdminInvitationResponseDto | ProjectAdminListItemDto> {
     const project = await this.getProjectOrThrow(projectId);
     const now = new Date();
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : addDays(now, 7);
@@ -115,6 +115,28 @@ export class ProjectAdminsService {
     if (existingAdmin) {
       throw new BadRequestException('Project admin already exists.');
     }
+
+    const existingUser = await this.prisma.user.findFirst({
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        email: true,
+        id: true,
+        name: true,
+      },
+      where: {
+        deletedAt: null,
+        email,
+        status: 'active',
+      },
+    });
+    if (existingUser) {
+      return this.assignExistingUserAsProjectAdmin({
+        now,
+        project,
+        user: existingUser,
+      });
+    }
+
     const existingPendingInvitation =
       await this.prisma.projectAdminInvitation.findFirst({
         where: {
@@ -181,6 +203,116 @@ export class ProjectAdminsService {
     };
   }
 
+  private async assignExistingUserAsProjectAdmin(args: {
+    now: Date;
+    project: {
+      id: string;
+      name: string;
+      tenant: { name: string };
+      tenantId: string;
+    };
+    user: {
+      email: string;
+      id: string;
+      name: string | null;
+    };
+  }): Promise<ProjectAdminListItemDto> {
+    const projectAdmin = await this.prisma.$transaction(async (tx) => {
+      const existingActiveMembership = await tx.tenantMembership.findFirst({
+        where: {
+          deletedAt: null,
+          status: 'active',
+          tenantId: args.project.tenantId,
+          userId: args.user.id,
+        },
+      });
+
+      if (!existingActiveMembership) {
+        const existingMembership = await tx.tenantMembership.findFirst({
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          where: {
+            tenantId: args.project.tenantId,
+            userId: args.user.id,
+          },
+        });
+
+        if (existingMembership) {
+          await tx.tenantMembership.update({
+            data: {
+              deletedAt: null,
+              joinedAt: args.now,
+              role: 'project_admin',
+              status: 'active',
+            },
+            where: { id: existingMembership.id },
+          });
+        } else {
+          await tx.tenantMembership.create({
+            data: {
+              joinedAt: args.now,
+              role: 'project_admin',
+              status: 'active',
+              tenantId: args.project.tenantId,
+              userId: args.user.id,
+            },
+          });
+        }
+      }
+
+      await tx.projectAdminInvitation.updateMany({
+        data: {
+          revokedAt: args.now,
+          status: 'revoked',
+        },
+        where: {
+          acceptedAt: null,
+          email: args.user.email,
+          projectId: args.project.id,
+          revokedAt: null,
+          status: 'pending',
+        },
+      });
+
+      return tx.projectAdmin.upsert({
+        create: {
+          projectId: args.project.id,
+          tenantId: args.project.tenantId,
+          userId: args.user.id,
+        },
+        include: {
+          user: {
+            select: {
+              email: true,
+              name: true,
+            },
+          },
+        },
+        update: {
+          tenantId: args.project.tenantId,
+        },
+        where: {
+          projectId_userId: {
+            projectId: args.project.id,
+            userId: args.user.id,
+          },
+        },
+      });
+    });
+
+    return {
+      connectedAt: projectAdmin.createdAt.toISOString(),
+      email: projectAdmin.user.email,
+      id: `project-admin:${projectAdmin.id}`,
+      invitationId: null,
+      name: displayProjectAdminName(projectAdmin.user.name, 'Unnamed admin'),
+      projectAdminId: projectAdmin.id,
+      projectId: projectAdmin.projectId,
+      role: 'project_admin',
+      status: 'active',
+      tenantId: projectAdmin.tenantId,
+      userId: projectAdmin.userId,
+    };
+  }
   async removeProjectAdmin(projectId: string, userId: string): Promise<ProjectAdminListItemDto> {
     const now = new Date();
     const existing = await this.prisma.projectAdmin.findUnique({

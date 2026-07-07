@@ -1,8 +1,11 @@
+import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
   getProjectAdminProjectIdsForTenant,
-  isProjectScopedForTenant
+  getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
+  resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
 import {
@@ -20,6 +23,7 @@ import {
   getLiveGatewayRequestLogs,
   type LiveGatewayRequestLogFilters
 } from "@/lib/gateway/live-request-logs";
+import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -51,24 +55,44 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const explicitSelectedRequestId = normalizeOptionalText(resolvedSearchParams?.requestId);
   const shouldSelectLatestProjectRequest = resolvedSearchParams?.latest === "project";
   const { filters, logFilters } = buildRequestLogFilters(resolvedSearchParams);
-  const [locale, auth] = await Promise.all([
+  const [locale, auth, projectsModel] = await Promise.all([
     getRequestLocale(),
-    getCurrentConsoleAuth()
+    getCurrentConsoleAuth(),
+    getProjectsModel(tenantId)
   ]);
   const projectScoped = isProjectScopedForTenant(auth, tenantId);
   const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, tenantId) : undefined;
+  const effectiveProjectId = resolveProjectIdForConsoleAuth({
+    auth,
+    projects: projectsModel.projects,
+    requestedProjectId: logFilters.projectId,
+    routeTenantId: tenantId
+  });
+
+  if (effectiveProjectId === null) {
+    notFound();
+  }
+
+  const scopedFilters: RequestLogFilterState = {
+    ...filters,
+    projectId: effectiveProjectId ?? filters.projectId
+  };
   const scopedLogFilters: LiveGatewayRequestLogFilters = {
     ...logFilters,
+    projectId: effectiveProjectId ?? logFilters.projectId,
     projectIds: allowedProjectIds
   };
-  const shouldLoadUnfilteredOptions = hasNarrowingFilters(filters);
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, tenantId)
+    .filter((project) => project.status !== "ARCHIVED");
+  const shouldLoadUnfilteredOptions = hasNarrowingFilters(scopedFilters);
   const optionRecordsPromise = shouldLoadUnfilteredOptions
     ? getLiveGatewayRequestLogs({
-        from: logFilters.from,
+        from: scopedLogFilters.from,
         limit: 100,
+        projectId: scopedLogFilters.projectId,
         projectIds: allowedProjectIds,
         tenantId,
-        to: logFilters.to
+        to: scopedLogFilters.to
       })
     : Promise.resolve(undefined);
   const [records, optionRecords] = await Promise.all([
@@ -83,15 +107,15 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const canLoadSelectedDetail = Boolean(selectedRequestId && (!projectScoped || selectedRecord));
   const selectedDetail = selectedRequestId && canLoadSelectedDetail
     ? await getLiveGatewayRequestDetail(selectedRequestId, {
-        projectId: selectedRecord?.projectId ?? logFilters.projectId,
+        projectId: selectedRecord?.projectId ?? scopedLogFilters.projectId,
         tenantId
       })
     : null;
   const scopedSelectedDetail =
     selectedDetail ?? (records ?? []).find((record) => record.requestId === selectedRequestId);
   const optionRecordsForFilters = optionRecords ?? records ?? [];
-  const modelOptions = getModelOptions(optionRecordsForFilters, filters.model);
-  const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, filters);
+  const modelOptions = getModelOptions(optionRecordsForFilters, scopedFilters.model);
+  const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, scopedFilters);
   const displayRecords = (records ?? []).map(toDisplayModelRecord);
   const displaySelectedDetail = scopedSelectedDetail ? toDisplayModelRecord(scopedSelectedDetail) : undefined;
 
@@ -113,10 +137,12 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
             />
           ) : undefined
         }
-        filters={filters}
+        allowAllProjects={!projectScoped}
+        filters={scopedFilters}
         locale={locale}
         budgetScopeOptions={budgetScopeOptions}
         modelOptions={modelOptions}
+        projects={visibleProjects}
         records={displayRecords}
         selectedRequestId={displaySelectedDetail?.requestId}
         sourceState={records ? "ready" : "unavailable"}
@@ -162,6 +188,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       created,
       model,
       page,
+      projectId,
       provider,
       requestId,
       resolvedBy,
@@ -242,6 +269,7 @@ function hasNarrowingFilters(filters: RequestLogFilterState) {
       filters.budgetScopeType ||
       filters.cacheStatus ||
       filters.model ||
+      filters.projectId ||
       filters.provider ||
       filters.requestId ||
       filters.resolvedBy ||

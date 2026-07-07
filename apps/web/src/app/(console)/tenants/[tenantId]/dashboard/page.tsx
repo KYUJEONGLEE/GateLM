@@ -1,8 +1,9 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import {
@@ -50,6 +51,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     getCurrentConsoleAuth(),
     getProjectsModel(tenantId)
   ]);
+  const projectScoped = isProjectScopedForTenant(auth, tenantId);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,
@@ -129,6 +131,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         overview={overview}
         projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
         recentRecords={recentRecords ?? []}
+        allowAllProjects={!projectScoped}
         suppressContentMotion={suppressContentMotion}
       />
     </ConsoleShell>

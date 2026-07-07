@@ -34,6 +34,7 @@ const projectAdminText: Record<
   Locale,
   {
     active: string;
+    assigned: string;
     connectedAt: string;
     copy: string;
     empty: string;
@@ -57,6 +58,7 @@ const projectAdminText: Record<
 > = {
   en: {
     active: "Active",
+    assigned: "Project admin added.",
     connectedAt: "Connected",
     copy: "Copy",
     empty: "No project admins yet.",
@@ -79,6 +81,7 @@ const projectAdminText: Record<
   },
   ko: {
     active: "활성",
+    assigned: "프로젝트 관리자로 추가되었습니다.",
     connectedAt: "연결일",
     copy: "복사",
     empty: "프로젝트 관리자가 없습니다.",
@@ -159,7 +162,7 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
     });
     const payload = (await response.json().catch(() => ({}))) as ProjectAdminActionPayload;
 
-    if (!response.ok || !payload.invitation) {
+    if (!response.ok || (!payload.invitation && !payload.projectAdmin)) {
       setSubmitState({
         message: payload.error ?? "Project admin invitation failed.",
         status: "error"
@@ -168,19 +171,32 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
       return;
     }
 
-    const pendingProjectAdmin = toPendingProjectAdmin(payload.invitation);
+    if (payload.projectAdmin) {
+      setProjectAdmins((current) => [
+        ...current.filter((item) => item.id !== payload.projectAdmin?.id),
+        payload.projectAdmin as ProjectAdminRecord
+      ]);
+      setInviteEmail("");
+      setInviteName("");
+      setLastInviteUrl("");
+      setSubmitState({ message: text.assigned, status: "success" });
+      setPendingAction(null);
+      router.refresh();
+      return;
+    }
+
+    const pendingProjectAdmin = toPendingProjectAdmin(payload.invitation as ProjectAdminInvitationRecord);
     setProjectAdmins((current) => [
       ...current.filter((item) => item.id !== pendingProjectAdmin.id),
       pendingProjectAdmin
     ]);
     setInviteEmail("");
     setInviteName("");
-    setLastInviteUrl(payload.invitation.signupUrl);
+    setLastInviteUrl((payload.invitation as ProjectAdminInvitationRecord).signupUrl);
     setSubmitState({ message: text.invited, status: "success" });
     setPendingAction(null);
     router.refresh();
   }
-
   async function removeProjectAdmin(projectAdmin: ProjectAdminRecord) {
     const action = projectAdmin.invitationId ? "revokeInvitation" : "remove";
     const pendingKey = `${action}:${projectAdmin.id}`;

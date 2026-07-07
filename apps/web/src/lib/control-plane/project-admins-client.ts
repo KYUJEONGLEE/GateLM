@@ -34,9 +34,9 @@ type ProjectAdminRequestResult =
       status: number;
     };
 
-type ProjectAdminInvitationRequestResult =
+type ProjectAdminInviteRequestResult =
   | {
-      data: ProjectAdminInvitationRecord;
+      data: ProjectAdminInvitationRecord | ProjectAdminRecord;
       ok: true;
       status: number;
     }
@@ -45,7 +45,6 @@ type ProjectAdminInvitationRequestResult =
       ok: false;
       status: number;
     };
-
 export async function getProjectAdminsModel(
   routeTenantId: string,
   projectId: string
@@ -73,7 +72,7 @@ export async function getProjectAdminsModel(
 
 export async function inviteProjectAdmin(
   values: ProjectAdminInviteValues
-): Promise<ProjectAdminInvitationRequestResult> {
+): Promise<ProjectAdminInviteRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}/project-admin-invitations`,
@@ -87,7 +86,7 @@ export async function inviteProjectAdmin(
       }
     );
 
-    return readProjectAdminInvitationResponse(response);
+    return readProjectAdminInviteResponse(response);
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -216,9 +215,9 @@ async function readProjectAdminResponse(response: Response): Promise<ProjectAdmi
   };
 }
 
-async function readProjectAdminInvitationResponse(
+async function readProjectAdminInviteResponse(
   response: Response
-): Promise<ProjectAdminInvitationRequestResult> {
+): Promise<ProjectAdminInviteRequestResult> {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -229,23 +228,30 @@ async function readProjectAdminInvitationResponse(
     };
   }
 
-  const invitation = getProjectAdminInvitationFromPayload(payload);
-
-  if (!invitation) {
+  const projectAdmin = getProjectAdminFromPayload(payload);
+  if (projectAdmin) {
     return {
-      error: "Control Plane response did not include project admin invitation data.",
-      ok: false,
+      data: projectAdmin,
+      ok: true,
+      status: response.status
+    };
+  }
+
+  const invitation = getProjectAdminInvitationFromPayload(payload);
+  if (invitation) {
+    return {
+      data: invitation,
+      ok: true,
       status: response.status
     };
   }
 
   return {
-    data: invitation,
-    ok: true,
+    error: "Control Plane response did not include project admin invite data.",
+    ok: false,
     status: response.status
   };
 }
-
 function getProjectAdminsFromPayload(payload: unknown): ProjectAdminRecord[] | null {
   if (!payload || typeof payload !== "object") {
     return null;

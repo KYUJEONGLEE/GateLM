@@ -16,6 +16,7 @@ type DashboardRangeOption = {
 
 type DashboardFilterFormProps = {
   actionPath: string;
+  allowAllProjects?: boolean;
   applyLabel: string;
   filters: DashboardFilterState;
   projects: ProjectRecord[];
@@ -24,6 +25,7 @@ type DashboardFilterFormProps = {
 
 export function DashboardFilterForm({
   actionPath,
+  allowAllProjects = true,
   applyLabel,
   filters,
   projects,
@@ -73,7 +75,7 @@ export function DashboardFilterForm({
         <div className="dashboard-filter-input">
           <Building2 aria-hidden="true" size={16} strokeWidth={2.1} />
           <select defaultValue={filters.projectId} name="projectId">
-            <option value="">All projects</option>
+            {allowAllProjects ? <option value="">All projects</option> : null}
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}

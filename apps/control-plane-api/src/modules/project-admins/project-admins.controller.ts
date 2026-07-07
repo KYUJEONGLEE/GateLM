@@ -46,7 +46,7 @@ export class ProjectAdminsController {
   async createProjectAdminInvitation(
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Body() body: CreateProjectAdminInvitationDto,
-  ): Promise<DataEnvelope<ProjectAdminInvitationResponseDto>> {
+  ): Promise<DataEnvelope<ProjectAdminInvitationResponseDto | ProjectAdminListItemDto>> {
     return {
       data: await this.projectAdminsService.createProjectAdminInvitation(
         projectId,

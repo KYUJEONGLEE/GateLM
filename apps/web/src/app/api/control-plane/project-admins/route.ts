@@ -68,10 +68,15 @@ export async function POST(request: Request) {
   }
 
   if (payload.action === "invite") {
-    return NextResponse.json({
-      invitation: result.data,
-      status: result.status
-    });
+    return isProjectAdminRecord(result.data)
+      ? NextResponse.json({
+          projectAdmin: result.data,
+          status: result.status
+        })
+      : NextResponse.json({
+          invitation: result.data,
+          status: result.status
+        });
   }
 
   return NextResponse.json({
@@ -200,6 +205,24 @@ async function assertInvitationBelongsToProject(projectId: string, invitationId:
   return null;
 }
 
+function isProjectAdminRecord(value: unknown): value is import("@/lib/control-plane/project-admins-types").ProjectAdminRecord {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.connectedAt === "string" &&
+    typeof record.email === "string" &&
+    typeof record.id === "string" &&
+    typeof record.name === "string" &&
+    typeof record.projectId === "string" &&
+    record.role === "project_admin" &&
+    record.status === "active" &&
+    typeof record.tenantId === "string"
+  );
+}
 function getProjectAdminActionValues(
   action: ProjectAdminAction,
   value: unknown
