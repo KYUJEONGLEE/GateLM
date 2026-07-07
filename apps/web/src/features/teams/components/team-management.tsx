@@ -180,7 +180,10 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
     const response = await fetch("/api/control-plane/teams", {
       body: JSON.stringify({
         action: "create",
-        values: createValues
+        values: {
+          ...createValues,
+          tenantId: model.controlPlaneTenantId
+        }
       }),
       headers: {
         "Content-Type": "application/json"

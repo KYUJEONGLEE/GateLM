@@ -25,6 +25,7 @@ export type ProjectTeamRecord = {
 export type TeamFormValues = {
   description: string;
   name: string;
+  tenantId?: string;
 };
 
 export type TeamUpdateValues = TeamFormValues & {

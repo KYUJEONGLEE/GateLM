@@ -3,7 +3,6 @@ import "server-only";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId,
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
@@ -125,6 +124,7 @@ export async function createProject(
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        routeTenantId: tenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
     );
@@ -196,6 +196,7 @@ export async function updateProject(values: ProjectUpdateValues): Promise<Projec
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        routeTenantId: result.data.tenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
     );

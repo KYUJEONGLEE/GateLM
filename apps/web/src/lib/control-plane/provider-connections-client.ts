@@ -3,8 +3,8 @@ import "server-only";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId,
-  getControlPlaneProjectId
+  getControlPlaneProjectId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import type {
   ProviderConnectionFormValues,
@@ -90,7 +90,7 @@ export async function getProviderConnectionsModel(
 ): Promise<ProviderConnectionsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
-  const controlPlaneTenantId = getControlPlaneTenantId();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const [listResult, presetResult] = await Promise.all([
     listTenantProviderConnections(controlPlaneTenantId),
     listProviderPresets()
@@ -111,6 +111,7 @@ export async function getProviderConnectionsModel(
     return {
       controlPlaneBaseUrl,
       controlPlaneProjectId,
+      controlPlaneTenantId,
       loadError: null,
       providerPresets,
       providers: listResult.data,
@@ -122,6 +123,7 @@ export async function getProviderConnectionsModel(
   return {
     controlPlaneBaseUrl,
     controlPlaneProjectId,
+    controlPlaneTenantId,
     loadError: listResult.error,
     providerPresets,
     providers: getFixtureProviders(),
@@ -131,9 +133,10 @@ export async function getProviderConnectionsModel(
 }
 
 export async function upsertProviderConnection(
-  values: ProviderConnectionFormValues
+  values: ProviderConnectionFormValues,
+  routeTenantId?: string | null
 ): Promise<ProviderRequestResult> {
-  const tenantId = getControlPlaneTenantId();
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(
@@ -158,8 +161,11 @@ export async function upsertProviderConnection(
   }
 }
 
-export async function deleteProviderConnection(provider: string): Promise<ProviderRequestResult> {
-  const tenantId = getControlPlaneTenantId();
+export async function deleteProviderConnection(
+  provider: string,
+  routeTenantId?: string | null
+): Promise<ProviderRequestResult> {
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(
@@ -180,8 +186,11 @@ export async function deleteProviderConnection(provider: string): Promise<Provid
   }
 }
 
-export async function discoverProviderModels(provider: string): Promise<ProviderDiscoveryResult> {
-  const tenantId = getControlPlaneTenantId();
+export async function discoverProviderModels(
+  provider: string,
+  routeTenantId?: string | null
+): Promise<ProviderDiscoveryResult> {
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(
@@ -208,8 +217,9 @@ export async function removeProviderModel({
 }: {
   modelName: string;
   provider: string;
-}): Promise<ProviderRequestResult> {
-  const listResult = await listTenantProviderConnections(getControlPlaneTenantId());
+}, routeTenantId?: string | null): Promise<ProviderRequestResult> {
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
+  const listResult = await listTenantProviderConnections(tenantId);
 
   if (!listResult.ok) {
     return listResult;
@@ -371,9 +381,7 @@ async function listProviderPresets(): Promise<ProviderPresetListResult> {
 function toProviderPayload(values: ProviderConnectionFormValues) {
   const models = splitProviderModels(values.models);
   const providerConfig = toProviderConfig(values, models);
-  const secretRef =
-    values.secretRef.trim() ||
-    (values.isEdit ? "" : getDefaultProviderSecretRef(values));
+  const secretRef = values.secretRef.trim();
   const credentialValue = values.credentialValue?.trim() ?? "";
   const provider = values.provider.trim();
   const previousProvider = values.previousProvider?.trim();
@@ -393,26 +401,6 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     status: values.status,
     timeoutMs: values.timeoutMs
   };
-}
-
-function getDefaultProviderSecretRef(values: ProviderConnectionFormValues) {
-  if (
-    !values.credentialRequired ||
-    values.resolver.trim().toLowerCase() !== "environment"
-  ) {
-    return "";
-  }
-
-  const provider = values.provider.trim().toLowerCase();
-  if (!provider) {
-    return "";
-  }
-
-  if (provider === "openai" || provider === "openai-main") {
-    return "credential_ref_openai_main";
-  }
-
-  return `credential_ref_${provider.replace(/[^a-z0-9]+/g, "_")}_main`;
 }
 
 function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {

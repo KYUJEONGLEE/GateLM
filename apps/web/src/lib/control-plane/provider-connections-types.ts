@@ -83,6 +83,7 @@ export type ProviderConnectionFormValues = {
 export type ProviderConnectionsModel = {
   controlPlaneBaseUrl: string;
   controlPlaneProjectId: string;
+  controlPlaneTenantId: string;
   loadError: string | null;
   providerPresets: {
     items: ProviderPresetRecord[];

@@ -5,6 +5,7 @@ import {
   getProjectAdminProjectIdsForTenant,
   getVisibleProjectsForConsoleAuth,
   isProjectScopedForTenant,
+  resolveConsoleTenantIdForAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
@@ -55,18 +56,19 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const explicitSelectedRequestId = normalizeOptionalText(resolvedSearchParams?.requestId);
   const shouldSelectLatestProjectRequest = resolvedSearchParams?.latest === "project";
   const { filters, logFilters } = buildRequestLogFilters(resolvedSearchParams);
-  const [locale, auth, projectsModel] = await Promise.all([
+  const [locale, auth] = await Promise.all([
     getRequestLocale(),
-    getCurrentConsoleAuth(),
-    getProjectsModel(tenantId)
+    getCurrentConsoleAuth()
   ]);
-  const projectScoped = isProjectScopedForTenant(auth, tenantId);
-  const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, tenantId) : undefined;
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const projectsModel = await getProjectsModel(effectiveTenantId);
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
+  const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, effectiveTenantId) : undefined;
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,
     requestedProjectId: logFilters.projectId,
-    routeTenantId: tenantId
+    routeTenantId: effectiveTenantId
   });
 
   if (effectiveProjectId === null) {
@@ -82,7 +84,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     projectId: effectiveProjectId ?? logFilters.projectId,
     projectIds: allowedProjectIds
   };
-  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, tenantId)
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId)
     .filter((project) => project.status !== "ARCHIVED");
   const shouldLoadUnfilteredOptions = hasNarrowingFilters(scopedFilters);
   const optionRecordsPromise = shouldLoadUnfilteredOptions
@@ -91,12 +93,12 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         limit: 100,
         projectId: scopedLogFilters.projectId,
         projectIds: allowedProjectIds,
-        tenantId,
+        tenantId: effectiveTenantId,
         to: scopedLogFilters.to
       })
     : Promise.resolve(undefined);
   const [records, optionRecords] = await Promise.all([
-    getLiveGatewayRequestLogs({ ...scopedLogFilters, tenantId }),
+    getLiveGatewayRequestLogs({ ...scopedLogFilters, tenantId: effectiveTenantId }),
     optionRecordsPromise
   ]);
   const latestSelectedRecord = shouldSelectLatestProjectRequest ? (records ?? [])[0] : undefined;
@@ -106,9 +108,9 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     : undefined;
   const canLoadSelectedDetail = Boolean(selectedRequestId && (!projectScoped || selectedRecord));
   const selectedDetail = selectedRequestId && canLoadSelectedDetail
-    ? await getLiveGatewayRequestDetail(selectedRequestId, {
+      ? await getLiveGatewayRequestDetail(selectedRequestId, {
         projectId: selectedRecord?.projectId ?? scopedLogFilters.projectId,
-        tenantId
+        tenantId: effectiveTenantId
       })
     : null;
   const scopedSelectedDetail =
@@ -124,7 +126,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
       activeMonitoringItem="live-logs"
       activeSection="monitoring"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <RequestLogTable
         detailPanel={
@@ -132,7 +134,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
             <RequestLogDetailAside
               locale={locale}
               record={displaySelectedDetail}
-              tenantId={tenantId}
+              tenantId={effectiveTenantId}
               timezone={DEFAULT_DISPLAY_TIMEZONE}
             />
           ) : undefined
@@ -146,7 +148,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         records={displayRecords}
         selectedRequestId={displaySelectedDetail?.requestId}
         sourceState={records ? "ready" : "unavailable"}
-        tenantId={tenantId}
+        tenantId={effectiveTenantId}
         timezone={DEFAULT_DISPLAY_TIMEZONE}
       />
     </ConsoleShell>

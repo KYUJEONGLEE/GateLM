@@ -1,5 +1,9 @@
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { AdminOnboardingFlow } from "@/features/onboarding/components/admin-onboarding-flow";
+import {
+  getCurrentConsoleAuth,
+  resolveConsoleTenantIdForAuth
+} from "@/lib/auth/current-console-auth";
 import { getProviderConnectionsModel } from "@/lib/control-plane/provider-connections-client";
 import { getTeamsModel } from "@/lib/control-plane/teams-client";
 import { getAdminOnboardingModel } from "@/lib/fixtures/v1-admin-fixtures";
@@ -14,12 +18,16 @@ type OnboardingPageProps = {
 
 export default async function OnboardingPage({ params }: OnboardingPageProps) {
   const { tenantId } = await params;
-  const locale = await getRequestLocale();
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
   const gatewayConfig = getLiveGatewayConfig();
-  const model = getAdminOnboardingModel({ tenantId });
+  const model = getAdminOnboardingModel({ tenantId: effectiveTenantId });
   const [providerConnectionsModel, teamsModel] = await Promise.all([
-    getProviderConnectionsModel(tenantId),
-    getTeamsModel(tenantId)
+    getProviderConnectionsModel(effectiveTenantId),
+    getTeamsModel(effectiveTenantId)
   ]);
 
   return (
@@ -27,7 +35,7 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
       activeManagementItem="project"
       activeSection="management"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <AdminOnboardingFlow
         activeStepId="project"

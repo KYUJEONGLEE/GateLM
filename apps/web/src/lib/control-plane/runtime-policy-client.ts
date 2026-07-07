@@ -4,8 +4,8 @@ import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-co
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId,
-  getControlPlaneProjectId
+  getControlPlaneProjectId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
   listApplicationProviderConnections,
@@ -122,6 +122,7 @@ export async function getRuntimePolicyModelForApplication(
   void projectId;
 
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const fallbackConfig = getFixtureRuntimeConfig();
 
   const [
@@ -137,7 +138,7 @@ export async function getRuntimePolicyModelForApplication(
     fetchActiveRuntimeSnapshot(applicationId),
     fetchActiveProviderCatalog(applicationId),
     listApplicationProviderConnections(applicationId),
-    listTenantProviderConnections(getControlPlaneTenantId())
+    listTenantProviderConnections(controlPlaneTenantId)
   ]);
   const providerConnectionState = toProviderConnectionState(
     tenantProviderConnections,
@@ -191,10 +192,10 @@ export async function getRuntimePolicyModelForApplication(
     };
   }
 
-  if (activeConfig.status === 404) {
+  if (shouldUseRuntimePolicyTemplate(activeConfig)) {
     const templateConfig = makeRuntimePolicyConfigTemplate(
       fallbackConfig,
-      routeTenantId,
+      controlPlaneTenantId,
       applicationId,
       getTemplateProviderConnections(providerConnections, tenantProviderConnections)
     );
@@ -251,6 +252,14 @@ export async function getRuntimePolicyModelForApplication(
     },
     source: "fixture"
   };
+}
+
+function shouldUseRuntimePolicyTemplate(result: ControlPlaneRequestResult) {
+  return (
+    !result.ok &&
+    (result.status === 404 ||
+      (result.status === 409 && result.error === "Active Runtime Config is not executable."))
+  );
 }
 
 function getTemplateProviderConnections(
@@ -492,6 +501,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   applicationId: string,
   selectedModelKey: string,
   options: {
+    routeTenantId?: string;
     warningThresholdPercent?: number;
   } = {}
 ): Promise<{ error?: string; ok: boolean }> {
@@ -514,7 +524,10 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const activeConfig = await fetchRuntimeConfigForModelSelection(applicationId);
+  const activeConfig = await fetchRuntimeConfigForModelSelection(
+    applicationId,
+    options.routeTenantId
+  );
 
   if (!activeConfig) {
     return {
@@ -566,7 +579,8 @@ export async function publishRuntimePolicyModelSelectionForApplication(
 }
 
 async function fetchRuntimeConfigForModelSelection(
-  applicationId: string
+  applicationId: string,
+  routeTenantId?: string
 ): Promise<RuntimePolicyConfig | null> {
   const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
 
@@ -574,7 +588,7 @@ async function fetchRuntimeConfigForModelSelection(
     return targetActiveConfig.data;
   }
 
-  if (targetActiveConfig.status !== 404) {
+  if (!shouldUseRuntimePolicyTemplate(targetActiveConfig)) {
     return null;
   }
 
@@ -586,7 +600,7 @@ async function fetchRuntimeConfigForModelSelection(
 
   return makeRuntimePolicyConfigTemplate(
     getFixtureRuntimeConfig(),
-    getControlPlaneTenantId(),
+    resolveControlPlaneTenantId(routeTenantId),
     applicationId,
     providerConnections.data
   );
@@ -964,7 +978,8 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     },
     rateLimit: {
       enabled: values.rateLimitEnabled,
-      limit: values.rateLimitLimit
+      limit: values.rateLimitLimit,
+      windowSeconds: values.rateLimitWindowSeconds
     },
     routingPolicy: {
       defaultModel: values.routingDefaultModel,

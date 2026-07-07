@@ -13,7 +13,7 @@ import type {
   ProviderConnectionRecord,
   ProviderConnectionsModel
 } from "@/lib/control-plane/provider-connections-types";
-import type { ProjectRecord, ProjectStatus } from "@/lib/control-plane/projects-types";
+import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { TeamFormValues, TeamRecord, TeamsModel } from "@/lib/control-plane/teams-types";
 import type { AdminOnboardingModel, AdminProviderModel } from "@/lib/fixtures/v1-admin-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
@@ -157,7 +157,6 @@ type OnboardingDraft = {
   projectDescription: string;
   projectName: string;
   projectTotalBudgetUsd: string;
-  projectStatus: string;
   runtimePublishState: string;
   safetyMode: string;
   selectedModelKey: string;
@@ -205,6 +204,7 @@ type TeamCreateState = {
 type RuntimeModelOption = {
   label: string;
   providerConnectionId: string | null;
+  providerTenantId: string | null;
   value: string;
 };
 
@@ -231,6 +231,7 @@ export function AdminOnboardingFlow({
   );
   const selectableModels = getSelectableModelOptions(
     providerConnections,
+    providerConnectionsModel.controlPlaneTenantId,
     model.provider.models
   );
   const [draft, setDraft] = useState<OnboardingDraft>(() =>
@@ -327,7 +328,10 @@ export function AdminOnboardingFlow({
     const response = await fetch("/api/control-plane/teams", {
       body: JSON.stringify({
         action: "create",
-        values: teamCreateValues
+        values: {
+          ...teamCreateValues,
+          tenantId: teamsModel.controlPlaneTenantId
+        }
       }),
       headers: {
         "Content-Type": "application/json"
@@ -471,12 +475,33 @@ export function AdminOnboardingFlow({
         project = projectPayload.project;
       }
 
+      if (!project) {
+        setProjectSetupState({
+          apiKey: null,
+          error: text.createProjectError,
+          project: null,
+          status: "error"
+        });
+        return false;
+      }
+
+      const activeProject = project;
+      const attachableTeamIds = new Set(
+        activeTeams
+          .filter((team) => team.tenantId === activeProject.tenantId && isUuid(team.id))
+          .map((team) => team.id)
+      );
+
       for (const teamId of selectedTeamIds) {
+        if (!attachableTeamIds.has(teamId)) {
+          continue;
+        }
+
         const attachResponse = await fetch("/api/control-plane/teams", {
           body: JSON.stringify({
             action: "attach",
             values: {
-              projectId: project.id,
+              projectId: activeProject.id,
               teamId
             }
           }),
@@ -493,7 +518,7 @@ export function AdminOnboardingFlow({
           setProjectSetupState({
             apiKey: null,
             error: attachPayload.error ?? text.attachTeamError,
-            project,
+            project: activeProject,
             status: "error"
           });
           return false;
@@ -506,7 +531,7 @@ export function AdminOnboardingFlow({
           values: {
             displayName: draft.apiKeyDisplayName,
             expiresAt: "",
-            projectId: project.id,
+            projectId: activeProject.id,
             scopes: "gateway:invoke"
           }
         }),
@@ -521,7 +546,7 @@ export function AdminOnboardingFlow({
         setProjectSetupState({
           apiKey: null,
           error: payload.error ?? text.issueApiKeyError,
-          project,
+          project: activeProject,
           status: "error"
         });
         return false;
@@ -530,7 +555,7 @@ export function AdminOnboardingFlow({
       setProjectSetupState({
         apiKey: payload.apiKey,
         error: "",
-        project,
+        project: activeProject,
         status: "issued"
       });
       return true;
@@ -556,7 +581,22 @@ export function AdminOnboardingFlow({
 
     setProjectCompletionState({ error: "", status: "saving" });
 
-    const selectedModel = getSelectedModelOption(selectableModels, draft.selectedModelKey);
+    const selectedModel = getSelectedModelOption(
+      selectableModels,
+      draft.selectedModelKey,
+      projectSetupState.project.tenantId
+    );
+
+    if (!selectedModel) {
+      setProjectCompletionState({
+        error:
+          locale === "ko"
+            ? "현재 Project tenant에서 사용할 수 있는 Provider 모델을 다시 선택하세요."
+            : "Select a provider model available for the current project tenant.",
+        status: "error"
+      });
+      return false;
+    }
 
     try {
       const response = await fetch("/api/control-plane/projects", {
@@ -570,7 +610,7 @@ export function AdminOnboardingFlow({
               ? [selectedModel.providerConnectionId]
               : [],
             selectedModelKey: draft.selectedModelKey,
-            status: normalizeDraftProjectStatus(draft.projectStatus),
+            status: "ACTIVE",
             totalBudgetUsd: Number(draft.projectTotalBudgetUsd),
             warningThresholdPercent: Number(draft.warningThresholdPercent)
           }
@@ -859,13 +899,6 @@ function renderStepContent({
           onChange={updateDraft}
           unit="%"
           value={draft.warningThresholdPercent}
-        />
-        <OnboardingSelect
-          field="projectStatus"
-          label="Status"
-          onChange={updateDraft}
-          options={["ACTIVE", "DISABLED"]}
-          value={draft.projectStatus}
         />
       </div>
     );
@@ -1206,18 +1239,6 @@ function OnboardingSelect({
   );
 }
 
-function normalizeDraftProjectStatus(value: string): ProjectStatus {
-  if (value === "DISABLED" || value === "disabled") {
-    return "DISABLED";
-  }
-
-  if (value === "ARCHIVED" || value === "archived") {
-    return "ARCHIVED";
-  }
-
-  return "ACTIVE";
-}
-
 function isValidBudgetInput(value: string) {
   const parsed = Number(value);
 
@@ -1265,7 +1286,6 @@ function buildInitialDraft(
     projectDescription: "",
     projectName: "",
     projectTotalBudgetUsd: "100",
-    projectStatus: normalizeDraftProjectStatus(model.project.status),
     runtimePublishState: model.runtimeConfig.publishState,
     safetyMode: model.runtimeConfig.safetyMode,
     selectedModelKey: selectableModels[0]?.value ?? "",
@@ -1273,21 +1293,37 @@ function buildInitialDraft(
   };
 }
 
-function getSelectedModelOption(options: RuntimeModelOption[], value: string) {
-  return options.find((option) => option.value === value) ?? null;
+function getSelectedModelOption(
+  options: RuntimeModelOption[],
+  value: string,
+  projectTenantId: string
+) {
+  return (
+    options.find(
+      (option) =>
+        option.value === value &&
+        (!option.providerTenantId || option.providerTenantId === projectTenantId)
+    ) ?? null
+  );
 }
 
 function getSelectableModelOptions(
   providerConnections: ProviderConnectionRecord[],
+  controlPlaneTenantId: string,
   fallbackModels: AdminProviderModel[] = []
 ): RuntimeModelOption[] {
-  const providerConnectionOptions = providerConnections.flatMap((providerConnection) =>
-    getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
-      label: `${model} (${providerConnection.provider})`,
-      providerConnectionId: providerConnection.id,
-      value: `${providerConnection.provider}::${model}`
-    }))
-  );
+  const providerConnectionOptions = providerConnections
+    .filter((providerConnection) =>
+      isTenantLevelProviderConnection(providerConnection, controlPlaneTenantId)
+    )
+    .flatMap((providerConnection) =>
+      getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
+        label: `${model} (${providerConnection.provider})`,
+        providerConnectionId: providerConnection.id,
+        providerTenantId: providerConnection.tenantId,
+        value: `${providerConnection.provider}::${model}`
+      }))
+    );
 
   if (providerConnectionOptions.length > 0) {
     return providerConnectionOptions;
@@ -1298,8 +1334,20 @@ function getSelectableModelOptions(
     .map((model) => ({
       label: `${model.displayName || model.model} (${model.provider})`,
       providerConnectionId: null,
+      providerTenantId: null,
       value: `${model.provider}::${model.model}`
     }));
+}
+
+function isTenantLevelProviderConnection(
+  providerConnection: ProviderConnectionRecord,
+  controlPlaneTenantId: string
+) {
+  return providerConnection.projectId === null && providerConnection.tenantId === controlPlaneTenantId;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {

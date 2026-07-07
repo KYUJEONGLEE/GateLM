@@ -7,6 +7,10 @@ import {
 } from "@/features/projects/components/project-management";
 import { ProjectGatewayApiKeySection } from "@/features/projects/components/project-gateway-api-key-section";
 import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
+import {
+  getCurrentConsoleAuth,
+  resolveConsoleTenantIdForAuth
+} from "@/lib/auth/current-console-auth";
 import { getProjectApiKeysModel } from "@/lib/control-plane/api-keys-client";
 import { getProjectAdminsModel } from "@/lib/control-plane/project-admins-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
@@ -22,8 +26,12 @@ type ProjectDetailPageProps = {
 
 export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {
   const { projectId, tenantId } = await params;
-  const locale = await getRequestLocale();
-  const projectsModel = await getProjectsModel(tenantId);
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const projectsModel = await getProjectsModel(effectiveTenantId);
   const project = projectsModel.projects.find((item) => item.id === projectId);
 
   if (!project) {
@@ -31,9 +39,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   const [projectAdminsModel, projectTeamsModel, projectApiKeysModel] = await Promise.all([
-    getProjectAdminsModel(tenantId, project.id),
-    getProjectTeamsModel(tenantId, project.id),
-    getProjectApiKeysModel(tenantId, project.id)
+    getProjectAdminsModel(effectiveTenantId, project.id),
+    getProjectTeamsModel(effectiveTenantId, project.id),
+    getProjectApiKeysModel(effectiveTenantId, project.id)
   ]);
 
   return (
@@ -41,12 +49,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       activeManagementItem="project"
       activeSection="management"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <ProjectDetailManagement
         breadcrumbItems={[
           {
-            href: `/tenants/${tenantId}/projects`,
+            href: `/tenants/${effectiveTenantId}/projects`,
             label: "Projects"
           },
           {
@@ -55,7 +63,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         ]}
         locale={locale}
         project={project}
-        tenantId={tenantId}
+        tenantId={effectiveTenantId}
       />
       <ProjectAdminManagement locale={locale} model={projectAdminsModel} />
       <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />
@@ -66,7 +74,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       <ProjectDeleteManagement
         locale={locale}
         project={project}
-        tenantId={tenantId}
+        tenantId={effectiveTenantId}
       />
     </ConsoleShell>
   );
