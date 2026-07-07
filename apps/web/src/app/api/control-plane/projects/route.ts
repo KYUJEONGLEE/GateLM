@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentConsoleAuth, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
-import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import {
+  getControlPlaneTenantId,
+  resolveControlPlaneTenantId
+} from "@/lib/control-plane/control-plane-config";
 import {
   createProject,
   listControlPlaneProjects,
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const syncProjectList = await listControlPlaneProjects(routeTenantId);
+  const syncProjectList = await listControlPlaneProjects(resolveControlPlaneTenantId(routeTenantId));
 
   if (syncProjectList.ok) {
     await syncApplicationChatEnvForProjects(syncProjectList.data).catch((error) => {

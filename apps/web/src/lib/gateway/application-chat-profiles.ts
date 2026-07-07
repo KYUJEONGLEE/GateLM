@@ -102,12 +102,24 @@ async function selectApplicationChatProfile(
 }
 
 async function getApplicationChatProfiles(): Promise<ApplicationChatProfileLoadResult> {
-  const configuredProfiles = parseProfiles(process.env.GATELM_APPLICATION_CHAT_PROFILES);
+  try {
+    const configuredProfiles = parseProfiles(process.env.GATELM_APPLICATION_CHAT_PROFILES);
 
-  if (configuredProfiles.length > 0) {
+    if (configuredProfiles.length > 0) {
+      return {
+        loadError: null,
+        profiles: configuredProfiles,
+        source: "manual"
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "GATELM_APPLICATION_CHAT_PROFILES could not be parsed.";
+
     return {
-      loadError: null,
-      profiles: configuredProfiles,
+      loadError: message,
+      profiles: [getDefaultApplicationChatProfile()],
       source: "manual"
     };
   }
