@@ -15,11 +15,13 @@ const maxProviderTimeoutMs = 120000;
 
 type RequestPayload = {
   action?: unknown;
+  tenantId?: unknown;
   values?: unknown;
 };
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const routeTenantId = typeof payload.tenantId === "string" ? payload.tenantId : undefined;
 
   if (payload.action === "discover-models") {
     const provider = getProviderFromPayload(payload.values);
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider discovery payload." }, { status: 400 });
     }
 
-    const result = await discoverProviderModels(provider);
+    const result = await discoverProviderModels(provider, routeTenantId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider deletion payload." }, { status: 400 });
     }
 
-    const result = await deleteProviderConnection(provider);
+    const result = await deleteProviderConnection(provider, routeTenantId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -78,7 +80,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid model removal payload." }, { status: 400 });
     }
 
-    const result = await removeProviderModel(values);
+    const result = await removeProviderModel({
+      ...values,
+      routeTenantId
+    });
 
     if (!result.ok) {
       return NextResponse.json(
@@ -104,7 +109,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid provider payload." }, { status: 400 });
   }
 
-  const result = await upsertProviderConnection(payload.values);
+  const result = await upsertProviderConnection(payload.values, routeTenantId);
 
   if (!result.ok) {
     return NextResponse.json(

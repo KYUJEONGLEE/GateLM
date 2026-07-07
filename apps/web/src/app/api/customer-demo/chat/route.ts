@@ -72,6 +72,16 @@ type RequestProfileResult =
       ok: false;
     };
 
+type GatewayCallOptions = {
+  contextRetentionEnabled?: boolean;
+  conversationId?: string | null;
+  message?: string;
+  profile: ResolvedApplicationChatProfile;
+  stream?: boolean;
+  surface?: CustomerDemoSurface;
+  userName?: string;
+};
+
 const RESPONSE_HEADER_NAMES = [
   "X-GateLM-Request-Id",
   "X-GateLM-Cache-Status",
@@ -86,6 +96,7 @@ const RESPONSE_HEADER_NAMES = [
 const SAFE_PROMPT =
   "Write a concise support reply for a delayed shipment. Keep it under three sentences.";
 const APPLICATION_END_USER_ID = "customer_user_demo_live";
+const DEFAULT_CONTEXT_RETENTION_ENABLED = true;
 const DEFAULT_SYSTEM_MESSAGE = "You are a helpful customer support assistant.";
 
 const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
@@ -123,14 +134,14 @@ const LIVE_SCENARIOS: Record<CustomerDemoScenarioId, LiveScenarioDefinition> = {
 
 export async function POST(request: Request) {
   const payload = await readRequestPayload(request);
-  const profileResult = getRequestProfile(payload.profileId);
+  const profileResult = await getRequestProfile(payload.profileId);
 
   if (!profileResult.ok) {
     return NextResponse.json({ error: profileResult.error }, { status: 400 });
   }
 
   const profile = profileResult.profile;
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -167,6 +178,7 @@ export async function POST(request: Request) {
       payload.surface,
       payload.conversationId,
       payload.contextRetentionEnabled,
+      payload.userName,
       profile
     );
 
@@ -207,7 +219,8 @@ function streamLiveScenario({
           await callGateway("cache-hit", "warmup", {
             message: payload.message,
             profile,
-            surface: payload.surface
+            surface: payload.surface,
+            userName: payload.userName
           });
         }
 
@@ -215,10 +228,13 @@ function streamLiveScenario({
           scenarioId,
           "1",
           {
+            contextRetentionEnabled: payload.contextRetentionEnabled,
+            conversationId: payload.conversationId,
             message: payload.message,
             profile,
             stream: true,
-            surface: payload.surface
+            surface: payload.surface,
+            userName: payload.userName
           },
           (content) => {
             enqueueSse(controller, encoder, "delta", { content });
@@ -263,6 +279,7 @@ async function readRequestPayload(request: Request) {
     stream?: unknown;
     surface?: unknown;
     tenantId?: unknown;
+    userName?: unknown;
   };
 
   return {
@@ -270,7 +287,7 @@ async function readRequestPayload(request: Request) {
     contextRetentionEnabled:
       typeof payload.contextRetentionEnabled === "boolean"
         ? payload.contextRetentionEnabled
-        : undefined,
+        : DEFAULT_CONTEXT_RETENTION_ENABLED,
     conversationId:
       typeof payload.conversationId === "string" && payload.conversationId.trim()
         ? payload.conversationId.trim()
@@ -279,7 +296,8 @@ async function readRequestPayload(request: Request) {
     scenarioId: typeof payload.scenarioId === "string" ? payload.scenarioId : "",
     stream: payload.stream === true,
     surface: normalizeCustomerDemoSurface(payload.surface),
-    tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
+    tenantId: typeof payload.tenantId === "string" ? payload.tenantId : "",
+    userName: normalizeEndUserId(payload.userName)
   };
 }
 
@@ -293,6 +311,16 @@ function normalizeUserMessage(value: unknown) {
   return message.length > 0 ? message.slice(0, 2000) : undefined;
 }
 
+function normalizeEndUserId(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.replace(/[\r\n\t]+/g, " ").trim().replace(/\s+/g, " ");
+
+  return normalized.length > 0 ? Array.from(normalized).slice(0, 160).join("") : undefined;
+}
+
 function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioId {
   return Object.hasOwn(LIVE_SCENARIOS, value);
 }
@@ -301,11 +329,11 @@ function normalizeCustomerDemoSurface(value: unknown): CustomerDemoSurface {
   return value === "application" ? "application" : "demo";
 }
 
-function getRequestProfile(profileId: string): RequestProfileResult {
+async function getRequestProfile(profileId: string): Promise<RequestProfileResult> {
   try {
     return {
       ok: true,
-      profile: resolveApplicationChatProfile(profileId)
+      profile: await resolveApplicationChatProfile(profileId)
     };
   } catch (error) {
     return {
@@ -322,11 +350,27 @@ async function executeLiveScenario(
   surface: CustomerDemoSurface,
   conversationId: string | null,
   contextRetentionEnabled: boolean | undefined,
+  userName: string | undefined,
   profile: ResolvedApplicationChatProfile
 ) {
   if (scenarioId === "cache-hit") {
-    await callGateway("cache-hit", "warmup", { contextRetentionEnabled, conversationId, message, profile, surface });
-    return callGateway("cache-hit", "hit", { contextRetentionEnabled, conversationId, message, profile, stream, surface });
+    await callGateway("cache-hit", "warmup", {
+      contextRetentionEnabled,
+      conversationId,
+      message,
+      profile,
+      surface,
+      userName
+    });
+    return callGateway("cache-hit", "hit", {
+      contextRetentionEnabled,
+      conversationId,
+      message,
+      profile,
+      stream,
+      surface,
+      userName
+    });
   }
 
   if (scenarioId === "rate-limited") {
@@ -341,7 +385,8 @@ async function executeLiveScenario(
         message,
         profile,
         stream,
-        surface
+        surface,
+        userName
       });
 
       if (latestResult.httpStatus === 429) {
@@ -355,11 +400,11 @@ async function executeLiveScenario(
   }
 
   if (scenarioId === "provider-timeout") {
-    return executeProviderFailureScenario(scenarioId, "timeout", profile);
+    return executeProviderFailureScenario(scenarioId, "timeout", profile, userName);
   }
 
   if (scenarioId === "provider-fallback") {
-    return executeProviderFailureScenario(scenarioId, "error", profile);
+    return executeProviderFailureScenario(scenarioId, "error", profile, userName);
   }
 
   return callGateway(scenarioId, "1", {
@@ -368,21 +413,23 @@ async function executeLiveScenario(
     message,
     profile,
     stream,
-    surface
+    surface,
+    userName
   });
 }
 
 async function executeProviderFailureScenario(
   scenarioId: CustomerDemoScenarioId,
   mode: ProviderFailureMode,
-  profile: ResolvedApplicationChatProfile
+  profile: ResolvedApplicationChatProfile,
+  userName: string | undefined
 ) {
   const config = getLiveGatewayConfig();
 
   await configureProviderFailureControl(mode);
 
   try {
-    return await callGateway(scenarioId, mode, { profile, stream: false });
+    return await callGateway(scenarioId, mode, { profile, stream: false, userName });
   } finally {
     await resetProviderFailureControl(config).catch(() => undefined);
   }
@@ -391,14 +438,7 @@ async function executeProviderFailureScenario(
 async function callGateway(
   scenarioId: CustomerDemoScenarioId,
   requestIdSuffix: string,
-  options: {
-    contextRetentionEnabled?: boolean;
-    conversationId?: string | null;
-    message?: string;
-    profile: ResolvedApplicationChatProfile;
-    stream?: boolean;
-    surface?: CustomerDemoSurface;
-  }
+  options: GatewayCallOptions
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig({ apiKey: options.profile.apiKey });
   const definition = LIVE_SCENARIOS[scenarioId];
@@ -418,7 +458,8 @@ async function callGateway(
     options.surface ?? "demo",
     config.applicationChatModel,
     config.applicationChatMaxTokens,
-    conversationContext?.messages
+    conversationContext?.messages,
+    options.userName
   );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
@@ -462,14 +503,7 @@ async function callGateway(
 async function callGatewayStreaming(
   scenarioId: CustomerDemoScenarioId,
   requestIdSuffix: string,
-  options: {
-    contextRetentionEnabled?: boolean;
-    conversationId?: string | null;
-    message?: string;
-    profile: ResolvedApplicationChatProfile;
-    stream?: boolean;
-    surface?: CustomerDemoSurface;
-  },
+  options: GatewayCallOptions,
   onDelta: (content: string) => void
 ): Promise<GatewayCallResult> {
   const config = getLiveGatewayConfig({ apiKey: options.profile.apiKey });
@@ -490,7 +524,8 @@ async function callGatewayStreaming(
     options.surface ?? "application",
     config.applicationChatModel,
     config.applicationChatMaxTokens,
-    conversationContext?.messages
+    conversationContext?.messages,
+    options.userName
   );
   const startedAt = Date.now();
   const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
@@ -569,7 +604,8 @@ function buildGatewayRequestBody(
   surface: CustomerDemoSurface,
   applicationChatModel: string,
   applicationChatMaxTokens: number,
-  contextMessages?: GatewayContextMessage[]
+  contextMessages?: GatewayContextMessage[],
+  endUserId?: string
 ): CustomerDemoRequest["body"] {
   return {
     model: surface === "application" ? applicationChatModel : "auto",
@@ -586,10 +622,7 @@ function buildGatewayRequestBody(
     max_tokens: surface === "application" ? applicationChatMaxTokens : 128,
     temperature: 0.2,
     stream,
-    metadata: {
-      demoScenario: scenarioId,
-      source: surface === "application" ? "web-application-chat" : "web-customer-demo"
-    },
+    metadata: buildGatewayRequestMetadata(scenarioId, surface, endUserId),
     gate_lm: {
       cache: {
         mode: "auto"
@@ -600,6 +633,23 @@ function buildGatewayRequestBody(
       responseMetadata: true
     }
   };
+}
+
+function buildGatewayRequestMetadata(
+  scenarioId: CustomerDemoScenarioId,
+  surface: CustomerDemoSurface,
+  endUserId: string | undefined
+): Record<string, string> {
+  const metadata: Record<string, string> = {
+    demoScenario: scenarioId,
+    source: surface === "application" ? "web-application-chat" : "web-customer-demo"
+  };
+
+  if (endUserId) {
+    metadata.endUserId = endUserId;
+  }
+
+  return metadata;
 }
 
 async function prepareConversationGatewayContext({
@@ -615,6 +665,7 @@ async function prepareConversationGatewayContext({
     contextRetentionEnabled?: boolean;
     conversationId?: string | null;
     surface?: CustomerDemoSurface;
+    userName?: string;
   };
   profile: ResolvedApplicationChatProfile;
   requestId: string;
@@ -623,13 +674,14 @@ async function prepareConversationGatewayContext({
     return null;
   }
 
-  const contextRetentionEnabled = options.contextRetentionEnabled ?? false;
+  const contextRetentionEnabled =
+    options.contextRetentionEnabled ?? DEFAULT_CONTEXT_RETENTION_ENABLED;
   if (!contextRetentionEnabled) {
     return null;
   }
 
   try {
-    const model = getCustomerDemoLiveModel({ profileId: profile.id });
+    const model = await getCustomerDemoLiveModel({ profileId: profile.id });
     const conversation =
       options.conversationId
         ? await updateExistingConversation({
@@ -639,7 +691,8 @@ async function prepareConversationGatewayContext({
           })
         : await createApplicationConversation({
             contextRetentionEnabled,
-            profile
+            profile,
+            userName: options.userName
           });
 
     const messageResult = await createChatConversationMessage({
@@ -703,16 +756,18 @@ function withRawCurrentUserMessage(
 
 async function createApplicationConversation({
   contextRetentionEnabled,
-  profile
+  profile,
+  userName
 }: {
   contextRetentionEnabled: boolean;
   profile: ResolvedApplicationChatProfile;
+  userName?: string;
 }): Promise<{ contextRetentionEnabled: boolean; id: string }> {
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
   const conversation = await createChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled,
-    endUserId: APPLICATION_END_USER_ID,
+    endUserId: userName ?? APPLICATION_END_USER_ID,
     projectId: model.projectId,
     tenantId: model.tenantId
   });
@@ -733,7 +788,7 @@ async function updateExistingConversation({
   conversationId: string;
   profile: ResolvedApplicationChatProfile;
 }): Promise<{ contextRetentionEnabled: boolean; id: string }> {
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
   const conversation = await updateChatConversation({
     applicationId: model.applicationId,
     contextRetentionEnabled,
@@ -774,7 +829,7 @@ async function retainAssistantMessage({
     return;
   }
 
-  const model = getCustomerDemoLiveModel({ profileId: profile.id });
+  const model = await getCustomerDemoLiveModel({ profileId: profile.id });
   await createChatConversationMessage({
     applicationId: model.applicationId,
     content,

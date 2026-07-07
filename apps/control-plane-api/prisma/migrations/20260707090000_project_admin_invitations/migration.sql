@@ -1,4 +1,4 @@
-﻿CREATE TABLE "tenant_admins" (
+CREATE TABLE "tenant_admins" (
   "id" UUID NOT NULL DEFAULT gen_random_uuid(),
   "tenantId" UUID NOT NULL,
   "userId" UUID NOT NULL,

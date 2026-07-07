@@ -14,12 +14,18 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const (
+	testTenantID      = "00000000-0000-4000-8000-000000000100"
+	testProjectID     = "00000000-0000-4000-8000-000000000200"
+	testApplicationID = "00000000-0000-4000-8000-000000000300"
+)
+
 func TestBuildProjectLogsQueryUsesTenantProjectScopeAndSafeColumns(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
 	query, args := buildProjectLogsQuery(invocationlog.ProjectLogsFilter{
-		TenantID:    "tenant_demo",
-		ProjectID:   "project_demo",
+		TenantID:    testTenantID,
+		ProjectID:   testProjectID,
 		From:        from,
 		To:          to,
 		Status:      invocationlog.StatusSuccess,
@@ -57,8 +63,31 @@ func TestBuildProjectLogsQueryUsesTenantProjectScopeAndSafeColumns(t *testing.T)
 	if len(args) != 7 {
 		t.Fatalf("expected tenant/project/from/to/status/cacheStatus/limit args, got %d", len(args))
 	}
-	if args[0] != "tenant_demo" || args[1] != "project_demo" || args[6] != 50 {
+	if args[0] != testTenantID || args[1] != testProjectID || args[6] != 50 {
 		t.Fatalf("unexpected query args: %#v", args)
+	}
+}
+
+func TestBuildProjectLogsQueryRejectsInvalidUUIDScopeWithoutCasting(t *testing.T) {
+	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	query, args := buildProjectLogsQuery(invocationlog.ProjectLogsFilter{
+		TenantID:      "tenant_demo",
+		ProjectID:     testProjectID,
+		ApplicationID: "app_demo",
+		From:          from,
+		To:            to,
+		Limit:         50,
+	})
+
+	if strings.Contains(query, "tenant_id::text =") || strings.Contains(query, "application_id::text =") {
+		t.Fatalf("uuid filters must not cast indexed columns to text: %s", query)
+	}
+	if !strings.Contains(query, "1 = 0") {
+		t.Fatalf("expected invalid uuid scope to short-circuit with false predicate, got %s", query)
+	}
+	if len(args) != 4 || args[0] != testProjectID || args[3] != 50 {
+		t.Fatalf("unexpected query args for invalid uuid scope: %#v", args)
 	}
 }
 
@@ -72,6 +101,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 				"request_001",
 				"project_demo",
 				sql.NullString{String: "app_demo", Valid: true},
+				sql.NullString{String: "Yoonji", Valid: true},
 				sql.NullString{String: "application", Valid: true},
 				sql.NullString{String: "app_demo", Valid: true},
 				sql.NullString{String: "default_application", Valid: true},
@@ -98,8 +128,8 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	items, err := reader.ListProjectLogs(context.Background(), invocationlog.ProjectLogsFilter{
-		TenantID:  "tenant_demo",
-		ProjectID: "project_demo",
+		TenantID:  testTenantID,
+		ProjectID: testProjectID,
 		From:      from,
 		To:        to,
 		Limit:     10,
@@ -113,6 +143,9 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	item := items[0]
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected list item: %+v", item)
+	}
+	if item.UserRef != "Yoonji" {
+		t.Fatalf("unexpected user ref: %+v", item)
 	}
 	if item.BudgetScope.Type != "application" || item.BudgetScope.ID != "app_demo" || item.BudgetScope.ResolvedBy != "default_application" {
 		t.Fatalf("unexpected budget scope: %+v", item.BudgetScope)
@@ -128,7 +161,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	if !strings.Contains(db.query, "tenant_id = $1") || !strings.Contains(db.query, "project_id = $2") {
 		t.Fatalf("expected tenant/project scoped list query, got %s", db.query)
 	}
-	if len(db.args) < 2 || db.args[0] != "tenant_demo" || db.args[1] != "project_demo" {
+	if len(db.args) < 2 || db.args[0] != testTenantID || db.args[1] != testProjectID {
 		t.Fatalf("unexpected list query args: %#v", db.args)
 	}
 }
@@ -180,8 +213,8 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	detail, err := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{
-		TenantID:  "tenant_demo",
-		ProjectID: "project_demo",
+		TenantID:  testTenantID,
+		ProjectID: testProjectID,
 		RequestID: "request_001",
 	})
 	if err != nil {
@@ -218,8 +251,26 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 			t.Fatalf("expected tenant/project/request scoped detail query to contain %q, got %s", expected, db.query)
 		}
 	}
-	if len(db.args) != 3 || db.args[0] != "tenant_demo" || db.args[1] != "project_demo" || db.args[2] != "request_001" {
+	if len(db.args) != 3 || db.args[0] != testTenantID || db.args[1] != testProjectID || db.args[2] != "request_001" {
 		t.Fatalf("unexpected detail query args: %#v", db.args)
+	}
+}
+
+func TestQueryReaderGetRequestDetailRejectsInvalidUUIDScopeBeforeQuery(t *testing.T) {
+	db := &fakeQueryer{}
+	reader := NewQueryReader(db)
+
+	_, err := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{
+		TenantID:  "tenant_demo",
+		ProjectID: testProjectID,
+		RequestID: "request_001",
+	})
+
+	if !errors.Is(err, invocationlog.ErrLogNotFound) {
+		t.Fatalf("expected invalid uuid scope to map to not found, got %v", err)
+	}
+	if len(db.queries) != 0 {
+		t.Fatalf("expected invalid uuid scope to skip query, got %d queries", len(db.queries))
 	}
 }
 
@@ -315,8 +366,8 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 
 	reader := NewQueryReader(db)
 	overview, err := reader.GetDashboardOverview(context.Background(), invocationlog.DashboardOverviewFilter{
-		TenantID:  "tenant_demo",
-		ProjectID: "project_demo",
+		TenantID:  testTenantID,
+		ProjectID: testProjectID,
 		From:      from,
 		To:        to,
 	})
@@ -394,7 +445,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 			t.Fatalf("expected dashboard query to contain %q, got %s", expected, db.query)
 		}
 	}
-	if len(db.args) != 4 || db.args[2] != "tenant_demo" || db.args[3] != "project_demo" {
+	if len(db.args) != 4 || db.args[2] != testTenantID || db.args[3] != testProjectID {
 		t.Fatalf("unexpected dashboard query args: %#v", db.args)
 	}
 }
@@ -453,8 +504,8 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 
 	reader := NewQueryReader(db)
 	performance, err := reader.GetAnalyticsPerformance(context.Background(), invocationlog.AnalyticsPerformanceFilter{
-		TenantID:  "tenant_demo",
-		ProjectID: "project_demo",
+		TenantID:  testTenantID,
+		ProjectID: testProjectID,
 		Provider:  "OpenAI",
 		Model:     "gpt-4o-mini",
 		From:      from,

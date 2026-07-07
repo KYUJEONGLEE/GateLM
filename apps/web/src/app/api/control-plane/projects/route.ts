@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { getCurrentConsoleAuth, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
-import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { createProject, updateProject } from "@/lib/control-plane/projects-client";
+import {
+  getControlPlaneTenantId,
+  resolveControlPlaneTenantId
+} from "@/lib/control-plane/control-plane-config";
+import {
+  createProject,
+  listControlPlaneProjects,
+  updateProject
+} from "@/lib/control-plane/projects-client";
 import type {
   ProjectFormValues,
   ProjectStatus,
   ProjectUpdateValues
 } from "@/lib/control-plane/projects-types";
+import { syncApplicationChatEnvForProjects } from "@/lib/gateway/application-chat-env-file";
 
 type RequestPayload = {
   action?: unknown;
@@ -47,7 +55,7 @@ export async function POST(request: Request) {
         ? await createProject(payload.values, routeTenantId)
         : null
       : isProjectUpdateValues(payload.values)
-        ? await updateProject(payload.values)
+        ? await updateProject(payload.values, routeTenantId)
         : null;
 
   if (!result) {
@@ -62,6 +70,19 @@ export async function POST(request: Request) {
       },
       { status: result.status > 0 ? result.status : 502 }
     );
+  }
+
+  const syncProjectList = await listControlPlaneProjects(resolveControlPlaneTenantId(routeTenantId));
+
+  if (syncProjectList.ok) {
+    await syncApplicationChatEnvForProjects(syncProjectList.data).catch((error) => {
+      console.warn(
+        "Application Chat env sync failed.",
+        error instanceof Error ? error.message : "unknown error"
+      );
+    });
+  } else {
+    console.warn("Application Chat env sync skipped.", syncProjectList.error);
   }
 
   return NextResponse.json({

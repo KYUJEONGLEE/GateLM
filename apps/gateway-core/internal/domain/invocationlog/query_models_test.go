@@ -17,6 +17,7 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 		RequestID:             "request_001",
 		ProjectID:             "project_demo",
 		ApplicationID:         "app_demo",
+		EndUserID:             "Yoonji",
 		Provider:              "mock",
 		Model:                 "mock-fast",
 		RequestedModel:        "auto",
@@ -42,6 +43,9 @@ func TestToRequestLogListItemUsesSafeP0Fields(t *testing.T) {
 
 	if item.RequestID != "request_001" || item.ProjectID != "project_demo" {
 		t.Fatalf("unexpected list identity fields: %+v", item)
+	}
+	if item.UserRef != "Yoonji" {
+		t.Fatalf("unexpected user ref: %+v", item)
 	}
 	if item.CostUSD != "0.000012" || item.CostMicroUSD != 12 {
 		t.Fatalf("unexpected cost fields: %+v", item)

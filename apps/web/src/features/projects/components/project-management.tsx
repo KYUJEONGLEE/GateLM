@@ -341,7 +341,8 @@ export function ProjectManagement({
 export function ProjectDetailManagement({
   breadcrumbItems,
   locale,
-  project
+  project,
+  tenantId
 }: ProjectDetailManagementProps) {
   const router = useRouter();
   const text = projectText[locale];
@@ -376,6 +377,7 @@ export function ProjectDetailManagement({
     const response = await fetch("/api/control-plane/projects", {
       body: JSON.stringify({
         action: "update",
+        tenantId,
         values
       }),
       headers: {
@@ -487,6 +489,10 @@ export function ProjectDetailManagement({
                   ))}
                 </select>
               </label>
+              <div className="project-detail-project-id-row">
+                <span>{text.projectId}</span>
+                <code>{project.id}</code>
+              </div>
             </div>
             <div className="project-detail-actions">
               <button
@@ -524,6 +530,7 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
     const response = await fetch("/api/control-plane/projects", {
       body: JSON.stringify({
         action: "update",
+        tenantId,
         values: {
           ...getProjectUpdateValues(project),
           status: "ARCHIVED"

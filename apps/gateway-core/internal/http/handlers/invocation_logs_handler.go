@@ -492,6 +492,7 @@ type requestLogListItemResponse struct {
 	ProjectID        string                 `json:"projectId"`
 	ApplicationID    string                 `json:"applicationId"`
 	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
+	UserRef          *string                `json:"userRef,omitempty"`
 	Provider         string                 `json:"provider"`
 	Model            string                 `json:"model"`
 	RequestedModel   string                 `json:"requestedModel"`
@@ -989,6 +990,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			ProjectID:        item.ProjectID,
 			ApplicationID:    item.ApplicationID,
 			BudgetScope:      budgetScopeResponseFromScope(item.BudgetScope, item.ApplicationID),
+			UserRef:          stringPointerOrNil(item.UserRef),
 			Provider:         item.Provider,
 			Model:            item.Model,
 			RequestedModel:   item.RequestedModel,

@@ -260,7 +260,7 @@ function getGatewayTenantId(routeTenantId: string | undefined) {
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function formatOptionalModelName(value: string | undefined | null) {
@@ -294,7 +294,7 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
     budgetScope,
     apiKeyId: "live_gateway_api_key",
     appTokenId: "live_gateway_app_token",
-    endUserId: item.userRef ?? null,
+    endUserId: normalizeUserRef(item.userRef),
     featureId: null,
     endpoint: "/v1/chat/completions",
     method: "POST",
@@ -366,6 +366,12 @@ function toInvocationRecord(item: GatewayProjectLogItem, projectId: string): Inv
       }
     }
   };
+}
+
+function normalizeUserRef(value: string | null | undefined) {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : null;
 }
 
 function normalizeBudgetScope(scope: GatewayBudgetScope | undefined, applicationId: string) {

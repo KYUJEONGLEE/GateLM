@@ -268,6 +268,7 @@ export function ProviderConnectionManagement({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
+        tenantId: model.routeTenantId,
         values: {
           ...valuesToSubmit,
           isEdit: Boolean(registeringProvider)
@@ -364,6 +365,7 @@ export function ProviderConnectionManagement({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "discover-models",
+        tenantId: model.routeTenantId,
         values: {
           provider: normalizedProvider
         }
@@ -465,6 +467,7 @@ export function ProviderConnectionManagement({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "delete-provider",
+        tenantId: model.routeTenantId,
         values: {
           provider: provider.provider
         }

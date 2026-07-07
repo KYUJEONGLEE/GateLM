@@ -23,6 +23,7 @@ export type LiveRequestRow = {
   statusLabel: string;
   timestamp: string;
   totalTokens: number;
+  userName: string | null;
 };
 
 export type LiveRequestsPayload = {
