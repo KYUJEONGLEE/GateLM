@@ -601,8 +601,8 @@ func NormalizeCostReportFilter(filter CostReportFilter) (CostReportFilter, error
 	if filter.Period == "" {
 		filter.Period = "day"
 	}
-	if filter.Period != "day" && filter.Period != "week" && filter.Period != "month" {
-		return CostReportFilter{}, fmt.Errorf("%w: period must be day, week, or month", ErrInvalidLogQuery)
+	if filter.Period != "hour" && filter.Period != "day" && filter.Period != "week" && filter.Period != "month" {
+		return CostReportFilter{}, fmt.Errorf("%w: period must be hour, day, week, or month", ErrInvalidLogQuery)
 	}
 	var err error
 	filter.BudgetScope, err = normalizeBudgetScopeFilter(filter.BudgetScope)
