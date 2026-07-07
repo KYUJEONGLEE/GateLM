@@ -543,13 +543,8 @@ export function ProviderConnectionManagement({
   }
 
   function toggleProvider(providerId: string) {
-    setExpandedProviderId((current) => {
-      const nextProviderId = current === providerId ? null : providerId;
-
-      setEditingProviderId(null);
-
-      return nextProviderId;
-    });
+    setExpandedProviderId((current) => (current === providerId ? null : providerId));
+    setEditingProviderId(null);
   }
 
   function openCredentialModal(provider: ProviderConnectionRecord) {
@@ -626,7 +621,7 @@ export function ProviderConnectionManagement({
   }
 
   function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
-    const savedModelNames = splitModelNames(formValues.models);
+    const savedModelNames = Array.from(new Set(splitModelNames(formValues.models)));
 
     return (
       <div className="provider-discovery-panel provider-inline-edit-panel">
@@ -811,9 +806,13 @@ export function ProviderConnectionManagement({
 
   function renderProviderModels(provider: ProviderConnectionRecord) {
     const discovery = discoveryByProvider[provider.provider];
-    const modelNames = discovery
-      ? discovery.selectedModels
-      : getProviderConfigModels(provider.providerConfig).filter(isChatCompletionModelName);
+    const modelNames = Array.from(
+      new Set(
+        discovery
+          ? discovery.selectedModels
+          : getProviderConfigModels(provider.providerConfig).filter(isChatCompletionModelName)
+      )
+    );
     const discoveredAt = discovery?.discoveredAt ?? provider.updatedAt;
 
     if (modelNames.length === 0) {
@@ -936,16 +935,6 @@ export function ProviderConnectionManagement({
                   <div
                     className="provider-card-row"
                     onClick={() => toggleProvider(provider.id)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") {
-                        return;
-                      }
-
-                      event.preventDefault();
-                      toggleProvider(provider.id);
-                    }}
-                    role="button"
-                    tabIndex={0}
                   >
                     <div className="provider-card-identity">
                       <span className="provider-card-icon" data-family={family}>

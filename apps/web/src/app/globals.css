@@ -4465,7 +4465,8 @@ select {
 }
 
 .provider-id-actual {
-  position: static;
+  position: absolute;
+  inset: 0;
   max-width: 100%;
   padding: 0;
   opacity: 0;
