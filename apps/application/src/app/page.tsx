@@ -33,7 +33,7 @@ export default async function ApplicationPage() {
   );
 }
 
-async function getLauncherModel(): Promise<CustomerDemoModel> {
+function getLauncherModel(): CustomerDemoModel {
   const integrationMode = getCustomerDemoIntegrationMode();
 
   return integrationMode === "fixture"
