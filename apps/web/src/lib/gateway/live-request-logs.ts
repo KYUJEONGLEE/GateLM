@@ -70,6 +70,8 @@ export type LiveGatewayRequestLogFilters = {
 
 const LIVE_RANGE_HOURS = 24;
 const MAX_LOG_PROJECT_FETCH_CONCURRENCY = 4;
+const DEFAULT_LOG_LIMIT = 50;
+const IN_MEMORY_FILTER_FETCH_LIMIT = 1000;
 
 export async function getLiveGatewayRequestLogs(
   filters: LiveGatewayRequestLogFilters = {}
@@ -77,9 +79,13 @@ export async function getLiveGatewayRequestLogs(
   const config = getLiveGatewayConfig();
   const defaultRange = getLiveRange();
   const tenantId = getGatewayTenantId(filters.tenantId);
+  const finalLimit = filters.limit ?? DEFAULT_LOG_LIMIT;
+  const upstreamLimit = hasInMemoryFilters(filters)
+    ? Math.max(finalLimit, IN_MEMORY_FILTER_FETCH_LIMIT)
+    : finalLimit;
   const query = new URLSearchParams({
     from: filters.from ?? defaultRange.from,
-    limit: String(filters.limit ?? 50),
+    limit: String(upstreamLimit),
     tenantId,
     to: filters.to ?? defaultRange.to
   });
@@ -101,7 +107,7 @@ export async function getLiveGatewayRequestLogs(
     .filter((record) => matchesBudgetScopeFilter(record.budgetScope, filters))
     .filter((record) => matchesModelFilter(record, filters.model))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .slice(0, filters.limit ?? 50);
+    .slice(0, finalLimit);
 }
 
 async function fetchProjectLogsWithConcurrency(
@@ -167,6 +173,15 @@ function appendOptionalQuery(query: URLSearchParams, key: string, value: string 
   }
 }
 
+function hasInMemoryFilters(filters: LiveGatewayRequestLogFilters) {
+  return Boolean(
+    filters.budgetScopeType?.trim() ||
+      filters.budgetScopeId?.trim() ||
+      filters.resolvedBy?.trim() ||
+      filters.model?.trim()
+  );
+}
+
 function matchesBudgetScopeFilter(
   scope: InvocationLogRecord["budgetScope"],
   filters: LiveGatewayRequestLogFilters
@@ -197,9 +212,11 @@ function matchesModelFilter(record: InvocationLogRecord, modelFilter: string | u
     return true;
   }
 
-  return [record.selectedModel, record.requestedModel]
-    .filter(Boolean)
-    .some((candidate) => formatModelDisplayName(candidate, "") === model);
+  const normalizedModel = model.toLowerCase();
+
+  return [record.selectedModel, record.requestedModel].some(
+    (candidate) => candidate?.toLowerCase() === normalizedModel
+  );
 }
 
 function getLiveRange() {
