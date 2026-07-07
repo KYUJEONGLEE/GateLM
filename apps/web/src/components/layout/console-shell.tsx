@@ -159,14 +159,6 @@ const navigationItems: Array<{
       },
       {
         labels: {
-          en: "Teams",
-          ko: "Teams"
-        },
-        item: "teams",
-        path: (tenantId) => `/tenants/${tenantId}/teams`
-      },
-      {
-        labels: {
           en: "Providers",
           ko: "Provider"
         },
