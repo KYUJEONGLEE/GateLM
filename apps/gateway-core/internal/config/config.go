@@ -51,6 +51,7 @@ type Config struct {
 	OpenAILowCostModelName                 string
 	OpenAIBalancedModelID                  string
 	OpenAIBalancedModelName                string
+	OpenAIExtraModelNames                  []string
 	MockProviderID                         string
 	MockProviderName                       string
 	ProviderCredentialEnvMap               string
@@ -189,6 +190,7 @@ func LoadWithError() (Config, error) {
 		OpenAILowCostModelName:                 envString("GATEWAY_OPENAI_LOW_COST_MODEL_NAME", "gpt-4o-mini"),
 		OpenAIBalancedModelID:                  envString("GATEWAY_OPENAI_BALANCED_MODEL_ID", "openai-balanced"),
 		OpenAIBalancedModelName:                envString("GATEWAY_OPENAI_BALANCED_MODEL_NAME", "gpt-4o"),
+		OpenAIExtraModelNames:                  envCSV("GATEWAY_OPENAI_EXTRA_MODELS", []string{"gpt-5.4-mini", "gpt-5.4"}),
 		MockProviderID:                         envString("GATEWAY_MOCK_PROVIDER_ID", "provider_mock_local"),
 		MockProviderName:                       envString("GATEWAY_MOCK_PROVIDER_NAME", "mock"),
 		ProviderCredentialEnvMap:               envString("GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP", "credential_ref_openai_main=OPENAI_API_KEY,provider_credential:00000000-0000-4000-8000-000000000601=OPENAI_API_KEY"),
@@ -514,8 +516,15 @@ func semanticEnvInt(key string, fallback int, minVal int) int {
 	return parsed
 }
 
+func envCSV(key string, fallback []string) []string {
+	return parseCSVEnvValue(os.Getenv(key), fallback)
+}
+
 func semanticEnvCSV(key string, fallback []string) []string {
-	value := semanticEnvString(key, "")
+	return parseCSVEnvValue(semanticEnvString(key, ""), fallback)
+}
+
+func parseCSVEnvValue(value string, fallback []string) []string {
 	if value == "" {
 		return append([]string{}, fallback...)
 	}

@@ -182,3 +182,40 @@ func TestProviderCatalogCacheConfigLoadsEnvOverrides(t *testing.T) {
 		t.Fatalf("unexpected provider catalog stale TTL: %s", cfg.ProviderCatalogCache.StaleTTL)
 	}
 }
+
+func TestOpenAIExtraModelConfigDefaultsAndLoadsEnvOverrides(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	t.Setenv("GATEWAY_OPENAI_EXTRA_MODELS", "")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if got, want := cfg.OpenAIExtraModelNames, []string{"gpt-5.4-mini", "gpt-5.4"}; !sameStrings(got, want) {
+		t.Fatalf("unexpected default extra models: got %#v want %#v", got, want)
+	}
+
+	t.Setenv("GATEWAY_OPENAI_EXTRA_MODELS", " gpt-5.4-mini, gpt-5.4 , , gpt-5.5 ")
+	cfg, err = LoadWithError()
+	if err != nil {
+		t.Fatalf("load config with env override: %v", err)
+	}
+	if got, want := cfg.OpenAIExtraModelNames, []string{"gpt-5.4-mini", "gpt-5.4", "gpt-5.5"}; !sameStrings(got, want) {
+		t.Fatalf("unexpected env extra models: got %#v want %#v", got, want)
+	}
+}
+
+func sameStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}

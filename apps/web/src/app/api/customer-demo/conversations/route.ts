@@ -3,11 +3,13 @@ import {
   createChatConversation,
   updateChatConversation
 } from "@/lib/control-plane/conversations-client";
+import { resolveApplicationChatProfile } from "@/lib/gateway/application-chat-profiles";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
 
 type ConversationRequestPayload = {
   contextRetentionEnabled?: unknown;
   conversationId?: unknown;
+  profileId?: unknown;
   tenantId?: unknown;
 };
 
@@ -15,7 +17,13 @@ const APPLICATION_END_USER_ID = "customer_user_demo_live";
 
 export async function POST(request: Request) {
   const payload = await readPayload(request);
-  const model = getCustomerDemoLiveModel();
+  const profileResult = getRequestProfile(payload.profileId);
+
+  if (!profileResult.ok) {
+    return NextResponse.json({ error: profileResult.error }, { status: 400 });
+  }
+
+  const model = getCustomerDemoLiveModel({ profileId: profileResult.profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -40,7 +48,13 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const payload = await readPayload(request);
-  const model = getCustomerDemoLiveModel();
+  const profileResult = getRequestProfile(payload.profileId);
+
+  if (!profileResult.ok) {
+    return NextResponse.json({ error: profileResult.error }, { status: 400 });
+  }
+
+  const model = getCustomerDemoLiveModel({ profileId: profileResult.profile.id });
 
   if (payload.tenantId !== model.tenantId) {
     return NextResponse.json({ error: "Unknown tenant for customer demo." }, { status: 404 });
@@ -76,6 +90,21 @@ async function readPayload(request: Request) {
         ? payload.contextRetentionEnabled
         : undefined,
     conversationId: typeof payload.conversationId === "string" ? payload.conversationId : "",
+    profileId: typeof payload.profileId === "string" ? payload.profileId : "",
     tenantId: typeof payload.tenantId === "string" ? payload.tenantId : ""
   };
+}
+
+function getRequestProfile(profileId: string) {
+  try {
+    return {
+      ok: true as const,
+      profile: resolveApplicationChatProfile(profileId)
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Application chat profile is invalid.",
+      ok: false as const
+    };
+  }
 }

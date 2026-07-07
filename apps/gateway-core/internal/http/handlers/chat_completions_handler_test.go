@@ -252,6 +252,41 @@ func TestChatCompletionsHandlerCalculatesCostFromProviderUsage(t *testing.T) {
 		t.Fatalf("costing metadata must describe tenant-owned provider usage, not GateLM billing: %+v", metadata)
 	}
 }
+
+func TestPricingKeysIncludeCanonicalAndCompatibilityAliases(t *testing.T) {
+	reqCtx := &pipeline.RequestContext{
+		SelectedProvider:           "openai",
+		SelectedProviderID:         "79e07d4e-3d26-47fc-b001-ae0e6402ed82",
+		SelectedProviderCatalogKey: "openai",
+		SelectedModel:              "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o",
+		SelectedModelID:            "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o",
+	}
+	target := providerCallTarget{
+		ProviderID:   "79e07d4e-3d26-47fc-b001-ae0e6402ed82",
+		ProviderName: "openai",
+		AdapterType:  "openai_compatible",
+		ModelID:      "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o",
+		ModelName:    "gpt-4o",
+		ExecutionConfig: provider.ExecutionConfig{
+			ProviderID:   "79e07d4e-3d26-47fc-b001-ae0e6402ed82",
+			ProviderName: "openai",
+			AdapterType:  "openai_compatible",
+		},
+	}
+
+	providerKeys := providerPricingKeys(reqCtx, target)
+	modelKeys := modelPricingKeys(reqCtx, target)
+
+	if !containsString(providerKeys, "openai") || !containsString(providerKeys, "openai-main") {
+		t.Fatalf("expected canonical and legacy provider pricing keys, got %+v", providerKeys)
+	}
+	if containsString(providerKeys, "79e07d4e-3d26-47fc-b001-ae0e6402ed82-main") || containsString(providerKeys, "openai_compatible-main") {
+		t.Fatalf("provider aliases must not be generated for ids or adapter types: %+v", providerKeys)
+	}
+	if !containsString(modelKeys, "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o") || !containsString(modelKeys, "gpt-4o") {
+		t.Fatalf("expected execution model id and billing model alias, got %+v", modelKeys)
+	}
+}
 func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{

@@ -16,8 +16,7 @@ export default async function HealthPage({ params }: HealthPageProps) {
 
   return (
     <ConsoleShell
-      activeAnalyticsItem="health"
-      activeSection="analytics"
+      activeSection="monitoring"
       locale={locale}
       tenantId={tenantId}
     >

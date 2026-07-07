@@ -408,42 +408,7 @@ func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {
 					RequestFormat: providercatalog.RequestFormatOpenAIChatCompletions,
 				},
 				FallbackEligible: false,
-				Models: []providercatalog.Model{
-					{
-						ModelID:     cfg.OpenAILowCostModelID,
-						ModelName:   cfg.OpenAILowCostModelName,
-						DisplayName: "OpenAI Low Cost",
-						Enabled:     true,
-						Capabilities: providercatalog.ModelCapabilities{
-							StreamingSupported: true,
-							SupportsJSONMode:   true,
-							MaxInputTokens:     8192,
-							MaxOutputTokens:    2048,
-						},
-						Routing: providercatalog.ModelRouting{
-							AutoRoutingEligible: true,
-							CostTier:            "low",
-							FallbackPriority:    0,
-						},
-					},
-					{
-						ModelID:     cfg.OpenAIBalancedModelID,
-						ModelName:   cfg.OpenAIBalancedModelName,
-						DisplayName: "OpenAI Balanced",
-						Enabled:     true,
-						Capabilities: providercatalog.ModelCapabilities{
-							StreamingSupported: true,
-							SupportsJSONMode:   true,
-							MaxInputTokens:     128000,
-							MaxOutputTokens:    4096,
-						},
-						Routing: providercatalog.ModelRouting{
-							AutoRoutingEligible: true,
-							CostTier:            "balanced",
-							FallbackPriority:    1,
-						},
-					},
-				},
+				Models:           buildOpenAIStaticCatalogModels(cfg),
 			},
 			{
 				ProviderID:         cfg.MockProviderID,
@@ -466,6 +431,88 @@ func buildStaticProviderCatalog(cfg config.Config) providercatalog.Catalog {
 			},
 		},
 	}
+}
+
+func buildOpenAIStaticCatalogModels(cfg config.Config) []providercatalog.Model {
+	models := []providercatalog.Model{
+		{
+			ModelID:     cfg.OpenAILowCostModelID,
+			ModelName:   cfg.OpenAILowCostModelName,
+			DisplayName: "OpenAI Low Cost",
+			Enabled:     true,
+			Capabilities: providercatalog.ModelCapabilities{
+				StreamingSupported: true,
+				SupportsJSONMode:   true,
+				MaxInputTokens:     8192,
+				MaxOutputTokens:    2048,
+			},
+			Routing: providercatalog.ModelRouting{
+				AutoRoutingEligible: true,
+				CostTier:            "low",
+				FallbackPriority:    0,
+			},
+		},
+		{
+			ModelID:     cfg.OpenAIBalancedModelID,
+			ModelName:   cfg.OpenAIBalancedModelName,
+			DisplayName: "OpenAI Balanced",
+			Enabled:     true,
+			Capabilities: providercatalog.ModelCapabilities{
+				StreamingSupported: true,
+				SupportsJSONMode:   true,
+				MaxInputTokens:     128000,
+				MaxOutputTokens:    4096,
+			},
+			Routing: providercatalog.ModelRouting{
+				AutoRoutingEligible: true,
+				CostTier:            "balanced",
+				FallbackPriority:    1,
+			},
+		},
+	}
+	seen := map[string]struct{}{}
+	for _, model := range models {
+		seen[strings.TrimSpace(model.ModelName)] = struct{}{}
+		seen[strings.TrimSpace(model.ModelID)] = struct{}{}
+	}
+	for _, modelName := range cfg.OpenAIExtraModelNames {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
+		if _, ok := seen[modelName]; ok {
+			continue
+		}
+		modelID := strings.TrimSpace(cfg.OpenAIProviderID) + ":" + modelName
+		models = append(models, providercatalog.Model{
+			ModelID:     modelID,
+			ModelName:   modelName,
+			DisplayName: openAIModelDisplayName(modelName),
+			Enabled:     true,
+			Capabilities: providercatalog.ModelCapabilities{
+				StreamingSupported: true,
+				SupportsJSONMode:   true,
+				MaxInputTokens:     128000,
+				MaxOutputTokens:    4096,
+			},
+			Routing: providercatalog.ModelRouting{
+				AutoRoutingEligible: false,
+				CostTier:            "premium",
+				FallbackPriority:    5,
+			},
+		})
+		seen[modelName] = struct{}{}
+		seen[modelID] = struct{}{}
+	}
+	return models
+}
+
+func openAIModelDisplayName(modelName string) string {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return "OpenAI Model"
+	}
+	return "OpenAI " + modelName
 }
 
 func mockCatalogModel(modelID string, displayName string, fallbackPriority int) providercatalog.Model {

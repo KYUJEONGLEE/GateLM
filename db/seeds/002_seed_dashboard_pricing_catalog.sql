@@ -89,6 +89,78 @@ insert into model_catalog (
   '{"pricingBasis":"demo_seed","aliasOf":"gpt-4o"}'::jsonb
 ),
 (
+  '00000000-0000-4000-8000-000000000726',
+  'openai-main',
+  'gpt-5.4-mini',
+  'GPT-5.4 mini',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"official_pricing","source":"https://platform.openai.com/docs/pricing"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000727',
+  'openai-main',
+  '00000000-0000-4000-8000-000000000601:gpt-5.4-mini',
+  'GPT-5.4 mini',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"official_pricing","aliasOf":"gpt-5.4-mini","source":"https://platform.openai.com/docs/pricing"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000728',
+  'openai-main',
+  'gpt-5.4',
+  'GPT-5.4',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"official_pricing","source":"https://platform.openai.com/docs/pricing"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000729',
+  'openai-main',
+  '00000000-0000-4000-8000-000000000601:gpt-5.4',
+  'GPT-5.4',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"official_pricing","aliasOf":"gpt-5.4","source":"https://platform.openai.com/docs/pricing"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000722',
+  'openai',
+  'gpt-4o-mini',
+  'GPT-4o mini',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"pricing_catalog","compatAliasOf":"openai-main"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000723',
+  'openai',
+  'gpt-4o',
+  'GPT-4o',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"pricing_catalog","compatAliasOf":"openai-main"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000724',
+  'openai',
+  'gpt-5.4-mini',
+  'GPT-5.4 mini',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"pricing_catalog","compatAliasOf":"openai-main","source":"https://platform.openai.com/docs/pricing"}'::jsonb
+),
+(
+  '00000000-0000-4000-8000-000000000725',
+  'openai',
+  'gpt-5.4',
+  'GPT-5.4',
+  '["chat"]'::jsonb,
+  'active',
+  '{"pricingBasis":"pricing_catalog","compatAliasOf":"openai-main","source":"https://platform.openai.com/docs/pricing"}'::jsonb
+),
+(
   '00000000-0000-4000-8000-000000000720',
   'gemini',
   'gemini-2.5-flash-lite',
@@ -224,6 +296,94 @@ insert into model_pricing_rules (
   'dashboard-demo-2026-07-06',
   '2026-07-01 00:00:00+00',
   'local_demo_seed'
+),
+(
+  '00000000-0000-4000-8000-000000000836',
+  'openai-main',
+  'gpt-5.4-mini',
+  'USD',
+  750000,
+  4500000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.openai.com/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000837',
+  'openai-main',
+  '00000000-0000-4000-8000-000000000601:gpt-5.4-mini',
+  'USD',
+  750000,
+  4500000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.openai.com/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000838',
+  'openai-main',
+  'gpt-5.4',
+  'USD',
+  2500000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.openai.com/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000839',
+  'openai-main',
+  '00000000-0000-4000-8000-000000000601:gpt-5.4',
+  'USD',
+  2500000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'https://platform.openai.com/docs/pricing'
+),
+(
+  '00000000-0000-4000-8000-000000000832',
+  'openai',
+  'gpt-4o-mini',
+  'USD',
+  150000,
+  600000,
+  'dashboard-demo-2026-07-06',
+  '2026-07-01 00:00:00+00',
+  'canonical_provider_alias_from_openai-main'
+),
+(
+  '00000000-0000-4000-8000-000000000833',
+  'openai',
+  'gpt-4o',
+  'USD',
+  2500000,
+  10000000,
+  'dashboard-demo-2026-07-06',
+  '2026-07-01 00:00:00+00',
+  'canonical_provider_alias_from_openai-main'
+),
+(
+  '00000000-0000-4000-8000-000000000834',
+  'openai',
+  'gpt-5.4-mini',
+  'USD',
+  750000,
+  4500000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'canonical_provider_alias_from_openai-main'
+),
+(
+  '00000000-0000-4000-8000-000000000835',
+  'openai',
+  'gpt-5.4',
+  'USD',
+  2500000,
+  15000000,
+  'official-pricing-2026-07-05-v1',
+  '2026-07-05 00:00:00+00',
+  'canonical_provider_alias_from_openai-main'
 ),
 (
   '00000000-0000-4000-8000-000000000830',

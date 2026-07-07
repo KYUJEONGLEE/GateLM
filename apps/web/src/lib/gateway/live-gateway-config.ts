@@ -19,9 +19,10 @@ export type LiveGatewayConfig = {
   rateLimitMaxAttempts: number;
 };
 
-export function getLiveGatewayConfig(): LiveGatewayConfig {
+export function getLiveGatewayConfig(options: { apiKey?: string } = {}): LiveGatewayConfig {
   return {
-    apiKey: firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY")
+    apiKey: options.apiKey
+      ?? firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY")
       ?? "glm_api_test_redacted",
     applicationChatMaxTokens: getApplicationChatMaxTokens(),
     applicationChatModel: "auto",

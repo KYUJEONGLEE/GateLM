@@ -76,8 +76,8 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
 
   return (
     <ConsoleShell
-      activeAnalyticsItem="request-logs"
-      activeSection="analytics"
+      activeMonitoringItem="live-logs"
+      activeSection="monitoring"
       locale={locale}
       tenantId={tenantId}
     >

@@ -24,6 +24,7 @@ type Reader interface {
 	GetRequestDetail(ctx context.Context, filter RequestDetailFilter) (RequestDetail, error)
 	GetDashboardOverview(ctx context.Context, filter DashboardOverviewFilter) (DashboardOverviewFields, error)
 	GetCostReport(ctx context.Context, filter CostReportFilter) (CostReportFields, error)
+	GetAnalyticsPerformance(ctx context.Context, filter AnalyticsPerformanceFilter) (AnalyticsPerformanceFields, error)
 }
 
 type ProjectLogsFilter struct {
@@ -65,6 +66,15 @@ type CostReportFilter struct {
 	Period        string
 	From          time.Time
 	To            time.Time
+}
+
+type AnalyticsPerformanceFilter struct {
+	TenantID  string
+	ProjectID string
+	Provider  string
+	Model     string
+	From      time.Time
+	To        time.Time
 }
 
 type LlmInvocationLog struct {
@@ -341,6 +351,13 @@ type CostReportBucket struct {
 	SavedCostUSD      string
 }
 
+type TimeSeriesBucketConfig struct {
+	Interval            time.Duration
+	IntervalLabel       string
+	ExpectedBucketCount int
+	Unit                string
+}
+
 type CostReportProjectBreakdown struct {
 	ProjectID         string
 	RequestCount      int64
@@ -398,11 +415,72 @@ type CostReportBreakdowns struct {
 }
 
 type CostReportFields struct {
-	Period        string
-	Totals        CostReportTotals
-	Buckets       []CostReportBucket
-	Breakdowns    CostReportBreakdowns
-	DataFreshness DashboardDataFreshness
+	Period              string
+	BucketInterval      string
+	ExpectedBucketCount int
+	Totals              CostReportTotals
+	Buckets             []CostReportBucket
+	Breakdowns          CostReportBreakdowns
+	DataFreshness       DashboardDataFreshness
+}
+
+type AnalyticsPerformanceSummary struct {
+	AvgLatencyMs        *float64
+	P95LatencyMs        *float64
+	P99LatencyMs        *float64
+	ThroughputPerMinute *float64
+	ErrorRate           *float64
+	TotalRequests       int64
+}
+
+type AnalyticsProviderModelPerformance struct {
+	Provider          string
+	Model             string
+	Requests          int64
+	AvgLatencyMs      *float64
+	P95LatencyMs      *float64
+	P99LatencyMs      *float64
+	ErrorRate         *float64
+	CostPerRequestUSD *float64
+	TotalCostMicroUSD int64
+	TotalCostUSD      string
+	CacheHitRate      *float64
+}
+
+type AnalyticsProviderLatency struct {
+	Provider     string
+	P95LatencyMs *float64
+	Requests     int64
+}
+
+type AnalyticsLatencyDistributionBucket struct {
+	Bucket       time.Time
+	P50LatencyMs *float64
+	P95LatencyMs *float64
+	P99LatencyMs *float64
+	Requests     int64
+}
+
+type AnalyticsSlowRequest struct {
+	RequestID      string
+	ProjectID      string
+	Provider       string
+	Model          string
+	LatencyMs      int64
+	HTTPStatus     int
+	TerminalStatus string
+	CreatedAt      time.Time
+}
+
+type AnalyticsPerformanceFields struct {
+	Summary                  AnalyticsPerformanceSummary
+	ProviderModelPerformance []AnalyticsProviderModelPerformance
+	P95LatencyByProvider     []AnalyticsProviderLatency
+	LatencyDistribution      []AnalyticsLatencyDistributionBucket
+	SlowestRequests          []AnalyticsSlowRequest
+	BucketInterval           string
+	ExpectedBucketCount      int
+	DataFreshness            DashboardDataFreshness
 }
 
 type DashboardDataFreshness struct {
@@ -616,6 +694,73 @@ func NormalizeCostReportFilter(filter CostReportFilter) (CostReportFilter, error
 		return CostReportFilter{}, err
 	}
 	return filter, nil
+}
+
+func NormalizeAnalyticsPerformanceFilter(filter AnalyticsPerformanceFilter) (AnalyticsPerformanceFilter, error) {
+	filter.TenantID = strings.TrimSpace(filter.TenantID)
+	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
+	filter.Provider = strings.TrimSpace(filter.Provider)
+	filter.Model = strings.TrimSpace(filter.Model)
+	if filter.TenantID == "" {
+		return AnalyticsPerformanceFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
+	}
+	if err := validateTimeRange(filter.From, filter.To); err != nil {
+		return AnalyticsPerformanceFilter{}, err
+	}
+	return filter, nil
+}
+
+func TimeSeriesBucketConfigForRange(from time.Time, to time.Time) TimeSeriesBucketConfig {
+	duration := to.Sub(from)
+	const tolerance = time.Second
+
+	if duration <= 15*time.Minute+tolerance {
+		return TimeSeriesBucketConfig{
+			Interval:            time.Minute,
+			IntervalLabel:       "1m",
+			ExpectedBucketCount: 15,
+			Unit:                "minute",
+		}
+	}
+	if duration <= time.Hour+tolerance {
+		return TimeSeriesBucketConfig{
+			Interval:            5 * time.Minute,
+			IntervalLabel:       "5m",
+			ExpectedBucketCount: 12,
+			Unit:                "5minute",
+		}
+	}
+	if duration <= 24*time.Hour+tolerance {
+		return TimeSeriesBucketConfig{
+			Interval:            time.Hour,
+			IntervalLabel:       "1h",
+			ExpectedBucketCount: 24,
+			Unit:                "hour",
+		}
+	}
+	return TimeSeriesBucketConfig{
+		Interval:            24 * time.Hour,
+		IntervalLabel:       "1d",
+		ExpectedBucketCount: 7,
+		Unit:                "day",
+	}
+}
+
+func AlignTimeSeriesBucketStart(value time.Time, config TimeSeriesBucketConfig) time.Time {
+	utc := value.UTC()
+	switch config.Unit {
+	case "minute":
+		return utc.Truncate(time.Minute)
+	case "5minute":
+		truncated := utc.Truncate(time.Minute)
+		return truncated.Add(-time.Duration(truncated.Minute()%5) * time.Minute)
+	case "hour":
+		return utc.Truncate(time.Hour)
+	case "day":
+		return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
+	default:
+		return utc.Truncate(config.Interval)
+	}
 }
 
 func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
