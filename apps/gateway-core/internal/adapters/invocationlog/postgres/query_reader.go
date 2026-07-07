@@ -844,9 +844,9 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
 	}
 
-	addOptionalWhere("tenant_id", filter.TenantID)
-	addOptionalWhere("project_id", filter.ProjectID)
-	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalWhere("tenant_id::text", filter.TenantID)
+	addOptionalWhere("project_id::text", filter.ProjectID)
+	addOptionalWhere("application_id::text", filter.ApplicationID)
 	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
 	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
@@ -1060,8 +1060,8 @@ func buildAnalyticsPerformanceWhere(filter invocationlog.AnalyticsPerformanceFil
 		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
 	}
 
-	addOptionalWhere("tenant_id", filter.TenantID)
-	addOptionalWhere("project_id", filter.ProjectID)
+	addOptionalWhere("tenant_id::text", filter.TenantID)
+	addOptionalWhere("project_id::text", filter.ProjectID)
 	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
 	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
 
@@ -1130,8 +1130,8 @@ func fillAnalyticsLatencyDistributionBuckets(filter invocationlog.AnalyticsPerfo
 func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
 	args := []any{filter.TenantID, filter.ProjectID, filter.From.UTC(), filter.To.UTC()}
 	where := []string{
-		"tenant_id = $1",
-		"project_id = $2",
+		"tenant_id::text = $1",
+		"project_id::text = $2",
 		"created_at >= $3",
 		"created_at < $4",
 	}
@@ -1147,7 +1147,7 @@ func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []an
 	addOptionalWhere("provider", filter.Provider)
 	addOptionalWhere("model", filter.Model)
 	addOptionalWhere("cache_status", filter.CacheStatus)
-	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalWhere("application_id::text", filter.ApplicationID)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
 	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
 	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
@@ -1198,11 +1198,11 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 	}
 	if filter.TenantID != "" {
 		args = append(args, filter.TenantID)
-		where = append(where, fmt.Sprintf("tenant_id = $%d", len(args)))
+		where = append(where, fmt.Sprintf("tenant_id::text = $%d", len(args)))
 	}
 	if filter.ProjectID != "" {
 		args = append(args, filter.ProjectID)
-		where = append(where, fmt.Sprintf("project_id = $%d", len(args)))
+		where = append(where, fmt.Sprintf("project_id::text = $%d", len(args)))
 	}
 	addOptionalWhere := func(expression string, value string) {
 		if strings.TrimSpace(value) == "" {
@@ -1465,8 +1465,8 @@ select
 	  completed_at,
 	  metadata
 	from p0_llm_invocation_logs
-where tenant_id = $1
-  and project_id = $2
+where tenant_id::text = $1
+  and project_id::text = $2
   and request_id = $3
 limit 1`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL)
 

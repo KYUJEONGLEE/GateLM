@@ -631,7 +631,7 @@ export function CustomerDemoApp({ locale, model, userName }: CustomerDemoAppProp
             <label className="customer-chat-input">
               <textarea
                 aria-label={text.inputPlaceholder}
-                disabled={isLoading || !canSendMessage}
+                disabled={!canSendMessage}
                 onChange={(event) => setInputValue(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {

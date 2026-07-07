@@ -31,8 +31,8 @@ func TestBuildProjectLogsQueryUsesTenantProjectScopeAndSafeColumns(t *testing.T)
 		t.Fatalf("expected p0 fallback table query, got %s", query)
 	}
 	for _, expected := range []string{
-		"tenant_id = $1",
-		"project_id = $2",
+		"tenant_id::text = $1",
+		"project_id::text = $2",
 		"created_at >= $3",
 		"created_at < $4",
 	} {
@@ -129,7 +129,7 @@ func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	if !strings.Contains(db.query, "order by created_at desc, request_id desc") {
 		t.Fatalf("expected stable descending sort, got %s", db.query)
 	}
-	if !strings.Contains(db.query, "tenant_id = $1") || !strings.Contains(db.query, "project_id = $2") {
+	if !strings.Contains(db.query, "tenant_id::text = $1") || !strings.Contains(db.query, "project_id::text = $2") {
 		t.Fatalf("expected tenant/project scoped list query, got %s", db.query)
 	}
 	if len(db.args) < 2 || db.args[0] != "tenant_demo" || db.args[1] != "project_demo" {
@@ -214,8 +214,8 @@ func TestQueryReaderGetRequestDetailScansMaskingCacheRouting(t *testing.T) {
 		t.Fatalf("unexpected runtime snapshot detail: %+v", detail.RuntimeSnapshot)
 	}
 	for _, expected := range []string{
-		"tenant_id = $1",
-		"project_id = $2",
+		"tenant_id::text = $1",
+		"project_id::text = $2",
 		"request_id = $3",
 	} {
 		if !strings.Contains(db.query, expected) {
@@ -373,7 +373,7 @@ func TestQueryReaderDashboardOverviewUsesCanonicalSourceCounts(t *testing.T) {
 	if overview.DataFreshness.RecordCount != 6 || overview.DataFreshness.LastLogCreatedAt == nil || !overview.DataFreshness.LastLogCreatedAt.Equal(lastLogCreatedAt) || overview.DataFreshness.GeneratedAt.IsZero() {
 		t.Fatalf("unexpected data freshness: %+v", overview.DataFreshness)
 	}
-	if !strings.Contains(db.query, "from p0_llm_invocation_logs") || !strings.Contains(db.query, "tenant_id = $3") || !strings.Contains(db.query, "project_id = $4") {
+	if !strings.Contains(db.query, "from p0_llm_invocation_logs") || !strings.Contains(db.query, "tenant_id::text = $3") || !strings.Contains(db.query, "project_id::text = $4") {
 		t.Fatalf("expected tenant/project-scoped dashboard query, got %s", db.query)
 	}
 	for _, expected := range []string{
@@ -506,8 +506,8 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 	joinedQueries := strings.Join(db.queries, "\n")
 	for _, expected := range []string{
 		"from p0_llm_invocation_logs",
-		"tenant_id = $3",
-		"project_id = $4",
+		"tenant_id::text = $3",
+		"project_id::text = $4",
 		"coalesce(nullif(selected_provider, ''), nullif(provider, '')) = $5",
 		"coalesce(nullif(selected_model, ''), nullif(model, '')) = $6",
 		"percentile_disc(0.95)",
