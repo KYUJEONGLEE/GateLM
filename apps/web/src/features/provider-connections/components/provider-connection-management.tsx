@@ -1,8 +1,9 @@
 "use client";
 
-import { KeyRound, Pencil, PlugZap, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, KeyRound, Pencil, PlugZap, Plus, Trash2, X } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -218,6 +219,7 @@ export function ProviderConnectionManagement({
   const [pendingAction, setPendingAction] = useState(false);
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
   const [providerModal, setProviderModal] = useState<ProviderModalState | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
@@ -534,9 +536,15 @@ export function ProviderConnectionManagement({
         : providerModels
     }));
     setProviderModal(null);
+    setExpandedProviderId(provider.id);
     setEditingProviderId((current) => (current === provider.id ? null : provider.id));
     setFormValues(getProviderFormValues(provider));
     setSubmitState({ message: "", status: "idle" });
+  }
+
+  function toggleProvider(providerId: string) {
+    setExpandedProviderId((current) => (current === providerId ? null : providerId));
+    setEditingProviderId(null);
   }
 
   function openCredentialModal(provider: ProviderConnectionRecord) {
@@ -613,6 +621,8 @@ export function ProviderConnectionManagement({
   }
 
   function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
+    const savedModelNames = Array.from(new Set(splitModelNames(formValues.models)));
+
     return (
       <div className="provider-discovery-panel provider-inline-edit-panel">
         <div className="provider-form-grid provider-inline-edit-grid">
@@ -713,16 +723,34 @@ export function ProviderConnectionManagement({
                   </div>
                 </>
               ) : (
-                <textarea
-                  onChange={(event) =>
-                    setFormValues((current) => ({
-                      ...current,
-                      models: event.target.value
-                    }))
-                  }
-                  rows={4}
-                  value={formValues.models}
-                />
+                <>
+                  {savedModelNames.length > 0 ? (
+                    <div className="provider-discovery-model-list provider-saved-model-list">
+                      {savedModelNames.map((modelName) => (
+                        <span key={modelName} className="provider-saved-model-item">
+                          {modelName}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="project-muted">
+                      {locale === "ko"
+                        ? "저장된 chat 모델이 없습니다. 모델 조회 후 선택하거나 직접 입력하세요."
+                        : "No saved chat models. Discover models to select them or enter model names manually."}
+                    </span>
+                  )}
+                  <textarea
+                    aria-label={text.models}
+                    onChange={(event) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        models: event.target.value
+                      }))
+                    }
+                    rows={3}
+                    value={formValues.models}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -776,6 +804,77 @@ export function ProviderConnectionManagement({
     );
   }
 
+  function renderProviderModels(provider: ProviderConnectionRecord) {
+    const discovery = discoveryByProvider[provider.provider];
+    const modelNames = Array.from(
+      new Set(
+        discovery
+          ? discovery.selectedModels
+          : getProviderConfigModels(provider.providerConfig).filter(isChatCompletionModelName)
+      )
+    );
+    const discoveredAt = discovery?.discoveredAt ?? provider.updatedAt;
+
+    if (modelNames.length === 0) {
+      return (
+        <div className="provider-model-empty-state">
+          {locale === "ko"
+            ? "아직 등록된 chat 모델이 없습니다. 모델 조회 후 사용할 모델을 저장하세요."
+            : "No chat models registered yet. Discover models and save the models to use."}
+        </div>
+      );
+    }
+
+    return (
+      <div className="provider-model-table-wrap">
+        <table className="provider-model-table">
+          <thead>
+            <tr>
+              <th>{locale === "ko" ? "모델" : "Model"}</th>
+              <th>{locale === "ko" ? "상태" : "Status"}</th>
+              <th>{locale === "ko" ? "기능" : "Capabilities"}</th>
+              <th>{locale === "ko" ? "컨텍스트" : "Context"}</th>
+              <th>{locale === "ko" ? "라우팅" : "Route usage"}</th>
+              <th>{locale === "ko" ? "최근 조회" : "Last discovered"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modelNames.map((modelName) => {
+              const capabilities = getModelCapabilities(modelName);
+
+              return (
+                <tr key={modelName}>
+                  <td>
+                    <strong>{modelName}</strong>
+                  </td>
+                  <td>
+                    <span className="provider-model-status" data-enabled="true">
+                      {locale === "ko" ? "허용" : "Allowed"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="provider-model-capability-list">
+                      {capabilities.map((capability) => (
+                        <em key={capability}>{capability}</em>
+                      ))}
+                    </span>
+                  </td>
+                  <td>{getModelContextWindow(modelName)}</td>
+                  <td>
+                    <span className="provider-model-route" data-enabled="true">
+                      {locale === "ko" ? "라우팅 후보" : "Routing candidate"}
+                    </span>
+                  </td>
+                  <td>{formatDateTime(discoveredAt)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <main className="console-content management-line-content">
       <section className="dashboard-hero">
@@ -818,65 +917,108 @@ export function ProviderConnectionManagement({
         {providers.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table provider-table">
-              <thead>
-                <tr>
-                  <th>{text.provider}</th>
-                  <th>{text.status}</th>
-                  <th>{text.updated}</th>
-                  <th>{text.providerId}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {providers.map((provider) => {
-                  const hasRegisteredKey = hasProviderKeyRegistered(provider);
-                  const family = getProviderFamily(provider);
-                  const preset = getProviderPreset(family, model.providerPresets.items);
+          <div className="provider-card-list">
+            {providers.map((provider) => {
+              const hasRegisteredKey = hasProviderKeyRegistered(provider);
+              const family = getProviderFamily(provider);
+              const preset = getProviderPreset(family, model.providerPresets.items);
+              const expanded = expandedProviderId === provider.id;
+              const providerIconSrc = getProviderFamilyIconSrc(family);
+              const modelCount = getProviderConfigModels(provider.providerConfig).filter(
+                isChatCompletionModelName
+              ).length;
 
-                  return (
-                    <Fragment key={provider.id}>
-                      <tr>
-                        <td>
+              const isEditing = editingProviderId === provider.id;
+
+              return (
+                <section className="provider-card" data-expanded={expanded} key={provider.id}>
+                  <div
+                    className="provider-card-row"
+                    onClick={() => toggleProvider(provider.id)}
+                  >
+                    <div className="provider-card-identity">
+                      <span className="provider-card-icon" data-family={family}>
+                        {providerIconSrc ? (
+                          <Image
+                            alt=""
+                            aria-hidden="true"
+                            height={28}
+                            src={providerIconSrc}
+                            width={28}
+                          />
+                        ) : (
+                          getProviderFamilyInitial(family)
+                        )}
+                      </span>
+                      <div>
+                        <div className="provider-card-title-row">
                           <strong className="provider-name">{provider.displayName}</strong>
-                          <small className="project-muted">
+                          <Badge className="provider-family-badge" variant="outline">
                             {preset?.displayName ?? getProviderFamilyLabel(family)}
-                            {" · "}
-                            {text.models}: {formatProviderModels(provider.providerConfig)}
-                          </small>
-                        </td>
-                        <td>
-                          {hasRegisteredKey ? (
-                            <Badge
-                              className="project-status-badge"
-                              data-status={provider.status}
-                              variant="outline"
-                            >
-                              {formatProviderStatus(provider.status)}
-                            </Badge>
-                          ) : (
-                            <Badge className="project-status-badge" variant="outline">
-                              {locale === "ko" ? "key 필요" : "key required"}
-                            </Badge>
-                          )}
-                        </td>
-                        <td>
-                          <span className="project-muted">{formatDateTime(provider.updatedAt)}</span>
-                          <small className="project-muted">
-                            {text.created}: {formatDateTime(provider.createdAt)}
-                          </small>
-                        </td>
-                        <td>
+                          </Badge>
+                        </div>
+                        <small className="project-muted">
+                          {text.providerId}:{" "}
                           <code className="project-code provider-id-mask" tabIndex={0}>
                             <span aria-hidden="true" className="provider-id-mask-value">
                               *****
                             </span>
                             <span className="provider-id-actual">{provider.id}</span>
                           </code>
-                        </td>
-                        <td>
-                          <div className="project-row-actions">
+                        </small>
+                      </div>
+                    </div>
+                    <div className="provider-card-status">
+                      <span className="provider-status-dot" data-status={provider.status} />
+                      {hasRegisteredKey ? (
+                        <Badge
+                          className="project-status-badge"
+                          data-status={provider.status}
+                          variant="outline"
+                        >
+                          {formatProviderStatus(provider.status)}
+                        </Badge>
+                      ) : (
+                        <Badge className="project-status-badge" variant="outline">
+                          {locale === "ko" ? "key 필요" : "key required"}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="provider-card-meta">
+                      <span>{text.models}</span>
+                      <strong>{modelCount}</strong>
+                    </div>
+                    <div className="provider-card-actions">
+                      <button
+                        aria-expanded={expanded}
+                        aria-label={
+                          expanded
+                            ? locale === "ko"
+                              ? "모델 목록 접기"
+                              : "Collapse model list"
+                            : locale === "ko"
+                              ? "모델 목록 펼치기"
+                              : "Expand model list"
+                        }
+                        className="provider-expand-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleProvider(provider.id);
+                        }}
+                        type="button"
+                      >
+                        <ChevronDown aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  {expanded ? (
+                    <div className="provider-card-models">
+                      {isEditing ? (
+                        renderProviderInlineEditor(provider)
+                      ) : (
+                        <>
+                          {renderProviderModels(provider)}
+                          <div className="provider-card-expanded-actions">
                             <Button
                               disabled={pendingAction || discoveringProvider !== null}
                               onClick={() => openEditModal(provider)}
@@ -887,20 +1029,13 @@ export function ProviderConnectionManagement({
                               {text.edit}
                             </Button>
                           </div>
-                        </td>
-                      </tr>
-                      {editingProviderId === provider.id ? (
-                        <tr className="provider-discovery-row provider-edit-row">
-                          <td colSpan={5}>
-                            {renderProviderInlineEditor(provider)}
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
           </div>
         )}
       </section>
@@ -1123,6 +1258,30 @@ function getProviderFamilyLabel(providerFamily: string) {
   }
 
   return providerFamily;
+}
+
+function getProviderFamilyInitial(providerFamily: string) {
+  if (providerFamily === "claude") {
+    return "AI";
+  }
+
+  if (providerFamily === "mock") {
+    return "M";
+  }
+
+  return providerFamily.slice(0, 2).toUpperCase();
+}
+
+function getProviderFamilyIconSrc(providerFamily: string) {
+  if (providerFamily === "openai") {
+    return "/openai-streamline.png";
+  }
+
+  if (providerFamily === "gemini") {
+    return "/gemini-provider-icon.webp";
+  }
+
+  return null;
 }
 
 function getProviderFormValuesFromPreset(
@@ -1418,8 +1577,40 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
     : [];
 }
 
-function formatProviderModels(providerConfig: Record<string, unknown> | null) {
-  const models = getProviderConfigModels(providerConfig);
+function getModelCapabilities(modelName: string) {
+  const normalized = modelName.toLowerCase();
+  const capabilities = ["chat"];
 
-  return models.length > 0 ? models.join(", ") : "none";
+  if (
+    normalized.includes("4o") ||
+    normalized.includes("vision") ||
+    normalized.includes("gemini") ||
+    normalized.includes("claude")
+  ) {
+    capabilities.push("vision");
+  }
+
+  return capabilities;
+}
+
+function getModelContextWindow(modelName: string) {
+  const normalized = modelName.toLowerCase();
+
+  if (normalized.includes("embedding")) {
+    return "1k";
+  }
+
+  if (normalized.includes("gemini")) {
+    return "1M";
+  }
+
+  if (normalized.includes("claude")) {
+    return "200k";
+  }
+
+  if (normalized.includes("4o") || normalized.includes("o3") || normalized.includes("o4")) {
+    return "128k";
+  }
+
+  return "-";
 }
