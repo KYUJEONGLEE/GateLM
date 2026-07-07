@@ -36,7 +36,7 @@ export function ApplicationLauncherForm({
       return;
     }
 
-    router.push(`/chat?profile=${encodeURIComponent(selectedProfile.id)}`);
+    router.push(`/chat?profile=${encodeURIComponent(selectedProfile.id)}&name=${encodeURIComponent(name.trim())}`);
   }
 
   return (
