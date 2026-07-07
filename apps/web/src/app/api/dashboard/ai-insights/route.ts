@@ -32,7 +32,11 @@ export async function POST(request: Request) {
   const hasTenantAdminAccess = isTenantAdminForTenant(auth, tenantId);
   const hasProjectScopedAccess = isProjectScopedForTenant(auth, tenantId);
 
-  if (!auth.isAuthenticated || (!hasTenantAdminAccess && !hasProjectScopedAccess)) {
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!hasTenantAdminAccess && !hasProjectScopedAccess) {
     return NextResponse.json({ error: "AI insights access denied" }, { status: 403 });
   }
 
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
 
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
-    projects: projectsModel.projects,
+    projects: projectsModel?.projects ?? [],
     requestedProjectId,
     routeTenantId: tenantId
   });

@@ -26,6 +26,10 @@ export async function POST(request: Request) {
     : getControlPlaneTenantId();
 
   const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!isTenantAdminForTenant(auth, routeTenantId)) {
     return NextResponse.json(
       {
