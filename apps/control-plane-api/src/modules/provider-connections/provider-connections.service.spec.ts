@@ -1144,6 +1144,102 @@ describe('ProviderConnectionsService', () => {
     ]);
   });
 
+  it('sorts discovered provider models by newest created timestamp first', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000925';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'gpt-5-mini',
+            object: 'model',
+            created: 1900000000,
+            owned_by: 'openai',
+          },
+          {
+            id: 'gpt-4o',
+            object: 'model',
+            created: 1700000000,
+            owned_by: 'openai',
+          },
+          {
+            id: 'gpt-5',
+            object: 'model',
+            created: 1800000000,
+            owned_by: 'openai',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(
+      projectId,
+      'openai-main',
+    );
+
+    expect(result.models.map((model) => model.modelName)).toEqual([
+      'gpt-5-mini',
+      'gpt-5',
+      'gpt-4o',
+    ]);
+  });
+
+  it('sorts discovered models without created timestamps by provider model version', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000926';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        provider: 'gemini',
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          { id: 'gemini-1.5-pro', object: 'model', owned_by: 'google' },
+          { id: 'gemini-2.5-flash-lite', object: 'model', owned_by: 'google' },
+          { id: 'gemini-2.0-flash', object: 'model', owned_by: 'google' },
+          { id: 'gemini-2.5-pro', object: 'model', owned_by: 'google' },
+          { id: 'gemini-1.5-flash', object: 'model', owned_by: 'google' },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'gemini');
+
+    expect(result.models.map((model) => model.modelName)).toEqual([
+      'gemini-2.5-pro',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+    ]);
+  });
+
   it('normalizes provider model created timestamps in milliseconds', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000908';

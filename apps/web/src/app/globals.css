@@ -665,10 +665,6 @@ select {
   white-space: nowrap;
 }
 
-.console-sidebar-settings-row[data-align="end"] {
-  justify-content: flex-end;
-}
-
 .console-sidebar-settings-row .language-switcher {
   flex: 0 1 auto;
   width: auto;
@@ -689,31 +685,6 @@ select {
   background: var(--accent);
   color: var(--foreground);
   box-shadow: none;
-}
-
-.console-sidebar-logout-button {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--foreground);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  cursor: pointer;
-}
-
-.console-sidebar-logout-button:hover {
-  background: var(--accent);
-}
-
-.console-sidebar-logout-button:disabled {
-  cursor: wait;
-  opacity: 0.6;
 }
 
 .console-sidebar-tenant {
@@ -7015,9 +6986,14 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   display: grid;
   min-width: 0;
   gap: 3px;
+  overflow: hidden;
 }
 
 .onboarding-provider-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--foreground);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-bold);
@@ -7025,11 +7001,15 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .onboarding-provider-copy small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   line-height: 1.3;
-  overflow-wrap: anywhere;
 }
 
 .onboarding-provider-choice {
@@ -7127,13 +7107,18 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .integration-guide-steps,
 .integration-guide-side {
   display: grid;
   gap: 14px;
+}
+
+.integration-guide-side {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
 }
 
 .integration-guide-steps {
@@ -7333,20 +7318,33 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .integration-next-panel {
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  min-height: 240px;
 }
 
 .integration-next-actions {
   display: grid;
-  gap: 10px;
+  align-self: center;
+  gap: 20px;
+  width: 100%;
 }
 
 .integration-next-actions .primary-button,
 .integration-next-actions .secondary-button {
-  display: inline-flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
   width: 100%;
-  min-height: 42px;
+  min-height: 46px;
+  padding: 0 16px;
+  text-align: center;
+}
+
+.integration-next-actions .primary-button svg,
+.integration-next-actions .secondary-button svg {
+  justify-self: start;
 }
 
 .integration-secret-list {
@@ -11013,11 +11011,13 @@ html[data-theme="dark"] .application-card[aria-disabled="true"] .application-car
 }
 
 .landing-summary-link {
+  appearance: none;
   min-height: 38px;
   padding: 0 14px;
   background: #ffffff;
   border: 1px solid #dcebe5;
   color: #102033;
+  font-family: inherit;
   font-size: var(--font-size-sm);
   white-space: nowrap;
 }

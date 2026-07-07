@@ -30,11 +30,15 @@ import {
 } from './dto/auth.dto';
 import { EmailSender } from './email-sender';
 import { GoogleOAuthClient } from './google-oauth-client';
+import {
+  SignupDraft,
+  SignupDraftTokenCodec,
+} from './signup-draft-token';
 
 interface PublicUser {
   email: string;
   emailVerifiedAt: string | null;
-  id: string;
+  id: string | null;
   name: string | null;
 }
 
@@ -60,6 +64,20 @@ export interface SessionIssue {
   token: string;
 }
 
+export interface SignupDraftIssue {
+  expiresAt: Date;
+  token: string;
+}
+
+export class SignupDraftUnauthorizedException extends UnauthorizedException {
+  constructor(
+    message: string,
+    readonly signupDraft?: SignupDraftIssue,
+  ) {
+    super(message);
+  }
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -73,7 +91,7 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<{
-    session?: SessionIssue;
+    signupDraft?: SignupDraftIssue;
     user: PublicUser;
     verificationRequired: boolean;
   }> {
@@ -82,93 +100,121 @@ export class AuthService {
     const now = new Date();
     const existingUser = await this.repository.findUserByEmail(email);
     if (existingUser) {
-      return this.resumeIncompleteSignup(existingUser, dto, devAutoVerify, now);
+      await this.ensureEmailCanStartLocalSignup(existingUser);
     }
 
     const passwordHash = await hashPassword(dto.password);
-    const user = await this.repository.createUser({
-      authProvider: 'local',
+    const draft: SignupDraft = {
       email,
-      emailVerifiedAt: devAutoVerify ? now : null,
+      emailVerifiedAt: devAutoVerify ? now.toISOString() : null,
+      expiresAt: addHours(now, 2).toISOString(),
       name: dto.name,
       passwordHash,
-      status: devAutoVerify ? 'active' : 'pending_email_verification',
-    });
+    };
 
     if (devAutoVerify) {
-      const session = await this.issueSession(user.id, 'onboarding');
-
       return {
-        session,
-        user: this.toPublicUser(user),
+        signupDraft: this.issueSignupDraft(draft),
+        user: this.toPublicSignupUser(draft),
         verificationRequired: false,
       };
     }
 
     const code = createVerificationCode();
-    const expiresAt = addMinutes(new Date(), 15);
+    const codeExpiresAt = addMinutes(now, 15);
 
-    await this.repository.consumeOpenVerificationCodes(user.id, now);
-    await this.repository.createVerificationCode({
+    draft.expiresAt = codeExpiresAt.toISOString();
+    draft.verification = {
       codeHash: hashSecret(code),
-      expiresAt,
-      userId: user.id,
-    });
+      expiresAt: codeExpiresAt.toISOString(),
+      failedAttemptCount: 0,
+    };
     await this.emailSender.sendVerificationEmail({
       code,
       email,
-      expiresAt,
+      expiresAt: codeExpiresAt,
     });
 
     return {
-      user: this.toPublicUser(user),
+      signupDraft: this.issueSignupDraft(draft),
+      user: this.toPublicSignupUser(draft),
       verificationRequired: true,
     };
   }
 
-  async verifyEmail(dto: VerifyEmailDto): Promise<{
-    session: SessionIssue;
+  async verifyEmail(
+    signupDraftToken: string | undefined,
+    dto: VerifyEmailDto,
+  ): Promise<{
+    signupDraft: SignupDraftIssue;
     user: PublicUser;
   }> {
     const email = normalizeEmail(dto.email);
-    const user = await this.repository.findUserByEmail(email);
-    if (!user) {
-      throw new UnauthorizedException('Invalid verification code.');
+    const draft = this.requireSignupDraft(signupDraftToken);
+    if (draft.email !== email) {
+      throw new SignupDraftUnauthorizedException('Invalid verification code.');
     }
 
     const now = new Date();
-    const verificationCode =
-      await this.repository.findLatestOpenVerificationCode(user.id, now);
-    if (!verificationCode) {
-      throw new UnauthorizedException('Invalid verification code.');
+    if (draft.emailVerifiedAt) {
+      const renewedDraft: SignupDraft = {
+        ...draft,
+        expiresAt: addHours(now, 2).toISOString(),
+      };
+
+      return {
+        signupDraft: this.issueSignupDraft(renewedDraft),
+        user: this.toPublicSignupUser(renewedDraft),
+      };
     }
-    if (verificationCode.codeHash !== hashSecret(dto.code)) {
-      const nextFailedAttemptCount = verificationCode.failedAttemptCount + 1;
-      await this.repository.recordVerificationCodeFailure(verificationCode.id, {
-        consumedAt:
+
+    if (
+      !draft.verification ||
+      isInvalidDate(new Date(draft.verification.expiresAt)) ||
+      new Date(draft.verification.expiresAt) <= now ||
+      draft.verification.failedAttemptCount >= MAX_EMAIL_VERIFICATION_FAILURES
+    ) {
+      throw new SignupDraftUnauthorizedException('Invalid verification code.');
+    }
+
+    if (draft.verification.codeHash !== hashSecret(dto.code)) {
+      const nextFailedAttemptCount =
+        draft.verification.failedAttemptCount + 1;
+      const failedDraft: SignupDraft = {
+        ...draft,
+        verification:
           nextFailedAttemptCount >= MAX_EMAIL_VERIFICATION_FAILURES
-            ? now
-            : null,
-      });
+            ? undefined
+            : {
+                ...draft.verification,
+                failedAttemptCount: nextFailedAttemptCount,
+              },
+      };
 
-      throw new UnauthorizedException('Invalid verification code.');
+      throw new SignupDraftUnauthorizedException(
+        'Invalid verification code.',
+        this.issueSignupDraft(failedDraft),
+      );
     }
 
-    await this.repository.consumeVerificationCode(verificationCode.id, now);
-    const verifiedUser = await this.repository.updateUserEmailVerified(
-      user.id,
-      now,
-    );
-    const session = await this.issueSession(verifiedUser.id, 'onboarding');
+    const verifiedDraft: SignupDraft = {
+      ...draft,
+      emailVerifiedAt: now.toISOString(),
+      expiresAt: addHours(now, 2).toISOString(),
+      verification: undefined,
+    };
 
     return {
-      session,
-      user: this.toPublicUser(verifiedUser),
+      signupDraft: this.issueSignupDraft(verifiedDraft),
+      user: this.toPublicSignupUser(verifiedDraft),
     };
   }
 
   async createOrganization(
-    onboardingToken: string | undefined,
+    tokens: {
+      onboardingToken: string | undefined;
+      signupDraftToken: string | undefined;
+    },
     dto: CreateOrganizationDto,
   ): Promise<{
     membership: PublicMembership;
@@ -176,7 +222,58 @@ export class AuthService {
     tenant: PublicTenant;
     user: PublicUser;
   }> {
-    const session = await this.requireSession(onboardingToken, 'onboarding');
+    if (tokens.signupDraftToken) {
+      const draft = this.requireSignupDraft(tokens.signupDraftToken);
+      if (!draft.emailVerifiedAt) {
+        throw new UnauthorizedException('Email verification is required.');
+      }
+
+      const verifiedAt = new Date(draft.emailVerifiedAt);
+      if (isInvalidDate(verifiedAt)) {
+        throw new UnauthorizedException('Email verification is required.');
+      }
+      const existingUser = await this.repository.findUserByEmail(draft.email);
+      if (existingUser) {
+        await this.ensureEmailCanStartLocalSignup(existingUser);
+      }
+
+      let created: {
+        membership: AuthTenantMembership;
+        tenant: AuthTenant;
+        user: AuthUser;
+      };
+      try {
+        created = await this.repository.createLocalUserTenantAndMembership({
+          email: draft.email,
+          emailVerifiedAt: verifiedAt,
+          name: draft.name,
+          organizationName: dto.organizationName,
+          passwordHash: draft.passwordHash,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'EMAIL_ALREADY_REGISTERED'
+        ) {
+          throw new ConflictException('Email is already registered.');
+        }
+        throw error;
+      }
+
+      const fullSession = await this.issueSession(created.user.id, 'full');
+
+      return {
+        membership: this.toPublicMembership(created.membership),
+        session: fullSession,
+        tenant: this.toPublicTenant(created.tenant),
+        user: this.toPublicUser(created.user),
+      };
+    }
+
+    const session = await this.requireSession(
+      tokens.onboardingToken,
+      'onboarding',
+    );
     if (!session.user.emailVerifiedAt) {
       throw new UnauthorizedException('Email verification is required.');
     }
@@ -212,36 +309,26 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    const now = new Date();
-    let loginUser = user;
-    if (!loginUser.emailVerifiedAt) {
-      if (
-        loginUser.authProvider !== 'local' ||
-        !this.isDevAutoVerifyEnabled()
-      ) {
-        throw new UnauthorizedException('Invalid email or password.');
-      }
-
-      loginUser = await this.repository.updateUserEmailVerified(
-        loginUser.id,
-        now,
-      );
+    if (!user.emailVerifiedAt) {
+      throw new UnauthorizedException('Invalid email or password.');
     }
 
-    await this.repository.updateUserLastLogin(loginUser.id, now);
     const memberships = await this.repository.findMembershipsByUserId(
-      loginUser.id,
+      user.id,
     );
-    const sessionKind: AuthSessionKind =
-      memberships.length > 0 ? 'full' : 'onboarding';
-    const session = await this.issueSession(loginUser.id, sessionKind);
+    if (memberships.length === 0) {
+      throw new UnauthorizedException('Invalid email or password.');
+    }
+
+    await this.repository.updateUserLastLogin(user.id, new Date());
+    const session = await this.issueSession(user.id, 'full');
 
     return {
       memberships: memberships.map((membership) =>
         this.toPublicMembership(membership),
       ),
       session,
-      user: this.toPublicUser(loginUser),
+      user: this.toPublicUser(user),
     };
   }
 
@@ -353,7 +440,7 @@ export class AuthService {
     const session = await this.issueSession(user.id, kind);
 
     return {
-      redirectUrl: this.webHomeUrl(),
+      redirectUrl: this.webDashboardUrl(),
       session,
     };
   }
@@ -373,6 +460,23 @@ export class AuthService {
     });
 
     return { expiresAt, kind, token };
+  }
+
+  private issueSignupDraft(draft: SignupDraft): SignupDraftIssue {
+    return {
+      expiresAt: new Date(draft.expiresAt),
+      token: this.signupDraftCodec().seal(draft),
+    };
+  }
+
+  private requireSignupDraft(token: string | undefined): SignupDraft {
+    const draft = this.signupDraftCodec().open(token);
+    const expiresAt = draft ? new Date(draft.expiresAt) : null;
+    if (!draft || !expiresAt || isInvalidDate(expiresAt) || expiresAt <= new Date()) {
+      throw new UnauthorizedException('Signup session expired. Start signup again.');
+    }
+
+    return draft;
   }
 
   private async requireSession(
@@ -414,6 +518,15 @@ export class AuthService {
     };
   }
 
+  private toPublicSignupUser(draft: SignupDraft): PublicUser {
+    return {
+      email: draft.email,
+      emailVerifiedAt: draft.emailVerifiedAt,
+      id: null,
+      name: draft.name,
+    };
+  }
+
   private toPublicUser(user: AuthUser): PublicUser {
     return {
       email: user.email,
@@ -427,8 +540,8 @@ export class AuthService {
     return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3000';
   }
 
-  private webHomeUrl(): string {
-    return `${this.webOrigin().replace(/\/+$/, '')}/`;
+  private webDashboardUrl(): string {
+    return `${this.webOrigin().replace(/\/+$/, '')}/tenants/tenant_demo_acme/dashboard`;
   }
 
   private isDevAutoVerifyEnabled(): boolean {
@@ -444,16 +557,15 @@ export class AuthService {
     );
   }
 
-  private async resumeIncompleteSignup(
-    user: AuthUser,
-    dto: SignupDto,
-    devAutoVerify: boolean,
-    now: Date,
-  ): Promise<{
-    session?: SessionIssue;
-    user: PublicUser;
-    verificationRequired: boolean;
-  }> {
+  private signupDraftCodec(): SignupDraftTokenCodec {
+    return new SignupDraftTokenCodec(
+      this.config.get<string>('CONTROL_PLANE_AUTH_STATE_SECRET') ??
+        this.config.get<string>('DATABASE_URL') ??
+        this.webOrigin(),
+    );
+  }
+
+  private async ensureEmailCanStartLocalSignup(user: AuthUser): Promise<void> {
     const memberships = await this.repository.findMembershipsByUserId(user.id);
     if (
       memberships.length > 0 ||
@@ -462,49 +574,6 @@ export class AuthService {
     ) {
       throw new ConflictException('Email is already registered.');
     }
-
-    const passwordMatches = await verifyPassword(
-      dto.password,
-      user.passwordHash,
-    );
-    if (!passwordMatches) {
-      throw new ConflictException(
-        'Email signup is already in progress. Use the original password to finish onboarding.',
-      );
-    }
-
-    if (devAutoVerify || user.emailVerifiedAt) {
-      const verifiedUser = user.emailVerifiedAt
-        ? user
-        : await this.repository.updateUserEmailVerified(user.id, now);
-      const session = await this.issueSession(verifiedUser.id, 'onboarding');
-
-      return {
-        session,
-        user: this.toPublicUser(verifiedUser),
-        verificationRequired: false,
-      };
-    }
-
-    const code = createVerificationCode();
-    const expiresAt = addMinutes(now, 15);
-
-    await this.repository.consumeOpenVerificationCodes(user.id, now);
-    await this.repository.createVerificationCode({
-      codeHash: hashSecret(code),
-      expiresAt,
-      userId: user.id,
-    });
-    await this.emailSender.sendVerificationEmail({
-      code,
-      email: user.email,
-      expiresAt,
-    });
-
-    return {
-      user: this.toPublicUser(user),
-      verificationRequired: true,
-    };
   }
 }
 
@@ -518,4 +587,8 @@ function addHours(date: Date, hours: number): Date {
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function isInvalidDate(date: Date): boolean {
+  return Number.isNaN(date.getTime());
 }

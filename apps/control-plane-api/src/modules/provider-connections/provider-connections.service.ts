@@ -1037,7 +1037,7 @@ export class ProviderConnectionsService {
     return payload.data
       .map((value) => this.toDiscoveryModel(providerConnection, value))
       .filter((model): model is ProviderModelDiscoveryItemDto => model !== null)
-      .sort((left, right) => left.modelName.localeCompare(right.modelName));
+      .sort((left, right) => this.compareDiscoveryModels(left, right));
   }
 
   private toDiscoveryModel(
@@ -1079,6 +1079,151 @@ export class ProviderConnectionsService {
       providerId: providerConnection.id,
       source: 'provider_models_endpoint',
     };
+  }
+
+  private compareDiscoveryModels(
+    left: ProviderModelDiscoveryItemDto,
+    right: ProviderModelDiscoveryItemDto,
+  ): number {
+    const leftCreatedAt = this.toDiscoveryModelCreatedTimestamp(left);
+    const rightCreatedAt = this.toDiscoveryModelCreatedTimestamp(right);
+
+    if (leftCreatedAt !== null && rightCreatedAt !== null) {
+      const timestampOrder = rightCreatedAt - leftCreatedAt;
+
+      if (timestampOrder !== 0) {
+        return timestampOrder;
+      }
+    }
+
+    if (leftCreatedAt !== null || rightCreatedAt !== null) {
+      return leftCreatedAt !== null ? -1 : 1;
+    }
+
+    const leftSortKey = this.toDiscoveryModelSortKey(left);
+    const rightSortKey = this.toDiscoveryModelSortKey(right);
+    const sortKeyLength = Math.max(leftSortKey.length, rightSortKey.length);
+
+    for (let index = 0; index < sortKeyLength; index += 1) {
+      const leftValue = leftSortKey[index] ?? 0;
+      const rightValue = rightSortKey[index] ?? 0;
+
+      if (leftValue !== rightValue) {
+        return rightValue - leftValue;
+      }
+    }
+
+    return left.modelName.localeCompare(right.modelName);
+  }
+
+  private toDiscoveryModelCreatedTimestamp(
+    model: ProviderModelDiscoveryItemDto,
+  ): number | null {
+    if (!model.createdAt) {
+      return null;
+    }
+
+    const timestamp = Date.parse(model.createdAt);
+
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  private toDiscoveryModelSortKey(
+    model: ProviderModelDiscoveryItemDto,
+  ): number[] {
+    const modelName = this.toNormalizedModelName(model.modelName);
+    const provider = model.provider.toLowerCase();
+    const versionSegments = this.toModelVersionSegments(modelName);
+
+    return [
+      this.toProviderFamilySortPriority(provider, modelName),
+      ...versionSegments,
+      this.toModelVariantSortPriority(provider, modelName),
+    ];
+  }
+
+  private toProviderFamilySortPriority(
+    provider: string,
+    modelName: string,
+  ): number {
+    if (provider.includes('gemini') || modelName.startsWith('gemini-')) {
+      return 40;
+    }
+
+    if (
+      provider.includes('openai') ||
+      modelName.startsWith('gpt-') ||
+      /^o\d/.test(modelName)
+    ) {
+      return 30;
+    }
+
+    return 0;
+  }
+
+  private toModelVersionSegments(modelName: string): number[] {
+    const matches = Array.from(modelName.matchAll(/\d+(?:\.\d+)*/g));
+    const versionText = matches[0]?.[0];
+    const versionSegments = versionText
+      ? versionText
+          .split('.')
+          .map((segment) => Number.parseInt(segment, 10))
+          .filter((segment) => Number.isFinite(segment))
+      : [];
+
+    return [
+      versionSegments[0] ?? 0,
+      versionSegments[1] ?? 0,
+      versionSegments[2] ?? 0,
+    ];
+  }
+
+  private toModelVariantSortPriority(provider: string, modelName: string): number {
+    if (provider.includes('gemini') || modelName.startsWith('gemini-')) {
+      if (modelName.includes('ultra')) {
+        return 50;
+      }
+
+      if (modelName.includes('pro')) {
+        return 40;
+      }
+
+      if (modelName.includes('flash-lite') || modelName.includes('lite')) {
+        return 20;
+      }
+
+      if (modelName.includes('flash')) {
+        return 30;
+      }
+
+      return 10;
+    }
+
+    if (
+      provider.includes('openai') ||
+      modelName.startsWith('gpt-') ||
+      /^o\d/.test(modelName)
+    ) {
+      if (modelName.includes('nano')) {
+        return 20;
+      }
+
+      if (modelName.includes('mini')) {
+        return 30;
+      }
+
+      return 40;
+    }
+
+    return 0;
+  }
+
+  private toNormalizedModelName(modelName: string): string {
+    const normalizedModelName = modelName.trim().toLowerCase();
+
+    return normalizedModelName.startsWith('models/')
+      ? normalizedModelName.slice('models/'.length)
+      : normalizedModelName;
   }
 
   private toUnixTimestampIsoString(value: unknown): string | null {

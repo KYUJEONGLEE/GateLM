@@ -118,6 +118,52 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       return authSession;
     },
 
+    async createLocalUserTenantAndMembership(input) {
+      const existingUser = state.users.find(
+        (item) => item.email === input.email && item.deletedAt === null,
+      );
+      let user: AuthUser;
+
+      if (existingUser) {
+        const hasActiveMembership = state.tenantMemberships.some(
+          (item) =>
+            item.userId === existingUser.id &&
+            item.status === 'active' &&
+            item.deletedAt === null,
+        );
+        if (hasActiveMembership || existingUser.authProvider !== 'local') {
+          throw new Error('EMAIL_ALREADY_REGISTERED');
+        }
+
+        existingUser.authProvider = 'local';
+        existingUser.emailVerifiedAt = input.emailVerifiedAt;
+        existingUser.name = input.name;
+        existingUser.passwordHash = input.passwordHash;
+        existingUser.status = 'active';
+        existingUser.updatedAt = input.emailVerifiedAt;
+        user = existingUser;
+      } else {
+        user = await repository.createUser({
+          authProvider: 'local',
+          email: input.email,
+          emailVerifiedAt: input.emailVerifiedAt,
+          name: input.name,
+          passwordHash: input.passwordHash,
+          status: 'active',
+        });
+      }
+
+      const created = await repository.createTenantAndMembership({
+        organizationName: input.organizationName,
+        userId: user.id,
+      });
+
+      return {
+        ...created,
+        user,
+      };
+    },
+
     async createTenantAndMembership(input) {
       const createdAt = now();
       const tenant: AuthTenant = {

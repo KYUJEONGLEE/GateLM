@@ -6,4 +6,5 @@ export const AUTH_COOKIE_NAMES = {
   full: 'gatelm_session',
   oauthState: 'gatelm_oauth_state',
   onboarding: 'gatelm_onboarding',
+  signup: 'gatelm_signup',
 } as const;
