@@ -3,6 +3,7 @@ import "server-only";
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import { getAlignedLiveTimeRange } from "@/lib/gateway/time-series-range";
 
 type LiveDashboardOverviewResponse = {
   data?: {
@@ -208,29 +209,7 @@ function isUuid(value: string) {
 }
 
 export function getDashboardLiveRange(range: LiveDashboardRange = "15m") {
-  const to = new Date();
-  const from = new Date(to.getTime() - dashboardRangeToMs(range));
-
-  return {
-    from: from.toISOString(),
-    to: to.toISOString()
-  };
-}
-
-function dashboardRangeToMs(range: LiveDashboardRange) {
-  if (range === "1w") {
-    return 7 * 24 * 60 * 60 * 1000;
-  }
-
-  if (range === "1d") {
-    return 24 * 60 * 60 * 1000;
-  }
-
-  if (range === "1h") {
-    return 60 * 60 * 1000;
-  }
-
-  return 15 * 60 * 1000;
+  return getAlignedLiveTimeRange(range);
 }
 
 function toDashboardOverview(

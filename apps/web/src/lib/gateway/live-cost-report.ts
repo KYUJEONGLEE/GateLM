@@ -39,6 +39,8 @@ type LiveCostReportResponse = {
       periodStart?: string;
       requestCount?: number | string;
     }>;
+    bucketInterval?: string;
+    expectedBucketCount?: number;
     generatedAt?: string;
     period?: string;
   };
@@ -191,6 +193,7 @@ function toCostOverTimeSummary(
     return undefined;
   }
 
+  const bucketInterval = normalizeCostBucketInterval(data.bucketInterval, period);
   const points = data.buckets
     .filter((bucket) => bucket.periodStart)
     .map((bucket) => {
@@ -199,7 +202,7 @@ function toCostOverTimeSummary(
 
       return {
         bucket: bucketStart,
-        label: formatCostBucketLabel(bucketStart, period),
+        label: formatCostBucketLabel(bucketStart, bucketInterval),
         spendUsd
       };
     });
@@ -207,6 +210,8 @@ function toCostOverTimeSummary(
 
   return {
     averageSpendUsd: points.length > 0 ? totalSpendUsd / points.length : 0,
+    bucketInterval,
+    expectedBucketCount: normalizePositiveInteger(data.expectedBucketCount),
     generatedAt: data.generatedAt ?? new Date().toISOString(),
     period,
     points
@@ -217,13 +222,13 @@ function microUsdToUsd(value: number) {
   return value / 1_000_000;
 }
 
-function formatCostBucketLabel(value: string, period: "hour" | "day") {
+function formatCostBucketLabel(value: string, bucketInterval: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  if (period === "hour") {
+  if (bucketInterval !== "1d") {
     return new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
       hourCycle: "h23",
@@ -240,6 +245,14 @@ function formatCostBucketLabel(value: string, period: "hour" | "day") {
   }).format(date);
 }
 
+function normalizeCostBucketInterval(value: string | undefined, period: "hour" | "day") {
+  if (value === "1m" || value === "5m" || value === "1h" || value === "1d") {
+    return value;
+  }
+
+  return period === "day" ? "1d" : "1h";
+}
+
 function normalizeNonNegativeNumber(value: number | string | undefined) {
   const parsed = typeof value === "string" ? Number(value) : value;
 
@@ -248,4 +261,8 @@ function normalizeNonNegativeNumber(value: number | string | undefined) {
   }
 
   return Math.max(0, parsed);
+}
+
+function normalizePositiveInteger(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined;
 }

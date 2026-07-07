@@ -574,6 +574,23 @@ func (s *readinessObservabilityStore) GetCostReport(ctx context.Context, filter 
 	return invocationlog.CostReportFields{}, nil
 }
 
+func (s *readinessObservabilityStore) GetAnalyticsPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
+	logs := s.invocationLogs()
+	totalRequests := int64(len(logs))
+	generatedAt := time.Now().UTC()
+	return invocationlog.AnalyticsPerformanceFields{
+		Summary: invocationlog.AnalyticsPerformanceSummary{
+			TotalRequests: totalRequests,
+		},
+		DataFreshness: invocationlog.DashboardDataFreshness{
+			Source:           "readiness_observability_store",
+			RecordCount:      totalRequests,
+			GeneratedAt:      generatedAt,
+			LastAggregatedAt: generatedAt,
+		},
+	}, nil
+}
+
 func (s *readinessObservabilityStore) terminalLogs() []invocationlog.TerminalLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()

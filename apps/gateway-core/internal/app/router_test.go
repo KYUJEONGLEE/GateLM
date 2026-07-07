@@ -463,6 +463,38 @@ func TestNewRouterWiresDashboardOverviewWithDemoTenantScope(t *testing.T) {
 	}
 }
 
+func TestNewRouterWiresAnalyticsPerformanceWithDemoTenantScope(t *testing.T) {
+	p95LatencyMs := 2153.0
+	reader := &routerTestInvocationLogReader{
+		analyticsPerformance: invocationlog.AnalyticsPerformanceFields{
+			Summary: invocationlog.AnalyticsPerformanceSummary{
+				TotalRequests: 2,
+				P95LatencyMs:  &p95LatencyMs,
+			},
+		},
+	}
+	router := NewRouter(config.Config{
+		DemoTenantID:    "tenant_demo",
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?projectId=project_demo&provider=mock&model=mock-balanced&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.analyticsFilter.TenantID != "tenant_demo" || reader.analyticsFilter.ProjectID != "project_demo" || reader.analyticsFilter.Provider != "mock" || reader.analyticsFilter.Model != "mock-balanced" {
+		t.Fatalf("expected demo tenant and query analytics scope, got %+v", reader.analyticsFilter)
+	}
+	if strings.Contains(rr.Body.String(), "rawPrompt") || strings.Contains(rr.Body.String(), "redactedPromptPreview") {
+		t.Fatalf("analytics response must not include request payload fields: %s", rr.Body.String())
+	}
+}
+
 func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
 	registry := metrics.NewRegistry()
 	registry.MaskingAction("none")
@@ -559,12 +591,14 @@ func (db *routerTestInvocationLogDB) Exec(_ context.Context, query string, argum
 }
 
 type routerTestInvocationLogReader struct {
-	filter          invocationlog.ProjectLogsFilter
-	detailFilter    invocationlog.RequestDetailFilter
-	dashboardFilter invocationlog.DashboardOverviewFilter
-	items           []invocationlog.RequestLogListItem
-	detail          invocationlog.RequestDetail
-	overview        invocationlog.DashboardOverviewFields
+	filter               invocationlog.ProjectLogsFilter
+	detailFilter         invocationlog.RequestDetailFilter
+	dashboardFilter      invocationlog.DashboardOverviewFilter
+	analyticsFilter      invocationlog.AnalyticsPerformanceFilter
+	items                []invocationlog.RequestLogListItem
+	detail               invocationlog.RequestDetail
+	overview             invocationlog.DashboardOverviewFields
+	analyticsPerformance invocationlog.AnalyticsPerformanceFields
 }
 
 func (r *routerTestInvocationLogReader) ListProjectLogs(_ context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -584,6 +618,11 @@ func (r *routerTestInvocationLogReader) GetDashboardOverview(_ context.Context, 
 
 func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
 	return invocationlog.CostReportFields{}, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
+	r.analyticsFilter = filter
+	return r.analyticsPerformance, nil
 }
 
 type routerTestAPIKeyAuthenticator struct {
