@@ -17,6 +17,7 @@ export type AiInsightsRequest = {
     successRate: number;
     totalRequests: number;
   };
+  tenantId?: string | null;
   timeRange: string;
 };
 

@@ -267,6 +267,7 @@ export class ProjectsService {
     const providers = await this.prisma.providerConnection.findMany({
       where: {
         id: { in: providerConnectionIds },
+        projectId: null,
         tenantId,
       },
       select: { id: true },
@@ -274,7 +275,7 @@ export class ProjectsService {
 
     if (providers.length !== providerConnectionIds.length) {
       throw new BadRequestException(
-        'Runtime providers must belong to the same tenant.',
+        'Runtime providers must reference tenant-level providers from the same tenant.',
       );
     }
 

@@ -25,11 +25,16 @@ export async function POST(request: Request) {
     ? payload.tenantId
     : getControlPlaneTenantId();
 
-  if (payload.action === "create") {
-    const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
-    if (!isTenantAdminForTenant(auth, routeTenantId)) {
-      return NextResponse.json({ error: "Only tenant admins can create projects." }, { status: 403 });
-    }
+  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+  if (!isTenantAdminForTenant(auth, routeTenantId)) {
+    return NextResponse.json(
+      {
+        error: payload.action === "create"
+          ? "Only tenant admins can create projects."
+          : "Only tenant admins can update projects."
+      },
+      { status: 403 }
+    );
   }
 
   const result =

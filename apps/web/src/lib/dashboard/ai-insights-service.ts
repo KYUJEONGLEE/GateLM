@@ -95,6 +95,7 @@ export function normalizeAiInsightsRequest(value: unknown): AiInsightsRequest | 
       successRate: normalizeRate(summaryRecord.successRate),
       totalRequests: normalizeNonNegativeNumber(summaryRecord.totalRequests)
     },
+    tenantId: normalizeOptionalText(record.tenantId, 120),
     timeRange: normalizeText(record.timeRange, 80) || "selected range"
   };
 }

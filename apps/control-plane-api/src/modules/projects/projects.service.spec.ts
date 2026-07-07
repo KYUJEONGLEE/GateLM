@@ -1,4 +1,8 @@
-﻿import { ConflictException, NotFoundException } from '@nestjs/common';
+﻿import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, ResourceStatus } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -198,6 +202,14 @@ describe('ProjectsService', () => {
         totalBudgetUsd: 200,
       },
     });
+    expect(prisma.providerConnection.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: [providerConnectionId] },
+        projectId: null,
+        tenantId,
+      },
+      select: { id: true },
+    });
     expect(prisma.application.create).toHaveBeenCalledWith({
       data: {
         tenantId,
@@ -222,6 +234,33 @@ describe('ProjectsService', () => {
     });
     expect(result.totalBudgetUsd).toBe(200);
     expect(result.runtimeApplicationId).toBe(defaultApplicationId);
+  });
+
+  it('rejects project-scoped providers when creating the default runtime application', async () => {
+    const { service, prisma } = createService();
+    const providerConnectionId = '00000000-0000-4000-8000-000000000601';
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      totalBudgetUsd: new Prisma.Decimal(300),
+      projects: [],
+    });
+    prisma.providerConnection.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.createProject(tenantId, {
+        name: 'Operations',
+        providerConnectionIds: [providerConnectionId],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.providerConnection.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: [providerConnectionId] },
+        projectId: null,
+        tenantId,
+      },
+      select: { id: true },
+    });
+    expect(prisma.project.create).not.toHaveBeenCalled();
   });
 
   it('rejects a project budget that exceeds the tenant budget', async () => {

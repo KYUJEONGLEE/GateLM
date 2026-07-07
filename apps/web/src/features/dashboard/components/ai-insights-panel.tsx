@@ -25,6 +25,7 @@ export type AiInsightsPanelProps = {
   rangeLabel: string;
   recentRequests?: LiveRequestRow[];
   successRate: number;
+  tenantId: string;
   totalRequests: number;
 };
 
@@ -64,6 +65,7 @@ export function AiInsightsPanel({
   rangeLabel,
   recentRequests,
   successRate,
+  tenantId,
   totalRequests
 }: AiInsightsPanelProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -82,6 +84,7 @@ export function AiInsightsPanel({
         successRate,
         totalRequests
       },
+      tenantId,
       timeRange: rangeLabel
     }),
     [
@@ -94,6 +97,7 @@ export function AiInsightsPanel({
       rangeLabel,
       recentRequests,
       successRate,
+      tenantId,
       totalRequests
     ]
   );
