@@ -11,7 +11,7 @@ import { ApplicationLauncherForm } from "./application-launcher-form";
 export default async function ApplicationPage() {
   const locale = await getRequestLocale();
   const text = locale === "ko" ? copy.ko : copy.en;
-  const model = await getLauncherModel();
+  const model = getLauncherModel();
   const chatProfiles = getLauncherProfiles(model, text.defaultProject);
 
   return (
