@@ -36,6 +36,7 @@ export class ProjectsService {
     const totalBudgetUsd = dto.totalBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD;
     const budgetLimitPercent =
       dto.budgetLimitPercent ?? DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT;
+    const status = dto.status ?? ResourceStatus.ACTIVE;
     const providerConnectionIds = await this.getValidProviderConnectionIdsOrThrow(
       tenantId,
       dto.providerConnectionIds ?? [],
@@ -45,7 +46,7 @@ export class ProjectsService {
       tenantId,
       projectId: null,
       totalBudgetUsd,
-      status: ResourceStatus.ACTIVE,
+      status,
     });
 
     const { project, runtimeApplicationId } = await this.prisma.$transaction(
@@ -55,6 +56,7 @@ export class ProjectsService {
             tenantId,
             name: dto.name,
             description: this.toNullableDescription(dto.description),
+            ...(status !== ResourceStatus.ACTIVE ? { status } : {}),
             totalBudgetUsd,
           },
         });
@@ -304,7 +306,7 @@ export class ProjectsService {
                 }
               : {}),
             status: {
-              not: 'ARCHIVED',
+              notIn: [ResourceStatus.ARCHIVED, ResourceStatus.DRAFT],
             },
           },
           select: {
@@ -326,7 +328,8 @@ export class ProjectsService {
       0,
     );
     const nextBudgetUsd =
-      args.status === ResourceStatus.ARCHIVED
+      args.status === ResourceStatus.ARCHIVED ||
+      args.status === ResourceStatus.DRAFT
         ? 0
         : Math.max(0, args.totalBudgetUsd);
 
@@ -466,6 +469,10 @@ export class ProjectsService {
     const selectedByProjectId = new Map<string, RuntimeApplicationProjection>();
 
     for (const application of applications) {
+      if (!application.projectId) {
+        continue;
+      }
+
       const current = selectedByProjectId.get(application.projectId);
 
       if (

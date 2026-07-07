@@ -10,6 +10,7 @@ import {
   AuthSessionKind,
   AuthSessionWithUser,
   AuthTenant,
+  AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
   EmailVerificationCode,
@@ -196,6 +197,86 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
+  async createLocalUserTenantAndMembership(input: {
+    email: string;
+    emailVerifiedAt: Date;
+    name: string | null;
+    organizationName: string;
+    passwordHash: string;
+  }): Promise<{
+    membership: AuthTenantMembership;
+    tenant: AuthTenant;
+    user: AuthUser;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findFirst({
+        where: {
+          deletedAt: null,
+          email: input.email,
+        },
+      });
+      let user: AuthUser;
+
+      if (existingUser) {
+        const activeMembershipCount = await tx.tenantMembership.count({
+          where: {
+            deletedAt: null,
+            status: 'active',
+            userId: existingUser.id,
+          },
+        });
+        if (
+          activeMembershipCount > 0 ||
+          existingUser.authProvider !== 'local'
+        ) {
+          throw new Error('EMAIL_ALREADY_REGISTERED');
+        }
+
+        user = await tx.user.update({
+          data: {
+            authProvider: 'local',
+            emailVerifiedAt: input.emailVerifiedAt,
+            name: input.name,
+            passwordHash: input.passwordHash,
+            status: 'active',
+          },
+          where: { id: existingUser.id },
+        });
+      } else {
+        user = await tx.user.create({
+          data: {
+            authProvider: 'local',
+            email: input.email,
+            emailVerifiedAt: input.emailVerifiedAt,
+            name: input.name,
+            passwordHash: input.passwordHash,
+            status: 'active',
+          },
+        });
+      }
+
+      const tenant = await tx.tenant.create({
+        data: {
+          name: input.organizationName,
+        },
+      });
+      const membership = await tx.tenantMembership.create({
+        data: {
+          joinedAt: new Date(),
+          role: 'tenant_admin',
+          status: 'active',
+          tenantId: tenant.id,
+          userId: user.id,
+        },
+        include: {
+          tenant: true,
+        },
+      });
+
+      return { membership, tenant, user };
+    });
+  }
+
   async createTenantAndMembership(input: {
     organizationName: string;
     userId: string;
@@ -308,6 +389,14 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
+  async findTenantAdminsByUserId(userId: string): Promise<AuthTenantAdmin[]> {
+    return this.prisma.tenantAdmin.findMany({
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      where: {
+        userId,
+      },
+    });
+  }
   async findProjectAdminsByUserId(userId: string): Promise<AuthProjectAdmin[]> {
     return this.prisma.projectAdmin.findMany({
       include: {

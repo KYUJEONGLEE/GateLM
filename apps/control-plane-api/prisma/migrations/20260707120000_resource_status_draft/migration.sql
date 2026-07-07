@@ -1,0 +1,1 @@
+ALTER TYPE "ResourceStatus" ADD VALUE IF NOT EXISTS 'DRAFT';

@@ -15,7 +15,12 @@ import type { Request, Response } from 'express';
 
 import { DataEnvelope } from '@/common/types/envelope';
 
-import { AuthService, SessionIssue } from './auth.service';
+import {
+  AuthService,
+  SessionIssue,
+  SignupDraftIssue,
+  SignupDraftUnauthorizedException,
+} from './auth.service';
 import { AUTH_COOKIE_NAMES } from './auth.tokens';
 import {
   CreateOrganizationDto,
@@ -37,7 +42,11 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<DataEnvelope<unknown>> {
     const result = await this.authService.signup(body);
+    if (result.signupDraft) {
+      this.setSignupDraftCookie(response, result.signupDraft);
+    }
     if (result.session) {
+      this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
       this.setSessionCookie(response, result.session);
     }
 
@@ -57,15 +66,38 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async verifyEmail(
     @Body() body: VerifyEmailDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<DataEnvelope<unknown>> {
-    const result = await this.authService.verifyEmail(body);
-    this.setSessionCookie(response, result.session);
+    let result: Awaited<ReturnType<AuthService['verifyEmail']>>;
+    try {
+      result = await this.authService.verifyEmail(
+        this.readCookie(request, AUTH_COOKIE_NAMES.signup),
+        body,
+      );
+    } catch (error) {
+      if (
+        error instanceof SignupDraftUnauthorizedException &&
+        error.signupDraft
+      ) {
+        this.setSignupDraftCookie(response, error.signupDraft);
+      }
+      throw error;
+    }
+    if (result.signupDraft) {
+      this.setSignupDraftCookie(response, result.signupDraft);
+    }
+    if (result.session) {
+      this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
+      this.setSessionCookie(response, result.session);
+    }
 
     return {
       data: {
         acceptedProjectInvitation: result.acceptedProjectInvitation,
-        session: this.toSessionResponse(result.session),
+        session: result.session
+          ? this.toSessionResponse(result.session)
+          : undefined,
         user: result.user,
       },
     };
@@ -79,7 +111,6 @@ export class AuthController {
       data: await this.authService.getProjectAdminInvitation(token),
     };
   }
-
   @Post('organizations')
   async createOrganization(
     @Body() body: CreateOrganizationDto,
@@ -88,10 +119,14 @@ export class AuthController {
   ): Promise<DataEnvelope<unknown>> {
     response.status(HttpStatus.CREATED);
     const result = await this.authService.createOrganization(
-      this.readCookie(request, AUTH_COOKIE_NAMES.onboarding),
+      {
+        onboardingToken: this.readCookie(request, AUTH_COOKIE_NAMES.onboarding),
+        signupDraftToken: this.readCookie(request, AUTH_COOKIE_NAMES.signup),
+      },
       body,
     );
     this.clearCookie(response, AUTH_COOKIE_NAMES.onboarding);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
     this.setSessionCookie(response, result.session);
 
     return {
@@ -134,6 +169,7 @@ export class AuthController {
     ]);
     this.clearCookie(response, AUTH_COOKIE_NAMES.full);
     this.clearCookie(response, AUTH_COOKIE_NAMES.onboarding);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
 
     return { data: result };
   }
@@ -151,6 +187,7 @@ export class AuthController {
   @Get('google/start')
   googleStart(@Res() response: Response): void {
     const result = this.authService.startGoogleOAuth();
+    this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
     response.cookie(AUTH_COOKIE_NAMES.oauthState, result.state, {
       ...this.baseCookieOptions(),
       expires: addMinutes(new Date(), 10),
@@ -171,6 +208,7 @@ export class AuthController {
       state,
     });
     this.clearCookie(response, AUTH_COOKIE_NAMES.oauthState);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
     this.setSessionCookie(response, result.session);
     response.redirect(result.redirectUrl);
   }
@@ -183,6 +221,16 @@ export class AuthController {
     response.cookie(cookieName, session.token, {
       ...this.baseCookieOptions(),
       expires: session.expiresAt,
+    });
+  }
+
+  private setSignupDraftCookie(
+    response: Response,
+    signupDraft: SignupDraftIssue,
+  ): void {
+    response.cookie(AUTH_COOKIE_NAMES.signup, signupDraft.token, {
+      ...this.baseCookieOptions(),
+      expires: signupDraft.expiresAt,
     });
   }
 

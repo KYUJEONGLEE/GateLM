@@ -28,6 +28,39 @@ export function formatModelDisplayName(value: string | null | undefined, fallbac
   return formattedValue;
 }
 
+export type BudgetScopeDisplayInput = {
+  budgetScopeId?: string | null;
+  budgetScopeType?: string | null;
+  resolvedBy?: string | null;
+};
+
+export function formatBudgetScopeTypeDisplayName(scopeType: string | null | undefined) {
+  if (scopeType === "application") {
+    return "Project default policy";
+  }
+
+  if (scopeType === "project") {
+    return "Project budget";
+  }
+
+  if (scopeType === "team") {
+    return "Team budget";
+  }
+
+  return scopeType ? formatDisplayIdentifier(scopeType) : "Project budget";
+}
+
+export function formatBudgetScopeDisplayName(scope: BudgetScopeDisplayInput) {
+  if (scope.budgetScopeType === "application") {
+    return "Project default policy";
+  }
+
+  const typeLabel = formatBudgetScopeTypeDisplayName(scope.budgetScopeType);
+  const scopeId = scope.budgetScopeId?.trim();
+
+  return scopeId ? `${typeLabel}: ${formatDisplayIdentifier(scopeId)}` : typeLabel;
+}
+
 export function formatTenantDisplayName(tenantId: string) {
   return tenantId === "tenant_demo_acme" ? "Acme Corp" : formatDisplayIdentifier(tenantId);
 }

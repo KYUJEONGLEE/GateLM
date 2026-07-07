@@ -41,6 +41,14 @@ export interface AuthProjectAdmin {
   project?: AuthProject;
 }
 
+export interface AuthTenantAdmin {
+  id: string;
+  tenantId: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AuthTenantMembership {
   id: string;
   tenantId: string;
@@ -156,6 +164,17 @@ export interface AuthRepository {
     sessionTokenHash: string;
     userId: string;
   }): Promise<AuthSession>;
+  createLocalUserTenantAndMembership(input: {
+    email: string;
+    emailVerifiedAt: Date;
+    name: string | null;
+    organizationName: string;
+    passwordHash: string;
+  }): Promise<{
+    membership: AuthTenantMembership;
+    tenant: AuthTenant;
+    user: AuthUser;
+  }>;
   createTenantAndMembership(input: {
     organizationName: string;
     userId: string;
@@ -175,6 +194,7 @@ export interface AuthRepository {
     now: Date,
   ): Promise<EmailVerificationCode | null>;
   findMembershipsByUserId(userId: string): Promise<AuthTenantMembership[]>;
+  findTenantAdminsByUserId(userId: string): Promise<AuthTenantAdmin[]>;
   findProjectAdminsByUserId(userId: string): Promise<AuthProjectAdmin[]>;
   findOAuthAccount(
     provider: string,

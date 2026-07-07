@@ -9,6 +9,7 @@ describe('ProjectsService', () => {
   const tenantId = '00000000-0000-4000-8000-000000000100';
   const projectId = '00000000-0000-4000-8000-000000000201';
   const createdAt = new Date('2026-06-27T00:00:00.000Z');
+  const draftResourceStatus = 'DRAFT' as ResourceStatus;
 
   function createService(): {
     service: ProjectsService;
@@ -112,6 +113,40 @@ describe('ProjectsService', () => {
     expect(result.runtimeApplicationId).toBe(
       '00000000-0000-4000-8000-000000000301',
     );
+  });
+
+  it('creates a draft project without consuming tenant budget before activation', async () => {
+    const { service, prisma } = createService();
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      totalBudgetUsd: new Prisma.Decimal(100),
+      projects: [{ totalBudgetUsd: new Prisma.Decimal(100) }],
+    });
+    prisma.project.create.mockResolvedValue({
+      ...project(projectId),
+      status: draftResourceStatus,
+      totalBudgetUsd: new Prisma.Decimal(500),
+    });
+    prisma.application.create.mockResolvedValue({
+      id: '00000000-0000-4000-8000-000000000301',
+    });
+
+    const result = await service.createProject(tenantId, {
+      name: 'Draft Project',
+      status: draftResourceStatus,
+      totalBudgetUsd: 500,
+    });
+
+    expect(prisma.project.create).toHaveBeenCalledWith({
+      data: {
+        tenantId,
+        name: 'Draft Project',
+        description: null,
+        status: draftResourceStatus,
+        totalBudgetUsd: 500,
+      },
+    });
+    expect(result.status).toBe(draftResourceStatus);
   });
 
   it('creates the hidden default runtime application with project values in the same transaction', async () => {

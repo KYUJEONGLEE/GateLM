@@ -107,7 +107,7 @@ describe('Auth HTTP API', () => {
     await app.close();
   });
 
-  it('signs up and emails a verification code without returning plaintext secrets', async () => {
+  it('starts signup and emails a verification code without persistent user records', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/signup')
       .send({
@@ -126,7 +126,10 @@ describe('Auth HTTP API', () => {
         },
       },
     });
-    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(String(response.headers['set-cookie'])).toContain('gatelm_signup=');
+    expect(String(response.headers['set-cookie'])).not.toContain(
+      'gatelm_onboarding=',
+    );
     expect(emailSender.sent).toHaveLength(1);
     expect(emailSender.sent[0]?.email).toBe('admin@example.com');
     expect(emailSender.sent[0]?.code).toMatch(/^\d{6}$/);
@@ -134,9 +137,8 @@ describe('Auth HTTP API', () => {
       emailSender.sent[0]?.code,
     );
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
-    expect(repository.dump().emailVerificationCodes[0]?.codeHash).not.toContain(
-      emailSender.sent[0]?.code,
-    );
+    expect(repository.dump().users).toHaveLength(0);
+    expect(repository.dump().emailVerificationCodes).toHaveLength(0);
   });
 
   it('auto-verifies local dev signups without returning plaintext secrets', async () => {
@@ -152,14 +154,12 @@ describe('Auth HTTP API', () => {
       })
       .expect(201);
 
-    expect(String(response.headers['set-cookie'])).toContain(
+    expect(String(response.headers['set-cookie'])).toContain('gatelm_signup=');
+    expect(String(response.headers['set-cookie'])).not.toContain(
       'gatelm_onboarding=',
     );
     expect(response.body).toMatchObject({
       data: {
-        session: {
-          kind: 'onboarding',
-        },
         user: {
           email: 'dev-owner@example.com',
           name: 'Dev Owner',
@@ -168,8 +168,7 @@ describe('Auth HTTP API', () => {
       },
     });
     expect(emailSender.sent).toHaveLength(0);
-    expect(repository.dump().users[0]?.emailVerifiedAt).toBeInstanceOf(Date);
-    expect(JSON.stringify(response.body)).not.toContain('gatelm_onboarding');
+    expect(repository.dump().users).toHaveLength(0);
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
   });
 
@@ -186,14 +185,12 @@ describe('Auth HTTP API', () => {
       })
       .expect(201);
 
-    expect(String(response.headers['set-cookie'])).toContain(
+    expect(String(response.headers['set-cookie'])).toContain('gatelm_signup=');
+    expect(String(response.headers['set-cookie'])).not.toContain(
       'gatelm_onboarding=',
     );
     expect(response.body).toMatchObject({
       data: {
-        session: {
-          kind: 'onboarding',
-        },
         user: {
           email: 'default-fake-owner@example.com',
         },
@@ -201,6 +198,7 @@ describe('Auth HTTP API', () => {
       },
     });
     expect(emailSender.sent).toHaveLength(0);
+    expect(repository.dump().users).toHaveLength(0);
     expect(repository.dump().emailVerificationCodes).toHaveLength(0);
   });
 
@@ -239,15 +237,12 @@ describe('Auth HTTP API', () => {
         },
       },
     });
-    expect(repository.dump().users).toHaveLength(1);
-    expect(repository.dump().emailVerificationCodes).toHaveLength(2);
-    expect(repository.dump().emailVerificationCodes[0]?.consumedAt).toBeInstanceOf(
-      Date,
-    );
+    expect(repository.dump().users).toHaveLength(0);
+    expect(repository.dump().emailVerificationCodes).toHaveLength(0);
     expect(emailSender.sent).toHaveLength(2);
   });
 
-  it('resumes an incomplete fake-verified local signup with an onboarding session', async () => {
+  it('restarts an incomplete fake-verified local signup without creating a user', async () => {
     await app.close();
     await createAuthTestApp({ devAutoVerify: true });
 
@@ -269,21 +264,19 @@ describe('Auth HTTP API', () => {
       })
       .expect(201);
 
-    expect(String(response.headers['set-cookie'])).toContain(
+    expect(String(response.headers['set-cookie'])).toContain('gatelm_signup=');
+    expect(String(response.headers['set-cookie'])).not.toContain(
       'gatelm_onboarding=',
     );
     expect(response.body).toMatchObject({
       data: {
-        session: {
-          kind: 'onboarding',
-        },
         user: {
           email: 'resume-owner@example.com',
         },
         verificationRequired: false,
       },
     });
-    expect(repository.dump().users).toHaveLength(1);
+    expect(repository.dump().users).toHaveLength(0);
     expect(repository.dump().tenantMemberships).toHaveLength(0);
     expect(emailSender.sent).toHaveLength(0);
   });
@@ -297,6 +290,8 @@ describe('Auth HTTP API', () => {
       password: 'correct-horse-battery-staple',
     });
     const code = emailSender.sent[0]?.code;
+    expect(repository.dump().users).toHaveLength(0);
+    expect(repository.dump().tenantMemberships).toHaveLength(0);
 
     const verifyResponse = await agent
       .post('/api/auth/email/verify')
@@ -304,8 +299,12 @@ describe('Auth HTTP API', () => {
       .expect(200);
 
     expect(String(verifyResponse.headers['set-cookie'])).toContain(
+      'gatelm_signup=',
+    );
+    expect(String(verifyResponse.headers['set-cookie'])).not.toContain(
       'gatelm_onboarding=',
     );
+    expect(repository.dump().users).toHaveLength(0);
 
     const organizationResponse = await agent
       .post('/api/auth/organizations')
@@ -329,6 +328,9 @@ describe('Auth HTTP API', () => {
     expect(JSON.stringify(organizationResponse.body)).not.toContain(
       'sessionToken',
     );
+    expect(repository.dump().users).toHaveLength(1);
+    expect(repository.dump().tenants).toHaveLength(1);
+    expect(repository.dump().tenantMemberships).toHaveLength(1);
   });
 
   it('accepts a project admin invitation during email verification', async () => {
@@ -411,9 +413,8 @@ describe('Auth HTTP API', () => {
         .expect(401);
     }
 
-    const verificationCode = repository.dump().emailVerificationCodes[0];
-    expect(verificationCode?.failedAttemptCount).toBe(5);
-    expect(verificationCode?.consumedAt).toBeInstanceOf(Date);
+    expect(repository.dump().users).toHaveLength(0);
+    expect(repository.dump().emailVerificationCodes).toHaveLength(0);
 
     await agent
       .post('/api/auth/email/verify')
@@ -451,7 +452,7 @@ describe('Auth HTTP API', () => {
     expect(JSON.stringify(loginResponse.body)).not.toContain('refreshToken');
   });
 
-  it('logs in to resume a pending local signup in fake verification mode', async () => {
+  it('does not log in a legacy pending local signup without tenant membership', async () => {
     await app.close();
     await createAuthTestApp({ devAutoVerify: true });
     await repository.createUser({
@@ -463,30 +464,14 @@ describe('Auth HTTP API', () => {
       status: 'pending_email_verification',
     });
 
-    const response = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
         email: 'pending-login@example.com',
         password: 'correct-horse-battery-staple',
       })
-      .expect(200);
-
-    expect(String(response.headers['set-cookie'])).toContain(
-      'gatelm_onboarding=',
-    );
-    expect(response.body).toMatchObject({
-      data: {
-        memberships: [],
-        session: {
-          kind: 'onboarding',
-        },
-        user: {
-          email: 'pending-login@example.com',
-        },
-      },
-    });
-    expect(response.body.data.user.emailVerifiedAt).toEqual(expect.any(String));
-    expect(repository.dump().users[0]?.emailVerifiedAt).toBeInstanceOf(Date);
+      .expect(401);
+    expect(repository.dump().users[0]?.emailVerifiedAt).toBeNull();
   });
 
   it('starts Google OAuth and returns verified Google users to the app with a login session without storing Google tokens', async () => {
@@ -505,7 +490,9 @@ describe('Auth HTTP API', () => {
       .get(`/api/auth/google/callback?code=oauth-code&state=${state}`)
       .expect(302);
 
-    expect(callbackResponse.headers.location).toBe('http://localhost:3000/');
+    expect(callbackResponse.headers.location).toBe(
+      'http://localhost:3000/tenants/tenant_demo_acme/dashboard',
+    );
     expect(String(callbackResponse.headers['set-cookie'])).toContain(
       'gatelm_onboarding=',
     );

@@ -3,7 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-  IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -14,6 +14,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+
+const RESOURCE_STATUS_VALUES = ['ACTIVE', 'DRAFT', 'DISABLED', 'ARCHIVED'];
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -51,6 +53,10 @@ export class CreateProjectDto {
   @ArrayMaxSize(20)
   @IsUUID('4', { each: true })
   providerConnectionIds?: string[];
+
+  @IsOptional()
+  @IsIn(RESOURCE_STATUS_VALUES)
+  status?: ResourceStatus;
 }
 
 export class UpdateProjectDto {
@@ -68,7 +74,7 @@ export class UpdateProjectDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(ResourceStatus)
+  @IsIn(RESOURCE_STATUS_VALUES)
   status?: ResourceStatus;
 
   @Type(() => Number)

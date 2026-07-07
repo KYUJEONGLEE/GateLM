@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
+import {
+  formatBudgetScopeDisplayName,
+  formatDisplayIdentifier
+} from "@/lib/formatting/display-identifiers";
 import {
   formatDateTime,
   formatInteger,
@@ -134,6 +137,7 @@ export function RequestLogDetailPanel({
   const text = requestDetailText[locale];
   const domainOutcomes = record.domainOutcomes;
   const hasErrorDetail = Boolean(record.errorCode || record.errorStage || record.errorMessage);
+  const runtimeSnapshot = record.metadata?.runtime?.runtimeSnapshot;
 
   return (
     <article className="console-panel detail-panel detail-panel-stack">
@@ -193,10 +197,27 @@ export function RequestLogDetailPanel({
       ) : null}
 
       <DetailSection
-        title="Identity"
+        title="Project policy"
         rows={[
           ["Project ID", record.projectId],
-          ["Application ID", record.applicationId]
+          ["Budget attribution", formatBudgetScopeDisplayName(record.budgetScope)],
+          ["Resolved by", record.budgetScope.resolvedBy]
+        ]}
+      />
+
+      <DetailSection
+        title="Advanced / Runtime boundary"
+        rows={[
+          ["Application ID", record.applicationId],
+          ["Budget scope type", record.budgetScope.budgetScopeType],
+          ["Budget scope ID", record.budgetScope.budgetScopeId],
+          ["Runtime state", runtimeSnapshot?.runtimeState ?? text.none],
+          ["Runtime snapshot", runtimeSnapshot?.runtimeSnapshotId ?? text.none],
+          [
+            "Snapshot version",
+            runtimeSnapshot ? String(runtimeSnapshot.runtimeSnapshotVersion) : text.none
+          ],
+          ["Gateway instance", runtimeSnapshot?.gatewayInstanceId ?? text.none]
         ]}
       />
 

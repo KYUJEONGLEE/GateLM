@@ -400,6 +400,10 @@ function normalizeRuntimeProviderFailureMode(
 }
 
 function normalizeRuntimeProviderResolver(value: string): RuntimePolicyProvider["resolver"] {
+  if (value === "credential_store") {
+    return "control_plane_secret_store";
+  }
+
   if (
     value === "none" ||
     value === "control_plane_secret_store" ||

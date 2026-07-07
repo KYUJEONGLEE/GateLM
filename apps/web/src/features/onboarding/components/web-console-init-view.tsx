@@ -24,11 +24,12 @@ const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
 const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
 
 type WebConsoleInitViewProps = {
+  initialAuthStatus: AuthStatus;
   locale: Locale;
 };
 
 type AuthMode = "login" | "signup";
-type AuthStatus = "anonymous" | "authenticated" | "checking";
+type AuthStatus = "anonymous" | "authenticated";
 type SignupStepId = "account" | "verify" | "organization" | "ready";
 
 type AcceptedProjectInvitation = {
@@ -474,12 +475,12 @@ const initText: Record<
   }
 };
 
-export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
+export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInitViewProps) {
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(initialAuthStatus);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
   const [dashboardTenantId, setDashboardTenantId] = useState(defaultTenantId);
@@ -511,6 +512,10 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
       Boolean(projectInvite) || hasLandingViewParam || hasStayOnLandingHistoryState();
     if (hasLandingViewParam || projectInvite) {
       replaceLandingUrl();
+    }
+
+    if (initialAuthStatus === "anonymous") {
+      return;
     }
 
     let isMounted = true;
@@ -564,7 +569,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialAuthStatus]);
 
   function openAuthPanel(mode: AuthMode) {
     setAuthError(null);
@@ -729,10 +734,12 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
             <span className="landing-brand-mark">G</span>
             <strong>GateLM</strong>
           </Link>
-          <Link className="landing-auth-button landing-gateway-request-button" href="/application">
-            <Send aria-hidden="true" size={16} strokeWidth={2.4} />
-            <span>{text.actions.gatewayRequest}</span>
-          </Link>
+          {authStatus === "authenticated" ? (
+            <Link className="landing-auth-button landing-gateway-request-button" href="/application">
+              <Send aria-hidden="true" size={16} strokeWidth={2.4} />
+              <span>{text.actions.gatewayRequest}</span>
+            </Link>
+          ) : null}
           {authStatus === "authenticated" ? (
             <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref(dashboardTenantId)}>
               <Route aria-hidden="true" size={17} strokeWidth={2.4} />
@@ -809,14 +816,29 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         </div>
         <p>{text.summary.body}</p>
         <div className="landing-summary-actions">
-          <Link className="landing-summary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
-            <Route aria-hidden="true" size={16} strokeWidth={2.3} />
-            <span>{text.actions.dashboard}</span>
-          </Link>
-          <Link className="landing-summary-link" href="/application">
-            <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
-            <span>{text.actions.chat}</span>
-          </Link>
+          {authStatus === "authenticated" ? (
+            <>
+              <Link className="landing-summary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
+                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.dashboard}</span>
+              </Link>
+              <Link className="landing-summary-link" href="/application">
+                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.chat}</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
+                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.dashboard}</span>
+              </button>
+              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
+                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.chat}</span>
+              </button>
+            </>
+          )}
         </div>
       </section>
 
@@ -1207,15 +1229,20 @@ function SignupFlow({
         <span>{isReadyStep ? text.actions.loginSubmit : text.actions.signupSubmit}</span>
       </button>
       {!isProjectInviteSignup ? (
-        <button
-          className="landing-google-button"
-          disabled={isSubmitting}
-          onClick={onGoogleLogin}
-          type="button"
-        >
-          <GoogleMark />
-          <strong>{text.actions.googleLogin}</strong>
-        </button>
+        <>
+          <div className="landing-auth-divider" role="separator">
+            <span>or</span>
+          </div>
+          <button
+            className="landing-google-button"
+            disabled={isSubmitting}
+            onClick={onGoogleLogin}
+            type="button"
+          >
+            <GoogleMark />
+            <strong>{text.actions.googleLogin}</strong>
+          </button>
+        </>
       ) : null}
     </form>
   );

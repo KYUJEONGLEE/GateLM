@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, PlugZap, Trash2, X } from "lucide-react";
+import { KeyRound, Pencil, PlugZap, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -41,12 +41,14 @@ type ProviderResponsePayload = {
   status?: number;
 };
 
-type ProviderDisplayRow = {
-  connection: ProviderConnectionRecord | null;
-  displayName: string;
-  providerKey: string;
-  preset: ProviderPresetRecord | null;
-};
+type ProviderModalState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "credential";
+      provider: string;
+    };
 
 const providerKeyPattern = /^[a-z][a-z0-9_-]{1,63}$/;
 const minProviderTimeoutMs = 1000;
@@ -64,6 +66,7 @@ const emptyProviderForm: ProviderConnectionFormValues = {
   failureMode: "fail_closed",
   models: "",
   modelsEndpointPath: "/models",
+  presetProviderKey: "openai",
   provider: "",
   requestFormat: "openai_chat_completions",
   resolver: "none",
@@ -81,6 +84,8 @@ const providerText: Record<
     created: string;
     credential: string;
     deleteProvider: string;
+    edit: string;
+    apiKeyChange: string;
     credentialRequired: string;
     credentialLast4: string;
     credentialPrefix: string;
@@ -105,6 +110,7 @@ const providerText: Record<
     requestFormat: string;
     resolver: string;
     save: string;
+    saveChanges: string;
     secretRef: string;
     source: string;
     status: string;
@@ -116,6 +122,8 @@ const providerText: Record<
   en: {
     adapterType: "Adapter type",
     deleteProvider: "Delete",
+    edit: "Edit",
+    apiKeyChange: "Change API key",
     apiVersion: "API version",
     baseUrl: "Base URL",
     created: "Created",
@@ -125,7 +133,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     credentialValue: "API key registration",
     credentialValuePlaceholder: "Paste provider API key",
-    displayName: "Display name",
+    displayName: "Provider name",
     discoverModels: "Discover models",
     discoveryOpenAiOnly: "Model discovery is enabled for OpenAI-compatible and Anthropic providers.",
     empty: "No provider connections found.",
@@ -144,6 +152,7 @@ const providerText: Record<
     requestFormat: "Request format",
     resolver: "Resolver",
     save: "Save",
+    saveChanges: "Save changes",
     secretRef: "Secret reference",
     source: "Source",
     status: "Status",
@@ -154,6 +163,8 @@ const providerText: Record<
   ko: {
     adapterType: "Adapter type",
     deleteProvider: "삭제",
+    edit: "편집",
+    apiKeyChange: "API key 변경",
     apiVersion: "API version",
     baseUrl: "Base URL",
     created: "생성",
@@ -163,7 +174,7 @@ const providerText: Record<
     credentialPrefix: "Credential prefix",
     credentialValue: "API key 등록",
     credentialValuePlaceholder: "Provider API key 입력",
-    displayName: "표시 이름",
+    displayName: "Provider 이름",
     discoverModels: "모델 조회",
     discoveryOpenAiOnly: "모델 조회는 OpenAI 호환 및 Anthropic Provider에서 활성화됩니다.",
     empty: "Provider connection이 없습니다.",
@@ -182,6 +193,7 @@ const providerText: Record<
     requestFormat: "Request format",
     resolver: "Resolver",
     save: "저장",
+    saveChanges: "변경 저장",
     secretRef: "Secret reference",
     source: "출처",
     status: "상태",
@@ -205,26 +217,39 @@ export function ProviderConnectionManagement({
   const [discoveryByProvider, setDiscoveryByProvider] = useState<Record<string, ProviderDiscoveryPreview>>({});
   const [pendingAction, setPendingAction] = useState(false);
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
-  const [registrationProviderKey, setRegistrationProviderKey] = useState<string | null>(null);
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [providerModal, setProviderModal] = useState<ProviderModalState | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
   });
-  const providerRows = getProviderRows(providers, model.providerPresets.items);
+  const activeDiscoveryKey = formValues.previousProvider?.trim() || formValues.provider.trim();
+  const activeDiscovery = activeDiscoveryKey ? discoveryByProvider[activeDiscoveryKey] : undefined;
+
   async function submitProvider() {
-    const validationError = validateProviderForm(formValues, locale);
+    const discovery = activeDiscovery;
+    const valuesToSubmit = {
+      ...formValues,
+      models: discovery ? discovery.selectedModels.join(", ") : formValues.models
+    };
+    const validationError = validateProviderForm(valuesToSubmit, locale);
 
     if (validationError) {
       setSubmitState({ message: validationError, status: "error" });
       return;
     }
 
+    const previousProvider = valuesToSubmit.previousProvider?.trim();
+    const nextProvider = valuesToSubmit.provider.trim();
     const registeringProvider = providers.find(
-      (provider) => provider.provider === formValues.provider.trim()
+      (provider) =>
+        provider.provider === previousProvider ||
+        provider.provider === nextProvider
     );
-    const requiresCredential = formValues.credentialRequired && !hasProviderKeyRegistered(registeringProvider);
+    const requiresCredential =
+      valuesToSubmit.credentialRequired && !hasProviderKeyRegistered(registeringProvider);
 
-    if (requiresCredential && !formValues.credentialValue?.trim()) {
+    if (requiresCredential && !valuesToSubmit.credentialValue?.trim()) {
       setSubmitState({
         message:
           locale === "ko"
@@ -242,8 +267,8 @@ export function ProviderConnectionManagement({
       body: JSON.stringify({
         action: "upsert",
         values: {
-          ...formValues,
-          isEdit: isRegisteredProvider(providers, formValues.provider)
+          ...valuesToSubmit,
+          isEdit: Boolean(registeringProvider)
         }
       }),
       headers: {
@@ -269,7 +294,12 @@ export function ProviderConnectionManagement({
     const savedProvider = payload.provider;
 
     setProviders((current) => [
-      ...current.filter((provider) => provider.provider !== savedProvider.provider),
+      ...current.filter(
+        (provider) =>
+          provider.id !== savedProvider.id &&
+          provider.provider !== savedProvider.provider &&
+          (!previousProvider || provider.provider !== previousProvider)
+      ),
       savedProvider
     ]);
     setModelOptionsByProvider((current) => ({
@@ -278,11 +308,20 @@ export function ProviderConnectionManagement({
         ? current[savedProvider.provider]
         : getProviderConfigModels(savedProvider.providerConfig).filter(isChatCompletionModelName)
     }));
+    setDiscoveryByProvider((current) => {
+      const next = { ...current };
+      if (previousProvider) {
+        delete next[previousProvider];
+      }
+      delete next[savedProvider.provider];
+      return next;
+    });
     setFormValues({
       ...getProviderFormValues(savedProvider),
       credentialValue: ""
     });
-    setRegistrationProviderKey(null);
+    setEditingProviderId(null);
+    setProviderModal(null);
     setSubmitState({
       message: locale === "ko" ? "Provider가 저장되었습니다." : "Provider saved.",
       status: "success"
@@ -355,6 +394,7 @@ export function ProviderConnectionManagement({
     const existingSelectedModels = splitModelNames(baseValues.models).filter((modelName) =>
       chatModels.includes(modelName)
     );
+    const selectedModels = existingSelectedModels.length > 0 ? existingSelectedModels : chatModels;
     const skippedModelCount = discoveredModels.length - chatModels.length;
 
     setModelOptionsByProvider((current) => ({
@@ -366,19 +406,18 @@ export function ProviderConnectionManagement({
       [normalizedProvider]: {
         chatModels,
         discoveredAt: payload.discovery?.discoveredAt ?? new Date().toISOString(),
-        selectedModels: existingSelectedModels,
+        selectedModels,
         skippedModelCount
       }
     }));
     if (applyToForm) {
       setFormValues((current) => {
         return {
-          ...baseValues,
+          ...current,
           adapterType: payload.discovery?.adapterType ?? current.adapterType,
           baseUrl: payload.discovery?.baseUrl ?? current.baseUrl,
           credentialRequired: payload.discovery?.credentialRequired ?? current.credentialRequired,
-          models: existingSelectedModels.join(", "),
-          provider: normalizedProvider
+          models: selectedModels.join(", ")
         };
       });
     }
@@ -394,87 +433,6 @@ export function ProviderConnectionManagement({
       status: "success"
     });
     setDiscoveringProvider(null);
-  }
-
-  async function applyDiscoveredModelsToProvider(provider: ProviderConnectionRecord) {
-    const discovery = discoveryByProvider[provider.provider];
-
-    if (!discovery) {
-      return;
-    }
-
-    const values = {
-      ...getProviderFormValues(provider),
-      isEdit: true,
-      models: discovery.selectedModels.join(", ")
-    };
-
-    setPendingAction(true);
-    setSubmitState({ message: "", status: "idle" });
-
-    const response = await fetch("/api/control-plane/provider-connections", {
-      body: JSON.stringify({
-        action: "upsert",
-        values
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
-
-    if (!response.ok || !payload.provider) {
-      setSubmitState({
-        message: payload.error ?? "Provider update failed.",
-        status: "error"
-      });
-      setPendingAction(false);
-      return;
-    }
-
-    const savedProvider = payload.provider;
-
-    setProviders((current) => [
-      ...current.filter((item) => item.provider !== savedProvider.provider),
-      savedProvider
-    ]);
-    setModelOptionsByProvider((current) => ({
-      ...current,
-      [savedProvider.provider]: discovery.chatModels
-    }));
-    setDiscoveryByProvider((current) => {
-      const next = { ...current };
-      delete next[savedProvider.provider];
-      return next;
-    });
-    if (formValues.provider === savedProvider.provider) {
-      setFormValues(getProviderFormValues(savedProvider));
-    }
-    setSubmitState({
-      message:
-        locale === "ko"
-          ? `${savedProvider.provider} 모델 목록을 저장했습니다.`
-          : `Saved discovered models for ${savedProvider.provider}.`,
-      status: "success"
-    });
-    setPendingAction(false);
-    router.refresh();
-  }
-
-  function editFromProvider(provider: ProviderConnectionRecord) {
-    const providerModels = getProviderConfigModels(provider.providerConfig).filter(
-      isChatCompletionModelName
-    );
-
-    setModelOptionsByProvider((current) => ({
-      ...current,
-      [provider.provider]: current[provider.provider]?.length
-        ? current[provider.provider]
-        : providerModels
-    }));
-    setFormValues(getProviderFormValues(provider));
-    setSubmitState({ message: "", status: "idle" });
   }
 
   async function deleteProvider(provider: ProviderConnectionRecord) {
@@ -541,6 +499,9 @@ export function ProviderConnectionManagement({
     if (formValues.provider === deletedProvider.provider) {
       setFormValues(emptyProviderForm);
     }
+    if (editingProviderId === deletedProvider.id) {
+      setEditingProviderId(null);
+    }
     setSubmitState({
       message:
         locale === "ko"
@@ -552,67 +513,59 @@ export function ProviderConnectionManagement({
     router.refresh();
   }
 
-  function applyProviderPreset(providerKey: string) {
-    const preset = model.providerPresets.items.find((item) => item.providerKey === providerKey);
+  function openCreateModal() {
+    const preset = model.providerPresets.items[0] ?? null;
 
-    if (!preset) {
-      return;
-    }
+    setProviderModal({ mode: "create" });
+    setEditingProviderId(null);
+    setFormValues(getProviderFormValuesFromPreset(preset, providers));
+    setSubmitState({ message: "", status: "idle" });
+  }
 
-    const savedProvider = providers.find((provider) => provider.provider === providerKey);
+  function openEditModal(provider: ProviderConnectionRecord) {
+    const providerModels = getProviderConfigModels(provider.providerConfig).filter(
+      isChatCompletionModelName
+    );
 
-    if (savedProvider) {
-      editFromProvider(savedProvider);
-      return;
-    }
+    setModelOptionsByProvider((current) => ({
+      ...current,
+      [provider.provider]: current[provider.provider]?.length
+        ? current[provider.provider]
+        : providerModels
+    }));
+    setProviderModal(null);
+    setEditingProviderId((current) => (current === provider.id ? null : provider.id));
+    setFormValues(getProviderFormValues(provider));
+    setSubmitState({ message: "", status: "idle" });
+  }
 
+  function openCredentialModal(provider: ProviderConnectionRecord) {
+    setProviderModal({ mode: "credential", provider: provider.provider });
     setFormValues({
-      ...emptyProviderForm,
-      adapterType: preset.adapterType,
-      apiVersion: getProviderConfigString(preset.providerConfig, "apiVersion", ""),
-      baseUrl: preset.baseUrl,
-      credentialRequired: preset.credentialRequired,
-      displayName: preset.displayName,
-      models: "",
-      modelsEndpointPath: preset.modelsEndpointPath,
-      provider: preset.providerKey,
-      requestFormat: getPresetRequestFormat(preset),
-      resolver: preset.defaultResolver,
-      timeoutMs: preset.defaultTimeoutMs
+      ...getProviderFormValues(provider),
+      credentialValue: ""
     });
     setSubmitState({ message: "", status: "idle" });
   }
 
-  function openRegistrationModal(providerKey: string) {
-    const savedProvider = providers.find((provider) => provider.provider === providerKey);
+  function applyProviderPresetToForm(providerKey: string) {
+    const preset = model.providerPresets.items.find((item) => item.providerKey === providerKey) ?? null;
 
-    setRegistrationProviderKey(providerKey);
-    if (savedProvider) {
-      const preset = model.providerPresets.items.find((item) => item.providerKey === providerKey) ?? null;
-      const values = getProviderFormValues(savedProvider);
-
-      setModelOptionsByProvider((current) => ({
-        ...current,
-        [savedProvider.provider]: current[savedProvider.provider]?.length
-          ? current[savedProvider.provider]
-          : getProviderConfigModels(savedProvider.providerConfig).filter(isChatCompletionModelName)
-      }));
-      setFormValues({
-        ...values,
-        models: splitModelNames(values.models).length > 0
-          ? splitModelNames(values.models).join(", ")
-          : getPresetModelOptions(preset).join(", ")
-      });
-      setSubmitState({ message: "", status: "idle" });
-      return;
-    }
-
-    applyProviderPreset(providerKey);
+    setFormValues(() => ({
+      ...getProviderFormValuesFromPreset(preset, providers),
+      credentialValue: ""
+    }));
   }
 
   function closeRegistrationModal() {
-    setRegistrationProviderKey(null);
-    setFormValues(emptyProviderForm);
+    setProviderModal(null);
+    if (!editingProviderId) {
+      setFormValues(emptyProviderForm);
+      return;
+    }
+
+    const editingProvider = providers.find((provider) => provider.id === editingProviderId);
+    setFormValues(editingProvider ? getProviderFormValues(editingProvider) : emptyProviderForm);
   }
 
   function toggleDiscoveredModel(providerKey: string, modelName: string, checked: boolean) {
@@ -659,6 +612,170 @@ export function ProviderConnectionManagement({
     });
   }
 
+  function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
+    return (
+      <div className="provider-discovery-panel provider-inline-edit-panel">
+        <div className="provider-form-grid provider-inline-edit-grid">
+          <label className="policy-field">
+            <span>{text.displayName}</span>
+            <input
+              autoComplete="off"
+              maxLength={120}
+              onChange={(event) =>
+                setFormValues((current) => ({
+                  ...current,
+                  displayName: event.target.value
+                }))
+              }
+              value={formValues.displayName}
+            />
+          </label>
+          <div className="policy-field provider-model-edit-field">
+            <span>{text.models}</span>
+            <div className="provider-model-edit">
+              <div className="provider-model-selection-toolbar">
+                <strong>
+                  {activeDiscovery
+                    ? locale === "ko"
+                      ? `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length}개 선택`
+                      : `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length} selected`
+                    : locale === "ko"
+                      ? "저장된 모델 목록"
+                      : "Saved model list"}
+                </strong>
+                <Button
+                  disabled={
+                    pendingAction ||
+                    discoveringProvider !== null ||
+                    !isDiscoverSupportedProvider(formValues.adapterType)
+                  }
+                  onClick={() =>
+                    void discoverModels(formValues.previousProvider || formValues.provider, {
+                      applyToForm: true
+                    })
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  {discoveringProvider === (formValues.previousProvider || formValues.provider)
+                    ? "..."
+                    : text.discoverModels}
+                </Button>
+              </div>
+              {activeDiscovery ? (
+                <>
+                  <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar">
+                    <span className="project-muted">
+                      {locale === "ko"
+                        ? `제외된 비채팅 모델 ${activeDiscovery.skippedModelCount}개 · ${formatDateTime(activeDiscovery.discoveredAt)}`
+                        : `${activeDiscovery.skippedModelCount} non-chat models excluded · ${formatDateTime(activeDiscovery.discoveredAt)}`}
+                    </span>
+                    <div>
+                      <button
+                        onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)}
+                        type="button"
+                      >
+                        {locale === "ko" ? "전체 선택" : "Select all"}
+                      </button>
+                      <button
+                        onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)}
+                        type="button"
+                      >
+                        {locale === "ko" ? "전체 해제" : "Clear"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="provider-discovery-model-list">
+                    {activeDiscovery.chatModels.length > 0 ? (
+                      activeDiscovery.chatModels.map((modelName) => (
+                        <label key={modelName} className="provider-model-checkbox">
+                          <input
+                            checked={activeDiscovery.selectedModels.includes(modelName)}
+                            onChange={(event) =>
+                              toggleDiscoveredModel(
+                                activeDiscoveryKey,
+                                modelName,
+                                event.target.checked
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>{modelName}</span>
+                        </label>
+                      ))
+                    ) : (
+                      <span className="project-muted">
+                        {locale === "ko"
+                          ? "반영 가능한 chat 모델이 없습니다."
+                          : "No chat models available to apply."}
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <textarea
+                  onChange={(event) =>
+                    setFormValues((current) => ({
+                      ...current,
+                      models: event.target.value
+                    }))
+                  }
+                  rows={4}
+                  value={formValues.models}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="provider-discovery-actions">
+          <Button
+            className="provider-delete-action"
+            disabled={
+              pendingAction ||
+              discoveringProvider !== null ||
+              !canDeleteProvider(provider, model.source)
+            }
+            onClick={() => void deleteProvider(provider)}
+            title={
+              canDeleteProvider(provider, model.source)
+                ? text.deleteProvider
+                : locale === "ko"
+                  ? "Tenant/global provider만 삭제할 수 있습니다."
+                  : "Only tenant/global provider connections can be deleted."
+            }
+            type="button"
+            variant="destructive"
+          >
+            <Trash2 aria-hidden="true" />
+            {text.deleteProvider}
+          </Button>
+          <Button
+            disabled={pendingAction || discoveringProvider !== null}
+            onClick={() => openCredentialModal(provider)}
+            type="button"
+            variant="outline"
+          >
+            <KeyRound aria-hidden="true" />
+            {text.apiKeyChange}
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingProviderId(null);
+              setFormValues(emptyProviderForm);
+            }}
+            type="button"
+            variant="outline"
+          >
+            {locale === "ko" ? "취소" : "Cancel"}
+          </Button>
+          <Button disabled={pendingAction} onClick={() => void submitProvider()} type="button">
+            {text.saveChanges}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="console-content management-line-content">
       <section className="dashboard-hero">
@@ -687,10 +804,18 @@ export function ProviderConnectionManagement({
       ) : null}
 
       <section className="console-panel provider-line-panel">
-        <div className="panel-heading">
+        <div className="panel-heading provider-panel-heading">
           <h3>{text.title}</h3>
+          <Button
+            disabled={pendingAction || discoveringProvider !== null || model.providerPresets.items.length === 0}
+            onClick={openCreateModal}
+            type="button"
+          >
+            <Plus aria-hidden="true" />
+            {text.registerAction}
+          </Button>
         </div>
-        {providerRows.length === 0 ? (
+        {providers.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
           <div className="table-wrap">
@@ -705,26 +830,24 @@ export function ProviderConnectionManagement({
                 </tr>
               </thead>
               <tbody>
-                {providerRows.map((row) => {
-                  const provider = row.connection;
-                  const discovery = discoveryByProvider[row.providerKey];
+                {providers.map((provider) => {
                   const hasRegisteredKey = hasProviderKeyRegistered(provider);
+                  const family = getProviderFamily(provider);
+                  const preset = getProviderPreset(family, model.providerPresets.items);
 
                   return (
-                    <Fragment key={provider?.id ?? row.providerKey}>
+                    <Fragment key={provider.id}>
                       <tr>
                         <td>
-                          <strong className="provider-name">{row.displayName}</strong>
-                          <span className="project-muted">{row.providerKey}</span>
+                          <strong className="provider-name">{provider.displayName}</strong>
                           <small className="project-muted">
-                            {text.models}:{" "}
-                            {provider
-                              ? formatProviderModels(provider.providerConfig)
-                              : formatPresetModels(row.preset)}
+                            {preset?.displayName ?? getProviderFamilyLabel(family)}
+                            {" · "}
+                            {text.models}: {formatProviderModels(provider.providerConfig)}
                           </small>
                         </td>
                         <td>
-                          {provider && hasRegisteredKey ? (
+                          {hasRegisteredKey ? (
                             <Badge
                               className="project-status-badge"
                               data-status={provider.status}
@@ -739,160 +862,37 @@ export function ProviderConnectionManagement({
                           )}
                         </td>
                         <td>
-                          {provider ? (
-                            <>
-                              <span className="project-muted">{formatDateTime(provider.updatedAt)}</span>
-                              <small className="project-muted">
-                                {text.created}: {formatDateTime(provider.createdAt)}
-                              </small>
-                            </>
-                          ) : (
-                            <span className="project-muted">-</span>
-                          )}
+                          <span className="project-muted">{formatDateTime(provider.updatedAt)}</span>
+                          <small className="project-muted">
+                            {text.created}: {formatDateTime(provider.createdAt)}
+                          </small>
                         </td>
                         <td>
-                          {provider ? (
-                            <code className="project-code provider-id-mask" tabIndex={0}>
-                              <span aria-hidden="true" className="provider-id-mask-value">
-                                *****
-                              </span>
-                              <span className="provider-id-actual">{provider.id}</span>
-                            </code>
-                          ) : (
-                            <span className="project-muted">-</span>
-                          )}
+                          <code className="project-code provider-id-mask" tabIndex={0}>
+                            <span aria-hidden="true" className="provider-id-mask-value">
+                              *****
+                            </span>
+                            <span className="provider-id-actual">{provider.id}</span>
+                          </code>
                         </td>
                         <td>
                           <div className="project-row-actions">
-                            {!provider || !hasRegisteredKey ? (
-                              <Button
-                                disabled={pendingAction || discoveringProvider !== null}
-                                onClick={() => openRegistrationModal(row.providerKey)}
-                                type="button"
-                              >
-                                <KeyRound aria-hidden="true" />
-                                {text.registerAction}
-                              </Button>
-                            ) : (
-                              <>
-                                <Button
-                                  disabled={
-                                    pendingAction ||
-                                    discoveringProvider !== null ||
-                                    !isDiscoverSupportedProvider(
-                                      getProviderFormValues(provider).adapterType
-                                    )
-                                  }
-                                  onClick={() =>
-                                    void discoverModels(provider.provider, { applyToForm: false })
-                                  }
-                                  type="button"
-                                  variant="outline"
-                                >
-                                  {discoveringProvider === provider.provider
-                                    ? "..."
-                                    : text.discoverModels}
-                                </Button>
-                                <Button
-                                  disabled={
-                                    pendingAction ||
-                                    discoveringProvider !== null ||
-                                    !canDeleteProvider(provider, model.source)
-                                  }
-                                  onClick={() => void deleteProvider(provider)}
-                                  title={
-                                    canDeleteProvider(provider, model.source)
-                                      ? text.deleteProvider
-                                      : locale === "ko"
-                                        ? "Tenant/global provider만 삭제할 수 있습니다."
-                                        : "Only tenant/global provider connections can be deleted."
-                                  }
-                                  type="button"
-                                  variant="destructive"
-                                >
-                                  <Trash2 aria-hidden="true" />
-                                  {text.deleteProvider}
-                                </Button>
-                              </>
-                            )}
+                            <Button
+                              disabled={pendingAction || discoveringProvider !== null}
+                              onClick={() => openEditModal(provider)}
+                              type="button"
+                              variant="outline"
+                            >
+                              <Pencil aria-hidden="true" />
+                              {text.edit}
+                            </Button>
                           </div>
                         </td>
                       </tr>
-                      {discovery ? (
-                        <tr
-                          key={`${provider?.id ?? row.providerKey}-discovery`}
-                          className="provider-discovery-row"
-                        >
+                      {editingProviderId === provider.id ? (
+                        <tr className="provider-discovery-row provider-edit-row">
                           <td colSpan={5}>
-                            <div className="provider-discovery-panel">
-                              <div className="provider-model-selection-toolbar">
-                                <strong>
-                                  {locale === "ko"
-                                    ? `${discovery.selectedModels.length} / ${discovery.chatModels.length}개 선택`
-                                    : `${discovery.selectedModels.length} / ${discovery.chatModels.length} selected`}
-                                </strong>
-                                <span className="project-muted">
-                                  {locale === "ko"
-                                    ? `제외된 비채팅 모델 ${discovery.skippedModelCount}개 · ${formatDateTime(discovery.discoveredAt)}`
-                                    : `${discovery.skippedModelCount} non-chat models excluded · ${formatDateTime(discovery.discoveredAt)}`}
-                                </span>
-                                <div>
-                                  <button
-                                    onClick={() => setAllDiscoveredModels(row.providerKey, true)}
-                                    type="button"
-                                  >
-                                    {locale === "ko" ? "전체 선택" : "Select all"}
-                                  </button>
-                                  <button
-                                    onClick={() => setAllDiscoveredModels(row.providerKey, false)}
-                                    type="button"
-                                  >
-                                    {locale === "ko" ? "전체 해제" : "Clear"}
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="provider-discovery-model-list">
-                                {discovery.chatModels.length > 0 ? (
-                                  discovery.chatModels.map((modelName) => (
-                                    <label key={modelName} className="provider-model-checkbox">
-                                      <input
-                                        checked={discovery.selectedModels.includes(modelName)}
-                                        onChange={(event) =>
-                                          toggleDiscoveredModel(
-                                            row.providerKey,
-                                            modelName,
-                                            event.target.checked
-                                          )
-                                        }
-                                        type="checkbox"
-                                      />
-                                      <span>{modelName}</span>
-                                    </label>
-                                  ))
-                                ) : (
-                                  <span className="project-muted">
-                                    {locale === "ko"
-                                      ? "반영 가능한 chat 모델이 없습니다."
-                                      : "No chat models available to apply."}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="provider-discovery-actions">
-                                <Button
-                                  disabled={pendingAction}
-                                  onClick={() =>
-                                    provider
-                                      ? void applyDiscoveredModelsToProvider(provider)
-                                      : undefined
-                                  }
-                                  type="button"
-                                >
-                                  {locale === "ko"
-                                    ? "선택 모델 저장"
-                                    : "Save selected models"}
-                                </Button>
-                              </div>
-                            </div>
+                            {renderProviderInlineEditor(provider)}
                           </td>
                         </tr>
                       ) : null}
@@ -904,7 +904,7 @@ export function ProviderConnectionManagement({
           </div>
         )}
       </section>
-      {registrationProviderKey ? (
+      {providerModal ? (
         <div
           className="modal-backdrop provider-registration-backdrop"
           onClick={closeRegistrationModal}
@@ -919,7 +919,13 @@ export function ProviderConnectionManagement({
             <div className="panel-heading provider-registration-heading">
               <div>
                 <h3>
-                  {locale === "ko" ? "Provider Key 등록" : "Register Provider Key"}
+                  {providerModal.mode === "create"
+                    ? locale === "ko"
+                      ? "Provider 등록"
+                      : "Register provider"
+                    : locale === "ko"
+                      ? "API key 변경"
+                      : "Change API key"}
                 </h3>
                 <p className="project-muted">{text.registerDescription}</p>
               </div>
@@ -933,13 +939,47 @@ export function ProviderConnectionManagement({
               </button>
             </div>
             <div className="provider-form-grid provider-registration-form">
-              <div className="policy-field">
-                <span>{text.provider}</span>
-                <div className="provider-readonly-summary">
-                  <strong>{formValues.provider || "-"}</strong>
-                  <small className="project-muted">{formValues.displayName || "-"}</small>
+              {providerModal.mode === "create" ? (
+                <>
+                  <label className="policy-field">
+                    <span>{text.provider}</span>
+                    <select
+                      onChange={(event) => applyProviderPresetToForm(event.target.value)}
+                      value={formValues.presetProviderKey}
+                    >
+                      {model.providerPresets.items.map((preset) => (
+                        <option key={preset.providerKey} value={preset.providerKey}>
+                          {preset.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="policy-field">
+                    <span>{text.displayName}</span>
+                    <input
+                      autoComplete="off"
+                      maxLength={120}
+                      onChange={(event) =>
+                        setFormValues((current) => ({
+                          ...current,
+                          displayName: event.target.value
+                        }))
+                      }
+                      value={formValues.displayName}
+                    />
+                  </label>
+                </>
+              ) : (
+                <div className="policy-field">
+                  <span>{text.provider}</span>
+                  <div className="provider-readonly-summary">
+                    <strong>{formValues.displayName || "-"}</strong>
+                    <small className="project-muted">
+                      {getProviderFamilyLabel(formValues.presetProviderKey)}
+                    </small>
+                  </div>
                 </div>
-              </div>
+              )}
               <label className="policy-field">
                 <span>{text.credentialValue}</span>
                 <input
@@ -972,8 +1012,12 @@ export function ProviderConnectionManagement({
                 onClick={() => void submitProvider()}
                 type="button"
               >
-                <PlugZap aria-hidden="true" />
-                {locale === "ko" ? "등록" : "Register"}
+                {providerModal.mode === "create" ? (
+                  <PlugZap aria-hidden="true" />
+                ) : (
+                  <KeyRound aria-hidden="true" />
+                )}
+                {providerModal.mode === "create" ? text.registerAction : text.apiKeyChange}
               </Button>
             </div>
           </section>
@@ -1008,7 +1052,9 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
       .filter(isChatCompletionModelName)
       .join(", "),
     modelsEndpointPath: getProviderConfigString(providerConfig, "modelsEndpointPath", "/models"),
+    presetProviderKey: getProviderFamily(provider),
     provider: provider.provider,
+    previousProvider: provider.provider,
     requestFormat: getProviderConfigRequestFormat(providerConfig, provider),
     resolver: provider.resolver,
     secretRef: "",
@@ -1026,28 +1072,115 @@ function getInitialModelOptions(providers: ProviderConnectionRecord[]) {
   );
 }
 
-function getProviderRows(
-  providers: ProviderConnectionRecord[],
-  presets: ProviderPresetRecord[]
-): ProviderDisplayRow[] {
-  const providerMap = new Map(providers.map((provider) => [provider.provider, provider]));
-  const rows = presets.map((preset) => ({
-    connection: providerMap.get(preset.providerKey) ?? null,
-    displayName: providerMap.get(preset.providerKey)?.displayName ?? preset.displayName,
-    providerKey: preset.providerKey,
-    preset
-  }));
-  const presetKeys = new Set(presets.map((preset) => preset.providerKey));
-  const extraRows = providers
-    .filter((provider) => !presetKeys.has(provider.provider))
-    .map((provider) => ({
-      connection: provider,
-      displayName: provider.displayName,
-      providerKey: provider.provider,
-      preset: null
-    }));
+function getProviderFamily(provider: ProviderConnectionRecord) {
+  const configuredFamily = getProviderConfigString(provider.providerConfig, "providerFamily", "");
 
-  return [...rows, ...extraRows];
+  if (configuredFamily) {
+    return configuredFamily;
+  }
+
+  const providerKey = provider.provider.toLowerCase();
+  const baseUrl = provider.baseUrl.toLowerCase();
+
+  if (providerKey.includes("gemini") || baseUrl.includes("generativelanguage.googleapis.com")) {
+    return "gemini";
+  }
+
+  if (
+    providerKey.includes("claude") ||
+    providerKey.includes("anthropic") ||
+    baseUrl.includes("anthropic.com")
+  ) {
+    return "claude";
+  }
+
+  if (providerKey === "mock") {
+    return "mock";
+  }
+
+  return "openai";
+}
+
+function getProviderPreset(providerFamily: string, presets: ProviderPresetRecord[]) {
+  return presets.find((preset) => preset.providerKey === providerFamily) ?? null;
+}
+
+function getProviderFamilyLabel(providerFamily: string) {
+  if (providerFamily === "openai") {
+    return "OpenAI";
+  }
+
+  if (providerFamily === "gemini") {
+    return "Gemini";
+  }
+
+  if (providerFamily === "claude") {
+    return "Claude";
+  }
+
+  if (providerFamily === "mock") {
+    return "Mock";
+  }
+
+  return providerFamily;
+}
+
+function getProviderFormValuesFromPreset(
+  preset: ProviderPresetRecord | null,
+  providers: ProviderConnectionRecord[]
+): ProviderConnectionFormValues {
+  if (!preset) {
+    return emptyProviderForm;
+  }
+
+  const provider = getNextProviderConnectionKey(preset.providerKey, providers);
+
+  return {
+    ...emptyProviderForm,
+    adapterType: preset.adapterType,
+    apiVersion: getProviderConfigString(preset.providerConfig, "apiVersion", ""),
+    baseUrl: preset.baseUrl,
+    credentialRequired: preset.credentialRequired,
+    displayName: getDefaultProviderDisplayName(preset, provider),
+    models: "",
+    modelsEndpointPath: preset.modelsEndpointPath,
+    presetProviderKey: preset.providerKey,
+    provider,
+    requestFormat: getPresetRequestFormat(preset),
+    resolver: preset.defaultResolver,
+    timeoutMs: preset.defaultTimeoutMs
+  };
+}
+
+function getNextProviderConnectionKey(
+  providerFamily: string,
+  providers: ProviderConnectionRecord[]
+) {
+  const usedProviders = new Set(providers.map((provider) => provider.provider));
+  const normalizedFamily = providerFamily.replace(/[^a-z0-9_-]/g, "") || "provider";
+  const mainProvider = `${normalizedFamily}-main`;
+
+  if (!usedProviders.has(mainProvider)) {
+    return mainProvider;
+  }
+
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${normalizedFamily}-${index}`;
+
+    if (!usedProviders.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return `${normalizedFamily}-${Date.now().toString(36)}`;
+}
+
+function getDefaultProviderDisplayName(preset: ProviderPresetRecord, provider: string) {
+  if (provider.endsWith("-main")) {
+    return `${preset.displayName} Main`;
+  }
+
+  return `${preset.displayName} ${provider.split("-").at(-1) ?? ""}`.trim();
 }
 
 function hasProviderKeyRegistered(provider: ProviderConnectionRecord | null | undefined) {
@@ -1068,40 +1201,6 @@ function hasProviderKeyRegistered(provider: ProviderConnectionRecord | null | un
   return Boolean(provider.credentialPreview?.prefix || provider.credentialPreview?.last4);
 }
 
-function getPresetModelOptions(preset: ProviderPresetRecord | null) {
-  if (!preset) {
-    return [];
-  }
-
-  const configuredModels = getProviderConfigModels(preset.providerConfig).filter(
-    isChatCompletionModelName
-  );
-
-  if (configuredModels.length > 0) {
-    return configuredModels;
-  }
-
-  if (preset.providerKey === "openai") {
-    return ["gpt-4o-mini", "gpt-4o"];
-  }
-
-  if (preset.providerKey === "gemini") {
-    return ["gemini-1.5-flash", "gemini-1.5-pro"];
-  }
-
-  if (preset.providerKey === "claude") {
-    return ["claude-3.5-sonnet", "claude-3-haiku"];
-  }
-
-  return [];
-}
-
-function formatPresetModels(preset: ProviderPresetRecord | null) {
-  const models = getPresetModelOptions(preset);
-
-  return models.length > 0 ? models.join(", ") : "none";
-}
-
 function isDiscoverSupportedProvider(adapterType: string) {
   return adapterType === "openai_compatible" || adapterType === "anthropic" || adapterType === "mock";
 }
@@ -1114,7 +1213,7 @@ function getProviderDiscoveryErrorMessage(
   const message = error ?? "Provider model discovery failed.";
 
   if (
-    provider === "gemini" &&
+    provider.includes("gemini") &&
     message.includes("Provider credential reference is not bound")
   ) {
     return locale === "ko"
@@ -1123,12 +1222,6 @@ function getProviderDiscoveryErrorMessage(
   }
 
   return message;
-}
-
-function isRegisteredProvider(providers: ProviderConnectionRecord[], provider: string) {
-  const normalizedProvider = provider.trim();
-
-  return providers.some((item) => item.provider === normalizedProvider);
 }
 
 function canDeleteProvider(
@@ -1209,8 +1302,8 @@ function formatProviderStatus(status: ProviderConnectionStatus) {
 function validateProviderForm(values: ProviderConnectionFormValues, locale: Locale) {
   if (!values.provider.trim() || !values.displayName.trim() || !values.baseUrl.trim()) {
     return locale === "ko"
-      ? "Provider를 선택하고 표시 이름을 입력하세요."
-      : "Select a provider and enter a display name.";
+      ? "Provider를 선택하고 Provider 이름을 입력하세요."
+      : "Select a provider and enter a provider name.";
   }
 
   if (!providerKeyPattern.test(values.provider)) {

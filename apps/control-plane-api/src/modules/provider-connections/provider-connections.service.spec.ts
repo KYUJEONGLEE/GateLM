@@ -95,7 +95,8 @@ describe('ProviderConnectionsService', () => {
   it('returns credential preview without exposing secretRef', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.upsert.mockResolvedValue({
+    prisma.providerConnection.findUnique.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
       id: '00000000-0000-4000-8000-000000000900',
       tenantId,
       projectId,
@@ -136,7 +137,8 @@ describe('ProviderConnectionsService', () => {
     const providerId = '00000000-0000-4000-8000-000000000919';
     const credentialRefId = `provider_credential:${providerId}`;
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.upsert.mockResolvedValue({
+    prisma.providerConnection.findUnique.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
       id: providerId,
       tenantId,
       projectId,
@@ -165,7 +167,7 @@ describe('ProviderConnectionsService', () => {
       secretRef: credentialRefId,
       credentialPrefix: 'provided_',
       credentialLast4: '1234',
-      resolver: 'credential_store',
+      resolver: 'control_plane_secret_store',
       providerConfig: { adapterType: 'openai_compatible' },
       createdAt,
       updatedAt: createdAt,
@@ -179,7 +181,7 @@ describe('ProviderConnectionsService', () => {
       resolver: 'environment',
     });
     const providerConnectionPayload = JSON.stringify([
-      prisma.providerConnection.upsert.mock.calls,
+      prisma.providerConnection.create.mock.calls,
       prisma.providerConnection.update.mock.calls,
     ]);
     const credentialStorePayload = JSON.stringify(
@@ -192,7 +194,7 @@ describe('ProviderConnectionsService', () => {
         data: expect.objectContaining({
           credentialLast4: '1234',
           credentialPrefix: 'provided_',
-          resolver: 'credential_store',
+          resolver: 'control_plane_secret_store',
           secretRef: credentialRefId,
         }),
       }),
@@ -245,7 +247,7 @@ describe('ProviderConnectionsService', () => {
       secretRef: credentialRefId,
       credentialPrefix: 'provided_',
       credentialLast4: '9876',
-      resolver: 'credential_store',
+      resolver: 'control_plane_secret_store',
       providerConfig: { adapterType: 'openai_compatible' },
       createdAt,
       updatedAt: createdAt,
@@ -272,7 +274,7 @@ describe('ProviderConnectionsService', () => {
         data: expect.objectContaining({
           credentialLast4: '9876',
           credentialPrefix: 'provided_',
-          resolver: 'credential_store',
+          resolver: 'control_plane_secret_store',
           secretRef: credentialRefId,
         }),
       }),
@@ -288,27 +290,23 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
-  it('promotes an existing project-scoped provider when registering it as tenant-level provider', async () => {
+  it('updates an existing tenant-level provider when registering it again', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000924';
-    const projectScopedProvider = providerConnection(providerId, {
+    const tenantProvider = providerConnection(providerId, {
       baseUrl: 'https://api.openai.com/v1',
       credentialLast4: '0000',
       credentialPrefix: 'env_ref_',
       displayName: 'OpenAI Main',
-      projectId,
+      projectId: null,
       provider: 'openai-main',
       resolver: 'environment',
       secretRef: `provider_credential:${providerId}`,
       providerConfig: { adapterType: 'openai_compatible' },
     });
-    const promotedProvider = {
-      ...projectScopedProvider,
-      projectId: null,
-    };
     prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
-    prisma.providerConnection.findFirst.mockResolvedValue(projectScopedProvider);
-    prisma.providerConnection.update.mockResolvedValue(promotedProvider);
+    prisma.providerConnection.findFirst.mockResolvedValue(tenantProvider);
+    prisma.providerConnection.update.mockResolvedValue(tenantProvider);
 
     const result = await service.upsertTenantProvider(tenantId, {
       provider: 'openai-main',
@@ -327,6 +325,7 @@ describe('ProviderConnectionsService', () => {
       where: {
         tenantId,
         provider: 'openai-main',
+        projectId: null,
       },
     });
     expect(prisma.providerConnection.create).not.toHaveBeenCalled();
@@ -343,6 +342,58 @@ describe('ProviderConnectionsService', () => {
       id: providerId,
       projectId: null,
       provider: 'openai-main',
+    });
+  });
+
+  it('renames an existing tenant-level provider connection without recreating it', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000925';
+    const existingProvider = providerConnection(providerId, {
+      baseUrl: 'https://api.openai.com/v1',
+      displayName: 'OpenAI Main',
+      projectId: null,
+      provider: 'openai-main',
+      providerConfig: {
+        adapterType: 'openai_compatible',
+        providerFamily: 'openai',
+      },
+    });
+    const renamedProvider = {
+      ...existingProvider,
+      displayName: 'OpenAI Backup',
+      provider: 'openai-backup',
+    };
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst
+      .mockResolvedValueOnce(existingProvider)
+      .mockResolvedValueOnce(null);
+    prisma.providerConnection.update.mockResolvedValue(renamedProvider);
+
+    const result = await service.upsertTenantProvider(tenantId, {
+      provider: 'openai-backup',
+      previousProvider: 'openai-main',
+      displayName: 'OpenAI Backup',
+      baseUrl: 'https://api.openai.com/v1',
+      providerConfig: {
+        adapterType: 'openai_compatible',
+        providerFamily: 'openai',
+      },
+    });
+
+    expect(prisma.providerConnection.create).not.toHaveBeenCalled();
+    expect(prisma.providerConnection.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: providerId },
+        data: expect.objectContaining({
+          displayName: 'OpenAI Backup',
+          provider: 'openai-backup',
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      id: providerId,
+      provider: 'openai-backup',
+      displayName: 'OpenAI Backup',
     });
   });
 
@@ -501,7 +552,7 @@ describe('ProviderConnectionsService', () => {
       projectId: null,
       provider: 'openai-main',
       displayName: 'OpenAI Main',
-      resolver: 'credential_store',
+      resolver: 'control_plane_secret_store',
       secretRef: `provider_credential:${providerId}`,
       credentialPrefix: 'provided_',
       credentialLast4: '1234',
@@ -687,7 +738,7 @@ describe('ProviderConnectionsService', () => {
       providerConnection(providerId, {
         baseUrl: 'https://api.openai.com/v1',
         provider: 'openai-main',
-        resolver: 'credential_store',
+        resolver: 'control_plane_secret_store',
         secretRef: credentialRefId,
         providerConfig: { adapterType: 'openai_compatible' },
       }),
@@ -801,7 +852,7 @@ describe('ProviderConnectionsService', () => {
       providerConnection(providerId, {
         baseUrl: 'https://api.openai.com/v1',
         provider: 'openai-main',
-        resolver: 'credential_store',
+        resolver: 'control_plane_secret_store',
         secretRef: credentialRefId,
         providerConfig: { adapterType: 'openai_compatible' },
       }),
@@ -1093,6 +1144,102 @@ describe('ProviderConnectionsService', () => {
     ]);
   });
 
+  it('sorts discovered provider models by newest created timestamp first', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000925';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://api.openai.com/v1',
+        provider: 'openai-main',
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'gpt-5-mini',
+            object: 'model',
+            created: 1900000000,
+            owned_by: 'openai',
+          },
+          {
+            id: 'gpt-4o',
+            object: 'model',
+            created: 1700000000,
+            owned_by: 'openai',
+          },
+          {
+            id: 'gpt-5',
+            object: 'model',
+            created: 1800000000,
+            owned_by: 'openai',
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(
+      projectId,
+      'openai-main',
+    );
+
+    expect(result.models.map((model) => model.modelName)).toEqual([
+      'gpt-5-mini',
+      'gpt-5',
+      'gpt-4o',
+    ]);
+  });
+
+  it('sorts discovered models without created timestamps by provider model version', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000926';
+    prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
+    prisma.providerConnection.findUnique.mockResolvedValue(
+      providerConnection(providerId, {
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        provider: 'gemini',
+        providerConfig: {
+          adapterType: 'openai_compatible',
+          credentialRequired: false,
+        },
+        resolver: 'none',
+        secretRef: null,
+      }),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        data: [
+          { id: 'gemini-1.5-pro', object: 'model', owned_by: 'google' },
+          { id: 'gemini-2.5-flash-lite', object: 'model', owned_by: 'google' },
+          { id: 'gemini-2.0-flash', object: 'model', owned_by: 'google' },
+          { id: 'gemini-2.5-pro', object: 'model', owned_by: 'google' },
+          { id: 'gemini-1.5-flash', object: 'model', owned_by: 'google' },
+        ],
+      }),
+    } as unknown as Response);
+
+    const result = await service.discoverProviderModels(projectId, 'gemini');
+
+    expect(result.models.map((model) => model.modelName)).toEqual([
+      'gemini-2.5-pro',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+    ]);
+  });
+
   it('normalizes provider model created timestamps in milliseconds', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000908';
@@ -1298,7 +1445,8 @@ describe('ProviderConnectionsService', () => {
   it('maps explicit null providerConfig to Prisma DbNull', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.upsert.mockResolvedValue(
+    prisma.providerConnection.findUnique.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue(
       providerConnection('00000000-0000-4000-8000-000000000904'),
     );
 
@@ -1309,12 +1457,9 @@ describe('ProviderConnectionsService', () => {
       providerConfig: null,
     });
 
-    expect(prisma.providerConnection.upsert).toHaveBeenCalledWith(
+    expect(prisma.providerConnection.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
-          providerConfig: Prisma.DbNull,
-        }),
-        update: expect.objectContaining({
+        data: expect.objectContaining({
           providerConfig: Prisma.DbNull,
         }),
       }),

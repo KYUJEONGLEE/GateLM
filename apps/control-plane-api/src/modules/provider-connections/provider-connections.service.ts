@@ -103,6 +103,8 @@ export class ProviderConnectionsService {
     dto: UpsertProviderDto,
   ): Promise<ProviderResponseDto> {
     const project = await this.getProjectOrThrow(projectId);
+    const providerKey = this.toProviderKeyOrThrow(dto.provider);
+    const previousProviderKey = this.toPreviousProviderKey(dto);
     const providerConfig = this.toJsonObject(dto.providerConfig);
     const credentialValue = this.toCredentialValue(dto);
     const optionalCredentialUpdate = credentialValue
@@ -110,17 +112,68 @@ export class ProviderConnectionsService {
       : this.toCredentialUpdate(dto);
 
     const providerConnection = await this.prisma.$transaction(async (tx) => {
-      const savedProviderConnection = await tx.providerConnection.upsert({
+      const existingProvider = await tx.providerConnection.findUnique({
         where: {
           projectId_provider: {
             projectId,
-            provider: dto.provider,
+            provider: previousProviderKey,
           },
         },
-        create: {
+      });
+      const providerToUpdate =
+        existingProvider ??
+        (previousProviderKey === providerKey
+          ? null
+          : await tx.providerConnection.findUnique({
+              where: {
+                projectId_provider: {
+                  projectId,
+                  provider: providerKey,
+                },
+              },
+            }));
+
+      if (providerToUpdate) {
+        if (providerToUpdate.provider !== providerKey) {
+          await this.assertProviderRenameAvailable(tx, {
+            projectId,
+            provider: providerKey,
+            providerConnectionId: providerToUpdate.id,
+            tenantId: project.tenantId,
+          });
+        }
+
+        const savedProviderConnection = await tx.providerConnection.update({
+          where: { id: providerToUpdate.id },
+          data: {
+            provider: providerKey,
+            displayName: dto.displayName,
+            status: dto.status,
+            baseUrl: dto.baseUrl,
+            timeoutMs: dto.timeoutMs,
+            resolver: dto.resolver,
+            providerConfig,
+            ...optionalCredentialUpdate,
+          },
+        });
+
+        if (!credentialValue) {
+          return savedProviderConnection;
+        }
+
+        return this.attachStoredProviderCredential(
+          tx as unknown as ProviderCredentialStoreClient,
+          savedProviderConnection,
+          dto,
+          credentialValue,
+        );
+      }
+
+      const savedProviderConnection = await tx.providerConnection.create({
+        data: {
           tenantId: project.tenantId,
           projectId: project.id,
-          provider: dto.provider,
+          provider: providerKey,
           displayName: dto.displayName,
           status: dto.status,
           baseUrl: dto.baseUrl,
@@ -128,15 +181,6 @@ export class ProviderConnectionsService {
           ...optionalCredentialUpdate,
           resolver: dto.resolver,
           providerConfig,
-        },
-        update: {
-          displayName: dto.displayName,
-          status: dto.status,
-          baseUrl: dto.baseUrl,
-          timeoutMs: dto.timeoutMs,
-          resolver: dto.resolver,
-          providerConfig,
-          ...optionalCredentialUpdate,
         },
       });
 
@@ -160,6 +204,8 @@ export class ProviderConnectionsService {
     dto: UpsertProviderDto,
   ): Promise<ProviderResponseDto> {
     const tenant = await this.getTenantOrThrow(tenantId);
+    const providerKey = this.toProviderKeyOrThrow(dto.provider);
+    const previousProviderKey = this.toPreviousProviderKey(dto);
     const providerConfig = this.toJsonObject(dto.providerConfig);
     const credentialValue = this.toCredentialValue(dto);
     const optionalCredentialUpdate = credentialValue
@@ -170,15 +216,37 @@ export class ProviderConnectionsService {
       const existingProvider = await tx.providerConnection.findFirst({
         where: {
           tenantId: tenant.id,
-          provider: dto.provider,
+          provider: previousProviderKey,
+          projectId: null,
         },
       });
+      const providerToUpdate =
+        existingProvider ??
+        (previousProviderKey === providerKey
+          ? null
+          : await tx.providerConnection.findFirst({
+              where: {
+                tenantId: tenant.id,
+                provider: providerKey,
+                projectId: null,
+              },
+            }));
 
-      if (existingProvider) {
+      if (providerToUpdate) {
+        if (providerToUpdate.provider !== providerKey) {
+          await this.assertProviderRenameAvailable(tx, {
+            projectId: null,
+            provider: providerKey,
+            providerConnectionId: providerToUpdate.id,
+            tenantId: tenant.id,
+          });
+        }
+
         const savedProviderConnection = await tx.providerConnection.update({
-          where: { id: existingProvider.id },
+          where: { id: providerToUpdate.id },
           data: {
             projectId: null,
+            provider: providerKey,
             displayName: dto.displayName,
             status: dto.status,
             baseUrl: dto.baseUrl,
@@ -205,7 +273,7 @@ export class ProviderConnectionsService {
         data: {
           tenantId: tenant.id,
           projectId: null,
-          provider: dto.provider,
+          provider: providerKey,
           displayName: dto.displayName,
           status: dto.status,
           baseUrl: dto.baseUrl,
@@ -613,6 +681,38 @@ export class ProviderConnectionsService {
     return value;
   }
 
+  private toPreviousProviderKey(dto: UpsertProviderDto): string {
+    return dto.previousProvider
+      ? this.toProviderKeyOrThrow(dto.previousProvider)
+      : this.toProviderKeyOrThrow(dto.provider);
+  }
+
+  private async assertProviderRenameAvailable(
+    tx: Prisma.TransactionClient,
+    args: {
+      projectId: string | null;
+      provider: string;
+      providerConnectionId: string;
+      tenantId: string;
+    },
+  ): Promise<void> {
+    const duplicate = await tx.providerConnection.findFirst({
+      where: {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        provider: args.provider,
+        NOT: {
+          id: args.providerConnectionId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new ConflictException('Provider key is already registered.');
+    }
+  }
+
   private toAdapterType(providerConnection: ProviderConnection): string {
     const adapterType = this.toRecordOrNull(providerConnection.providerConfig)
       ?.adapterType;
@@ -937,7 +1037,7 @@ export class ProviderConnectionsService {
     return payload.data
       .map((value) => this.toDiscoveryModel(providerConnection, value))
       .filter((model): model is ProviderModelDiscoveryItemDto => model !== null)
-      .sort((left, right) => left.modelName.localeCompare(right.modelName));
+      .sort((left, right) => this.compareDiscoveryModels(left, right));
   }
 
   private toDiscoveryModel(
@@ -979,6 +1079,151 @@ export class ProviderConnectionsService {
       providerId: providerConnection.id,
       source: 'provider_models_endpoint',
     };
+  }
+
+  private compareDiscoveryModels(
+    left: ProviderModelDiscoveryItemDto,
+    right: ProviderModelDiscoveryItemDto,
+  ): number {
+    const leftCreatedAt = this.toDiscoveryModelCreatedTimestamp(left);
+    const rightCreatedAt = this.toDiscoveryModelCreatedTimestamp(right);
+
+    if (leftCreatedAt !== null && rightCreatedAt !== null) {
+      const timestampOrder = rightCreatedAt - leftCreatedAt;
+
+      if (timestampOrder !== 0) {
+        return timestampOrder;
+      }
+    }
+
+    if (leftCreatedAt !== null || rightCreatedAt !== null) {
+      return leftCreatedAt !== null ? -1 : 1;
+    }
+
+    const leftSortKey = this.toDiscoveryModelSortKey(left);
+    const rightSortKey = this.toDiscoveryModelSortKey(right);
+    const sortKeyLength = Math.max(leftSortKey.length, rightSortKey.length);
+
+    for (let index = 0; index < sortKeyLength; index += 1) {
+      const leftValue = leftSortKey[index] ?? 0;
+      const rightValue = rightSortKey[index] ?? 0;
+
+      if (leftValue !== rightValue) {
+        return rightValue - leftValue;
+      }
+    }
+
+    return left.modelName.localeCompare(right.modelName);
+  }
+
+  private toDiscoveryModelCreatedTimestamp(
+    model: ProviderModelDiscoveryItemDto,
+  ): number | null {
+    if (!model.createdAt) {
+      return null;
+    }
+
+    const timestamp = Date.parse(model.createdAt);
+
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  private toDiscoveryModelSortKey(
+    model: ProviderModelDiscoveryItemDto,
+  ): number[] {
+    const modelName = this.toNormalizedModelName(model.modelName);
+    const provider = model.provider.toLowerCase();
+    const versionSegments = this.toModelVersionSegments(modelName);
+
+    return [
+      this.toProviderFamilySortPriority(provider, modelName),
+      ...versionSegments,
+      this.toModelVariantSortPriority(provider, modelName),
+    ];
+  }
+
+  private toProviderFamilySortPriority(
+    provider: string,
+    modelName: string,
+  ): number {
+    if (provider.includes('gemini') || modelName.startsWith('gemini-')) {
+      return 40;
+    }
+
+    if (
+      provider.includes('openai') ||
+      modelName.startsWith('gpt-') ||
+      /^o\d/.test(modelName)
+    ) {
+      return 30;
+    }
+
+    return 0;
+  }
+
+  private toModelVersionSegments(modelName: string): number[] {
+    const matches = Array.from(modelName.matchAll(/\d+(?:\.\d+)*/g));
+    const versionText = matches[0]?.[0];
+    const versionSegments = versionText
+      ? versionText
+          .split('.')
+          .map((segment) => Number.parseInt(segment, 10))
+          .filter((segment) => Number.isFinite(segment))
+      : [];
+
+    return [
+      versionSegments[0] ?? 0,
+      versionSegments[1] ?? 0,
+      versionSegments[2] ?? 0,
+    ];
+  }
+
+  private toModelVariantSortPriority(provider: string, modelName: string): number {
+    if (provider.includes('gemini') || modelName.startsWith('gemini-')) {
+      if (modelName.includes('ultra')) {
+        return 50;
+      }
+
+      if (modelName.includes('pro')) {
+        return 40;
+      }
+
+      if (modelName.includes('flash-lite') || modelName.includes('lite')) {
+        return 20;
+      }
+
+      if (modelName.includes('flash')) {
+        return 30;
+      }
+
+      return 10;
+    }
+
+    if (
+      provider.includes('openai') ||
+      modelName.startsWith('gpt-') ||
+      /^o\d/.test(modelName)
+    ) {
+      if (modelName.includes('nano')) {
+        return 20;
+      }
+
+      if (modelName.includes('mini')) {
+        return 30;
+      }
+
+      return 40;
+    }
+
+    return 0;
+  }
+
+  private toNormalizedModelName(modelName: string): string {
+    const normalizedModelName = modelName.trim().toLowerCase();
+
+    return normalizedModelName.startsWith('models/')
+      ? normalizedModelName.slice('models/'.length)
+      : normalizedModelName;
   }
 
   private toUnixTimestampIsoString(value: unknown): string | null {
@@ -1074,7 +1319,7 @@ export class ProviderConnectionsService {
       data: {
         credentialLast4,
         credentialPrefix,
-        resolver: 'credential_store',
+        resolver: 'control_plane_secret_store',
         secretRef: credentialRefId,
       },
     });
