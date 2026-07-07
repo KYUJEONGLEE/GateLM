@@ -98,7 +98,7 @@ export function ProjectGatewayApiKeySection({
   model
 }: ProjectGatewayApiKeySectionProps) {
   const text = gatewayApiKeyText[locale];
-  const [apiKeys, setApiKeys] = useState<ApiKeyListItem[]>(model.apiKeys);
+  const [apiKeys, setApiKeys] = useState<ApiKeyListItem[]>(() => model.apiKeys ?? []);
   const [oneTimeSecret, setOneTimeSecret] = useState<OneTimeApiKeyResponse | null>(null);
   const [pendingAction, setPendingAction] = useState<"issue" | "rotate" | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>({
