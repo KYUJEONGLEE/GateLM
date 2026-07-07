@@ -584,7 +584,7 @@ export function AdminOnboardingFlow({
     const selectedModel = getSelectedModelOption(
       selectableModels,
       draft.selectedModelKey,
-      projectSetupState.project.tenantId
+      projectSetupState.project?.tenantId ?? ""
     );
 
     if (!selectedModel) {

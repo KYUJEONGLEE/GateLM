@@ -1535,6 +1535,7 @@ function formatModelReleaseDate(
   return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     day: "numeric",
     month: "short",
+    timeZone: "UTC",
     year: "numeric"
   }).format(date);
 }
