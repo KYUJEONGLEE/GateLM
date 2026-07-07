@@ -978,8 +978,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
     },
     rateLimit: {
       enabled: values.rateLimitEnabled,
-      limit: values.rateLimitLimit,
-      windowSeconds: values.rateLimitWindowSeconds
+      limit: values.rateLimitLimit
     },
     routingPolicy: {
       defaultModel: values.routingDefaultModel,

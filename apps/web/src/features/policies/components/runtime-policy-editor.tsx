@@ -174,6 +174,7 @@ const policyText: Record<
     publishedAt: string;
     history: string;
     rateLimit: string;
+    rateLimitInfo: string;
     rateLimitTab: string;
     refillRate: string;
     remove: string;
@@ -262,6 +263,8 @@ const policyText: Record<
     publishedAt: "Published",
     history: "Runtime history",
     rateLimit: "Rate limit",
+    rateLimitInfo:
+      "Rate limit prevents request bursts. Each request uses one token, and tokens refill every second by the configured amount. Tokens never accumulate above the max bucket size; when tokens run out, the request is blocked before the Provider call.",
     rateLimitTab: "Rate Limit",
     refillRate: "Refill tokens / sec",
     remove: "Remove",
@@ -353,6 +356,8 @@ const policyText: Record<
     publishedAt: "게시 시각",
     history: "Runtime history",
     rateLimit: "Rate limit",
+    rateLimitInfo:
+      "요청 폭주를 막기 위한 제한입니다. 요청 1건은 토큰 1개를 사용하고, 토큰은 매초 설정한 수만큼 다시 채워집니다. 최대 버킷 토큰 수를 넘어서 쌓이지 않으며, 토큰이 부족하면 Provider 호출 전에 차단됩니다.",
     rateLimitTab: "Rate Limit",
     refillRate: "초당 충전 토큰",
     remove: "삭제",
@@ -694,7 +699,6 @@ export function RuntimePolicyEditor({
       <section className="dashboard-hero">
         <div>
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
-          <p className="console-kicker">management</p>
           <h2>{text.title}</h2>
         </div>
         <div className="policy-actions">
@@ -1018,7 +1022,22 @@ export function RuntimePolicyEditor({
         >
           <article className="console-panel policy-editor-panel">
             <div className="panel-heading">
-              <h3>{text.rateLimit}</h3>
+              <div className="policy-heading-with-info">
+                <h3>{text.rateLimit}</h3>
+                <span className="policy-info-tooltip">
+                  <button
+                    aria-label={text.rateLimitInfo}
+                    className="policy-info-trigger"
+                    title={text.rateLimitInfo}
+                    type="button"
+                  >
+                    i
+                  </button>
+                  <span className="policy-info-content" role="tooltip">
+                    {text.rateLimitInfo}
+                  </span>
+                </span>
+              </div>
             </div>
             <label className="policy-toggle-row">
               <Switch

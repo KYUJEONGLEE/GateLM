@@ -3772,6 +3772,67 @@ select {
   letter-spacing: 0;
 }
 
+.policy-heading-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.policy-info-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.policy-info-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #2563eb;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  cursor: help;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.policy-info-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.policy-info-content {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: min(340px, calc(100vw - 48px));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--foreground);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.policy-info-tooltip:hover .policy-info-content,
+.policy-info-tooltip:focus-within .policy-info-content {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .policy-settings-list .policy-field {
   grid-template-columns: minmax(140px, 1fr) minmax(190px, 330px);
   align-items: center;
@@ -8193,6 +8254,14 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   line-height: 1.25;
 }
 
+.integration-guide-step-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+}
+
 .integration-side-heading p {
   margin: 7px 0 0;
   color: var(--text-muted);
@@ -8527,6 +8596,13 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 
 .secret-placeholder-action .primary-button {
   justify-self: start;
+}
+
+.onboarding-create-api-key-button {
+  min-height: 48px;
+  min-width: 180px;
+  padding: 0 22px;
+  font-size: var(--font-size-base);
 }
 
 .credential-list-state {

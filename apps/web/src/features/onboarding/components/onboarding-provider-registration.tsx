@@ -129,6 +129,10 @@ const preferredProviderOrder = ["openai", "claude", "anthropic", "gemini", "cohe
 const providerModelSummaryVisibleCount = 3;
 const onboardingPresetProviderKeys = ["openai", "gemini"];
 const onboardingProviderModelPageSize = 10;
+const onboardingDefaultProviderModels: Record<string, string[]> = {
+  gemini: ["gemini-3.5-flash", "gemini-2.5-pro"],
+  openai: ["chat-latest", "gpt-4o", "gpt-4o-mini"]
+};
 
 export function OnboardingProviderRegistration({
   locale,
@@ -190,10 +194,12 @@ export function OnboardingProviderRegistration({
     setFormValues(getProviderFormValuesForRow(row, nextModel, providers));
     setSubmitState({ message: "", status: "idle" });
 
-    if (row.kind === "registered" && row.connection && nextModel.trim()) {
+    if (row.kind === "registered" && row.connection) {
       onProviderSaved({
         provider: row.connection,
-        selectedModelKey: `${row.connection.provider}::${nextModel.trim()}`
+        selectedModelKey: nextModel.trim()
+          ? `${row.connection.provider}::${nextModel.trim()}`
+          : ""
       });
     }
   }
@@ -228,6 +234,11 @@ export function OnboardingProviderRegistration({
     setPendingAction(true);
     setSubmitState({ message: "", status: "idle" });
 
+    const selectedModels = getOnboardingDefaultSelectedModels(
+      formValues.presetProviderKey || selectedRow.family,
+      selectedModel
+    );
+
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
@@ -235,7 +246,7 @@ export function OnboardingProviderRegistration({
         values: {
           ...formValues,
           isEdit: isRegisteredProvider(providers, formValues.provider),
-          models: selectedModel
+          models: selectedModels.join(", ")
         }
       }),
       headers: {
@@ -259,7 +270,7 @@ export function OnboardingProviderRegistration({
     }
 
     const savedProvider = payload.provider;
-    const savedModel = selectedModel.trim();
+    const savedModel = selectedModels[0] ?? selectedModel.trim();
 
     setProviders((current) => [
       ...current.filter((provider) => provider.provider !== savedProvider.provider),
@@ -268,7 +279,7 @@ export function OnboardingProviderRegistration({
     setFormValues({
       ...getProviderFormValues(savedProvider),
       credentialValue: "",
-      models: savedModel
+      models: selectedModels.join(", ")
     });
     setSelectedProviderKey(savedProvider.provider);
     setSelectedModel(savedModel);
@@ -924,11 +935,11 @@ function getProviderConfigModels(providerConfig: Record<string, unknown> | null)
 
 function getPresetModelOptions(providerKey: string) {
   if (providerKey === "openai") {
-    return ["gpt-4o-mini", "gpt-4o"];
+    return onboardingDefaultProviderModels.openai;
   }
 
   if (providerKey === "gemini") {
-    return ["gemini-1.5-flash", "gemini-1.5-pro"];
+    return onboardingDefaultProviderModels.gemini;
   }
 
   if (providerKey === "claude" || providerKey === "anthropic") {
@@ -1043,13 +1054,24 @@ function getPreferredModelRules(providerFamily: string) {
           model === "chatgpt-4o-latest" ||
           model === "gpt-4o-latest"
       },
-      { matches: (model: string) => model === "gpt-4o-mini" },
       { matches: (model: string) => model === "gpt-4o" },
+      { matches: (model: string) => model === "gpt-4o-mini" },
       { matches: (model: string) => isSameOrVariantModel(model, "gpt-5.5") }
     ];
   }
 
   return [];
+}
+
+function getOnboardingDefaultSelectedModels(providerFamily: string, selectedModel: string) {
+  const normalizedFamily = getProviderFamilyFromKey(providerFamily);
+  const defaultModels = onboardingDefaultProviderModels[normalizedFamily] ?? [];
+
+  if (defaultModels.length > 0) {
+    return defaultModels;
+  }
+
+  return selectedModel.trim() ? [selectedModel.trim()] : [];
 }
 
 function isSameOrVariantModel(model: string, target: string) {
