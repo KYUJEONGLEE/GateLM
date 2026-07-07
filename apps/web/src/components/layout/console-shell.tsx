@@ -278,7 +278,7 @@ export function ConsoleShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [currentUser, setCurrentUser] = useState<CurrentUser>(() => buildFallbackCurrentUser(tenantLabel));
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
@@ -330,15 +330,15 @@ export function ConsoleShell({
         }
 
         if (!response.ok) {
-          setCurrentUser(buildFallbackCurrentUser(tenantLabel));
+          setCurrentUser(null);
           return;
         }
 
         const payload = (await response.json()) as unknown;
-        setCurrentUser(parseCurrentUser(payload, tenantLabel) ?? buildFallbackCurrentUser(tenantLabel));
+        setCurrentUser(parseCurrentUser(payload, tenantLabel));
       } catch {
         if (isMounted) {
-          setCurrentUser(buildFallbackCurrentUser(tenantLabel));
+          setCurrentUser(null);
         }
       }
     }
@@ -689,7 +689,7 @@ function ConsoleTopbarActions({
   tenantLabel,
   unreadNotificationCount
 }: {
-  currentUser: CurrentUser;
+  currentUser: CurrentUser | null;
   isLoggingOut: boolean;
   notifications: AdminNotification[];
   onLogout: () => Promise<void>;
@@ -697,7 +697,8 @@ function ConsoleTopbarActions({
   tenantLabel: string;
   unreadNotificationCount: number;
 }) {
-  const initials = getUserInitials(currentUser.displayName);
+  const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel);
+  const initials = currentUser ? getUserInitials(displayUser.displayName) : "";
 
   return (
     <div className="console-topbar-actions" aria-label="Console account actions">
@@ -777,18 +778,18 @@ function ConsoleTopbarActions({
       <DropdownMenu>
         <DropdownMenuTrigger className="console-user-trigger" aria-label="Open user profile menu">
           <span className="console-user-avatar" aria-hidden="true">
-            {currentUser.avatarUrl ? (
+            {displayUser.avatarUrl ? (
               <span
                 className="console-user-avatar-image"
-                style={{ backgroundImage: `url(${currentUser.avatarUrl})` }}
+                style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
               />
             ) : (
               <span>{initials}</span>
             )}
           </span>
           <span className="console-user-copy">
-            <strong>{currentUser.displayName}</strong>
-            <small>{currentUser.role}</small>
+            <strong>{displayUser.displayName}</strong>
+            <small>{displayUser.role}</small>
           </span>
           <ChevronDown aria-hidden="true" size={14} strokeWidth={2.4} />
         </DropdownMenuTrigger>
@@ -800,29 +801,29 @@ function ConsoleTopbarActions({
         >
           <div className="console-user-popover-header">
             <span className="console-user-avatar" aria-hidden="true">
-              {currentUser.avatarUrl ? (
+              {displayUser.avatarUrl ? (
                 <span
                   className="console-user-avatar-image"
-                  style={{ backgroundImage: `url(${currentUser.avatarUrl})` }}
+                  style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
                 />
               ) : (
                 <span>{initials}</span>
               )}
             </span>
             <div>
-              <strong>{currentUser.displayName}</strong>
-              {currentUser.email ? <span>{currentUser.email}</span> : null}
+              <strong>{displayUser.displayName}</strong>
+              {displayUser.email ? <span>{displayUser.email}</span> : null}
             </div>
           </div>
 
           <dl className="console-user-meta">
             <div>
               <dt>Role</dt>
-              <dd>{currentUser.role}</dd>
+              <dd>{displayUser.role}</dd>
             </div>
             <div>
               <dt>Organization</dt>
-              <dd>{currentUser.tenantName ?? tenantLabel}</dd>
+              <dd>{displayUser.tenantName ?? tenantLabel}</dd>
             </div>
           </dl>
 
@@ -850,11 +851,11 @@ function ConsoleTopbarActions({
   );
 }
 
-function buildFallbackCurrentUser(tenantLabel: string): CurrentUser {
+function buildPendingCurrentUser(tenantLabel: string): CurrentUser {
   return {
-    displayName: "Admin",
-    id: "demo-admin",
-    role: "Tenant Admin",
+    displayName: "Account",
+    id: "session-loading",
+    role: "Session required",
     tenantName: tenantLabel
   };
 }
