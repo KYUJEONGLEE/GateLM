@@ -307,7 +307,7 @@ export class ProjectsService {
                 }
               : {}),
             status: {
-              notIn: [ResourceStatus.ARCHIVED, DRAFT_RESOURCE_STATUS],
+              notIn: [ResourceStatus.ARCHIVED, ResourceStatus.DRAFT],
             },
           },
           select: {
