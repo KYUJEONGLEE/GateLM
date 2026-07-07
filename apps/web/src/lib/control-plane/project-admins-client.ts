@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cookies } from "next/headers";
 import { getControlPlaneBaseUrl, getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import type {
   ProjectAdminInvitationRecord,
@@ -9,6 +10,10 @@ import type {
   ProjectAdminRemoveValues,
   ProjectAdminsModel
 } from "@/lib/control-plane/project-admins-types";
+
+type ControlPlaneRequestOptions = {
+  cookieHeader?: string | null;
+};
 
 type ProjectAdminListResult =
   | {
@@ -71,7 +76,8 @@ export async function getProjectAdminsModel(
 }
 
 export async function inviteProjectAdmin(
-  values: ProjectAdminInviteValues
+  values: ProjectAdminInviteValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectAdminInviteRequestResult> {
   try {
     const response = await fetch(
@@ -79,9 +85,9 @@ export async function inviteProjectAdmin(
       {
         body: JSON.stringify({ email: values.email.trim(), name: values.name.trim() }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -97,13 +103,15 @@ export async function inviteProjectAdmin(
 }
 
 export async function removeProjectAdmin(
-  values: ProjectAdminRemoveValues
+  values: ProjectAdminRemoveValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectAdminRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}/project-admins/${encodeURIComponent(values.userId)}`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "DELETE"
       }
     );
@@ -119,13 +127,15 @@ export async function removeProjectAdmin(
 }
 
 export async function revokeProjectAdminInvitation(
-  values: ProjectAdminInvitationRevokeValues
+  values: ProjectAdminInvitationRevokeValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectAdminRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/project-admin-invitations/${encodeURIComponent(values.invitationId)}/revoke`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "POST"
       }
     );
@@ -140,12 +150,16 @@ export async function revokeProjectAdminInvitation(
   }
 }
 
-export async function listProjectAdmins(projectId: string): Promise<ProjectAdminListResult> {
+export async function listProjectAdmins(
+  projectId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<ProjectAdminListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/project-admins`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders(options)
       }
     );
 
@@ -252,6 +266,32 @@ async function readProjectAdminInviteResponse(
     status: response.status
   };
 }
+async function buildControlPlaneHeaders(
+  options?: ControlPlaneRequestOptions,
+  init?: Record<string, string>
+): Promise<Record<string, string> | undefined> {
+  const headers = { ...(init ?? {}) };
+  const cookieHeader = options?.cookieHeader ?? await getServerCookieHeader();
+
+  if (cookieHeader) {
+    headers.cookie = cookieHeader;
+  }
+
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+async function getServerCookieHeader() {
+  const cookieStore = await cookies();
+  const pairs = ["gatelm_session", "gatelm_onboarding"]
+    .map((name) => {
+      const value = cookieStore.get(name)?.value;
+      return value ? `${name}=${encodeURIComponent(value)}` : null;
+    })
+    .filter((pair): pair is string => Boolean(pair));
+
+  return pairs.length > 0 ? pairs.join("; ") : null;
+}
+
 function getProjectAdminsFromPayload(payload: unknown): ProjectAdminRecord[] | null {
   if (!payload || typeof payload !== "object") {
     return null;

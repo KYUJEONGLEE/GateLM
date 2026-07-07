@@ -696,7 +696,7 @@ function ConsoleTopbarActions({
   unreadNotificationCount: number;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel);
-  const initials = currentUser ? getUserInitials(displayUser.displayName) : "";
+  const initials = getUserInitials(displayUser.displayName);
 
   return (
     <div className="console-topbar-actions" aria-label="Console account actions">

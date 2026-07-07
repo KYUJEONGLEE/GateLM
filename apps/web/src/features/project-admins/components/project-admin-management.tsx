@@ -198,6 +198,18 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
     router.refresh();
   }
   async function removeProjectAdmin(projectAdmin: ProjectAdminRecord) {
+    const confirmMessage = projectAdmin.invitationId
+      ? locale === "ko"
+        ? `${projectAdmin.name}님의 프로젝트 관리자 초대를 취소하시겠습니까?`
+        : `Are you sure you want to revoke ${projectAdmin.name}'s project admin invitation?`
+      : locale === "ko"
+        ? `${projectAdmin.name}님을 프로젝트 관리자에서 제거하시겠습니까?`
+        : `Are you sure you want to remove ${projectAdmin.name} as a project admin?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
     const action = projectAdmin.invitationId ? "revokeInvitation" : "remove";
     const pendingKey = `${action}:${projectAdmin.id}`;
     setPendingAction(pendingKey);
@@ -237,7 +249,18 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
       return;
     }
 
-    await navigator.clipboard?.writeText(lastInviteUrl).catch(() => undefined);
+    if (!navigator.clipboard) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(lastInviteUrl)
+      .then(() => {
+        setSubmitState({
+          message: locale === "ko" ? "초대 링크가 복사되었습니다." : "Invitation link copied to clipboard.",
+          status: "success"
+        });
+      })
+      .catch(() => undefined);
   }
 
   return (

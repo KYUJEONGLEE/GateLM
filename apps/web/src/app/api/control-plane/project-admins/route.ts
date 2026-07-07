@@ -37,8 +37,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid project admin payload." }, { status: 400 });
   }
 
-  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
-  const authFailure = await authorizeTenantAdminForProject(auth, values.projectId);
+  const cookieHeader = request.headers.get("cookie");
+  const auth = await getCurrentConsoleAuth(cookieHeader);
+  const authFailure = await authorizeTenantAdminForProject(auth, values.projectId, cookieHeader);
 
   if (authFailure) {
     return authFailure;
@@ -47,7 +48,8 @@ export async function POST(request: Request) {
   if (payload.action === "revokeInvitation") {
     const invitationCheck = await assertInvitationBelongsToProject(
       values.projectId,
-      (values as ProjectAdminInvitationRevokeValues).invitationId
+      (values as ProjectAdminInvitationRevokeValues).invitationId,
+      cookieHeader
     );
 
     if (invitationCheck) {
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const result = await runProjectAdminAction(payload.action, values);
+  const result = await runProjectAdminAction(payload.action, values, cookieHeader);
 
   if (!result.ok) {
     return NextResponse.json(
@@ -85,19 +87,27 @@ export async function POST(request: Request) {
   });
 }
 
-function runProjectAdminAction(action: ProjectAdminAction, values: ProjectAdminActionValues) {
+function runProjectAdminAction(
+  action: ProjectAdminAction,
+  values: ProjectAdminActionValues,
+  cookieHeader?: string | null
+) {
   if (action === "invite") {
-    return inviteProjectAdmin(values as ProjectAdminInviteValues);
+    return inviteProjectAdmin(values as ProjectAdminInviteValues, { cookieHeader });
   }
 
   if (action === "remove") {
-    return removeProjectAdmin(values as ProjectAdminRemoveValues);
+    return removeProjectAdmin(values as ProjectAdminRemoveValues, { cookieHeader });
   }
 
-  return revokeProjectAdminInvitation(values as ProjectAdminInvitationRevokeValues);
+  return revokeProjectAdminInvitation(values as ProjectAdminInvitationRevokeValues, { cookieHeader });
 }
 
-async function authorizeTenantAdminForProject(auth: CurrentConsoleAuth, projectId: string) {
+async function authorizeTenantAdminForProject(
+  auth: CurrentConsoleAuth,
+  projectId: string,
+  cookieHeader?: string | null
+) {
   if (!auth.isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
@@ -113,7 +123,7 @@ async function authorizeTenantAdminForProject(auth: CurrentConsoleAuth, projectI
   }
 
   for (const tenantId of tenantIds) {
-    const projectLookup = await tenantHasProject(tenantId, projectId);
+    const projectLookup = await tenantHasProject(tenantId, projectId, cookieHeader);
 
     if (!projectLookup.ok) {
       return NextResponse.json(
@@ -130,7 +140,7 @@ async function authorizeTenantAdminForProject(auth: CurrentConsoleAuth, projectI
   return NextResponse.json({ error: "Project is outside the tenant admin scope." }, { status: 403 });
 }
 
-async function tenantHasProject(tenantId: string, projectId: string) {
+async function tenantHasProject(tenantId: string, projectId: string, cookieHeader?: string | null) {
   let cursor: string | null = null;
 
   try {
@@ -142,7 +152,10 @@ async function tenantHasProject(tenantId: string, projectId: string) {
 
       const response = await fetch(
         `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects?${query.toString()}`,
-        { cache: "no-store" }
+        {
+          cache: "no-store",
+          headers: cookieHeader ? { cookie: cookieHeader } : undefined
+        }
       );
       const payload = await response.json().catch(() => ({}));
 
@@ -181,8 +194,12 @@ async function tenantHasProject(tenantId: string, projectId: string) {
   }
 }
 
-async function assertInvitationBelongsToProject(projectId: string, invitationId: string) {
-  const projectAdmins = await listProjectAdmins(projectId);
+async function assertInvitationBelongsToProject(
+  projectId: string,
+  invitationId: string,
+  cookieHeader?: string | null
+) {
+  const projectAdmins = await listProjectAdmins(projectId, { cookieHeader });
 
   if (!projectAdmins.ok) {
     return NextResponse.json(
