@@ -864,7 +864,7 @@ function getProviderLogoText(providerKey: string, displayName: string) {
     return "AI";
   }
 
-  return displayName.slice(0, 2).toUpperCase();
+  return (displayName ?? "").slice(0, 2).toUpperCase();
 }
 
 function getProviderKeyPlaceholder(providerKey: string) {
