@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
+import { ProjectAdminManagement } from "@/features/project-admins/components/project-admin-management";
 import {
   ProjectDeleteManagement,
   ProjectDetailManagement
 } from "@/features/projects/components/project-management";
 import { ProjectTeamAssignment } from "@/features/teams/components/team-management";
+import { getProjectAdminsModel } from "@/lib/control-plane/project-admins-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getProjectTeamsModel } from "@/lib/control-plane/teams-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -26,7 +28,10 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
     notFound();
   }
 
-  const projectTeamsModel = await getProjectTeamsModel(tenantId, project.id);
+  const [projectAdminsModel, projectTeamsModel] = await Promise.all([
+    getProjectAdminsModel(tenantId, project.id),
+    getProjectTeamsModel(tenantId, project.id)
+  ]);
 
   return (
     <ConsoleShell
@@ -49,6 +54,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         project={project}
         tenantId={tenantId}
       />
+      <ProjectAdminManagement locale={locale} model={projectAdminsModel} />
       <ProjectTeamAssignment locale={locale} model={projectTeamsModel} />
       <ProjectDeleteManagement
         locale={locale}

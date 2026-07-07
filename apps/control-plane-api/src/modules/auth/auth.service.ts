@@ -15,6 +15,7 @@ import {
   verifyPassword,
 } from './auth.crypto';
 import {
+  AuthProjectAdminInvitation,
   AuthRepository,
   AuthSessionKind,
   AuthTenant,
@@ -52,6 +53,17 @@ interface PublicMembership {
   userId: string;
 }
 
+interface PublicProjectAdminInvitation {
+  acceptedAt?: string | null;
+  email: string;
+  expiresAt: string;
+  projectId: string;
+  projectName: string | null;
+  status: string;
+  tenantId: string;
+  tenantName: string | null;
+}
+
 const MAX_EMAIL_VERIFICATION_FAILURES = 5;
 
 export interface SessionIssue {
@@ -73,6 +85,7 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<{
+    acceptedProjectInvitation?: PublicProjectAdminInvitation;
     session?: SessionIssue;
     user: PublicUser;
     verificationRequired: boolean;
@@ -80,6 +93,14 @@ export class AuthService {
     const email = normalizeEmail(dto.email);
     const devAutoVerify = this.isDevAutoVerifyEnabled();
     const now = new Date();
+    if (dto.projectInviteToken) {
+      await this.getProjectAdminInvitationOrThrow(
+        dto.projectInviteToken,
+        email,
+        now,
+      );
+    }
+
     const existingUser = await this.repository.findUserByEmail(email);
     if (existingUser) {
       return this.resumeIncompleteSignup(existingUser, dto, devAutoVerify, now);
@@ -96,6 +117,24 @@ export class AuthService {
     });
 
     if (devAutoVerify) {
+      if (dto.projectInviteToken) {
+        const acceptedInvitation = await this.acceptProjectAdminInvitationOrThrow(
+          dto.projectInviteToken,
+          email,
+          user.id,
+          now,
+        );
+        const session = await this.issueSession(user.id, 'full');
+
+        return {
+          acceptedProjectInvitation:
+            this.toPublicProjectAdminInvitation(acceptedInvitation),
+          session,
+          user: this.toPublicUser(user),
+          verificationRequired: false,
+        };
+      }
+
       const session = await this.issueSession(user.id, 'onboarding');
 
       return {
@@ -127,6 +166,7 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<{
+    acceptedProjectInvitation?: PublicProjectAdminInvitation;
     session: SessionIssue;
     user: PublicUser;
   }> {
@@ -137,6 +177,14 @@ export class AuthService {
     }
 
     const now = new Date();
+    if (dto.projectInviteToken) {
+      await this.getProjectAdminInvitationOrThrow(
+        dto.projectInviteToken,
+        email,
+        now,
+      );
+    }
+
     const verificationCode =
       await this.repository.findLatestOpenVerificationCode(user.id, now);
     if (!verificationCode) {
@@ -159,12 +207,38 @@ export class AuthService {
       user.id,
       now,
     );
+
+    if (dto.projectInviteToken) {
+      const acceptedInvitation = await this.acceptProjectAdminInvitationOrThrow(
+        dto.projectInviteToken,
+        email,
+        verifiedUser.id,
+        now,
+      );
+      const session = await this.issueSession(verifiedUser.id, 'full');
+
+      return {
+        acceptedProjectInvitation:
+          this.toPublicProjectAdminInvitation(acceptedInvitation),
+        session,
+        user: this.toPublicUser(verifiedUser),
+      };
+    }
+
     const session = await this.issueSession(verifiedUser.id, 'onboarding');
 
     return {
       session,
       user: this.toPublicUser(verifiedUser),
     };
+  }
+
+  async getProjectAdminInvitation(
+    token: string,
+  ): Promise<PublicProjectAdminInvitation> {
+    return this.toPublicProjectAdminInvitation(
+      await this.getProjectAdminInvitationOrThrow(token),
+    );
   }
 
   async createOrganization(
@@ -358,6 +432,49 @@ export class AuthService {
     };
   }
 
+  private async acceptProjectAdminInvitationOrThrow(
+    token: string,
+    email: string,
+    userId: string,
+    now: Date,
+  ): Promise<AuthProjectAdminInvitation> {
+    try {
+      return await this.repository.acceptProjectAdminInvitation({
+        acceptedAt: now,
+        email,
+        tokenHash: hashSecret(token),
+        userId,
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid or expired project admin invitation.',
+      );
+    }
+  }
+
+  private async getProjectAdminInvitationOrThrow(
+    token: string,
+    email?: string,
+    now = new Date(),
+  ): Promise<AuthProjectAdminInvitation> {
+    const invitation = await this.repository.findProjectAdminInvitationByTokenHash(
+      hashSecret(token),
+      now,
+    );
+    if (!invitation) {
+      throw new UnauthorizedException(
+        'Invalid or expired project admin invitation.',
+      );
+    }
+    if (email && invitation.email !== email) {
+      throw new UnauthorizedException(
+        'Project admin invitation email does not match.',
+      );
+    }
+
+    return invitation;
+  }
+
   private async issueSession(
     userId: string,
     kind: AuthSessionKind,
@@ -406,6 +523,21 @@ export class AuthService {
     };
   }
 
+  private toPublicProjectAdminInvitation(
+    invitation: AuthProjectAdminInvitation,
+  ): PublicProjectAdminInvitation {
+    return {
+      acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
+      email: invitation.email,
+      expiresAt: invitation.expiresAt.toISOString(),
+      projectId: invitation.projectId,
+      projectName: invitation.project?.name ?? null,
+      status: invitation.status,
+      tenantId: invitation.tenantId,
+      tenantName: invitation.tenant?.name ?? null,
+    };
+  }
+
   private toPublicTenant(tenant: AuthTenant): PublicTenant {
     return {
       id: tenant.id,
@@ -424,7 +556,7 @@ export class AuthService {
   }
 
   private webOrigin(): string {
-    return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3000';
+    return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3005';
   }
 
   private webHomeUrl(): string {
@@ -450,6 +582,7 @@ export class AuthService {
     devAutoVerify: boolean,
     now: Date,
   ): Promise<{
+    acceptedProjectInvitation?: PublicProjectAdminInvitation;
     session?: SessionIssue;
     user: PublicUser;
     verificationRequired: boolean;
@@ -477,6 +610,25 @@ export class AuthService {
       const verifiedUser = user.emailVerifiedAt
         ? user
         : await this.repository.updateUserEmailVerified(user.id, now);
+
+      if (dto.projectInviteToken) {
+        const acceptedInvitation = await this.acceptProjectAdminInvitationOrThrow(
+          dto.projectInviteToken,
+          user.email,
+          verifiedUser.id,
+          now,
+        );
+        const session = await this.issueSession(verifiedUser.id, 'full');
+
+        return {
+          acceptedProjectInvitation:
+            this.toPublicProjectAdminInvitation(acceptedInvitation),
+          session,
+          user: this.toPublicUser(verifiedUser),
+          verificationRequired: false,
+        };
+      }
+
       const session = await this.issueSession(verifiedUser.id, 'onboarding');
 
       return {

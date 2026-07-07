@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   Req,
@@ -42,6 +43,7 @@ export class AuthController {
 
     return {
       data: {
+        acceptedProjectInvitation: result.acceptedProjectInvitation,
         session: result.session
           ? this.toSessionResponse(result.session)
           : undefined,
@@ -62,9 +64,19 @@ export class AuthController {
 
     return {
       data: {
+        acceptedProjectInvitation: result.acceptedProjectInvitation,
         session: this.toSessionResponse(result.session),
         user: result.user,
       },
+    };
+  }
+
+  @Get('project-admin-invitations/:token')
+  async getProjectAdminInvitation(
+    @Param('token') token: string,
+  ): Promise<DataEnvelope<unknown>> {
+    return {
+      data: await this.authService.getProjectAdminInvitation(token),
     };
   }
 

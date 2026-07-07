@@ -4,7 +4,7 @@ import { TLSSocket, connect as connectTls } from 'node:tls';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { EmailSender, VerificationEmailMessage } from './email-sender';
+import { EmailSender, ProjectAdminInvitationEmailMessage, VerificationEmailMessage } from './email-sender';
 
 type SmtpSocket = Socket | TLSSocket;
 
@@ -29,6 +29,23 @@ interface SmtpResponse {
 export class SmtpEmailSender implements EmailSender {
   constructor(private readonly config: ConfigService) {}
 
+  async sendProjectAdminInvitationEmail(
+    message: ProjectAdminInvitationEmailMessage,
+  ): Promise<void> {
+    const smtpConfig = this.readConfig();
+    const connection = await SmtpConnection.open(smtpConfig);
+
+    try {
+      await connection.sendMail({
+        body: this.renderProjectAdminInvitationBody(message),
+        from: smtpConfig.from,
+        subject: `GateLM project admin invitation for ${message.projectName}`,
+        to: message.email,
+      });
+    } finally {
+      await connection.close();
+    }
+  }
   async sendVerificationEmail(
     message: VerificationEmailMessage,
   ): Promise<void> {
@@ -45,6 +62,23 @@ export class SmtpEmailSender implements EmailSender {
     } finally {
       await connection.close();
     }
+  }
+
+  private renderProjectAdminInvitationBody(
+    message: ProjectAdminInvitationEmailMessage,
+  ): string {
+    return [
+      `Hello ${message.name},`,
+      '',
+      `You have been invited as a project admin for ${message.projectName} in ${message.tenantName}.`,
+      '',
+      'Use the link below to create your GateLM account and accept the invitation:',
+      message.signupUrl,
+      '',
+      `This invitation expires at: ${message.expiresAt.toISOString()}`,
+      '',
+      'If you did not expect this invitation, you can ignore this email.',
+    ].join('\r\n');
   }
 
   private readConfig(): SmtpConfig {
@@ -461,3 +495,6 @@ function escapeSmtpData(value: string): string {
     .map((line) => (line.startsWith('.') ? `.${line}` : line))
     .join('\r\n');
 }
+
+
+

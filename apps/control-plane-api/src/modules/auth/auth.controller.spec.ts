@@ -17,6 +17,7 @@ describe('Auth HTTP API', () => {
   let repository: ReturnType<typeof createInMemoryAuthRepository>;
   let emailSender: {
     sent: Array<{ email: string; code: string }>;
+    sendProjectAdminInvitationEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
   };
   let googleOAuthClient: {
@@ -37,6 +38,7 @@ describe('Auth HTTP API', () => {
     repository = createInMemoryAuthRepository();
     emailSender = {
       sent: [],
+      sendProjectAdminInvitationEmail: jest.fn(async () => undefined),
       sendVerificationEmail: jest.fn(async (message) => {
         emailSender.sent.push(message);
       }),
@@ -329,6 +331,68 @@ describe('Auth HTTP API', () => {
     );
   });
 
+  it('accepts a project admin invitation during email verification', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const invitation = await repository.createProjectAdminInvitation({
+      email: 'project-admin@example.com',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      projectId: '00000000-0000-4000-8000-000000000201',
+      tenantId: '00000000-0000-4000-8000-000000000101',
+      tokenHash:
+        'sha256:30bb50742c146614848437b28da7c55eff7be239672e6e81bdcdec676e35e33b',
+    });
+
+    await agent.post('/api/auth/signup').send({
+      email: 'project-admin@example.com',
+      name: 'Project Admin',
+      password: 'correct-horse-battery-staple',
+      projectInviteToken: 'project-admin-invite-token',
+    });
+
+    const verifyResponse = await agent
+      .post('/api/auth/email/verify')
+      .send({
+        code: emailSender.sent[0]?.code,
+        email: 'project-admin@example.com',
+        projectInviteToken: 'project-admin-invite-token',
+      })
+      .expect(200);
+
+    expect(String(verifyResponse.headers['set-cookie'])).toContain(
+      'gatelm_session=',
+    );
+    expect(verifyResponse.body).toMatchObject({
+      data: {
+        acceptedProjectInvitation: {
+          email: 'project-admin@example.com',
+          projectId: invitation.projectId,
+          status: 'accepted',
+          tenantId: invitation.tenantId,
+        },
+        session: {
+          kind: 'full',
+        },
+      },
+    });
+
+    const state = repository.dump();
+    expect(state.tenantMemberships).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'project_admin',
+          tenantId: invitation.tenantId,
+        }),
+      ]),
+    );
+    expect(state.projectAdmins).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          projectId: invitation.projectId,
+          tenantId: invitation.tenantId,
+        }),
+      ]),
+    );
+  });
   it('expires an email verification code after repeated invalid attempts', async () => {
     const agent = request.agent(app.getHttpServer());
 
@@ -466,3 +530,4 @@ describe('Auth HTTP API', () => {
     );
   });
 });
+

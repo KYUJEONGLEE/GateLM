@@ -26,7 +26,7 @@ type ValidatedControlPlaneEnv = Record<string, string | number | undefined> &
 
 const DEFAULT_CONTROL_PLANE_PORT = 3001;
 const DEFAULT_ADMIN_AUTH_MODE = 'demo_admin_placeholder';
-const DEFAULT_CONTROL_PLANE_WEB_ORIGIN = 'http://localhost:3000';
+const DEFAULT_CONTROL_PLANE_WEB_ORIGIN = 'http://localhost:3005';
 const DEFAULT_AUTH_EMAIL_TRANSPORT = 'dev_memory';
 
 function requireString(env: RawEnv, key: keyof ControlPlaneEnv): string {

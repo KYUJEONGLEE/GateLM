@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
   IsEmail,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -27,6 +28,13 @@ export class SignupDto {
   @MinLength(8)
   @MaxLength(256)
   password!: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @MaxLength(512)
+  projectInviteToken?: string;
 }
 
 export class VerifyEmailDto {
@@ -39,6 +47,13 @@ export class VerifyEmailDto {
   @IsString()
   @Matches(/^\d{6}$/)
   code!: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @MaxLength(512)
+  projectInviteToken?: string;
 }
 
 export class CreateOrganizationDto {
