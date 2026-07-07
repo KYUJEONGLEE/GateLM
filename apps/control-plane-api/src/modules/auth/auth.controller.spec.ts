@@ -474,7 +474,7 @@ describe('Auth HTTP API', () => {
     expect(repository.dump().users[0]?.emailVerifiedAt).toBeNull();
   });
 
-  it('starts Google OAuth and returns verified Google users to the app with a login session without storing Google tokens', async () => {
+  it('starts Google OAuth and sends new verified Google users to onboarding without storing Google tokens', async () => {
     const agent = request.agent(app.getHttpServer());
 
     const startResponse = await agent
@@ -491,7 +491,7 @@ describe('Auth HTTP API', () => {
       .expect(302);
 
     expect(callbackResponse.headers.location).toBe(
-      'http://localhost:3000/tenants/tenant_demo_acme/dashboard',
+      'http://localhost:3000/?auth=organization',
     );
     expect(String(callbackResponse.headers['set-cookie'])).toContain(
       'gatelm_onboarding=',
@@ -515,6 +515,55 @@ describe('Auth HTTP API', () => {
     expect(JSON.stringify(repository.dump())).not.toContain(
       'access-token-for-oauth-code',
     );
+  });
+
+  it('returns verified Google users with memberships to the demo dashboard fallback', async () => {
+    const user = await repository.createUser({
+      authProvider: 'google',
+      email: 'google-admin@example.com',
+      emailVerifiedAt: new Date(),
+      name: 'Google Admin',
+      passwordHash: null,
+      status: 'active',
+    });
+    await repository.createOAuthAccount({
+      email: 'google-admin@example.com',
+      provider: 'google',
+      providerSubject: 'google-subject-001',
+      userId: user.id,
+    });
+    await repository.createTenantAndMembership({
+      organizationName: 'Google Admin Tenant',
+      userId: user.id,
+    });
+    const agent = request.agent(app.getHttpServer());
+
+    const startResponse = await agent
+      .get('/api/auth/google/start')
+      .expect(302);
+    const state = new URL(startResponse.headers.location as string).searchParams.get('state');
+
+    const callbackResponse = await agent
+      .get(`/api/auth/google/callback?code=oauth-code&state=${state}`)
+      .expect(302);
+
+    expect(callbackResponse.headers.location).toBe(
+      'http://localhost:3000/tenants/tenant_demo_acme/dashboard',
+    );
+    expect(String(callbackResponse.headers['set-cookie'])).toContain(
+      'gatelm_session=',
+    );
+    const meResponse = await agent.get('/api/auth/me').expect(200);
+    expect(meResponse.body).toMatchObject({
+      data: {
+        session: {
+          kind: 'full',
+        },
+        user: {
+          email: 'google-admin@example.com',
+        },
+      },
+    });
   });
 });
 

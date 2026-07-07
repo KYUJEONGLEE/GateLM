@@ -494,10 +494,14 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
+    const hasOrganizationAuthParam =
+      params.get("auth") === "organization" || params.get("auth") === "tenant";
+    if (hasOrganizationAuthParam) {
       window.history.replaceState(null, "", "/");
-      redirectToProjects(defaultTenantId, true);
-      return;
+      setAuthMode("signup");
+      setSignupStep("organization");
+      setIsAuthPanelOpen(true);
+      setAuthNotice("Create your tenant to finish Google login.");
     }
     const projectInvite = params.get("projectInvite") ?? params.get("invite");
     if (projectInvite) {
@@ -509,7 +513,10 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
 
     const hasLandingViewParam = params.get("view") === "landing";
     const shouldStayOnLanding =
-      Boolean(projectInvite) || hasLandingViewParam || hasStayOnLandingHistoryState();
+      hasOrganizationAuthParam ||
+      Boolean(projectInvite) ||
+      hasLandingViewParam ||
+      hasStayOnLandingHistoryState();
     if (hasLandingViewParam || projectInvite) {
       replaceLandingUrl();
     }
@@ -547,13 +554,19 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
           return;
         }
 
-        const hasConsoleSession =
-          body.data?.session?.kind === "full" ||
-          body.data?.session?.kind === "onboarding";
+        const hasFullSession = body.data?.session?.kind === "full";
+        const hasOnboardingSession = body.data?.session?.kind === "onboarding";
 
-        setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
+        setAuthStatus(hasFullSession ? "authenticated" : "anonymous");
 
-        if (hasConsoleSession && !shouldStayOnLanding) {
+        if (hasOnboardingSession) {
+          setAuthMode("signup");
+          setSignupStep("organization");
+          setIsAuthPanelOpen(true);
+          return;
+        }
+
+        if (hasFullSession && !shouldStayOnLanding) {
           redirectToDashboard(true);
         }
       } catch {

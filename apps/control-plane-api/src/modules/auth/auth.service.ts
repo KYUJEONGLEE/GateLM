@@ -549,7 +549,8 @@ export class AuthService {
     const session = await this.issueSession(user.id, kind);
 
     return {
-      redirectUrl: this.webDashboardUrl(),
+      redirectUrl:
+        kind === 'full' ? this.webDashboardUrl() : this.webOrganizationUrl(),
       session,
     };
   }
@@ -821,6 +822,10 @@ export class AuthService {
 
   private webDashboardUrl(): string {
     return `${this.webOrigin().replace(/\/+$/, '')}/tenants/tenant_demo_acme/dashboard`;
+  }
+
+  private webOrganizationUrl(): string {
+    return `${this.webOrigin().replace(/\/+$/, '')}/?auth=organization`;
   }
 
   private isDevAutoVerifyEnabled(): boolean {

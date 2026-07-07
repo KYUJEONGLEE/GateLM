@@ -11,18 +11,26 @@ export async function GET(request: NextRequest, context: AuthProxyContext) {
   return proxyAuthRequest(request, context);
 }
 
+export async function HEAD(request: NextRequest, context: AuthProxyContext) {
+  return proxyAuthRequest(request, context);
+}
+
 export async function POST(request: NextRequest, context: AuthProxyContext) {
   return proxyAuthRequest(request, context);
 }
 
 async function proxyAuthRequest(request: NextRequest, context: AuthProxyContext) {
   const targetUrl = await buildTargetUrl(request, context);
-  const upstreamResponse = await fetch(targetUrl, {
-    body: request.method === "GET" ? undefined : await request.text(),
+  const upstreamRequestInit: RequestInit = {
     headers: buildForwardHeaders(request),
     method: request.method,
     redirect: "manual"
-  });
+  };
+  if (!isRequestBodyForbidden(request.method)) {
+    upstreamRequestInit.body = await request.text();
+  }
+
+  const upstreamResponse = await fetch(targetUrl, upstreamRequestInit);
 
   return toNextResponse(upstreamResponse);
 }
@@ -139,4 +147,8 @@ function splitSetCookieHeader(header: string | null) {
 
 function isRedirectStatus(status: number) {
   return status >= 300 && status < 400;
+}
+
+function isRequestBodyForbidden(method: string) {
+  return method === "GET" || method === "HEAD";
 }
