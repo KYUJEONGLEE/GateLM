@@ -226,6 +226,15 @@ export type DashboardOverview = {
     costMicroUsd: number;
     costUsd: string;
   }>;
+  costByProject?: Array<{
+    projectId: string;
+    requestCount: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    costMicroUsd: number;
+    costUsd: string;
+  }>;
   requestIds: string[];
   dataFreshness: {
     source: string;

@@ -48,6 +48,7 @@ describe('RuntimeConfigsService', () => {
       };
       runtimeSnapshot: {
         create: jest.Mock;
+        findUnique: jest.Mock;
       };
       activeRuntimeSnapshot: {
         findUnique: jest.Mock;
@@ -83,6 +84,7 @@ describe('RuntimeConfigsService', () => {
       },
       runtimeSnapshot: {
         create: jest.fn(),
+        findUnique: jest.fn(),
       },
       activeRuntimeSnapshot: {
         findUnique: jest.fn(),
@@ -1397,6 +1399,76 @@ describe('RuntimeConfigsService', () => {
     });
     expect(JSON.stringify(catalog)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
+  });
+
+  it('returns active Provider Catalog from persisted RuntimeSnapshot before revalidating active Runtime Config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    const runtimeConfig = runtimeConfigRecord(activeDocument, {
+      publishState: RuntimeConfigPublishState.ACTIVE,
+      publishedAt: now,
+    });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(runtimeConfig);
+
+    const expectedCatalog =
+      await service.getActiveProviderCatalog(applicationId);
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    prisma.runtimeConfig.findFirst.mockReset();
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(snapshot, {
+        runtimeSnapshot: {
+          runtimeConfig,
+        },
+      }),
+    );
+
+    const result = await service.getActiveProviderCatalog(applicationId);
+
+    expect(result).toEqual(expectedCatalog);
+    expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('returns canonical Provider Catalog by persisted RuntimeSnapshot ref without revalidating active Runtime Config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    const runtimeConfig = runtimeConfigRecord(activeDocument, {
+      publishState: RuntimeConfigPublishState.ACTIVE,
+      publishedAt: now,
+    });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(runtimeConfig);
+
+    const expectedCatalog =
+      await service.getActiveProviderCatalog(applicationId);
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    prisma.runtimeConfig.findFirst.mockReset();
+    prisma.runtimeSnapshot.findUnique.mockResolvedValue({
+      ...activeRuntimeSnapshotRecord(snapshot).runtimeSnapshot,
+      runtimeConfig,
+    });
+
+    const result = await service.getProviderCatalog(
+      expectedCatalog.catalogId,
+    );
+
+    expect(result).toEqual(expectedCatalog);
+    expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
+    expect(prisma.runtimeSnapshot.findUnique).toHaveBeenCalledWith({
+      where: {
+        applicationId_version: {
+          applicationId,
+          version: BigInt(expectedCatalog.catalogVersion),
+        },
+      },
+      include: {
+        runtimeConfig: true,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
   it('preserves Anthropic adapter config in the Provider Catalog body', async () => {
