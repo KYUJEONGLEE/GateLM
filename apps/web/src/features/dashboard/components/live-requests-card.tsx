@@ -113,7 +113,10 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
 
   const loadRequests = useCallback(
     async ({ silent }: { silent: boolean }) => {
-      abortRef.current?.abort();
+      if (abortRef.current) {
+        return;
+      }
+
       const controller = new AbortController();
       abortRef.current = controller;
 

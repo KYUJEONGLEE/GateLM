@@ -170,7 +170,11 @@ export function OnboardingProviderRegistration({
       return;
     }
 
-    const requiresCredential = formValues.credentialRequired;
+    const registeringProvider = providers.find(
+      (provider) => provider.provider === formValues.provider.trim()
+    );
+    const requiresCredential =
+      formValues.credentialRequired && !hasProviderKeyRegistered(registeringProvider);
 
     if (requiresCredential && !formValues.credentialValue?.trim()) {
       setSubmitState({ message: text.providerRequired, status: "error" });
@@ -807,6 +811,24 @@ function getProviderConfigBoolean(
   const value = providerConfig?.[key];
 
   return typeof value === "boolean" ? value : fallback;
+}
+
+function hasProviderKeyRegistered(provider: ProviderConnectionRecord | null | undefined) {
+  if (!provider) {
+    return false;
+  }
+
+  const credentialRequired = getProviderConfigBoolean(
+    provider.providerConfig,
+    "credentialRequired",
+    provider.resolver !== "none"
+  );
+
+  if (!credentialRequired) {
+    return true;
+  }
+
+  return Boolean(provider.credentialPreview?.prefix || provider.credentialPreview?.last4);
 }
 
 function getProviderConfigFailureMode(

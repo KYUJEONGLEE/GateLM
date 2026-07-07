@@ -469,6 +469,10 @@ export class ProjectsService {
     const selectedByProjectId = new Map<string, RuntimeApplicationProjection>();
 
     for (const application of applications) {
+      if (!application.projectId) {
+        continue;
+      }
+
       const current = selectedByProjectId.get(application.projectId);
 
       if (

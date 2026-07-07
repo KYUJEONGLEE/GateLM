@@ -93,7 +93,9 @@ function isSignupDraft(value: unknown): value is SignupDraft {
       draft.emailVerifiedAt === null) &&
     typeof draft.expiresAt === 'string' &&
     (draft.verification === undefined ||
-      (typeof draft.verification.codeHash === 'string' &&
+      (draft.verification !== null &&
+        typeof draft.verification === 'object' &&
+        typeof draft.verification.codeHash === 'string' &&
         typeof draft.verification.expiresAt === 'string' &&
         typeof draft.verification.failedAttemptCount === 'number'))
   );
