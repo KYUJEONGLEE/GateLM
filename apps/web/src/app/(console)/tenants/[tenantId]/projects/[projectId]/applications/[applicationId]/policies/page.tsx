@@ -23,7 +23,7 @@ export default async function ApplicationPoliciesPage({
   const projectsModel = await getProjectsModel(tenantId);
   const project = projectsModel.projects.find((item) => item.id === projectId);
 
-  if (!project) {
+  if (!project || project.status !== "ACTIVE") {
     notFound();
   }
 
