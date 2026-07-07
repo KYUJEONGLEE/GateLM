@@ -9,6 +9,7 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { AiInsightsPanel } from "@/features/dashboard/components/ai-insights-panel";
 import { CostOverTimeCard } from "@/features/dashboard/components/cost-over-time-card";
+import { DashboardAutoRefresh } from "@/features/dashboard/components/dashboard-auto-refresh";
 import {
   DashboardLineEChart,
   DashboardPieEChart
@@ -301,6 +302,7 @@ export function DashboardOverviewView({
 
   return (
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
+      <DashboardAutoRefresh />
       <section className="dashboard-main-header">
         <div>
           <h1>{text.title}</h1>
@@ -364,29 +366,29 @@ export function DashboardOverviewView({
               <ProviderModelUsageCard rows={buildProviderModelUsageRows(overview)} />
             )}
           </div>
+          <LiveRequestsCard
+            filters={{
+              ...filters,
+              tenantId: overview.filters.tenantId
+            }}
+            initialPayload={liveRequests}
+          />
         </div>
         <aside className="dashboard-ai-panel" aria-label="AI analysis workspace">
           <AiInsightsPanel
             averageLatencyMs={overview.averageLatencyMs}
-            blockedRequests={overview.blockedRequests}
             cacheHitRate={overview.exactCacheHitRate ?? overview.cacheHitRate}
-            failedRequests={overview.failedRequests}
             monthToDateSpendMicroUsd={monthToDate.totalCostMicroUsd}
+            p95LatencyMs={overview.p95LatencyMs}
+            projectId={filters.projectId || null}
             projectName={selectedProject?.name ?? null}
             rangeLabel={rangeLabel(filters.range)}
+            recentRequests={liveRequests?.rows}
             successRate={successRate}
             totalRequests={overview.totalRequests}
           />
         </aside>
       </section>
-
-      <LiveRequestsCard
-        filters={{
-          ...filters,
-          tenantId: overview.filters.tenantId
-        }}
-        initialPayload={liveRequests}
-      />
 
       {detailPanel}
     </main>

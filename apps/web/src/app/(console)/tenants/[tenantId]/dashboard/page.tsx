@@ -56,7 +56,12 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 
   if (!overview) {
     return (
-      <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
+      <ConsoleShell
+        activeMonitoringItem="overview"
+        activeSection="monitoring"
+        locale={locale}
+        tenantId={tenantId}
+      >
         <main className="console-content">
           <section className="dashboard-hero">
             <div>
@@ -75,7 +80,12 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   }
 
   return (
-    <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
+    <ConsoleShell
+      activeMonitoringItem="overview"
+      activeSection="monitoring"
+      locale={locale}
+      tenantId={tenantId}
+    >
       <DashboardOverviewView
         locale={locale}
         costOverTime={costOverTime}

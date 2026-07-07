@@ -112,7 +112,7 @@ const requestLogText: Record<
     },
     emptyPreview: "No preview stored",
     filterLabel: "Log filters",
-    kicker: "analytics",
+    kicker: "Monitoring",
     modelLabel: "Model",
     nextPage: "Next",
     pageSummary: "Showing {start}-{end} of {total}",
@@ -123,7 +123,7 @@ const requestLogText: Record<
     searchPlaceholder: "Search by requestId",
     statusLabel: "Status",
     submitLabel: "Search",
-    title: "Request logs"
+    title: "Live Logs"
   },
   ko: {
     allApplications: "전체 Application",
@@ -147,7 +147,7 @@ const requestLogText: Record<
     },
     emptyPreview: "저장된 preview 없음",
     filterLabel: "로그 필터",
-    kicker: "분석",
+    kicker: "모니터링",
     modelLabel: "모델",
     nextPage: "다음",
     pageSummary: "{total}개 중 {start}-{end}개 표시",
@@ -158,7 +158,7 @@ const requestLogText: Record<
     searchPlaceholder: "requestId 검색",
     statusLabel: "상태",
     submitLabel: "검색",
-    title: "요청 로그"
+    title: "실시간 로그"
   }
 };
 
