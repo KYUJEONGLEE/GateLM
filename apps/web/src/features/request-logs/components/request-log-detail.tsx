@@ -137,7 +137,7 @@ export function RequestLogDetailPanel({
   const text = requestDetailText[locale];
   const domainOutcomes = record.domainOutcomes;
   const hasErrorDetail = Boolean(record.errorCode || record.errorStage || record.errorMessage);
-  const runtimeSnapshot = record.metadata.runtime.runtimeSnapshot;
+  const runtimeSnapshot = record.metadata?.runtime?.runtimeSnapshot;
 
   return (
     <article className="console-panel detail-panel detail-panel-stack">
