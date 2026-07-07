@@ -491,7 +491,7 @@ describe('Auth HTTP API', () => {
       .expect(302);
 
     expect(callbackResponse.headers.location).toBe(
-      'http://localhost:3000/tenants/tenant_demo_acme/dashboard',
+      'http://localhost:3000/?auth=organization',
     );
     expect(String(callbackResponse.headers['set-cookie'])).toContain(
       'gatelm_onboarding=',
@@ -517,4 +517,3 @@ describe('Auth HTTP API', () => {
     );
   });
 });
-
