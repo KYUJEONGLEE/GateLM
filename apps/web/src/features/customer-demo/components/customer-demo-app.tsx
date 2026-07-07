@@ -63,6 +63,9 @@ const customerDemoText: Record<
       light: string;
       newConversation: string;
       openSidebar: string;
+      profile: string;
+      profileMissing: string;
+      profileReady: string;
       settings: string;
       closeSidebar: string;
       theme: string;
@@ -78,15 +81,15 @@ const customerDemoText: Record<
       replay: "Send again",
       send: "Send"
     },
-    appName: "Acme Support",
+    appName: "Gateway Chat",
     chatPreview: "conversation",
     disclaimer: "AI can make mistakes. Verify important information.",
     emptyState: {
-      subtitle: "Start a new conversation with Acme Support.",
+      subtitle: "Start a new conversation through the selected project Gateway API.",
       title: "What can I help with?"
     },
     error: "Unable to load this request state.",
-    inputPlaceholder: "Ask Acme support anything",
+    inputPlaceholder: "Type a message for this project",
     language: "Console language",
     sidebar: {
       application: "Application",
@@ -99,6 +102,9 @@ const customerDemoText: Record<
       light: "Light",
       newConversation: "New conversation",
       openSidebar: "Open sidebar",
+      profile: "Project profile",
+      profileMissing: "Gateway API key missing",
+      profileReady: "Gateway API connected",
       settings: "User settings",
       closeSidebar: "Close sidebar",
       theme: "Theme",
@@ -113,15 +119,15 @@ const customerDemoText: Record<
       replay: "다시 전송",
       send: "전송"
     },
-    appName: "Acme Support",
+    appName: "Gateway Chat",
     chatPreview: "대화",
     disclaimer: "AI는 실수할 수 있습니다. 중요한 정보는 다시 확인하세요.",
     emptyState: {
-      subtitle: "Acme Support와 새 대화를 시작하세요.",
+      subtitle: "선택한 프로젝트 Gateway API로 새 대화를 시작하세요.",
       title: "무엇을 도와드릴까요?"
     },
     error: "요청 상태를 불러오지 못했습니다.",
-    inputPlaceholder: "Acme 지원팀에 메시지 입력",
+    inputPlaceholder: "이 프로젝트로 보낼 메시지 입력",
     language: "콘솔 언어",
     sidebar: {
       application: "Application",
@@ -131,6 +137,9 @@ const customerDemoText: Record<
       light: "라이트",
       newConversation: "새 대화",
       openSidebar: "좌측탭 열기",
+      profile: "프로젝트 프로필",
+      profileMissing: "Gateway API Key 누락",
+      profileReady: "Gateway API 연결됨",
       settings: "사용자 설정",
       closeSidebar: "좌측탭 닫기",
       theme: "테마",
@@ -145,11 +154,15 @@ const themeStorageKey = "gatelm_console_theme";
 export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const client = useMemo(() => {
     if (model.integrationMode === "gateway") {
-      return new RouteGatewayChatClient(model.tenantId, model.surface);
+      return new RouteGatewayChatClient(
+        model.tenantId,
+        model.surface,
+        model.selectedChatProfileId
+      );
     }
 
     return new FixtureGatewayChatClient(model.scenarios);
-  }, [model.integrationMode, model.scenarios, model.surface, model.tenantId]);
+  }, [model.integrationMode, model.scenarios, model.selectedChatProfileId, model.surface, model.tenantId]);
   const [, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -165,11 +178,21 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const hasScenarios = model.scenarios.length > 0;
   const text = customerDemoText[locale];
+  const chatProfiles = model.chatProfiles ?? [];
+  const selectedProfile =
+    chatProfiles.find((profile) => profile.id === model.selectedChatProfileId)
+    ?? chatProfiles.find((profile) => profile.isDefault)
+    ?? chatProfiles[0];
+  const selectedProfileId = model.selectedChatProfileId ?? selectedProfile?.id ?? "";
+  const appDisplayName = model.selectedChatProfileLabel ?? selectedProfile?.label ?? text.appName;
+  const profileStatus = selectedProfile?.configured
+    ? text.sidebar.profileReady
+    : text.sidebar.profileMissing;
   const canStreamApplicationChat =
     model.integrationMode === "gateway" && (model.applicationChatStreamingEnabled ?? true);
   const firstUserMessage = messages.find((message) => message.side === "outgoing");
   const currentConversationTitle = firstUserMessage?.body ?? text.sidebar.newConversation;
-  const currentConversationAuthor = messages.length > 0 ? text.chatPreview : text.appName;
+  const currentConversationAuthor = messages.length > 0 ? text.chatPreview : appDisplayName;
 
   useEffect(() => {
     const initialTheme = readStoredTheme() ?? readDocumentTheme();
@@ -255,6 +278,16 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     setTheme(nextTheme);
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
+  }
+
+  function selectProfile(nextProfileId: string) {
+    if (!nextProfileId || nextProfileId === selectedProfileId || typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("profile", nextProfileId);
+    window.location.assign(`${url.pathname}${url.search}${url.hash}`);
   }
 
   const updateContextRetention = useCallback((enabled: boolean) => {
@@ -418,9 +451,25 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         <section className="customer-chat-sidebar-history" aria-label={text.sidebar.current}>
           <span>{text.sidebar.application}</span>
           <div className="customer-chat-sidebar-card">
-            <strong>{text.appName}</strong>
-            <small>{text.chatPreview}</small>
+            <strong>{appDisplayName}</strong>
+            <small>{profileStatus}</small>
           </div>
+
+          {chatProfiles.length > 1 ? (
+            <label className="customer-chat-profile-picker">
+              <span>{text.sidebar.profile}</span>
+              <select
+                onChange={(event) => selectProfile(event.target.value)}
+                value={selectedProfileId}
+              >
+                {chatProfiles.map((profile) => (
+                  <option disabled={!profile.configured} key={profile.id} value={profile.id}>
+                    {profile.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <button
             className="customer-chat-new-button"
