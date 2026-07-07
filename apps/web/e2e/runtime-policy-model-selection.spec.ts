@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { applyInitialRuntimePolicyModelSelection } from "../src/lib/control-plane/runtime-policy-model-selection";
+import {
+  applyInitialRuntimePolicyModelSelection,
+  applyPrimaryRuntimePolicyRouteSelection
+} from "../src/lib/control-plane/runtime-policy-model-selection";
 import type {
   RuntimePolicyDraftValues,
   RuntimePolicyModelConfig
@@ -38,6 +41,26 @@ test("initial model selection applies the selected model to all routing tiers", 
     routingLowCostModel: "cheap-v1",
     routingLowCostProvider: "provider-cheap"
   });
+});
+
+test("primary route selection updates every auto routing tier", () => {
+  const draftValues = createDraftValues();
+
+  const nextValues = applyPrimaryRuntimePolicyRouteSelection(draftValues, {
+    model: "balanced-v2",
+    provider: "provider-two"
+  });
+
+  expect(nextValues).toMatchObject({
+    budgetWarningThresholdPercent: 80,
+    routingDefaultModel: "balanced-v2",
+    routingDefaultProvider: "provider-two",
+    routingFallbackModel: "balanced-v2",
+    routingFallbackProvider: "provider-two",
+    routingLowCostModel: "balanced-v2",
+    routingLowCostProvider: "provider-two"
+  });
+  expect(draftValues.routingLowCostModel).toBe("cheap-v1");
 });
 
 function createDraftValues(): RuntimePolicyDraftValues {

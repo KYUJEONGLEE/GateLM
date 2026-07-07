@@ -26,8 +26,8 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
-  const tenantId =
-    typeof payload.tenantId === "string" ? payload.tenantId : getControlPlaneTenantId();
+  const routeTenantId = typeof payload.tenantId === "string" ? payload.tenantId : undefined;
+  const tenantId = routeTenantId ?? getControlPlaneTenantId();
   const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
 
   if (!auth.isAuthenticated) {
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider discovery payload." }, { status: 400 });
     }
 
-    const result = await discoverProviderModels(provider, tenantId);
+    const result = await discoverProviderModels(provider, routeTenantId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider deletion payload." }, { status: 400 });
     }
 
-    const result = await deleteProviderConnection(provider, tenantId);
+    const result = await deleteProviderConnection(provider, routeTenantId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -98,7 +98,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid model removal payload." }, { status: 400 });
     }
 
-    const result = await removeProviderModel(values, tenantId);
+    const result = await removeProviderModel({
+      ...values,
+      routeTenantId
+    });
 
     if (!result.ok) {
       return NextResponse.json(
@@ -124,7 +127,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid provider payload." }, { status: 400 });
   }
 
-  const result = await upsertProviderConnection(payload.values, tenantId);
+  const result = await upsertProviderConnection(payload.values, routeTenantId);
 
   if (!result.ok) {
     return NextResponse.json(

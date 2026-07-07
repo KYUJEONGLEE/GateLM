@@ -151,6 +151,7 @@ type RequestLogListItem struct {
 	ProjectID        string
 	ApplicationID    string
 	BudgetScope      budget.Scope
+	UserRef          string
 	Provider         string
 	Model            string
 	RequestedModel   string
@@ -771,6 +772,7 @@ func ToRequestLogListItem(log LlmInvocationLog) RequestLogListItem {
 		ProjectID:        log.ProjectID,
 		ApplicationID:    log.ApplicationID,
 		BudgetScope:      budget.NormalizeScope(log.BudgetScope, log.ApplicationID),
+		UserRef:          log.EndUserID,
 		Provider:         log.Provider,
 		Model:            log.Model,
 		RequestedModel:   log.RequestedModel,

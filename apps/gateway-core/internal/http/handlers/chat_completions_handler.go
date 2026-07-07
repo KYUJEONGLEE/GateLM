@@ -172,6 +172,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		h.writeAuthFailureLog(r.Context(), reqCtx, startedAt, time.Now())
 		return
 	}
+	if metadataEndUserID := endUserIDFromChatMetadata(chatReq.Metadata); metadataEndUserID != "" {
+		reqCtx.EndUserID = metadataEndUserID
+	}
 	terminalLogEnabled = true
 
 	if chatReq.Model == "" {
@@ -3214,6 +3217,43 @@ func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID 
 	req.Metadata = nil
 	req.GateLM = nil
 	return req
+}
+
+func endUserIDFromChatMetadata(raw json.RawMessage) string {
+	if strings.TrimSpace(string(raw)) == "" {
+		return ""
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return ""
+	}
+
+	for _, key := range []string{"endUserId", "userName"} {
+		value, ok := metadata[key].(string)
+		if !ok {
+			continue
+		}
+		if normalized := normalizeEndUserID(value); normalized != "" {
+			return normalized
+		}
+	}
+
+	return ""
+}
+
+func normalizeEndUserID(value string) string {
+	normalized := strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(value)
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	if normalized == "" {
+		return ""
+	}
+
+	runes := []rune(normalized)
+	if len(runes) > 160 {
+		return string(runes[:160])
+	}
+	return normalized
 }
 
 func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {

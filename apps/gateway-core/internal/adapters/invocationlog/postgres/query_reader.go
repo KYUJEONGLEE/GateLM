@@ -91,6 +91,9 @@ func (r *QueryReader) GetRequestDetail(ctx context.Context, filter invocationlog
 	if err != nil {
 		return invocationlog.RequestDetail{}, err
 	}
+	if !isPostgresUUID(normalizedFilter.TenantID) || !isPostgresUUID(normalizedFilter.ProjectID) {
+		return invocationlog.RequestDetail{}, invocationlog.ErrLogNotFound
+	}
 
 	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.TenantID, normalizedFilter.ProjectID, normalizedFilter.RequestID))
 	if err != nil {
@@ -836,6 +839,9 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 		"created_at >= $1",
 		"created_at < $2",
 	}
+	addOptionalUUIDWhere := func(expression string, value string) {
+		addUUIDWhere(&where, &args, expression, value)
+	}
 	addOptionalWhere := func(expression string, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -844,9 +850,9 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
 	}
 
-	addOptionalWhere("tenant_id", filter.TenantID)
-	addOptionalWhere("project_id", filter.ProjectID)
-	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalUUIDWhere("tenant_id", filter.TenantID)
+	addOptionalUUIDWhere("project_id", filter.ProjectID)
+	addOptionalUUIDWhere("application_id", filter.ApplicationID)
 	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
 	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
@@ -1052,6 +1058,9 @@ func buildAnalyticsPerformanceWhere(filter invocationlog.AnalyticsPerformanceFil
 		"created_at >= $1",
 		"created_at < $2",
 	}
+	addOptionalUUIDWhere := func(expression string, value string) {
+		addUUIDWhere(&where, &args, expression, value)
+	}
 	addOptionalWhere := func(expression string, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -1060,8 +1069,8 @@ func buildAnalyticsPerformanceWhere(filter invocationlog.AnalyticsPerformanceFil
 		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
 	}
 
-	addOptionalWhere("tenant_id", filter.TenantID)
-	addOptionalWhere("project_id", filter.ProjectID)
+	addOptionalUUIDWhere("tenant_id", filter.TenantID)
+	addOptionalUUIDWhere("project_id", filter.ProjectID)
 	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
 	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
 
@@ -1128,12 +1137,16 @@ func fillAnalyticsLatencyDistributionBuckets(filter invocationlog.AnalyticsPerfo
 }
 
 func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
-	args := []any{filter.TenantID, filter.ProjectID, filter.From.UTC(), filter.To.UTC()}
-	where := []string{
-		"tenant_id = $1",
-		"project_id = $2",
-		"created_at >= $3",
-		"created_at < $4",
+	args := []any{}
+	where := []string{}
+	addUUIDWhere(&where, &args, "tenant_id", filter.TenantID)
+	addUUIDWhere(&where, &args, "project_id", filter.ProjectID)
+	args = append(args, filter.From.UTC())
+	where = append(where, fmt.Sprintf("created_at >= $%d", len(args)))
+	args = append(args, filter.To.UTC())
+	where = append(where, fmt.Sprintf("created_at < $%d", len(args)))
+	addOptionalUUIDWhere := func(column string, value string) {
+		addUUIDWhere(&where, &args, column, value)
 	}
 	addOptionalWhere := func(column string, value string) {
 		if strings.TrimSpace(value) == "" {
@@ -1147,7 +1160,7 @@ func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []an
 	addOptionalWhere("provider", filter.Provider)
 	addOptionalWhere("model", filter.Model)
 	addOptionalWhere("cache_status", filter.CacheStatus)
-	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalUUIDWhere("application_id", filter.ApplicationID)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
 	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
 	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
@@ -1161,6 +1174,7 @@ select
   request_id,
   project_id::text,
   application_id::text,
+  end_user_id,
   %s as budget_scope_type,
   %s as budget_scope_id,
   %s as budget_scope_resolved_by,
@@ -1195,14 +1209,8 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 		"created_at >= $1",
 		"created_at < $2",
 	}
-	if filter.TenantID != "" {
-		args = append(args, filter.TenantID)
-		where = append(where, fmt.Sprintf("tenant_id = $%d", len(args)))
-	}
-	if filter.ProjectID != "" {
-		args = append(args, filter.ProjectID)
-		where = append(where, fmt.Sprintf("project_id = $%d", len(args)))
-	}
+	addUUIDWhere(&where, &args, "tenant_id", filter.TenantID)
+	addUUIDWhere(&where, &args, "project_id", filter.ProjectID)
 	addOptionalWhere := func(expression string, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -1469,9 +1477,49 @@ where tenant_id = $1
   and request_id = $3
 limit 1`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL)
 
+func addUUIDWhere(where *[]string, args *[]any, expression string, value string) {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return
+	}
+	if !isPostgresUUID(normalized) {
+		*where = append(*where, "1 = 0")
+		return
+	}
+	*args = append(*args, normalized)
+	*where = append(*where, fmt.Sprintf("%s = $%d", expression, len(*args)))
+}
+
+func isPostgresUUID(value string) bool {
+	normalized := strings.TrimSpace(value)
+	if len(normalized) != 36 {
+		return false
+	}
+	for index, char := range normalized {
+		switch index {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return false
+			}
+		default:
+			if !isHexChar(char) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isHexChar(char rune) bool {
+	return (char >= '0' && char <= '9') ||
+		(char >= 'a' && char <= 'f') ||
+		(char >= 'A' && char <= 'F')
+}
+
 func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var log invocationlog.LlmInvocationLog
 	var applicationID sql.NullString
+	var endUserID sql.NullString
 	var budgetScopeType sql.NullString
 	var budgetScopeID sql.NullString
 	var budgetScopeResolvedBy sql.NullString
@@ -1483,6 +1531,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.RequestID,
 		&log.ProjectID,
 		&applicationID,
+		&endUserID,
 		&budgetScopeType,
 		&budgetScopeID,
 		&budgetScopeResolvedBy,
@@ -1508,6 +1557,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	}
 
 	log.ApplicationID = nullableString(applicationID)
+	log.EndUserID = nullableString(endUserID)
 	log.BudgetScope = budget.NormalizeScope(budget.Scope{
 		Type:       nullableString(budgetScopeType),
 		ID:         nullableString(budgetScopeID),

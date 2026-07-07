@@ -134,7 +134,7 @@ export async function getProviderConnectionsModel(
 
 export async function upsertProviderConnection(
   values: ProviderConnectionFormValues,
-  routeTenantId?: string | null
+  routeTenantId?: string
 ): Promise<ProviderRequestResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -163,7 +163,7 @@ export async function upsertProviderConnection(
 
 export async function deleteProviderConnection(
   provider: string,
-  routeTenantId?: string | null
+  routeTenantId?: string
 ): Promise<ProviderRequestResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -188,7 +188,7 @@ export async function deleteProviderConnection(
 
 export async function discoverProviderModels(
   provider: string,
-  routeTenantId?: string | null
+  routeTenantId?: string
 ): Promise<ProviderDiscoveryResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -213,13 +213,14 @@ export async function discoverProviderModels(
 
 export async function removeProviderModel({
   modelName,
-  provider
+  provider,
+  routeTenantId
 }: {
   modelName: string;
   provider: string;
-}, routeTenantId?: string | null): Promise<ProviderRequestResult> {
-  const tenantId = resolveControlPlaneTenantId(routeTenantId);
-  const listResult = await listTenantProviderConnections(tenantId);
+  routeTenantId?: string;
+}): Promise<ProviderRequestResult> {
+  const listResult = await listTenantProviderConnections(resolveControlPlaneTenantId(routeTenantId));
 
   if (!listResult.ok) {
     return listResult;
@@ -248,44 +249,47 @@ export async function removeProviderModel({
     };
   }
 
-  return upsertProviderConnection({
-    adapterType: getProviderConfigString(
-      providerConnection.providerConfig,
-      "adapterType",
-      getDefaultProviderAdapterType(providerConnection)
-    ),
-    apiVersion: getProviderConfigString(providerConnection.providerConfig, "apiVersion", ""),
-    baseUrl: providerConnection.baseUrl,
-    credentialLast4: providerConnection.credentialPreview.last4 ?? "",
-    credentialPrefix: providerConnection.credentialPreview.prefix ?? "",
-    credentialRequired: getProviderConfigBoolean(
-      providerConnection.providerConfig,
-      "credentialRequired",
-      providerConnection.resolver !== "none"
-    ),
-    credentialValue: "",
-    displayName: providerConnection.displayName,
-    failureMode: getProviderFailureMode(providerConnection.providerConfig),
-    isEdit: true,
-    models: remainingModels.join(", "),
-    modelsEndpointPath: getProviderConfigString(
-      providerConnection.providerConfig,
-      "modelsEndpointPath",
-      "/models"
-    ),
-    presetProviderKey: getProviderConfigString(
-      providerConnection.providerConfig,
-      "providerFamily",
-      inferProviderFamily(providerConnection)
-    ),
-    provider: providerConnection.provider,
-    previousProvider: providerConnection.provider,
-    requestFormat: getProviderRequestFormat(providerConnection),
-    resolver: providerConnection.resolver,
-    secretRef: "",
-    status: providerConnection.status,
-    timeoutMs: providerConnection.timeoutMs
-  });
+  return upsertProviderConnection(
+    {
+      adapterType: getProviderConfigString(
+        providerConnection.providerConfig,
+        "adapterType",
+        getDefaultProviderAdapterType(providerConnection)
+      ),
+      apiVersion: getProviderConfigString(providerConnection.providerConfig, "apiVersion", ""),
+      baseUrl: providerConnection.baseUrl,
+      credentialLast4: providerConnection.credentialPreview.last4 ?? "",
+      credentialPrefix: providerConnection.credentialPreview.prefix ?? "",
+      credentialRequired: getProviderConfigBoolean(
+        providerConnection.providerConfig,
+        "credentialRequired",
+        providerConnection.resolver !== "none"
+      ),
+      credentialValue: "",
+      displayName: providerConnection.displayName,
+      failureMode: getProviderFailureMode(providerConnection.providerConfig),
+      isEdit: true,
+      models: remainingModels.join(", "),
+      modelsEndpointPath: getProviderConfigString(
+        providerConnection.providerConfig,
+        "modelsEndpointPath",
+        "/models"
+      ),
+      presetProviderKey: getProviderConfigString(
+        providerConnection.providerConfig,
+        "providerFamily",
+        inferProviderFamily(providerConnection)
+      ),
+      provider: providerConnection.provider,
+      previousProvider: providerConnection.provider,
+      requestFormat: getProviderRequestFormat(providerConnection),
+      resolver: providerConnection.resolver,
+      secretRef: "",
+      status: providerConnection.status,
+      timeoutMs: providerConnection.timeoutMs
+    },
+    routeTenantId
+  );
 }
 
 export async function listTenantProviderConnections(

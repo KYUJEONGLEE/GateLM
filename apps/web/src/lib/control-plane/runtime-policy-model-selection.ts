@@ -3,6 +3,8 @@ import type {
   RuntimePolicyModelConfig
 } from "./runtime-policy-types";
 
+type RuntimePolicyRouteSelection = Pick<RuntimePolicyModelConfig, "model" | "provider">;
+
 const onboardingRouteModelPreferences: Record<
   string,
   {
@@ -42,6 +44,21 @@ export function applyInitialRuntimePolicyModelSelection(
     routingFallbackProvider: routeModels.fallback.provider,
     routingLowCostModel: routeModels.high.model,
     routingLowCostProvider: routeModels.high.provider
+  };
+}
+
+export function applyPrimaryRuntimePolicyRouteSelection(
+  draftValues: RuntimePolicyDraftValues,
+  selectedModel: RuntimePolicyRouteSelection
+): RuntimePolicyDraftValues {
+  return {
+    ...draftValues,
+    routingDefaultModel: selectedModel.model,
+    routingDefaultProvider: selectedModel.provider,
+    routingFallbackModel: selectedModel.model,
+    routingFallbackProvider: selectedModel.provider,
+    routingLowCostModel: selectedModel.model,
+    routingLowCostProvider: selectedModel.provider
   };
 }
 

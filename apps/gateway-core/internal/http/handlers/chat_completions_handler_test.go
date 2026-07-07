@@ -397,6 +397,39 @@ func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.
 	}
 }
 
+func TestChatCompletionsHandlerUsesMetadataEndUserIDForTerminalLog(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"metadata": {"endUserId": " 윤지\nKim "},
+		"stream": false
+	}`))
+	setValidGatewayAuthHeaders(req)
+	req.Header.Set("X-GateLM-End-User-Id", "customer_user_demo_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].EndUserID != "윤지 Kim" {
+		t.Fatalf("unexpected end user id: %+v", logWriter.logs[0])
+	}
+}
+
 func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	handler := ChatCompletionsHandler{
@@ -2942,6 +2975,75 @@ func TestChatCompletionsHandlerUsesLiveRuntimeSnapshotAndProviderCatalog(t *test
 	}
 }
 
+func TestChatCompletionsHandlerUsesApplicationRuntimeSnapshotModelForAutoRequests(t *testing.T) {
+	appA := "app_policy_a"
+	appB := "app_policy_b"
+	catalogA := testProviderCatalogWithPrimaryModel(
+		"provider_catalog:"+appA+":1",
+		"sha256:provider-catalog-app-a",
+		"model_app_a",
+		"provider-model-a",
+	)
+	catalogB := testProviderCatalogWithPrimaryModel(
+		"provider_catalog:"+appB+":1",
+		"sha256:provider-catalog-app-b",
+		"model_app_b",
+		"provider-model-b",
+	)
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/v1/applications/" + appA + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayloadForApplication(catalogA.Reference(), appA, "model_app_a"))
+		case "/admin/v1/applications/" + appB + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayloadForApplication(catalogB.Reference(), appB, "model_app_b"))
+		case "/admin/v1/provider-catalogs/" + catalogA.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalogA))
+		case "/admin/v1/provider-catalogs/" + catalogB.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalogB))
+		default:
+			t.Fatalf("unexpected control plane path: %s", r.URL.Path)
+		}
+	}))
+	defer controlPlane.Close()
+
+	runtimeSnapshotProvider := controlplaneruntimeconfig.NewProvider(controlPlane.URL, controlPlane.Client())
+	providerCatalogResolver := controlplaneprovidercatalog.NewResolver(controlPlane.URL, controlPlane.Client())
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: providerCatalogResolver,
+		CredentialResolver:      staticCredentialResolver{},
+		RuntimePolicyPipeline:   pipeline.New(runtimeconfigstage.NewStage(runtimeSnapshotProvider)),
+		APIKeyAuthenticator: &mappedAPIKeyAuthenticator{identities: map[string]auth.APIKeyIdentity{
+			"api-key-a": {
+				APIKeyID:      "api_key_a",
+				TenantID:      testTenantID,
+				ProjectID:     testProjectID,
+				ApplicationID: appA,
+			},
+			"api-key-b": {
+				APIKeyID:      "api_key_b",
+				TenantID:      testTenantID,
+				ProjectID:     testProjectID,
+				ApplicationID: appB,
+			},
+		}},
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}
+
+	performAutoRequestWithAPIKey(t, &handler, "api-key-a")
+	if primary.lastRequest.Model != "provider-model-a" {
+		t.Fatalf("expected app A provider modelName provider-model-a, got %s", primary.lastRequest.Model)
+	}
+
+	performAutoRequestWithAPIKey(t, &handler, "api-key-b")
+	if primary.lastRequest.Model != "provider-model-b" {
+		t.Fatalf("expected app B provider modelName provider-model-b, got %s", primary.lastRequest.Model)
+	}
+}
+
 func TestChatCompletionsHandlerAppliesRuntimeSnapshotDetectorSetToMasking(t *testing.T) {
 	catalog := testProviderCatalog()
 	catalog.CatalogID = "provider_catalog:" + testAppID + ":1"
@@ -3543,6 +3645,21 @@ func (cancelingCredentialResolver) Resolve(ctx context.Context, ref credentials.
 	return credentials.Resolved{}, context.Canceled
 }
 
+type mappedAPIKeyAuthenticator struct {
+	identities map[string]auth.APIKeyIdentity
+}
+
+func (a *mappedAPIKeyAuthenticator) AuthenticateAPIKey(_ context.Context, bearerToken string) (auth.APIKeyIdentity, error) {
+	if a == nil {
+		return auth.APIKeyIdentity{}, auth.ErrInvalidAPIKey
+	}
+	identity, ok := a.identities[bearerToken]
+	if !ok {
+		return auth.APIKeyIdentity{}, auth.ErrInvalidAPIKey
+	}
+	return identity, nil
+}
+
 func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatewayPipeline {
 	return &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
@@ -3654,6 +3771,29 @@ func testProviderCatalog() providercatalog.Catalog {
 				}},
 			},
 		},
+	}
+}
+
+func testProviderCatalogWithPrimaryModel(catalogID string, contentHash string, modelID string, modelName string) providercatalog.Catalog {
+	catalog := testProviderCatalog()
+	catalog.CatalogID = catalogID
+	catalog.ContentHash = contentHash
+	catalog.Providers[0].Models[0].ModelID = modelID
+	catalog.Providers[0].Models[0].ModelName = modelName
+	catalog.Providers[0].Models[0].DisplayName = modelName
+	return catalog
+}
+
+func performAutoRequestWithAPIKey(t *testing.T, handler *ChatCompletionsHandler, apiKey string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBodyWithModel("auto", "safe prompt")))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -3961,6 +4101,19 @@ func liveRuntimeSnapshotPayloadWithDetectorSet(ref providercatalog.Reference, de
 	policies := payload["policies"].(map[string]any)
 	safety := policies["safety"].(map[string]any)
 	safety["detectorSet"] = detectorSet
+	return payload
+}
+
+func liveRuntimeSnapshotPayloadForApplication(ref providercatalog.Reference, applicationID string, modelID string) map[string]any {
+	payload := liveRuntimeSnapshotPayload(ref)
+	lookupKey := payload["lookupKey"].(map[string]any)
+	lookupKey["applicationId"] = applicationID
+	policies := payload["policies"].(map[string]any)
+	routing := policies["routing"].(map[string]any)
+	routing["defaultModel"] = modelID
+	routing["lowCostModel"] = modelID
+	fallback := policies["fallback"].(map[string]any)
+	fallback["fallbackModel"] = modelID
 	return payload
 }
 

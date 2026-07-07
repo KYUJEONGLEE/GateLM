@@ -25,6 +25,7 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 			RequestID:        "request_001",
 			ProjectID:        "project_demo",
 			ApplicationID:    "app_demo",
+			UserRef:          "Yoonji",
 			Provider:         "mock",
 			Model:            "mock-fast",
 			RequestedModel:   "auto",
@@ -75,6 +76,9 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	item := response.Data[0]
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected response item: %+v", item)
+	}
+	if item.UserRef == nil || *item.UserRef != "Yoonji" {
+		t.Fatalf("unexpected user ref: %+v", item)
 	}
 
 	for _, forbidden := range []string{

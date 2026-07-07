@@ -8,7 +8,7 @@
     "endUserId": "employee_demo_user",
     "title": "Support reply draft",
     "status": "active",
-    "contextRetentionEnabled": false,
+    "contextRetentionEnabled": true,
     "createdAt": "2026-07-05T01:00:00Z",
     "updatedAt": "2026-07-05T01:02:00Z",
     "deletedAt": null
@@ -21,8 +21,8 @@
       "projectId": "project_demo_001",
       "applicationId": "app_employee_chat_001",
       "role": "user",
-      "safeContent": null,
-      "contentPolicy": "not_retained",
+      "safeContent": "Please draft a support reply for a delayed shipment.",
+      "contentPolicy": "retained",
       "requestId": "req_chat_demo_001",
       "parentMessageId": null,
       "sequence": 1,
@@ -35,8 +35,8 @@
       "projectId": "project_demo_001",
       "applicationId": "app_employee_chat_001",
       "role": "assistant",
-      "safeContent": null,
-      "contentPolicy": "not_retained",
+      "safeContent": "I can help draft a concise reply that acknowledges the delay and offers next steps.",
+      "contentPolicy": "retained",
       "requestId": "req_chat_demo_001",
       "parentMessageId": "chat_message_demo_001",
       "sequence": 2,
@@ -49,8 +49,8 @@
       "projectId": "project_demo_001",
       "applicationId": "app_employee_chat_001",
       "role": "user",
-      "safeContent": null,
-      "contentPolicy": "not_retained",
+      "safeContent": "Continue with a shorter version.",
+      "contentPolicy": "retained",
       "requestId": "req_chat_demo_002",
       "parentMessageId": null,
       "sequence": 3,
@@ -59,13 +59,21 @@
   ],
   "contextAssembly": {
     "strategy": "sliding_window",
-    "contextRetentionEnabled": false,
+    "contextRetentionEnabled": true,
     "maxPreviousUserTurns": 10,
     "maxPreviousChars": 8000,
     "gatewayMessages": [
       {
         "role": "system",
         "content": "You are a helpful customer support assistant."
+      },
+      {
+        "role": "user",
+        "content": "Please draft a support reply for a delayed shipment."
+      },
+      {
+        "role": "assistant",
+        "content": "I can help draft a concise reply that acknowledges the delay and offers next steps."
       },
       {
         "role": "user",

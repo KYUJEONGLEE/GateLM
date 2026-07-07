@@ -5,6 +5,8 @@ import { DashboardCostOverTimeEChart } from "@/features/dashboard/components/das
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 
 const COST_OVER_TIME_POLLING_INTERVAL_MS = 3000;
+const COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS = 10000;
+const COST_OVER_TIME_REPEATED_FAILURE_BACKOFF_MS = 20000;
 
 type CostOverTimeRange = "15m" | "1h" | "1d" | "1w";
 
@@ -61,25 +63,76 @@ export function CostOverTimeCard({
   const [summary, setSummary] = useState<CostOverTimeSummary | undefined>(() => normalizedInitialSummary);
   const [status, setStatus] = useState<CostOverTimeStatus>(normalizedInitialSummary ? "success" : "loading");
   const latestSummaryRef = useRef<CostOverTimeSummary | undefined>(normalizedInitialSummary);
+  const latestSummarySignatureRef = useRef(getCostOverTimeSummarySignature(normalizedInitialSummary));
   const hasCostData = summary?.points.some((point) => point.spendUsd > 0) ?? false;
 
   useEffect(() => {
     latestSummaryRef.current = summary;
+    latestSummarySignatureRef.current = getCostOverTimeSummarySignature(summary);
   }, [summary]);
 
   useEffect(() => {
     setSummary(normalizedInitialSummary);
     latestSummaryRef.current = normalizedInitialSummary;
+    latestSummarySignatureRef.current = getCostOverTimeSummarySignature(normalizedInitialSummary);
     setStatus(normalizedInitialSummary ? "success" : "loading");
   }, [normalizedInitialSummary, queryString]);
 
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    let failureCount = 0;
     let inFlight = false;
+    let timeoutId: number | undefined;
+
+    function isDocumentHidden() {
+      return document.visibilityState === "hidden";
+    }
+
+    function getNextPollingDelay() {
+      if (failureCount === 0) {
+        return COST_OVER_TIME_POLLING_INTERVAL_MS;
+      }
+
+      return failureCount === 1
+        ? COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS
+        : COST_OVER_TIME_REPEATED_FAILURE_BACKOFF_MS;
+    }
+
+    function clearScheduledRefresh() {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+        timeoutId = undefined;
+      }
+    }
+
+    function scheduleNextRefresh() {
+      clearScheduledRefresh();
+
+      if (cancelled || isDocumentHidden()) {
+        return;
+      }
+
+      timeoutId = window.setTimeout(() => {
+        void refreshCostData(false);
+      }, getNextPollingDelay());
+    }
+
+    function handleVisibilityChange() {
+      if (cancelled) {
+        return;
+      }
+
+      if (isDocumentHidden()) {
+        clearScheduledRefresh();
+        return;
+      }
+
+      void refreshCostData(false);
+    }
 
     async function refreshCostData(showLoading: boolean) {
-      if (inFlight) {
+      if (inFlight || isDocumentHidden()) {
         return;
       }
 
@@ -105,28 +158,37 @@ export function CostOverTimeCard({
         }
 
         if (!cancelled) {
+          failureCount = 0;
+          const nextSummarySignature = getCostOverTimeSummarySignature(nextSummary);
           latestSummaryRef.current = nextSummary;
-          setSummary(nextSummary);
+
+          if (nextSummarySignature !== latestSummarySignatureRef.current) {
+            latestSummarySignatureRef.current = nextSummarySignature;
+            setSummary(nextSummary);
+          }
+
           setStatus("success");
         }
       } catch {
+        failureCount += 1;
+
         if (!cancelled && !latestSummaryRef.current) {
           setStatus("error");
         }
       } finally {
         inFlight = false;
+        scheduleNextRefresh();
       }
     }
 
     void refreshCostData(!normalizedInitialSummary);
-    const intervalId = window.setInterval(() => {
-      void refreshCostData(false);
-    }, COST_OVER_TIME_POLLING_INTERVAL_MS);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
+      clearScheduledRefresh();
       controller.abort();
-      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [normalizedInitialSummary, queryString]);
 
@@ -206,6 +268,24 @@ function normalizeCostOverTimeSummary(summary: CostOverTimeSummary | undefined):
         spendUsd: normalizeNonNegativeNumber(point.spendUsd)
       }))
   };
+}
+
+function getCostOverTimeSummarySignature(summary: CostOverTimeSummary | undefined) {
+  if (!summary) {
+    return "";
+  }
+
+  return JSON.stringify({
+    averageSpendUsd: summary.averageSpendUsd,
+    bucketInterval: summary.bucketInterval ?? null,
+    expectedBucketCount: summary.expectedBucketCount ?? null,
+    period: summary.period,
+    points: summary.points.map((point) => [
+      point.bucket,
+      point.label,
+      point.spendUsd
+    ])
+  });
 }
 
 function normalizeNonNegativeNumber(value: number | undefined) {

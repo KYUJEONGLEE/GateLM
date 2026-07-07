@@ -242,7 +242,7 @@ export function OnboardingProviderRegistration({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
-        tenantId: model.controlPlaneTenantId,
+        tenantId: model.routeTenantId,
         values: {
           ...formValues,
           isEdit: isRegisteredProvider(providers, formValues.provider),
@@ -301,7 +301,7 @@ export function OnboardingProviderRegistration({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "discover-models",
-        tenantId: model.controlPlaneTenantId,
+        tenantId: model.routeTenantId,
         values: {
           provider: provider.provider
         }
@@ -438,7 +438,7 @@ export function OnboardingProviderRegistration({
     const response = await fetch("/api/control-plane/provider-connections", {
       body: JSON.stringify({
         action: "upsert",
-        tenantId: model.controlPlaneTenantId,
+        tenantId: model.routeTenantId,
         values: {
           ...getProviderFormValues(provider),
           isEdit: true,

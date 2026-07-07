@@ -13,6 +13,7 @@ export type CustomerDemoSurface = "application" | "demo";
 export type CustomerDemoChatProfile = {
   applicationId: string;
   configured: boolean;
+  disabledReason?: string;
   id: string;
   isDefault: boolean;
   label: string;
@@ -89,6 +90,7 @@ export type CustomerDemoExchange = {
 
 export type CustomerDemoModel = {
   applicationId: string;
+  applicationChatProfileLoadError?: string | null;
   applicationChatStreamingEnabled?: boolean;
   chatProfiles?: CustomerDemoChatProfile[];
   integrationMode: CustomerDemoIntegrationMode;
@@ -133,6 +135,7 @@ export interface GatewayChatClient {
 
 export class FixtureGatewayChatClient implements GatewayChatClient {
   private readonly scenarioMap: Map<CustomerDemoScenarioId, CustomerDemoExchange>;
+  private static readonly defaultContextRetentionEnabled = true;
 
   constructor(scenarios: CustomerDemoExchange[]) {
     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
@@ -142,7 +145,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     options: { contextRetentionEnabled?: boolean } = {}
   ): Promise<CustomerDemoConversation> {
     return {
-      contextRetentionEnabled: options.contextRetentionEnabled ?? false,
+      contextRetentionEnabled:
+        options.contextRetentionEnabled ?? FixtureGatewayChatClient.defaultContextRetentionEnabled,
       id: `fixture-conversation-${Date.now()}`
     };
   }
@@ -215,7 +219,8 @@ export class FixtureGatewayChatClient implements GatewayChatClient {
     options: { contextRetentionEnabled?: boolean }
   ): Promise<CustomerDemoConversation> {
     return {
-      contextRetentionEnabled: options.contextRetentionEnabled ?? false,
+      contextRetentionEnabled:
+        options.contextRetentionEnabled ?? FixtureGatewayChatClient.defaultContextRetentionEnabled,
       id: conversationId
     };
   }
@@ -225,7 +230,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
   constructor(
     private readonly tenantId: string,
     private readonly surface: CustomerDemoSurface,
-    private readonly profileId?: string
+    private readonly profileId?: string,
+    private readonly userName?: string
   ) {}
 
   async sendChatCompletion(
@@ -250,7 +256,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
         profileId: this.profileId,
         surface: this.surface,
         stream: options.stream === true,
-        tenantId: this.tenantId
+        tenantId: this.tenantId,
+        userName: this.userName
       })
     });
     const payload = (await response.json()) as {
@@ -288,7 +295,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
         profileId: this.profileId,
         surface: this.surface,
         stream: true,
-        tenantId: this.tenantId
+        tenantId: this.tenantId,
+        userName: this.userName
       })
     });
 
@@ -390,7 +398,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
       body: JSON.stringify({
         contextRetentionEnabled: options.contextRetentionEnabled,
         profileId: this.profileId,
-        tenantId: this.tenantId
+        tenantId: this.tenantId,
+        userName: this.userName
       })
     });
     const payload = (await response.json()) as {
@@ -418,7 +427,8 @@ export class RouteGatewayChatClient implements GatewayChatClient {
         contextRetentionEnabled: options.contextRetentionEnabled,
         conversationId,
         profileId: this.profileId,
-        tenantId: this.tenantId
+        tenantId: this.tenantId,
+        userName: this.userName
       })
     });
     const payload = (await response.json()) as {

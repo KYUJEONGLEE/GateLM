@@ -90,8 +90,15 @@ function toLiveRequestRow(record: InvocationLogRecord, projectNames: Map<string,
     statusCode,
     statusLabel: statusLabel(statusCode, record.status),
     timestamp: record.createdAt,
-    totalTokens: record.totalTokens
+    totalTokens: record.totalTokens,
+    userName: normalizeUserName(record.endUserId)
   };
+}
+
+function normalizeUserName(value: string | null | undefined) {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : null;
 }
 
 function normalizeProvider(value: string | null | undefined): LiveRequestProvider {

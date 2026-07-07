@@ -388,6 +388,7 @@ export function DashboardOverviewView({
             rangeLabel={rangeLabel(filters.range)}
             recentRequests={liveRequests?.rows}
             successRate={successRate}
+            tenantId={overview.filters.tenantId}
             totalRequests={overview.totalRequests}
           />
         </aside>

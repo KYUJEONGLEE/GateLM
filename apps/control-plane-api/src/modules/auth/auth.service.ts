@@ -540,16 +540,26 @@ export class AuthService {
       }
     }
 
-    const [memberships, tenantAdmins] = await Promise.all([
+    const [memberships, tenantAdmins, projectAdmins] = await Promise.all([
       this.repository.findMembershipsByUserId(user.id),
       this.repository.findTenantAdminsByUserId(user.id),
+      this.repository.findProjectAdminsByUserId(user.id),
     ]);
-    const kind: AuthSessionKind =
-      memberships.length > 0 || tenantAdmins.length > 0 ? 'full' : 'onboarding';
+    const mergedMemberships = this.mergeTenantAdminMemberships(
+      memberships,
+      tenantAdmins,
+    );
+    const consoleTenantId = this.resolveConsoleTenantId(
+      mergedMemberships,
+      projectAdmins,
+    );
+    const kind: AuthSessionKind = consoleTenantId ? 'full' : 'onboarding';
     const session = await this.issueSession(user.id, kind);
 
     return {
-      redirectUrl: this.webDashboardUrl(),
+      redirectUrl: consoleTenantId
+        ? this.webDashboardUrl(consoleTenantId)
+        : this.webOrganizationSetupUrl(),
       session,
     };
   }
@@ -750,6 +760,21 @@ export class AuthService {
 
     return publicMemberships;
   }
+
+  private resolveConsoleTenantId(
+    memberships: PublicMembership[],
+    projectAdmins: AuthProjectAdmin[],
+  ): string | null {
+    const activeMembership = memberships.find(
+      (membership) => membership.status === 'active' && membership.tenantId,
+    );
+    if (activeMembership) {
+      return activeMembership.tenantId;
+    }
+
+    return projectAdmins[0]?.tenantId ?? null;
+  }
+
   private toPublicProjectAdmin(
     projectAdmin: AuthProjectAdmin,
   ): PublicProjectAdmin {
@@ -816,11 +841,15 @@ export class AuthService {
   }
 
   private webOrigin(): string {
-    return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3000';
+    return this.config.getOrThrow<string>('CONTROL_PLANE_WEB_ORIGIN');
   }
 
-  private webDashboardUrl(): string {
-    return `${this.webOrigin().replace(/\/+$/, '')}/tenants/tenant_demo_acme/dashboard`;
+  private webDashboardUrl(tenantId: string): string {
+    return `${this.webOrigin().replace(/\/+$/, '')}/tenants/${encodeURIComponent(tenantId)}/dashboard`;
+  }
+
+  private webOrganizationSetupUrl(): string {
+    return `${this.webOrigin().replace(/\/+$/, '')}/?auth=organization`;
   }
 
   private isDevAutoVerifyEnabled(): boolean {

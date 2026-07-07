@@ -235,10 +235,11 @@ Conversation records:
 - `conversations` stores Application-scoped chat container metadata only.
 - Required scope fields are `tenantId`, `projectId`, and `applicationId`.
 - User attribution may use `endUserId` or `userId`; it is not a Gateway RuntimeSnapshot lookup key.
-- New conversations default to `contextRetentionEnabled=false`.
+- New conversations default to `contextRetentionEnabled=true`.
 - `contextRetentionEnabled=true` allows retained safe messages from the same conversation to be assembled into the next Gateway request.
 - `contextRetentionEnabled=false` means previous conversation messages must never be included in the next Gateway request.
-- When retention is not explicitly enabled, the API must behave as retention off.
+- When retention is not explicitly specified, the API must behave as retention on.
+- Retention must be disabled only when the client explicitly sends `contextRetentionEnabled=false`.
 - Soft delete uses metadata such as `status` and `deletedAt`; physical deletion is not required for the MVP.
 
 Chat message records:

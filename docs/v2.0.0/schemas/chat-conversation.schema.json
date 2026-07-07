@@ -42,7 +42,7 @@
         },
         "contextRetentionEnabled": {
           "type": "boolean",
-          "default": false
+          "default": true
         },
         "maxPreviousUserTurns": {
           "type": "integer",
@@ -119,7 +119,7 @@
         },
         "contextRetentionEnabled": {
           "type": "boolean",
-          "default": false
+          "default": true
         },
         "createdAt": {
           "type": "string",

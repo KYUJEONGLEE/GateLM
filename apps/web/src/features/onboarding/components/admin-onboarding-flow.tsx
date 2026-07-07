@@ -596,6 +596,7 @@ export function AdminOnboardingFlow({
       const response = await fetch("/api/control-plane/projects", {
         body: JSON.stringify({
           action: "update",
+          tenantId: model.tenantId,
           values: {
             description: draft.projectDescription,
             name: draft.projectName,

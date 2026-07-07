@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { getCurrentConsoleAuth, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
-import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
-import { createProject, updateProject } from "@/lib/control-plane/projects-client";
+import {
+  getControlPlaneTenantId,
+  resolveControlPlaneTenantId
+} from "@/lib/control-plane/control-plane-config";
+import {
+  createProject,
+  listControlPlaneProjects,
+  updateProject
+} from "@/lib/control-plane/projects-client";
 import type {
   ProjectFormValues,
   ProjectStatus,
   ProjectUpdateValues
 } from "@/lib/control-plane/projects-types";
+import { syncApplicationChatEnvForProjects } from "@/lib/gateway/application-chat-env-file";
 
 type RequestPayload = {
   action?: unknown;
@@ -25,11 +33,20 @@ export async function POST(request: Request) {
     ? payload.tenantId
     : getControlPlaneTenantId();
 
-  if (payload.action === "create") {
-    const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
-    if (!isTenantAdminForTenant(auth, routeTenantId)) {
-      return NextResponse.json({ error: "Only tenant admins can create projects." }, { status: 403 });
-    }
+  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isTenantAdminForTenant(auth, routeTenantId)) {
+    return NextResponse.json(
+      {
+        error: payload.action === "create"
+          ? "Only tenant admins can create projects."
+          : "Only tenant admins can update projects."
+      },
+      { status: 403 }
+    );
   }
 
   const result =
@@ -38,7 +55,7 @@ export async function POST(request: Request) {
         ? await createProject(payload.values, routeTenantId)
         : null
       : isProjectUpdateValues(payload.values)
-        ? await updateProject(payload.values)
+        ? await updateProject(payload.values, routeTenantId)
         : null;
 
   if (!result) {
@@ -53,6 +70,19 @@ export async function POST(request: Request) {
       },
       { status: result.status > 0 ? result.status : 502 }
     );
+  }
+
+  const syncProjectList = await listControlPlaneProjects(resolveControlPlaneTenantId(routeTenantId));
+
+  if (syncProjectList.ok) {
+    await syncApplicationChatEnvForProjects(syncProjectList.data).catch((error) => {
+      console.warn(
+        "Application Chat env sync failed.",
+        error instanceof Error ? error.message : "unknown error"
+      );
+    });
+  } else {
+    console.warn("Application Chat env sync skipped.", syncProjectList.error);
   }
 
   return NextResponse.json({

@@ -255,11 +255,7 @@ export async function getRuntimePolicyModelForApplication(
 }
 
 function shouldUseRuntimePolicyTemplate(result: ControlPlaneRequestResult) {
-  return (
-    !result.ok &&
-    (result.status === 404 ||
-      (result.status === 409 && result.error === "Active Runtime Config is not executable."))
-  );
+  return !result.ok && (result.status === 404 || result.status === 409);
 }
 
 function getTemplateProviderConnections(
@@ -583,16 +579,18 @@ async function fetchRuntimeConfigForModelSelection(
   routeTenantId?: string
 ): Promise<RuntimePolicyConfig | null> {
   const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
+  const providerConnections = await listApplicationProviderConnections(applicationId);
 
   if (targetActiveConfig.ok) {
-    return targetActiveConfig.data;
+    return mergeProviderConnectionCandidates(
+      targetActiveConfig.data,
+      providerConnections.ok ? providerConnections.data : []
+    );
   }
 
   if (!shouldUseRuntimePolicyTemplate(targetActiveConfig)) {
     return null;
   }
-
-  const providerConnections = await listApplicationProviderConnections(applicationId);
 
   if (!providerConnections.ok) {
     return null;
