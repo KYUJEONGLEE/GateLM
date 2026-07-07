@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+import { applyPrimaryRuntimePolicyRouteSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -462,14 +463,17 @@ export function RuntimePolicyEditor({
   ) {
     const nextModel = modelOptionsByProvider.get(provider)?.[0]?.model ?? "";
 
-    setDraftValues((current) => ({
-      ...current,
-      ...(route === "default"
-        ? {
-            routingDefaultModel: nextModel,
-            routingDefaultProvider: provider
-          }
-        : route === "lowCost"
+    setDraftValues((current) => {
+      if (route === "default") {
+        return applyPrimaryRuntimePolicyRouteSelection(current, {
+          model: nextModel,
+          provider
+        });
+      }
+
+      return {
+        ...current,
+        ...(route === "lowCost"
           ? {
               routingLowCostModel: nextModel,
               routingLowCostProvider: provider
@@ -478,18 +482,26 @@ export function RuntimePolicyEditor({
               routingFallbackModel: nextModel,
               routingFallbackProvider: provider
             })
-    }));
+      };
+    });
   }
 
   function updateRoutingModel(route: "default" | "fallback" | "lowCost", modelName: string) {
-    setDraftValues((current) => ({
-      ...current,
-      ...(route === "default"
-        ? { routingDefaultModel: modelName }
-        : route === "lowCost"
+    setDraftValues((current) => {
+      if (route === "default") {
+        return applyPrimaryRuntimePolicyRouteSelection(current, {
+          model: modelName,
+          provider: current.routingDefaultProvider
+        });
+      }
+
+      return {
+        ...current,
+        ...(route === "lowCost"
           ? { routingLowCostModel: modelName }
           : { routingFallbackModel: modelName })
-    }));
+      };
+    });
   }
 
   async function submitPolicy(action: "save-draft" | "publish") {

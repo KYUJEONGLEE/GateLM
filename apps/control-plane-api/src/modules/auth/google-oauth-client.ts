@@ -121,6 +121,6 @@ export class GoogleOAuthHttpClient implements GoogleOAuthClient {
   }
 
   private webOrigin(): string {
-    return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3005';
+    return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3000';
   }
 }
