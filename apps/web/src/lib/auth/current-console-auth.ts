@@ -116,6 +116,16 @@ function parseConsoleAuth(payload: unknown): CurrentConsoleAuth {
   const memberships = Array.isArray(data?.memberships)
     ? data.memberships.map(toMembership).filter((membership): membership is AuthMembership => Boolean(membership))
     : [];
+  const tenant = getRecord(data?.tenant);
+  const userRole = normalizeAuthRole(readString(user, 'role'));
+  const tenantId = readString(tenant, 'id') ?? getControlPlaneTenantId();
+  if (memberships.length === 0 && userRole === 'tenant_admin') {
+    memberships.push({
+      role: 'tenant_admin',
+      status: 'active',
+      tenantId
+    });
+  }
   const projectAdmins = Array.isArray(data?.projectAdmins)
     ? data.projectAdmins.map(toProjectAdmin).filter((projectAdmin): projectAdmin is AuthProjectAdmin => Boolean(projectAdmin))
     : [];
@@ -130,7 +140,7 @@ function parseConsoleAuth(payload: unknown): CurrentConsoleAuth {
 
 function toMembership(value: unknown): AuthMembership | null {
   const record = getRecord(value);
-  const role = readString(record, 'role');
+  const role = normalizeAuthRole(readString(record, 'role'));
   const status = readString(record, 'status') ?? 'active';
   const tenantId = readString(record, 'tenantId');
 
@@ -155,6 +165,16 @@ function toProjectAdmin(value: unknown): AuthProjectAdmin | null {
     projectName: readString(record, 'projectName'),
     tenantId
   };
+}
+
+function normalizeAuthRole(role: string | null) {
+  const normalizedRole = role?.trim().toLowerCase();
+
+  if (normalizedRole === 'super_admin') {
+    return 'tenant_admin';
+  }
+
+  return normalizedRole ?? null;
 }
 
 function emptyConsoleAuth(): CurrentConsoleAuth {

@@ -854,7 +854,7 @@ function buildFallbackCurrentUser(tenantLabel: string): CurrentUser {
   return {
     displayName: "Admin",
     id: "demo-admin",
-    role: "Super Admin",
+    role: "Tenant Admin",
     tenantName: tenantLabel
   };
 }
@@ -941,19 +941,19 @@ function getDisplayNameFromEmail(email: string | null) {
 
 function formatRoleLabel(role: string | null) {
   if (!role) {
-    return "Super Admin";
+    return "Tenant Admin";
   }
 
   const normalizedRole = role.trim().toLowerCase();
   if (normalizedRole === "tenant_admin" || normalizedRole === "super_admin") {
-    return "Super Admin";
+    return "Tenant Admin";
   }
 
   return normalizedRole
     .split(/[_-]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ") || "Super Admin";
+    .join(" ") || "Tenant Admin";
 }
 
 function getUserInitials(displayName: string) {
