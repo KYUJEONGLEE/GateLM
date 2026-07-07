@@ -841,7 +841,7 @@ export class AuthService {
   }
 
   private webOrigin(): string {
-    return this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3000';
+    return this.config.getOrThrow<string>('CONTROL_PLANE_WEB_ORIGIN');
   }
 
   private webDashboardUrl(tenantId: string): string {

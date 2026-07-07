@@ -460,8 +460,7 @@ export class ProjectAdminsService {
   }
 
   private buildSignupUrl(token: string): string {
-    const origin =
-      this.config.get<string>('CONTROL_PLANE_WEB_ORIGIN') ?? 'http://localhost:3000';
+    const origin = this.config.getOrThrow<string>('CONTROL_PLANE_WEB_ORIGIN');
 
     return `${origin.replace(/\/+$/, '')}/?projectInvite=${encodeURIComponent(token)}`;
   }

@@ -30,7 +30,7 @@ Default local URLs:
 | --- | --- |
 | Gateway metrics | `http://localhost:8080/metrics` |
 | Prometheus | `http://localhost:9090` |
-| Grafana | `http://localhost:3000` |
+| Grafana | `http://localhost:3005` |
 
 Default Grafana local credentials:
 
@@ -45,7 +45,7 @@ Default Grafana local credentials:
 | --- | --- | --- |
 | `PROMETHEUS_PORT` | `9090` | Host port for Prometheus |
 | `PROMETHEUS_RETENTION_TIME` | `24h` | Local Prometheus TSDB retention |
-| `GRAFANA_PORT` | `3000` | Host port for Grafana |
+| `GRAFANA_PORT` | `3005` | Host port for Grafana |
 | `GRAFANA_ADMIN_USER` | `admin` | Local Grafana admin user |
 | `GRAFANA_ADMIN_PASSWORD` | `admin` | Local Grafana admin password |
 | `GATELM_OBSERVABILITY_EVIDENCE_REPORT_DIR` | `reports/observability-stack-evidence` | Evidence report output directory |
@@ -69,13 +69,13 @@ Invoke-WebRequest "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22gatelm
 Grafana health:
 
 ```powershell
-Invoke-WebRequest "http://localhost:3000/api/health" -UseBasicParsing
+Invoke-WebRequest "http://localhost:3005/api/health" -UseBasicParsing
 ```
 
 Grafana dashboard:
 
 ```text
-http://localhost:3000/d/gatelm-gateway-overview/gatelm-gateway-observability
+http://localhost:3005/d/gatelm-gateway-overview/gatelm-gateway-observability
 ```
 
 ## Verify With Evidence Script
