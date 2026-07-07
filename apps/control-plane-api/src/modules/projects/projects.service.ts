@@ -307,7 +307,7 @@ export class ProjectsService {
                 }
               : {}),
             status: {
-              notIn: [ResourceStatus.ARCHIVED, DRAFT_RESOURCE_STATUS],
+              notIn: [ResourceStatus.ARCHIVED, ResourceStatus.DRAFT],
             },
           },
           select: {
@@ -330,7 +330,7 @@ export class ProjectsService {
     );
     const nextBudgetUsd =
       args.status === ResourceStatus.ARCHIVED ||
-      args.status === DRAFT_RESOURCE_STATUS
+      args.status === ResourceStatus.DRAFT
         ? 0
         : Math.max(0, args.totalBudgetUsd);
 

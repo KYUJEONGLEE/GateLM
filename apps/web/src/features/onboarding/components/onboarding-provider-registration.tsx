@@ -264,7 +264,7 @@ export function OnboardingProviderRegistration({
       return false;
     }
 
-    const discoveredModels = payload.discovery.models.map((item) =>
+    const discoveredModels = (payload.discovery?.models ?? []).map((item) =>
       normalizeDiscoveredModelName(item.modelName)
     );
     const chatModels = getUniqueChatModels(discoveredModels);
@@ -867,7 +867,7 @@ function getProviderLogoText(providerKey: string, displayName: string) {
     return "AI";
   }
 
-  return displayName.slice(0, 2).toUpperCase();
+  return (displayName ?? "").slice(0, 2).toUpperCase();
 }
 
 function getProviderKeyPlaceholder(providerKey: string) {

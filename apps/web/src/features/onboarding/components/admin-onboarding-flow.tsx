@@ -1277,7 +1277,7 @@ function getSelectedModelOption(options: RuntimeModelOption[], value: string) {
 
 function getSelectableModelOptions(
   providerConnections: ProviderConnectionRecord[],
-  fallbackModels: AdminProviderModel[]
+  fallbackModels: AdminProviderModel[] = []
 ): RuntimeModelOption[] {
   const providerConnectionOptions = providerConnections.flatMap((providerConnection) =>
     getProviderConfigModels(providerConnection.providerConfig).map((model) => ({
