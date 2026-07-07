@@ -45,7 +45,7 @@ type ProjectResponsePayload = {
 type ProjectSortMode = "budget" | "limitRisk" | "usage";
 type ProjectBudgetState = "alert" | "operational" | "warning";
 
-const projectStatuses: ProjectStatus[] = ["ACTIVE", "DISABLED", "ARCHIVED"];
+const projectStatuses: ProjectStatus[] = ["ACTIVE", "DRAFT", "DISABLED", "ARCHIVED"];
 const projectSortModes: ProjectSortMode[] = ["budget", "limitRisk", "usage"];
 const defaultWarningThresholdPercent = 80;
 
@@ -712,7 +712,7 @@ function formatProjectSortMode(mode: ProjectSortMode, text: (typeof projectText)
 
 function formatUsagePercent(value: number | null) {
   if (value === null) {
-    return "-";
+    return "0%";
   }
 
   return `${Math.round(value)}%`;
@@ -720,7 +720,7 @@ function formatUsagePercent(value: number | null) {
 
 function formatMicroUsd(value: number | null) {
   if (value === null) {
-    return "-";
+    return "$0";
   }
 
   return formatBudgetUsd(value / 1_000_000);

@@ -1,4 +1,4 @@
-export type ProjectStatus = "ACTIVE" | "ARCHIVED" | "DISABLED";
+export type ProjectStatus = "ACTIVE" | "ARCHIVED" | "DISABLED" | "DRAFT";
 
 export type ProjectRecord = {
   createdAt: string;
@@ -23,11 +23,19 @@ export type ProjectBaseValues = {
   totalBudgetUsd: number;
 };
 
-export type ProjectFormValues = ProjectBaseValues;
+export type ProjectFormValues = ProjectBaseValues & {
+  providerConnectionIds?: string[];
+  selectedModelKey?: string;
+  status?: ProjectStatus;
+  warningThresholdPercent: number;
+};
 
 export type ProjectUpdateValues = ProjectBaseValues & {
   projectId: string;
+  providerConnectionIds?: string[];
+  selectedModelKey?: string;
   status: ProjectStatus;
+  warningThresholdPercent?: number;
 };
 
 export type ProjectsModel = {

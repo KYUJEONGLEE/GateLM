@@ -189,6 +189,26 @@ describe('RuntimeConfigsService', () => {
     expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
   });
 
+  it('normalizes legacy stored credential resolver for runtime configs', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      credentialLast4: '1234',
+      credentialPrefix: 'provided_',
+      resolver: 'credential_store',
+      secretRef: `provider_credential:${providerId}`,
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {});
+
+    expect(result.runtimeConfig.providers[0]?.resolver).toBe(
+      'control_plane_secret_store',
+    );
+  });
+
   it('accepts optional v2 safety detector categories in draft configs', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);

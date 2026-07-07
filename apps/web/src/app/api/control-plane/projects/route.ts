@@ -43,6 +43,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     project: result.data,
+    policyError: "policyError" in result ? result.policyError : undefined,
     status: result.status
   });
 }
@@ -59,7 +60,22 @@ function isProjectFormValues(value: unknown): value is ProjectFormValues {
     typeof record.description === "string" &&
     typeof record.totalBudgetUsd === "number" &&
     Number.isFinite(record.totalBudgetUsd) &&
-    record.totalBudgetUsd >= 0
+    record.totalBudgetUsd >= 0 &&
+    typeof record.warningThresholdPercent === "number" &&
+    Number.isInteger(record.warningThresholdPercent) &&
+    record.warningThresholdPercent >= 0 &&
+    record.warningThresholdPercent <= 100 &&
+    (
+      record.providerConnectionIds === undefined ||
+      (
+        Array.isArray(record.providerConnectionIds) &&
+        record.providerConnectionIds.every((providerConnectionId) =>
+          typeof providerConnectionId === "string"
+        )
+      )
+    ) &&
+    (record.status === undefined || isProjectStatus(record.status)) &&
+    (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string")
   );
 }
 
@@ -77,10 +93,29 @@ function isProjectUpdateValues(value: unknown): value is ProjectUpdateValues {
     Number.isFinite(record.totalBudgetUsd) &&
     record.totalBudgetUsd >= 0 &&
     typeof record.projectId === "string" &&
-    isProjectStatus(record.status)
+    isProjectStatus(record.status) &&
+    (
+      record.providerConnectionIds === undefined ||
+      (
+        Array.isArray(record.providerConnectionIds) &&
+        record.providerConnectionIds.every((providerConnectionId) =>
+          typeof providerConnectionId === "string"
+        )
+      )
+    ) &&
+    (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string") &&
+    (
+      record.warningThresholdPercent === undefined ||
+      (
+        typeof record.warningThresholdPercent === "number" &&
+        Number.isInteger(record.warningThresholdPercent) &&
+        record.warningThresholdPercent >= 0 &&
+        record.warningThresholdPercent <= 100
+      )
+    )
   );
 }
 
 function isProjectStatus(value: unknown): value is ProjectStatus {
-  return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED";
+  return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED" || value === "DRAFT";
 }

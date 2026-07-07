@@ -28,8 +28,10 @@ type RequestLogsPageProps = {
     budgetScopeType?: string;
     cacheStatus?: string;
     created?: string;
+    latest?: string;
     model?: string;
     page?: string;
+    projectId?: string;
     provider?: string;
     requestId?: string;
     resolvedBy?: string;
@@ -41,7 +43,8 @@ type RequestLogsPageProps = {
 export default async function RequestLogsPage({ params, searchParams }: RequestLogsPageProps) {
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
-  const selectedRequestId = resolvedSearchParams?.requestId;
+  const explicitSelectedRequestId = normalizeOptionalText(resolvedSearchParams?.requestId);
+  const shouldSelectLatestProjectRequest = resolvedSearchParams?.latest === "project";
   const { filters, logFilters } = buildRequestLogFilters(resolvedSearchParams);
   const shouldLoadUnfilteredOptions = hasNarrowingFilters(filters);
   const optionRecordsPromise = shouldLoadUnfilteredOptions
@@ -52,12 +55,14 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     getLiveGatewayRequestLogs({ ...logFilters, tenantId }),
     optionRecordsPromise
   ]);
+  const latestSelectedRecord = shouldSelectLatestProjectRequest ? (records ?? [])[0] : undefined;
+  const selectedRequestId = explicitSelectedRequestId || latestSelectedRecord?.requestId;
   const selectedRecord = selectedRequestId
-    ? (records ?? []).find((record) => record.requestId === selectedRequestId)
+    ? (records ?? []).find((record) => record.requestId === selectedRequestId) ?? latestSelectedRecord
     : undefined;
   const selectedDetail = selectedRequestId
     ? await getLiveGatewayRequestDetail(selectedRequestId, {
-        projectId: selectedRecord?.projectId,
+        projectId: selectedRecord?.projectId ?? logFilters.projectId,
         tenantId
       })
     : null;
@@ -119,6 +124,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
   const provider = normalizeOptionalText(searchParams?.provider);
   const cacheStatus = normalizeCacheStatusFilter(searchParams?.cacheStatus);
   const applicationId = normalizeOptionalText(searchParams?.applicationId);
+  const projectId = normalizeOptionalText(searchParams?.projectId);
   const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
   const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
   const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
@@ -148,6 +154,7 @@ function buildRequestLogFilters(searchParams: Awaited<RequestLogsPageProps["sear
       from,
       limit: 100,
       model: model || undefined,
+      projectId: projectId || undefined,
       provider: provider || undefined,
       requestId: requestId || undefined,
       resolvedBy: resolvedBy || undefined,

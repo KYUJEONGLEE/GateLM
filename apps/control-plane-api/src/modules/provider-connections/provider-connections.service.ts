@@ -1174,7 +1174,7 @@ export class ProviderConnectionsService {
       data: {
         credentialLast4,
         credentialPrefix,
-        resolver: 'credential_store',
+        resolver: 'control_plane_secret_store',
         secretRef: credentialRefId,
       },
     });
