@@ -67,6 +67,8 @@ export type ProviderConnectionFormValues = {
   isEdit?: boolean;
   models: string;
   modelsEndpointPath: string;
+  presetProviderKey: string;
+  previousProvider?: string;
   provider: string;
   requestFormat:
     | "openai_chat_completions"

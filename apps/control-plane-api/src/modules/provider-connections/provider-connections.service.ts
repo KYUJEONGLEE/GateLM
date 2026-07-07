@@ -103,6 +103,8 @@ export class ProviderConnectionsService {
     dto: UpsertProviderDto,
   ): Promise<ProviderResponseDto> {
     const project = await this.getProjectOrThrow(projectId);
+    const providerKey = this.toProviderKeyOrThrow(dto.provider);
+    const previousProviderKey = this.toPreviousProviderKey(dto);
     const providerConfig = this.toJsonObject(dto.providerConfig);
     const credentialValue = this.toCredentialValue(dto);
     const optionalCredentialUpdate = credentialValue
@@ -110,17 +112,68 @@ export class ProviderConnectionsService {
       : this.toCredentialUpdate(dto);
 
     const providerConnection = await this.prisma.$transaction(async (tx) => {
-      const savedProviderConnection = await tx.providerConnection.upsert({
+      const existingProvider = await tx.providerConnection.findUnique({
         where: {
           projectId_provider: {
             projectId,
-            provider: dto.provider,
+            provider: previousProviderKey,
           },
         },
-        create: {
+      });
+      const providerToUpdate =
+        existingProvider ??
+        (previousProviderKey === providerKey
+          ? null
+          : await tx.providerConnection.findUnique({
+              where: {
+                projectId_provider: {
+                  projectId,
+                  provider: providerKey,
+                },
+              },
+            }));
+
+      if (providerToUpdate) {
+        if (providerToUpdate.provider !== providerKey) {
+          await this.assertProviderRenameAvailable(tx, {
+            projectId,
+            provider: providerKey,
+            providerConnectionId: providerToUpdate.id,
+            tenantId: project.tenantId,
+          });
+        }
+
+        const savedProviderConnection = await tx.providerConnection.update({
+          where: { id: providerToUpdate.id },
+          data: {
+            provider: providerKey,
+            displayName: dto.displayName,
+            status: dto.status,
+            baseUrl: dto.baseUrl,
+            timeoutMs: dto.timeoutMs,
+            resolver: dto.resolver,
+            providerConfig,
+            ...optionalCredentialUpdate,
+          },
+        });
+
+        if (!credentialValue) {
+          return savedProviderConnection;
+        }
+
+        return this.attachStoredProviderCredential(
+          tx as unknown as ProviderCredentialStoreClient,
+          savedProviderConnection,
+          dto,
+          credentialValue,
+        );
+      }
+
+      const savedProviderConnection = await tx.providerConnection.create({
+        data: {
           tenantId: project.tenantId,
           projectId: project.id,
-          provider: dto.provider,
+          provider: providerKey,
           displayName: dto.displayName,
           status: dto.status,
           baseUrl: dto.baseUrl,
@@ -128,15 +181,6 @@ export class ProviderConnectionsService {
           ...optionalCredentialUpdate,
           resolver: dto.resolver,
           providerConfig,
-        },
-        update: {
-          displayName: dto.displayName,
-          status: dto.status,
-          baseUrl: dto.baseUrl,
-          timeoutMs: dto.timeoutMs,
-          resolver: dto.resolver,
-          providerConfig,
-          ...optionalCredentialUpdate,
         },
       });
 
@@ -160,6 +204,8 @@ export class ProviderConnectionsService {
     dto: UpsertProviderDto,
   ): Promise<ProviderResponseDto> {
     const tenant = await this.getTenantOrThrow(tenantId);
+    const providerKey = this.toProviderKeyOrThrow(dto.provider);
+    const previousProviderKey = this.toPreviousProviderKey(dto);
     const providerConfig = this.toJsonObject(dto.providerConfig);
     const credentialValue = this.toCredentialValue(dto);
     const optionalCredentialUpdate = credentialValue
@@ -170,15 +216,37 @@ export class ProviderConnectionsService {
       const existingProvider = await tx.providerConnection.findFirst({
         where: {
           tenantId: tenant.id,
-          provider: dto.provider,
+          provider: previousProviderKey,
+          projectId: null,
         },
       });
+      const providerToUpdate =
+        existingProvider ??
+        (previousProviderKey === providerKey
+          ? null
+          : await tx.providerConnection.findFirst({
+              where: {
+                tenantId: tenant.id,
+                provider: providerKey,
+                projectId: null,
+              },
+            }));
 
-      if (existingProvider) {
+      if (providerToUpdate) {
+        if (providerToUpdate.provider !== providerKey) {
+          await this.assertProviderRenameAvailable(tx, {
+            projectId: null,
+            provider: providerKey,
+            providerConnectionId: providerToUpdate.id,
+            tenantId: tenant.id,
+          });
+        }
+
         const savedProviderConnection = await tx.providerConnection.update({
-          where: { id: existingProvider.id },
+          where: { id: providerToUpdate.id },
           data: {
             projectId: null,
+            provider: providerKey,
             displayName: dto.displayName,
             status: dto.status,
             baseUrl: dto.baseUrl,
@@ -205,7 +273,7 @@ export class ProviderConnectionsService {
         data: {
           tenantId: tenant.id,
           projectId: null,
-          provider: dto.provider,
+          provider: providerKey,
           displayName: dto.displayName,
           status: dto.status,
           baseUrl: dto.baseUrl,
@@ -611,6 +679,38 @@ export class ProviderConnectionsService {
     }
 
     return value;
+  }
+
+  private toPreviousProviderKey(dto: UpsertProviderDto): string {
+    return dto.previousProvider
+      ? this.toProviderKeyOrThrow(dto.previousProvider)
+      : this.toProviderKeyOrThrow(dto.provider);
+  }
+
+  private async assertProviderRenameAvailable(
+    tx: Prisma.TransactionClient,
+    args: {
+      projectId: string | null;
+      provider: string;
+      providerConnectionId: string;
+      tenantId: string;
+    },
+  ): Promise<void> {
+    const duplicate = await tx.providerConnection.findFirst({
+      where: {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        provider: args.provider,
+        NOT: {
+          id: args.providerConnectionId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new ConflictException('Provider key is already registered.');
+    }
   }
 
   private toAdapterType(providerConnection: ProviderConnection): string {
