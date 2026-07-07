@@ -43,6 +43,25 @@ type AcceptedProjectInvitation = {
   tenantName?: string | null;
 };
 
+type AuthAccessRecord = {
+  status?: string;
+  tenantId?: string | null;
+};
+
+type AuthResponseData = {
+  acceptedProjectInvitation?: AcceptedProjectInvitation;
+  memberships?: AuthAccessRecord[];
+  projectAdmins?: AuthAccessRecord[];
+  session?: {
+    kind?: string;
+  };
+  tenant?: {
+    id?: string;
+    name?: string;
+  };
+  verificationRequired?: boolean;
+};
+
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
 
 const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
@@ -68,6 +87,31 @@ function redirectToDashboard(replace = false, tenantId = defaultTenantId) {
   }
 
   window.location.assign(href);
+}
+
+function resolveDashboardTenantId(data: AuthResponseData | null | undefined) {
+  const tenantIdFromMembership = findActiveTenantId(data?.memberships);
+  if (tenantIdFromMembership) {
+    return tenantIdFromMembership;
+  }
+
+  const tenantIdFromProjectAdmin = findActiveTenantId(data?.projectAdmins);
+  if (tenantIdFromProjectAdmin) {
+    return tenantIdFromProjectAdmin;
+  }
+
+  const tenantIdFromTenant = normalizeTenantId(data?.tenant?.id);
+  return tenantIdFromTenant;
+}
+
+function findActiveTenantId(records: AuthAccessRecord[] | undefined) {
+  return records
+    ?.find((record) => record.status === undefined || record.status === "active")
+    ?.tenantId?.trim() || null;
+}
+
+function normalizeTenantId(value: string | null | undefined) {
+  return value?.trim() || null;
 }
 
 function redirectToProjects(tenantId: string, replace = false) {
@@ -483,7 +527,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
   const [authStatus, setAuthStatus] = useState<AuthStatus>(initialAuthStatus);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
-  const [dashboardTenantId, setDashboardTenantId] = useState(defaultTenantId);
+  const [dashboardTenantId, setDashboardTenantId] = useState<string | null>(null);
   const [projectInviteToken, setProjectInviteToken] = useState<string | null>(null);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
@@ -496,8 +540,9 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     const params = new URLSearchParams(window.location.search);
     if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
       window.history.replaceState(null, "", "/");
-      redirectToProjects(defaultTenantId, true);
-      return;
+      setAuthMode("signup");
+      setSignupStep("organization");
+      setIsAuthPanelOpen(true);
     }
     const projectInvite = params.get("projectInvite") ?? params.get("invite");
     if (projectInvite) {
@@ -535,26 +580,28 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
           return;
         }
 
-        const body = (await response.json()) as {
-          data?: {
-            session?: {
-              kind?: string;
-            };
-          };
-        };
+        const body = (await response.json()) as { data?: AuthResponseData };
 
         if (!isMounted) {
           return;
         }
 
-        const hasConsoleSession =
-          body.data?.session?.kind === "full" ||
-          body.data?.session?.kind === "onboarding";
+        const sessionKind = body.data?.session?.kind;
+        const restoredTenantId = resolveDashboardTenantId(body.data);
+        const hasConsoleSession = sessionKind === "full" || sessionKind === "onboarding";
 
         setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
+        setDashboardTenantId(restoredTenantId);
 
-        if (hasConsoleSession && !shouldStayOnLanding) {
-          redirectToDashboard(true);
+        if (sessionKind === "full" && restoredTenantId && !shouldStayOnLanding) {
+          redirectToDashboard(true, restoredTenantId);
+          return;
+        }
+
+        if (sessionKind === "onboarding" && !restoredTenantId && !projectInvite) {
+          setAuthMode("signup");
+          setSignupStep("organization");
+          setIsAuthPanelOpen(true);
         }
       } catch {
         // Anonymous visitors should still see the landing page.
@@ -592,6 +639,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     setAuthError(null);
     setAuthNotice(null);
     setAuthStatus("anonymous");
+    setDashboardTenantId(null);
     window.history.replaceState(null, "", "/");
     await fetch("/api/auth/logout", {
       credentials: "include",
@@ -599,13 +647,16 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     }).catch(() => undefined);
   }
 
-  function completeAuth() {
+  function completeAuth(tenantId: string | null = dashboardTenantId) {
     setIsAuthPanelOpen(false);
     setAuthError(null);
     setAuthNotice(null);
     setSignupStep("account");
     setAuthStatus("authenticated");
-    redirectToDashboard(false, dashboardTenantId);
+    setDashboardTenantId(tenantId);
+    if (tenantId) {
+      redirectToDashboard(false, tenantId);
+    }
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -617,11 +668,11 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     const formData = new FormData(event.currentTarget);
 
     await runAuthAction(async () => {
-      await postAuth("login", {
+      const result = await postAuth("login", {
         email: readFormString(formData, "email"),
         password: readFormString(formData, "password")
       });
-      completeAuth();
+      completeAuth(resolveDashboardTenantId(result.data));
     });
   }
 
@@ -634,7 +685,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     const formData = new FormData(event.currentTarget);
 
     if (signupStep === "ready") {
-      completeAuth();
+      completeAuth(dashboardTenantId);
       return;
     }
 
@@ -740,7 +791,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
               <span>{text.actions.gatewayRequest}</span>
             </Link>
           ) : null}
-          {authStatus === "authenticated" ? (
+          {authStatus === "authenticated" && dashboardTenantId ? (
             <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref(dashboardTenantId)}>
               <Route aria-hidden="true" size={17} strokeWidth={2.4} />
               <span>{text.actions.dashboard}</span>
@@ -818,10 +869,12 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
         <div className="landing-summary-actions">
           {authStatus === "authenticated" ? (
             <>
-              <Link className="landing-summary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
-                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
-                <span>{text.actions.dashboard}</span>
-              </Link>
+              {dashboardTenantId ? (
+                <Link className="landing-summary-link" href={getDashboardHref(dashboardTenantId)}>
+                  <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                  <span>{text.actions.dashboard}</span>
+                </Link>
+              ) : null}
               <Link className="landing-summary-link" href="/application">
                 <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
                 <span>{text.actions.chat}</span>
