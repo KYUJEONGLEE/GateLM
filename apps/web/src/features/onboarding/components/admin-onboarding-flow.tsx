@@ -1036,6 +1036,7 @@ function OnboardingTeamPicker({
             {availableTeams.length > 0 ? (
               availableTeams.map((team) => (
                 <button
+                  aria-selected="false"
                   className="onboarding-team-option"
                   data-team-id={team.id}
                   key={team.id}
