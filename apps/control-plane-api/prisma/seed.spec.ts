@@ -84,6 +84,22 @@ describe('Control Plane demo seed baseline', () => {
       resolver: 'environment',
       adapterConfig: { requestFormat: 'openai_chat_completions' },
     });
+    expect(openAIProvider?.models).toEqual([
+      'gpt-4o-mini',
+      'gpt-4o',
+      'gpt-5.4-mini',
+      'gpt-5.4',
+    ]);
+    expect(
+      runtimeConfig.models
+        .filter((model) => model.provider === 'openai-main')
+        .map((model) => model.model),
+    ).toEqual(['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4']);
+    expect(
+      runtimeConfig.pricingRules
+        .filter((rule) => rule.provider === 'openai-main')
+        .map((rule) => rule.model),
+    ).toEqual(['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4']);
     expect(mockProvider).toMatchObject({
       providerId: DEMO_MOCK_PROVIDER_ID,
       adapterType: 'mock',
@@ -185,6 +201,9 @@ describe('Control Plane demo seed baseline', () => {
           defaultResolver: 'environment',
           modelsEndpointPath: '/models',
           status: ResourceStatus.ACTIVE,
+          providerConfig: expect.objectContaining({
+            models: ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4'],
+          }),
         }),
       }),
     );
@@ -271,6 +290,7 @@ describe('Control Plane demo seed baseline', () => {
             adapterType: 'openai_compatible',
             requestFormat: 'openai_chat_completions',
             credentialRequired: true,
+            models: ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4'],
           }),
         }),
       }),

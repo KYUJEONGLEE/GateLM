@@ -1983,7 +1983,7 @@ export class RuntimeConfigsService {
         maxOutputTokens: this.toMaxOutputTokens(model),
       },
       routing: {
-        autoRoutingEligible: model.status === 'active',
+        autoRoutingEligible: this.isModelSelectedForRouting(model, document),
         costTier: this.toModelCostTier(model, document),
         fallbackPriority: this.toModelFallbackPriority(model, document),
       },
@@ -2184,6 +2184,28 @@ export class RuntimeConfigsService {
     }
 
     return 'balanced';
+  }
+
+  private isModelSelectedForRouting(
+    model: RuntimeConfigModelResponseDto,
+    document: ActiveRuntimeConfigResponseDto,
+  ): boolean {
+    if (model.status !== 'active') {
+      return false;
+    }
+
+    return (
+      (model.provider === document.routingPolicy.lowCostProvider &&
+        model.model === document.routingPolicy.lowCostModel) ||
+      (model.provider === document.routingPolicy.defaultProvider &&
+        model.model === document.routingPolicy.defaultModel) ||
+      (document.routingPolicy.highQualityProvider !== undefined &&
+        document.routingPolicy.highQualityModel !== undefined &&
+        model.provider === document.routingPolicy.highQualityProvider &&
+        model.model === document.routingPolicy.highQualityModel) ||
+      (model.provider === document.routingPolicy.fallbackProvider &&
+        model.model === document.routingPolicy.fallbackModel)
+    );
   }
 
   private toModelFallbackPriority(
