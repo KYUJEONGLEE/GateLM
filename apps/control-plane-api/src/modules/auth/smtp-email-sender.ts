@@ -495,6 +495,3 @@ function escapeSmtpData(value: string): string {
     .map((line) => (line.startsWith('.') ? `.${line}` : line))
     .join('\r\n');
 }
-
-
-

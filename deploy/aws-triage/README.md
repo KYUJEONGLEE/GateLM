@@ -14,7 +14,17 @@ It differs from `deploy/selfhost` on purpose:
 
 ## EC2 Setup
 
-From the EC2 instance:
+From the EC2 instance, make sure Git, Docker Engine, and the Docker Compose plugin are installed:
+
+```bash
+git --version
+docker version
+docker compose version
+```
+
+If any of these are missing, install Git and Docker first. Caddy is only needed later for the HTTPS step.
+
+Then clone the repo:
 
 ```bash
 git clone <repo-url> GateLM
@@ -46,6 +56,22 @@ openssl rand -hex 32
 
 `GATELM_DEMO_API_KEY` is used by the Web/Application BFF when it calls Gateway. `GATELM_DEMO_APP_TOKEN` is still used by the demo seed to populate the app-token management surface, but current Gateway chat requests no longer require `X-GateLM-App-Token`.
 
+The default triage signup flow does not use SMTP:
+
+```bash
+AUTH_EMAIL_TRANSPORT=dev_memory
+CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=true
+SMTP_HOST=
+SMTP_PORT=
+SMTP_SECURE=
+SMTP_TLS_MODE=
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+```
+
+Leave the SMTP values blank until a real mail sender is configured.
+
 Optional Google login for the main landing page uses the Web Console auth proxy and Control Plane OAuth handler. Configure these only after creating a Google Cloud OAuth client for the exact callback URL:
 
 ```bash
@@ -69,10 +95,21 @@ Recommended public exposure:
 - SSH `22`: your IP only
 - Web `3000`: your IP only until HTTPS is ready
 - Application `3002`: your IP only until HTTPS is ready
-- Control Plane `3001`: do not expose publicly
-- Gateway `8080`: do not expose publicly
+- Control Plane `3001`: localhost-bound by default; do not expose publicly
+- Gateway `8080`: localhost-bound by default; do not expose publicly
 
 When HTTPS is enabled through a host-level reverse proxy such as Caddy, open `80` and `443`, keep `22` restricted to your IP, and prefer closing public `3000`/`3002` access. Keep `3001` and `8080` blocked from the public internet while `CONTROL_PLANE_ADMIN_AUTH_MODE=demo_admin_placeholder`.
+
+The default `.env.example` binds host ports like this:
+
+```bash
+AWS_TRIAGE_WEB_BIND=0.0.0.0
+AWS_TRIAGE_APPLICATION_BIND=0.0.0.0
+AWS_TRIAGE_CONTROL_PLANE_BIND=127.0.0.1
+AWS_TRIAGE_GATEWAY_BIND=127.0.0.1
+```
+
+After HTTPS is working through Caddy, you can also set `AWS_TRIAGE_WEB_BIND=127.0.0.1` and `AWS_TRIAGE_APPLICATION_BIND=127.0.0.1`, then recreate Web and Application.
 
 ## Build
 
@@ -107,6 +144,7 @@ Apply dashboard pricing catalog compatibility tables and demo pricing seed:
 
 ```bash
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 ```
 
@@ -175,6 +213,8 @@ If using `gatelm.co.kr` and `chat.gatelm.co.kr`, create DNS `A` records pointing
 For host-level Caddy, use `Caddyfile.example`:
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y caddy
 sudo cp Caddyfile.example /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
@@ -187,6 +227,8 @@ GATELM_PUBLIC_BASE_URL=https://gatelm.co.kr
 GATELM_APPLICATION_BASE_URL=https://chat.gatelm.co.kr
 GOOGLE_OAUTH_REDIRECT_URI=https://gatelm.co.kr/api/auth/google/callback
 CONTROL_PLANE_AUTH_COOKIE_SECURE=true
+AWS_TRIAGE_WEB_BIND=127.0.0.1
+AWS_TRIAGE_APPLICATION_BIND=127.0.0.1
 ```
 
 Then recreate Control Plane, Web, and Application:
@@ -206,6 +248,7 @@ docker compose --env-file .env up -d postgres redis mock-provider
 docker compose --env-file .env run --rm control-plane-api ./node_modules/.bin/prisma migrate deploy
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < migrations/001_gateway_runtime_tables.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
+docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core application web

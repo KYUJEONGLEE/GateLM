@@ -58,20 +58,29 @@ describe('Auth HTTP API', () => {
       }),
       getProfile: jest.fn(async () => googleOAuthClient.profile),
     };
+    const readConfigValue = (key: string) => {
+      const values: Record<string, string> = {
+        AUTH_EMAIL_TRANSPORT: 'dev_memory',
+        CONTROL_PLANE_AUTH_COOKIE_SECURE: 'false',
+        CONTROL_PLANE_WEB_ORIGIN: 'http://localhost:3000',
+      };
+      if (!options.omitDevAutoVerify) {
+        values.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY = options.devAutoVerify
+          ? 'true'
+          : 'false';
+      }
+
+      return values[key];
+    };
     const configService = {
-      get: jest.fn((key: string) => {
-        const values: Record<string, string> = {
-          AUTH_EMAIL_TRANSPORT: 'dev_memory',
-          CONTROL_PLANE_AUTH_COOKIE_SECURE: 'false',
-          CONTROL_PLANE_WEB_ORIGIN: 'http://localhost:3000',
-        };
-        if (!options.omitDevAutoVerify) {
-          values.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY = options.devAutoVerify
-            ? 'true'
-            : 'false';
+      get: jest.fn(readConfigValue),
+      getOrThrow: jest.fn((key: string) => {
+        const value = readConfigValue(key);
+        if (value === undefined) {
+          throw new Error(`Missing config value: ${key}`);
         }
 
-        return values[key];
+        return value;
       }),
     };
 
