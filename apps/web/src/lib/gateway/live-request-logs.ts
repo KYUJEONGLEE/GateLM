@@ -84,14 +84,10 @@ export async function getLiveGatewayRequestLogs(
     to: filters.to ?? defaultRange.to
   });
   appendOptionalQuery(query, "applicationId", filters.applicationId);
-  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
-  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendOptionalQuery(query, "cacheStatus", filters.cacheStatus);
   appendOptionalQuery(query, "status", filters.status);
-  appendOptionalQuery(query, "model", filters.model);
   appendOptionalQuery(query, "provider", filters.provider);
   appendOptionalQuery(query, "requestId", filters.requestId);
-  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
 
   const projectIds = await getLogProjectIds(filters.projectId, filters.tenantId, config.projectId);
   const records = await fetchProjectLogsWithConcurrency(config.baseUrl, projectIds, query);
@@ -102,6 +98,8 @@ export async function getLiveGatewayRequestLogs(
   }
 
   return flattenedRecords
+    .filter((record) => matchesBudgetScopeFilter(record.budgetScope, filters))
+    .filter((record) => matchesModelFilter(record, filters.model))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, filters.limit ?? 50);
 }
@@ -167,6 +165,41 @@ function appendOptionalQuery(query: URLSearchParams, key: string, value: string 
   if (normalized) {
     query.set(key, normalized);
   }
+}
+
+function matchesBudgetScopeFilter(
+  scope: InvocationLogRecord["budgetScope"],
+  filters: LiveGatewayRequestLogFilters
+) {
+  const budgetScopeType = filters.budgetScopeType?.trim();
+  const budgetScopeId = filters.budgetScopeId?.trim();
+  const resolvedBy = filters.resolvedBy?.trim();
+
+  if (budgetScopeType && scope.budgetScopeType !== budgetScopeType) {
+    return false;
+  }
+
+  if (budgetScopeId && scope.budgetScopeId !== budgetScopeId) {
+    return false;
+  }
+
+  if (resolvedBy && scope.resolvedBy !== resolvedBy) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesModelFilter(record: InvocationLogRecord, modelFilter: string | undefined) {
+  const model = modelFilter?.trim();
+
+  if (!model) {
+    return true;
+  }
+
+  return [record.selectedModel, record.requestedModel]
+    .filter(Boolean)
+    .some((candidate) => formatModelDisplayName(candidate, "") === model);
 }
 
 function getLiveRange() {

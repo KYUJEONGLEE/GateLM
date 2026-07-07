@@ -444,7 +444,7 @@ export function OnboardingProviderRegistration({
           return (
             <button
               aria-label={`Choose ${row.displayName}`}
-              aria-selected={isSelected}
+              aria-pressed={isSelected}
               className="onboarding-provider-option"
               data-selected={isSelected}
               key={row.providerKey}
