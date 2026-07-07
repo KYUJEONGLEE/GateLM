@@ -150,6 +150,10 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     typeof record.resolver === "string" &&
     typeof record.secretRef === "string" &&
     (record.isEdit === undefined || typeof record.isEdit === "boolean") &&
+    typeof record.presetProviderKey === "string" &&
+    (record.previousProvider === undefined ||
+      (typeof record.previousProvider === "string" &&
+        /^[a-z][a-z0-9_-]{1,63}$/.test(record.previousProvider))) &&
     typeof record.credentialPrefix === "string" &&
     typeof record.credentialLast4 === "string" &&
     (record.credentialValue === undefined ||

@@ -28,6 +28,12 @@ export class UpsertProviderDto {
   provider!: string;
 
   @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z][a-z0-9_-]{1,63}$/)
+  previousProvider?: string;
+
+  @Transform(({ value }) => trimString(value))
   @IsString()
   @MinLength(1)
   @MaxLength(120)

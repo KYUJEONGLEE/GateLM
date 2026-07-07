@@ -222,6 +222,12 @@ export class RuntimeConfigsService {
   async getActiveProviderCatalog(
     applicationId: string,
   ): Promise<ProviderCatalogResponseDto> {
+    const persistedCatalog =
+      await this.getPersistedActiveProviderCatalog(applicationId);
+    if (persistedCatalog) {
+      return persistedCatalog;
+    }
+
     const { runtimeConfig, document } =
       await this.getExecutableActiveRuntimeConfig({
         applicationId,
@@ -235,6 +241,15 @@ export class RuntimeConfigsService {
     catalogId: string,
   ): Promise<ProviderCatalogResponseDto> {
     const parsedCatalogId = this.parseProviderCatalogId(catalogId);
+    const persistedCatalog = await this.getPersistedProviderCatalog({
+      applicationId: parsedCatalogId.applicationId,
+      catalogId,
+      catalogVersion: parsedCatalogId.catalogVersion,
+    });
+    if (persistedCatalog) {
+      return persistedCatalog;
+    }
+
     const catalog = await this.getActiveProviderCatalog(
       parsedCatalogId.applicationId,
     );
@@ -247,6 +262,99 @@ export class RuntimeConfigsService {
     }
 
     return catalog;
+  }
+
+  private async getPersistedActiveProviderCatalog(
+    applicationId: string,
+  ): Promise<ProviderCatalogResponseDto | null> {
+    const application = await this.getApplicationContextOrThrow(
+      applicationId,
+    );
+    this.assertActiveContext(application);
+    const activeSnapshot =
+      await this.prisma.activeRuntimeSnapshot.findUnique({
+        where: {
+          tenantId_projectId_applicationId: {
+            tenantId: application.tenantId,
+            projectId: application.projectId,
+            applicationId,
+          },
+        },
+        include: {
+          runtimeSnapshot: {
+            include: {
+              runtimeConfig: true,
+            },
+          },
+        },
+      });
+
+    if (!activeSnapshot) {
+      return null;
+    }
+
+    if (
+      activeSnapshot.runtimeSnapshot.tenantId !== activeSnapshot.tenantId ||
+      activeSnapshot.runtimeSnapshot.projectId !== activeSnapshot.projectId ||
+      activeSnapshot.runtimeSnapshot.applicationId !==
+        activeSnapshot.applicationId
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    return this.toPersistedProviderCatalogResponse(
+      activeSnapshot.runtimeSnapshot,
+    );
+  }
+
+  private async getPersistedProviderCatalog(args: {
+    applicationId: string;
+    catalogId: string;
+    catalogVersion: number;
+  }): Promise<ProviderCatalogResponseDto | null> {
+    const application = await this.getApplicationContextOrThrow(
+      args.applicationId,
+    );
+    this.assertActiveContext(application);
+    const runtimeSnapshot = await this.prisma.runtimeSnapshot.findUnique({
+      where: {
+        applicationId_version: {
+          applicationId: args.applicationId,
+          version: BigInt(args.catalogVersion),
+        },
+      },
+      include: {
+        runtimeConfig: true,
+      },
+    });
+
+    if (!runtimeSnapshot) {
+      return null;
+    }
+
+    if (
+      runtimeSnapshot.tenantId !== application.tenantId ||
+      runtimeSnapshot.projectId !== application.projectId ||
+      runtimeSnapshot.applicationId !== application.id
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    const snapshot = this.toPersistedRuntimeSnapshotResponse(
+      runtimeSnapshot,
+    );
+    if (
+      snapshot.providerCatalogRef.catalogId !== args.catalogId ||
+      snapshot.providerCatalogRef.catalogVersion !== args.catalogVersion
+    ) {
+      throw new NotFoundException('Provider Catalog not found.');
+    }
+
+    return this.toPersistedProviderCatalogResponse(runtimeSnapshot);
   }
 
   private async getPersistedActiveRuntimeSnapshot(
@@ -1864,6 +1972,38 @@ export class RuntimeConfigsService {
     return document;
   }
 
+  private toPersistedProviderCatalogResponse(
+    runtimeSnapshot: RuntimeSnapshot & {
+      runtimeConfig?: RuntimeConfig | null;
+    },
+  ): ProviderCatalogResponseDto | null {
+    const snapshot = this.toPersistedRuntimeSnapshotResponse(
+      runtimeSnapshot,
+    );
+    const runtimeConfig = runtimeSnapshot.runtimeConfig;
+    if (!runtimeConfig) {
+      return null;
+    }
+
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
+    const catalog = this.toProviderCatalogResponse(runtimeConfig, document);
+
+    if (
+      !this.providerCatalogMatchesRef(
+        catalog,
+        snapshot.providerCatalogRef,
+      )
+    ) {
+      throw new InternalServerErrorException(
+        'Provider Catalog body is inconsistent.',
+      );
+    }
+
+    return catalog;
+  }
+
   private toProviderCatalogResponse(
     runtimeConfig: RuntimeConfig,
     document: ActiveRuntimeConfigResponseDto,
@@ -1901,6 +2041,17 @@ export class RuntimeConfigsService {
       ...catalogBodyWithoutHash,
       contentHash: this.sha256(this.canonicalJson(catalogBodyWithoutHash)),
     };
+  }
+
+  private providerCatalogMatchesRef(
+    catalog: ProviderCatalogResponseDto,
+    ref: RuntimeSnapshotResponseDto['providerCatalogRef'],
+  ): boolean {
+    return (
+      catalog.catalogId === ref.catalogId &&
+      catalog.catalogVersion === ref.catalogVersion &&
+      catalog.contentHash === ref.contentHash
+    );
   }
 
   private isProviderCatalogProviderExecutable(

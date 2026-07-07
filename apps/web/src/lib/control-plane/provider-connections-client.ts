@@ -263,7 +263,13 @@ export async function removeProviderModel({
       "modelsEndpointPath",
       "/models"
     ),
+    presetProviderKey: getProviderConfigString(
+      providerConnection.providerConfig,
+      "providerFamily",
+      inferProviderFamily(providerConnection)
+    ),
     provider: providerConnection.provider,
+    previousProvider: providerConnection.provider,
     requestFormat: getProviderRequestFormat(providerConnection),
     resolver: providerConnection.resolver,
     secretRef: "",
@@ -369,6 +375,8 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     values.secretRef.trim() ||
     (values.isEdit ? "" : getDefaultProviderSecretRef(values));
   const credentialValue = values.credentialValue?.trim() ?? "";
+  const provider = values.provider.trim();
+  const previousProvider = values.previousProvider?.trim();
 
   return {
     baseUrl: values.baseUrl.trim(),
@@ -376,7 +384,9 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     credentialPrefix: values.credentialPrefix.trim() || undefined,
     credentialValue: credentialValue || undefined,
     displayName: values.displayName.trim(),
-    provider: values.provider.trim(),
+    previousProvider:
+      previousProvider && previousProvider !== provider ? previousProvider : undefined,
+    provider,
     providerConfig,
     resolver: values.resolver.trim() || undefined,
     secretRef: secretRef || undefined,
@@ -408,6 +418,7 @@ function getDefaultProviderSecretRef(values: ProviderConnectionFormValues) {
 function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {
   const adapterType = values.adapterType.trim();
   const apiVersion = values.apiVersion.trim();
+  const providerFamily = values.presetProviderKey.trim();
   const providerConfig: Record<string, unknown> = {
     credentialRequired: values.credentialRequired,
     failureMode: values.failureMode,
@@ -420,6 +431,10 @@ function toProviderConfig(values: ProviderConnectionFormValues, models: string[]
 
   if (adapterType) {
     providerConfig.adapterType = adapterType;
+  }
+
+  if (providerFamily) {
+    providerConfig.providerFamily = providerFamily;
   }
 
   if (apiVersion) {
@@ -525,6 +540,25 @@ function getDefaultProviderAdapterType(providerConnection: ProviderConnectionRec
   }
 
   return providerConnection.provider === "claude" ? "anthropic" : "openai_compatible";
+}
+
+function inferProviderFamily(providerConnection: ProviderConnectionRecord) {
+  const provider = providerConnection.provider.toLowerCase();
+  const baseUrl = providerConnection.baseUrl.toLowerCase();
+
+  if (provider.includes("gemini") || baseUrl.includes("generativelanguage.googleapis.com")) {
+    return "gemini";
+  }
+
+  if (provider.includes("claude") || provider.includes("anthropic") || baseUrl.includes("anthropic.com")) {
+    return "claude";
+  }
+
+  if (provider === "mock") {
+    return "mock";
+  }
+
+  return "openai";
 }
 
 async function readProviderResponse(response: Response): Promise<ProviderRequestResult> {

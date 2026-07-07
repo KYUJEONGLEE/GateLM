@@ -95,7 +95,8 @@ describe('ProviderConnectionsService', () => {
   it('returns credential preview without exposing secretRef', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.upsert.mockResolvedValue({
+    prisma.providerConnection.findUnique.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
       id: '00000000-0000-4000-8000-000000000900',
       tenantId,
       projectId,
@@ -136,7 +137,8 @@ describe('ProviderConnectionsService', () => {
     const providerId = '00000000-0000-4000-8000-000000000919';
     const credentialRefId = `provider_credential:${providerId}`;
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.upsert.mockResolvedValue({
+    prisma.providerConnection.findUnique.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue({
       id: providerId,
       tenantId,
       projectId,
@@ -179,7 +181,7 @@ describe('ProviderConnectionsService', () => {
       resolver: 'environment',
     });
     const providerConnectionPayload = JSON.stringify([
-      prisma.providerConnection.upsert.mock.calls,
+      prisma.providerConnection.create.mock.calls,
       prisma.providerConnection.update.mock.calls,
     ]);
     const credentialStorePayload = JSON.stringify(
@@ -288,27 +290,23 @@ describe('ProviderConnectionsService', () => {
     });
   });
 
-  it('promotes an existing project-scoped provider when registering it as tenant-level provider', async () => {
+  it('updates an existing tenant-level provider when registering it again', async () => {
     const { service, prisma } = createService();
     const providerId = '00000000-0000-4000-8000-000000000924';
-    const projectScopedProvider = providerConnection(providerId, {
+    const tenantProvider = providerConnection(providerId, {
       baseUrl: 'https://api.openai.com/v1',
       credentialLast4: '0000',
       credentialPrefix: 'env_ref_',
       displayName: 'OpenAI Main',
-      projectId,
+      projectId: null,
       provider: 'openai-main',
       resolver: 'environment',
       secretRef: `provider_credential:${providerId}`,
       providerConfig: { adapterType: 'openai_compatible' },
     });
-    const promotedProvider = {
-      ...projectScopedProvider,
-      projectId: null,
-    };
     prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
-    prisma.providerConnection.findFirst.mockResolvedValue(projectScopedProvider);
-    prisma.providerConnection.update.mockResolvedValue(promotedProvider);
+    prisma.providerConnection.findFirst.mockResolvedValue(tenantProvider);
+    prisma.providerConnection.update.mockResolvedValue(tenantProvider);
 
     const result = await service.upsertTenantProvider(tenantId, {
       provider: 'openai-main',
@@ -327,6 +325,7 @@ describe('ProviderConnectionsService', () => {
       where: {
         tenantId,
         provider: 'openai-main',
+        projectId: null,
       },
     });
     expect(prisma.providerConnection.create).not.toHaveBeenCalled();
@@ -343,6 +342,58 @@ describe('ProviderConnectionsService', () => {
       id: providerId,
       projectId: null,
       provider: 'openai-main',
+    });
+  });
+
+  it('renames an existing tenant-level provider connection without recreating it', async () => {
+    const { service, prisma } = createService();
+    const providerId = '00000000-0000-4000-8000-000000000925';
+    const existingProvider = providerConnection(providerId, {
+      baseUrl: 'https://api.openai.com/v1',
+      displayName: 'OpenAI Main',
+      projectId: null,
+      provider: 'openai-main',
+      providerConfig: {
+        adapterType: 'openai_compatible',
+        providerFamily: 'openai',
+      },
+    });
+    const renamedProvider = {
+      ...existingProvider,
+      displayName: 'OpenAI Backup',
+      provider: 'openai-backup',
+    };
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.providerConnection.findFirst
+      .mockResolvedValueOnce(existingProvider)
+      .mockResolvedValueOnce(null);
+    prisma.providerConnection.update.mockResolvedValue(renamedProvider);
+
+    const result = await service.upsertTenantProvider(tenantId, {
+      provider: 'openai-backup',
+      previousProvider: 'openai-main',
+      displayName: 'OpenAI Backup',
+      baseUrl: 'https://api.openai.com/v1',
+      providerConfig: {
+        adapterType: 'openai_compatible',
+        providerFamily: 'openai',
+      },
+    });
+
+    expect(prisma.providerConnection.create).not.toHaveBeenCalled();
+    expect(prisma.providerConnection.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: providerId },
+        data: expect.objectContaining({
+          displayName: 'OpenAI Backup',
+          provider: 'openai-backup',
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      id: providerId,
+      provider: 'openai-backup',
+      displayName: 'OpenAI Backup',
     });
   });
 
@@ -1298,7 +1349,8 @@ describe('ProviderConnectionsService', () => {
   it('maps explicit null providerConfig to Prisma DbNull', async () => {
     const { service, prisma } = createService();
     prisma.project.findUnique.mockResolvedValue({ id: projectId, tenantId });
-    prisma.providerConnection.upsert.mockResolvedValue(
+    prisma.providerConnection.findUnique.mockResolvedValue(null);
+    prisma.providerConnection.create.mockResolvedValue(
       providerConnection('00000000-0000-4000-8000-000000000904'),
     );
 
@@ -1309,12 +1361,9 @@ describe('ProviderConnectionsService', () => {
       providerConfig: null,
     });
 
-    expect(prisma.providerConnection.upsert).toHaveBeenCalledWith(
+    expect(prisma.providerConnection.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
-          providerConfig: Prisma.DbNull,
-        }),
-        update: expect.objectContaining({
+        data: expect.objectContaining({
           providerConfig: Prisma.DbNull,
         }),
       }),
