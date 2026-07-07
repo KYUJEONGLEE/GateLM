@@ -19,7 +19,6 @@ import {
 const DEFAULT_TENANT_BUDGET_USD = 1000;
 const DEFAULT_PROJECT_BUDGET_USD = 100;
 const DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT = 100;
-const DRAFT_RESOURCE_STATUS = 'DRAFT' as ResourceStatus;
 
 type RuntimeApplicationProjection = Pick<
   Application,

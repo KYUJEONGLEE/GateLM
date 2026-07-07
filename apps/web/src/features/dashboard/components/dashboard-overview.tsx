@@ -1729,16 +1729,16 @@ function getBudgetScopeShareRows(overview: DashboardOverview) {
         }
       ];
   const sortedRows = [...sourceRows]
-    .filter((row) => row.estimatedCostMicroUsd > 0 || row.requestCount > 0)
+    .filter((row) => row.estimatedCostMicroUsd > 0)
     .sort((left, right) => right.estimatedCostMicroUsd - left.estimatedCostMicroUsd);
   const topRows = sortedRows.slice(0, 4).map((row, index) => ({
     color: chartColors[index] ?? chartColors[0],
     label: formatBudgetScopeDisplayName(row),
-    value: row.estimatedCostMicroUsd || row.requestCount
+    value: row.estimatedCostMicroUsd
   }));
   const otherValue = sortedRows
     .slice(4)
-    .reduce((sum, row) => sum + (row.estimatedCostMicroUsd || row.requestCount), 0);
+    .reduce((sum, row) => sum + row.estimatedCostMicroUsd, 0);
 
   if (otherValue > 0) {
     topRows.push({
