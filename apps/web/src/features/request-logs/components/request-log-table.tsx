@@ -1,4 +1,16 @@
-import { Building2, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CircleMinus,
+  Coins,
+  Database,
+  RotateCw,
+  Search
+} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
@@ -87,10 +99,35 @@ const requestLogText: Record<
     previousPage: string;
     providerLabel: string;
     rangeEndLabel: string;
+    refreshLabel: string;
     searchLabel: string;
     searchPlaceholder: string;
     statusLabel: string;
+    summary: {
+      blocked: string;
+      countUnit: string;
+      failed: string;
+      successful: string;
+      totalCost: string;
+      totalRequests: string;
+    };
     submitLabel: string;
+    table: {
+      actions: string;
+      cacheBypass: string;
+      cacheHit: string;
+      cacheMiss: string;
+      cacheUnknown: string;
+      cost: string;
+      empty: string;
+      latency: string;
+      model: string;
+      requestId: string;
+      status: string;
+      time: string;
+      tokens: string;
+      unavailable: string;
+    };
     title: string;
   }
 > = {
@@ -123,10 +160,35 @@ const requestLogText: Record<
     previousPage: "Previous",
     providerLabel: "Provider",
     rangeEndLabel: "End of logs in this range",
+    refreshLabel: "Refresh",
     searchLabel: "Search logs",
     searchPlaceholder: "Search by requestId",
     statusLabel: "Status",
+    summary: {
+      blocked: "Blocked",
+      countUnit: "requests",
+      failed: "Failed",
+      successful: "Success",
+      totalCost: "Total cost",
+      totalRequests: "Total requests"
+    },
     submitLabel: "Search",
+    table: {
+      actions: "Open detail",
+      cacheBypass: "Bypass",
+      cacheHit: "Hit",
+      cacheMiss: "Miss",
+      cacheUnknown: "-",
+      cost: "Cost",
+      empty: "No Gateway request logs found for the current range.",
+      latency: "Latency",
+      model: "Model",
+      requestId: "Request ID",
+      status: "Status",
+      time: "Time",
+      tokens: "Tokens",
+      unavailable: "Live Gateway request logs are not available right now."
+    },
     title: "Live Logs"
   },
   ko: {
@@ -158,10 +220,35 @@ const requestLogText: Record<
     previousPage: "이전",
     providerLabel: "Provider",
     rangeEndLabel: "현재 범위의 마지막 로그",
+    refreshLabel: "새로고침",
     searchLabel: "로그 검색",
     searchPlaceholder: "requestId 검색",
     statusLabel: "상태",
+    summary: {
+      blocked: "차단",
+      countUnit: "건",
+      failed: "실패",
+      successful: "성공",
+      totalCost: "총 비용",
+      totalRequests: "전체 요청"
+    },
     submitLabel: "검색",
+    table: {
+      actions: "상세 보기",
+      cacheBypass: "Bypass",
+      cacheHit: "Hit",
+      cacheMiss: "Miss",
+      cacheUnknown: "-",
+      cost: "비용",
+      empty: "현재 범위에 Gateway 요청 로그가 없습니다.",
+      latency: "지연 시간",
+      model: "모델",
+      requestId: "요청 ID",
+      status: "상태",
+      time: "시간",
+      tokens: "토큰",
+      unavailable: "현재 Gateway 요청 로그를 불러올 수 없습니다."
+    },
     title: "실시간 로그"
   }
 };
@@ -193,19 +280,46 @@ export function RequestLogTable({
     .replace("{start}", String(displayStart))
     .replace("{end}", String(displayEnd))
     .replace("{total}", String(totalRecords));
+  const summaryItems = buildRequestLogSummaryItems(records, text.summary);
+  const refreshHref = requestLogPageHref(tenantId, filters, currentPage);
+  const headerDate = formatHeaderDate(records);
 
   return (
-    <main className="console-content">
-      <section className="dashboard-hero">
+    <main className="console-content request-log-screen">
+      <section className="request-log-hero">
         <div>
           <p className="console-kicker">{text.kicker}</p>
           <h2>{text.title}</h2>
+        </div>
+        <div className="request-log-hero-actions" aria-label="Live log controls">
+          <span className="request-log-hero-control">
+            <CalendarDays aria-hidden="true" size={16} strokeWidth={2.2} />
+            {headerDate}
+          </span>
+          <span className="request-log-hero-control">{text.createdOptions[filters.created]}</span>
+          <Link className="request-log-refresh-link" href={refreshHref}>
+            <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
+            {text.refreshLabel}
+          </Link>
         </div>
       </section>
 
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={detailPanel ? "open" : "closed"}>
           <div className="console-panel request-log-list-panel">
+            <section className="request-log-summary-strip" aria-label="Request log summary">
+              {summaryItems.map((item) => (
+                <article className="request-log-summary-item" data-tone={item.tone} key={item.label}>
+                  <span className="request-log-summary-icon">{item.icon}</span>
+                  <div>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    {item.detail ? <em>{item.detail}</em> : null}
+                  </div>
+                </article>
+              ))}
+            </section>
+
             <form action={`/tenants/${tenantId}/request-logs`} className="request-log-search-panel">
               <input name="page" type="hidden" value="1" />
               <div className="request-log-search-shell">
@@ -322,54 +436,69 @@ export function RequestLogTable({
               <table className="data-table request-table">
                 <thead>
                   <tr>
-                    <th>Request</th>
-                    <th>Status</th>
-                    <th>Model</th>
-                    <th>Safety</th>
-                    <th>Cache</th>
-                    <th>Latency</th>
-                    <th>Tokens</th>
-                    <th>Created</th>
+                    <th>{text.table.time}</th>
+                    <th>{text.table.requestId}</th>
+                    <th>{text.table.model}</th>
+                    <th>{text.table.status}</th>
+                    <th>{text.table.cacheHit}</th>
+                    <th>{text.table.latency}</th>
+                    <th>{text.table.tokens}</th>
+                    <th>{text.table.cost}</th>
+                    <th aria-label={text.table.actions} />
                   </tr>
                 </thead>
                 <tbody>
                   {sourceState === "unavailable" ? (
                     <tr>
-                      <td colSpan={8}>Live Gateway request logs are not available right now.</td>
+                      <td colSpan={9}>{text.table.unavailable}</td>
                     </tr>
                   ) : null}
                   {sourceState === "ready" && records.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>No Gateway request logs found for the current range.</td>
+                      <td colSpan={9}>{text.table.empty}</td>
                     </tr>
                   ) : null}
                   {pageRecords.map((record) => {
                     const isSelected = selectedRequestId === record.requestId;
+                    const detailHref = requestLogDetailHref(tenantId, record.requestId, filters);
+                    const displayRequestId = formatDisplayIdentifier(record.requestId);
 
                     return (
                       <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
+                        <td className="request-log-time-cell">
+                          {formatDateTime(record.createdAt, timezone)}
+                        </td>
                         <td>
                           <Link
                             className="request-link"
                             data-request-log-anchor
-                            href={requestLogDetailHref(tenantId, record.requestId, filters)}
+                            href={detailHref}
                             scroll={false}
                           >
-                            {formatDisplayIdentifier(record.requestId)}
+                            {displayRequestId}
                           </Link>
-                          <span>{nullableText(record.redactedPromptPreview, text.emptyPreview)}</span>
                         </td>
+                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
                         <td>
                           <StatusBadge status={record.status} />
                         </td>
-                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
-                        <td>{record.domainOutcomes?.safety?.outcome ?? record.maskingAction}</td>
                         <td>
-                          {record.cacheType}:{record.domainOutcomes?.cache?.outcome ?? record.cacheStatus}
+                          <CacheHitBadge record={record} text={text.table} />
                         </td>
                         <td>{formatLatency(record.latencyMs)}</td>
                         <td>{formatInteger(record.totalTokens)}</td>
-                        <td>{formatDateTime(record.createdAt, timezone)}</td>
+                        <td>{formatMicroUsd(record.costMicroUsd)}</td>
+                        <td className="request-log-action-cell">
+                          <Link
+                            aria-label={`${text.table.actions}: ${displayRequestId}`}
+                            className="request-log-action-link"
+                            data-request-log-anchor
+                            href={detailHref}
+                            scroll={false}
+                          >
+                            <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
+                          </Link>
+                        </td>
                       </tr>
                     );
                   })}
@@ -452,4 +581,161 @@ export function StatusBadge({ status }: { status: InvocationLogRecord["status"] 
       {status}
     </span>
   );
+}
+
+function CacheHitBadge({
+  record,
+  text
+}: {
+  record: InvocationLogRecord;
+  text: (typeof requestLogText)[Locale]["table"];
+}) {
+  const cache = getCacheHitDisplay(record, text);
+  const Icon = cache.tone === "hit" ? CheckCircle2 : cache.tone === "miss" ? CircleMinus : Database;
+
+  return (
+    <span className="request-log-cache-badge" data-cache-tone={cache.tone}>
+      <Icon aria-hidden="true" size={16} strokeWidth={2.4} />
+      {cache.label}
+    </span>
+  );
+}
+
+function getCacheHitDisplay(
+  record: InvocationLogRecord,
+  text: (typeof requestLogText)[Locale]["table"]
+) {
+  const cacheSignal = `${record.cacheStatus} ${record.domainOutcomes?.cache?.outcome ?? ""}`.toLowerCase();
+
+  if (cacheSignal.includes("hit")) {
+    return {
+      label: text.cacheHit,
+      tone: "hit"
+    } as const;
+  }
+
+  if (cacheSignal.includes("miss")) {
+    return {
+      label: text.cacheMiss,
+      tone: "miss"
+    } as const;
+  }
+
+  if (cacheSignal.includes("bypass")) {
+    return {
+      label: text.cacheBypass,
+      tone: "bypass"
+    } as const;
+  }
+
+  return {
+    label: text.cacheUnknown,
+    tone: "unknown"
+  } as const;
+}
+
+function buildRequestLogSummaryItems(
+  records: InvocationLogRecord[],
+  text: (typeof requestLogText)[Locale]["summary"]
+) {
+  const summary = records.reduce(
+    (accumulator, record) => {
+      accumulator.totalRequests += 1;
+      accumulator.totalCostMicroUsd += record.costMicroUsd;
+
+      if (record.status === "success") {
+        accumulator.successfulRequests += 1;
+      } else if (record.status === "blocked" || record.status === "rate_limited") {
+        accumulator.blockedRequests += 1;
+      } else if (record.status === "failed" || record.status === "cancelled") {
+        accumulator.failedRequests += 1;
+      }
+
+      return accumulator;
+    },
+    {
+      blockedRequests: 0,
+      failedRequests: 0,
+      successfulRequests: 0,
+      totalCostMicroUsd: 0,
+      totalRequests: 0
+    }
+  );
+  const successRate = safeRatio(summary.successfulRequests, summary.totalRequests);
+  const blockedRate = safeRatio(summary.blockedRequests, summary.totalRequests);
+  const failedRate = safeRatio(summary.failedRequests, summary.totalRequests);
+
+  return [
+    {
+      detail: text.countUnit,
+      icon: <CheckCircle2 aria-hidden="true" size={20} strokeWidth={2.3} />,
+      label: text.totalRequests,
+      tone: "total",
+      value: formatInteger(summary.totalRequests)
+    },
+    {
+      detail: `${text.countUnit} (${formatPercent(successRate)})`,
+      icon: <CheckCircle2 aria-hidden="true" size={20} strokeWidth={2.3} />,
+      label: text.successful,
+      tone: "success",
+      value: formatInteger(summary.successfulRequests)
+    },
+    {
+      detail: `${text.countUnit} (${formatPercent(blockedRate)})`,
+      icon: <AlertTriangle aria-hidden="true" size={20} strokeWidth={2.3} />,
+      label: text.blocked,
+      tone: "blocked",
+      value: formatInteger(summary.blockedRequests)
+    },
+    {
+      detail: `${text.countUnit} (${formatPercent(failedRate)})`,
+      icon: <Database aria-hidden="true" size={20} strokeWidth={2.3} />,
+      label: text.failed,
+      tone: "failed",
+      value: formatInteger(summary.failedRequests)
+    },
+    {
+      detail: "",
+      icon: <Coins aria-hidden="true" size={20} strokeWidth={2.3} />,
+      label: text.totalCost,
+      tone: "cost",
+      value: formatMicroUsd(summary.totalCostMicroUsd)
+    }
+  ];
+}
+
+function safeRatio(numerator: number, denominator: number) {
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+function formatPercent(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+    style: "percent"
+  }).format(value);
+}
+
+function formatMicroUsd(value: number) {
+  const dollars = value / 1_000_000;
+
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
+    minimumFractionDigits: 2,
+    style: "currency"
+  }).format(dollars);
+}
+
+function formatHeaderDate(records: InvocationLogRecord[]) {
+  const latest = records[0]?.createdAt;
+  const date = latest ? new Date(latest) : new Date();
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

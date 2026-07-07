@@ -133,7 +133,6 @@ const navigationItems: Array<{
         path: (tenantId) => `/tenants/${tenantId}/analytics`
       },
       {
-        badge: "3",
         labels: {
           en: "Alerts",
           ko: "알림"
