@@ -7271,19 +7271,19 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 
 .request-log-screen {
   --request-log-bg: var(--background);
-  --request-log-surface: #ffffff;
-  --request-log-surface-strong: #f3f7fa;
+  --request-log-surface: var(--surface);
+  --request-log-surface-strong: var(--surface-subtle);
   --request-log-border: rgba(15, 23, 42, 0.1);
   --request-log-border-strong: rgba(15, 23, 42, 0.16);
   --request-log-text: var(--foreground);
   --request-log-muted: var(--text-muted);
   --request-log-link: var(--brand-blue);
   --request-log-accent: var(--brand-blue-strong);
-  --request-log-hero-bg: linear-gradient(180deg, #ffffff, #f5f8fb);
+  --request-log-hero-bg: var(--surface);
   --request-log-control-bg: color-mix(in srgb, var(--request-log-surface) 92%, var(--request-log-accent) 8%);
-  --request-log-panel-bg: linear-gradient(180deg, #ffffff, #f8fafc);
+  --request-log-panel-bg: var(--surface);
   --request-log-panel-shadow: none;
-  --request-log-summary-bg: linear-gradient(180deg, #ffffff, #f5f8fb);
+  --request-log-summary-bg: var(--surface);
   --request-log-input-bg: #ffffff;
   --request-log-table-bg: #ffffff;
   --request-log-row-hover-bg: #f1f6f9;
@@ -7335,19 +7335,19 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 
 html[data-theme="dark"] .request-log-screen {
   --request-log-bg: var(--background);
-  --request-log-surface: #121a25;
-  --request-log-surface-strong: #172433;
+  --request-log-surface: var(--surface);
+  --request-log-surface-strong: var(--surface-subtle);
   --request-log-border: rgba(148, 163, 184, 0.18);
   --request-log-border-strong: rgba(148, 163, 184, 0.28);
   --request-log-text: #ecf4ff;
   --request-log-muted: #9fb0c5;
   --request-log-link: #00b894;
   --request-log-accent: #00b894;
-  --request-log-hero-bg: linear-gradient(180deg, rgba(17, 29, 42, 0.92), rgba(13, 20, 30, 0.92));
+  --request-log-hero-bg: var(--surface);
   --request-log-control-bg: rgba(15, 23, 35, 0.84);
-  --request-log-panel-bg: linear-gradient(180deg, #111923, var(--request-log-bg));
+  --request-log-panel-bg: var(--surface);
   --request-log-panel-shadow: none;
-  --request-log-summary-bg: linear-gradient(180deg, rgba(27, 43, 61, 0.92), rgba(19, 31, 45, 0.92));
+  --request-log-summary-bg: var(--surface);
   --request-log-input-bg: rgba(15, 23, 35, 0.84);
   --request-log-table-bg: rgba(17, 29, 42, 0.72);
   --request-log-row-hover-bg: rgba(30, 46, 64, 0.64);

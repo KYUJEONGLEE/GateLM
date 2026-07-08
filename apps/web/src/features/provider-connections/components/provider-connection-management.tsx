@@ -568,6 +568,7 @@ export function ProviderConnectionManagement({
     const providerModels = getProviderConfigModels(provider.providerConfig).filter(
       isChatCompletionModelName
     );
+    const nextFormValues = getProviderFormValues(provider);
 
     setModelOptionsByProvider((current) => ({
       ...current,
@@ -578,8 +579,18 @@ export function ProviderConnectionManagement({
     setProviderModal(null);
     setExpandedProviderId(provider.id);
     setEditingProviderId(provider.id);
-    setFormValues(getProviderFormValues(provider));
+    setFormValues(nextFormValues);
     setSubmitState({ message: "", status: "idle" });
+
+    if (
+      discoveringProvider === null &&
+      !discoveryByProvider[provider.provider] &&
+      isDiscoverSupportedProvider(nextFormValues.adapterType)
+    ) {
+      void discoverModels(provider.provider, {
+        applyToForm: true
+      });
+    }
   }
 
   function openCredentialModal(provider: ProviderConnectionRecord) {
@@ -657,6 +668,7 @@ export function ProviderConnectionManagement({
 
   function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
     const activeProviderFamily = getProviderFamilyFromKey(activeDiscoveryKey, formValues.baseUrl);
+    const activeProviderIsDiscovering = discoveringProvider === activeDiscoveryKey;
     const activeDiscoveryModelList = activeDiscovery
       ? getModelDisplayList(
           activeDiscovery.chatModels,
@@ -674,6 +686,10 @@ export function ProviderConnectionManagement({
                 ? locale === "ko"
                   ? `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length}개 선택`
                   : `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length} selected`
+                : activeProviderIsDiscovering
+                  ? locale === "ko"
+                    ? "모델 조회 중"
+                    : "Discovering models"
                 : locale === "ko"
                   ? "모델 목록"
                   : "Model list"}
@@ -839,6 +855,8 @@ export function ProviderConnectionManagement({
                 )}
               </div>
             </>
+          ) : activeProviderIsDiscovering ? (
+            renderProviderModelDiscoveryLoading()
           ) : (
             renderProviderModels(provider)
           )}
@@ -888,6 +906,46 @@ export function ProviderConnectionManagement({
           <Button disabled={pendingAction} onClick={() => void submitProvider()} type="button">
             {text.saveChanges}
           </Button>
+        </div>
+      </>
+    );
+  }
+
+  function renderProviderModelDiscoveryLoading() {
+    return (
+      <>
+        <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar provider-card-model-discovery-note">
+          <span className="project-muted">
+            {locale === "ko"
+              ? "Provider에서 사용 가능한 chat 모델을 불러오는 중입니다."
+              : "Loading available chat models from the provider."}
+          </span>
+        </div>
+        <div className="provider-discovery-model-list provider-model-selection-table">
+          <div className="provider-model-table-wrap provider-model-selection-table-wrap">
+            <table className="provider-model-table">
+              <thead>
+                <tr>
+                  <th>{locale === "ko" ? "모델" : "Model"}</th>
+                  <th>{locale === "ko" ? "기능" : "Capabilities"}</th>
+                  <th>{locale === "ko" ? "컨텍스트" : "Context"}</th>
+                  <th>{locale === "ko" ? "추천" : "Recommended"}</th>
+                  <th>{locale === "ko" ? "출시날짜" : "Release date"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5}>
+                    <span className="project-muted">
+                      {locale === "ko"
+                        ? "모델 조회 결과를 준비 중입니다."
+                        : "Preparing model discovery results."}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </>
     );
