@@ -508,9 +508,11 @@ export function ConsoleShell({
                 return (
                   <div className="console-nav-group" key={item.section}>
                     <div
+                      aria-level={3}
                       className="console-nav-link"
                       data-open="true"
                       data-static="true"
+                      role="heading"
                     >
                       <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                       <span>{label}</span>

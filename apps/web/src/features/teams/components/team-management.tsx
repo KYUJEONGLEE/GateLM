@@ -517,6 +517,7 @@ export function TeamCreateModal({
               autoFocus
               maxLength={120}
               onChange={(event) => onChange({ name: event.target.value })}
+              required
               type="text"
               value={createValues.name}
             />

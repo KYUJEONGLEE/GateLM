@@ -954,6 +954,7 @@ function OnboardingTeamPicker({
         ) : null}
         <button
           aria-expanded={isTeamDropdownOpen}
+          aria-required="true"
           className="onboarding-team-toggle"
           onClick={() => setIsTeamDropdownOpen((current) => !current)}
           type="button"
