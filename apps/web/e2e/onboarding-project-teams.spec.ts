@@ -372,10 +372,16 @@ test("create project can select existing teams and create a team inline before a
     name: /Provider selectable models|Provider 모델 선택/
   });
   await expect(providerModelPanel).toBeVisible();
-  await expect(providerModelPanel.getByRole("checkbox", { name: "gpt-4o", exact: true })).toBeVisible();
-  await expect(providerModelPanel.getByRole("checkbox", { name: "gpt-4o-mini", exact: true })).toBeVisible();
+  const defaultProviderModelCheckboxes = [
+    providerModelPanel.getByRole("checkbox", { name: "chat-latest", exact: true }),
+    providerModelPanel.getByRole("checkbox", { name: "gpt-4o", exact: true }),
+    providerModelPanel.getByRole("checkbox", { name: "gpt-4o-mini", exact: true })
+  ];
+  for (const checkbox of defaultProviderModelCheckboxes) {
+    await expect(checkbox).toBeVisible();
+    await expect(checkbox).toBeChecked();
+  }
   await expect(providerModelPanel.getByText("text-embedding-3-small")).toHaveCount(0);
-  await providerModelPanel.getByRole("checkbox", { name: "gpt-4o", exact: true }).check();
   await providerModelPanel.getByRole("button", { name: /Save selected models|선택 모델 저장/ }).click();
   await expect(page.getByText(/Selected provider models saved|선택 모델을 저장했습니다/)).toBeVisible();
 
@@ -440,6 +446,11 @@ test("create project can select existing teams and create a team inline before a
   expect(savedProviderValues).toMatchObject({
     provider: "openai"
   });
+  expect(
+    String(savedProviderValues.models)
+      .split(",")
+      .map((model) => model.trim())
+  ).toEqual(expect.arrayContaining(["chat-latest", "gpt-4o", "gpt-4o-mini"]));
   expect(
     String(savedProviderValues.models)
       .split(",")

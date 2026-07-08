@@ -1,7 +1,7 @@
 "use client";
 
 import { Save, UploadCloud } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
@@ -32,9 +32,12 @@ import type { Locale } from "@/lib/i18n/locale";
 type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
   breadcrumbItems?: BreadcrumbItem[];
+  children?: ReactNode;
+  generalFooter?: ReactNode;
   hideStreamingTab?: boolean;
   locale: Locale;
   model: RuntimePolicyModel;
+  moveBudgetToGeneral?: boolean;
 };
 
 type RuntimePolicyApiKeyReadiness = {
@@ -61,6 +64,7 @@ type OneTimeApiKeyState = {
 };
 
 type PolicySection =
+  | "general"
   | "safety"
   | "routing"
   | "budget"
@@ -80,6 +84,7 @@ type RoutingPriorityRoute = "default" | "fallback" | "lowCost";
 type PolicySectionLabelText = {
   budgetTab: string;
   cacheTab: string;
+  general: string;
   rateLimitTab: string;
   routing: string;
   safetyTab: string;
@@ -105,6 +110,8 @@ function getPolicyPanelId(section: PolicySection) {
 
 function getPolicySectionLabel(section: PolicySection, text: PolicySectionLabelText) {
   switch (section) {
+    case "general":
+      return text.general;
     case "safety":
       return text.safetyTab;
     case "routing":
@@ -327,7 +334,7 @@ const policyText: Record<
     enabled: "사용",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
-    general: "General",
+    general: "일반",
     jsonMode: "JSON",
     limit: "한도",
     lowCostRoute: "Low-cost route",
@@ -397,12 +404,17 @@ const policyText: Record<
 export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
+  children,
+  generalFooter,
   hideStreamingTab = false,
   locale,
-  model
+  model,
+  moveBudgetToGeneral = false
 }: RuntimePolicyEditorProps) {
   const router = useRouter();
   const text = policyText[locale];
+  const hasGeneralSection = Boolean(children || generalFooter);
+  const shouldMoveBudgetToGeneral = moveBudgetToGeneral && hasGeneralSection;
   const [activeApiKeyCount, setActiveApiKeyCount] = useState(
     apiKeyReadiness?.activeApiKeyCount ?? 1
   );
@@ -416,19 +428,37 @@ export function RuntimePolicyEditor({
     message: "",
     status: "idle"
   });
-  const [activePolicySection, setActivePolicySection] = useState<PolicySection>("routing");
+  const [activePolicySection, setActivePolicySection] = useState<PolicySection>(
+    hasGeneralSection ? "general" : "routing"
+  );
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   const visiblePolicySections = useMemo(
-    () =>
-      hideStreamingTab
-        ? policySections.filter((section) => section !== "streaming")
-        : policySections,
-    [hideStreamingTab]
+    () => {
+      const policySectionsForContext = shouldMoveBudgetToGeneral
+        ? policySections.filter((section) => section !== "budget")
+        : policySections;
+      const sections: PolicySection[] = hasGeneralSection
+        ? ["general", ...policySectionsForContext]
+        : [...policySectionsForContext];
+
+      return hideStreamingTab
+        ? sections.filter((section) => section !== "streaming")
+        : sections;
+    },
+    [hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
   );
+  useEffect(() => {
+    if (!hasGeneralSection && activePolicySection === "general") {
+      setActivePolicySection("routing");
+    }
+    if (shouldMoveBudgetToGeneral && activePolicySection === "budget") {
+      setActivePolicySection(hasGeneralSection ? "general" : "routing");
+    }
+  }, [activePolicySection, hasGeneralSection, shouldMoveBudgetToGeneral]);
   useEffect(() => {
     setDraftValues(
       getWritableRuntimePolicyDraftValues(
@@ -530,6 +560,69 @@ export function RuntimePolicyEditor({
       };
     });
   }
+
+  const budgetPolicyPanel = (
+    <article
+      className={
+        shouldMoveBudgetToGeneral
+          ? "console-panel policy-editor-panel project-policy-budget-panel"
+          : "console-panel policy-editor-panel"
+      }
+    >
+      <div className="panel-heading">
+        <h3>{text.budget}</h3>
+      </div>
+      <label className="policy-toggle-row">
+        <Switch
+          checked={draftValues.budgetEnabled}
+          onCheckedChange={(checked) =>
+            setDraftValues((current) => ({
+              ...current,
+              budgetEnabled: checked,
+              budgetEnforcementMode: checked
+                ? current.budgetEnforcementMode === "disabled"
+                  ? "warn"
+                  : current.budgetEnforcementMode
+                : "disabled"
+            }))
+          }
+        />
+        <span>{text.enabled}</span>
+      </label>
+      <label className="policy-field">
+        <span>{text.budgetEnforcement}</span>
+        <select
+          disabled={!draftValues.budgetEnabled}
+          onChange={(event) =>
+            setDraftValues((current) => ({
+              ...current,
+              budgetEnforcementMode:
+                event.target.value === "block" || event.target.value === "warn"
+                  ? event.target.value
+                  : "disabled"
+            }))
+          }
+          value={draftValues.budgetEnforcementMode}
+        >
+          <option value="warn">warn</option>
+          <option value="block">block</option>
+          <option value="disabled">disabled</option>
+        </select>
+      </label>
+      <PolicyNumberField
+        label={text.budgetWarning}
+        max={100}
+        min={0}
+        onChange={(value) =>
+          setDraftValues((current) => ({
+            ...current,
+            budgetWarningThresholdPercent: value
+          }))
+        }
+        value={draftValues.budgetWarningThresholdPercent}
+      />
+    </article>
+  );
 
   async function submitPolicy(action: "save-draft" | "publish") {
     if (!hasActiveApiKey) {
@@ -817,7 +910,26 @@ export function RuntimePolicyEditor({
         })}
       </div>
 
-      <section className="policy-layout policy-settings-list">
+      {hasGeneralSection ? (
+        <section className="policy-general-layout" hidden={activePolicySection !== "general"}>
+          <div
+            aria-labelledby={getPolicyTabId("general")}
+            className="policy-tab-panel"
+            id={getPolicyPanelId("general")}
+            role="tabpanel"
+            tabIndex={0}
+          >
+            {children}
+            {shouldMoveBudgetToGeneral ? budgetPolicyPanel : null}
+            {generalFooter}
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        className="policy-layout policy-settings-list"
+        hidden={activePolicySection === "general"}
+      >
         <div
           aria-labelledby={getPolicyTabId("safety")}
           className="policy-tab-panel"
@@ -969,69 +1081,18 @@ export function RuntimePolicyEditor({
           </article>
         </div>
 
-        <div
-          aria-labelledby={getPolicyTabId("budget")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "budget"}
-          id={getPolicyPanelId("budget")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.budget}</h3>
-            </div>
-            <label className="policy-toggle-row">
-              <Switch
-                checked={draftValues.budgetEnabled}
-                onCheckedChange={(checked) =>
-                  setDraftValues((current) => ({
-                    ...current,
-                    budgetEnabled: checked,
-                    budgetEnforcementMode: checked
-                      ? current.budgetEnforcementMode === "disabled"
-                        ? "warn"
-                        : current.budgetEnforcementMode
-                      : "disabled"
-                  }))
-                }
-              />
-              <span>{text.enabled}</span>
-            </label>
-            <label className="policy-field">
-              <span>{text.budgetEnforcement}</span>
-              <select
-                disabled={!draftValues.budgetEnabled}
-                onChange={(event) =>
-                  setDraftValues((current) => ({
-                    ...current,
-                    budgetEnforcementMode:
-                      event.target.value === "block" || event.target.value === "warn"
-                        ? event.target.value
-                        : "disabled"
-                  }))
-                }
-                value={draftValues.budgetEnforcementMode}
-              >
-                <option value="warn">warn</option>
-                <option value="block">block</option>
-                <option value="disabled">disabled</option>
-              </select>
-            </label>
-            <PolicyNumberField
-              label={text.budgetWarning}
-              max={100}
-              min={0}
-              onChange={(value) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  budgetWarningThresholdPercent: value
-                }))
-              }
-              value={draftValues.budgetWarningThresholdPercent}
-            />
-          </article>
-        </div>
+        {!shouldMoveBudgetToGeneral ? (
+          <div
+            aria-labelledby={getPolicyTabId("budget")}
+            className="policy-tab-panel"
+            hidden={activePolicySection !== "budget"}
+            id={getPolicyPanelId("budget")}
+            role="tabpanel"
+            tabIndex={0}
+          >
+            {budgetPolicyPanel}
+          </div>
+        ) : null}
 
         <div
           aria-labelledby={getPolicyTabId("rateLimit")}

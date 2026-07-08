@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
 const policyPath = "/tenants/tenant_demo_acme/policies";
+const projectsPath = "/tenants/tenant_demo_acme/projects";
 const policyTabs = [
   "Routing",
   "Budget",
@@ -10,6 +11,13 @@ const policyTabs = [
   "Safety",
   "Streaming",
   "Provider/Model"
+] as const;
+const projectPolicyTabs = [
+  "General",
+  "Routing",
+  "Rate Limit",
+  "Cache",
+  "Safety"
 ] as const;
 const selectableDetectorTypes = [
   "email",
@@ -57,6 +65,46 @@ test("policy editor exposes category tabs and category panels", async ({ page })
     page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "Routing" })
   ).toBeHidden();
   await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
+});
+
+test("project policy editor opens with project general tab before routing", async ({ page }) => {
+  await prepareRuntimeConfigPostRoute(page);
+  await page.goto(projectsPath);
+  await page.getByTestId("project-card").first().getByRole("link", {
+    exact: true,
+    name: "Edit project"
+  }).click();
+
+  for (const tabName of projectPolicyTabs) {
+    await expect(page.getByRole("tab", { exact: true, name: tabName })).toBeVisible();
+  }
+  await expect(page.getByRole("tab")).toHaveText([...projectPolicyTabs]);
+  await expect(page.getByRole("tab", { exact: true, name: "General" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+
+  const generalPanel = page.getByRole("tabpanel", { exact: true, name: "General" });
+  await expect(generalPanel).toBeVisible();
+  await expect(generalPanel.getByLabel("Name", { exact: true })).toBeVisible();
+  await expect(generalPanel.getByText("Budget policy")).toBeVisible();
+  await expect(generalPanel.getByText("Project admins")).toBeVisible();
+  await expect(generalPanel.getByText("Project teams")).toBeVisible();
+  await expect(generalPanel.getByText("Gateway API Key")).toBeVisible();
+  await expect(page.getByRole("tab", { exact: true, name: "Budget" })).toHaveCount(0);
+
+  const generalHeadings = await generalPanel.locator("h3").evaluateAll((headings) =>
+    headings.map((heading) => heading.textContent?.trim() ?? "")
+  );
+  expect(generalHeadings.indexOf("Budget policy")).toBeLessThan(
+    generalHeadings.indexOf("Project admins")
+  );
+
+  await page.getByRole("tab", { exact: true, name: "Routing" }).click();
+  await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
+  await expect(
+    page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "General" })
+  ).toBeHidden();
 });
 
 test("safety detectors expose five editable categories and gray locked mandatory protection", async ({
