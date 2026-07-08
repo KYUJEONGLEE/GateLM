@@ -106,6 +106,7 @@ export interface ProjectResponseDto {
   status: ResourceStatus;
   totalBudgetUsd: number;
   runtimeApplicationId: string | null;
+  warningThresholdPercent: number;
   createdAt: string;
   updatedAt: string;
 }

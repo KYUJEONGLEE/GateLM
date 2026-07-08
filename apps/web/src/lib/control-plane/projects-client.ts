@@ -12,12 +12,10 @@ import {
   controlPlaneTenantReadCacheTag
 } from "@/lib/control-plane/read-cache";
 import {
-  getRuntimePolicyConfigForApplication,
   publishRuntimePolicyModelSelectionForApplication
 } from "@/lib/control-plane/runtime-policy-client";
 import { setApplicationProviderConnections } from "@/lib/control-plane/provider-connections-client";
 import type {
-  ProjectBudgetThresholdRecord,
   ProjectFormValues,
   ProjectRecord,
   ProjectsModel,
@@ -121,12 +119,6 @@ export async function listControlPlaneProjectsFresh(
       status: 0
     };
   }
-}
-
-export async function getProjectBudgetThresholds(
-  projects: ProjectRecord[]
-): Promise<ProjectBudgetThresholdRecord[]> {
-  return Promise.all(projects.map(getProjectBudgetThreshold));
 }
 
 export async function createProject(
@@ -258,32 +250,6 @@ export async function updateProject(
       error: "Control Plane unavailable.",
       ok: false,
       status: 0
-    };
-  }
-}
-
-async function getProjectBudgetThreshold(
-  project: ProjectRecord
-): Promise<ProjectBudgetThresholdRecord> {
-  if (!project.runtimeApplicationId) {
-    return {
-      projectId: project.id,
-      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
-    };
-  }
-
-  try {
-    const config = await getRuntimePolicyConfigForApplication(project.runtimeApplicationId);
-    const warningThresholdPercent = config?.budgetPolicy?.warningThresholdPercent;
-
-    return {
-      projectId: project.id,
-      warningThresholdPercent: normalizeWarningThresholdPercent(warningThresholdPercent)
-    };
-  } catch {
-    return {
-      projectId: project.id,
-      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
     };
   }
 }
@@ -427,7 +393,8 @@ function getFixtureProject(): ProjectRecord {
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
     totalBudgetUsd: 100,
-    updatedAt: timestamp
+    updatedAt: timestamp,
+    warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT
   };
 }
 
@@ -462,7 +429,8 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     status,
     tenantId: record.tenantId,
     totalBudgetUsd: normalizeNumber(record.totalBudgetUsd, 100),
-    updatedAt: record.updatedAt
+    updatedAt: record.updatedAt,
+    warningThresholdPercent: normalizeWarningThresholdPercent(record.warningThresholdPercent)
   };
 }
 

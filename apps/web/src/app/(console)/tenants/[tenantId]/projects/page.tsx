@@ -5,7 +5,7 @@ import {
   isTenantAdminForTenant,
   resolveConsoleTenantIdForAuth
 } from "@/lib/auth/current-console-auth";
-import { getProjectBudgetThresholds, getProjectsModel } from "@/lib/control-plane/projects-client";
+import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveMonthlyProjectCostReport } from "@/lib/gateway/live-cost-report";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -27,7 +27,10 @@ export default async function ProjectsPage({ params }: ProjectsPageProps) {
     getLiveMonthlyProjectCostReport(effectiveTenantId)
   ]);
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
-  const budgetThresholds = await getProjectBudgetThresholds(visibleProjects);
+  const budgetThresholds = visibleProjects.map((project) => ({
+    projectId: project.id,
+    warningThresholdPercent: project.warningThresholdPercent
+  }));
   const canCreateProject = isTenantAdminForTenant(auth, effectiveTenantId);
 
   return (
