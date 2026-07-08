@@ -713,36 +713,16 @@ export function ProviderConnectionManagement({
                   ? "모델 목록"
                   : "Model list"}
             </strong>
-            <div>
-              {activeDiscovery ? (
-                <>
-                  <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)} type="button">
-                    {locale === "ko" ? "전체 선택" : "Select all"}
-                  </button>
-                  <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)} type="button">
-                    {locale === "ko" ? "전체 해제" : "Clear"}
-                  </button>
-                </>
-              ) : null}
-              <Button
-                disabled={
-                  pendingAction ||
-                  discoveringProvider !== null ||
-                  !isDiscoverSupportedProvider(formValues.adapterType)
-                }
-                onClick={() =>
-                  void discoverModels(formValues.previousProvider || formValues.provider, {
-                    applyToForm: true
-                  })
-                }
-                type="button"
-                variant="outline"
-              >
-                {discoveringProvider === (formValues.previousProvider || formValues.provider)
-                  ? "..."
-                  : text.discoverModels}
-              </Button>
-            </div>
+            {activeDiscovery ? (
+              <div>
+                <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)} type="button">
+                  {locale === "ko" ? "전체 선택" : "Select all"}
+                </button>
+                <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)} type="button">
+                  {locale === "ko" ? "전체 해제" : "Clear"}
+                </button>
+              </div>
+            ) : null}
         </div>
           {activeDiscovery ? (
             <>

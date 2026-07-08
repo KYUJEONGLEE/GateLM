@@ -6611,6 +6611,7 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .provider-card-model-toolbar {
+  margin-top: 10px;
   padding: 0 2px;
 }
 
