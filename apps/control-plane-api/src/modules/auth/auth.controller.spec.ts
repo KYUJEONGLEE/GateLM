@@ -62,6 +62,7 @@ describe('Auth HTTP API', () => {
       const values: Record<string, string> = {
         AUTH_EMAIL_TRANSPORT: 'dev_memory',
         CONTROL_PLANE_AUTH_COOKIE_SECURE: 'false',
+        CONTROL_PLANE_AUTH_STATE_SECRET: 'test-control-plane-auth-state-secret',
         CONTROL_PLANE_WEB_ORIGIN: 'http://localhost:3000',
       };
       if (!options.omitDevAutoVerify) {

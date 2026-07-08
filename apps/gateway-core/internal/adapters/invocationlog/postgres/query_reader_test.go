@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -455,50 +456,65 @@ func TestQueryReaderGetAnalyticsPerformanceAggregatesSafeReadModel(t *testing.T)
 	to := from.Add(24 * time.Hour)
 	lastLogCreatedAt := from.Add(23 * time.Hour)
 	db := &fakeQueryer{
-		rowQueue: []fakeRow{{
-			values: []any{
-				int64(3),
-				sql.NullFloat64{Float64: 100, Valid: true},
-				sql.NullFloat64{Float64: 300, Valid: true},
-				sql.NullFloat64{Float64: 300, Valid: true},
-				sql.NullFloat64{Float64: 1.0 / 3.0, Valid: true},
-				sql.NullTime{Time: lastLogCreatedAt, Valid: true},
+		rowByQuery: []fakeQueryRow{{
+			contains: "total_requests",
+			row: fakeRow{
+				values: []any{
+					int64(3),
+					sql.NullFloat64{Float64: 100, Valid: true},
+					sql.NullFloat64{Float64: 300, Valid: true},
+					sql.NullFloat64{Float64: 300, Valid: true},
+					sql.NullFloat64{Float64: 1.0 / 3.0, Valid: true},
+					sql.NullTime{Time: lastLogCreatedAt, Valid: true},
+				},
 			},
 		}},
-		rowsQueue: []*fakeRows{
-			{values: [][]any{{
-				"OpenAI",
-				"gpt-4o-mini",
-				int64(2),
-				sql.NullFloat64{Float64: 100, Valid: true},
-				sql.NullFloat64{Float64: 300, Valid: true},
-				sql.NullFloat64{Float64: 300, Valid: true},
-				sql.NullFloat64{Float64: 0.5, Valid: true},
-				int64(1200000),
-				sql.NullFloat64{Float64: 0.25, Valid: true},
-			}}},
-			{values: [][]any{{
-				"OpenAI",
-				sql.NullFloat64{Float64: 300, Valid: true},
-				int64(2),
-			}}},
-			{values: [][]any{{
-				from,
-				int64(2),
-				sql.NullFloat64{Float64: 80, Valid: true},
-				sql.NullFloat64{Float64: 300, Valid: true},
-				sql.NullFloat64{Float64: 300, Valid: true},
-			}}},
-			{values: [][]any{{
-				"request_slow_001",
-				"project_demo",
-				"OpenAI",
-				"gpt-4o-mini",
-				int64(300),
-				500,
-				invocationlog.StatusFailed,
-				lastLogCreatedAt,
-			}}},
+		rowsByQuery: []fakeQueryRows{
+			{
+				contains: "total_cost_micro_usd",
+				rows: &fakeRows{values: [][]any{{
+					"OpenAI",
+					"gpt-4o-mini",
+					int64(2),
+					sql.NullFloat64{Float64: 100, Valid: true},
+					sql.NullFloat64{Float64: 300, Valid: true},
+					sql.NullFloat64{Float64: 300, Valid: true},
+					sql.NullFloat64{Float64: 0.5, Valid: true},
+					int64(1200000),
+					sql.NullFloat64{Float64: 0.25, Valid: true},
+				}}},
+			},
+			{
+				contains: "order by p95_latency_ms",
+				rows: &fakeRows{values: [][]any{{
+					"OpenAI",
+					sql.NullFloat64{Float64: 300, Valid: true},
+					int64(2),
+				}}},
+			},
+			{
+				contains: " as bucket",
+				rows: &fakeRows{values: [][]any{{
+					from,
+					int64(2),
+					sql.NullFloat64{Float64: 80, Valid: true},
+					sql.NullFloat64{Float64: 300, Valid: true},
+					sql.NullFloat64{Float64: 300, Valid: true},
+				}}},
+			},
+			{
+				contains: "order by latency_ms desc",
+				rows: &fakeRows{values: [][]any{{
+					"request_slow_001",
+					"project_demo",
+					"OpenAI",
+					"gpt-4o-mini",
+					int64(300),
+					500,
+					invocationlog.StatusFailed,
+					lastLogCreatedAt,
+				}}},
+			},
 		},
 	}
 
@@ -671,21 +687,24 @@ func TestQueryReaderGetAnalyticsPerformanceFillsExpectedLatencyBuckets(t *testin
 			to := time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)
 			from := to.Add(-tc.duration)
 			db := &fakeQueryer{
-				rowQueue: []fakeRow{{
-					values: []any{
-						int64(0),
-						sql.NullFloat64{},
-						sql.NullFloat64{},
-						sql.NullFloat64{},
-						sql.NullFloat64{},
-						sql.NullTime{},
+				rowByQuery: []fakeQueryRow{{
+					contains: "total_requests",
+					row: fakeRow{
+						values: []any{
+							int64(0),
+							sql.NullFloat64{},
+							sql.NullFloat64{},
+							sql.NullFloat64{},
+							sql.NullFloat64{},
+							sql.NullTime{},
+						},
 					},
 				}},
-				rowsQueue: []*fakeRows{
-					{},
-					{},
-					{},
-					{},
+				rowsByQuery: []fakeQueryRows{
+					{contains: "total_cost_micro_usd", rows: &fakeRows{}},
+					{contains: "order by p95_latency_ms", rows: &fakeRows{}},
+					{contains: " as bucket", rows: &fakeRows{}},
+					{contains: "order by latency_ms desc", rows: &fakeRows{}},
 				},
 			}
 
@@ -710,8 +729,8 @@ func TestQueryReaderGetAnalyticsPerformanceFillsExpectedLatencyBuckets(t *testin
 					t.Fatalf("expected empty latency bucket to keep null latency values, got %+v", bucket)
 				}
 			}
-			if !strings.Contains(db.queries[3], tc.expectedUnitSQL) {
-				t.Fatalf("expected latency bucket query to contain %q, got %s", tc.expectedUnitSQL, db.queries[3])
+			if !anyQueryContains(db.queries, tc.expectedUnitSQL) {
+				t.Fatalf("expected latency bucket query to contain %q, got queries %#v", tc.expectedUnitSQL, db.queries)
 			}
 		})
 	}
@@ -735,22 +754,52 @@ func floatEquals(a float64, b float64) bool {
 	return math.Abs(a-b) < 0.0000001
 }
 
+func anyQueryContains(queries []string, expected string) bool {
+	for _, query := range queries {
+		if strings.Contains(query, expected) {
+			return true
+		}
+	}
+	return false
+}
+
+type fakeQueryRows struct {
+	contains string
+	rows     *fakeRows
+}
+
+type fakeQueryRow struct {
+	contains string
+	row      fakeRow
+}
+
 type fakeQueryer struct {
-	query     string
-	args      []any
-	queries   []string
-	argsList  [][]any
-	rows      *fakeRows
-	rowsQueue []*fakeRows
-	row       fakeRow
-	rowQueue  []fakeRow
+	mu          sync.Mutex
+	query       string
+	args        []any
+	queries     []string
+	argsList    [][]any
+	rows        *fakeRows
+	rowsByQuery []fakeQueryRows
+	rowsQueue   []*fakeRows
+	row         fakeRow
+	rowByQuery  []fakeQueryRow
+	rowQueue    []fakeRow
 }
 
 func (q *fakeQueryer) Query(_ context.Context, query string, arguments ...any) (Rows, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	q.query = query
 	q.args = append([]any(nil), arguments...)
 	q.queries = append(q.queries, query)
 	q.argsList = append(q.argsList, append([]any(nil), arguments...))
+	for _, result := range q.rowsByQuery {
+		if strings.Contains(query, result.contains) {
+			return result.rows, nil
+		}
+	}
 	if len(q.rowsQueue) > 0 {
 		rows := q.rowsQueue[0]
 		q.rowsQueue = q.rowsQueue[1:]
@@ -763,10 +812,18 @@ func (q *fakeQueryer) Query(_ context.Context, query string, arguments ...any) (
 }
 
 func (q *fakeQueryer) QueryRow(_ context.Context, query string, arguments ...any) Row {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	q.query = query
 	q.args = append([]any(nil), arguments...)
 	q.queries = append(q.queries, query)
 	q.argsList = append(q.argsList, append([]any(nil), arguments...))
+	for _, result := range q.rowByQuery {
+		if strings.Contains(query, result.contains) {
+			return result.row
+		}
+	}
 	if len(q.rowQueue) > 0 {
 		row := q.rowQueue[0]
 		q.rowQueue = q.rowQueue[1:]

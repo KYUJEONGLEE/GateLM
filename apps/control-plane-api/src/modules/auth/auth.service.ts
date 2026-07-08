@@ -867,9 +867,7 @@ export class AuthService {
 
   private signupDraftCodec(): SignupDraftTokenCodec {
     return new SignupDraftTokenCodec(
-      this.config.get<string>('CONTROL_PLANE_AUTH_STATE_SECRET') ??
-        this.config.get<string>('DATABASE_URL') ??
-        this.webOrigin(),
+      this.config.getOrThrow<string>('CONTROL_PLANE_AUTH_STATE_SECRET'),
     );
   }
 

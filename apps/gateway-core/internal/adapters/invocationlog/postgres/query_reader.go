@@ -14,6 +14,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/sync/errgroup"
 )
 
 type Queryer interface {
@@ -362,24 +363,40 @@ func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invoca
 		return invocationlog.AnalyticsPerformanceFields{}, err
 	}
 
-	summary, lastLogCreatedAt, err := r.queryAnalyticsPerformanceSummary(ctx, normalizedFilter)
-	if err != nil {
-		return invocationlog.AnalyticsPerformanceFields{}, err
-	}
-	providerModelPerformance, err := r.queryAnalyticsProviderModelPerformance(ctx, normalizedFilter)
-	if err != nil {
-		return invocationlog.AnalyticsPerformanceFields{}, err
-	}
-	p95LatencyByProvider, err := r.queryAnalyticsP95LatencyByProvider(ctx, normalizedFilter)
-	if err != nil {
-		return invocationlog.AnalyticsPerformanceFields{}, err
-	}
-	latencyDistribution, err := r.queryAnalyticsLatencyDistribution(ctx, normalizedFilter)
-	if err != nil {
-		return invocationlog.AnalyticsPerformanceFields{}, err
-	}
-	slowestRequests, err := r.queryAnalyticsSlowestRequests(ctx, normalizedFilter)
-	if err != nil {
+	var summary invocationlog.AnalyticsPerformanceSummary
+	var lastLogCreatedAt *time.Time
+	var providerModelPerformance []invocationlog.AnalyticsProviderModelPerformance
+	var p95LatencyByProvider []invocationlog.AnalyticsProviderLatency
+	var latencyDistribution []invocationlog.AnalyticsLatencyDistributionBucket
+	var slowestRequests []invocationlog.AnalyticsSlowRequest
+
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		summary, lastLogCreatedAt, err = r.queryAnalyticsPerformanceSummary(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		providerModelPerformance, err = r.queryAnalyticsProviderModelPerformance(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		p95LatencyByProvider, err = r.queryAnalyticsP95LatencyByProvider(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		latencyDistribution, err = r.queryAnalyticsLatencyDistribution(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		slowestRequests, err = r.queryAnalyticsSlowestRequests(groupCtx, normalizedFilter)
+		return err
+	})
+	if err := group.Wait(); err != nil {
 		return invocationlog.AnalyticsPerformanceFields{}, err
 	}
 

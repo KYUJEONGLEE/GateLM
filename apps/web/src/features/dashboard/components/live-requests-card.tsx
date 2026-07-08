@@ -90,6 +90,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   const [error, setError] = useState<string | null>(initialPayload ? null : "Failed to load live requests");
   const [copiedRequestId, setCopiedRequestId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const inFlightQueryRef = useRef<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
   const rowCountRef = useRef(rows.length);
   const requestQueryString = useMemo(
@@ -125,11 +126,16 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   const loadRequests = useCallback(
     async ({ silent }: { silent: boolean }) => {
       if (abortRef.current) {
-        return;
+        if (silent && inFlightQueryRef.current === requestQueryString) {
+          return;
+        }
+
+        abortRef.current.abort();
       }
 
       const controller = new AbortController();
       abortRef.current = controller;
+      inFlightQueryRef.current = requestQueryString;
 
       if (!silent && rowCountRef.current === 0) {
         setIsLoading(true);
@@ -161,8 +167,9 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
       } finally {
         if (abortRef.current === controller) {
           abortRef.current = null;
+          inFlightQueryRef.current = null;
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     },
     [modelFilter, requestQueryString]
@@ -177,6 +184,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
     return () => {
       window.clearInterval(interval);
       abortRef.current?.abort();
+      inFlightQueryRef.current = null;
     };
   }, [loadRequests]);
 

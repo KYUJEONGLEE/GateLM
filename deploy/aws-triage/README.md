@@ -61,6 +61,7 @@ The default triage signup flow does not use SMTP:
 ```bash
 AUTH_EMAIL_TRANSPORT=dev_memory
 CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=true
+CONTROL_PLANE_AUTH_STATE_SECRET=<random-long-value>
 SMTP_HOST=
 SMTP_PORT=
 SMTP_SECURE=
@@ -69,6 +70,10 @@ SMTP_USER=
 SMTP_PASSWORD=
 SMTP_FROM=
 ```
+
+`CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
+long random value for each deployment and do not reuse the placeholder from
+`.env.example`.
 
 Leave the SMTP values blank until a real mail sender is configured.
 
