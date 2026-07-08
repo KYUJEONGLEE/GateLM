@@ -1,33 +1,28 @@
 "use client";
 
 import { Save, UploadCloud } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import {
-  getProviderConnectionFamily,
-  ProviderFamilyIcon
-} from "@/features/provider-connections/components/provider-family-icon";
+import { getProviderConnectionFamily } from "@/features/provider-connections/components/provider-family-icon";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { applyPrimaryRuntimePolicyRouteSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
-  getRateLimitRefillTokensPerSecond,
-  getRateLimitWindowSeconds,
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
-  type RuntimePolicyDetector,
   type RuntimePolicyDraftValues,
-  type RuntimePolicyHistoryItem,
   type RuntimePolicyModelConfig,
-  type RuntimePolicyModel,
-  type RuntimePolicySnapshot
+  type RuntimePolicyModel
 } from "@/lib/control-plane/runtime-policy-types";
-import { formatDateTime } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import {
+  PolicyDetailModalFallback,
+  PolicyPanelFallback,
+  PolicyPanelFallbackGroup
+} from "./runtime-policy-panel-fallback";
 
 type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
@@ -63,7 +58,7 @@ type OneTimeApiKeyState = {
   projectName: string;
 };
 
-type PolicySection =
+export type PolicySection =
   | "general"
   | "safety"
   | "routing"
@@ -72,14 +67,14 @@ type PolicySection =
   | "cache"
   | "streaming";
 
-type RoutingProviderOption = {
+export type RoutingProviderOption = {
   displayName: string;
   family: string;
   provider: string;
   providerId: string;
 };
 
-type RoutingPriorityRoute = "default" | "fallback" | "lowCost";
+export type RoutingPriorityRoute = "default" | "fallback" | "lowCost";
 
 type PolicySectionLabelText = {
   budgetTab: string;
@@ -99,6 +94,42 @@ const policySections: PolicySection[] = [
   "safety",
   "streaming"
 ];
+
+const BudgetPolicyPanel = lazy(() =>
+  import("./runtime-policy-editor-panels/budget-policy-panel").then((module) => ({
+    default: module.BudgetPolicyPanel
+  }))
+);
+const CachePolicyPanel = lazy(() =>
+  import("./runtime-policy-editor-panels/cache-policy-panel").then((module) => ({
+    default: module.CachePolicyPanel
+  }))
+);
+const RateLimitPolicyPanel = lazy(() =>
+  import("./runtime-policy-editor-panels/rate-limit-policy-panel").then((module) => ({
+    default: module.RateLimitPolicyPanel
+  }))
+);
+const RoutingPolicyPanel = lazy(() =>
+  import("./runtime-policy-editor-panels/routing-policy-panel").then((module) => ({
+    default: module.RoutingPolicyPanel
+  }))
+);
+const SafetyPolicyPanel = lazy(() =>
+  import("./runtime-policy-editor-panels/safety-policy-panel").then((module) => ({
+    default: module.SafetyPolicyPanel
+  }))
+);
+const StreamingPolicyPanel = lazy(() =>
+  import("./runtime-policy-editor-panels/streaming-policy-panel").then((module) => ({
+    default: module.StreamingPolicyPanel
+  }))
+);
+const RuntimePolicyDetailModal = lazy(() =>
+  import("./runtime-policy-detail-modal").then((module) => ({
+    default: module.RuntimePolicyDetailModal
+  }))
+);
 
 function getPolicyTabId(section: PolicySection) {
   return `policy-tab-${section}`;
@@ -401,6 +432,50 @@ const policyText: Record<
   }
 };
 
+export type RuntimePolicyEditorText = (typeof policyText)["en"];
+
+function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEditorText) {
+  switch (section) {
+    case "budget":
+      return <PolicyPanelFallback heading={text.budget} />;
+    case "cache":
+      return (
+        <PolicyPanelFallbackGroup
+          panels={[
+            { heading: text.cache },
+            { heading: text.semanticCache }
+          ]}
+        />
+      );
+    case "rateLimit":
+      return <PolicyPanelFallback heading={text.rateLimit} />;
+    case "routing":
+      return (
+        <PolicyPanelFallbackGroup
+          panels={[
+            { heading: text.routing },
+            { heading: text.routingAdvanced, lineCount: 1 },
+            { heading: text.providerCatalog }
+          ]}
+        />
+      );
+    case "safety":
+      return (
+        <PolicyPanelFallbackGroup
+          panels={[
+            { heading: text.detectors, lineCount: 4, wide: true },
+            { heading: text.promptCapture },
+            { heading: text.responseCapture }
+          ]}
+        />
+      );
+    case "streaming":
+      return <PolicyPanelFallback heading={text.streaming} />;
+    case "general":
+      return null;
+  }
+}
+
 export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
@@ -472,7 +547,6 @@ export function RuntimePolicyEditor({
       ? submitState.runtimeConfig
       : model.activeConfig;
   const hasActiveApiKey = activeApiKeyCount > 0;
-  const providerOptions = model.activeConfig.providers;
   const modelOptionsByProvider = useMemo(
     () => groupRoutingModelsByProvider(draftValues.models, model.providerConnections.available),
     [draftValues.models, model.providerConnections.available]
@@ -560,69 +634,6 @@ export function RuntimePolicyEditor({
       };
     });
   }
-
-  const budgetPolicyPanel = (
-    <article
-      className={
-        shouldMoveBudgetToGeneral
-          ? "console-panel policy-editor-panel project-policy-budget-panel"
-          : "console-panel policy-editor-panel"
-      }
-    >
-      <div className="panel-heading">
-        <h3>{text.budget}</h3>
-      </div>
-      <label className="policy-toggle-row">
-        <Switch
-          checked={draftValues.budgetEnabled}
-          onCheckedChange={(checked) =>
-            setDraftValues((current) => ({
-              ...current,
-              budgetEnabled: checked,
-              budgetEnforcementMode: checked
-                ? current.budgetEnforcementMode === "disabled"
-                  ? "warn"
-                  : current.budgetEnforcementMode
-                : "disabled"
-            }))
-          }
-        />
-        <span>{text.enabled}</span>
-      </label>
-      <label className="policy-field">
-        <span>{text.budgetEnforcement}</span>
-        <select
-          disabled={!draftValues.budgetEnabled}
-          onChange={(event) =>
-            setDraftValues((current) => ({
-              ...current,
-              budgetEnforcementMode:
-                event.target.value === "block" || event.target.value === "warn"
-                  ? event.target.value
-                  : "disabled"
-            }))
-          }
-          value={draftValues.budgetEnforcementMode}
-        >
-          <option value="warn">warn</option>
-          <option value="block">block</option>
-          <option value="disabled">disabled</option>
-        </select>
-      </label>
-      <PolicyNumberField
-        label={text.budgetWarning}
-        max={100}
-        min={0}
-        onChange={(value) =>
-          setDraftValues((current) => ({
-            ...current,
-            budgetWarningThresholdPercent: value
-          }))
-        }
-        value={draftValues.budgetWarningThresholdPercent}
-      />
-    </article>
-  );
 
   async function submitPolicy(action: "save-draft" | "publish") {
     if (!hasActiveApiKey) {
@@ -808,6 +819,96 @@ export function RuntimePolicyEditor({
     setRollbackTarget(null);
   }
 
+  function renderBudgetPolicyPanel(projectPanel = false) {
+    return (
+      <Suspense
+        fallback={
+          <PolicyPanelFallback
+            className={projectPanel ? "project-policy-budget-panel" : ""}
+            heading={text.budget}
+          />
+        }
+      >
+        <BudgetPolicyPanel
+          draftValues={draftValues}
+          onDraftValuesChange={setDraftValues}
+          projectPanel={projectPanel}
+          text={text}
+        />
+      </Suspense>
+    );
+  }
+
+  function renderPolicyPanelContent(section: PolicySection) {
+    if (activePolicySection !== section) {
+      return null;
+    }
+
+    switch (section) {
+      case "budget":
+        return renderBudgetPolicyPanel(false);
+      case "cache":
+        return (
+          <Suspense fallback={getPolicyPanelFallback("cache", text)}>
+            <CachePolicyPanel
+              draftValues={draftValues}
+              onDraftValuesChange={setDraftValues}
+              text={text}
+            />
+          </Suspense>
+        );
+      case "rateLimit":
+        return (
+          <Suspense fallback={getPolicyPanelFallback("rateLimit", text)}>
+            <RateLimitPolicyPanel
+              draftValues={draftValues}
+              onDraftValuesChange={setDraftValues}
+              text={text}
+            />
+          </Suspense>
+        );
+      case "routing":
+        return (
+          <Suspense fallback={getPolicyPanelFallback("routing", text)}>
+            <RoutingPolicyPanel
+              draftValues={draftValues}
+              modelOptionsByProvider={modelOptionsByProvider}
+              onModelChange={updateRoutingModel}
+              onProviderChange={updateRoutingProvider}
+              onShortPromptChange={(value) =>
+                setDraftValues((current) => ({
+                  ...current,
+                  routingShortPromptMaxChars: value
+                }))
+              }
+              providerCatalog={model.providerCatalog}
+              providerOptions={routingProviderOptions}
+              providers={model.activeConfig.providers}
+              text={text}
+            />
+          </Suspense>
+        );
+      case "safety":
+        return (
+          <Suspense fallback={getPolicyPanelFallback("safety", text)}>
+            <SafetyPolicyPanel
+              draftValues={draftValues}
+              onDraftValuesChange={setDraftValues}
+              text={text}
+            />
+          </Suspense>
+        );
+      case "streaming":
+        return (
+          <Suspense fallback={getPolicyPanelFallback("streaming", text)}>
+            <StreamingPolicyPanel runtimeSnapshot={model.runtimeSnapshot} text={text} />
+          </Suspense>
+        );
+      case "general":
+        return null;
+    }
+  }
+
   return (
     <main className="console-content">
       <section className="dashboard-hero">
@@ -920,7 +1021,7 @@ export function RuntimePolicyEditor({
             tabIndex={0}
           >
             {children}
-            {shouldMoveBudgetToGeneral ? budgetPolicyPanel : null}
+            {shouldMoveBudgetToGeneral ? renderBudgetPolicyPanel(true) : null}
             {generalFooter}
           </div>
         </section>
@@ -938,83 +1039,7 @@ export function RuntimePolicyEditor({
           role="tabpanel"
           tabIndex={0}
         >
-          <article className="console-panel policy-editor-panel wide-panel">
-            <div className="panel-heading">
-              <h3>{text.detectors}</h3>
-            </div>
-            <div className="policy-alert" data-status="warning">
-              <strong>{text.mandatoryProtection}</strong>
-              {" "}
-              <span>{text.mandatoryProtectionHint}</span>
-            </div>
-            <div className="policy-detector-list">
-              {draftValues.detectors.map((detector, index) => (
-                <DetectorEditor
-                  detector={detector}
-                  key={detector.type}
-                  labels={text}
-                  onChange={(nextDetector) =>
-                    setDraftValues((current) => ({
-                      ...current,
-                      detectors: current.detectors.map((item, itemIndex) =>
-                        itemIndex === index ? nextDetector : item
-                      )
-                    }))
-                  }
-                />
-              ))}
-            </div>
-          </article>
-
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.promptCapture}</h3>
-            </div>
-            <label className="policy-toggle-row">
-              <Switch
-                checked={draftValues.promptCaptureEnabled}
-                onCheckedChange={(checked) =>
-                  setDraftValues((current) => ({
-                    ...current,
-                    promptCaptureEnabled: checked
-                  }))
-                }
-              />
-              <span>{text.promptCaptureEnabled}</span>
-            </label>
-            <p className="project-muted">{text.logSafeCaptureHint}</p>
-            <PolicyNumberField
-              label={text.promptCaptureMaxChars}
-              max={20000}
-              min={1}
-              onChange={(value) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  promptCaptureMaxChars: value
-                }))
-              }
-              value={draftValues.promptCaptureMaxChars}
-            />
-          </article>
-
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.responseCapture}</h3>
-            </div>
-            <label aria-disabled="true" className="policy-toggle-row">
-              <Switch checked={draftValues.responseCaptureEnabled} disabled readOnly />
-              <span>
-                {draftValues.responseCaptureEnabled ? text.enabled : text.disabled}
-              </span>
-            </label>
-            <p className="project-muted">{text.responseCaptureHint}</p>
-            <dl className="policy-summary-list">
-              <div>
-                <dt>{text.responseCaptureMaxChars}</dt>
-                <dd>{draftValues.responseCaptureMaxChars}</dd>
-              </div>
-            </dl>
-          </article>
+          {renderPolicyPanelContent("safety")}
         </div>
 
         <div
@@ -1025,60 +1050,7 @@ export function RuntimePolicyEditor({
           role="tabpanel"
           tabIndex={0}
         >
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.routing}</h3>
-            </div>
-            <RoutingPriorityTable
-              modelOptionsByProvider={modelOptionsByProvider}
-              onModelChange={updateRoutingModel}
-              onProviderChange={updateRoutingProvider}
-              providerOptions={routingProviderOptions}
-              rows={[
-                {
-                  priority: "High",
-                  provider: draftValues.routingLowCostProvider,
-                  route: "lowCost",
-                  selectedModel: draftValues.routingLowCostModel
-                },
-                {
-                  priority: "Default",
-                  provider: draftValues.routingDefaultProvider,
-                  route: "default",
-                  selectedModel: draftValues.routingDefaultModel
-                },
-                {
-                  priority: "Fallback",
-                  provider: draftValues.routingFallbackProvider,
-                  route: "fallback",
-                  selectedModel: draftValues.routingFallbackModel
-                }
-              ]}
-              text={{
-                model: text.model,
-                noProviderModels: text.noProviderModels,
-                provider: text.provider
-              }}
-            />
-          </article>
-
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.routingAdvanced}</h3>
-            </div>
-            <PolicyNumberField
-              label={text.shortPrompt}
-              max={100000}
-              min={1}
-              onChange={(value) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  routingShortPromptMaxChars: value
-                }))
-              }
-              value={draftValues.routingShortPromptMaxChars}
-            />
-          </article>
+          {renderPolicyPanelContent("routing")}
         </div>
 
         {!shouldMoveBudgetToGeneral ? (
@@ -1090,7 +1062,7 @@ export function RuntimePolicyEditor({
             role="tabpanel"
             tabIndex={0}
           >
-            {budgetPolicyPanel}
+            {renderPolicyPanelContent("budget")}
           </div>
         ) : null}
 
@@ -1102,70 +1074,7 @@ export function RuntimePolicyEditor({
           role="tabpanel"
           tabIndex={0}
         >
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <div className="policy-heading-with-info">
-                <h3>{text.rateLimit}</h3>
-                <span className="policy-info-tooltip">
-                  <button
-                    aria-label={text.rateLimitInfo}
-                    className="policy-info-trigger"
-                    title={text.rateLimitInfo}
-                    type="button"
-                  >
-                    i
-                  </button>
-                  <span className="policy-info-content" role="tooltip">
-                    {text.rateLimitInfo}
-                  </span>
-                </span>
-              </div>
-            </div>
-            <label className="policy-toggle-row">
-              <Switch
-                checked={draftValues.rateLimitEnabled}
-                onCheckedChange={(checked) =>
-                  setDraftValues((current) => ({
-                    ...current,
-                    rateLimitEnabled: checked
-                  }))
-                }
-              />
-              <span>{text.enabled}</span>
-            </label>
-            <PolicyNumberField
-              label={text.refillRate}
-              max={100000}
-              min={1}
-              onChange={(value) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  rateLimitRefillTokensPerSecond: value,
-                  rateLimitWindowSeconds: getRateLimitWindowSeconds(
-                    current.rateLimitLimit,
-                    value
-                  )
-                }))
-              }
-              value={draftValues.rateLimitRefillTokensPerSecond}
-            />
-            <PolicyNumberField
-              label={text.maxBucketTokens}
-              max={100000}
-              min={1}
-              onChange={(value) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  rateLimitLimit: value,
-                  rateLimitWindowSeconds: getRateLimitWindowSeconds(
-                    value,
-                    current.rateLimitRefillTokensPerSecond
-                  )
-                }))
-              }
-              value={draftValues.rateLimitLimit}
-            />
-          </article>
+          {renderPolicyPanelContent("rateLimit")}
         </div>
 
         <div
@@ -1176,60 +1085,7 @@ export function RuntimePolicyEditor({
           role="tabpanel"
           tabIndex={0}
         >
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.cache}</h3>
-            </div>
-            <label className="policy-toggle-row">
-              <Switch
-                checked={draftValues.cacheEnabled}
-                onCheckedChange={(checked) =>
-                  setDraftValues((current) => ({
-                    ...current,
-                    cacheEnabled: checked
-                  }))
-                }
-              />
-              <span>{text.cacheEnabled}</span>
-            </label>
-            <PolicyNumberField
-              label={text.cacheTtl}
-              max={86400}
-              min={1}
-              onChange={(value) =>
-                setDraftValues((current) => ({
-                  ...current,
-                  cacheTtlSeconds: value
-                }))
-              }
-              value={draftValues.cacheTtlSeconds}
-            />
-          </article>
-
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.semanticCache}</h3>
-            </div>
-            <label aria-disabled="true" className="policy-toggle-row">
-              <Switch checked={draftValues.cacheEnabled} disabled readOnly />
-              <span>
-                {draftValues.cacheEnabled
-                  ? text.semanticCacheEvidenceOnly
-                  : text.semanticCacheDisabled}
-              </span>
-            </label>
-            <dl className="policy-summary-list">
-              <div>
-                <dt>{text.mode}</dt>
-                <dd>
-                  {draftValues.cacheEnabled
-                    ? text.semanticCacheEvidenceOnly
-                    : text.semanticCacheDisabled}
-                </dd>
-              </div>
-            </dl>
-            <p className="project-muted">{text.semanticCacheNote}</p>
-          </article>
+          {renderPolicyPanelContent("cache")}
         </div>
 
         {hideStreamingTab ? null : (
@@ -1241,39 +1097,7 @@ export function RuntimePolicyEditor({
             role="tabpanel"
             tabIndex={0}
           >
-            <article className="console-panel policy-editor-panel">
-              <div className="panel-heading">
-                <h3>{text.streaming}</h3>
-              </div>
-              {model.runtimeSnapshot.loadError ? (
-                <Alert variant="warning">
-                  <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
-                </Alert>
-              ) : null}
-              {model.runtimeSnapshot.snapshot ? (
-                <dl className="policy-summary-list">
-                  <div>
-                    <dt>{text.enabled}</dt>
-                    <dd>
-                      {formatEnabled(
-                        model.runtimeSnapshot.snapshot.policies?.streaming?.enabled
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>thin slice</dt>
-                    <dd>
-                      {formatEnabled(
-                        model.runtimeSnapshot.snapshot.policies?.streaming?.thinSliceOnly
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="project-muted">{text.streamingUnavailable}</p>
-              )}
-              <p className="project-muted">{text.streamingNote}</p>
-            </article>
+            {renderPolicyPanelContent("streaming")}
           </div>
         )}
 
@@ -1281,562 +1105,27 @@ export function RuntimePolicyEditor({
 
       {isDetailOpen ? (
         <div className="modal-backdrop" onClick={() => setIsDetailOpen(false)} role="presentation">
-          <section
-            aria-labelledby="policy-detail-title"
-            aria-modal="true"
-            className="modal-panel policy-detail-modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
+          <Suspense
+            fallback={
+              <PolicyDetailModalFallback
+                onClose={() => setIsDetailOpen(false)}
+                text={text}
+              />
+            }
           >
-            <div className="panel-heading">
-              <h3 id="policy-detail-title">{text.policyDetails}</h3>
-              <Button onClick={() => setIsDetailOpen(false)} type="button" variant="outline">
-                {text.close}
-              </Button>
-            </div>
-
-            <div className="policy-detail-layout">
-              <article className="console-panel policy-editor-panel">
-                <div className="panel-heading">
-                  <h3>{text.runtimeSnapshot}</h3>
-                </div>
-                {model.runtimeSnapshot.loadError ? (
-                  <Alert variant="warning">
-                    <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
-                  </Alert>
-                ) : null}
-                {model.runtimeSnapshot.snapshot ? (
-                  <RuntimeSnapshotDetail snapshot={model.runtimeSnapshot.snapshot} text={text} />
-                ) : (
-                  <dl className="policy-summary-list">
-                    <div>
-                      <dt>{text.snapshotState}</dt>
-                      <dd>unavailable</dd>
-                    </div>
-                  </dl>
-                )}
-              </article>
-
-              <article className="console-panel policy-editor-panel">
-                <div className="panel-heading">
-                  <h3>{text.providerCatalog}</h3>
-                </div>
-                {model.providerCatalog.loadError ? (
-                  <Alert variant="warning">
-                    <AlertDescription>{model.providerCatalog.loadError}</AlertDescription>
-                  </Alert>
-                ) : null}
-                {model.providerCatalog.canonicalLoadError ? (
-                  <Alert variant="warning">
-                    <AlertDescription>{model.providerCatalog.canonicalLoadError}</AlertDescription>
-                  </Alert>
-                ) : null}
-                {model.providerCatalog.summary ? (
-                  <dl className="policy-summary-list">
-                    <div>
-                      <dt>{text.catalogVersion}</dt>
-                      <dd>{model.providerCatalog.summary.catalogVersion}</dd>
-                    </div>
-                    <div>
-                      <dt>{text.providerCount}</dt>
-                      <dd>
-                        {model.providerCatalog.summary.providerCount} / {text.models}:{" "}
-                        {model.providerCatalog.summary.modelCount}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>canonical by-id</dt>
-                      <dd>
-                        {model.providerCatalog.canonicalVerified === null
-                          ? "not_checked"
-                          : model.providerCatalog.canonicalVerified
-                            ? "verified"
-                            : "mismatch"}
-                      </dd>
-                    </div>
-                  </dl>
-                ) : (
-                  <dl className="policy-summary-list">
-                    <div>
-                      <dt>active catalog</dt>
-                      <dd>unavailable</dd>
-                    </div>
-                    <div>
-                      <dt>canonical by-id</dt>
-                      <dd>not_checked</dd>
-                    </div>
-                  </dl>
-                )}
-                <dl className="policy-summary-list">
-                  {providerOptions.map((provider) => (
-                    <div key={provider.providerId}>
-                      <dt>
-                        {provider.displayName} / {provider.provider}
-                      </dt>
-                      <dd>
-                        {provider.status} / {provider.resolver} / {provider.models.join(", ")}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </article>
-
-              <article className="console-panel policy-editor-panel wide-panel">
-                <div className="panel-heading">
-                  <h3>{text.history}</h3>
-                </div>
-                {model.history.loadError ? (
-                  <Alert variant="warning">
-                    <AlertDescription>{model.history.loadError}</AlertDescription>
-                  </Alert>
-                ) : null}
-                {model.history.items.length > 0 ? (
-                  <RuntimeHistoryTable
-                    activeConfigVersion={displayConfig.configVersion}
-                    isSubmitting={isSubmitting || rollbackTarget !== null}
-                    items={model.history.items}
-                    onRollback={(configVersion) => void rollbackPolicy(configVersion)}
-                    rollbackTarget={rollbackTarget}
-                    text={text}
-                  />
-                ) : (
-                  <p className="empty-state">No runtime config history returned.</p>
-                )}
-              </article>
-            </div>
-          </section>
+            <RuntimePolicyDetailModal
+              displayConfig={displayConfig}
+              isSubmitting={isSubmitting}
+              model={model}
+              onClose={() => setIsDetailOpen(false)}
+              onRollback={(configVersion) => void rollbackPolicy(configVersion)}
+              rollbackTarget={rollbackTarget}
+              text={text}
+            />
+          </Suspense>
         </div>
       ) : null}
     </main>
-  );
-}
-
-function RuntimeSnapshotDetail({
-  snapshot,
-  text
-}: {
-  snapshot: RuntimePolicySnapshot;
-  text: (typeof policyText)[Locale];
-}) {
-  return (
-    <div className="runtime-snapshot-detail">
-      <dl className="policy-summary-list">
-        <div>
-          <dt>{text.snapshotState}</dt>
-          <dd>{snapshot.runtimeState}</dd>
-        </div>
-        <div>
-          <dt>{text.snapshotVersion}</dt>
-          <dd>{snapshot.runtimeSnapshotVersion}</dd>
-        </div>
-        <div>
-          <dt>lookup key</dt>
-          <dd>
-            {snapshot.lookupKey.tenantId} / {snapshot.lookupKey.projectId} /{" "}
-            {snapshot.lookupKey.applicationId}
-          </dd>
-        </div>
-        <div>
-          <dt>budget scope</dt>
-          <dd>
-            {snapshot.budgetResolution.budgetScopeType}:{snapshot.budgetResolution.budgetScopeId} /{" "}
-            {snapshot.budgetResolution.resolvedBy}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.providerCatalog}</dt>
-          <dd>
-            {snapshot.providerCatalogRef.catalogId} / v
-            {snapshot.providerCatalogRef.catalogVersion}
-          </dd>
-        </div>
-      </dl>
-
-      <dl className="policy-summary-list">
-        <div>
-          <dt>{text.budget}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.budget.enabled)} /{" "}
-            {snapshot.policies.budget.enforcementMode} / warning{" "}
-            {snapshot.policies.budget.warningThresholdPercent}%
-          </dd>
-        </div>
-        <div>
-          <dt>{text.rateLimit}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.rateLimit.enabled)} /{" "}
-            {snapshot.policies.rateLimit.scope} / {text.maxBucketTokens}:{" "}
-            {snapshot.policies.rateLimit.limit} / {text.refillRate}:{" "}
-            {getRateLimitRefillTokensPerSecond(
-              snapshot.policies.rateLimit.limit,
-              snapshot.policies.rateLimit.windowSeconds
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.routing}</dt>
-          <dd>
-            {snapshot.policies.routing.defaultProvider}:{snapshot.policies.routing.defaultModel} /{" "}
-            {snapshot.policies.routing.defaultRequestedModel} / auto{" "}
-            {formatEnabled(snapshot.policies.routing.autoModelEnabled)}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.fallbackRoute}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.fallback.enabled)} /{" "}
-            {snapshot.policies.fallback.fallbackProvider ?? "none"}:
-            {snapshot.policies.fallback.fallbackModel ?? "none"} / reasons{" "}
-            {formatList(snapshot.policies.fallback.allowedReasons)}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.cache}</dt>
-          <dd>
-            exact {formatEnabled(snapshot.policies.cache.exactCacheEnabled)} / semantic{" "}
-            {snapshot.policies.cache.semanticCacheMode}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.promptCapture}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.promptCapture?.enabled ?? false)} /{" "}
-            {snapshot.policies.promptCapture?.mode ?? "disabled"} / max{" "}
-            {snapshot.policies.promptCapture?.maxChars ?? 8000}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.detectors}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies.safety.enabled)} / {snapshot.policies.safety.mode} / request-side{" "}
-            {formatEnabled(snapshot.policies.safety.requestSideRequired)} / detectors{" "}
-            {formatDetectorSet(snapshot.policies.safety.detectorSet)}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.streaming}</dt>
-          <dd>
-            {formatEnabled(snapshot.policies?.streaming?.enabled)} / thin slice{" "}
-            {formatEnabled(snapshot.policies?.streaming?.thinSliceOnly)}
-          </dd>
-        </div>
-      </dl>
-    </div>
-  );
-}
-
-function formatEnabled(value?: boolean | null) {
-  return value ? "enabled" : "disabled";
-}
-
-function formatDetectorSet(detectorSet: RuntimePolicySnapshot["policies"]["safety"]["detectorSet"]) {
-  if (!detectorSet || detectorSet.length === 0) {
-    return "none";
-  }
-
-  return detectorSet
-    .map((detector) => `${detector.detectorType}:${detector.action}`)
-    .join(", ");
-}
-
-function formatList(values: string[] | undefined) {
-  return values && values.length > 0 ? values.join(", ") : "none";
-}
-
-function RuntimeHistoryTable({
-  activeConfigVersion,
-  isSubmitting,
-  items,
-  onRollback,
-  rollbackTarget,
-  text
-}: {
-  activeConfigVersion: string;
-  isSubmitting: boolean;
-  items: RuntimePolicyHistoryItem[];
-  onRollback: (configVersion: string) => void;
-  rollbackTarget: string | null;
-  text: (typeof policyText)[Locale];
-}) {
-  return (
-    <div className="table-wrap">
-      <table className="data-table policy-config-table">
-        <thead>
-          <tr>
-            <th>{text.configVersion}</th>
-            <th>{text.mode}</th>
-            <th>{text.publishedAt}</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => {
-            const isActive = item.configVersion === activeConfigVersion;
-            const isRollingBack = rollbackTarget === item.configVersion;
-
-            return (
-              <tr key={item.id}>
-                <td>
-                  <strong className="provider-name">{item.configVersion}</strong>
-                  <span className="project-muted">
-                    {item.effectiveAt ? formatDateTime(item.effectiveAt) : "-"}
-                  </span>
-                </td>
-                <td>{item.publishState}</td>
-                <td>{item.publishedAt ? formatDateTime(item.publishedAt) : "-"}</td>
-                <td>
-                  <div className="project-row-actions">
-                    <Button
-                      disabled={isSubmitting || isActive || !item.canRollback}
-                      onClick={() => onRollback(item.configVersion)}
-                      type="button"
-                      variant="outline"
-                    >
-                      {isRollingBack ? "..." : text.rollback}
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function RoutingPriorityTable({
-  modelOptionsByProvider,
-  onModelChange,
-  onProviderChange,
-  providerOptions,
-  rows,
-  text
-}: {
-  modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>;
-  onModelChange: (route: RoutingPriorityRoute, model: string) => void;
-  onProviderChange: (route: RoutingPriorityRoute, provider: string) => void;
-  providerOptions: RoutingProviderOption[];
-  rows: Array<{
-    priority: string;
-    provider: string;
-    route: RoutingPriorityRoute;
-    selectedModel: string;
-  }>;
-  text: {
-    model: string;
-    noProviderModels: string;
-    provider: string;
-  };
-}) {
-  return (
-    <div className="policy-routing-table" role="table" aria-label="Routing priority">
-      <div className="policy-routing-table-head" role="row">
-        <span role="columnheader">Priority</span>
-        <span role="columnheader">{text.provider}</span>
-        <span role="columnheader">{text.model}</span>
-      </div>
-      {rows.map((row) => (
-        <RoutingPriorityRow
-          key={row.route}
-          modelOptionsByProvider={modelOptionsByProvider}
-          onModelChange={onModelChange}
-          onProviderChange={onProviderChange}
-          providerOptions={providerOptions}
-          row={row}
-          text={text}
-        />
-      ))}
-    </div>
-  );
-}
-
-function RoutingPriorityRow({
-  modelOptionsByProvider,
-  onModelChange,
-  onProviderChange,
-  providerOptions,
-  row,
-  text
-}: {
-  modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>;
-  onModelChange: (route: RoutingPriorityRoute, model: string) => void;
-  onProviderChange: (route: RoutingPriorityRoute, provider: string) => void;
-  providerOptions: RoutingProviderOption[];
-  row: {
-    priority: string;
-    provider: string;
-    route: RoutingPriorityRoute;
-    selectedModel: string;
-  };
-  text: {
-    model: string;
-    noProviderModels: string;
-    provider: string;
-  };
-}) {
-  const selectedProvider = getRoutingProviderOption(providerOptions, row.provider);
-  const modelOptions = modelOptionsByProvider.get(row.provider) ?? [];
-  const hasProviderOptions = providerOptions.length > 0;
-  const selectedModelAvailable = modelOptions.some((option) => option.model === row.selectedModel);
-
-  return (
-    <div className="policy-routing-table-row" role="row">
-      <div className="policy-routing-priority" role="cell">
-        {row.priority}
-      </div>
-      <label className="policy-routing-provider-cell">
-        <span className="sr-only">{row.priority} {text.provider}</span>
-        {selectedProvider ? (
-          <ProviderFamilyIcon
-            className="policy-routing-provider-icon"
-            family={selectedProvider.family}
-            size={26}
-          />
-        ) : (
-          <span className="policy-routing-provider-icon" aria-hidden="true">
-            -
-          </span>
-        )}
-        <select
-          aria-label={`${row.priority} ${text.provider}`}
-          disabled={!hasProviderOptions}
-          onChange={(event) => onProviderChange(row.route, event.target.value)}
-          value={hasProviderOptions ? row.provider : ""}
-        >
-          {!hasProviderOptions ? <option value="">{text.noProviderModels}</option> : null}
-          {providerOptions.map((option) => (
-            <option key={option.providerId} value={option.provider}>
-              {option.displayName}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="policy-routing-model-cell">
-        <span className="sr-only">{row.priority} {text.model}</span>
-        <select
-          aria-label={`${row.priority} ${text.model}`}
-          disabled={modelOptions.length === 0}
-          onChange={(event) => onModelChange(row.route, event.target.value)}
-          value={modelOptions.length === 0 || !selectedModelAvailable ? "" : row.selectedModel}
-        >
-          {modelOptions.length === 0 ? <option value="">{text.noProviderModels}</option> : null}
-          {modelOptions.length > 0 && !selectedModelAvailable ? (
-            <option value="">Select a registered model</option>
-          ) : null}
-          {modelOptions.map((option) => (
-            <option key={`${option.provider}:${option.model}`} value={option.model}>
-              {option.displayName || option.model}
-            </option>
-          ))}
-        </select>
-      </label>
-    </div>
-  );
-}
-
-function getRoutingProviderOption(
-  providerOptions: RoutingProviderOption[],
-  provider: string
-) {
-  return providerOptions.find((option) => option.provider === provider) ?? null;
-}
-
-function PolicyNumberField({
-  label,
-  max,
-  min,
-  onChange,
-  readOnly = false,
-  value
-}: {
-  label: string;
-  max: number;
-  min: number;
-  onChange: (value: number) => void;
-  readOnly?: boolean;
-  value: number;
-}) {
-  return (
-    <label className="policy-field">
-      <span>{label}</span>
-      <input
-        max={max}
-        min={min}
-        onChange={(event) => onChange(parseBoundedInteger(event.target.value, min, max))}
-        readOnly={readOnly}
-        type="number"
-        value={value}
-      />
-    </label>
-  );
-}
-
-function DetectorEditor({
-  detector,
-  labels,
-  onChange
-}: {
-  detector: RuntimePolicyDetector;
-  labels: (typeof policyText)["en"];
-  onChange: (detector: RuntimePolicyDetector) => void;
-}) {
-  const isMandatory = isMandatorySafetyDetector(detector.type);
-  const actionValue = isMandatory ? "block" : detector.action;
-
-  return (
-    <div
-      className="policy-detector-row"
-      data-detector-type={detector.type}
-      data-mandatory={isMandatory}
-    >
-      <label className="policy-toggle-row">
-        <Switch
-          aria-label={`${detector.type} ${labels.enabled}`}
-          checked={isMandatory || detector.enabled}
-          disabled={isMandatory}
-          onCheckedChange={(checked) =>
-            onChange({
-              ...detector,
-              enabled: checked
-            })
-          }
-        />
-        <span>{labels.enabled}</span>
-      </label>
-      <div className="policy-detector-name">
-        <span>{labels.detectorType}</span>
-        <strong>{detector.type}</strong>
-      </div>
-      <label className="policy-field">
-        <span>{labels.mode}</span>
-        <select
-          disabled={isMandatory}
-          onChange={(event) =>
-            onChange({
-              ...detector,
-              action: event.target.value === "block" ? "block" : "redact"
-            })
-          }
-          value={actionValue}
-        >
-          <option value="redact">redact</option>
-          <option value="block">block</option>
-        </select>
-      </label>
-      <label className="policy-field">
-        <span>{labels.placeholder}</span>
-        <input
-          onChange={(event) =>
-            onChange({
-              ...detector,
-              placeholder: event.target.value
-            })
-          }
-          value={detector.placeholder}
-        />
-      </label>
-    </div>
   );
 }
 
@@ -1903,26 +1192,6 @@ function normalizeDraftRoutingForProviderConnections(
       ? values.routingLowCostProvider
       : firstActiveModel.provider
   };
-}
-
-function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {
-  return (
-    detectorType === "resident_registration_number" ||
-    detectorType === "api_key" ||
-    detectorType === "authorization_header" ||
-    detectorType === "jwt" ||
-    detectorType === "private_key"
-  );
-}
-
-function parseBoundedInteger(value: string, min: number, max: number) {
-  const parsed = Number.parseInt(value, 10);
-
-  if (!Number.isFinite(parsed)) {
-    return min;
-  }
-
-  return Math.min(Math.max(parsed, min), max);
 }
 
 function groupModelsByProvider(models: RuntimePolicyModelConfig[]) {
