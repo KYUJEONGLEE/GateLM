@@ -8,6 +8,7 @@ import {
   CircleMinus,
   Coins,
   Database,
+  Eye,
   RotateCw,
   Search
 } from "lucide-react";
@@ -17,7 +18,6 @@ import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
-  formatDateTime,
   formatInteger,
   formatLatency,
   nullableText
@@ -114,6 +114,7 @@ const requestLogText: Record<
     submitLabel: string;
     table: {
       actions: string;
+      cache: string;
       cacheBypass: string;
       cacheHit: string;
       cacheMiss: string;
@@ -122,7 +123,11 @@ const requestLogText: Record<
       empty: string;
       latency: string;
       model: string;
+      name: string;
+      project: string;
+      provider: string;
       requestId: string;
+      safety: string;
       status: string;
       time: string;
       tokens: string;
@@ -175,6 +180,7 @@ const requestLogText: Record<
     submitLabel: "Search",
     table: {
       actions: "Open detail",
+      cache: "Cache",
       cacheBypass: "Bypass",
       cacheHit: "Hit",
       cacheMiss: "Miss",
@@ -183,7 +189,11 @@ const requestLogText: Record<
       empty: "No Gateway request logs found for the current range.",
       latency: "Latency",
       model: "Model",
+      name: "Name",
+      project: "Project",
+      provider: "Provider",
       requestId: "Request ID",
+      safety: "Safety",
       status: "Status",
       time: "Time",
       tokens: "Tokens",
@@ -235,6 +245,7 @@ const requestLogText: Record<
     submitLabel: "검색",
     table: {
       actions: "상세 보기",
+      cache: "Cache",
       cacheBypass: "Bypass",
       cacheHit: "Hit",
       cacheMiss: "Miss",
@@ -243,7 +254,11 @@ const requestLogText: Record<
       empty: "현재 범위에 Gateway 요청 로그가 없습니다.",
       latency: "지연 시간",
       model: "모델",
+      name: "Name",
+      project: "Project",
+      provider: "Provider",
       requestId: "요청 ID",
+      safety: "Safety",
       status: "상태",
       time: "시간",
       tokens: "토큰",
@@ -283,6 +298,7 @@ export function RequestLogTable({
   const summaryItems = buildRequestLogSummaryItems(records, text.summary);
   const refreshHref = requestLogPageHref(tenantId, filters, currentPage);
   const headerDate = formatHeaderDate(records);
+  const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
 
   return (
     <main className="console-content request-log-screen">
@@ -438,9 +454,13 @@ export function RequestLogTable({
                   <tr>
                     <th>{text.table.time}</th>
                     <th>{text.table.requestId}</th>
+                    <th>{text.table.project}</th>
+                    <th>{text.table.name}</th>
+                    <th>{text.table.provider}</th>
                     <th>{text.table.model}</th>
                     <th>{text.table.status}</th>
-                    <th>{text.table.cacheHit}</th>
+                    <th>{text.table.cache}</th>
+                    <th>{text.table.safety}</th>
                     <th>{text.table.latency}</th>
                     <th>{text.table.tokens}</th>
                     <th>{text.table.cost}</th>
@@ -450,23 +470,24 @@ export function RequestLogTable({
                 <tbody>
                   {sourceState === "unavailable" ? (
                     <tr>
-                      <td colSpan={9}>{text.table.unavailable}</td>
+                      <td colSpan={13}>{text.table.unavailable}</td>
                     </tr>
                   ) : null}
                   {sourceState === "ready" && records.length === 0 ? (
                     <tr>
-                      <td colSpan={9}>{text.table.empty}</td>
+                      <td colSpan={13}>{text.table.empty}</td>
                     </tr>
                   ) : null}
                   {pageRecords.map((record) => {
                     const isSelected = selectedRequestId === record.requestId;
                     const detailHref = requestLogDetailHref(tenantId, record.requestId, filters);
                     const displayRequestId = formatDisplayIdentifier(record.requestId);
+                    const projectName = projectNameById.get(record.projectId) ?? formatDisplayIdentifier(record.projectId);
 
                     return (
                       <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
                         <td className="request-log-time-cell">
-                          {formatDateTime(record.createdAt, timezone)}
+                          {formatShortTime(record.createdAt, timezone)}
                         </td>
                         <td>
                           <Link
@@ -478,12 +499,36 @@ export function RequestLogTable({
                             {displayRequestId}
                           </Link>
                         </td>
+                        <td>
+                          <span
+                            className="request-log-project-pill"
+                            data-project-tone={projectTone(record.projectId || projectName)}
+                            title={record.projectId}
+                          >
+                            {projectName}
+                          </span>
+                        </td>
+                        <td>
+                          {record.endUserId ? (
+                            <span className="request-log-name-cell" title={record.endUserId}>
+                              {formatDisplayIdentifier(record.endUserId)}
+                            </span>
+                          ) : (
+                            <span className="request-log-muted-value">-</span>
+                          )}
+                        </td>
+                        <td>
+                          <ProviderBadge provider={record.selectedProvider ?? record.requestedProvider} />
+                        </td>
                         <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
                         <td>
-                          <StatusBadge status={record.status} />
+                          <StatusBadge label={formatHttpStatus(record)} status={record.status} />
                         </td>
                         <td>
                           <CacheHitBadge record={record} text={text.table} />
+                        </td>
+                        <td>
+                          <SafetyBadge record={record} />
                         </td>
                         <td>{formatLatency(record.latencyMs)}</td>
                         <td>{formatInteger(record.totalTokens)}</td>
@@ -496,7 +541,7 @@ export function RequestLogTable({
                             href={detailHref}
                             scroll={false}
                           >
-                            <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
+                            <Eye aria-hidden="true" size={16} strokeWidth={2.3} />
                           </Link>
                         </td>
                       </tr>
@@ -575,10 +620,16 @@ function appendRequestLogQuery(query: URLSearchParams, key: string, value: strin
   }
 }
 
-export function StatusBadge({ status }: { status: InvocationLogRecord["status"] }) {
+export function StatusBadge({
+  label,
+  status
+}: {
+  label?: string;
+  status: InvocationLogRecord["status"];
+}) {
   return (
     <span className="status-badge" data-status={status}>
-      {status}
+      {label ?? status}
     </span>
   );
 }
@@ -632,6 +683,124 @@ function getCacheHitDisplay(
     label: text.cacheUnknown,
     tone: "unknown"
   } as const;
+}
+
+function ProviderBadge({ provider }: { provider: string | null | undefined }) {
+  const normalized = normalizeProvider(provider);
+
+  return (
+    <span className="request-log-provider-badge" data-provider={normalized}>
+      <span>{providerMark(normalized)}</span>
+      {providerLabel(normalized, provider)}
+    </span>
+  );
+}
+
+function SafetyBadge({ record }: { record: InvocationLogRecord }) {
+  const outcome = record.domainOutcomes?.safety?.outcome ?? record.maskingAction;
+  const normalized = normalizeSafetyOutcome(outcome);
+
+  if (normalized === "none") {
+    return <span className="request-log-muted-value">-</span>;
+  }
+
+  return (
+    <span className="request-log-safety-badge" data-safety-tone={normalized}>
+      {safetyLabel(normalized)}
+    </span>
+  );
+}
+
+function normalizeProvider(provider: string | null | undefined) {
+  const normalized = provider?.trim().toLowerCase() ?? "";
+
+  if (normalized.includes("openai")) {
+    return "openai";
+  }
+  if (normalized.includes("anthropic") || normalized.includes("claude")) {
+    return "anthropic";
+  }
+  if (normalized.includes("gemini") || normalized.includes("google")) {
+    return "gemini";
+  }
+  if (normalized.includes("mock")) {
+    return "mock";
+  }
+
+  return "unknown";
+}
+
+function providerLabel(normalized: string, provider: string | null | undefined) {
+  if (normalized === "openai") {
+    return "OpenAI";
+  }
+  if (normalized === "anthropic") {
+    return "Anthropic";
+  }
+  if (normalized === "gemini") {
+    return "Gemini";
+  }
+  if (normalized === "mock") {
+    return "Mock";
+  }
+
+  return provider?.trim() ? formatDisplayIdentifier(provider) : "Unknown";
+}
+
+function providerMark(provider: string) {
+  if (provider === "openai") {
+    return "O";
+  }
+  if (provider === "anthropic") {
+    return "A";
+  }
+  if (provider === "gemini") {
+    return "G";
+  }
+  if (provider === "mock") {
+    return "M";
+  }
+
+  return "?";
+}
+
+function normalizeSafetyOutcome(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+
+  if (!normalized || normalized === "none" || normalized === "passed" || normalized === "pass") {
+    return "none";
+  }
+  if (normalized.includes("mask") || normalized.includes("redact")) {
+    return "masked";
+  }
+  if (normalized.includes("block")) {
+    return "blocked";
+  }
+
+  return "flagged";
+}
+
+function safetyLabel(value: string) {
+  if (value === "masked") {
+    return "MASKED";
+  }
+  if (value === "blocked") {
+    return "BLOCKED";
+  }
+
+  return "FLAGGED";
+}
+
+function projectTone(value: string) {
+  return String(stableHash(value) % 8);
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index++) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
 }
 
 function buildRequestLogSummaryItems(
@@ -725,6 +894,64 @@ function formatMicroUsd(value: number) {
     minimumFractionDigits: 2,
     style: "currency"
   }).format(dollars);
+}
+
+function formatHttpStatus(record: InvocationLogRecord) {
+  if (record.httpStatus >= 200 && record.httpStatus < 300) {
+    return `${record.httpStatus} OK`;
+  }
+  if (record.httpStatus === 400) {
+    return "400 Bad Request";
+  }
+  if (record.httpStatus === 401) {
+    return "401 Unauthorized";
+  }
+  if (record.httpStatus === 403) {
+    return "403 Forbidden";
+  }
+  if (record.httpStatus === 404) {
+    return "404 Not Found";
+  }
+  if (record.httpStatus === 408) {
+    return "408 Timeout";
+  }
+  if (record.httpStatus === 429) {
+    return "429 Rate Limited";
+  }
+  if (record.httpStatus === 500) {
+    return "500 Error";
+  }
+  if (record.httpStatus === 502) {
+    return "502 Bad Gateway";
+  }
+  if (record.httpStatus === 503) {
+    return "503 Unavailable";
+  }
+  if (record.httpStatus > 0) {
+    return String(record.httpStatus);
+  }
+
+  return record.status;
+}
+
+function formatShortTime(value: string | null | undefined, timezone: string) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: timezone
+  }).format(date);
 }
 
 function formatHeaderDate(records: InvocationLogRecord[]) {
