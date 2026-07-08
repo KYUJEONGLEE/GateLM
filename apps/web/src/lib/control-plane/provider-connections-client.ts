@@ -6,6 +6,12 @@ import {
   getControlPlaneProjectId,
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import {
+  cachedControlPlaneRead,
+  CONTROL_PLANE_READ_CACHE_SECONDS,
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag
+} from "@/lib/control-plane/read-cache";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
@@ -220,7 +226,7 @@ export async function removeProviderModel({
   provider: string;
   routeTenantId?: string;
 }): Promise<ProviderRequestResult> {
-  const listResult = await listTenantProviderConnections(resolveControlPlaneTenantId(routeTenantId));
+  const listResult = await listTenantProviderConnectionsFresh(resolveControlPlaneTenantId(routeTenantId));
 
   if (!listResult.ok) {
     return listResult;
@@ -295,6 +301,22 @@ export async function removeProviderModel({
 export async function listTenantProviderConnections(
   tenantId: string
 ): Promise<ProviderListResult> {
+  return cachedControlPlaneRead(
+    ["control-plane-tenant-providers", tenantId],
+    () => listTenantProviderConnectionsFresh(tenantId),
+    {
+      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.providerConnections,
+      tags: [
+        controlPlaneReadCacheTags.providerConnections,
+        controlPlaneTenantReadCacheTag("providerConnections", tenantId)
+      ]
+    }
+  );
+}
+
+export async function listTenantProviderConnectionsFresh(
+  tenantId: string
+): Promise<ProviderListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers?limit=50`,
@@ -367,6 +389,17 @@ export async function setApplicationProviderConnections({
 }
 
 async function listProviderPresets(): Promise<ProviderPresetListResult> {
+  return cachedControlPlaneRead(
+    ["control-plane-provider-presets"],
+    listProviderPresetsFresh,
+    {
+      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.providerPresets,
+      tags: [controlPlaneReadCacheTags.providerPresets]
+    }
+  );
+}
+
+async function listProviderPresetsFresh(): Promise<ProviderPresetListResult> {
   try {
     const response = await fetch(`${getControlPlaneBaseUrl()}/admin/v1/provider-presets`, {
       cache: "no-store"

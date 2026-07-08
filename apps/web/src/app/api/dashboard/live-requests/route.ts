@@ -32,15 +32,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Project access denied" }, { status: 403 });
   }
 
-  const payload = await getLiveOverviewRequests(tenantId, {
-    budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
-    budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
-    model: optionalQueryValue(query, "model"),
-    projectId: effectiveProjectId ?? requestedProjectId,
-    range: normalizeRange(query.get("range")),
-    resolvedBy: optionalQueryValue(query, "resolvedBy"),
-    status: normalizeStatus(query.get("status"))
-  });
+  const projects = projectsModel.projects;
+  const payload = await getLiveOverviewRequests(
+    tenantId,
+    {
+      budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
+      budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
+      model: optionalQueryValue(query, "model"),
+      projectId: effectiveProjectId ?? requestedProjectId,
+      range: normalizeRange(query.get("range")),
+      resolvedBy: optionalQueryValue(query, "resolvedBy"),
+      status: normalizeStatus(query.get("status"))
+    },
+    {
+      projectIds: projects.map((project) => project.id).filter(Boolean),
+      projectNameSource: projectsModel.source,
+      projects
+    }
+  );
 
   if (!payload) {
     return NextResponse.json({ error: "Failed to load live requests" }, { status: 502 });

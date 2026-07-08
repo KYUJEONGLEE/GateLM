@@ -4,6 +4,11 @@ import {
   rollbackRuntimePolicy,
   saveRuntimePolicyDraft
 } from "@/lib/control-plane/runtime-policy-client";
+import {
+  controlPlaneReadCacheTags,
+  revalidateControlPlaneRead,
+  runtimePolicyApplicationReadCacheTag
+} from "@/lib/control-plane/read-cache";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
 type RequestPayload = {
@@ -42,6 +47,8 @@ export async function POST(request: Request) {
       );
     }
 
+    revalidateRuntimePolicyReadCache(applicationId);
+
     return NextResponse.json({
       runtimeConfig: result.data,
       status: result.status
@@ -52,10 +59,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid runtime policy payload." }, { status: 400 });
   }
 
+  const applicationId = getOptionalApplicationId(payload.applicationId);
   const result =
     payload.action === "save-draft"
-      ? await saveRuntimePolicyDraft(payload.values, getOptionalApplicationId(payload.applicationId))
-      : await publishRuntimePolicy(payload.values, getOptionalApplicationId(payload.applicationId));
+      ? await saveRuntimePolicyDraft(payload.values, applicationId)
+      : await publishRuntimePolicy(payload.values, applicationId);
 
   if (!result.ok) {
     return NextResponse.json(
@@ -67,10 +75,19 @@ export async function POST(request: Request) {
     );
   }
 
+  revalidateRuntimePolicyReadCache(applicationId);
+
   return NextResponse.json({
     runtimeConfig: result.data,
     status: result.status
   });
+}
+
+function revalidateRuntimePolicyReadCache(applicationId: string | undefined) {
+  revalidateControlPlaneRead([
+    controlPlaneReadCacheTags.runtimePolicy,
+    ...(applicationId ? [runtimePolicyApplicationReadCacheTag(applicationId)] : [])
+  ]);
 }
 
 function getOptionalApplicationId(value: unknown) {

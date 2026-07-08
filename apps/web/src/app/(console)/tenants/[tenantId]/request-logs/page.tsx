@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   getCurrentConsoleAuth,
@@ -25,6 +26,7 @@ import {
 } from "@/lib/gateway/live-request-logs";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
+import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type RequestLogsPageProps = {
@@ -63,6 +65,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const projectsModel = await getProjectsModel(effectiveTenantId);
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, effectiveTenantId) : undefined;
+  const scopedProjectIds = allowedProjectIds ?? projectsModel.projects.map((project) => project.id).filter(Boolean);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,
@@ -81,7 +84,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const scopedLogFilters: LiveGatewayRequestLogFilters = {
     ...logFilters,
     projectId: effectiveProjectId ?? logFilters.projectId,
-    projectIds: allowedProjectIds
+    projectIds: scopedProjectIds
   };
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId)
     .filter((project) => project.status !== "ARCHIVED");
@@ -91,7 +94,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
         from: scopedLogFilters.from,
         limit: 100,
         projectId: scopedLogFilters.projectId,
-        projectIds: allowedProjectIds,
+        projectIds: scopedProjectIds,
         tenantId: effectiveTenantId,
         to: scopedLogFilters.to
       })
@@ -106,30 +109,37 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
     ? (records ?? []).find((record) => record.requestId === selectedRequestId) ?? latestSelectedRecord
     : undefined;
   const canLoadSelectedDetail = Boolean(selectedRequestId && (!projectScoped || selectedRecord));
-  const selectedDetail = selectedRequestId && canLoadSelectedDetail
-      ? await getLiveGatewayRequestDetail(selectedRequestId, {
-        projectId: selectedRecord?.projectId ?? scopedLogFilters.projectId,
-        tenantId: effectiveTenantId
-      })
-    : null;
-  const scopedSelectedDetail =
-    selectedDetail ?? (records ?? []).find((record) => record.requestId === selectedRequestId);
   const optionRecordsForFilters = optionRecords ?? records ?? [];
   const modelOptions = getModelOptions(optionRecordsForFilters, scopedFilters.model);
   const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, scopedFilters);
   const displayRecords = (records ?? []).map(toDisplayModelRecord);
-  const displaySelectedDetail = scopedSelectedDetail ? toDisplayModelRecord(scopedSelectedDetail) : undefined;
+  const fallbackSelectedRecord = selectedRecord ? toDisplayModelRecord(selectedRecord) : undefined;
 
   return (
     <RequestLogTable
       detailPanel={
-        displaySelectedDetail ? (
-          <RequestLogDetailAside
-            locale={locale}
-            record={displaySelectedDetail}
-            tenantId={effectiveTenantId}
-            timezone={DEFAULT_DISPLAY_TIMEZONE}
-          />
+        selectedRequestId && canLoadSelectedDetail ? (
+          <Suspense
+            fallback={
+              fallbackSelectedRecord ? (
+                <RequestLogDetailAside
+                  locale={locale}
+                  record={fallbackSelectedRecord}
+                  tenantId={effectiveTenantId}
+                  timezone={DEFAULT_DISPLAY_TIMEZONE}
+                />
+              ) : undefined
+            }
+          >
+            <RequestLogDetailAsideLoader
+              fallbackRecord={fallbackSelectedRecord}
+              locale={locale}
+              projectId={selectedRecord?.projectId ?? scopedLogFilters.projectId}
+              requestId={selectedRequestId}
+              tenantId={effectiveTenantId}
+              timezone={DEFAULT_DISPLAY_TIMEZONE}
+            />
+          </Suspense>
         ) : undefined
       }
       allowAllProjects={!projectScoped}
@@ -139,10 +149,45 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
       modelOptions={modelOptions}
       projects={visibleProjects}
       records={displayRecords}
-      selectedRequestId={displaySelectedDetail?.requestId}
+      selectedRequestId={selectedRequestId || undefined}
       sourceState={records ? "ready" : "unavailable"}
       tenantId={effectiveTenantId}
       timezone={DEFAULT_DISPLAY_TIMEZONE}
+    />
+  );
+}
+
+async function RequestLogDetailAsideLoader({
+  fallbackRecord,
+  locale,
+  projectId,
+  requestId,
+  tenantId,
+  timezone
+}: {
+  fallbackRecord?: InvocationLogRecord;
+  locale: Locale;
+  projectId?: string;
+  requestId: string;
+  tenantId: string;
+  timezone: string;
+}) {
+  const detail = await getLiveGatewayRequestDetail(requestId, {
+    projectId,
+    tenantId
+  });
+  const record = detail ? toDisplayModelRecord(detail) : fallbackRecord;
+
+  if (!record) {
+    return null;
+  }
+
+  return (
+    <RequestLogDetailAside
+      locale={locale}
+      record={record}
+      tenantId={tenantId}
+      timezone={timezone}
     />
   );
 }

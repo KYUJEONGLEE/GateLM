@@ -6,6 +6,12 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  cachedControlPlaneRead,
+  CONTROL_PLANE_READ_CACHE_SECONDS,
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag
+} from "@/lib/control-plane/read-cache";
+import {
   getRuntimePolicyConfigForApplication,
   publishRuntimePolicyModelSelectionForApplication
 } from "@/lib/control-plane/runtime-policy-client";
@@ -81,6 +87,22 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
 }
 
 export async function listControlPlaneProjects(
+  tenantId: string
+): Promise<ProjectListResult> {
+  return cachedControlPlaneRead(
+    ["control-plane-projects", tenantId],
+    () => listControlPlaneProjectsFresh(tenantId),
+    {
+      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.projects,
+      tags: [
+        controlPlaneReadCacheTags.projects,
+        controlPlaneTenantReadCacheTag("projects", tenantId)
+      ]
+    }
+  );
+}
+
+export async function listControlPlaneProjectsFresh(
   tenantId: string
 ): Promise<ProjectListResult> {
   try {

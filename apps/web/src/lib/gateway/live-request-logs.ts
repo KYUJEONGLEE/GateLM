@@ -166,7 +166,7 @@ async function getLogProjectIds(
   const requestedProjectId = projectId?.trim();
   const scopedIds = dedupeProjectIds(scopedProjectIds);
 
-  if (scopedIds.length > 0) {
+  if (scopedProjectIds) {
     return requestedProjectId
       ? scopedIds.includes(requestedProjectId)
         ? [requestedProjectId]

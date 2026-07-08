@@ -5,8 +5,13 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag,
+  revalidateControlPlaneRead
+} from "@/lib/control-plane/read-cache";
+import {
   createProject,
-  listControlPlaneProjects,
+  listControlPlaneProjectsFresh,
   updateProject
 } from "@/lib/control-plane/projects-client";
 import type {
@@ -72,7 +77,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const syncProjectList = await listControlPlaneProjects(resolveControlPlaneTenantId(routeTenantId));
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
+  revalidateControlPlaneRead([
+    controlPlaneReadCacheTags.projects,
+    controlPlaneTenantReadCacheTag("projects", controlPlaneTenantId),
+    controlPlaneReadCacheTags.runtimePolicy
+  ]);
+
+  const syncProjectList = await listControlPlaneProjectsFresh(controlPlaneTenantId);
 
   if (syncProjectList.ok) {
     await syncApplicationChatEnvForProjects(syncProjectList.data).catch((error) => {
