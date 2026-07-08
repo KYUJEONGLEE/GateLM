@@ -378,35 +378,42 @@ export function ProjectDetailManagement({
     setPendingAction("save");
     setSubmitState({ message: "", status: "idle" });
 
-    const response = await fetch("/api/control-plane/projects", {
-      body: JSON.stringify({
-        action: "update",
-        tenantId,
-        values
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
 
-    if (!response.ok || !payload.project) {
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project update failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      setValues(getProjectUpdateValues(payload.project));
       setSubmitState({
-        message: payload.error ?? "Project update failed.",
+        message: text.detailSaved,
+        status: "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({
+        message: "Project update failed.",
         status: "error"
       });
+    } finally {
       setPendingAction(null);
-      return;
     }
-
-    setValues(getProjectUpdateValues(payload.project));
-    setSubmitState({
-      message: text.detailSaved,
-      status: "success"
-    });
-    setPendingAction(null);
-    router.refresh();
   }
 
   return (
@@ -552,35 +559,42 @@ export function ProjectDetailSection({
     setPendingAction("save");
     setSubmitState({ message: "", status: "idle" });
 
-    const response = await fetch("/api/control-plane/projects", {
-      body: JSON.stringify({
-        action: "update",
-        tenantId,
-        values
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
 
-    if (!response.ok || !payload.project) {
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project update failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      setValues(getProjectUpdateValues(payload.project));
       setSubmitState({
-        message: payload.error ?? "Project update failed.",
+        message: text.detailSaved,
+        status: "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({
+        message: "Project update failed.",
         status: "error"
       });
+    } finally {
       setPendingAction(null);
-      return;
     }
-
-    setValues(getProjectUpdateValues(payload.project));
-    setSubmitState({
-      message: text.detailSaved,
-      status: "success"
-    });
-    setPendingAction(null);
-    router.refresh();
   }
 
   return (
@@ -696,33 +710,46 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
     setIsDeleting(true);
     setSubmitState({ message: "", status: "idle" });
 
-    const response = await fetch("/api/control-plane/projects", {
-      body: JSON.stringify({
-        action: "update",
-        tenantId,
-        values: {
-          ...getProjectUpdateValues(project),
-          status: "ARCHIVED"
-        }
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+    let didNavigate = false;
 
-    if (!response.ok || !payload.project) {
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values: {
+            ...getProjectUpdateValues(project),
+            status: "ARCHIVED"
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project delete failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      didNavigate = true;
+      router.push(`/tenants/${tenantId}/projects`);
+      router.refresh();
+    } catch {
       setSubmitState({
-        message: payload.error ?? "Project delete failed.",
+        message: "Project delete failed.",
         status: "error"
       });
-      setIsDeleting(false);
-      return;
+    } finally {
+      if (!didNavigate) {
+        setIsDeleting(false);
+      }
     }
-
-    router.push(`/tenants/${tenantId}/projects`);
-    router.refresh();
   }
 
   return (
@@ -770,33 +797,46 @@ export function ProjectDeleteSection({
     setIsDeleting(true);
     setSubmitState({ message: "", status: "idle" });
 
-    const response = await fetch("/api/control-plane/projects", {
-      body: JSON.stringify({
-        action: "update",
-        tenantId,
-        values: {
-          ...getProjectUpdateValues(project),
-          status: "ARCHIVED"
-        }
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+    let didNavigate = false;
 
-    if (!response.ok || !payload.project) {
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values: {
+            ...getProjectUpdateValues(project),
+            status: "ARCHIVED"
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project delete failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      didNavigate = true;
+      router.push(`/tenants/${tenantId}/projects`);
+      router.refresh();
+    } catch {
       setSubmitState({
-        message: payload.error ?? "Project delete failed.",
+        message: "Project delete failed.",
         status: "error"
       });
-      setIsDeleting(false);
-      return;
+    } finally {
+      if (!didNavigate) {
+        setIsDeleting(false);
+      }
     }
-
-    router.push(`/tenants/${tenantId}/projects`);
-    router.refresh();
   }
 
   return (
