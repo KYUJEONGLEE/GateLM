@@ -1072,6 +1072,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 }
 
 func requestLogFilterOptionsResponseFromDomain(options invocationlog.RequestLogFilterOptions) requestLogFilterOptionsResponse {
+	models := append(make([]string, 0, len(options.Models)), options.Models...)
 	budgetScopes := make([]budgetScopeResponse, 0, len(options.BudgetScopes))
 	for _, scope := range options.BudgetScopes {
 		response := budgetScopeResponseFromScope(scope, "")
@@ -1081,7 +1082,7 @@ func requestLogFilterOptionsResponseFromDomain(options invocationlog.RequestLogF
 		budgetScopes = append(budgetScopes, response)
 	}
 	return requestLogFilterOptionsResponse{
-		Models:       append([]string(nil), options.Models...),
+		Models:       models,
 		BudgetScopes: budgetScopes,
 	}
 }

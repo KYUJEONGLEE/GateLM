@@ -64,7 +64,7 @@ function optionalQueryValue(query: URLSearchParams, key: string) {
 }
 
 function normalizeRange(value: string | null): LiveDashboardRange {
-  if (value === "1h" || value === "1d" || value === "1w") {
+  if (value === "5m" || value === "15m" || value === "1h" || value === "1d" || value === "1w") {
     return value;
   }
 

@@ -1,5 +1,11 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
+import {
+  DASHBOARD_RANGE_PREFERENCE_COOKIE,
+  DEFAULT_DASHBOARD_RANGE,
+  normalizeDashboardRangePreference
+} from "@/features/dashboard/dashboard-range-preference";
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
@@ -40,7 +46,14 @@ type DashboardPageProps = {
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
-  const { dashboardFilters, liveFilters } = buildDashboardFilters(resolvedSearchParams);
+  const cookieStore = await cookies();
+  const preferredRange = normalizeDashboardRangePreference(
+    cookieStore.get(DASHBOARD_RANGE_PREFERENCE_COOKIE)?.value
+  );
+  const { dashboardFilters, liveFilters } = buildDashboardFilters(
+    resolvedSearchParams,
+    preferredRange
+  );
   const suppressContentMotion = resolvedSearchParams?.motion === "none";
   const [locale, auth] = await Promise.all([
     getRequestLocale(),
@@ -125,19 +138,22 @@ async function MonthToDateSpendValue({
     from: monthToDateRange.from,
     to: monthToDateRange.to
   });
-  const totalSpendUsd = summary?.points.reduce((sum, point) => sum + point.spendUsd, 0);
+  const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
 
   return <>{formatDashboardMicroUsd(totalSpendUsd === undefined ? fallbackMicroUsd : totalSpendUsd * 1_000_000)}</>;
 }
 
-function buildDashboardFilters(searchParams: Awaited<DashboardPageProps["searchParams"]>): {
+function buildDashboardFilters(
+  searchParams: Awaited<DashboardPageProps["searchParams"]>,
+  preferredRange?: DashboardRange
+): {
   dashboardFilters: DashboardFilterState;
   liveFilters: LiveDashboardOverviewFilters;
 } {
   const budgetScopeId = normalizeOptionalText(searchParams?.budgetScopeId);
   const budgetScopeType = normalizeBudgetScopeTypeFilter(searchParams?.budgetScopeType);
   const projectId = normalizeOptionalText(searchParams?.projectId);
-  const range = normalizeDashboardRange(searchParams?.range);
+  const range = normalizeDashboardRange(searchParams?.range, preferredRange);
   const resolvedBy = normalizeOptionalText(searchParams?.resolvedBy);
 
   return {
@@ -158,12 +174,11 @@ function buildDashboardFilters(searchParams: Awaited<DashboardPageProps["searchP
   };
 }
 
-function normalizeDashboardRange(value: string | undefined): DashboardRange {
-  if (value === "1h" || value === "1d" || value === "1w") {
-    return value;
-  }
-
-  return "15m";
+function normalizeDashboardRange(
+  value: string | undefined,
+  fallbackRange: DashboardRange = DEFAULT_DASHBOARD_RANGE
+): DashboardRange {
+  return normalizeDashboardRangePreference(value) ?? fallbackRange;
 }
 
 function normalizeBudgetScopeTypeFilter(value: string | undefined): DashboardFilterState["budgetScopeType"] {

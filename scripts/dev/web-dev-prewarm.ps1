@@ -6,6 +6,16 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
+function Convert-ToSafeArray {
+    param([AllowNull()]$InputObject)
+
+    if ($null -eq $InputObject) {
+        return ,@()
+    }
+
+    return ,@($InputObject | Where-Object { $null -ne $_ })
+}
+
 function Resolve-PnpmRunner {
     $corepack = Get-Command corepack -ErrorAction SilentlyContinue
     if ($null -ne $corepack) {
@@ -32,10 +42,10 @@ function Read-LogLines {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        return @()
+        return ,@()
     }
 
-    return @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)
+    return Convert-ToSafeArray (Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)
 }
 
 function Wait-ForLogLine {
@@ -85,7 +95,7 @@ function Write-NewLogLines {
 function Stop-ProcessTree {
     param([Parameter(Mandatory = $true)][int]$ProcessId)
 
-    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)
+    $children = Convert-ToSafeArray (Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)
     foreach ($child in $children) {
         Stop-ProcessTree -ProcessId ([int]$child.ProcessId)
     }

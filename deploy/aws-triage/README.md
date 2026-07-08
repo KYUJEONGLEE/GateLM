@@ -45,6 +45,7 @@ Replace:
 - `GATELM_APPLICATION_BASE_URL`
 - `POSTGRES_PASSWORD`
 - `GATEWAY_EXACT_CACHE_KEY_SECRET`
+- `GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY`
 - `GATELM_DEMO_API_KEY`
 - `GATELM_DEMO_APP_TOKEN`
 
@@ -76,6 +77,34 @@ long random value for each deployment and do not reuse the placeholder from
 `.env.example`.
 
 Leave the SMTP values blank until a real mail sender is configured.
+
+Provider credentials registered through the Web Console are encrypted before
+being stored. Set a stable 32-byte encryption key before using the Provider
+registration screen:
+
+```bash
+GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY=<openssl-rand-hex-32-output>
+GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY_VERSION=v1
+```
+
+Do not change this key after storing provider credentials unless you also
+rotate or re-register those credentials. The value is a server-only encryption
+key, not a provider API key.
+
+To point the demo chat surface at a project created through the Web Console,
+keep the key values only in the EC2 `.env` file:
+
+```bash
+GATELM_CONTROL_PLANE_TENANT_ID=<tenant-uuid>
+GATELM_CONTROL_PLANE_PROJECT_ID=<project-uuid>
+GATELM_CONTROL_PLANE_APPLICATION_ID=<application-uuid>
+GATELM_GATEWAY_API_KEY=<project-gateway-api-key>
+GATELM_APPLICATION_CHAT_API_KEYS='{"<project-uuid>":"<project-gateway-api-key>"}'
+GATELM_APPLICATION_CHAT_PROFILES='[{"id":"support","label":"Customer Support","projectId":"<project-uuid>","apiKey":"<project-gateway-api-key>"}]'
+```
+
+Leave these values blank to use the seeded demo tenant, project, application,
+and Gateway API key. Do not commit real project API keys or provider keys.
 
 Optional Google login for the main landing page uses the Web Console auth proxy and Control Plane OAuth handler. Configure these only after creating a Google Cloud OAuth client for the exact callback URL:
 
@@ -259,6 +288,15 @@ docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core application web
 docker compose --env-file .env ps
 ```
+
+If chat returns `invalid_api_key`, check that the chat profile or
+`GATELM_GATEWAY_API_KEY` value matches the project Gateway API key stored in
+Control Plane, then recreate `web` and `application`. If Provider registration
+shows `Provider credential encryption backend is not configured`, set
+`GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY` and recreate `control-plane-api`
+before registering credentials. If Gateway returns a sanitized runtime config
+error, confirm the selected project/application is active and has a published
+RuntimeSnapshot before debugging provider credentials.
 
 ## Stop Or Remove
 

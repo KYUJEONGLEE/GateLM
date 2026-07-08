@@ -177,6 +177,30 @@ func TestProjectLogsHandlerIncludesFilterOptionsMetaWhenRequested(t *testing.T) 
 	}
 }
 
+func TestProjectLogsHandlerSerializesEmptyFilterOptionsAsArrays(t *testing.T) {
+	reader := &recordingProjectLogsReader{}
+	handler := ProjectLogsHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z&includeFilterOptions=true", nil)
+	req.SetPathValue("projectId", "project_demo")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, `"models":null`) || !strings.Contains(body, `"models":[]`) {
+		t.Fatalf("expected empty model options to serialize as [], got: %s", body)
+	}
+	if strings.Contains(body, `"budgetScopes":null`) || !strings.Contains(body, `"budgetScopes":[]`) {
+		t.Fatalf("expected empty budget scope options to serialize as [], got: %s", body)
+	}
+}
+
 func TestProjectLogsHandlerRejectsMissingRange(t *testing.T) {
 	handler := ProjectLogsHandler{
 		Reader:   &recordingProjectLogsReader{},

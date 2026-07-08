@@ -15,7 +15,7 @@ import type {
   LiveRequestStatusFilter
 } from "@/lib/gateway/live-requests-types";
 
-export const LIVE_REQUESTS_POLL_INTERVAL_MS = 2000;
+export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
 
 type LiveRequestsCardFilters = {
   budgetScopeId: string;
@@ -466,6 +466,10 @@ function appendQuery(query: URLSearchParams, key: string, value: string | undefi
 }
 
 function requestLogsCreatedRange(range: string) {
+  if (range === "5m") {
+    return "15m";
+  }
+
   if (range === "15m" || range === "1h") {
     return range;
   }
