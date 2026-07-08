@@ -9,10 +9,10 @@ import {
 } from "@/lib/control-plane/runtime-policy-types";
 import { formatDateTime } from "@/lib/formatting/formatters";
 
-import { formatEnabled } from "./runtime-policy-editor-controls";
-import type { RuntimePolicyEditorText } from "./runtime-policy-editor";
+import type { RuntimePolicyEditorText } from "./runtime-policy-editor-types";
+import { formatEnabled } from "./runtime-policy-panels/shared";
 
-type RuntimePolicyDetailModalProps = {
+export type RuntimePolicyDetailModalProps = {
   displayConfig: RuntimePolicyConfig;
   isSubmitting: boolean;
   model: RuntimePolicyModel;

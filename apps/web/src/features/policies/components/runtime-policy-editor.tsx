@@ -1,28 +1,47 @@
 "use client";
 
 import { Save, UploadCloud } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { getProviderConnectionFamily } from "@/features/provider-connections/components/provider-family-icon";
 import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
-import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import { applyPrimaryRuntimePolicyRouteSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
   type RuntimePolicyDraftValues,
-  type RuntimePolicyModelConfig,
   type RuntimePolicyModel
 } from "@/lib/control-plane/runtime-policy-types";
 import type { Locale } from "@/lib/i18n/locale";
+import type {
+  PolicySection,
+  RoutingPriorityRoute,
+  RuntimePolicyEditorText
+} from "./runtime-policy-editor-types";
+import type { RuntimePolicyDetailModalProps } from "./runtime-policy-detail-modal";
+import {
+  getRoutingProviderOptions,
+  getSelectedRoutingProviderConnections,
+  getSelectedRoutingProviderNames,
+  getWritableRuntimePolicyDraftValues,
+  groupRoutingModelsByProvider,
+  hasRoutingModelSelection,
+  mergeDraftValuesWithProviderConnections
+} from "./runtime-policy-editor-utils";
 import {
   PolicyDetailModalFallback,
   PolicyPanelFallback,
   PolicyPanelFallbackGroup
 } from "./runtime-policy-panel-fallback";
+import type { BudgetPolicyPanelProps } from "./runtime-policy-panels/budget-panel";
+import type { CachePolicyPanelProps } from "./runtime-policy-panels/cache-panel";
+import type { RateLimitPolicyPanelProps } from "./runtime-policy-panels/rate-limit-panel";
+import type { RoutingPolicyPanelProps } from "./runtime-policy-panels/routing-panel";
+import type { SafetyPolicyPanelProps } from "./runtime-policy-panels/safety-panel";
+import type { StreamingPolicyPanelProps } from "./runtime-policy-panels/streaming-panel";
 
 type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
@@ -58,34 +77,6 @@ type OneTimeApiKeyState = {
   projectName: string;
 };
 
-export type PolicySection =
-  | "general"
-  | "safety"
-  | "routing"
-  | "budget"
-  | "rateLimit"
-  | "cache"
-  | "streaming";
-
-export type RoutingProviderOption = {
-  displayName: string;
-  family: string;
-  provider: string;
-  providerId: string;
-};
-
-export type RoutingPriorityRoute = "default" | "fallback" | "lowCost";
-
-type PolicySectionLabelText = {
-  budgetTab: string;
-  cacheTab: string;
-  general: string;
-  rateLimitTab: string;
-  routing: string;
-  safetyTab: string;
-  streaming: string;
-};
-
 const policySections: PolicySection[] = [
   "routing",
   "budget",
@@ -95,51 +86,103 @@ const policySections: PolicySection[] = [
   "streaming"
 ];
 
-const BudgetPolicyPanel = lazy(() =>
-  import("./runtime-policy-editor-panels/budget-policy-panel").then((module) => ({
-    default: module.BudgetPolicyPanel
-  }))
+function RuntimePolicyDetailLoadingFallback() {
+  return (
+    <section
+      aria-busy="true"
+      aria-labelledby="policy-detail-title"
+      aria-modal="true"
+      className="modal-panel policy-detail-modal"
+      onClick={(event) => event.stopPropagation()}
+      role="dialog"
+    >
+      <div className="panel-heading">
+        <h3 id="policy-detail-title">Policy details</h3>
+      </div>
+
+      <div className="policy-detail-layout">
+        <PolicyPanelFallback heading="Runtime snapshot" />
+        <PolicyPanelFallback heading="Provider catalog" />
+        <PolicyPanelFallback heading="History" wide />
+      </div>
+    </section>
+  );
+}
+
+const BudgetPolicyPanel = dynamic<BudgetPolicyPanelProps>(() =>
+  import("./runtime-policy-panels/budget-panel").then((module) => module.BudgetPolicyPanel),
+  {
+    loading: () => <PolicyPanelFallback heading="Budget policy" />
+  }
 );
-const CachePolicyPanel = lazy(() =>
-  import("./runtime-policy-editor-panels/cache-policy-panel").then((module) => ({
-    default: module.CachePolicyPanel
-  }))
+const CachePolicyPanel = dynamic<CachePolicyPanelProps>(() =>
+  import("./runtime-policy-panels/cache-panel").then((module) => module.CachePolicyPanel),
+  {
+    loading: () => (
+      <PolicyPanelFallbackGroup
+        panels={[
+          { heading: "Exact cache" },
+          { heading: "Semantic cache" }
+        ]}
+      />
+    )
+  }
 );
-const RateLimitPolicyPanel = lazy(() =>
-  import("./runtime-policy-editor-panels/rate-limit-policy-panel").then((module) => ({
-    default: module.RateLimitPolicyPanel
-  }))
+const RateLimitPolicyPanel = dynamic<RateLimitPolicyPanelProps>(() =>
+  import("./runtime-policy-panels/rate-limit-panel").then((module) => module.RateLimitPolicyPanel),
+  {
+    loading: () => <PolicyPanelFallback heading="Rate limit" />
+  }
 );
-const RoutingPolicyPanel = lazy(() =>
-  import("./runtime-policy-editor-panels/routing-policy-panel").then((module) => ({
-    default: module.RoutingPolicyPanel
-  }))
+const RoutingPolicyPanel = dynamic<RoutingPolicyPanelProps>(() =>
+  import("./runtime-policy-panels/routing-panel").then((module) => module.RoutingPolicyPanel),
+  {
+    loading: () => (
+      <PolicyPanelFallbackGroup
+        panels={[
+          { heading: "Routing" },
+          { heading: "Advanced routing", lineCount: 1 },
+          { heading: "Provider catalog" }
+        ]}
+      />
+    )
+  }
 );
-const SafetyPolicyPanel = lazy(() =>
-  import("./runtime-policy-editor-panels/safety-policy-panel").then((module) => ({
-    default: module.SafetyPolicyPanel
-  }))
+const SafetyPolicyPanel = dynamic<SafetyPolicyPanelProps>(() =>
+  import("./runtime-policy-panels/safety-panel").then((module) => module.SafetyPolicyPanel),
+  {
+    loading: () => (
+      <PolicyPanelFallbackGroup
+        panels={[
+          { heading: "Safety detectors", lineCount: 4, wide: true },
+          { heading: "Prompt capture" },
+          { heading: "Response capture" }
+        ]}
+      />
+    )
+  }
 );
-const StreamingPolicyPanel = lazy(() =>
-  import("./runtime-policy-editor-panels/streaming-policy-panel").then((module) => ({
-    default: module.StreamingPolicyPanel
-  }))
+const StreamingPolicyPanel = dynamic<StreamingPolicyPanelProps>(() =>
+  import("./runtime-policy-panels/streaming-panel").then((module) => module.StreamingPolicyPanel),
+  {
+    loading: () => <PolicyPanelFallback heading="Streaming" />
+  }
 );
-const RuntimePolicyDetailModal = lazy(() =>
-  import("./runtime-policy-detail-modal").then((module) => ({
-    default: module.RuntimePolicyDetailModal
-  }))
+const RuntimePolicyDetailModal = dynamic<RuntimePolicyDetailModalProps>(() =>
+  import("./runtime-policy-detail-modal").then((module) => module.RuntimePolicyDetailModal),
+  {
+    loading: RuntimePolicyDetailLoadingFallback
+  }
 );
 
 function getPolicyTabId(section: PolicySection) {
   return `policy-tab-${section}`;
 }
-
 function getPolicyPanelId(section: PolicySection) {
   return `policy-panel-${section}`;
 }
 
-function getPolicySectionLabel(section: PolicySection, text: PolicySectionLabelText) {
+function getPolicySectionLabel(section: PolicySection, text: RuntimePolicyEditorText) {
   switch (section) {
     case "general":
       return text.general;
@@ -158,92 +201,7 @@ function getPolicySectionLabel(section: PolicySection, text: PolicySectionLabelT
   }
 }
 
-const policyText: Record<
-  Locale,
-  {
-    activeConfig: string;
-    activeApiKeyMissing: string;
-    apiKeyIssueFailed: string;
-    apiKeyIssued: string;
-    budget: string;
-    budgetEnforcement: string;
-    budgetTab: string;
-    budgetWarning: string;
-    cache: string;
-    cacheEnabled: string;
-    cacheSection: string;
-    cacheTab: string;
-    cacheTtl: string;
-    catalogVersion: string;
-    configVersion: string;
-    completionPrice: string;
-    defaultRoute: string;
-    detectors: string;
-    detectorType: string;
-    close: string;
-    details: string;
-    disabled: string;
-    enabled: string;
-    fallbackRoute: string;
-    fixtureFallback: string;
-    general: string;
-    jsonMode: string;
-    limit: string;
-    lowCostRoute: string;
-    logSafeCaptureHint: string;
-    mandatoryProtection: string;
-    mandatoryProtectionHint: string;
-    maxBucketTokens: string;
-    mode: string;
-    model: string;
-    models: string;
-    noProviderModels: string;
-    placeholder: string;
-    policyDetails: string;
-    pricing: string;
-    pricingVersion: string;
-    promptCapture: string;
-    promptCaptureEnabled: string;
-    promptCaptureMaxChars: string;
-    promptPrice: string;
-    provider: string;
-    providerConnectionMissing: string;
-    providerCount: string;
-    providerCatalog: string;
-    publish: string;
-    publishedAt: string;
-    history: string;
-    rateLimit: string;
-    rateLimitInfo: string;
-    rateLimitTab: string;
-    refillRate: string;
-    remove: string;
-    rollback: string;
-    routing: string;
-    routingAdvanced: string;
-    runtimeSnapshot: string;
-    responseCapture: string;
-    responseCaptureHint: string;
-    responseCaptureMaxChars: string;
-    saveDraft: string;
-    safetyTab: string;
-    issueApiKey: string;
-    issuingApiKey: string;
-    shortPrompt: string;
-    snapshotState: string;
-    snapshotVersion: string;
-    semanticCache: string;
-    semanticCacheDisabled: string;
-    semanticCacheEvidenceOnly: string;
-    semanticCacheNote: string;
-    streaming: string;
-    streamingNote: string;
-    streamingUnavailable: string;
-    templateFallback: string;
-    title: string;
-    tokens: string;
-  }
-> = {
+const policyText: Record<Locale, RuntimePolicyEditorText> = {
   en: {
     activeConfig: "Active config",
     activeApiKeyMissing:
@@ -432,8 +390,6 @@ const policyText: Record<
   }
 };
 
-export type RuntimePolicyEditorText = (typeof policyText)["en"];
-
 function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEditorText) {
   switch (section) {
     case "budget":
@@ -475,7 +431,6 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
       return null;
   }
 }
-
 export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
@@ -839,6 +794,32 @@ export function RuntimePolicyEditor({
     );
   }
 
+  function renderActivePolicyPanel() {
+    if (activePolicySection === "general") {
+      return null;
+    }
+
+    const content = renderPolicyPanelContent(activePolicySection);
+
+    if (!content) {
+      return null;
+    }
+
+    return (
+      <section className="policy-layout policy-settings-list">
+        <div
+          aria-labelledby={getPolicyTabId(activePolicySection)}
+          className="policy-tab-panel"
+          id={getPolicyPanelId(activePolicySection)}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          {content}
+        </div>
+      </section>
+    );
+  }
+
   function renderPolicyPanelContent(section: PolicySection) {
     if (activePolicySection !== section) {
       return null;
@@ -875,7 +856,7 @@ export function RuntimePolicyEditor({
               modelOptionsByProvider={modelOptionsByProvider}
               onModelChange={updateRoutingModel}
               onProviderChange={updateRoutingProvider}
-              onShortPromptChange={(value) =>
+              onShortPromptChange={(value: number) =>
                 setDraftValues((current) => ({
                   ...current,
                   routingShortPromptMaxChars: value
@@ -1011,8 +992,8 @@ export function RuntimePolicyEditor({
         })}
       </div>
 
-      {hasGeneralSection ? (
-        <section className="policy-general-layout" hidden={activePolicySection !== "general"}>
+      {hasGeneralSection && activePolicySection === "general" ? (
+        <section className="policy-general-layout">
           <div
             aria-labelledby={getPolicyTabId("general")}
             className="policy-tab-panel"
@@ -1027,81 +1008,7 @@ export function RuntimePolicyEditor({
         </section>
       ) : null}
 
-      <section
-        className="policy-layout policy-settings-list"
-        hidden={activePolicySection === "general"}
-      >
-        <div
-          aria-labelledby={getPolicyTabId("safety")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "safety"}
-          id={getPolicyPanelId("safety")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          {renderPolicyPanelContent("safety")}
-        </div>
-
-        <div
-          aria-labelledby={getPolicyTabId("routing")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "routing"}
-          id={getPolicyPanelId("routing")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          {renderPolicyPanelContent("routing")}
-        </div>
-
-        {!shouldMoveBudgetToGeneral ? (
-          <div
-            aria-labelledby={getPolicyTabId("budget")}
-            className="policy-tab-panel"
-            hidden={activePolicySection !== "budget"}
-            id={getPolicyPanelId("budget")}
-            role="tabpanel"
-            tabIndex={0}
-          >
-            {renderPolicyPanelContent("budget")}
-          </div>
-        ) : null}
-
-        <div
-          aria-labelledby={getPolicyTabId("rateLimit")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "rateLimit"}
-          id={getPolicyPanelId("rateLimit")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          {renderPolicyPanelContent("rateLimit")}
-        </div>
-
-        <div
-          aria-labelledby={getPolicyTabId("cache")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "cache"}
-          id={getPolicyPanelId("cache")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          {renderPolicyPanelContent("cache")}
-        </div>
-
-        {hideStreamingTab ? null : (
-          <div
-            aria-labelledby={getPolicyTabId("streaming")}
-            className="policy-tab-panel"
-            hidden={activePolicySection !== "streaming"}
-            id={getPolicyPanelId("streaming")}
-            role="tabpanel"
-            tabIndex={0}
-          >
-            {renderPolicyPanelContent("streaming")}
-          </div>
-        )}
-
-      </section>
+      {renderActivePolicyPanel()}
 
       {isDetailOpen ? (
         <div className="modal-backdrop" onClick={() => setIsDetailOpen(false)} role="presentation">
@@ -1118,7 +1025,7 @@ export function RuntimePolicyEditor({
               isSubmitting={isSubmitting}
               model={model}
               onClose={() => setIsDetailOpen(false)}
-              onRollback={(configVersion) => void rollbackPolicy(configVersion)}
+              onRollback={(configVersion: string) => void rollbackPolicy(configVersion)}
               rollbackTarget={rollbackTarget}
               text={text}
             />
@@ -1127,317 +1034,4 @@ export function RuntimePolicyEditor({
       ) : null}
     </main>
   );
-}
-
-function getWritableRuntimePolicyDraftValues(
-  config: RuntimePolicyConfig,
-  providerConnections: ProviderConnectionRecord[]
-) {
-  return normalizeDraftRoutingForProviderConnections(
-    getRuntimePolicyDraftValues(config),
-    providerConnections
-  );
-}
-
-function normalizeDraftRoutingForProviderConnections(
-  values: RuntimePolicyDraftValues,
-  providerConnections: ProviderConnectionRecord[]
-): RuntimePolicyDraftValues {
-  const modelOptionsByProvider = groupRoutingModelsByProvider(values.models, providerConnections);
-  const runtimeModels = getProviderConnectionRuntimeModels(providerConnections);
-  const firstActiveModel = runtimeModels.find((model) => model.status === "active") ?? runtimeModels[0];
-
-  if (!firstActiveModel) {
-    return values;
-  }
-
-  const defaultRouteAvailable = hasRoutingModelSelection(
-    values.routingDefaultProvider,
-    values.routingDefaultModel,
-    modelOptionsByProvider
-  );
-  const lowCostRouteAvailable = hasRoutingModelSelection(
-    values.routingLowCostProvider,
-    values.routingLowCostModel,
-    modelOptionsByProvider
-  );
-  const fallbackRouteAvailable = hasRoutingModelSelection(
-    values.routingFallbackProvider,
-    values.routingFallbackModel,
-    modelOptionsByProvider
-  );
-
-  if (defaultRouteAvailable && lowCostRouteAvailable && fallbackRouteAvailable) {
-    return values;
-  }
-
-  return {
-    ...values,
-    routingDefaultModel: defaultRouteAvailable
-      ? values.routingDefaultModel
-      : firstActiveModel.model,
-    routingDefaultProvider: defaultRouteAvailable
-      ? values.routingDefaultProvider
-      : firstActiveModel.provider,
-    routingFallbackModel: fallbackRouteAvailable
-      ? values.routingFallbackModel
-      : firstActiveModel.model,
-    routingFallbackProvider: fallbackRouteAvailable
-      ? values.routingFallbackProvider
-      : firstActiveModel.provider,
-    routingLowCostModel: lowCostRouteAvailable
-      ? values.routingLowCostModel
-      : firstActiveModel.model,
-    routingLowCostProvider: lowCostRouteAvailable
-      ? values.routingLowCostProvider
-      : firstActiveModel.provider
-  };
-}
-
-function groupModelsByProvider(models: RuntimePolicyModelConfig[]) {
-  const groups = new Map<string, RuntimePolicyModelConfig[]>();
-
-  for (const model of models) {
-    const modelsForProvider = groups.get(model.provider) ?? [];
-    modelsForProvider.push(model);
-    groups.set(model.provider, modelsForProvider);
-  }
-
-  return groups;
-}
-
-function groupRoutingModelsByProvider(
-  _models: RuntimePolicyModelConfig[],
-  providerConnections: ProviderConnectionRecord[]
-) {
-  return groupModelsByProvider(getProviderConnectionRuntimeModels(providerConnections));
-}
-
-function getRoutingProviderOptions(
-  providerConnections: ProviderConnectionRecord[],
-  _models: RuntimePolicyModelConfig[],
-  selectedProviders: Array<string | null | undefined>
-): RoutingProviderOption[] {
-  const providerOptions = new Map<string, RoutingProviderOption>();
-
-  for (const providerConnection of providerConnections) {
-    const providerName = normalizePolicyText(providerConnection.provider);
-    const displayName = normalizePolicyText(providerConnection.displayName) || providerName;
-
-    if (providerName && getProviderConnectionModels(providerConnection).length > 0) {
-      providerOptions.set(providerName, {
-        displayName,
-        family: getProviderConnectionFamily(providerConnection),
-        provider: providerName,
-        providerId: providerConnection.id
-      });
-    }
-  }
-
-  for (const provider of selectedProviders) {
-    const providerName = normalizePolicyText(provider);
-    const providerConnection = providerConnections.find(
-      (connection) => normalizePolicyText(connection.provider) === providerName
-    );
-
-    if (
-      providerName &&
-      !providerOptions.has(providerName) &&
-      providerConnection
-    ) {
-      providerOptions.set(providerName, {
-        displayName: normalizePolicyText(providerConnection.displayName) || providerName,
-        family: getProviderConnectionFamily(providerConnection),
-        provider: providerName,
-        providerId: `selected-provider-${providerName}`
-      });
-    }
-  }
-
-  return Array.from(providerOptions.values());
-}
-
-function getSelectedRoutingProviderConnections(
-  values: RuntimePolicyDraftValues,
-  providerConnections: ProviderConnectionRecord[]
-) {
-  const providerConnectionsByProvider = new Map(
-    providerConnections.map((providerConnection) => [
-      normalizePolicyText(providerConnection.provider),
-      providerConnection
-    ])
-  );
-
-  return getSelectedRoutingProviderNames(values)
-    .map((provider) => providerConnectionsByProvider.get(provider))
-    .filter(
-      (providerConnection): providerConnection is ProviderConnectionRecord =>
-        Boolean(providerConnection && getProviderConnectionModels(providerConnection).length > 0)
-    );
-}
-
-function getSelectedRoutingProviderNames(values: RuntimePolicyDraftValues) {
-  return Array.from(
-    new Set(
-      [
-        values.routingDefaultProvider,
-        values.routingLowCostProvider,
-        values.routingFallbackProvider
-      ]
-        .map((provider) => normalizePolicyText(provider))
-        .filter(Boolean)
-    )
-  );
-}
-
-function mergeDraftValuesWithProviderConnections(
-  values: RuntimePolicyDraftValues,
-  providerConnections: ProviderConnectionRecord[]
-): RuntimePolicyDraftValues {
-  const providerModels = getProviderConnectionRuntimeModels(providerConnections);
-  const models = mergeRuntimePolicyModels([], providerModels);
-  const providerModelKeys = new Set(
-    providerModels.map((model) => runtimePolicyModelKey(model.provider, model.model))
-  );
-
-  return {
-    ...values,
-    models,
-    pricingRules: mergeRuntimePolicyPricingRules(
-      values.pricingRules.filter((pricingRule) =>
-        providerModelKeys.has(runtimePolicyModelKey(pricingRule.provider, pricingRule.model))
-      ),
-      providerModels
-    )
-  };
-}
-
-function getProviderConnectionRuntimeModels(providerConnections: ProviderConnectionRecord[]) {
-  return providerConnections.flatMap((providerConnection) =>
-    getProviderConnectionModels(providerConnection).map((modelName) =>
-      toRuntimePolicyModelConfig(providerConnection, modelName)
-    )
-  );
-}
-
-function toRuntimePolicyModelConfig(
-  providerConnection: ProviderConnectionRecord,
-  modelName: string
-): RuntimePolicyModelConfig {
-  return {
-    contextWindowTokens: 128000,
-    displayName: modelName,
-    model: modelName,
-    provider: providerConnection.provider,
-    status: providerConnection.status === "ACTIVE" ? "active" : "disabled",
-    supportsJsonMode: true,
-    supportsStreaming: true
-  };
-}
-
-function mergeRuntimePolicyModels(
-  models: RuntimePolicyModelConfig[],
-  nextModels: RuntimePolicyModelConfig[]
-) {
-  const merged = new Map<string, RuntimePolicyModelConfig>();
-
-  for (const model of [...models, ...nextModels]) {
-    const provider = normalizePolicyText(model.provider);
-    const modelName = normalizePolicyText(model.model);
-
-    if (provider && modelName) {
-      merged.set(`${provider}::${modelName}`, {
-        ...model,
-        displayName: normalizePolicyText(model.displayName) || modelName,
-        model: modelName,
-        provider
-      });
-    }
-  }
-
-  return Array.from(merged.values());
-}
-
-function runtimePolicyModelKey(provider: unknown, model: unknown) {
-  return `${normalizePolicyText(provider)}::${normalizePolicyText(model)}`;
-}
-
-function mergeRuntimePolicyPricingRules(
-  pricingRules: RuntimePolicyDraftValues["pricingRules"],
-  models: RuntimePolicyModelConfig[]
-) {
-  const merged = new Map<string, RuntimePolicyDraftValues["pricingRules"][number]>();
-
-  for (const pricingRule of pricingRules) {
-    const provider = normalizePolicyText(pricingRule.provider);
-    const model = normalizePolicyText(pricingRule.model);
-
-    if (provider && model) {
-      merged.set(`${provider}::${model}`, {
-        ...pricingRule,
-        model,
-        provider
-      });
-    }
-  }
-
-  for (const model of models) {
-    const provider = normalizePolicyText(model.provider);
-    const modelName = normalizePolicyText(model.model);
-    const key = `${provider}::${modelName}`;
-
-    if (provider && modelName && !merged.has(key)) {
-      merged.set(key, {
-        completionTokenMicroUsd: 10,
-        model: modelName,
-        pricingVersion: "default",
-        promptTokenMicroUsd: 10,
-        provider
-      });
-    }
-  }
-
-  return Array.from(merged.values());
-}
-
-function hasRoutingModelSelection(
-  provider: string | null | undefined,
-  model: string | null | undefined,
-  modelOptionsByProvider: Map<string, RuntimePolicyModelConfig[]>
-) {
-  const trimmedProvider = normalizePolicyText(provider);
-  const trimmedModel = normalizePolicyText(model);
-
-  if (!trimmedProvider || !trimmedModel) {
-    return false;
-  }
-
-  return Boolean(
-    modelOptionsByProvider
-      .get(trimmedProvider)
-      ?.some(
-        (option) =>
-          normalizePolicyText(option.model) === trimmedModel && option.status === "active"
-      )
-  );
-}
-
-function getProviderConnectionModels(providerConnection: ProviderConnectionRecord) {
-  const models = providerConnection.providerConfig?.models;
-
-  if (!Array.isArray(models)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      models
-        .map((model) => (typeof model === "string" ? model.trim() : ""))
-        .filter(Boolean)
-    )
-  );
-}
-
-function normalizePolicyText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
 }

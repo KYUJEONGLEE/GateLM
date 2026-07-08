@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 
-import type { RuntimePolicyEditorText } from "./runtime-policy-editor";
+import type { RuntimePolicyEditorText } from "./runtime-policy-editor-types";
 
 type PolicyPanelFallbackProps = {
   className?: string;

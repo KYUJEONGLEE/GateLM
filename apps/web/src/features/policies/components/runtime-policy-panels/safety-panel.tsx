@@ -1,12 +1,15 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import { Switch } from "@/components/ui/switch";
-import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
+import type {
+  RuntimePolicyDetector,
+  RuntimePolicyDraftValues
+} from "@/lib/control-plane/runtime-policy-types";
 
-import { DetectorEditor, PolicyNumberField } from "../runtime-policy-editor-controls";
-import type { RuntimePolicyEditorText } from "../runtime-policy-editor";
+import type { RuntimePolicyEditorText } from "../runtime-policy-editor-types";
+import { PolicyNumberField } from "./shared";
 
-type SafetyPolicyPanelProps = {
+export type SafetyPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: Dispatch<SetStateAction<RuntimePolicyDraftValues>>;
   text: RuntimePolicyEditorText;
@@ -96,5 +99,83 @@ export function SafetyPolicyPanel({
         </dl>
       </article>
     </>
+  );
+}
+
+function DetectorEditor({
+  detector,
+  labels,
+  onChange
+}: {
+  detector: RuntimePolicyDetector;
+  labels: RuntimePolicyEditorText;
+  onChange: (detector: RuntimePolicyDetector) => void;
+}) {
+  const isMandatory = isMandatorySafetyDetector(detector.type);
+  const actionValue = isMandatory ? "block" : detector.action;
+
+  return (
+    <div
+      className="policy-detector-row"
+      data-detector-type={detector.type}
+      data-mandatory={isMandatory}
+    >
+      <label className="policy-toggle-row">
+        <Switch
+          aria-label={`${detector.type} ${labels.enabled}`}
+          checked={isMandatory || detector.enabled}
+          disabled={isMandatory}
+          onCheckedChange={(checked) =>
+            onChange({
+              ...detector,
+              enabled: checked
+            })
+          }
+        />
+        <span>{labels.enabled}</span>
+      </label>
+      <div className="policy-detector-name">
+        <span>{labels.detectorType}</span>
+        <strong>{detector.type}</strong>
+      </div>
+      <label className="policy-field">
+        <span>{labels.mode}</span>
+        <select
+          disabled={isMandatory}
+          onChange={(event) =>
+            onChange({
+              ...detector,
+              action: event.target.value === "block" ? "block" : "redact"
+            })
+          }
+          value={actionValue}
+        >
+          <option value="redact">redact</option>
+          <option value="block">block</option>
+        </select>
+      </label>
+      <label className="policy-field">
+        <span>{labels.placeholder}</span>
+        <input
+          onChange={(event) =>
+            onChange({
+              ...detector,
+              placeholder: event.target.value
+            })
+          }
+          value={detector.placeholder}
+        />
+      </label>
+    </div>
+  );
+}
+
+function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {
+  return (
+    detectorType === "resident_registration_number" ||
+    detectorType === "api_key" ||
+    detectorType === "authorization_header" ||
+    detectorType === "jwt" ||
+    detectorType === "private_key"
   );
 }

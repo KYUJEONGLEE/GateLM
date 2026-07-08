@@ -1,10 +1,10 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { RuntimePolicyModel } from "@/lib/control-plane/runtime-policy-types";
 
-import { formatEnabled } from "../runtime-policy-editor-controls";
-import type { RuntimePolicyEditorText } from "../runtime-policy-editor";
+import type { RuntimePolicyEditorText } from "../runtime-policy-editor-types";
+import { formatEnabled } from "./shared";
 
-type StreamingPolicyPanelProps = {
+export type StreamingPolicyPanelProps = {
   runtimeSnapshot: RuntimePolicyModel["runtimeSnapshot"];
   text: RuntimePolicyEditorText;
 };

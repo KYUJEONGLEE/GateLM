@@ -80,17 +80,17 @@ test("policy editor exposes category tabs and category panels", async ({ page })
 
   await page.getByRole("tab", { exact: true, name: "Safety" }).click();
   await expect(page.getByRole("tabpanel", { exact: true, name: "Safety" })).toBeVisible();
-  await expect(
-    page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "Routing" })
-  ).toBeHidden();
+  await expect(page.locator("#policy-panel-routing")).toHaveCount(0);
   await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
 });
 
-test("lazy policy tab panel keeps wrapper and shows loading fallback", async ({ page }) => {
+test("lazy policy tab panel mounts only for active tab and shows loading fallback", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);
-  await delayRuntimePolicyLazyChunk(page, "safety-policy-panel");
+  await delayRuntimePolicyLazyChunk(page, "safety-panel");
   await page.goto(policyPath);
   await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
+  await expect(page.locator("#policy-panel-routing")).toHaveCount(1);
+  await expect(page.locator("#policy-panel-safety")).toHaveCount(0);
 
   await page.getByRole("tab", { exact: true, name: "Safety" }).click();
   const safetyPanel = page.getByRole("tabpanel", { exact: true, name: "Safety" });
@@ -100,6 +100,7 @@ test("lazy policy tab panel keeps wrapper and shows loading fallback", async ({ 
 
   await expect(safetyPanel).toBeVisible();
   await expect(safetyPanel).toHaveClass(/policy-tab-panel/);
+  await expect(page.locator("#policy-panel-routing")).toHaveCount(0);
   await expect(loadingPanel).toBeVisible();
   await expect(loadingPanel).toHaveAttribute("aria-busy", "true");
   await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
@@ -176,9 +177,7 @@ test("project policy editor opens with project general tab before routing", asyn
 
   await page.getByRole("tab", { exact: true, name: "Routing" }).click();
   await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
-  await expect(
-    page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "General" })
-  ).toBeHidden();
+  await expect(page.locator("#policy-panel-general")).toHaveCount(0);
 });
 
 test("safety detectors expose five editable categories and gray locked mandatory protection", async ({

@@ -3,10 +3,10 @@ import type { Dispatch, SetStateAction } from "react";
 import { Switch } from "@/components/ui/switch";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
-import { PolicyNumberField } from "../runtime-policy-editor-controls";
-import type { RuntimePolicyEditorText } from "../runtime-policy-editor";
+import type { RuntimePolicyEditorText } from "../runtime-policy-editor-types";
+import { PolicyNumberField } from "./shared";
 
-type CachePolicyPanelProps = {
+export type CachePolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
   onDraftValuesChange: Dispatch<SetStateAction<RuntimePolicyDraftValues>>;
   text: RuntimePolicyEditorText;
