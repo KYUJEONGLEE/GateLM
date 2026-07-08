@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,6 +82,81 @@ func (r *QueryReader) ListProjectLogs(ctx context.Context, filter invocationlog.
 	}
 
 	return items, nil
+}
+
+func (r *QueryReader) ListProjectLogFilterOptions(ctx context.Context, filter invocationlog.ProjectLogsFilter) (invocationlog.RequestLogFilterOptions, error) {
+	if r == nil || r.db == nil {
+		return invocationlog.RequestLogFilterOptions{}, errors.New("query reader requires a database queryer")
+	}
+
+	normalizedFilter, err := normalizeProjectLogFilterOptionsFilter(filter)
+	if err != nil {
+		return invocationlog.RequestLogFilterOptions{}, err
+	}
+	query, args := buildProjectLogFilterOptionsQuery(normalizedFilter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return invocationlog.RequestLogFilterOptions{}, err
+	}
+	defer rows.Close()
+
+	modelSet := map[string]struct{}{}
+	budgetScopeSet := map[string]budget.Scope{}
+	for rows.Next() {
+		var optionType string
+		var model sql.NullString
+		var budgetScopeType sql.NullString
+		var budgetScopeID sql.NullString
+		var budgetScopeResolvedBy sql.NullString
+		if err := rows.Scan(&optionType, &model, &budgetScopeType, &budgetScopeID, &budgetScopeResolvedBy); err != nil {
+			return invocationlog.RequestLogFilterOptions{}, err
+		}
+		switch optionType {
+		case "model":
+			value := strings.TrimSpace(nullableString(model))
+			if value != "" {
+				modelSet[value] = struct{}{}
+			}
+		case "budget_scope":
+			scope := budget.NormalizeScope(budget.Scope{
+				Type:       nullableString(budgetScopeType),
+				ID:         nullableString(budgetScopeID),
+				ResolvedBy: nullableString(budgetScopeResolvedBy),
+			}, "")
+			if scope.ID == "" {
+				continue
+			}
+			budgetScopeSet[scope.Type+":"+scope.ID+":"+scope.ResolvedBy] = scope
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return invocationlog.RequestLogFilterOptions{}, err
+	}
+
+	models := make([]string, 0, len(modelSet))
+	for model := range modelSet {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+
+	budgetScopes := make([]budget.Scope, 0, len(budgetScopeSet))
+	for _, scope := range budgetScopeSet {
+		budgetScopes = append(budgetScopes, scope)
+	}
+	sort.Slice(budgetScopes, func(i int, j int) bool {
+		if budgetScopes[i].Type != budgetScopes[j].Type {
+			return budgetScopes[i].Type < budgetScopes[j].Type
+		}
+		if budgetScopes[i].ID != budgetScopes[j].ID {
+			return budgetScopes[i].ID < budgetScopes[j].ID
+		}
+		return budgetScopes[i].ResolvedBy < budgetScopes[j].ResolvedBy
+	})
+
+	return invocationlog.RequestLogFilterOptions{
+		Models:       models,
+		BudgetScopes: budgetScopes,
+	}, nil
 }
 
 func (r *QueryReader) GetRequestDetail(ctx context.Context, filter invocationlog.RequestDetailFilter) (invocationlog.RequestDetail, error) {
@@ -1216,6 +1292,73 @@ from p0_llm_invocation_logs
 where %s
 order by created_at desc, request_id desc
 limit $%d`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL, terminalStatusSQL, strings.Join(where, " and "), limitPlaceholder)
+
+	return query, args
+}
+
+func normalizeProjectLogFilterOptionsFilter(filter invocationlog.ProjectLogsFilter) (invocationlog.ProjectLogsFilter, error) {
+	filter.Status = ""
+	filter.Provider = ""
+	filter.Model = ""
+	filter.CacheStatus = ""
+	filter.ApplicationID = ""
+	filter.BudgetScope = budget.Scope{}
+	filter.RequestID = ""
+	filter.Limit = 1
+	return invocationlog.NormalizeProjectLogsFilter(filter)
+}
+
+func buildProjectLogFilterOptionsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
+	args := []any{}
+	where := []string{}
+	addUUIDWhere(&where, &args, "tenant_id", filter.TenantID)
+	addUUIDWhere(&where, &args, "project_id", filter.ProjectID)
+	args = append(args, filter.From.UTC())
+	where = append(where, fmt.Sprintf("created_at >= $%d", len(args)))
+	args = append(args, filter.To.UTC())
+	where = append(where, fmt.Sprintf("created_at < $%d", len(args)))
+
+	query := fmt.Sprintf(`
+with filtered as (
+  select
+    coalesce(nullif(selected_model, ''), nullif(model, ''), nullif(requested_model, '')) as model_option,
+    %s as budget_scope_type,
+    %s as budget_scope_id,
+    %s as budget_scope_resolved_by
+  from p0_llm_invocation_logs
+  where %s
+),
+model_options as (
+  select distinct model_option
+  from filtered
+  where coalesce(nullif(model_option, ''), '') <> ''
+),
+budget_scope_options as (
+  select distinct budget_scope_type, budget_scope_id, budget_scope_resolved_by
+  from filtered
+  where coalesce(nullif(budget_scope_id, ''), '') <> ''
+)
+select
+  'model' as option_type,
+  model_option,
+  null::text as budget_scope_type,
+  null::text as budget_scope_id,
+  null::text as budget_scope_resolved_by
+from model_options
+union all
+select
+  'budget_scope' as option_type,
+  null::text as model_option,
+  budget_scope_type,
+  budget_scope_id,
+  budget_scope_resolved_by
+from budget_scope_options
+order by option_type, model_option, budget_scope_type, budget_scope_id, budget_scope_resolved_by`,
+		budgetScopeTypeSQL,
+		budgetScopeIDSQL,
+		budgetScopeResolvedBySQL,
+		strings.Join(where, " and "),
+	)
 
 	return query, args
 }

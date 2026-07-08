@@ -25,6 +25,7 @@ import {
 import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
 import { RequestLogScopeFilterControls } from "./request-log-scope-filter-controls";
+import { StatusBadge } from "./request-log-status-badge";
 
 type RequestLogTableProps = {
   allowAllProjects?: boolean;
@@ -321,7 +322,7 @@ export function RequestLogTable({
       </section>
 
       <RequestLogDetailAnchor>
-        <section className="request-log-workspace" data-detail={detailPanel ? "open" : "closed"}>
+        <section className="request-log-workspace" data-detail={selectedRequestId ? "open" : "closed"}>
           <div className="console-panel request-log-list-panel">
             <section className="request-log-summary-strip" aria-label="Request log summary">
               {summaryItems.map((item) => (
@@ -493,6 +494,8 @@ export function RequestLogTable({
                           <Link
                             className="request-link"
                             data-request-log-anchor
+                            data-request-log-project-id={record.projectId}
+                            data-request-log-request-id={record.requestId}
                             href={detailHref}
                             scroll={false}
                           >
@@ -538,6 +541,8 @@ export function RequestLogTable({
                             aria-label={`${text.table.actions}: ${displayRequestId}`}
                             className="request-log-action-link"
                             data-request-log-anchor
+                            data-request-log-project-id={record.projectId}
+                            data-request-log-request-id={record.requestId}
                             href={detailHref}
                             scroll={false}
                           >
@@ -618,20 +623,6 @@ function appendRequestLogQuery(query: URLSearchParams, key: string, value: strin
   if (value) {
     query.set(key, value);
   }
-}
-
-export function StatusBadge({
-  label,
-  status
-}: {
-  label?: string;
-  status: InvocationLogRecord["status"];
-}) {
-  return (
-    <span className="status-badge" data-status={status}>
-      {label ?? status}
-    </span>
-  );
 }
 
 function CacheHitBadge({

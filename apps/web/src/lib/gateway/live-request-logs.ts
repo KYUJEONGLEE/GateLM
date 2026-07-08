@@ -13,6 +13,9 @@ import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 
 type GatewayProjectLogsResponse = {
   data?: GatewayProjectLogItem[];
+  meta?: {
+    filterOptions?: GatewayProjectLogFilterOptions;
+  };
 };
 
 type GatewayProjectLogItem = {
@@ -47,6 +50,11 @@ type GatewayBudgetScope = {
   resolvedBy?: string;
 };
 
+type GatewayProjectLogFilterOptions = {
+  budgetScopes?: GatewayBudgetScope[];
+  models?: string[];
+};
+
 type GatewayDomainOutcomes = Partial<
   Record<keyof DomainOutcomes, Partial<DomainOutcome> | null>
 >;
@@ -69,6 +77,27 @@ export type LiveGatewayRequestLogFilters = {
   to?: string;
 };
 
+export type LiveGatewayRequestLogBudgetScopeOption = {
+  budgetScopeId: string;
+  budgetScopeType: string;
+  resolvedBy?: string;
+};
+
+export type LiveGatewayRequestLogFilterOptions = {
+  budgetScopes: LiveGatewayRequestLogBudgetScopeOption[];
+  models: string[];
+};
+
+export type LiveGatewayRequestLogsWithMeta = {
+  filterOptions: LiveGatewayRequestLogFilterOptions;
+  records: InvocationLogRecord[];
+};
+
+type ProjectLogsFetchResult = {
+  filterOptions: LiveGatewayRequestLogFilterOptions;
+  records: InvocationLogRecord[];
+};
+
 const LIVE_RANGE_HOURS = 24;
 const MAX_LOG_PROJECT_FETCH_CONCURRENCY = 4;
 const DEFAULT_LOG_LIMIT = 50;
@@ -77,6 +106,20 @@ const IN_MEMORY_FILTER_FETCH_LIMIT = 1000;
 export async function getLiveGatewayRequestLogs(
   filters: LiveGatewayRequestLogFilters = {}
 ): Promise<InvocationLogRecord[] | undefined> {
+  const result = await getLiveGatewayRequestLogsPayload(filters, false);
+  return result?.records;
+}
+
+export async function getLiveGatewayRequestLogsWithMeta(
+  filters: LiveGatewayRequestLogFilters = {}
+): Promise<LiveGatewayRequestLogsWithMeta | undefined> {
+  return getLiveGatewayRequestLogsPayload(filters, true);
+}
+
+async function getLiveGatewayRequestLogsPayload(
+  filters: LiveGatewayRequestLogFilters,
+  includeFilterOptions: boolean
+): Promise<LiveGatewayRequestLogsWithMeta | undefined> {
   const config = getLiveGatewayConfig();
   const defaultRange = getLiveRange();
   const tenantId = getGatewayTenantId(filters.tenantId);
@@ -95,6 +138,9 @@ export async function getLiveGatewayRequestLogs(
   appendOptionalQuery(query, "status", filters.status);
   appendOptionalQuery(query, "provider", filters.provider);
   appendOptionalQuery(query, "requestId", filters.requestId);
+  if (includeFilterOptions) {
+    query.set("includeFilterOptions", "true");
+  }
 
   const projectIds = await getLogProjectIds(
     filters.projectId,
@@ -102,43 +148,50 @@ export async function getLiveGatewayRequestLogs(
     filters.tenantId,
     config.projectId
   );
-  const records = await fetchProjectLogsWithConcurrency(config.baseUrl, projectIds, query);
-  const flattenedRecords = records.flatMap((projectRecords) => projectRecords ?? []);
+  const projectResults = await fetchProjectLogsWithConcurrency(config.baseUrl, projectIds, query);
+  const flattenedRecords = projectResults.flatMap((projectResult) => projectResult?.records ?? []);
 
-  if (flattenedRecords.length === 0 && records.some((projectRecords) => projectRecords === undefined)) {
+  if (flattenedRecords.length === 0 && projectResults.some((projectResult) => projectResult === undefined)) {
     return undefined;
   }
 
-  return flattenedRecords
+  const records = flattenedRecords
     .filter((record) => matchesBudgetScopeFilter(record.budgetScope, filters))
     .filter((record) => matchesModelFilter(record, filters.model))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, finalLimit);
+
+  return {
+    filterOptions: mergeProjectLogFilterOptions(
+      projectResults.map((projectResult) => projectResult?.filterOptions)
+    ),
+    records
+  };
 }
 
 async function fetchProjectLogsWithConcurrency(
   baseUrl: string,
   projectIds: string[],
   query: URLSearchParams
-): Promise<Array<InvocationLogRecord[] | undefined>> {
-  const records: Array<InvocationLogRecord[] | undefined> = [];
+): Promise<Array<ProjectLogsFetchResult | undefined>> {
+  const results: Array<ProjectLogsFetchResult | undefined> = [];
 
   for (let index = 0; index < projectIds.length; index += MAX_LOG_PROJECT_FETCH_CONCURRENCY) {
     const batch = projectIds.slice(index, index + MAX_LOG_PROJECT_FETCH_CONCURRENCY);
-    const batchRecords = await Promise.all(
+    const batchResults = await Promise.all(
       batch.map((projectId) => fetchProjectLogs(baseUrl, projectId, query))
     );
-    records.push(...batchRecords);
+    results.push(...batchResults);
   }
 
-  return records;
+  return results;
 }
 
 async function fetchProjectLogs(
   baseUrl: string,
   projectId: string,
   query: URLSearchParams
-): Promise<InvocationLogRecord[] | undefined> {
+): Promise<ProjectLogsFetchResult | undefined> {
   const response = await fetch(
     `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/logs?${query.toString()}`,
     {
@@ -154,7 +207,58 @@ async function fetchProjectLogs(
   }
 
   const payload = (await response.json().catch(() => ({}))) as GatewayProjectLogsResponse;
-  return (payload.data ?? []).map((item) => toInvocationRecord(item, projectId));
+  return {
+    filterOptions: normalizeGatewayFilterOptions(payload.meta?.filterOptions),
+    records: (payload.data ?? []).map((item) => toInvocationRecord(item, projectId))
+  };
+}
+
+function normalizeGatewayFilterOptions(
+  value: GatewayProjectLogFilterOptions | undefined
+): LiveGatewayRequestLogFilterOptions {
+  return {
+    budgetScopes: (value?.budgetScopes ?? [])
+      .map((scope) => ({
+        budgetScopeId: scope.budgetScopeId?.trim() ?? "",
+        budgetScopeType: scope.budgetScopeType?.trim() ?? "",
+        resolvedBy: scope.resolvedBy?.trim() || undefined
+      }))
+      .filter((scope) => scope.budgetScopeId && scope.budgetScopeType),
+    models: (value?.models ?? []).map((model) => model.trim()).filter(Boolean)
+  };
+}
+
+function mergeProjectLogFilterOptions(
+  options: Array<LiveGatewayRequestLogFilterOptions | undefined>
+): LiveGatewayRequestLogFilterOptions {
+  const models = new Set<string>();
+  const budgetScopes = new Map<string, LiveGatewayRequestLogBudgetScopeOption>();
+
+  options.forEach((option) => {
+    option?.models.forEach((model) => {
+      if (model) {
+        models.add(model);
+      }
+    });
+    option?.budgetScopes.forEach((scope) => {
+      if (!scope.budgetScopeId || !scope.budgetScopeType) {
+        return;
+      }
+      budgetScopes.set(
+        `${scope.budgetScopeType}:${scope.budgetScopeId}:${scope.resolvedBy ?? ""}`,
+        scope
+      );
+    });
+  });
+
+  return {
+    budgetScopes: Array.from(budgetScopes.values()).sort((first, second) => {
+      const typeOrder = first.budgetScopeType.localeCompare(second.budgetScopeType);
+      const idOrder = first.budgetScopeId.localeCompare(second.budgetScopeId);
+      return typeOrder || idOrder || (first.resolvedBy ?? "").localeCompare(second.resolvedBy ?? "");
+    }),
+    models: Array.from(models).sort((first, second) => first.localeCompare(second))
+  };
 }
 
 async function getLogProjectIds(

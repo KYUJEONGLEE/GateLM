@@ -763,6 +763,8 @@ MUST NOT:
 
 ### 10.1 Request Log / Detail
 
+Request Log list API may include optional `meta.filterOptions` for UI filters. This metadata is scoped to the same `tenantId/projectId` and time range as the list request, ignores narrowing filters such as status/model/cache/application/requestId, and may contain only model labels and resolved budget scopes. It must not contain raw prompt, raw response, raw detected value, credential material, provider raw error body, request/trace IDs, hashes, or other high-cardinality correlation values.
+
 Request Log와 Request Detail은 Gateway가 생산한 terminal status와 domain outcome을 그대로 소비한다.
 
 Request Detail은 최소 아래 정보를 설명할 수 있어야 한다.

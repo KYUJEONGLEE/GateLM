@@ -173,6 +173,11 @@ type RequestLogListItem struct {
 	CreatedAt        time.Time
 }
 
+type RequestLogFilterOptions struct {
+	Models       []string
+	BudgetScopes []budget.Scope
+}
+
 type RequestDetail struct {
 	RequestID       string
 	TraceID         string

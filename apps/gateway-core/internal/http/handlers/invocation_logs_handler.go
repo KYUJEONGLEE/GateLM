@@ -35,6 +35,10 @@ type ProjectLogsReader interface {
 	ListProjectLogs(ctx context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error)
 }
 
+type ProjectLogFilterOptionsReader interface {
+	ListProjectLogFilterOptions(ctx context.Context, filter invocationlog.ProjectLogsFilter) (invocationlog.RequestLogFilterOptions, error)
+}
+
 type RequestDetailReader interface {
 	GetRequestDetail(ctx context.Context, filter invocationlog.RequestDetailFilter) (invocationlog.RequestDetail, error)
 }
@@ -71,6 +75,7 @@ type AnalyticsPerformanceHandler struct {
 type projectLogsResponse struct {
 	Data       []requestLogListItemResponse `json:"data"`
 	Pagination paginationResponse           `json:"pagination"`
+	Meta       *projectLogsMetaResponse     `json:"meta,omitempty"`
 }
 
 type requestDetailResponse struct {
@@ -83,6 +88,15 @@ type dashboardOverviewResponse struct {
 
 type analyticsPerformanceResponse struct {
 	Data analyticsPerformanceDataResponse `json:"data"`
+}
+
+type projectLogsMetaResponse struct {
+	FilterOptions requestLogFilterOptionsResponse `json:"filterOptions"`
+}
+
+type requestLogFilterOptionsResponse struct {
+	Models       []string              `json:"models"`
+	BudgetScopes []budgetScopeResponse `json:"budgetScopes"`
 }
 
 type dashboardOverviewDataResponse struct {
@@ -543,9 +557,21 @@ func (h ProjectLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	meta, err := h.projectLogsMeta(r, filter)
+	if err != nil {
+		if errors.Is(err, invocationlog.ErrInvalidLogQuery) {
+			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
+			return
+		}
+		logInvocationLogInternalError(r, "list_project_log_filter_options", filter.TenantID, filter.ProjectID, err)
+		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Request log filter options could not be loaded.")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, projectLogsResponse{
 		Data:       requestLogListItemResponses(items),
 		Pagination: paginationResponse{Limit: filter.Limit, NextCursor: nil, HasMore: false},
+		Meta:       meta,
 	})
 }
 
@@ -689,6 +715,36 @@ func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invoc
 		RequestID:     query.Get("requestId"),
 		Limit:         limit,
 	}, nil
+}
+
+func (h ProjectLogsHandler) projectLogsMeta(r *http.Request, filter invocationlog.ProjectLogsFilter) (*projectLogsMetaResponse, error) {
+	if !includeProjectLogFilterOptions(r) {
+		return nil, nil
+	}
+
+	optionsReader, ok := h.Reader.(ProjectLogFilterOptionsReader)
+	if !ok {
+		return &projectLogsMetaResponse{
+			FilterOptions: requestLogFilterOptionsResponse{
+				Models:       []string{},
+				BudgetScopes: []budgetScopeResponse{},
+			},
+		}, nil
+	}
+
+	options, err := optionsReader.ListProjectLogFilterOptions(r.Context(), filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return &projectLogsMetaResponse{
+		FilterOptions: requestLogFilterOptionsResponseFromDomain(options),
+	}, nil
+}
+
+func includeProjectLogFilterOptions(r *http.Request) bool {
+	value := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("includeFilterOptions")))
+	return value == "true" || value == "1"
 }
 
 func firstNonEmptyQueryValue(values ...string) string {
@@ -1013,6 +1069,21 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 		})
 	}
 	return responses
+}
+
+func requestLogFilterOptionsResponseFromDomain(options invocationlog.RequestLogFilterOptions) requestLogFilterOptionsResponse {
+	budgetScopes := make([]budgetScopeResponse, 0, len(options.BudgetScopes))
+	for _, scope := range options.BudgetScopes {
+		response := budgetScopeResponseFromScope(scope, "")
+		if response.BudgetScopeID == "" {
+			continue
+		}
+		budgetScopes = append(budgetScopes, response)
+	}
+	return requestLogFilterOptionsResponse{
+		Models:       append([]string(nil), options.Models...),
+		BudgetScopes: budgetScopes,
+	}
 }
 
 func domainOutcomesResponseFromDomain(outcomes invocationlog.DomainOutcomes) domainOutcomesResponse {

@@ -10,6 +10,8 @@ const PANEL_MAX_WIDTH = 760;
 const VIEWPORT_PADDING = 24;
 const MIN_VISIBLE_PANEL_HEIGHT = 180;
 const PANEL_TOP_RATIO = 0.22;
+export const REQUEST_LOG_DETAIL_CLOSE_EVENT = "request-log-detail:close";
+export const REQUEST_LOG_DETAIL_SELECT_EVENT = "request-log-detail:select";
 
 export function RequestLogDetailAnchor({ children }: RequestLogDetailAnchorProps) {
   function captureDetailAnchor(event: MouseEvent<HTMLDivElement>) {
@@ -38,6 +40,28 @@ export function RequestLogDetailAnchor({ children }: RequestLogDetailAnchorProps
     document.documentElement.style.setProperty("--request-log-detail-top", `${top}px`);
     document.documentElement.style.setProperty("--request-log-detail-origin-x", `${originX}px`);
     document.documentElement.style.setProperty("--request-log-detail-origin-y", `${originY}px`);
+
+    const href = anchor.getAttribute("href");
+    if (!href) {
+      return;
+    }
+
+    const nextUrl = new URL(href, window.location.origin);
+    const requestId = nextUrl.searchParams.get("requestId")?.trim();
+    if (!requestId || nextUrl.origin !== window.location.origin || nextUrl.pathname !== window.location.pathname) {
+      return;
+    }
+
+    event.preventDefault();
+    window.history.pushState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    window.dispatchEvent(
+      new CustomEvent(REQUEST_LOG_DETAIL_SELECT_EVENT, {
+        detail: {
+          projectId: anchor.getAttribute("data-request-log-project-id")?.trim() || undefined,
+          requestId
+        }
+      })
+    );
   }
 
   return (
