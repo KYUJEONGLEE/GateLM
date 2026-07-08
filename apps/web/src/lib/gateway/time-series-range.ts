@@ -1,6 +1,7 @@
-export type LiveTimeSeriesRange = "15m" | "1h" | "1d" | "1w";
+export type LiveTimeSeriesRange = "5m" | "15m" | "1h" | "1d" | "1w";
 
 const rangeMs: Record<LiveTimeSeriesRange, number> = {
+  "5m": 5 * 60 * 1000,
   "15m": 15 * 60 * 1000,
   "1h": 60 * 60 * 1000,
   "1d": 24 * 60 * 60 * 1000,
@@ -8,6 +9,7 @@ const rangeMs: Record<LiveTimeSeriesRange, number> = {
 };
 
 const bucketMs: Record<LiveTimeSeriesRange, number> = {
+  "5m": 7 * 1000,
   "15m": 60 * 1000,
   "1h": 5 * 60 * 1000,
   "1d": 60 * 60 * 1000,

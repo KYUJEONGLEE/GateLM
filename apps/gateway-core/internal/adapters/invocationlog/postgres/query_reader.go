@@ -928,6 +928,8 @@ func costReportBucketConfig(filter invocationlog.CostReportFilter) invocationlog
 
 func timeSeriesBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
 	switch config.Unit {
+	case "7second":
+		return "to_timestamp(floor(extract(epoch from created_at) / 7) * 7)"
 	case "minute":
 		return "date_trunc('minute', created_at)"
 	case "5minute":

@@ -8,7 +8,7 @@ const COST_OVER_TIME_POLLING_INTERVAL_MS = 3000;
 const COST_OVER_TIME_FIRST_FAILURE_BACKOFF_MS = 10000;
 const COST_OVER_TIME_REPEATED_FAILURE_BACKOFF_MS = 20000;
 
-type CostOverTimeRange = "15m" | "1h" | "1d" | "1w";
+type CostOverTimeRange = "5m" | "15m" | "1h" | "1d" | "1w";
 
 type CostOverTimeCardFilters = {
   budgetScopeId: string;
@@ -199,7 +199,7 @@ export function CostOverTimeCard({
           <h2>Cost Over Time</h2>
           <p>시간별 비용 추이</p>
         </div>
-        <span>{summary?.period === "day" ? "Daily" : "Hourly"}</span>
+        <span>{formatCostGranularity(summary)}</span>
       </div>
       <div className="dashboard-cost-over-time-legend">
         <span data-kind="spend">Spend (USD)</span>
@@ -251,6 +251,14 @@ function formatUsd(value: number) {
     minimumFractionDigits: 2,
     style: "currency"
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatCostGranularity(summary: CostOverTimeSummary | undefined) {
+  if (summary?.bucketInterval === "7s") {
+    return "7-second";
+  }
+
+  return summary?.period === "day" ? "Daily" : "Hourly";
 }
 
 function normalizeCostOverTimeSummary(summary: CostOverTimeSummary | undefined): CostOverTimeSummary | undefined {
