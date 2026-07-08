@@ -205,7 +205,10 @@ export function ProjectManagement({
         </div>
         {canCreateProject ? (
           <div className="dashboard-hero-actions">
-            <Link className="primary-button" href={`/tenants/${model.routeTenantId}/onboarding`}>
+            <Link
+              className="primary-button project-create-hero-button"
+              href={`/tenants/${model.routeTenantId}/onboarding`}
+            >
               <Plus aria-hidden="true" />
               {text.createProject}
             </Link>

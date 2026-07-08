@@ -27,7 +27,6 @@ import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
 type ConsoleSection = "monitoring" | "management";
-type ExpandableConsoleSection = "management" | "monitoring";
 type ConsoleTheme = "light" | "dark";
 type NotificationSeverity = "critical" | "info" | "warning";
 type NotificationCategory = "Budget" | "Cache" | "Cost" | "Provider" | "Rate Limit" | "Safety" | "System";
@@ -211,7 +210,6 @@ const shellText: Record<
   }
 };
 
-const openSectionsStorageKey = "gatelm_console_open_sections";
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
 const notificationReadStorageKey = "gatelm_console_header_notification_read_ids";
@@ -270,9 +268,6 @@ export function ConsoleShell({
 }: ConsoleShellProps) {
   const text = shellText[locale];
   const tenantLabel = formatTenantDisplayName(tenantId);
-  const [openSections, setOpenSections] = useState<ExpandableConsoleSection[]>(() =>
-    getActiveOpenSections(activeSection)
-  );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -291,8 +286,6 @@ export function ConsoleShell({
   const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
 
   useEffect(() => {
-    const storedOpenSections = readStoredOpenSections();
-    setOpenSections(mergeOpenSections(storedOpenSections ?? [], getActiveOpenSections(activeSection)));
     setIsMobileNavigationOpen(false);
   }, [activeSection]);
 
@@ -388,21 +381,6 @@ export function ConsoleShell({
     const nextReadIds = previewNotificationSeeds.map((notification) => notification.id);
     setReadNotificationIds(nextReadIds);
     writeStoredNotificationIds(nextReadIds);
-  }
-
-  function toggleSection(section: ConsoleSection) {
-    if (!isExpandableSection(section)) {
-      return;
-    }
-
-    setOpenSections((current) => {
-      const next = current.includes(section)
-        ? current.filter((openSection) => openSection !== section)
-        : [...current, section];
-
-      writeStoredOpenSections(next);
-      return next;
-    });
   }
 
   function isChildActive(child: ChildNavigationItem) {
@@ -527,26 +505,20 @@ export function ConsoleShell({
 
             if (!item.path) {
               if (item.children) {
-                const isOpen = isExpandableSection(item.section) && openSections.includes(item.section);
-
                 return (
                   <div className="console-nav-group" key={item.section}>
-                    <button
-                      aria-expanded={isOpen}
+                    <div
                       className="console-nav-link"
-                      data-open={isOpen}
-                      onClick={() => toggleSection(item.section)}
-                      type="button"
+                      data-open="true"
+                      data-static="true"
                     >
                       <SectionIcon aria-hidden="true" size={16} strokeWidth={2.2} />
                       <span>{label}</span>
-                    </button>
+                    </div>
 
-                    {isOpen ? (
-                      <div className="console-subnav" aria-label={`${label} navigation`}>
-                        {renderSubnavItems(item.children)}
-                      </div>
-                    ) : null}
+                    <div className="console-subnav" aria-label={`${label} navigation`}>
+                      {renderSubnavItems(item.children)}
+                    </div>
                   </div>
                 );
               }
@@ -591,12 +563,8 @@ export function ConsoleShell({
         <div className="console-mobile-subnavs" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {
             const label = item.labels[locale];
-            const isOpen =
-              item.children &&
-              isExpandableSection(item.section) &&
-              openSections.includes(item.section);
 
-            if (!item.children || !isOpen) {
+            if (!item.children) {
               return null;
             }
 
@@ -956,22 +924,8 @@ function getUserInitials(displayName: string) {
   return (parts[0]?.charAt(0) || "A").toUpperCase();
 }
 
-function getActiveOpenSections(activeSection: ConsoleSection): ExpandableConsoleSection[] {
-  return isExpandableSection(activeSection) ? [activeSection] : [];
-}
-
-function isExpandableSection(section: ConsoleSection): section is ExpandableConsoleSection {
-  return section === "management" || section === "monitoring";
-}
-
 function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {
   return item === "alerts" || item === "analytics" || item === "live-logs" || item === "overview";
-}
-
-function mergeOpenSections(
-  ...sectionGroups: Array<ExpandableConsoleSection[]>
-): ExpandableConsoleSection[] {
-  return Array.from(new Set(sectionGroups.flat()));
 }
 
 function readStoredNotificationIds(): string[] {
@@ -1002,38 +956,6 @@ function writeStoredNotificationIds(notificationIds: string[]) {
   }
 
   window.localStorage.setItem(notificationReadStorageKey, JSON.stringify(notificationIds));
-}
-
-function readStoredOpenSections(): ExpandableConsoleSection[] | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const storedValue = window.localStorage.getItem(openSectionsStorageKey);
-
-    if (!storedValue) {
-      return null;
-    }
-
-    const parsedValue = JSON.parse(storedValue);
-
-    if (!Array.isArray(parsedValue)) {
-      return null;
-    }
-
-    return mergeOpenSections(parsedValue.filter(isExpandableSection));
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredOpenSections(openSections: ExpandableConsoleSection[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(openSectionsStorageKey, JSON.stringify(openSections));
 }
 
 function readStoredSidebarCollapsed(): boolean | null {

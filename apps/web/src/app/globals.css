@@ -539,6 +539,15 @@ select {
   color: var(--sidebar-accent-foreground);
 }
 
+.console-nav-link[data-static="true"] {
+  cursor: default;
+}
+
+.console-nav-link[data-static="true"]:hover {
+  background: transparent;
+  color: var(--sidebar-foreground);
+}
+
 .console-nav-link[data-active="true"] {
   background: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);
@@ -4255,6 +4264,18 @@ select {
   height: 16px;
 }
 
+.dashboard-hero-actions .project-create-hero-button {
+  min-height: 48px;
+  padding: 0 22px;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dashboard-hero-actions .project-create-hero-button svg {
+  width: 20px;
+  height: 20px;
+}
+
 .project-create-form {
   display: grid;
   grid-template-columns: minmax(180px, 0.65fr) minmax(260px, 1fr) auto;
@@ -4323,10 +4344,14 @@ select {
 
 .project-detail-general-content {
   display: flex;
-  align-items: end;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 10px;
   width: 100%;
+}
+
+.project-detail-general-content > .project-detail-actions {
+  margin-top: 25px;
 }
 
 .project-danger-button {
@@ -4986,6 +5011,18 @@ select {
   border-color: #ea580c;
   box-shadow: none;
   color: #ffffff;
+}
+
+.gateway-api-key-rotate-button {
+  background: #ffedd5;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+.gateway-api-key-rotate-button:hover {
+  background: #fed7aa;
+  border-color: #fb923c;
+  color: #7c2d12;
 }
 
 button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
@@ -12596,6 +12633,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     grid-template-columns: 1fr;
     width: 100%;
     max-width: none;
+  }
+
+  .management-line-content .project-detail-general-content > .project-detail-actions {
+    margin-top: 0;
   }
 
   .management-line-content .project-detail-panel .project-delete-actions {
