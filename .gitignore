@@ -3,6 +3,7 @@
 !.env.example
 plan.md
 .codex/
+.codex-*.log
 
 *.pem
 *.key
@@ -18,6 +19,9 @@ build/
 .next/
 coverage/
 *.tsbuildinfo
+debug.log
+test-results/
+.gocache/
 reports/*
 !reports/rate-limit/
 reports/rate-limit/*

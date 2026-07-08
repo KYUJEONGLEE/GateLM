@@ -3869,6 +3869,58 @@ select {
   letter-spacing: 0;
 }
 
+.policy-panel-loading {
+  min-height: 124px;
+}
+
+.policy-panel-loading.wide-panel {
+  min-height: 176px;
+}
+
+.policy-panel-skeleton {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.policy-panel-skeleton-line {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 10px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent, rgb(148 163 184 / 0.16), transparent),
+    linear-gradient(180deg, rgb(148 163 184 / 0.12), rgb(148 163 184 / 0.06));
+  background-size:
+    220% 100%,
+    100% 100%;
+  border: 1px solid rgb(148 163 184 / 0.08);
+  border-radius: 999px;
+  animation: policy-panel-skeleton 1.2s ease-in-out infinite;
+}
+
+.policy-panel-skeleton-line[data-size="short"] {
+  width: min(64%, 420px);
+}
+
+@keyframes policy-panel-skeleton {
+  from {
+    background-position:
+      220% 0,
+      0 0;
+  }
+
+  to {
+    background-position:
+      -220% 0,
+      0 0;
+  }
+}
+
 .policy-heading-with-info {
   display: inline-flex;
   align-items: center;

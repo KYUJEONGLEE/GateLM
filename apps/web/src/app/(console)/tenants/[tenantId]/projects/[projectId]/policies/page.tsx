@@ -1,13 +1,7 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
-import { ProjectAdminSection } from "@/features/project-admins/components/project-admin-management";
-import {
-  ProjectDeleteSection,
-  ProjectDetailSection
-} from "@/features/projects/components/project-management";
-import { ProjectGatewayApiKeyPanel } from "@/features/projects/components/project-gateway-api-key-section";
+import { ProjectPolicyGeneralContent } from "@/features/policies/components/project-policy-general-content";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
-import { ProjectTeamAssignmentSection } from "@/features/teams/components/team-management";
 import {
   getCurrentConsoleAuth,
   resolveConsoleTenantIdForAuth
@@ -67,27 +61,17 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
         hideStreamingTab
         locale={locale}
         model={projectRuntime.policyModel}
+        generalBudgetPanelPlacement="childSlot"
         moveBudgetToGeneral
-        generalFooter={
-          <div className="project-policy-general-tab management-line-content">
-            <ProjectAdminSection locale={locale} model={projectAdminsModel} />
-            <ProjectTeamAssignmentSection locale={locale} model={projectTeamsModel} />
-            <ProjectGatewayApiKeyPanel locale={locale} model={projectApiKeysModel} />
-            <ProjectDeleteSection
-              locale={locale}
-              project={projectRuntime.project}
-              tenantId={effectiveTenantId}
-            />
-          </div>
-        }
       >
-        <div className="project-policy-general-tab management-line-content">
-          <ProjectDetailSection
-            locale={locale}
-            project={projectRuntime.project}
-            tenantId={effectiveTenantId}
-          />
-        </div>
+        <ProjectPolicyGeneralContent
+          locale={locale}
+          project={projectRuntime.project}
+          projectAdminsModel={projectAdminsModel}
+          projectApiKeysModel={projectApiKeysModel}
+          projectTeamsModel={projectTeamsModel}
+          tenantId={effectiveTenantId}
+        />
       </RuntimePolicyEditor>
     </ConsoleShell>
   );
