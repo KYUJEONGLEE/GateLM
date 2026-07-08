@@ -194,7 +194,7 @@ func TestOpenAIExtraModelConfigDefaultsAndLoadsEnvOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if got, want := cfg.OpenAIExtraModelNames, []string{"gpt-5.4-mini", "gpt-5.4"}; !sameStrings(got, want) {
+	if got, want := cfg.OpenAIExtraModelNames, defaultOpenAIExtraModelNames; !sameStrings(got, want) {
 		t.Fatalf("unexpected default extra models: got %#v want %#v", got, want)
 	}
 

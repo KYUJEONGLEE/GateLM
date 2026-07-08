@@ -287,6 +287,31 @@ func TestPricingKeysIncludeCanonicalAndCompatibilityAliases(t *testing.T) {
 		t.Fatalf("expected execution model id and billing model alias, got %+v", modelKeys)
 	}
 }
+
+func TestPricingKeysIncludeOpenAITextModelVersionAliases(t *testing.T) {
+	reqCtx := &pipeline.RequestContext{
+		SelectedModel:   "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-5.1-2025-11-13",
+		SelectedModelID: "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-5.1-2025-11-13",
+		RequestedModel:  "auto",
+	}
+	target := providerCallTarget{
+		ModelID:   "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-5.1-2025-11-13",
+		ModelName: "gpt-5.1-2025-11-13",
+	}
+
+	modelKeys := modelPricingKeys(reqCtx, target)
+
+	for _, expected := range []string{
+		"79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-5.1-2025-11-13",
+		"gpt-5.1-2025-11-13",
+		"gpt-5.1",
+	} {
+		if !containsString(modelKeys, expected) {
+			t.Fatalf("expected model pricing key %q in %+v", expected, modelKeys)
+		}
+	}
+}
+
 func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{

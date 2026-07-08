@@ -25,6 +25,33 @@ const (
 	RateLimitAlgorithmTokenBucket = "token_bucket"
 )
 
+var defaultOpenAIExtraModelNames = []string{
+	"gpt-5.5",
+	"gpt-5.5-pro",
+	"gpt-5.4",
+	"gpt-5.4-mini",
+	"gpt-5.4-nano",
+	"gpt-5.4-pro",
+	"gpt-5.3-codex",
+	"gpt-5.2",
+	"gpt-5.2-pro",
+	"gpt-5.2-codex",
+	"gpt-5.1",
+	"gpt-5.1-codex",
+	"gpt-5.1-codex-mini",
+	"gpt-5.1-codex-max",
+	"gpt-5",
+	"gpt-5-mini",
+	"gpt-5-nano",
+	"gpt-5-pro",
+	"gpt-4.5-preview",
+	"gpt-4.1",
+	"gpt-4.1-mini",
+	"gpt-4.1-nano",
+	"gpt-3.5-turbo",
+	"chat-latest",
+}
+
 type Config struct {
 	Port                                   string
 	DatabaseURL                            string
@@ -190,7 +217,7 @@ func LoadWithError() (Config, error) {
 		OpenAILowCostModelName:                 envString("GATEWAY_OPENAI_LOW_COST_MODEL_NAME", "gpt-4o-mini"),
 		OpenAIBalancedModelID:                  envString("GATEWAY_OPENAI_BALANCED_MODEL_ID", "openai-balanced"),
 		OpenAIBalancedModelName:                envString("GATEWAY_OPENAI_BALANCED_MODEL_NAME", "gpt-4o"),
-		OpenAIExtraModelNames:                  envCSV("GATEWAY_OPENAI_EXTRA_MODELS", []string{"gpt-5.4-mini", "gpt-5.4"}),
+		OpenAIExtraModelNames:                  envCSV("GATEWAY_OPENAI_EXTRA_MODELS", defaultOpenAIExtraModelNames),
 		MockProviderID:                         envString("GATEWAY_MOCK_PROVIDER_ID", "provider_mock_local"),
 		MockProviderName:                       envString("GATEWAY_MOCK_PROVIDER_NAME", "mock"),
 		ProviderCredentialEnvMap:               envString("GATEWAY_PROVIDER_CREDENTIAL_ENV_MAP", "credential_ref_openai_main=OPENAI_API_KEY,provider_credential:00000000-0000-4000-8000-000000000601=OPENAI_API_KEY"),

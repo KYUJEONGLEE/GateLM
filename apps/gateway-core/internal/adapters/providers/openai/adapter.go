@@ -75,7 +75,7 @@ func (a *Adapter) CreateChatCompletion(ctx context.Context, config provider.Exec
 		return nil, err
 	}
 
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(openAIRequestForModel(req))
 	if err != nil {
 		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("encode provider chat request: %w", err))
 	}
@@ -117,7 +117,7 @@ func (a *Adapter) CreateChatCompletionStream(ctx context.Context, config provide
 
 	req.Stream = true
 	req.StreamOptions = withStreamingUsage(req.StreamOptions)
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(openAIRequestForModel(req))
 	if err != nil {
 		return nil, provider.NewError(provider.ErrorKindError, provider.ErrorCodeProviderError, fmt.Errorf("encode provider streaming chat request: %w", err))
 	}
@@ -161,6 +161,55 @@ func withStreamingUsage(options *provider.ChatCompletionStreamOptions) *provider
 	copied := *options
 	copied.IncludeUsage = true
 	return &copied
+}
+
+type openAIChatCompletionRequest struct {
+	Model               string                                `json:"model"`
+	Messages            []provider.ChatMessage                `json:"messages"`
+	Temperature         *float64                              `json:"temperature,omitempty"`
+	MaxTokens           *int                                  `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int                                  `json:"max_completion_tokens,omitempty"`
+	Stream              bool                                  `json:"stream,omitempty"`
+	StreamOptions       *provider.ChatCompletionStreamOptions `json:"stream_options,omitempty"`
+	Metadata            json.RawMessage                       `json:"metadata,omitempty"`
+	GateLM              json.RawMessage                       `json:"gate_lm,omitempty"`
+}
+
+func openAIRequestForModel(req provider.ChatCompletionRequest) openAIChatCompletionRequest {
+	out := openAIChatCompletionRequest{
+		Model:               req.Model,
+		Messages:            req.Messages,
+		Temperature:         req.Temperature,
+		MaxTokens:           req.MaxTokens,
+		MaxCompletionTokens: req.MaxCompletionTokens,
+		Stream:              req.Stream,
+		StreamOptions:       req.StreamOptions,
+		Metadata:            req.Metadata,
+		GateLM:              req.GateLM,
+	}
+	if usesMaxCompletionTokens(req.Model) {
+		if out.MaxCompletionTokens == nil {
+			out.MaxCompletionTokens = out.MaxTokens
+		}
+		out.MaxTokens = nil
+	}
+	return out
+}
+
+func usesMaxCompletionTokens(model string) bool {
+	normalized := normalizeOpenAIModelName(model)
+	return strings.HasPrefix(normalized, "gpt-5") ||
+		strings.HasPrefix(normalized, "o1") ||
+		strings.HasPrefix(normalized, "o3") ||
+		strings.HasPrefix(normalized, "o4")
+}
+
+func normalizeOpenAIModelName(model string) string {
+	normalized := strings.TrimSpace(strings.ToLower(model))
+	if index := strings.LastIndex(normalized, ":"); index >= 0 {
+		normalized = strings.TrimSpace(normalized[index+1:])
+	}
+	return normalized
 }
 
 func normalizeConfig(config provider.ExecutionConfig) provider.ExecutionConfig {
