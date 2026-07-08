@@ -125,7 +125,7 @@ async function MonthToDateSpendValue({
     from: monthToDateRange.from,
     to: monthToDateRange.to
   });
-  const totalSpendUsd = summary?.points.reduce((sum, point) => sum + point.spendUsd, 0);
+  const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
 
   return <>{formatDashboardMicroUsd(totalSpendUsd === undefined ? fallbackMicroUsd : totalSpendUsd * 1_000_000)}</>;
 }
