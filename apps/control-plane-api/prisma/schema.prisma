@@ -705,6 +705,3 @@ model ChatMessage {
   @@index([parentMessageId])
   @@map("chat_messages")
 }
-
-
-

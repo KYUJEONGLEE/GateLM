@@ -423,6 +423,3 @@ function toPendingProjectAdmin(invitation: ProjectAdminInvitationRecord): Projec
     userId: null
   };
 }
-
-
-

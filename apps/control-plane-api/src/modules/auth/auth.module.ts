@@ -43,4 +43,3 @@ import { SmtpEmailSender } from './smtp-email-sender';
   exports: [EMAIL_SENDER],
 })
 export class AuthModule {}
-

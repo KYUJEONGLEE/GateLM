@@ -213,4 +213,3 @@ export interface AuthRepository {
   updateUserEmailVerified(userId: string, verifiedAt: Date): Promise<AuthUser>;
   updateUserLastLogin(userId: string, lastLoginAt: Date): Promise<void>;
 }
-

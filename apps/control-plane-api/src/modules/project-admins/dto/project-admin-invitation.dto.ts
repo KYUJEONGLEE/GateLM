@@ -51,4 +51,3 @@ export interface ProjectAdminListItemDto {
   tenantId: string;
   userId: string | null;
 }
-
