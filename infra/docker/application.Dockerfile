@@ -45,6 +45,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=node:node /app/apps/application/.next/standalone ./
 COPY --from=builder --chown=node:node /app/apps/application/.next/static ./apps/application/.next/static
+COPY --from=builder --chown=node:node /app/apps/web/public ./apps/application/public
 
 USER node
 
