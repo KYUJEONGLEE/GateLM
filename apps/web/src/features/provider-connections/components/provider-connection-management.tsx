@@ -2,7 +2,7 @@
 
 import { ChevronDown, KeyRound, PlugZap, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -232,7 +232,10 @@ export function ProviderConnectionManagement({
     message: "",
     status: "idle"
   });
-  const activeDiscoveryKey = formValues.previousProvider?.trim() || formValues.provider.trim();
+  const discoveryRequestIdRef = useRef(0);
+  const activeDiscoveryKey = getProviderFormDiscoveryKey(formValues);
+  const activeDiscoveryKeyRef = useRef(activeDiscoveryKey);
+  activeDiscoveryKeyRef.current = activeDiscoveryKey;
   const activeDiscovery = activeDiscoveryKey ? discoveryByProvider[activeDiscoveryKey] : undefined;
 
   async function submitProvider() {
@@ -366,6 +369,10 @@ export function ProviderConnectionManagement({
       return;
     }
 
+    const discoveryRequestId = discoveryRequestIdRef.current + 1;
+    discoveryRequestIdRef.current = discoveryRequestId;
+    const isLatestDiscoveryRequest = () => discoveryRequestIdRef.current === discoveryRequestId;
+
     setDiscoveringProvider(normalizedProvider);
     setSubmitState({ message: "", status: "idle" });
 
@@ -384,17 +391,23 @@ export function ProviderConnectionManagement({
     });
     const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
 
+    if (!isLatestDiscoveryRequest()) {
+      return;
+    }
+
     if (!response.ok || !payload.discovery) {
-      setSubmitState({
-        message:
-          payload.status === 404
-            ? locale === "ko"
-              ? "Tenant/global Provider를 찾을 수 없습니다. Provider를 저장한 뒤 다시 조회하세요."
-              : "Tenant/global provider is not registered. Save the provider and try again."
-            : getProviderDiscoveryErrorMessage(payload.error, normalizedProvider, locale),
-        status: "error"
-      });
-      setDiscoveringProvider(null);
+      if (activeDiscoveryKeyRef.current === normalizedProvider) {
+        setSubmitState({
+          message:
+            payload.status === 404
+              ? locale === "ko"
+                ? "Tenant/global Provider를 찾을 수 없습니다. Provider를 저장한 뒤 다시 조회하세요."
+                : "Tenant/global provider is not registered. Save the provider and try again."
+              : getProviderDiscoveryErrorMessage(payload.error, normalizedProvider, locale),
+          status: "error"
+        });
+      }
+      setDiscoveringProvider((current) => (current === normalizedProvider ? null : current));
       return;
     }
 
@@ -446,6 +459,10 @@ export function ProviderConnectionManagement({
     }));
     if (applyToForm) {
       setFormValues((current) => {
+        if (getProviderFormDiscoveryKey(current) !== normalizedProvider) {
+          return current;
+        }
+
         return {
           ...current,
           adapterType: payload.discovery?.adapterType ?? current.adapterType,
@@ -455,18 +472,20 @@ export function ProviderConnectionManagement({
         };
       });
     }
-    setSubmitState({
-      message:
-        locale === "ko"
-          ? applyToForm
-            ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
-            : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
-          : applyToForm
-            ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
-            : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
-      status: "success"
-    });
-    setDiscoveringProvider(null);
+    if (activeDiscoveryKeyRef.current === normalizedProvider) {
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? applyToForm
+              ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+              : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+            : applyToForm
+              ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
+              : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
+        status: "success"
+      });
+    }
+    setDiscoveringProvider((current) => (current === normalizedProvider ? null : current));
   }
 
   async function deleteProvider(provider: ProviderConnectionRecord) {
@@ -1335,6 +1354,10 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     status: provider.status,
     timeoutMs: provider.timeoutMs
   };
+}
+
+function getProviderFormDiscoveryKey(values: ProviderConnectionFormValues) {
+  return values.previousProvider?.trim() || values.provider.trim();
 }
 
 function getInitialModelOptions(providers: ProviderConnectionRecord[]) {
