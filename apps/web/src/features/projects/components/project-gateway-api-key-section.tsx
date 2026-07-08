@@ -269,7 +269,7 @@ export function ProjectGatewayApiKeySection({
             <div className="gateway-api-key-actions">
               {representativeKey ? (
                 <Button
-                  className="gateway-api-key-action-button"
+                  className="gateway-api-key-action-button gateway-api-key-rotate-button"
                   disabled={pendingAction !== null || actionsDisabled}
                   onClick={() => void submitRotateApiKey(representativeKey)}
                   type="button"

@@ -539,6 +539,15 @@ select {
   color: var(--sidebar-accent-foreground);
 }
 
+.console-nav-link[data-static="true"] {
+  cursor: default;
+}
+
+.console-nav-link[data-static="true"]:hover {
+  background: transparent;
+  color: var(--sidebar-foreground);
+}
+
 .console-nav-link[data-active="true"] {
   background: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);
@@ -4178,6 +4187,18 @@ select {
   font-weight: var(--font-weight-bold);
 }
 
+.required-field-marker {
+  margin-left: 4px;
+  color: #f97316;
+  font-weight: var(--font-weight-bold);
+}
+
+.onboarding-field .required-field-marker,
+.onboarding-team-field .required-field-marker,
+.policy-field .required-field-marker {
+  color: #f97316;
+}
+
 .policy-toggle-row {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -4255,6 +4276,18 @@ select {
   height: 16px;
 }
 
+.dashboard-hero-actions .project-create-hero-button {
+  min-height: 62px;
+  padding: 0 29px;
+  font-size: calc(var(--font-size-lg) * 1.3);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dashboard-hero-actions .project-create-hero-button svg {
+  width: 26px;
+  height: 26px;
+}
+
 .project-create-form {
   display: grid;
   grid-template-columns: minmax(180px, 0.65fr) minmax(260px, 1fr) auto;
@@ -4323,10 +4356,14 @@ select {
 
 .project-detail-general-content {
   display: flex;
-  align-items: end;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 10px;
   width: 100%;
+}
+
+.project-detail-general-content > .project-detail-actions {
+  margin-top: 25px;
 }
 
 .project-danger-button {
@@ -4986,6 +5023,18 @@ select {
   border-color: #ea580c;
   box-shadow: none;
   color: #ffffff;
+}
+
+.gateway-api-key-rotate-button {
+  background: #ffedd5;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+.gateway-api-key-rotate-button:hover {
+  background: #fed7aa;
+  border-color: #fb923c;
+  color: #7c2d12;
 }
 
 button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
@@ -8767,7 +8816,7 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
   gap: 18px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .integration-guide-steps,
@@ -8777,8 +8826,8 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .integration-guide-side {
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
+  grid-template-rows: auto auto;
+  align-content: start;
 }
 
 .integration-guide-steps {
@@ -8986,15 +9035,15 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .integration-next-panel {
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: stretch;
-  min-height: 240px;
+  grid-template-rows: auto auto;
+  align-content: start;
+  min-height: 0;
 }
 
 .integration-next-actions {
   display: grid;
-  align-self: center;
-  gap: 20px;
+  align-self: start;
+  gap: 8px;
   width: 100%;
 }
 
@@ -12596,6 +12645,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     grid-template-columns: 1fr;
     width: 100%;
     max-width: none;
+  }
+
+  .management-line-content .project-detail-general-content > .project-detail-actions {
+    margin-top: 0;
   }
 
   .management-line-content .project-detail-panel .project-delete-actions {

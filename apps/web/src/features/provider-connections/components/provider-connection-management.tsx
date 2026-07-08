@@ -983,7 +983,7 @@ export function ProviderConnectionManagement({
           <AlertDescription>{model.providerPresets.loadError}</AlertDescription>
         </Alert>
       ) : null}
-      {submitState.message ? (
+      {submitState.message && !providerModal ? (
         <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
@@ -1159,6 +1159,11 @@ export function ProviderConnectionManagement({
                 <X aria-hidden="true" />
               </button>
             </div>
+            {submitState.message ? (
+              <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+                <AlertDescription>{submitState.message}</AlertDescription>
+              </Alert>
+            ) : null}
             <div className="provider-form-grid provider-registration-form">
               {providerModal.mode === "create" ? (
                 <>
