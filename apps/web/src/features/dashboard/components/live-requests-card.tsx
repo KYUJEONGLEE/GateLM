@@ -8,7 +8,7 @@ import {
   RotateCw
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   LiveRequestRow,
   LiveRequestsPayload,
@@ -61,17 +61,6 @@ const compactUsdFormatter = new Intl.NumberFormat("en-US", {
 });
 
 const integerFormatter = new Intl.NumberFormat("en-US");
-
-const projectPillTones = [
-  { background: "rgba(37, 99, 235, 0.24)", border: "rgba(96, 165, 250, 0.44)", text: "#bfdbfe" },
-  { background: "rgba(13, 148, 136, 0.24)", border: "rgba(45, 212, 191, 0.44)", text: "#99f6e4" },
-  { background: "rgba(124, 58, 237, 0.24)", border: "rgba(167, 139, 250, 0.44)", text: "#ddd6fe" },
-  { background: "rgba(219, 39, 119, 0.22)", border: "rgba(244, 114, 182, 0.42)", text: "#fbcfe8" },
-  { background: "rgba(217, 119, 6, 0.22)", border: "rgba(251, 191, 36, 0.42)", text: "#fde68a" },
-  { background: "rgba(22, 163, 74, 0.22)", border: "rgba(74, 222, 128, 0.42)", text: "#bbf7d0" },
-  { background: "rgba(8, 145, 178, 0.24)", border: "rgba(34, 211, 238, 0.42)", text: "#a5f3fc" },
-  { background: "rgba(225, 29, 72, 0.21)", border: "rgba(251, 113, 133, 0.42)", text: "#fecdd3" }
-];
 
 export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardProps) {
   const {
@@ -318,7 +307,6 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
                 <td>
                   <span
                     className="dashboard-live-project-pill"
-                    style={projectPillStyle(row.projectId || row.projectName)}
                     title={row.projectId}
                   >
                     {row.projectName}
@@ -390,24 +378,6 @@ function OptionalBadge({
       {value}
     </span>
   );
-}
-
-function projectPillStyle(value: string): CSSProperties {
-  const tone = projectPillTones[stableHash(value) % projectPillTones.length];
-
-  return {
-    "--project-pill-bg": tone.background,
-    "--project-pill-border": tone.border,
-    "--project-pill-text": tone.text
-  } as CSSProperties;
-}
-
-function stableHash(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index++) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
 }
 
 function liveRequestsApiQuery(

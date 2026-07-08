@@ -2733,12 +2733,17 @@ select {
 }
 
 .dashboard-live-project-pill {
-  max-width: 160px;
-  padding: 0 9px;
+  max-width: 180px;
+  min-height: auto;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--project-pill-border, color-mix(in srgb, var(--brand-blue) 24%, transparent));
-  background: var(--project-pill-bg, color-mix(in srgb, var(--brand-blue) 12%, var(--surface-subtle)));
-  color: var(--project-pill-text, var(--brand-blue));
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  justify-content: flex-start;
+  line-height: 1.35;
   text-overflow: ellipsis;
 }
 
