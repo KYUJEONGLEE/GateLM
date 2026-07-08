@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { ProjectManagement } from "@/features/projects/components/project-management";
 import {
   getCurrentConsoleAuth,
@@ -32,19 +31,12 @@ export default async function ProjectsPage({ params }: ProjectsPageProps) {
   const canCreateProject = isTenantAdminForTenant(auth, effectiveTenantId);
 
   return (
-    <ConsoleShell
-      activeManagementItem="project"
-      activeSection="management"
+    <ProjectManagement
+      budgetThresholds={budgetThresholds}
+      canCreateProject={canCreateProject}
       locale={locale}
-      tenantId={effectiveTenantId}
-    >
-      <ProjectManagement
-        budgetThresholds={budgetThresholds}
-        canCreateProject={canCreateProject}
-        locale={locale}
-        model={{ ...projectsModel, projects: visibleProjects }}
-        monthlyCostReport={monthlyCostReport}
-      />
-    </ConsoleShell>
+      model={{ ...projectsModel, projects: visibleProjects }}
+      monthlyCostReport={monthlyCostReport}
+    />
   );
 }

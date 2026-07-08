@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { GatewayHealthOverview } from "@/features/health/components/gateway-health-overview";
 import { getGatewayHealthModel } from "@/lib/gateway/health-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -14,13 +13,5 @@ export default async function HealthPage({ params }: HealthPageProps) {
   const locale = await getRequestLocale();
   const model = await getGatewayHealthModel(tenantId);
 
-  return (
-    <ConsoleShell
-      activeSection="monitoring"
-      locale={locale}
-      tenantId={tenantId}
-    >
-      <GatewayHealthOverview locale={locale} model={model} />
-    </ConsoleShell>
-  );
+  return <GatewayHealthOverview locale={locale} model={model} />;
 }

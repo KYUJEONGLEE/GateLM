@@ -16,6 +16,7 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import {
@@ -78,12 +79,18 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
 };
 
 type ConsoleShellProps = {
-  activeSection: ConsoleSection;
   children: ReactNode;
   activeManagementItem?: ManagementNavItem;
   activeMonitoringItem?: MonitoringNavItem;
+  activeSection?: ConsoleSection;
   locale: Locale;
   tenantId: string;
+};
+
+type ConsoleNavigationState = {
+  activeManagementItem?: ManagementNavItem;
+  activeMonitoringItem?: MonitoringNavItem;
+  activeSection: ConsoleSection;
 };
 
 type ChildNavigationItem = {
@@ -266,8 +273,15 @@ export function ConsoleShell({
   locale,
   tenantId
 }: ConsoleShellProps) {
+  const pathname = usePathname();
   const text = shellText[locale];
   const tenantLabel = formatTenantDisplayName(tenantId);
+  const navigationState = useMemo(() => getConsoleNavigationState(pathname), [pathname]);
+  const resolvedActiveSection = activeSection ?? navigationState.activeSection;
+  const resolvedActiveManagementItem =
+    activeManagementItem ?? navigationState.activeManagementItem;
+  const resolvedActiveMonitoringItem =
+    activeMonitoringItem ?? navigationState.activeMonitoringItem;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -287,7 +301,7 @@ export function ConsoleShell({
 
   useEffect(() => {
     setIsMobileNavigationOpen(false);
-  }, [activeSection]);
+  }, [pathname]);
 
   useEffect(() => {
     const storedCollapsedState = readStoredSidebarCollapsed();
@@ -385,10 +399,10 @@ export function ConsoleShell({
 
   function isChildActive(child: ChildNavigationItem) {
     if (isMonitoringNavItem(child.item)) {
-      return child.item === activeMonitoringItem;
+      return child.item === resolvedActiveMonitoringItem;
     }
 
-    return child.item === activeManagementItem;
+    return child.item === resolvedActiveManagementItem;
   }
 
   function renderSubnavItems(children: ChildNavigationItem[]) {
@@ -529,7 +543,7 @@ export function ConsoleShell({
                 <span
                   aria-disabled="true"
                   className="console-nav-link"
-                  data-active={item.section === activeSection}
+                  data-active={item.section === resolvedActiveSection}
                   data-disabled="true"
                   key={item.section}
                 >
@@ -543,9 +557,9 @@ export function ConsoleShell({
             return (
               <div className="console-nav-group" key={item.section}>
                 <Link
-                  aria-current={item.section === activeSection ? "page" : undefined}
+                  aria-current={item.section === resolvedActiveSection ? "page" : undefined}
                   className="console-nav-link"
-                  data-active={item.section === activeSection}
+                  data-active={item.section === resolvedActiveSection}
                   href={item.path(tenantId)}
                   onClick={closeMobileNavigation}
                 >
@@ -553,7 +567,7 @@ export function ConsoleShell({
                   <span>{label}</span>
                 </Link>
 
-                {item.children && item.section === activeSection ? (
+                {item.children && item.section === resolvedActiveSection ? (
                   <div className="console-subnav" aria-label={`${label} navigation`}>
                     {renderSubnavItems(item.children)}
                   </div>
@@ -637,6 +651,80 @@ export function ConsoleShell({
       </div>
     </div>
   );
+}
+
+function getConsoleNavigationState(pathname: string | null): ConsoleNavigationState {
+  switch (getTenantConsoleRoute(pathname)) {
+    case "dashboard":
+      return {
+        activeMonitoringItem: "overview",
+        activeSection: "monitoring"
+      };
+    case "request-logs":
+    case "metrics":
+      return {
+        activeMonitoringItem: "live-logs",
+        activeSection: "monitoring"
+      };
+    case "analytics":
+      return {
+        activeMonitoringItem: "analytics",
+        activeSection: "monitoring"
+      };
+    case "alerts":
+      return {
+        activeMonitoringItem: "alerts",
+        activeSection: "monitoring"
+      };
+    case "health":
+      return {
+        activeSection: "monitoring"
+      };
+    case "api-keys":
+      return {
+        activeManagementItem: "api-keys",
+        activeSection: "management"
+      };
+    case "app-tokens":
+      return {
+        activeManagementItem: "app-tokens",
+        activeSection: "management"
+      };
+    case "policies":
+      return {
+        activeManagementItem: "policies",
+        activeSection: "management"
+      };
+    case "provider-connections":
+    case "model-catalog":
+      return {
+        activeManagementItem: "provider",
+        activeSection: "management"
+      };
+    case "teams":
+      return {
+        activeManagementItem: "teams",
+        activeSection: "management"
+      };
+    case "applications":
+    case "onboarding":
+    case "projects":
+      return {
+        activeManagementItem: "project",
+        activeSection: "management"
+      };
+    default:
+      return {
+        activeSection: "management"
+      };
+  }
+}
+
+function getTenantConsoleRoute(pathname: string | null) {
+  const segments = (pathname ?? "").split("/").filter(Boolean);
+  const tenantIndex = segments.indexOf("tenants");
+
+  return tenantIndex >= 0 ? segments[tenantIndex + 2] : undefined;
 }
 
 function ConsoleTopbarActions({

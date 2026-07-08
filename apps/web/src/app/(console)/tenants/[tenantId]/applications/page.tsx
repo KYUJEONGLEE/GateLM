@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { ApplicationManagement } from "@/features/applications/components/application-management";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
@@ -22,31 +21,24 @@ export default async function ApplicationsPage({ params }: ApplicationsPageProps
   );
 
   return (
-    <ConsoleShell
-      activeManagementItem="project"
-      activeSection="management"
+    <ApplicationManagement
       locale={locale}
-      tenantId={tenantId}
-    >
-      <ApplicationManagement
-        locale={locale}
-        model={model}
-        policySummariesByApplicationId={Object.fromEntries(
-          runtimeConfigEntries.map(([applicationId, config]) => [
-            applicationId,
-            config
-              ? {
-                  defaultModel: config.routingPolicy.defaultModel,
-                  defaultProvider: config.routingPolicy.defaultProvider,
-                  modelCount: config.models.length,
-                  publishedAt: config.publishedAt,
-                  publishState: config.publishState
-                }
+      model={model}
+      policySummariesByApplicationId={Object.fromEntries(
+        runtimeConfigEntries.map(([applicationId, config]) => [
+          applicationId,
+          config
+            ? {
+                defaultModel: config.routingPolicy.defaultModel,
+                defaultProvider: config.routingPolicy.defaultProvider,
+                modelCount: config.models.length,
+                publishedAt: config.publishedAt,
+                publishState: config.publishState
+              }
             : null
-          ])
-        )}
-        tenantId={tenantId}
-      />
-    </ConsoleShell>
+        ])
+      )}
+      tenantId={tenantId}
+    />
   );
 }

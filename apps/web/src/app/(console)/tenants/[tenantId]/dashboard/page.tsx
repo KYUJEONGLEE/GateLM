@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
   getVisibleProjectsForConsoleAuth,
@@ -94,22 +93,15 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 
   if (!overview) {
     return (
-      <ConsoleShell
-        activeMonitoringItem="overview"
-        activeSection="monitoring"
-        locale={locale}
-        tenantId={effectiveTenantId}
-      >
-        <main className="console-content">
-          <section className="dashboard-hero">
-            <div>
-              <p className="console-kicker">Gateway connection</p>
-              <h2>Dashboard unavailable</h2>
-              <p>Live Gateway metrics are not available right now.</p>
-            </div>
-          </section>
-        </main>
-      </ConsoleShell>
+      <main className="console-content">
+        <section className="dashboard-hero">
+          <div>
+            <p className="console-kicker">Gateway connection</p>
+            <h2>Dashboard unavailable</h2>
+            <p>Live Gateway metrics are not available right now.</p>
+          </div>
+        </section>
+      </main>
     );
   }
 
@@ -118,25 +110,18 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   }
 
   return (
-    <ConsoleShell
-      activeMonitoringItem="overview"
-      activeSection="monitoring"
+    <DashboardOverviewView
       locale={locale}
-      tenantId={effectiveTenantId}
-    >
-      <DashboardOverviewView
-        locale={locale}
-        costOverTime={costOverTime}
-        filters={scopedDashboardFilters}
-        liveRequests={liveRequests}
-        monthToDateOverview={monthToDateOverview}
-        overview={overview}
-        projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
-        recentRecords={recentRecords ?? []}
-        allowAllProjects={!projectScoped}
-        suppressContentMotion={suppressContentMotion}
-      />
-    </ConsoleShell>
+      costOverTime={costOverTime}
+      filters={scopedDashboardFilters}
+      liveRequests={liveRequests}
+      monthToDateOverview={monthToDateOverview}
+      overview={overview}
+      projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
+      recentRecords={recentRecords ?? []}
+      allowAllProjects={!projectScoped}
+      suppressContentMotion={suppressContentMotion}
+    />
   );
 }
 

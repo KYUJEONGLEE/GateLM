@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
   getProjectAdminProjectIdsForTenant,
@@ -122,36 +121,29 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const displaySelectedDetail = scopedSelectedDetail ? toDisplayModelRecord(scopedSelectedDetail) : undefined;
 
   return (
-    <ConsoleShell
-      activeMonitoringItem="live-logs"
-      activeSection="monitoring"
+    <RequestLogTable
+      detailPanel={
+        displaySelectedDetail ? (
+          <RequestLogDetailAside
+            locale={locale}
+            record={displaySelectedDetail}
+            tenantId={effectiveTenantId}
+            timezone={DEFAULT_DISPLAY_TIMEZONE}
+          />
+        ) : undefined
+      }
+      allowAllProjects={!projectScoped}
+      filters={scopedFilters}
       locale={locale}
+      budgetScopeOptions={budgetScopeOptions}
+      modelOptions={modelOptions}
+      projects={visibleProjects}
+      records={displayRecords}
+      selectedRequestId={displaySelectedDetail?.requestId}
+      sourceState={records ? "ready" : "unavailable"}
       tenantId={effectiveTenantId}
-    >
-      <RequestLogTable
-        detailPanel={
-          displaySelectedDetail ? (
-            <RequestLogDetailAside
-              locale={locale}
-              record={displaySelectedDetail}
-              tenantId={effectiveTenantId}
-              timezone={DEFAULT_DISPLAY_TIMEZONE}
-            />
-          ) : undefined
-        }
-        allowAllProjects={!projectScoped}
-        filters={scopedFilters}
-        locale={locale}
-        budgetScopeOptions={budgetScopeOptions}
-        modelOptions={modelOptions}
-        projects={visibleProjects}
-        records={displayRecords}
-        selectedRequestId={displaySelectedDetail?.requestId}
-        sourceState={records ? "ready" : "unavailable"}
-        tenantId={effectiveTenantId}
-        timezone={DEFAULT_DISPLAY_TIMEZONE}
-      />
-    </ConsoleShell>
+      timezone={DEFAULT_DISPLAY_TIMEZONE}
+    />
   );
 }
 

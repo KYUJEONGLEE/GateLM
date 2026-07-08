@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Zap
 } from "lucide-react";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   AnalyticsLatencyDistributionLineChart,
   AnalyticsProviderLatencyBarChart
@@ -304,113 +303,106 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const analyticsRangeOptions = getAnalyticsRangeOptions(text);
 
   return (
-    <ConsoleShell
-      activeMonitoringItem="analytics"
-      activeSection="monitoring"
-      locale={locale}
-      tenantId={tenantId}
-    >
-      <main className="console-content analytics-page">
-        <header className="analytics-header">
-          <div>
-            <h1>{text.title}</h1>
-            <p>{text.subtitle}</p>
-          </div>
-          <button className="analytics-export-button" type="button">
-            <Download aria-hidden="true" size={16} />
-            {text.export}
-          </button>
-        </header>
+    <main className="console-content analytics-page">
+      <header className="analytics-header">
+        <div>
+          <h1>{text.title}</h1>
+          <p>{text.subtitle}</p>
+        </div>
+        <button className="analytics-export-button" type="button">
+          <Download aria-hidden="true" size={16} />
+          {text.export}
+        </button>
+      </header>
 
-        <form action={`/tenants/${tenantId}/analytics`} className="analytics-filter-bar">
-          <input name="tab" type="hidden" value={activeTab} />
-          <label>
-            <span>{text.filterTimeRange}</span>
-            <select defaultValue={filters.range} name="range">
-              {analyticsRangeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{text.filterProject}</span>
-            <select defaultValue={filters.projectId} name="projectId">
-              <option value="">{text.allProjects}</option>
-              {activeProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{text.filterProvider}</span>
-            <select defaultValue={filters.provider} name="provider">
-              <option value="">{text.allProviders}</option>
-              {providerOptions.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{text.filterModel}</span>
-            <select defaultValue={filters.model} name="model">
-              <option value="">{text.allModels}</option>
-              {modelOptions.map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="analytics-apply-button" type="submit">
-            {text.apply}
-          </button>
-        </form>
+      <form action={`/tenants/${tenantId}/analytics`} className="analytics-filter-bar">
+        <input name="tab" type="hidden" value={activeTab} />
+        <label>
+          <span>{text.filterTimeRange}</span>
+          <select defaultValue={filters.range} name="range">
+            {analyticsRangeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{text.filterProject}</span>
+          <select defaultValue={filters.projectId} name="projectId">
+            <option value="">{text.allProjects}</option>
+            {activeProjects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{text.filterProvider}</span>
+          <select defaultValue={filters.provider} name="provider">
+            <option value="">{text.allProviders}</option>
+            {providerOptions.map((provider) => (
+              <option key={provider} value={provider}>
+                {provider}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{text.filterModel}</span>
+          <select defaultValue={filters.model} name="model">
+            <option value="">{text.allModels}</option>
+            {modelOptions.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="analytics-apply-button" type="submit">
+          {text.apply}
+        </button>
+      </form>
 
-        <nav aria-label={text.analyticsSectionsAria} className="analytics-tabs">
-          {analyticsTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <Link
-                className="analytics-tab"
-                data-active={tab.id === activeTab}
-                href={analyticsTabHref(tenantId, tab.id, filters)}
-                key={tab.id}
-              >
-                <Icon aria-hidden="true" size={17} />
-                {tab.label}
-              </Link>
-            );
-          })}
-        </nav>
+      <nav aria-label={text.analyticsSectionsAria} className="analytics-tabs">
+        {analyticsTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <Link
+              className="analytics-tab"
+              data-active={tab.id === activeTab}
+              href={analyticsTabHref(tenantId, tab.id, filters)}
+              key={tab.id}
+            >
+              <Icon aria-hidden="true" size={17} />
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
 
-        {activeTab === "performance" ? (
-          <PerformancePanel
-            filters={filters}
-            locale={locale}
-            performance={performance}
-            projects={activeProjects}
-            rangeLabel={rangeLabel(filters.range, text)}
-            text={text}
-            tenantId={tenantId}
-          />
-        ) : (
-          <AnalyticsPlaceholder activeTab={activeTab} text={text} />
-        )}
+      {activeTab === "performance" ? (
+        <PerformancePanel
+          filters={filters}
+          locale={locale}
+          performance={performance}
+          projects={activeProjects}
+          rangeLabel={rangeLabel(filters.range, text)}
+          text={text}
+          tenantId={tenantId}
+        />
+      ) : (
+        <AnalyticsPlaceholder activeTab={activeTab} text={text} />
+      )}
 
-        <footer className="analytics-freshness">
-          <span>{text.freshnessRange}</span>
-          <strong>
-            {formatDateTime(liveRange.from)} - {formatDateTime(liveRange.to)}
-          </strong>
-        </footer>
-      </main>
-    </ConsoleShell>
+      <footer className="analytics-freshness">
+        <span>{text.freshnessRange}</span>
+        <strong>
+          {formatDateTime(liveRange.from)} - {formatDateTime(liveRange.to)}
+        </strong>
+      </footer>
+    </main>
   );
 }
 
