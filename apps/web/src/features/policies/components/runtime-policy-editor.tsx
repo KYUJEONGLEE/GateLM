@@ -32,6 +32,7 @@ import type { Locale } from "@/lib/i18n/locale";
 type RuntimePolicyEditorProps = {
   apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
   breadcrumbItems?: BreadcrumbItem[];
+  hideStreamingTab?: boolean;
   locale: Locale;
   model: RuntimePolicyModel;
 };
@@ -396,6 +397,7 @@ const policyText: Record<
 export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
+  hideStreamingTab = false,
   locale,
   model
 }: RuntimePolicyEditorProps) {
@@ -420,6 +422,13 @@ export function RuntimePolicyEditor({
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
+  const visiblePolicySections = useMemo(
+    () =>
+      hideStreamingTab
+        ? policySections.filter((section) => section !== "streaming")
+        : policySections,
+    [hideStreamingTab]
+  );
   useEffect(() => {
     setDraftValues(
       getWritableRuntimePolicyDraftValues(
@@ -787,7 +796,7 @@ export function RuntimePolicyEditor({
       ) : null}
 
       <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
-        {policySections.map((section) => {
+        {visiblePolicySections.map((section) => {
           const label = getPolicySectionLabel(section, text);
           const isActive = activePolicySection === section;
 
@@ -1162,44 +1171,50 @@ export function RuntimePolicyEditor({
           </article>
         </div>
 
-        <div
-          aria-labelledby={getPolicyTabId("streaming")}
-          className="policy-tab-panel"
-          hidden={activePolicySection !== "streaming"}
-          id={getPolicyPanelId("streaming")}
-          role="tabpanel"
-          tabIndex={0}
-        >
-          <article className="console-panel policy-editor-panel">
-            <div className="panel-heading">
-              <h3>{text.streaming}</h3>
-            </div>
-            {model.runtimeSnapshot.loadError ? (
-              <Alert variant="warning">
-                <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
-              </Alert>
-            ) : null}
-            {model.runtimeSnapshot.snapshot ? (
-              <dl className="policy-summary-list">
-                <div>
-                  <dt>{text.enabled}</dt>
-                  <dd>{formatEnabled(model.runtimeSnapshot.snapshot.policies?.streaming?.enabled)}</dd>
-                </div>
-                <div>
-                  <dt>thin slice</dt>
-                  <dd>
-                    {formatEnabled(
-                      model.runtimeSnapshot.snapshot.policies?.streaming?.thinSliceOnly
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="project-muted">{text.streamingUnavailable}</p>
-            )}
-            <p className="project-muted">{text.streamingNote}</p>
-          </article>
-        </div>
+        {hideStreamingTab ? null : (
+          <div
+            aria-labelledby={getPolicyTabId("streaming")}
+            className="policy-tab-panel"
+            hidden={activePolicySection !== "streaming"}
+            id={getPolicyPanelId("streaming")}
+            role="tabpanel"
+            tabIndex={0}
+          >
+            <article className="console-panel policy-editor-panel">
+              <div className="panel-heading">
+                <h3>{text.streaming}</h3>
+              </div>
+              {model.runtimeSnapshot.loadError ? (
+                <Alert variant="warning">
+                  <AlertDescription>{model.runtimeSnapshot.loadError}</AlertDescription>
+                </Alert>
+              ) : null}
+              {model.runtimeSnapshot.snapshot ? (
+                <dl className="policy-summary-list">
+                  <div>
+                    <dt>{text.enabled}</dt>
+                    <dd>
+                      {formatEnabled(
+                        model.runtimeSnapshot.snapshot.policies?.streaming?.enabled
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>thin slice</dt>
+                    <dd>
+                      {formatEnabled(
+                        model.runtimeSnapshot.snapshot.policies?.streaming?.thinSliceOnly
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="project-muted">{text.streamingUnavailable}</p>
+              )}
+              <p className="project-muted">{text.streamingNote}</p>
+            </article>
+          </div>
+        )}
 
       </section>
 

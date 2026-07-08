@@ -276,8 +276,6 @@ function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
-    providerConnectionIds: values.providerConnectionIds ?? [],
-    status: values.status,
     totalBudgetUsd: values.totalBudgetUsd
   };
 }
