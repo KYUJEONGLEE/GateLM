@@ -1,4 +1,0 @@
-./router.go
-./server.go
-./gateway_v1_readiness_smoke_test.go
-./router_test.go

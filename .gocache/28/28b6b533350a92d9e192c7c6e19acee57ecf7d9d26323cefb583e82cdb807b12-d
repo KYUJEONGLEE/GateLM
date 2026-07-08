@@ -1,5 +1,0 @@
-./errors.go
-./registry.go
-./types.go
-./errors_test.go
-./registry_test.go

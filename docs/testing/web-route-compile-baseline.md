@@ -49,6 +49,10 @@ The script starts `corepack pnpm --filter @gatelm/web dev`, waits for `Ready in 
 2. `/tenants/{tenantId}/projects/{projectId}/policies`
 3. `/tenants/{tenantId}/projects/{projectId}/applications/{applicationId}/policies`
 
+Protected console routes use a non-secret probe cookie so middleware lets the route module compile before the auth layout redirects. The probe is not a valid user session and is not authentication evidence. Reports record only that the console probe was enabled; they must not record the cookie value or any other header value.
+
+To reproduce the unauthenticated redirect behavior without the probe, pass `-DisableConsoleProbeCookie`.
+
 Default IDs match the seed defaults:
 
 | Scope | Default ID |

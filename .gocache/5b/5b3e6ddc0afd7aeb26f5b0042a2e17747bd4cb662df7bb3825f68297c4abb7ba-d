@@ -1,5 +1,0 @@
-./fixed_window_limiter.go
-./limiter.go
-./token_bucket_limiter.go
-./fixed_window_limiter_test.go
-./token_bucket_limiter_test.go

@@ -4,8 +4,10 @@ param(
     [string]$ProjectId = $(if ([string]::IsNullOrWhiteSpace($env:GATELM_WEB_ROUTE_COMPILE_PROJECT_ID)) { "00000000-0000-4000-8000-000000000200" } else { $env:GATELM_WEB_ROUTE_COMPILE_PROJECT_ID }),
     [string]$ApplicationId = $(if ([string]::IsNullOrWhiteSpace($env:GATELM_WEB_ROUTE_COMPILE_APPLICATION_ID)) { "00000000-0000-4000-8000-000000000300" } else { $env:GATELM_WEB_ROUTE_COMPILE_APPLICATION_ID }),
     [string]$ReportDir = $(if ([string]::IsNullOrWhiteSpace($env:GATELM_WEB_ROUTE_COMPILE_REPORT_DIR)) { "reports/web-route-compile" } else { $env:GATELM_WEB_ROUTE_COMPILE_REPORT_DIR }),
+    [string]$ConsoleProbeCookieName = $(if ([string]::IsNullOrWhiteSpace($env:GATELM_WEB_ROUTE_COMPILE_CONSOLE_PROBE_COOKIE_NAME)) { "gatelm_session" } else { $env:GATELM_WEB_ROUTE_COMPILE_CONSOLE_PROBE_COOKIE_NAME }),
     [int]$ReadyTimeoutSeconds = $(if ([string]::IsNullOrWhiteSpace($env:GATELM_WEB_ROUTE_COMPILE_READY_TIMEOUT_SECONDS)) { 120 } else { [int]$env:GATELM_WEB_ROUTE_COMPILE_READY_TIMEOUT_SECONDS }),
     [int]$RouteTimeoutSeconds = $(if ([string]::IsNullOrWhiteSpace($env:GATELM_WEB_ROUTE_COMPILE_ROUTE_TIMEOUT_SECONDS)) { 180 } else { [int]$env:GATELM_WEB_ROUTE_COMPILE_ROUTE_TIMEOUT_SECONDS }),
+    [switch]$DisableConsoleProbeCookie,
     [switch]$KeepRawLogs
 )
 
@@ -47,6 +49,20 @@ function Resolve-PnpmRunner {
     }
 
     throw "required command not found: corepack or pnpm"
+}
+
+function Resolve-CurlRunner {
+    $curl = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -ne $curl) {
+        return $curl.Source
+    }
+
+    $curl = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -ne $curl) {
+        return $curl.Source
+    }
+
+    throw "required command not found: curl or curl.exe"
 }
 
 function Join-UrlPath {
@@ -123,51 +139,114 @@ function Wait-ForLogLine {
     throw "$FailureMessage Timed out after ${TimeoutSeconds}s."
 }
 
+function New-RouteRequestRow {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [Parameter(Mandatory = $true)][string]$Probe,
+        [Parameter(Mandatory = $true)][int]$StatusCode,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$TransportError,
+        [Parameter(Mandatory = $true)][datetime]$StartedAt
+    )
+
+    return [pscustomobject]@{
+        Label = $Label
+        Uri = $Uri
+        Probe = $Probe
+        StatusCode = $StatusCode
+        TransportError = $TransportError
+        StartedAt = $StartedAt.ToString("o")
+        FinishedAt = (Get-Date).ToString("o")
+    }
+}
+
 function Invoke-RouteRequest {
     param(
         [Parameter(Mandatory = $true)][string]$Label,
         [Parameter(Mandatory = $true)][string]$Uri,
-        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+        [Parameter(Mandatory = $true)][bool]$UseConsoleProbeCookie,
+        [Parameter(Mandatory = $true)][string]$ConsoleProbeCookieName
     )
 
     $startedAt = Get-Date
+    if ($UseConsoleProbeCookie) {
+        $curl = Resolve-CurlRunner
+        $nullDevice = if ([System.IO.Path]::DirectorySeparatorChar -eq "\") { "NUL" } else { "/dev/null" }
+        $cookie = "$ConsoleProbeCookieName=route_compile_probe"
+        $curlArgs = @(
+            "-sS",
+            "-o",
+            $nullDevice,
+            "-w",
+            "%{http_code}",
+            "--max-time",
+            [string]$TimeoutSeconds,
+            "--cookie",
+            $cookie,
+            $Uri
+        )
+
+        $statusText = (& $curl @curlArgs) -join ""
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            return New-RouteRequestRow `
+                -Label $Label `
+                -Uri $Uri `
+                -Probe "console-cookie" `
+                -StatusCode 0 `
+                -TransportError "curl_exit_$exitCode" `
+                -StartedAt $startedAt
+        }
+
+        $statusCode = 0
+        if (-not [int]::TryParse($statusText.Trim(), [ref]$statusCode)) {
+            $statusCode = 0
+        }
+
+        return New-RouteRequestRow `
+            -Label $Label `
+            -Uri $Uri `
+            -Probe "console-cookie" `
+            -StatusCode $statusCode `
+            -TransportError "" `
+            -StartedAt $startedAt
+    }
+
     try {
         $response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec $TimeoutSeconds
-        return [pscustomobject]@{
-            Label = $Label
-            Uri = $Uri
-            StatusCode = [int]$response.StatusCode
-            TransportError = ""
-            StartedAt = $startedAt.ToString("o")
-            FinishedAt = (Get-Date).ToString("o")
-        }
+        return New-RouteRequestRow `
+            -Label $Label `
+            -Uri $Uri `
+            -Probe "none" `
+            -StatusCode ([int]$response.StatusCode) `
+            -TransportError "" `
+            -StartedAt $startedAt
     }
     catch {
         $response = Get-ErrorResponse -ErrorRecord $_
         if ($null -ne $response) {
-            return [pscustomobject]@{
-                Label = $Label
-                Uri = $Uri
-                StatusCode = [int]$response.StatusCode
-                TransportError = ""
-                StartedAt = $startedAt.ToString("o")
-                FinishedAt = (Get-Date).ToString("o")
-            }
+            return New-RouteRequestRow `
+                -Label $Label `
+                -Uri $Uri `
+                -Probe "none" `
+                -StatusCode ([int]$response.StatusCode) `
+                -TransportError "" `
+                -StartedAt $startedAt
         }
 
-        return [pscustomobject]@{
-            Label = $Label
-            Uri = $Uri
-            StatusCode = 0
-            TransportError = "request_failed"
-            StartedAt = $startedAt.ToString("o")
-            FinishedAt = (Get-Date).ToString("o")
-        }
+        return New-RouteRequestRow `
+            -Label $Label `
+            -Uri $Uri `
+            -Probe "none" `
+            -StatusCode 0 `
+            -TransportError "request_failed" `
+            -StartedAt $startedAt
     }
 }
 
 function Get-InterestingLogLines {
-    param([Parameter(Mandatory = $true)][string[]]$Lines)
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
 
     return @(
         $Lines |
@@ -180,7 +259,7 @@ function Get-InterestingLogLines {
 }
 
 function ConvertTo-CompileRows {
-    param([Parameter(Mandatory = $true)][string[]]$Lines)
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
 
     $rows = @()
     foreach ($line in $Lines) {
@@ -198,7 +277,7 @@ function ConvertTo-CompileRows {
 }
 
 function ConvertTo-GetRows {
-    param([Parameter(Mandatory = $true)][string[]]$Lines)
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
 
     $rows = @()
     foreach ($line in $Lines) {
@@ -244,11 +323,15 @@ function Format-DisplayPath {
 
 function Add-MarkdownTable {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.List[string]]$Lines,
+        [System.Collections.Generic.List[string]]$Lines,
         [Parameter(Mandatory = $true)][string[]]$Headers,
         [Parameter(Mandatory = $true)][object[]]$Rows,
         [Parameter(Mandatory = $true)][string[]]$Properties
     )
+
+    if ($null -eq $Lines) {
+        throw "Lines is required."
+    }
 
     $Lines.Add("| " + (($Headers | ForEach-Object { ConvertTo-MarkdownCell $_ }) -join " | ") + " |")
     $Lines.Add("| " + (($Headers | ForEach-Object { "---" }) -join " | ") + " |")
@@ -277,22 +360,26 @@ $stdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) "$runId.out.log"
 $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) "$runId.err.log"
 $process = $null
 $BaseUrl = $BaseUrl.TrimEnd("/")
+$consoleProbeMode = if ($DisableConsoleProbeCookie) { "disabled" } else { "enabled for protected console routes; value intentionally omitted" }
 
 $routes = @(
     [pscustomobject]@{
         Label = "home"
         Path = "/"
         RoutePattern = "/"
+        UseConsoleProbeCookie = $false
     },
     [pscustomobject]@{
         Label = "project policies"
         Path = "/tenants/$TenantId/projects/$ProjectId/policies"
         RoutePattern = "/tenants/[tenantId]/projects/[projectId]/policies"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
     },
     [pscustomobject]@{
         Label = "application policies"
         Path = "/tenants/$TenantId/projects/$ProjectId/applications/$ApplicationId/policies"
         RoutePattern = "/tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
     }
 )
 
@@ -318,6 +405,7 @@ try {
     Write-Host "baseUrl:    $BaseUrl"
     Write-Host "command:    $($runner.CommandText)"
     Write-Host "reportDir:  $ReportDir"
+    Write-Host "probe:      $consoleProbeMode"
     Write-Host ""
 
     $process = Start-Process `
@@ -340,7 +428,12 @@ try {
     foreach ($route in $routes) {
         $uri = Join-UrlPath -RootUrl $BaseUrl -Path $route.Path
         Write-Host ("requesting: {0} {1}" -f $route.Label, $route.Path)
-        $requestRows += Invoke-RouteRequest -Label $route.Label -Uri $uri -TimeoutSeconds $RouteTimeoutSeconds
+        $requestRows += Invoke-RouteRequest `
+            -Label $route.Label `
+            -Uri $uri `
+            -TimeoutSeconds $RouteTimeoutSeconds `
+            -UseConsoleProbeCookie ([bool]$route.UseConsoleProbeCookie) `
+            -ConsoleProbeCookieName $ConsoleProbeCookieName
 
         $routePattern = [regex]::Escape("Compiled $($route.RoutePattern)")
         $requestPattern = [regex]::Escape("GET $($route.Path)") -replace "\\\?", "\?"
@@ -373,14 +466,15 @@ try {
     $reportLines.Add("| Base URL | $(ConvertTo-MarkdownCell $BaseUrl) |")
     $reportLines.Add("| Command | $(ConvertTo-MarkdownCell $runner.CommandText) |")
     $reportLines.Add("| Baseline doc | docs/testing/web-route-compile-baseline.md |")
+    $reportLines.Add("| Console route probe | $(ConvertTo-MarkdownCell $consoleProbeMode) |")
     $reportLines.Add("")
     $reportLines.Add("## Requested Routes")
     $reportLines.Add("")
     Add-MarkdownTable `
         -Lines $reportLines `
-        -Headers @("Label", "URI", "StatusCode", "TransportError", "StartedAt", "FinishedAt") `
+        -Headers @("Label", "URI", "Probe", "StatusCode", "TransportError", "StartedAt", "FinishedAt") `
         -Rows $requestRows `
-        -Properties @("Label", "Uri", "StatusCode", "TransportError", "StartedAt", "FinishedAt")
+        -Properties @("Label", "Uri", "Probe", "StatusCode", "TransportError", "StartedAt", "FinishedAt")
     $reportLines.Add("")
     $reportLines.Add("## Compile Lines")
     $reportLines.Add("")

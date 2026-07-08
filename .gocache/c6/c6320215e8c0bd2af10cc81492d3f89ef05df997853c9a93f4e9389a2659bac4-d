@@ -1,6 +1,0 @@
-./auth_failure_writer.go
-./query_reader.go
-./terminal_writer.go
-./auth_failure_writer_test.go
-./query_reader_test.go
-./terminal_writer_test.go
