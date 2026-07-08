@@ -5974,6 +5974,22 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   gap: 14px;
 }
 
+.provider-panel-heading h3 {
+  font-size: calc(var(--font-size-xl) * 1.35);
+}
+
+.provider-panel-heading [data-slot="button"] {
+  height: 42px;
+  gap: 8px;
+  padding-inline: 16px;
+  font-size: var(--font-size-base);
+}
+
+.provider-panel-heading [data-slot="button"] svg {
+  width: 18px;
+  height: 18px;
+}
+
 .provider-card-list {
   display: grid;
   gap: 14px;
