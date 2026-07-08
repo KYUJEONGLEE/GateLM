@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { getControlPlaneBaseUrl, getControlPlaneTenantId } from '@/lib/control-plane/control-plane-config';
 import type { ProjectRecord } from '@/lib/control-plane/projects-types';
@@ -16,7 +17,17 @@ type AuthProjectAdmin = {
   tenantId: string;
 };
 
+export type CurrentConsoleUser = {
+  avatarUrl?: string;
+  displayName: string;
+  email?: string;
+  id: string;
+  role: string;
+  tenantName?: string;
+};
+
 export type CurrentConsoleAuth = {
+  currentUser: CurrentConsoleUser | null;
   isAuthenticated: boolean;
   memberships: AuthMembership[];
   projectAdmins: AuthProjectAdmin[];
@@ -25,17 +36,19 @@ export type CurrentConsoleAuth = {
 
 const authCookieNames = ['gatelm_session', 'gatelm_onboarding'];
 
-export async function getCurrentConsoleAuth(cookieHeader?: string | null): Promise<CurrentConsoleAuth> {
-  const header = cookieHeader ?? (await getConsoleAuthCookieHeader());
+export const getCurrentConsoleAuth = cache(async (): Promise<CurrentConsoleAuth> => {
+  return getCurrentConsoleAuthForCookieHeader(await getConsoleAuthCookieHeader());
+});
 
-  if (!header) {
+export async function getCurrentConsoleAuthForCookieHeader(cookieHeader?: string | null): Promise<CurrentConsoleAuth> {
+  if (!cookieHeader) {
     return emptyConsoleAuth();
   }
 
   const response = await fetch(new URL('/api/auth/me', getControlPlaneBaseUrl()), {
     cache: 'no-store',
     headers: {
-      cookie: header
+      cookie: cookieHeader
     }
   }).catch(() => undefined);
 
@@ -143,8 +156,13 @@ function parseConsoleAuth(payload: unknown): CurrentConsoleAuth {
   const projectAdmins = Array.isArray(data?.projectAdmins)
     ? data.projectAdmins.map(toProjectAdmin).filter((projectAdmin): projectAdmin is AuthProjectAdmin => Boolean(projectAdmin))
     : [];
+  const currentUser = toCurrentConsoleUser({
+    data,
+    user
+  });
 
   return {
+    currentUser,
     isAuthenticated: Boolean(user),
     memberships,
     projectAdmins,
@@ -193,11 +211,90 @@ function normalizeAuthRole(role: string | null) {
 
 function emptyConsoleAuth(): CurrentConsoleAuth {
   return {
+    currentUser: null,
     isAuthenticated: false,
     memberships: [],
     projectAdmins: [],
     userId: null
   };
+}
+
+function toCurrentConsoleUser(input: {
+  data: Record<string, unknown> | null;
+  user: Record<string, unknown> | null;
+}): CurrentConsoleUser | null {
+  if (!input.user) {
+    return null;
+  }
+
+  const email = readString(input.user, 'email');
+  const membership = getPrimaryMembership(input.data);
+  const tenant = getRecord(input.data?.tenant);
+  const tenantName = readString(tenant, 'name');
+  const displayName =
+    readString(input.user, 'displayName') ??
+    readString(input.user, 'name') ??
+    getDisplayNameFromEmail(email) ??
+    'Admin';
+
+  return {
+    avatarUrl: readString(input.user, 'avatarUrl') ?? readString(input.user, 'picture') ?? undefined,
+    displayName,
+    email: email ?? undefined,
+    id: readString(input.user, 'id') ?? readString(input.user, 'userId') ?? 'current-admin',
+    role: formatRoleLabel(readString(membership, 'role') ?? readString(input.user, 'role')),
+    tenantName: tenantName ?? undefined
+  };
+}
+
+function getPrimaryMembership(data: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!data) {
+    return null;
+  }
+
+  const membership = getRecord(data.membership);
+  if (membership) {
+    return membership;
+  }
+
+  if (!Array.isArray(data.memberships)) {
+    return null;
+  }
+
+  return data.memberships.map(getRecord).find((item): item is Record<string, unknown> => Boolean(item)) ?? null;
+}
+
+function getDisplayNameFromEmail(email: string | null) {
+  if (!email) {
+    return null;
+  }
+
+  const localPart = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim();
+  if (!localPart) {
+    return null;
+  }
+
+  return localPart
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatRoleLabel(role: string | null) {
+  if (!role) {
+    return 'Tenant Admin';
+  }
+
+  const normalizedRole = role.trim().toLowerCase();
+  if (normalizedRole === 'tenant_admin' || normalizedRole === 'super_admin') {
+    return 'Tenant Admin';
+  }
+
+  return normalizedRole
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ') || 'Tenant Admin';
 }
 
 function toControlPlaneTenantId(routeTenantId: string) {

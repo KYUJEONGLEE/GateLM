@@ -25,7 +25,7 @@ export default async function ConsoleTenantLayout({
   const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
 
   return (
-    <ConsoleShell locale={locale} tenantId={effectiveTenantId}>
+    <ConsoleShell currentUser={auth.currentUser} locale={locale} tenantId={effectiveTenantId}>
       {children}
     </ConsoleShell>
   );

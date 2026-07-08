@@ -83,6 +83,7 @@ type ConsoleShellProps = {
   activeManagementItem?: ManagementNavItem;
   activeMonitoringItem?: MonitoringNavItem;
   activeSection?: ConsoleSection;
+  currentUser: CurrentUser | null;
   locale: Locale;
   tenantId: string;
 };
@@ -270,6 +271,7 @@ export function ConsoleShell({
   activeMonitoringItem,
   activeSection,
   children,
+  currentUser,
   locale,
   tenantId
 }: ConsoleShellProps) {
@@ -285,7 +287,6 @@ export function ConsoleShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
@@ -320,40 +321,6 @@ export function ConsoleShell({
   useEffect(() => {
     setReadNotificationIds(readStoredNotificationIds());
   }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        const response = await fetch("/api/auth/me", {
-          credentials: "include"
-        });
-
-        if (!isMounted) {
-          return;
-        }
-
-        if (!response.ok) {
-          setCurrentUser(null);
-          return;
-        }
-
-        const payload = (await response.json()) as unknown;
-        setCurrentUser(parseCurrentUser(payload, tenantLabel));
-      } catch {
-        if (isMounted) {
-          setCurrentUser(null);
-        }
-      }
-    }
-
-    void loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [tenantLabel]);
 
   function toggleSidebar() {
     if (isMobileViewport()) {
@@ -905,103 +872,6 @@ function buildPendingCurrentUser(tenantLabel: string): CurrentUser {
     role: "Session required",
     tenantName: tenantLabel
   };
-}
-
-function parseCurrentUser(payload: unknown, tenantLabel: string): CurrentUser | null {
-  const root = getRecord(payload);
-  const data = getRecord(root?.data);
-  const user = getRecord(data?.user);
-
-  if (!user) {
-    return null;
-  }
-
-  const email = readString(user, "email");
-  const membership = getPrimaryMembership(data);
-  const tenant = getRecord(data?.tenant);
-  const displayName =
-    readString(user, "displayName") ??
-    readString(user, "name") ??
-    getDisplayNameFromEmail(email) ??
-    "Admin";
-
-  return {
-    avatarUrl: readString(user, "avatarUrl") ?? readString(user, "picture") ?? undefined,
-    displayName,
-    email: email ?? undefined,
-    id: readString(user, "id") ?? readString(user, "userId") ?? "current-admin",
-    role: formatRoleLabel(readString(membership, "role") ?? readString(user, "role")),
-    tenantName: readString(tenant, "name") ?? tenantLabel
-  };
-}
-
-function getPrimaryMembership(data: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!data) {
-    return null;
-  }
-
-  const membership = getRecord(data.membership);
-  if (membership) {
-    return membership;
-  }
-
-  if (!Array.isArray(data.memberships)) {
-    return null;
-  }
-
-  return data.memberships.map(getRecord).find((item): item is Record<string, unknown> => Boolean(item)) ?? null;
-}
-
-function getRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function readString(record: Record<string, unknown> | null, key: string): string | null {
-  const value = record?.[key];
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmedValue = value.trim();
-  return trimmedValue ? trimmedValue : null;
-}
-
-function getDisplayNameFromEmail(email: string | null) {
-  if (!email) {
-    return null;
-  }
-
-  const localPart = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
-  if (!localPart) {
-    return null;
-  }
-
-  return localPart
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatRoleLabel(role: string | null) {
-  if (!role) {
-    return "Tenant Admin";
-  }
-
-  const normalizedRole = role.trim().toLowerCase();
-  if (normalizedRole === "tenant_admin" || normalizedRole === "super_admin") {
-    return "Tenant Admin";
-  }
-
-  return normalizedRole
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ") || "Tenant Admin";
 }
 
 function getUserInitials(displayName: string) {

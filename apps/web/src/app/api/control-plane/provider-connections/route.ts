@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  getCurrentConsoleAuth,
+  getCurrentConsoleAuthForCookieHeader,
   isTenantAdminForTenant
 } from "@/lib/auth/current-console-auth";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
   const routeTenantId = typeof payload.tenantId === "string" ? payload.tenantId : undefined;
   const tenantId = routeTenantId ?? getControlPlaneTenantId();
-  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
 
   if (!auth.isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
