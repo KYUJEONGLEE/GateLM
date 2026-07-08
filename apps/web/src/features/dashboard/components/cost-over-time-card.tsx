@@ -181,7 +181,11 @@ export function CostOverTimeCard({
       }
     }
 
-    void refreshCostData(!normalizedInitialSummary);
+    if (normalizedInitialSummary) {
+      scheduleNextRefresh();
+    } else {
+      void refreshCostData(true);
+    }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {

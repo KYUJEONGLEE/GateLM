@@ -16,6 +16,7 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import {
@@ -78,12 +79,19 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
 };
 
 type ConsoleShellProps = {
-  activeSection: ConsoleSection;
   children: ReactNode;
   activeManagementItem?: ManagementNavItem;
   activeMonitoringItem?: MonitoringNavItem;
+  activeSection?: ConsoleSection;
+  currentUser: CurrentUser | null;
   locale: Locale;
   tenantId: string;
+};
+
+type ConsoleNavigationState = {
+  activeManagementItem?: ManagementNavItem;
+  activeMonitoringItem?: MonitoringNavItem;
+  activeSection: ConsoleSection;
 };
 
 type ChildNavigationItem = {
@@ -263,15 +271,22 @@ export function ConsoleShell({
   activeMonitoringItem,
   activeSection,
   children,
+  currentUser,
   locale,
   tenantId
 }: ConsoleShellProps) {
+  const pathname = usePathname();
   const text = shellText[locale];
   const tenantLabel = formatTenantDisplayName(tenantId);
+  const navigationState = useMemo(() => getConsoleNavigationState(pathname), [pathname]);
+  const resolvedActiveSection = activeSection ?? navigationState.activeSection;
+  const resolvedActiveManagementItem =
+    activeManagementItem ?? navigationState.activeManagementItem;
+  const resolvedActiveMonitoringItem =
+    activeMonitoringItem ?? navigationState.activeMonitoringItem;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
 
@@ -287,7 +302,7 @@ export function ConsoleShell({
 
   useEffect(() => {
     setIsMobileNavigationOpen(false);
-  }, [activeSection]);
+  }, [pathname]);
 
   useEffect(() => {
     const storedCollapsedState = readStoredSidebarCollapsed();
@@ -306,40 +321,6 @@ export function ConsoleShell({
   useEffect(() => {
     setReadNotificationIds(readStoredNotificationIds());
   }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCurrentUser() {
-      try {
-        const response = await fetch("/api/auth/me", {
-          credentials: "include"
-        });
-
-        if (!isMounted) {
-          return;
-        }
-
-        if (!response.ok) {
-          setCurrentUser(null);
-          return;
-        }
-
-        const payload = (await response.json()) as unknown;
-        setCurrentUser(parseCurrentUser(payload, tenantLabel));
-      } catch {
-        if (isMounted) {
-          setCurrentUser(null);
-        }
-      }
-    }
-
-    void loadCurrentUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [tenantLabel]);
 
   function toggleSidebar() {
     if (isMobileViewport()) {
@@ -385,10 +366,10 @@ export function ConsoleShell({
 
   function isChildActive(child: ChildNavigationItem) {
     if (isMonitoringNavItem(child.item)) {
-      return child.item === activeMonitoringItem;
+      return child.item === resolvedActiveMonitoringItem;
     }
 
-    return child.item === activeManagementItem;
+    return child.item === resolvedActiveManagementItem;
   }
 
   function renderSubnavItems(children: ChildNavigationItem[]) {
@@ -529,7 +510,7 @@ export function ConsoleShell({
                 <span
                   aria-disabled="true"
                   className="console-nav-link"
-                  data-active={item.section === activeSection}
+                  data-active={item.section === resolvedActiveSection}
                   data-disabled="true"
                   key={item.section}
                 >
@@ -543,9 +524,9 @@ export function ConsoleShell({
             return (
               <div className="console-nav-group" key={item.section}>
                 <Link
-                  aria-current={item.section === activeSection ? "page" : undefined}
+                  aria-current={item.section === resolvedActiveSection ? "page" : undefined}
                   className="console-nav-link"
-                  data-active={item.section === activeSection}
+                  data-active={item.section === resolvedActiveSection}
                   href={item.path(tenantId)}
                   onClick={closeMobileNavigation}
                 >
@@ -553,7 +534,7 @@ export function ConsoleShell({
                   <span>{label}</span>
                 </Link>
 
-                {item.children && item.section === activeSection ? (
+                {item.children && item.section === resolvedActiveSection ? (
                   <div className="console-subnav" aria-label={`${label} navigation`}>
                     {renderSubnavItems(item.children)}
                   </div>
@@ -637,6 +618,80 @@ export function ConsoleShell({
       </div>
     </div>
   );
+}
+
+function getConsoleNavigationState(pathname: string | null): ConsoleNavigationState {
+  switch (getTenantConsoleRoute(pathname)) {
+    case "dashboard":
+      return {
+        activeMonitoringItem: "overview",
+        activeSection: "monitoring"
+      };
+    case "request-logs":
+    case "metrics":
+      return {
+        activeMonitoringItem: "live-logs",
+        activeSection: "monitoring"
+      };
+    case "analytics":
+      return {
+        activeMonitoringItem: "analytics",
+        activeSection: "monitoring"
+      };
+    case "alerts":
+      return {
+        activeMonitoringItem: "alerts",
+        activeSection: "monitoring"
+      };
+    case "health":
+      return {
+        activeSection: "monitoring"
+      };
+    case "api-keys":
+      return {
+        activeManagementItem: "api-keys",
+        activeSection: "management"
+      };
+    case "app-tokens":
+      return {
+        activeManagementItem: "app-tokens",
+        activeSection: "management"
+      };
+    case "policies":
+      return {
+        activeManagementItem: "policies",
+        activeSection: "management"
+      };
+    case "provider-connections":
+    case "model-catalog":
+      return {
+        activeManagementItem: "provider",
+        activeSection: "management"
+      };
+    case "teams":
+      return {
+        activeManagementItem: "teams",
+        activeSection: "management"
+      };
+    case "applications":
+    case "onboarding":
+    case "projects":
+      return {
+        activeManagementItem: "project",
+        activeSection: "management"
+      };
+    default:
+      return {
+        activeSection: "management"
+      };
+  }
+}
+
+function getTenantConsoleRoute(pathname: string | null) {
+  const segments = (pathname ?? "").split("/").filter(Boolean);
+  const tenantIndex = segments.indexOf("tenants");
+
+  return tenantIndex >= 0 ? segments[tenantIndex + 2] : undefined;
 }
 
 function ConsoleTopbarActions({
@@ -817,103 +872,6 @@ function buildPendingCurrentUser(tenantLabel: string): CurrentUser {
     role: "Session required",
     tenantName: tenantLabel
   };
-}
-
-function parseCurrentUser(payload: unknown, tenantLabel: string): CurrentUser | null {
-  const root = getRecord(payload);
-  const data = getRecord(root?.data);
-  const user = getRecord(data?.user);
-
-  if (!user) {
-    return null;
-  }
-
-  const email = readString(user, "email");
-  const membership = getPrimaryMembership(data);
-  const tenant = getRecord(data?.tenant);
-  const displayName =
-    readString(user, "displayName") ??
-    readString(user, "name") ??
-    getDisplayNameFromEmail(email) ??
-    "Admin";
-
-  return {
-    avatarUrl: readString(user, "avatarUrl") ?? readString(user, "picture") ?? undefined,
-    displayName,
-    email: email ?? undefined,
-    id: readString(user, "id") ?? readString(user, "userId") ?? "current-admin",
-    role: formatRoleLabel(readString(membership, "role") ?? readString(user, "role")),
-    tenantName: readString(tenant, "name") ?? tenantLabel
-  };
-}
-
-function getPrimaryMembership(data: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!data) {
-    return null;
-  }
-
-  const membership = getRecord(data.membership);
-  if (membership) {
-    return membership;
-  }
-
-  if (!Array.isArray(data.memberships)) {
-    return null;
-  }
-
-  return data.memberships.map(getRecord).find((item): item is Record<string, unknown> => Boolean(item)) ?? null;
-}
-
-function getRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function readString(record: Record<string, unknown> | null, key: string): string | null {
-  const value = record?.[key];
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmedValue = value.trim();
-  return trimmedValue ? trimmedValue : null;
-}
-
-function getDisplayNameFromEmail(email: string | null) {
-  if (!email) {
-    return null;
-  }
-
-  const localPart = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
-  if (!localPart) {
-    return null;
-  }
-
-  return localPart
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatRoleLabel(role: string | null) {
-  if (!role) {
-    return "Tenant Admin";
-  }
-
-  const normalizedRole = role.trim().toLowerCase();
-  if (normalizedRole === "tenant_admin" || normalizedRole === "super_admin") {
-    return "Tenant Admin";
-  }
-
-  return normalizedRole
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ") || "Tenant Admin";
 }
 
 function getUserInitials(displayName: string) {

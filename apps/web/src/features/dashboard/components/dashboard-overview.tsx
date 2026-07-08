@@ -49,6 +49,7 @@ type DashboardOverviewProps = {
   liveRequests?: LiveRequestsPayload;
   locale: Locale;
   monthToDateOverview?: DashboardOverview;
+  monthToDateSpendValue?: ReactNode;
   overview: DashboardOverview;
   projects?: ProjectRecord[];
   rateLimitedRecords?: InvocationLogRecord[];
@@ -260,15 +261,19 @@ export function DashboardOverviewView({
   liveRequests,
   locale,
   monthToDateOverview,
+  monthToDateSpendValue,
   overview,
   projects = [],
-  recentRecords = [],
   suppressContentMotion = false
 }: DashboardOverviewProps) {
   const text = dashboardText[locale];
   const monthToDate = monthToDateOverview ?? overview;
   const successRate = ratio(overview.successfulRequests, overview.totalRequests);
-  const dataAsOf = formatDashboardDataAsOf(latestRecordTimestamp(recentRecords) ?? overview.range.to);
+  const dataAsOf = formatDashboardDataAsOf(
+    overview.dataFreshness.lastLogCreatedAt ||
+      overview.dataFreshness.generatedAt ||
+      overview.range.to
+  );
   const selectedProject = filters.projectId
     ? projects.find((project) => project.id === filters.projectId)
     : null;
@@ -299,7 +304,7 @@ export function DashboardOverviewView({
       icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: "이번 달 누적 비용",
       tone: "orange",
-      value: formatMicroUsd(monthToDate.totalCostMicroUsd)
+      value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
 
@@ -407,19 +412,6 @@ function ratio(numerator: number, denominator: number) {
   }
 
   return numerator / denominator;
-}
-
-function latestRecordTimestamp(records: InvocationLogRecord[]) {
-  let latest = 0;
-
-  for (const record of records) {
-    const timestamp = Date.parse(record.createdAt);
-    if (Number.isFinite(timestamp) && timestamp > latest) {
-      latest = timestamp;
-    }
-  }
-
-  return latest > 0 ? new Date(latest).toISOString() : undefined;
 }
 
 function formatDashboardDataAsOf(value: string) {

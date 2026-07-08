@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import {
-  getCurrentConsoleAuth,
+  getCurrentConsoleAuthForCookieHeader,
   isTenantAdminForTenant
 } from "@/lib/auth/current-console-auth";
-import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import {
+  getControlPlaneTenantId,
+  resolveControlPlaneTenantId
+} from "@/lib/control-plane/control-plane-config";
+import {
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag,
+  revalidateControlPlaneRead
+} from "@/lib/control-plane/read-cache";
 import {
   deleteProviderConnection,
   discoverProviderModels,
@@ -28,7 +36,8 @@ export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
   const routeTenantId = typeof payload.tenantId === "string" ? payload.tenantId : undefined;
   const tenantId = routeTenantId ?? getControlPlaneTenantId();
-  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
 
   if (!auth.isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -85,6 +94,8 @@ export async function POST(request: Request) {
       );
     }
 
+    revalidateProviderReadCache(controlPlaneTenantId);
+
     return NextResponse.json({
       provider: result.data,
       status: result.status
@@ -113,6 +124,8 @@ export async function POST(request: Request) {
       );
     }
 
+    revalidateProviderReadCache(controlPlaneTenantId);
+
     return NextResponse.json({
       provider: result.data,
       status: result.status
@@ -139,10 +152,20 @@ export async function POST(request: Request) {
     );
   }
 
+  revalidateProviderReadCache(controlPlaneTenantId);
+
   return NextResponse.json({
     provider: result.data,
     status: result.status
   });
+}
+
+function revalidateProviderReadCache(controlPlaneTenantId: string) {
+  revalidateControlPlaneRead([
+    controlPlaneReadCacheTags.providerConnections,
+    controlPlaneTenantReadCacheTag("providerConnections", controlPlaneTenantId),
+    controlPlaneReadCacheTags.runtimePolicy
+  ]);
 }
 
 function isProviderConnectionFormValues(value: unknown): value is ProviderConnectionFormValues {

@@ -1,6 +1,6 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   DASHBOARD_RANGE_PREFERENCE_COOKIE,
   DEFAULT_DASHBOARD_RANGE,
@@ -21,12 +21,9 @@ import {
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import {
-  getDashboardLiveRange,
   getLiveDashboardOverview,
   type LiveDashboardOverviewFilters
 } from "@/lib/gateway/live-dashboard-overview";
-import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
-import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 type DashboardPageProps = {
@@ -57,8 +54,6 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     resolvedSearchParams,
     preferredRange
   );
-  const liveRange = getDashboardLiveRange(dashboardFilters.range);
-  const monthToDateRange = getMonthToDateRange();
   const suppressContentMotion = resolvedSearchParams?.motion === "none";
   const [locale, auth] = await Promise.all([
     getRequestLocale(),
@@ -87,42 +82,19 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     projectId: effectiveProjectId ?? dashboardFilters.projectId
   };
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
-  const [overview, monthToDateOverview, costOverTime, liveRequests, recentRecords] = await Promise.all([
-    getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters),
-    getLiveDashboardOverview(effectiveTenantId, {
-      ...scopedLiveFilters,
-      from: monthToDateRange.from,
-      to: monthToDateRange.to
-    }),
-    getLiveCostOverTime(effectiveTenantId, scopedLiveFilters),
-    getLiveOverviewRequests(effectiveTenantId, scopedLiveFilters),
-    getLiveGatewayRequestLogs({
-      from: liveRange.from,
-      limit: 100,
-      projectId: scopedLiveFilters.projectId,
-      tenantId: effectiveTenantId,
-      to: liveRange.to
-    })
-  ]);
+  const overview = await getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters);
 
   if (!overview) {
     return (
-      <ConsoleShell
-        activeMonitoringItem="overview"
-        activeSection="monitoring"
-        locale={locale}
-        tenantId={effectiveTenantId}
-      >
-        <main className="console-content">
-          <section className="dashboard-hero">
-            <div>
-              <p className="console-kicker">Gateway connection</p>
-              <h2>Dashboard unavailable</h2>
-              <p>Live Gateway metrics are not available right now.</p>
-            </div>
-          </section>
-        </main>
-      </ConsoleShell>
+      <main className="console-content">
+        <section className="dashboard-hero">
+          <div>
+            <p className="console-kicker">Gateway connection</p>
+            <h2>Dashboard unavailable</h2>
+            <p>Live Gateway metrics are not available right now.</p>
+          </div>
+        </section>
+      </main>
     );
   }
 
@@ -131,26 +103,44 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   }
 
   return (
-    <ConsoleShell
-      activeMonitoringItem="overview"
-      activeSection="monitoring"
+    <DashboardOverviewView
       locale={locale}
-      tenantId={effectiveTenantId}
-    >
-      <DashboardOverviewView
-        locale={locale}
-        costOverTime={costOverTime}
-        filters={scopedDashboardFilters}
-        liveRequests={liveRequests}
-        monthToDateOverview={monthToDateOverview}
-        overview={overview}
-        projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
-        recentRecords={recentRecords ?? []}
-        allowAllProjects={!projectScoped}
-        suppressContentMotion={suppressContentMotion}
-      />
-    </ConsoleShell>
+      filters={scopedDashboardFilters}
+      monthToDateSpendValue={
+        <Suspense fallback={formatDashboardMicroUsd(overview.totalCostMicroUsd)}>
+          <MonthToDateSpendValue
+            fallbackMicroUsd={overview.totalCostMicroUsd}
+            filters={scopedLiveFilters}
+            tenantId={effectiveTenantId}
+          />
+        </Suspense>
+      }
+      overview={overview}
+      projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
+      allowAllProjects={!projectScoped}
+      suppressContentMotion={suppressContentMotion}
+    />
   );
+}
+
+async function MonthToDateSpendValue({
+  fallbackMicroUsd,
+  filters,
+  tenantId
+}: {
+  fallbackMicroUsd: number;
+  filters: LiveDashboardOverviewFilters;
+  tenantId: string;
+}) {
+  const monthToDateRange = getMonthToDateRange();
+  const summary = await getLiveCostOverTime(tenantId, {
+    ...filters,
+    from: monthToDateRange.from,
+    to: monthToDateRange.to
+  });
+  const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
+
+  return <>{formatDashboardMicroUsd(totalSpendUsd === undefined ? fallbackMicroUsd : totalSpendUsd * 1_000_000)}</>;
 }
 
 function buildDashboardFilters(
@@ -211,4 +201,15 @@ function getMonthToDateRange() {
     from: from.toISOString(),
     to: to.toISOString()
   };
+}
+
+function formatDashboardMicroUsd(value: number) {
+  const dollars = value / 1_000_000;
+
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: dollars > 0 && dollars < 1 ? 6 : 2,
+    minimumFractionDigits: 2,
+    style: "currency"
+  }).format(Number.isFinite(dollars) ? dollars : 0);
 }

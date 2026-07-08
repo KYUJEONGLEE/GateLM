@@ -3,7 +3,11 @@
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ResourceStatus } from '@prisma/client';
+import {
+  Prisma,
+  ResourceStatus,
+  RuntimeConfigPublishState,
+} from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -23,6 +27,7 @@ describe('ProjectsService', () => {
       application: { create: jest.Mock; findMany: jest.Mock };
       applicationProviderConnection: { createMany: jest.Mock };
       providerConnection: { findMany: jest.Mock };
+      runtimeConfig: { findMany: jest.Mock };
       tenant: { findUnique: jest.Mock };
       project: {
         create: jest.Mock;
@@ -45,6 +50,9 @@ describe('ProjectsService', () => {
         createMany: jest.fn(),
       },
       providerConnection: {
+        findMany: jest.fn(),
+      },
+      runtimeConfig: {
         findMany: jest.fn(),
       },
       tenant: {
@@ -300,6 +308,16 @@ describe('ProjectsService', () => {
         status: ResourceStatus.ACTIVE,
       },
     ]);
+    prisma.runtimeConfig.findMany.mockResolvedValue([
+      {
+        applicationId: '00000000-0000-4000-8000-000000000301',
+        document: {
+          budgetPolicy: {
+            warningThresholdPercent: 72,
+          },
+        },
+      },
+    ]);
 
     const result = await service.listProjects(tenantId, { limit: 2 });
 
@@ -325,16 +343,67 @@ describe('ProjectsService', () => {
         status: true,
       },
     });
+    expect(prisma.runtimeConfig.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.runtimeConfig.findMany).toHaveBeenCalledWith({
+      where: {
+        applicationId: {
+          in: expect.arrayContaining([
+            '00000000-0000-4000-8000-000000000301',
+            '00000000-0000-4000-8000-000000000302',
+          ]),
+        },
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      select: {
+        applicationId: true,
+        document: true,
+      },
+    });
     expect(result.data).toHaveLength(2);
     expect(result.data.map((item) => item.runtimeApplicationId)).toEqual([
       '00000000-0000-4000-8000-000000000301',
       '00000000-0000-4000-8000-000000000302',
+    ]);
+    expect(result.data.map((item) => item.warningThresholdPercent)).toEqual([
+      72,
+      80,
     ]);
     expect(result.pagination).toEqual({
       limit: 2,
       nextCursor: '00000000-0000-4000-8000-000000000202',
       hasMore: true,
     });
+  });
+
+  it('falls back to the default warning threshold for malformed active runtime configs', async () => {
+    const { service, prisma } = createService();
+    prisma.tenant.findUnique.mockResolvedValue({ id: tenantId });
+    prisma.project.findMany.mockResolvedValue([project(projectId)]);
+    prisma.application.findMany.mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000301',
+        projectId,
+        status: ResourceStatus.ACTIVE,
+      },
+    ]);
+    prisma.runtimeConfig.findMany.mockResolvedValue([
+      {
+        applicationId: '00000000-0000-4000-8000-000000000301',
+        document: {
+          budgetPolicy: {
+            warningThresholdPercent: 101,
+          },
+        },
+      },
+    ]);
+
+    const result = await service.listProjects(tenantId, { limit: 50 });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data.map((item) => item.warningThresholdPercent)).toEqual([
+      80,
+    ]);
   });
 
   it('checks tenant budget when reactivating an archived project', async () => {

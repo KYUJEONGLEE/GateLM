@@ -785,6 +785,30 @@
         }
       }
     },
+    "requestLogFilterOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "models",
+        "budgetScopes"
+      ],
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "description": "Low-cardinality model labels for Request Log UI filters. Must not include request IDs, hashes, prompt fragments, or raw provider error text."
+        },
+        "budgetScopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/budgetScope"
+          },
+          "description": "Resolved budget scopes available in the Request Log time range."
+        }
+      }
+    },
     "requestLogListReadModel": {
       "type": "object",
       "additionalProperties": false,
@@ -803,6 +827,9 @@
           "items": {
             "$ref": "#/$defs/requestSummary"
           }
+        },
+        "filterOptions": {
+          "$ref": "#/$defs/requestLogFilterOptions"
         },
         "freshness": {
           "$ref": "#/$defs/freshness"

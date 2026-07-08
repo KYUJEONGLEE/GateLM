@@ -2157,6 +2157,16 @@ select {
   overflow: hidden;
 }
 
+.dashboard-cost-over-time-chart[data-chart-state="loading"],
+.dashboard-line-chart[data-chart-state="loading"],
+.dashboard-pie-chart[data-chart-state="loading"],
+.analytics-echart[data-chart-state="loading"] {
+  background: linear-gradient(90deg, var(--surface-subtle), var(--surface), var(--surface-subtle));
+  background-size: 200% 100%;
+  border-radius: var(--radius-md);
+  animation: dashboard-cost-skeleton 1.4s ease-in-out infinite;
+}
+
 .dashboard-cost-over-time-state,
 .dashboard-cost-over-time-skeleton {
   display: grid;

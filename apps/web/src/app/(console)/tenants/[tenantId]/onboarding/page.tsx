@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { AdminOnboardingFlow } from "@/features/onboarding/components/admin-onboarding-flow";
 import {
   getCurrentConsoleAuth,
@@ -31,20 +30,13 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
   ]);
 
   return (
-    <ConsoleShell
-      activeManagementItem="project"
-      activeSection="management"
+    <AdminOnboardingFlow
+      activeStepId="project"
+      gatewayBaseUrl={gatewayConfig.baseUrl}
       locale={locale}
-      tenantId={effectiveTenantId}
-    >
-      <AdminOnboardingFlow
-        activeStepId="project"
-        gatewayBaseUrl={gatewayConfig.baseUrl}
-        locale={locale}
-        model={model}
-        providerConnectionsModel={providerConnectionsModel}
-        teamsModel={teamsModel}
-      />
-    </ConsoleShell>
+      model={model}
+      providerConnectionsModel={providerConnectionsModel}
+      teamsModel={teamsModel}
+    />
   );
 }

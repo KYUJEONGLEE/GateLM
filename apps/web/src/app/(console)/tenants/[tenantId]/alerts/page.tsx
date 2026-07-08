@@ -1,12 +1,5 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import type { Locale } from "@/lib/i18n/locale";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
-
-type AlertsPageProps = {
-  params: Promise<{
-    tenantId: string;
-  }>;
-};
 
 const alertsPageText: Record<
   Locale,
@@ -34,34 +27,26 @@ const alertsPageText: Record<
   }
 };
 
-export default async function AlertsPage({ params }: AlertsPageProps) {
-  const { tenantId } = await params;
+export default async function AlertsPage() {
   const locale = await getRequestLocale();
   const text = alertsPageText[locale];
 
   return (
-    <ConsoleShell
-      activeMonitoringItem="alerts"
-      activeSection="monitoring"
-      locale={locale}
-      tenantId={tenantId}
-    >
-      <main className="console-content">
-        <section className="dashboard-hero">
-          <div>
-            <p className="console-kicker">{text.kicker}</p>
-            <h2>{text.title}</h2>
-            <p>{text.body}</p>
-          </div>
-        </section>
+    <main className="console-content">
+      <section className="dashboard-hero">
+        <div>
+          <p className="console-kicker">{text.kicker}</p>
+          <h2>{text.title}</h2>
+          <p>{text.body}</p>
+        </div>
+      </section>
 
-        <section className="console-panel monitoring-placeholder-card">
-          <div className="panel-heading">
-            <h3>{text.comingSoon}</h3>
-            <p>{text.teaser}</p>
-          </div>
-        </section>
-      </main>
-    </ConsoleShell>
+      <section className="console-panel monitoring-placeholder-card">
+        <div className="panel-heading">
+          <h3>{text.comingSoon}</h3>
+          <p>{text.teaser}</p>
+        </div>
+      </section>
+    </main>
   );
 }

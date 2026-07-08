@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { ProjectPolicyGeneralContent } from "@/features/policies/components/project-policy-general-content";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
 import {
@@ -39,40 +38,33 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
   ]);
 
   return (
-    <ConsoleShell
-      activeManagementItem="project"
-      activeSection="management"
+    <RuntimePolicyEditor
+      breadcrumbItems={[
+        {
+          href: `/tenants/${effectiveTenantId}/projects`,
+          label: "Projects"
+        },
+        {
+          label: projectRuntime.project.name
+        },
+        {
+          label: "Policies"
+        }
+      ]}
+      hideStreamingTab
       locale={locale}
-      tenantId={effectiveTenantId}
+      model={projectRuntime.policyModel}
+      generalBudgetPanelPlacement="childSlot"
+      moveBudgetToGeneral
     >
-      <RuntimePolicyEditor
-        breadcrumbItems={[
-          {
-            href: `/tenants/${effectiveTenantId}/projects`,
-            label: "Projects"
-          },
-          {
-            label: projectRuntime.project.name
-          },
-          {
-            label: "Policies"
-          }
-        ]}
-        hideStreamingTab
+      <ProjectPolicyGeneralContent
         locale={locale}
-        model={projectRuntime.policyModel}
-        generalBudgetPanelPlacement="childSlot"
-        moveBudgetToGeneral
-      >
-        <ProjectPolicyGeneralContent
-          locale={locale}
-          project={projectRuntime.project}
-          projectAdminsModel={projectAdminsModel}
-          projectApiKeysModel={projectApiKeysModel}
-          projectTeamsModel={projectTeamsModel}
-          tenantId={effectiveTenantId}
-        />
-      </RuntimePolicyEditor>
-    </ConsoleShell>
+        project={projectRuntime.project}
+        projectAdminsModel={projectAdminsModel}
+        projectApiKeysModel={projectApiKeysModel}
+        projectTeamsModel={projectTeamsModel}
+        tenantId={effectiveTenantId}
+      />
+    </RuntimePolicyEditor>
   );
 }

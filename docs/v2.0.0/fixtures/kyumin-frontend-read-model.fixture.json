@@ -110,6 +110,20 @@
           }
         }
       ],
+      "filterOptions": {
+        "models": [
+          "gpt-4.1-mini",
+          "mock-fast"
+        ],
+        "budgetScopes": [
+          {
+            "budgetScopeType": "application",
+            "budgetScopeId": "app_employee_chat",
+            "resolvedBy": "default_application",
+            "displayName": "Employee Chat"
+          }
+        ]
+      },
       "freshness": {
         "lastIngestedAt": "2026-06-29T00:00:11Z",
         "lastAggregatedAt": "2026-06-29T00:00:15Z",

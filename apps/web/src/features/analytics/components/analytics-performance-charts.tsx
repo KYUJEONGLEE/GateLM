@@ -1,14 +1,21 @@
 "use client";
 
-import { BarChart, LineChart } from "echarts/charts";
-import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
-import * as echarts from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-echarts.use([BarChart, GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
-
-type EChartOption = Parameters<ReturnType<typeof echarts.init>["setOption"]>[0];
+type EChartOption = Record<string, unknown>;
+type EChartInstance = {
+  dispose: () => void;
+  resize: () => void;
+  setOption: (option: EChartOption, options?: unknown) => void;
+};
+type EChartsRuntime = {
+  init: (
+    node: HTMLDivElement,
+    theme?: string | null,
+    options?: Record<string, unknown>
+  ) => EChartInstance;
+  use: (components: unknown[]) => void;
+};
 
 export type AnalyticsProviderLatencyChartRow = {
   label: string;
@@ -25,6 +32,7 @@ export type AnalyticsLatencyDistributionChartPoint = {
 const axisColor = "#95a3b7";
 const gridColor = "rgba(148, 163, 184, 0.14)";
 const tooltipBackground = "rgba(8, 13, 22, 0.96)";
+let analyticsEchartsRuntimePromise: Promise<EChartsRuntime> | null = null;
 
 export function AnalyticsProviderLatencyBarChart({
   ariaLabel,
@@ -194,31 +202,77 @@ function AnalyticsEChart({
   option: EChartOption;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const chartRef = useRef<echarts.ECharts | null>(null);
+  const chartRef = useRef<EChartInstance | null>(null);
+  const optionRef = useRef(option);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!containerRef.current) {
+    optionRef.current = option;
+    chartRef.current?.setOption(option, true);
+  }, [option]);
+
+  useEffect(() => {
+    let isDisposed = false;
+    let resizeObserver: ResizeObserver | null = null;
+    const container = containerRef.current;
+
+    if (!container) {
       return undefined;
     }
 
-    const chart = echarts.init(containerRef.current, undefined, { renderer: "canvas" });
-    chartRef.current = chart;
+    void loadAnalyticsEchartsRuntime().then((runtime) => {
+      if (isDisposed) {
+        return;
+      }
 
-    const resizeObserver = new ResizeObserver(() => chart.resize());
-    resizeObserver.observe(containerRef.current);
+      const chart = runtime.init(container, null, { renderer: "canvas" });
+      chartRef.current = chart;
+      chart.setOption(optionRef.current, true);
+      setIsReady(true);
+
+      resizeObserver = new ResizeObserver(() => chart.resize());
+      resizeObserver.observe(container);
+    }).catch(() => undefined);
 
     return () => {
-      resizeObserver.disconnect();
-      chart.dispose();
+      isDisposed = true;
+      resizeObserver?.disconnect();
+      chartRef.current?.dispose();
       chartRef.current = null;
     };
   }, []);
 
-  useEffect(() => {
-    chartRef.current?.setOption(option, true);
-  }, [option]);
+  return (
+    <div
+      aria-label={ariaLabel}
+      className={`analytics-echart ${className}`}
+      data-chart-state={isReady ? "ready" : "loading"}
+      ref={containerRef}
+      role="img"
+    />
+  );
+}
 
-  return <div aria-label={ariaLabel} className={`analytics-echart ${className}`} ref={containerRef} role="img" />;
+function loadAnalyticsEchartsRuntime() {
+  analyticsEchartsRuntimePromise ??= Promise.all([
+    import("echarts/core"),
+    import("echarts/charts"),
+    import("echarts/components"),
+    import("echarts/renderers")
+  ]).then(([core, charts, components, renderers]) => {
+    core.use([
+      charts.BarChart,
+      charts.LineChart,
+      components.GridComponent,
+      components.LegendComponent,
+      components.TooltipComponent,
+      renderers.CanvasRenderer
+    ]);
+
+    return core as unknown as EChartsRuntime;
+  });
+
+  return analyticsEchartsRuntimePromise;
 }
 
 function analyticsLineSeries(name: string, data: Array<number | null>) {

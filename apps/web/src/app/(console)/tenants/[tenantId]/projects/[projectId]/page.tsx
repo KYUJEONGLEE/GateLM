@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { ProjectAdminManagement } from "@/features/project-admins/components/project-admin-management";
 import {
   ProjectDeleteManagement,
@@ -45,12 +44,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   ]);
 
   return (
-    <ConsoleShell
-      activeManagementItem="project"
-      activeSection="management"
-      locale={locale}
-      tenantId={effectiveTenantId}
-    >
+    <>
       <ProjectDetailManagement
         breadcrumbItems={[
           {
@@ -76,6 +70,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         project={project}
         tenantId={effectiveTenantId}
       />
-    </ConsoleShell>
+    </>
   );
 }

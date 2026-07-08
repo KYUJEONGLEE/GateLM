@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  getCurrentConsoleAuth,
+  getCurrentConsoleAuthForCookieHeader,
   isProjectScopedForTenant,
   isTenantAdminForTenant,
   resolveProjectIdForConsoleAuth
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const tenantId = insightRequest.tenantId?.trim() || getControlPlaneTenantId();
   const requestedProjectId = insightRequest.projectId?.trim() || undefined;
   const [auth, projectsModel] = await Promise.all([
-    getCurrentConsoleAuth(request.headers.get("cookie")),
+    getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie")),
     getProjectsModel(tenantId)
   ]);
   const hasTenantAdminAccess = isTenantAdminForTenant(auth, tenantId);

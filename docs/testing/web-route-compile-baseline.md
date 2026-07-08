@@ -17,7 +17,7 @@ This is evidence guidance, not a hard performance gate. Local route compile time
 | pnpm baseline | `9.15.0` |
 | Cold-start definition | Fresh `apps/web` dev server process, route not previously visited in that process |
 
-## Recorded Baseline
+## Recorded Historical Baseline
 
 | Route | Compile result | Request result | Notes |
 |---|---:|---:|---|
@@ -43,11 +43,19 @@ Run:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/web-route-compile-measure.ps1
 ```
 
-The script starts `corepack pnpm --filter @gatelm/web dev`, waits for `Ready in ...`, requests these routes in order, and writes a markdown report under `reports/web-route-compile/`:
+The script starts the raw `corepack pnpm --filter @gatelm/web dev` server, waits for `Ready in ...`, requests these routes in order, and writes a markdown report under `reports/web-route-compile/`:
 
 1. `/`
-2. `/tenants/{tenantId}/projects/{projectId}/policies`
-3. `/tenants/{tenantId}/projects/{projectId}/applications/{applicationId}/policies`
+2. `/tenants/{tenantId}/dashboard`
+3. `/tenants/{tenantId}/request-logs`
+4. `/tenants/{tenantId}/analytics`
+5. `/tenants/{tenantId}/alerts`
+6. `/tenants/{tenantId}/projects`
+7. `/tenants/{tenantId}/provider-connections`
+8. `/tenants/{tenantId}/projects/{projectId}/policies`
+9. `/tenants/{tenantId}/projects/{projectId}/applications/{applicationId}/policies`
+
+The root `pnpm dev:web` script intentionally starts apps/web through `scripts/dev/web-dev-prewarm.ps1`, which warms the common console routes after Next reports `Ready in ...`. Use `pnpm dev:web:raw` or `pnpm --filter @gatelm/web dev` when a truly cold first-route compile measurement is needed.
 
 Protected console routes use a non-secret probe cookie so middleware lets the route module compile before the auth layout redirects. The probe is not a valid user session and is not authentication evidence. Reports record only that the console probe was enabled; they must not record the cookie value or any other header value.
 
@@ -69,5 +77,6 @@ Do not fail the work only because one timing number is above or below a fixed th
 - same-route first compile duration, treated as a noisy signal
 - whether route compile scope moved out of the initial shell path
 - whether the user can see shell or fallback UI sooner
+- whether the root dev entrypoint prewarms common console routes before the first manual menu click
 
 The report intentionally stores only route compile and request summary lines. It must not include raw prompts, raw responses, API keys, app tokens, provider keys, Authorization headers, provider raw error bodies, or secret plaintext.

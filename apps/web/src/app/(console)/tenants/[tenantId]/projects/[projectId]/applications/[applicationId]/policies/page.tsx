@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
 import {
   getCurrentConsoleAuth,
@@ -50,36 +49,29 @@ export default async function ApplicationPoliciesPage({
     : 0;
 
   return (
-    <ConsoleShell
-      activeManagementItem="project"
-      activeSection="management"
+    <RuntimePolicyEditor
+      apiKeyReadiness={{
+        activeApiKeyCount,
+        loadError: apiKeysResult.ok ? null : apiKeysResult.error,
+        projectId: project.id,
+        projectName: project.name
+      }}
+      breadcrumbItems={[
+        {
+          href: `/tenants/${effectiveTenantId}/projects`,
+          label: "Projects"
+        },
+        {
+          href: `/tenants/${effectiveTenantId}/projects/${project.id}`,
+          label: project.name
+        },
+        {
+          label: "Policies"
+        }
+      ]}
       locale={locale}
-      tenantId={effectiveTenantId}
-    >
-      <RuntimePolicyEditor
-        apiKeyReadiness={{
-          activeApiKeyCount,
-          loadError: apiKeysResult.ok ? null : apiKeysResult.error,
-          projectId: project.id,
-          projectName: project.name
-        }}
-        breadcrumbItems={[
-          {
-            href: `/tenants/${effectiveTenantId}/projects`,
-            label: "Projects"
-          },
-          {
-            href: `/tenants/${effectiveTenantId}/projects/${project.id}`,
-            label: project.name
-          },
-          {
-            label: "Policies"
-          }
-        ]}
-        locale={locale}
-        model={model}
-      />
-    </ConsoleShell>
+      model={model}
+    />
   );
 }
 

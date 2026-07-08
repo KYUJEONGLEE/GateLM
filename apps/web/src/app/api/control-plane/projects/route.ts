@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
-import { getCurrentConsoleAuth, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
+import { getCurrentConsoleAuthForCookieHeader, isTenantAdminForTenant } from "@/lib/auth/current-console-auth";
 import {
   getControlPlaneTenantId,
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag,
+  revalidateControlPlaneRead
+} from "@/lib/control-plane/read-cache";
+import {
   createProject,
-  listControlPlaneProjects,
+  listControlPlaneProjectsFresh,
   updateProject
 } from "@/lib/control-plane/projects-client";
 import type {
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
     ? payload.tenantId
     : getControlPlaneTenantId();
 
-  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
   if (!auth.isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -72,7 +77,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const syncProjectList = await listControlPlaneProjects(resolveControlPlaneTenantId(routeTenantId));
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
+  revalidateControlPlaneRead([
+    controlPlaneReadCacheTags.projects,
+    controlPlaneTenantReadCacheTag("projects", controlPlaneTenantId),
+    controlPlaneReadCacheTags.runtimePolicy
+  ]);
+
+  const syncProjectList = await listControlPlaneProjectsFresh(controlPlaneTenantId);
 
   if (syncProjectList.ok) {
     await syncApplicationChatEnvForProjects(syncProjectList.data).catch((error) => {
