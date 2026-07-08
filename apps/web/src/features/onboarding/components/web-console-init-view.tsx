@@ -82,7 +82,7 @@ function getProjectsHref(tenantId: string) {
 function getSafeNextPath(params: URLSearchParams) {
   const nextPath = params.get("next")?.trim();
 
-  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
+  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//") || nextPath.startsWith("/\\")) {
     return null;
   }
 
