@@ -370,6 +370,42 @@ $routes = @(
         UseConsoleProbeCookie = $false
     },
     [pscustomobject]@{
+        Label = "dashboard"
+        Path = "/tenants/$TenantId/dashboard"
+        RoutePattern = "/tenants/[tenantId]/dashboard"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
+    },
+    [pscustomobject]@{
+        Label = "request logs"
+        Path = "/tenants/$TenantId/request-logs"
+        RoutePattern = "/tenants/[tenantId]/request-logs"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
+    },
+    [pscustomobject]@{
+        Label = "analytics"
+        Path = "/tenants/$TenantId/analytics"
+        RoutePattern = "/tenants/[tenantId]/analytics"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
+    },
+    [pscustomobject]@{
+        Label = "alerts"
+        Path = "/tenants/$TenantId/alerts"
+        RoutePattern = "/tenants/[tenantId]/alerts"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
+    },
+    [pscustomobject]@{
+        Label = "projects"
+        Path = "/tenants/$TenantId/projects"
+        RoutePattern = "/tenants/[tenantId]/projects"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
+    },
+    [pscustomobject]@{
+        Label = "provider connections"
+        Path = "/tenants/$TenantId/provider-connections"
+        RoutePattern = "/tenants/[tenantId]/provider-connections"
+        UseConsoleProbeCookie = (-not $DisableConsoleProbeCookie)
+    },
+    [pscustomobject]@{
         Label = "project policies"
         Path = "/tenants/$TenantId/projects/$ProjectId/policies"
         RoutePattern = "/tenants/[tenantId]/projects/[projectId]/policies"
