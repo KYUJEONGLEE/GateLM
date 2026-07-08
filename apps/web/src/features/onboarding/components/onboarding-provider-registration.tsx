@@ -330,16 +330,12 @@ export function OnboardingProviderRegistration({
       normalizeDiscoveredModelName(item.modelName)
     );
     const chatModels = getUniqueChatModels(discoveredModels);
-    const preferredModels = getPreferredVisibleModels(
+    const providerFamily = getProviderFamilyFromKey(provider.provider, provider.baseUrl);
+    const selectedModels = getDefaultDiscoveredSelectedModels(
       chatModels,
-      getProviderFamilyFromKey(provider.provider, provider.baseUrl)
+      providerFamily,
+      defaultModel
     );
-    const selectedModels =
-      defaultModel && chatModels.includes(defaultModel)
-        ? [defaultModel]
-        : preferredModels.length > 0
-          ? preferredModels
-          : chatModels.slice(0, getDefaultVisibleModelLimit(provider.provider));
 
     setDiscoveryPreviewByProvider((current) => ({
       ...current,
@@ -355,7 +351,7 @@ export function OnboardingProviderRegistration({
       ...current,
       [provider.provider]: getInitialVisibleModelCount(
         chatModels,
-        getProviderFamilyFromKey(provider.provider, provider.baseUrl)
+        providerFamily
       )
     }));
     return true;
@@ -1026,6 +1022,39 @@ function getPreferredVisibleModels(models: string[], providerFamily: string) {
   }
 
   return preferredModels;
+}
+
+function getDefaultDiscoveredSelectedModels(
+  chatModels: string[],
+  providerFamily: string,
+  defaultModel: string
+) {
+  const family = getProviderFamilyFromKey(providerFamily);
+  const defaultModels = onboardingDefaultProviderModels[family] ?? [];
+  const chatModelByName = new Map(
+    chatModels.map((model) => [normalizeDiscoveredModelName(model).toLowerCase(), model])
+  );
+  const discoveredDefaults = defaultModels
+    .map((model) => chatModelByName.get(normalizeDiscoveredModelName(model).toLowerCase()))
+    .filter((model): model is string => Boolean(model));
+
+  if (discoveredDefaults.length > 0) {
+    return discoveredDefaults;
+  }
+
+  const normalizedDefaultModel = normalizeDiscoveredModelName(defaultModel);
+
+  if (normalizedDefaultModel && chatModels.includes(normalizedDefaultModel)) {
+    return [normalizedDefaultModel];
+  }
+
+  const preferredModels = getPreferredVisibleModels(chatModels, family);
+
+  if (preferredModels.length > 0) {
+    return preferredModels;
+  }
+
+  return chatModels.slice(0, getDefaultVisibleModelLimit(family));
 }
 
 function getDefaultVisibleModelLimit(providerFamily: string) {

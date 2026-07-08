@@ -79,6 +79,25 @@ function getProjectsHref(tenantId: string) {
   return `/tenants/${encodeURIComponent(tenantId)}/projects`;
 }
 
+function getSafeNextPath(params: URLSearchParams) {
+  const nextPath = params.get("next")?.trim();
+
+  if (!nextPath || !nextPath.startsWith("/") || nextPath.startsWith("//")) {
+    return null;
+  }
+
+  return nextPath;
+}
+
+function redirectToPath(path: string, replace = false) {
+  if (replace) {
+    window.location.replace(path);
+    return;
+  }
+
+  window.location.assign(path);
+}
+
 function redirectToDashboard(replace = false, tenantId = defaultTenantId) {
   const href = getDashboardHref(tenantId);
   if (replace) {
@@ -538,6 +557,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const nextPath = getSafeNextPath(params);
     if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
       window.history.replaceState(null, "", "/");
       setAuthMode("signup");
@@ -560,6 +580,10 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     }
 
     if (initialAuthStatus === "anonymous") {
+      if (nextPath) {
+        setAuthMode("login");
+        setIsAuthPanelOpen(true);
+      }
       return;
     }
 
@@ -592,6 +616,11 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
 
         setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
         setDashboardTenantId(restoredTenantId);
+
+        if (hasConsoleSession && nextPath && !shouldStayOnLanding) {
+          redirectToPath(nextPath, true);
+          return;
+        }
 
         if (sessionKind === "full" && restoredTenantId && !shouldStayOnLanding) {
           redirectToDashboard(true, restoredTenantId);
@@ -654,6 +683,11 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     setSignupStep("account");
     setAuthStatus("authenticated");
     setDashboardTenantId(tenantId);
+    const nextPath = getSafeNextPath(new URLSearchParams(window.location.search));
+    if (nextPath) {
+      redirectToPath(nextPath);
+      return;
+    }
     if (tenantId) {
       redirectToDashboard(false, tenantId);
     }

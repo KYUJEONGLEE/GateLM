@@ -3737,6 +3737,17 @@ select {
   border-bottom: 0;
 }
 
+.policy-settings-list[hidden],
+.policy-general-layout[hidden] {
+  display: none;
+}
+
+.policy-general-layout {
+  display: block;
+  width: min(100%, 1280px);
+  border-top: 1px solid var(--border);
+}
+
 .policy-tab-panel {
   display: block;
   width: 100%;
@@ -3744,6 +3755,83 @@ select {
 
 .policy-tab-panel[hidden] {
   display: none;
+}
+
+.project-policy-general-tab {
+  display: grid;
+  width: 100%;
+  padding: 0;
+}
+
+.project-policy-general-tab.management-line-content {
+  gap: 0;
+}
+
+.project-policy-general-tab.management-line-content > .project-admin-section {
+  width: 100%;
+}
+
+.project-policy-general-tab.management-line-content
+  > .project-admin-section
+  .project-admin-heading-row
+  h3 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.policy-general-layout .project-policy-budget-panel {
+  display: grid;
+  grid-template-columns: 195px minmax(0, 1fr);
+  column-gap: 40px;
+  row-gap: 16px;
+  align-items: start;
+  width: min(100%, 1280px);
+  padding: 28px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.policy-general-layout .project-policy-budget-panel > .panel-heading {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+
+.policy-general-layout .project-policy-budget-panel > :not(.panel-heading) {
+  grid-column: 2;
+  width: 100%;
+}
+
+.policy-general-layout .project-policy-budget-panel .panel-heading h3 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.project-policy-general-tab > .policy-editor-panel .policy-field {
+  grid-template-columns: minmax(140px, 1fr) minmax(190px, 330px);
+  align-items: center;
+  gap: 18px;
+  min-height: 40px;
+  max-width: none;
+}
+
+.project-policy-general-tab > .policy-editor-panel .policy-field > span,
+.project-policy-general-tab > .policy-editor-panel .policy-toggle-row > span,
+.policy-general-layout .project-policy-budget-panel .policy-field > span,
+.policy-general-layout .project-policy-budget-panel .policy-toggle-row > span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.project-policy-general-tab > .policy-editor-panel .policy-toggle-row,
+.policy-general-layout .project-policy-budget-panel .policy-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: none;
 }
 
 .policy-settings-list .policy-tab-panel > .policy-editor-panel {
@@ -4590,15 +4678,45 @@ select {
 }
 
 .project-card-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
   align-self: end;
 }
 
 .project-card-actions .project-list-action-link {
-  justify-content: center;
-  min-height: 40px;
+  justify-content: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--foreground);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  text-align: left;
+  white-space: normal;
+}
+
+.project-card-actions .project-list-action-link:hover:not(:disabled) {
+  background: transparent;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.project-card-actions .project-list-action-link[data-action-kind="policy"] {
+  font-size: var(--font-size-xl);
+}
+
+.project-card-actions .project-list-action-link svg {
+  width: 0.9em;
+  height: 0.9em;
 }
 
 .project-table-field {
@@ -12451,8 +12569,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
   .project-sort-control,
   .project-sort-buttons,
-  .project-card-actions,
-  .project-card-actions .project-list-action-link {
+  .project-card-actions {
     width: 100%;
   }
 
@@ -12740,7 +12857,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .management-line-content > .provider-line-panel,
   .management-line-content > .credential-line-panel,
   .management-line-content > .team-section,
-  .management-line-content .project-detail-section {
+  .management-line-content .project-detail-section,
+  .policy-general-layout .project-policy-budget-panel {
     grid-template-columns: 1fr;
     gap: 14px;
     width: 100%;
@@ -12757,6 +12875,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .management-line-content > .team-section > :not(.team-section-header),
   .management-line-content .project-detail-section > .panel-heading,
   .management-line-content .project-detail-section > :not(.panel-heading),
+  .policy-general-layout .project-policy-budget-panel > .panel-heading,
+  .policy-general-layout .project-policy-budget-panel > :not(.panel-heading),
   .management-line-content .applications-panel-heading > .panel-heading,
   .management-line-content .applications-panel-heading > .primary-button,
   .management-line-content .team-section-header-with-actions > div,
@@ -12800,6 +12920,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .policy-settings-list .policy-field,
+  .project-policy-general-tab > .policy-editor-panel .policy-field,
+  .policy-general-layout .project-policy-budget-panel .policy-field,
   .policy-settings-list .policy-routing-pair,
   .policy-settings-list .policy-detector-row {
     grid-template-columns: 1fr;
