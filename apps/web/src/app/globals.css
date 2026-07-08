@@ -4187,6 +4187,18 @@ select {
   font-weight: var(--font-weight-bold);
 }
 
+.required-field-marker {
+  margin-left: 4px;
+  color: #f97316;
+  font-weight: var(--font-weight-bold);
+}
+
+.onboarding-field .required-field-marker,
+.onboarding-team-field .required-field-marker,
+.policy-field .required-field-marker {
+  color: #f97316;
+}
+
 .policy-toggle-row {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -4265,15 +4277,15 @@ select {
 }
 
 .dashboard-hero-actions .project-create-hero-button {
-  min-height: 48px;
-  padding: 0 22px;
-  font-size: var(--font-size-lg);
+  min-height: 62px;
+  padding: 0 29px;
+  font-size: calc(var(--font-size-lg) * 1.3);
   font-weight: var(--font-weight-semibold);
 }
 
 .dashboard-hero-actions .project-create-hero-button svg {
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
 }
 
 .project-create-form {
@@ -8804,7 +8816,7 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
   gap: 18px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .integration-guide-steps,
@@ -8814,8 +8826,8 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .integration-guide-side {
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
+  grid-template-rows: auto auto;
+  align-content: start;
 }
 
 .integration-guide-steps {
@@ -9023,15 +9035,15 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .integration-next-panel {
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: stretch;
-  min-height: 240px;
+  grid-template-rows: auto auto;
+  align-content: start;
+  min-height: 0;
 }
 
 .integration-next-actions {
   display: grid;
-  align-self: center;
-  gap: 20px;
+  align-self: start;
+  gap: 8px;
   width: 100%;
 }
 

@@ -293,6 +293,7 @@ export function ProviderConnectionManagement({
         ...current,
         credentialValue: ""
       }));
+      setProviderModal(null);
       setSubmitState({
         message: payload.error ?? "Provider registration failed.",
         status: "error"

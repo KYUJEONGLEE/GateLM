@@ -926,7 +926,10 @@ function OnboardingTeamPicker({
 
   return (
     <fieldset className="onboarding-team-field">
-      <legend>{text.team}</legend>
+      <legend>
+        {text.team}
+        <span aria-hidden="true" className="required-field-marker">*</span>
+      </legend>
       {teamCreateError ? (
         <Alert variant="destructive">
           <AlertDescription>{teamCreateError}</AlertDescription>
@@ -1077,7 +1080,10 @@ function OnboardingField({
 
   return (
     <label className="onboarding-field">
-      <span>{label}</span>
+      <span>
+        {label}
+        {required ? <span aria-hidden="true" className="required-field-marker">*</span> : null}
+      </span>
       {unit ? (
         <span className="onboarding-input-with-unit">
           <input

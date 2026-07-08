@@ -509,7 +509,10 @@ export function TeamCreateModal({
         </div>
         <div className="modal-form-grid">
           <label className="policy-field">
-            <span>{text.name}</span>
+            <span>
+              {text.name}
+              <span aria-hidden="true" className="required-field-marker">*</span>
+            </span>
             <input
               autoFocus
               maxLength={120}
