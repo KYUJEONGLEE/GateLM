@@ -1,3 +1,48 @@
+import type { Dispatch, ReactNode, SetStateAction } from "react";
+
+import type { BreadcrumbItem } from "@/components/ui/breadcrumb";
+import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
+import type {
+  RuntimePolicyConfig,
+  RuntimePolicyDraftValues,
+  RuntimePolicyModel
+} from "@/lib/control-plane/runtime-policy-types";
+import type { Locale } from "@/lib/i18n/locale";
+
+export type RuntimePolicyEditorProps = {
+  apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
+  breadcrumbItems?: BreadcrumbItem[];
+  children?: ReactNode;
+  generalFooter?: ReactNode;
+  hideStreamingTab?: boolean;
+  locale: Locale;
+  model: RuntimePolicyModel;
+  moveBudgetToGeneral?: boolean;
+};
+
+export type RuntimePolicyApiKeyReadiness = {
+  activeApiKeyCount: number;
+  loadError: string | null;
+  projectId: string;
+  projectName: string;
+};
+
+export type SubmitState =
+  | {
+      message: string;
+      status: "error" | "idle" | "success";
+    }
+  | {
+      message: string;
+      runtimeConfig: RuntimePolicyConfig;
+      status: "success";
+    };
+
+export type OneTimeApiKeyState = {
+  apiKey: OneTimeApiKeyResponse;
+  projectName: string;
+};
+
 export type PolicySection =
   | "general"
   | "safety"
@@ -14,6 +59,23 @@ export type RoutingProviderOption = {
   family: string;
   provider: string;
   providerId: string;
+};
+
+export type RuntimePolicyDraftValuesSetter = Dispatch<
+  SetStateAction<RuntimePolicyDraftValues>
+>;
+
+export type RoutingPriorityRow = {
+  priority: string;
+  provider: string;
+  route: RoutingPriorityRoute;
+  selectedModel: string;
+};
+
+export type RoutingPriorityTableText = {
+  model: string;
+  noProviderModels: string;
+  provider: string;
 };
 
 export type RuntimePolicyEditorText = {

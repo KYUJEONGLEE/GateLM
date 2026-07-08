@@ -1,8 +1,8 @@
-import { getProviderConnectionFamily } from "@/features/provider-connections/components/provider-family-icon";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
+  type RuntimePolicyDetector,
   type RuntimePolicyDraftValues,
   type RuntimePolicyModelConfig
 } from "@/lib/control-plane/runtime-policy-types";
@@ -143,7 +143,7 @@ export function hasRoutingModelSelection(
   );
 }
 
-function normalizeDraftRoutingForProviderConnections(
+export function normalizeDraftRoutingForProviderConnections(
   values: RuntimePolicyDraftValues,
   providerConnections: ProviderConnectionRecord[]
 ): RuntimePolicyDraftValues {
@@ -196,6 +196,26 @@ function normalizeDraftRoutingForProviderConnections(
       ? values.routingLowCostProvider
       : firstActiveModel.provider
   };
+}
+
+export function parseBoundedInteger(value: string, min: number, max: number) {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return min;
+  }
+
+  return Math.min(Math.max(parsed, min), max);
+}
+
+export function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {
+  return (
+    detectorType === "resident_registration_number" ||
+    detectorType === "api_key" ||
+    detectorType === "authorization_header" ||
+    detectorType === "jwt" ||
+    detectorType === "private_key"
+  );
 }
 
 function groupModelsByProvider(models: RuntimePolicyModelConfig[]) {
@@ -312,6 +332,60 @@ function getProviderConnectionModels(providerConnection: ProviderConnectionRecor
         .filter(Boolean)
     )
   );
+}
+
+function getProviderConnectionFamily(provider: ProviderConnectionRecord) {
+  const configuredFamily = getProviderConfigString(
+    provider.providerConfig,
+    "providerFamily",
+    ""
+  );
+
+  if (configuredFamily) {
+    return configuredFamily;
+  }
+
+  return getProviderFamilyFromKey(provider.provider, provider.baseUrl);
+}
+
+function getProviderFamilyFromKey(providerKey: string, baseUrl = "") {
+  const normalizedProvider = providerKey.toLowerCase();
+  const normalizedBaseUrl = baseUrl.toLowerCase();
+
+  if (
+    normalizedProvider.includes("gemini") ||
+    normalizedBaseUrl.includes("generativelanguage.googleapis.com")
+  ) {
+    return "gemini";
+  }
+
+  if (
+    normalizedProvider.includes("claude") ||
+    normalizedProvider.includes("anthropic") ||
+    normalizedBaseUrl.includes("anthropic.com")
+  ) {
+    return "claude";
+  }
+
+  if (normalizedProvider === "mock") {
+    return "mock";
+  }
+
+  if (normalizedProvider === "new-provider") {
+    return "new-provider";
+  }
+
+  return "openai";
+}
+
+function getProviderConfigString(
+  providerConfig: Record<string, unknown> | null,
+  key: string,
+  fallback: string
+) {
+  const value = providerConfig?.[key];
+
+  return typeof value === "string" ? value : fallback;
 }
 
 function normalizePolicyText(value: unknown) {

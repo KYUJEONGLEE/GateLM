@@ -1,17 +1,18 @@
-import type { Dispatch, SetStateAction } from "react";
-
 import { Switch } from "@/components/ui/switch";
 import {
   getRateLimitWindowSeconds,
   type RuntimePolicyDraftValues
 } from "@/lib/control-plane/runtime-policy-types";
 
-import type { RuntimePolicyEditorText } from "../runtime-policy-editor-types";
+import type {
+  RuntimePolicyDraftValuesSetter,
+  RuntimePolicyEditorText
+} from "../runtime-policy-editor-types";
 import { PolicyNumberField } from "./shared";
 
 export type RateLimitPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
-  onDraftValuesChange: Dispatch<SetStateAction<RuntimePolicyDraftValues>>;
+  onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   text: RuntimePolicyEditorText;
 };
 

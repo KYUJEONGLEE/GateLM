@@ -1,3 +1,5 @@
+import { parseBoundedInteger } from "../runtime-policy-editor-utils";
+
 export function PolicyNumberField({
   label,
   max,
@@ -30,14 +32,4 @@ export function PolicyNumberField({
 
 export function formatEnabled(value?: boolean | null) {
   return value ? "enabled" : "disabled";
-}
-
-function parseBoundedInteger(value: string, min: number, max: number) {
-  const parsed = Number.parseInt(value, 10);
-
-  if (!Number.isFinite(parsed)) {
-    return min;
-  }
-
-  return Math.min(Math.max(parsed, min), max);
 }

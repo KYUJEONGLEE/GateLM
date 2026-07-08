@@ -2,24 +2,25 @@
 
 import { Save, UploadCloud } from "lucide-react";
 import dynamic from "next/dynamic";
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/breadcrumb";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import type { OneTimeApiKeyResponse } from "@/lib/control-plane/api-keys-types";
 import { applyPrimaryRuntimePolicyRouteSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
-  type RuntimePolicyDraftValues,
-  type RuntimePolicyModel
+  type RuntimePolicyDraftValues
 } from "@/lib/control-plane/runtime-policy-types";
 import type { Locale } from "@/lib/i18n/locale";
 import type {
+  OneTimeApiKeyState,
   PolicySection,
   RoutingPriorityRoute,
-  RuntimePolicyEditorText
+  RuntimePolicyEditorProps,
+  RuntimePolicyEditorText,
+  SubmitState
 } from "./runtime-policy-editor-types";
 import type { RuntimePolicyDetailModalProps } from "./runtime-policy-detail-modal";
 import {
@@ -42,40 +43,6 @@ import type { RateLimitPolicyPanelProps } from "./runtime-policy-panels/rate-lim
 import type { RoutingPolicyPanelProps } from "./runtime-policy-panels/routing-panel";
 import type { SafetyPolicyPanelProps } from "./runtime-policy-panels/safety-panel";
 import type { StreamingPolicyPanelProps } from "./runtime-policy-panels/streaming-panel";
-
-type RuntimePolicyEditorProps = {
-  apiKeyReadiness?: RuntimePolicyApiKeyReadiness;
-  breadcrumbItems?: BreadcrumbItem[];
-  children?: ReactNode;
-  generalFooter?: ReactNode;
-  hideStreamingTab?: boolean;
-  locale: Locale;
-  model: RuntimePolicyModel;
-  moveBudgetToGeneral?: boolean;
-};
-
-type RuntimePolicyApiKeyReadiness = {
-  activeApiKeyCount: number;
-  loadError: string | null;
-  projectId: string;
-  projectName: string;
-};
-
-type SubmitState =
-  | {
-      message: string;
-      status: "error" | "idle" | "success";
-    }
-  | {
-      message: string;
-      runtimeConfig: RuntimePolicyConfig;
-      status: "success";
-    };
-
-type OneTimeApiKeyState = {
-  apiKey: OneTimeApiKeyResponse;
-  projectName: string;
-};
 
 const policySections: PolicySection[] = [
   "routing",
@@ -710,7 +677,7 @@ export function RuntimePolicyEditor({
       method: "POST"
     });
     const payload = (await response.json().catch(() => ({}))) as {
-      apiKey?: OneTimeApiKeyResponse;
+      apiKey?: OneTimeApiKeyState["apiKey"];
       error?: string;
     };
 

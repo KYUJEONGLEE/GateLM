@@ -9,6 +9,8 @@ import type {
 
 import type {
   RoutingPriorityRoute,
+  RoutingPriorityRow,
+  RoutingPriorityTableText,
   RoutingProviderOption,
   RuntimePolicyEditorText
 } from "../runtime-policy-editor-types";
@@ -157,17 +159,8 @@ function RoutingPriorityTable({
   onModelChange: (route: RoutingPriorityRoute, model: string) => void;
   onProviderChange: (route: RoutingPriorityRoute, provider: string) => void;
   providerOptions: RoutingProviderOption[];
-  rows: Array<{
-    priority: string;
-    provider: string;
-    route: RoutingPriorityRoute;
-    selectedModel: string;
-  }>;
-  text: {
-    model: string;
-    noProviderModels: string;
-    provider: string;
-  };
+  rows: RoutingPriorityRow[];
+  text: RoutingPriorityTableText;
 }) {
   return (
     <div className="policy-routing-table" role="table" aria-label="Routing priority">
@@ -203,17 +196,8 @@ function RoutingPriorityRow({
   onModelChange: (route: RoutingPriorityRoute, model: string) => void;
   onProviderChange: (route: RoutingPriorityRoute, provider: string) => void;
   providerOptions: RoutingProviderOption[];
-  row: {
-    priority: string;
-    provider: string;
-    route: RoutingPriorityRoute;
-    selectedModel: string;
-  };
-  text: {
-    model: string;
-    noProviderModels: string;
-    provider: string;
-  };
+  row: RoutingPriorityRow;
+  text: RoutingPriorityTableText;
 }) {
   const selectedProvider = getRoutingProviderOption(providerOptions, row.provider);
   const modelOptions = modelOptionsByProvider.get(row.provider) ?? [];

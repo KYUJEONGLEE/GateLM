@@ -1,17 +1,19 @@
-import type { Dispatch, SetStateAction } from "react";
-
 import { Switch } from "@/components/ui/switch";
 import type {
   RuntimePolicyDetector,
   RuntimePolicyDraftValues
 } from "@/lib/control-plane/runtime-policy-types";
 
-import type { RuntimePolicyEditorText } from "../runtime-policy-editor-types";
+import type {
+  RuntimePolicyDraftValuesSetter,
+  RuntimePolicyEditorText
+} from "../runtime-policy-editor-types";
+import { isMandatorySafetyDetector } from "../runtime-policy-editor-utils";
 import { PolicyNumberField } from "./shared";
 
 export type SafetyPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
-  onDraftValuesChange: Dispatch<SetStateAction<RuntimePolicyDraftValues>>;
+  onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   text: RuntimePolicyEditorText;
 };
 
@@ -167,15 +169,5 @@ function DetectorEditor({
         />
       </label>
     </div>
-  );
-}
-
-function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {
-  return (
-    detectorType === "resident_registration_number" ||
-    detectorType === "api_key" ||
-    detectorType === "authorization_header" ||
-    detectorType === "jwt" ||
-    detectorType === "private_key"
   );
 }

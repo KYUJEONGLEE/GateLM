@@ -1,14 +1,15 @@
-import type { Dispatch, SetStateAction } from "react";
-
 import { Switch } from "@/components/ui/switch";
 import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
-import type { RuntimePolicyEditorText } from "../runtime-policy-editor-types";
+import type {
+  RuntimePolicyDraftValuesSetter,
+  RuntimePolicyEditorText
+} from "../runtime-policy-editor-types";
 import { PolicyNumberField } from "./shared";
 
 export type BudgetPolicyPanelProps = {
   draftValues: RuntimePolicyDraftValues;
-  onDraftValuesChange: Dispatch<SetStateAction<RuntimePolicyDraftValues>>;
+  onDraftValuesChange: RuntimePolicyDraftValuesSetter;
   projectPanel?: boolean;
   text: RuntimePolicyEditorText;
 };
