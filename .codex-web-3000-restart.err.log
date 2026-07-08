@@ -1,0 +1,245 @@
+ ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ ReferenceError: canDeleteProvider is not defined
+    at eval (src\features\provider-connections\components\provider-connection-management.tsx:902:33)
+    at Array.map (<anonymous>)
+    at ProviderConnectionManagement (src\features\provider-connections\components\provider-connection-management.tsx:836:28)
+  900 |                               disabled={
+  901 |                                 pendingAction ||
+> 902 |                                 discoveringProvider !== null ||
+      |                                 ^
+  903 |                                 !canDeleteProvider(provider, model.source)
+  904 |                               }
+  905 |                               onClick={() => void deleteProvider(provider)} {
+  digest: '2834453873'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⨯ ReferenceError: OnboardingTeamPicker is not defined
+    at renderStepContent (src\features\onboarding\components\admin-onboarding-flow.tsx:604:10)
+    at AdminOnboardingFlow (src\features\onboarding\components\admin-onboarding-flow.tsx:498:16)
+  602 |           value={draft.projectName}
+  603 |         />
+> 604 |         <OnboardingTeamPicker
+      |          ^
+  605 |           onCreateTeam={onOpenTeamCreate}
+  606 |           onToggleTeam={onToggleTeam}
+  607 |           selectedTeamIds={selectedTeamIds} {
+  digest: '2837331868'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⨯ ./src/features/onboarding/components/admin-onboarding-flow.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\onboarding\components\admin-onboarding-flow.tsx
+    1: 지정된 파일을 찾을 수 없습니다. (os error 2)
+
+Import trace for requested module:
+./src/features/onboarding/components/admin-onboarding-flow.tsx
+ ⨯ ./src/features/onboarding/components/admin-onboarding-flow.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\onboarding\components\admin-onboarding-flow.tsx
+    1: 지정된 파일을 찾을 수 없습니다. (os error 2)
+
+Import trace for requested module:
+./src/features/onboarding/components/admin-onboarding-flow.tsx
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⨯ ReferenceError: getSelectableModelOptions is not defined
+    at AdminOnboardingFlow (src\features\onboarding\components\admin-onboarding-flow.tsx:196:28)
+  194 |   );
+  195 |   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+> 196 |   const selectableModels = getSelectableModelOptions(
+      |                            ^
+  197 |     providerConnectionsModel.providers,
+  198 |     model.provider.models
+  199 |   ); {
+  digest: '3382110313'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ ReferenceError: getSelectableModelOptions is not defined
+    at AdminOnboardingFlow (src\features\onboarding\components\admin-onboarding-flow.tsx:196:28)
+  194 |   );
+  195 |   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+> 196 |   const selectableModels = getSelectableModelOptions(
+      |                            ^
+  197 |     providerConnectionsModel.providers,
+  198 |     model.provider.models
+  199 |   ); {
+  digest: '3382110313'
+}
+ ⨯ ReferenceError: getSelectableModelOptions is not defined
+    at AdminOnboardingFlow (src\features\onboarding\components\admin-onboarding-flow.tsx:196:28)
+  194 |   );
+  195 |   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+> 196 |   const selectableModels = getSelectableModelOptions(
+      |                            ^
+  197 |     providerConnectionsModel.providers,
+  198 |     model.provider.models
+  199 |   ); {
+  digest: '3382110313'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ ReferenceError: getSelectableModelOptions is not defined
+    at AdminOnboardingFlow (src\features\onboarding\components\admin-onboarding-flow.tsx:196:28)
+  194 |   );
+  195 |   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+> 196 |   const selectableModels = getSelectableModelOptions(
+      |                            ^
+  197 |     providerConnectionsModel.providers,
+  198 |     model.provider.models
+  199 |   ); {
+  digest: '3382110313'
+}
+ ⨯ ReferenceError: getSelectableModelOptions is not defined
+    at AdminOnboardingFlow (src\features\onboarding\components\admin-onboarding-flow.tsx:196:28)
+  194 |   );
+  195 |   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+> 196 |   const selectableModels = getSelectableModelOptions(
+      |                            ^
+  197 |     providerConnectionsModel.providers,
+  198 |     model.provider.models
+  199 |   ); {
+  digest: '3382110313'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx
+ ⨯ ./src/features/model-catalog/components/model-catalog-view.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\features\model-catalog\components\model-catalog-view.tsx
+    1: 지정된 경로를 찾을 수 없습니다. (os error 3)
+
+Import trace for requested module:
+./src/features/model-catalog/components/model-catalog-view.tsx

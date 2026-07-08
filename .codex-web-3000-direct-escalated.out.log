@@ -1,0 +1,192 @@
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://0.0.0.0:3000
+
+ ✓ Starting...
+ ✓ Ready in 7.6s
+ ○ Compiling / ...
+ ✓ Compiled / in 3.2s (645 modules)
+ HEAD / 200 in 3231ms
+ HEAD / 200 in 519ms
+ GET / 200 in 338ms
+ GET / 200 in 185ms
+ GET / 200 in 388ms
+ GET / 200 in 177ms
+ GET / 200 in 240ms
+ ○ Compiling /tenants/[tenantId]/dashboard ...
+ ✓ Compiled /tenants/[tenantId]/dashboard in 13.5s (2286 modules)
+ GET /tenants/tenant_demo_acme/dashboard 200 in 18567ms
+ GET /?view=landing 200 in 358ms
+ ✓ Compiled in 2.8s (1059 modules)
+ ✓ Compiled in 763ms (1059 modules)
+ ✓ Compiled in 1947ms (1059 modules)
+ GET / 200 in 2230ms
+ GET / 200 in 418ms
+ GET / 200 in 387ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 1737ms (1679 modules)
+ GET /tenants/tenant_signup_acme/projects 200 in 6004ms
+ ○ Compiling /tenants/[tenantId]/onboarding ...
+ ✓ Compiled /tenants/[tenantId]/onboarding in 1601ms (1692 modules)
+ GET /tenants/tenant_signup_acme/onboarding 200 in 5856ms
+ GET / 200 in 1290ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 2.5s (1711 modules)
+ GET /api/auth/me 200 in 4915ms
+ ○ Compiling /tenants/[tenantId]/dashboard ...
+ ✓ Compiled /tenants/[tenantId]/dashboard in 1455ms (1286 modules)
+ GET /tenants/tenant_demo_acme/dashboard 200 in 6341ms
+ ✓ Compiled in 3.2s (2335 modules)
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1315ms
+ GET /tenants/tenant_demo_acme/projects 200 in 503ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId] ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId] in 6.6s (2359 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 8813ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 711ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 909ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 932ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 921ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 761ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 614ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 613ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 583ms
+ ✓ Compiled in 1044ms (1085 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 414ms
+ ✓ Compiled in 3.2s (2359 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 704ms
+ ○ Compiling /tenants/[tenantId]/model-catalog ...
+ ✓ Compiled /tenants/[tenantId]/model-catalog in 1970ms (2362 modules)
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 4512ms
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 534ms
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 1374ms
+ ✓ Compiled in 1392ms (1090 modules)
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 425ms
+ ✓ Compiled in 1696ms (1090 modules)
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 1417ms
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 219ms
+ GET /?view=landing 200 in 175ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 1092ms (1303 modules)
+ GET /api/auth/me 200 in 1715ms
+ GET /api/auth/me 200 in 754ms
+ ✓ Compiled in 1097ms (1090 modules)
+ GET /?view=landing 200 in 354ms
+ ○ Compiling /application ...
+ ✓ Compiled /application in 1853ms (2396 modules)
+ GET /application 200 in 2378ms
+ GET /application 200 in 182ms
+ GET /application 200 in 188ms
+ GET / 200 in 1653ms
+ ✓ Compiled in 1997ms (1090 modules)
+ GET / 200 in 1175ms
+ ✓ Compiled in 1348ms (1090 modules)
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2439ms
+ GET /?view=landing 200 in 478ms
+ ✓ Compiled in 602ms (1090 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 1699ms
+ ✓ Compiled in 7.8s (2396 modules)
+ GET /tenants/tenant_demo_acme/dashboard 200 in 8885ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2115ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 606ms
+ ○ Compiling /tenants/[tenantId]/request-logs ...
+ GET / 200 in 703ms
+ GET / 200 in 143ms
+ ✓ Compiled /tenants/[tenantId]/request-logs in 15s (2369 modules)
+ GET / 200 in 963ms
+ GET /tenants/tenant_signup_acme/projects 200 in 4036ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 16566ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 1388ms
+ ○ Compiling /tenants/[tenantId]/onboarding ...
+ ✓ Compiled /tenants/[tenantId]/onboarding in 2.7s (1288 modules)
+ GET /tenants/tenant_signup_acme/onboarding 200 in 5956ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 3608ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 537ms
+ ✓ Compiled in 478ms (1091 modules)
+ GET /tenants/tenant_demo_acme/request-logs 200 in 190ms
+ GET / 200 in 613ms
+ ✓ Compiled in 796ms (1091 modules)
+ GET / 200 in 347ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 456ms
+ GET / 200 in 446ms
+ GET /tenants/tenant_signup_acme/projects 200 in 358ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 451ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 507ms
+ ✓ Compiled in 1028ms (1091 modules)
+ GET /tenants/tenant_demo_acme/request-logs 200 in 616ms
+ GET / 200 in 307ms
+ GET / 200 in 311ms
+ GET / 200 in 208ms
+ GET / 200 in 236ms
+ GET /tenants/tenant_signup_acme/projects 200 in 535ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 667ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 689ms
+ GET / 200 in 319ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1191ms
+ GET /?view=landing 200 in 92ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 532ms
+ GET / 200 in 199ms
+ GET /?view=landing 200 in 166ms
+ ○ Compiling /api/customer-demo/conversations ...
+ ✓ Compiled /api/customer-demo/conversations in 2.7s (2398 modules)
+ POST /api/customer-demo/conversations 404 in 3211ms
+ POST /api/customer-demo/conversations 200 in 3033ms
+ GET / 200 in 1453ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 2732ms
+ ✓ Compiled in 1788ms (1091 modules)
+ GET / 200 in 706ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 735ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2541ms
+ GET /?view=landing 200 in 721ms
+ GET / 200 in 226ms
+ GET / 200 in 279ms
+ GET / 200 in 444ms
+ GET / 200 in 600ms
+ GET /tenants/tenant_signup_acme/projects 200 in 1729ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 1887ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1291ms
+ GET / 200 in 1160ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2690ms
+ GET /?view=landing 200 in 5346ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1583ms
+ GET /?view=landing 200 in 556ms
+ GET / 200 in 291ms
+ GET /?view=landing 200 in 445ms
+ GET / 200 in 308ms
+ GET / 200 in 372ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 645ms
+ GET /?view=landing 200 in 151ms
+ GET /tenants/tenant_demo_acme/projects 200 in 321ms
+ ○ Compiling /tenants/[tenantId]/provider-connections ...
+ ✓ Compiled /tenants/[tenantId]/provider-connections in 6.3s (2367 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 8418ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 381ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 326ms
+ ○ Compiling /api/control-plane/provider-connections ...
+ ✓ Compiled /api/control-plane/provider-connections in 1610ms (2366 modules)
+ POST /api/control-plane/provider-connections 400 in 2126ms
+ POST /api/control-plane/provider-connections 400 in 115ms
+ POST /api/control-plane/provider-connections 200 in 134ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 473ms
+ POST /api/control-plane/provider-connections 400 in 135ms
+ POST /api/control-plane/provider-connections 400 in 120ms
+ POST /api/control-plane/provider-connections 404 in 363ms
+ POST /api/control-plane/provider-connections 400 in 108ms
+ POST /api/control-plane/provider-connections 400 in 119ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 1632ms
+ POST /api/control-plane/provider-connections 500 in 154ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 580ms
+ ○ Compiling /tenants/[tenantId]/teams ...
+ ✓ Compiled /tenants/[tenantId]/teams in 6.2s (2354 modules)
+ GET /tenants/tenant_demo_acme/teams 200 in 8427ms
+ GET /tenants/tenant_demo_acme/teams 200 in 305ms
+ GET /tenants/tenant_demo_acme/teams 200 in 1003ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 405ms
+ ○ Compiling /api/control-plane/provider-connections ...
+ ✓ Compiled /api/control-plane/provider-connections in 1817ms (1285 modules)
+ POST /api/control-plane/provider-connections 400 in 2353ms
+ POST /api/control-plane/provider-connections 400 in 126ms
+ POST /api/control-plane/provider-connections 400 in 168ms
+ POST /api/control-plane/provider-connections 400 in 127ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 1507ms
+ POST /api/control-plane/provider-connections 200 in 1426ms
+[?25h

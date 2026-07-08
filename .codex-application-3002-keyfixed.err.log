@@ -1,0 +1,78 @@
+ ⨯ ../web/src/lib/gateway/application-chat-profiles.ts
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\Users\yoonj\GateLM\apps\web\src\lib\gateway\application-chat-profiles.ts
+    1: 지정된 파일을 찾을 수 없습니다. (os error 2)
+
+Import trace for requested module:
+../web/src/lib/gateway/application-chat-profiles.ts
+../web/src/lib/gateway/customer-demo-live-model.ts
+./src/app/chat/page.tsx
+Only plain objects can be passed to Client Components from Server Components. Objects with symbol properties like async_id_symbol are not supported.
+  <... locale="en" model={{surface: ...}}>
+                         ^^^^^^^^^^^^^^^^
+ ⨯ TypeError: Cannot read properties of undefined (reading 'map')
+    at new FixtureGatewayChatClient (..\web\src\lib\gateway\customer-demo-client.ts:138:42)
+    at CustomerDemoApp.useMemo[client] (..\web\src\features\customer-demo\components\customer-demo-app.tsx:166:12)
+    at CustomerDemoApp (..\web\src\features\customer-demo\components\customer-demo-app.tsx:157:25)
+  136 |
+  137 |   constructor(scenarios: CustomerDemoExchange[]) {
+> 138 |     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
+      |                                          ^
+  139 |   }
+  140 |
+  141 |   async createConversation( {
+  digest: '881171600'
+}
+Only plain objects can be passed to Client Components from Server Components. Objects with symbol properties like async_id_symbol are not supported.
+  <... locale="ko" model={{surface: ...}}>
+                         ^^^^^^^^^^^^^^^^
+ ⨯ TypeError: Cannot read properties of undefined (reading 'map')
+    at new FixtureGatewayChatClient (..\web\src\lib\gateway\customer-demo-client.ts:138:42)
+    at CustomerDemoApp.useMemo[client] (..\web\src\features\customer-demo\components\customer-demo-app.tsx:166:12)
+    at CustomerDemoApp (..\web\src\features\customer-demo\components\customer-demo-app.tsx:157:25)
+  136 |
+  137 |   constructor(scenarios: CustomerDemoExchange[]) {
+> 138 |     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
+      |                                          ^
+  139 |   }
+  140 |
+  141 |   async createConversation( {
+  digest: '881171600'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+Only plain objects can be passed to Client Components from Server Components. Objects with symbol properties like async_id_symbol are not supported.
+  <... locale="ko" model={{surface: ...}}>
+                         ^^^^^^^^^^^^^^^^
+ ⨯ TypeError: Cannot read properties of undefined (reading 'map')
+    at new FixtureGatewayChatClient (..\web\src\lib\gateway\customer-demo-client.ts:140:42)
+    at CustomerDemoApp.useMemo[client] (..\web\src\features\customer-demo\components\customer-demo-app.tsx:166:12)
+    at CustomerDemoApp (..\web\src\features\customer-demo\components\customer-demo-app.tsx:157:25)
+  138 |
+  139 |   constructor(scenarios: CustomerDemoExchange[]) {
+> 140 |     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
+      |                                          ^
+  141 |   }
+  142 |
+  143 |   async createConversation( {
+  digest: '881171600'
+}
+Only plain objects can be passed to Client Components from Server Components. Objects with symbol properties like async_id_symbol are not supported.
+  <... locale="en" model={{surface: ...}}>
+                         ^^^^^^^^^^^^^^^^
+ ⨯ TypeError: Cannot read properties of undefined (reading 'map')
+    at new FixtureGatewayChatClient (..\web\src\lib\gateway\customer-demo-client.ts:140:42)
+    at CustomerDemoApp.useMemo[client] (..\web\src\features\customer-demo\components\customer-demo-app.tsx:166:12)
+    at CustomerDemoApp (..\web\src\features\customer-demo\components\customer-demo-app.tsx:157:25)
+  138 |
+  139 |   constructor(scenarios: CustomerDemoExchange[]) {
+> 140 |     this.scenarioMap = new Map(scenarios.map((scenario) => [scenario.scenarioId, scenario]));
+      |                                          ^
+  141 |   }
+  142 |
+  143 |   async createConversation( {
+  digest: '881171600'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.

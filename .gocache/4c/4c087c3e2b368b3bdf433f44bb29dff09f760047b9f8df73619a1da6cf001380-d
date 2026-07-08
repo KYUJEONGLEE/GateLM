@@ -1,0 +1,3 @@
+./recorder.go
+./registry.go
+./registry_test.go

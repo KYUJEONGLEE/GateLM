@@ -1,0 +1,3 @@
+# test log
+open ..\..\..\..\apps\gateway-core\internal\domain\cache\testdata\semantic_cache_policy_ko_v1.json
+open ..\..\..\..\apps\gateway-core\internal\domain\cache\testdata\semantic_cache_intent_eval_cases.json

@@ -1,0 +1,10 @@
+./coreference.go
+./detectors.go
+./engine.go
+./entity_scope.go
+./registry.go
+./relationship_role.go
+./role_context.go
+./span_normalization.go
+./types.go
+./engine_test.go

@@ -1,0 +1,2 @@
+2026/07/07 23:10:13 gateway-core listening on :8080
+2026/07/07 23:10:13 gateway-core server failed: listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.

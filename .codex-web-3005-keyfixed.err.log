@@ -1,0 +1,746 @@
+C:\nvm4w\nodejs : 'C:\nvm4w\nodejs' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö 
+¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:1
++ C:\nvm4w\nodejs;C:\Users\yoonj\.codex\tmp\arg0\codex-arg04XJO5U;C:\Us ...
++ ~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\nvm4w\nodejs:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\.codex\tmp\arg0\codex-arg04XJO5U : 'C:\Users\yoonj\.codex\tmp\arg0\codex-arg04XJO5U' ¿ë¾î°¡ cmdlet, ÇÔ¼ö
+, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ
+·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:17
++ ... \nvm4w\nodejs;C:\Users\yoonj\.codex\tmp\arg0\codex-arg04XJO5U;C:\User ...
++                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...odex-arg04XJO5U:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin : 'C:\Users\yoonj\.cache\codex-runtimes\cod
+ex-primary-runtime\dependencies\bin' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö 
+¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:65
++ ... -arg04XJO5U;C:\Users\yoonj\.cache\codex-runtimes\codex-primary-runtim ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...ependencies\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\data\db\bin : 'C:\data\db\bin' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê
+½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:141
++ ... untimes\codex-primary-runtime\dependencies\bin;C:\data\db\bin;C:\Prog ...
++                                                    ~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\data\db\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Program : 'C:\Program' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. 
+ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:156
++ ... ex-primary-runtime\dependencies\bin;C:\data\db\bin;C:\Program Files\G ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Program:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Program : 'C:\Program' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. 
+ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:181
++ ... encies\bin;C:\data\db\bin;C:\Program Files\Git\cmd;C:\Program Files\G ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Program:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Program : 'C:\Program' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. 
+ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:210
++ ... Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\n ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Program:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Windows\System32 : 'C:\Windows\System32' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ
+½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:235
++ ... iles\GitHub CLI\;C:\Program Files\nodejs\;C:\Windows\System32;;C:\Pro ...
++                                               ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Windows\System32:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Program : 'C:\Program' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. 
+ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:256
++ ... CLI\;C:\Program Files\nodejs\;C:\Windows\System32;;C:\Program Files\D ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Program:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Go\go1.24.13\bin : 'C:\Users\yoonj\AppData\Local\Programs\Go\go1.24.13\bin' ¿ë¾î
+°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡
+ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:301
++ ... sources\bin;C:\Users\yoonj\AppData\Local\Programs\Go\go1.24.13\bin;C: ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...o\go1.24.13\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\anaconda\Scripts\ : 'C:\anaconda\Scripts\' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î 
+ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:356
++ ... \AppData\Local\Programs\Go\go1.24.13\bin;C:\anaconda\Scripts\;C:\anac ...
++                                              ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\anaconda\Scripts\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\anaconda\ : 'C:\anaconda\' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï
+´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:377
++ ... l\Programs\Go\go1.24.13\bin;C:\anaconda\Scripts\;C:\anaconda\;C:\User ...
++                                                      ~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\anaconda\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Python\Python310\Scripts\ : 'C:\Users\yoonj\AppData\Local\Programs\Python\Python3
+10\Scripts\' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑ
+Áö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:390
++ ... :\anaconda\;C:\Users\yoonj\AppData\Local\Programs\Python\Python310\Sc ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...hon310\Scripts\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Python\Python310\ : 'C:\Users\yoonj\AppData\Local\Programs\Python\Python310\' ¿ë
+¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î
+°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:454
++ ... 10\Scripts\;C:\Users\yoonj\AppData\Local\Programs\Python\Python310\;C ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...thon\Python310\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Python\Python313\Scripts\ : 'C:\Users\yoonj\AppData\Local\Programs\Python\Python3
+13\Scripts\' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑ
+Áö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:510
++ ... \Python310\;C:\Users\yoonj\AppData\Local\Programs\Python\Python313\Sc ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...hon313\Scripts\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Python\Python313\ : 'C:\Users\yoonj\AppData\Local\Programs\Python\Python313\' ¿ë
+¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î
+°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:574
++ ... 13\Scripts\;C:\Users\yoonj\AppData\Local\Programs\Python\Python313\;C ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...thon\Python313\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Python\Python312\Scripts\ : 'C:\Users\yoonj\AppData\Local\Programs\Python\Python3
+12\Scripts\' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑ
+Áö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:630
++ ... \Python313\;C:\Users\yoonj\AppData\Local\Programs\Python\Python312\Sc ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...hon312\Scripts\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Python\Python312\ : 'C:\Users\yoonj\AppData\Local\Programs\Python\Python312\' ¿ë
+¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î
+°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:694
++ ... 12\Scripts\;C:\Users\yoonj\AppData\Local\Programs\Python\Python312\;C ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...thon\Python312\:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Microsoft\WindowsApps : 'C:\Users\yoonj\AppData\Local\Microsoft\WindowsApps' ¿ë¾î°¡ cmdlet
+, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ 
+°æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:750
++ ... \Python312\;C:\Users\yoonj\AppData\Local\Microsoft\WindowsApps;C:\PyC ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...oft\WindowsApps:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\PyCharm : 'C:\PyCharm' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. 
+ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:801
++ ... C:\Users\yoonj\AppData\Local\Microsoft\WindowsApps;C:\PyCharm Communi ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\PyCharm:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\.pyenv\pyenv-win\bin : 'C:\Users\yoonj\.pyenv\pyenv-win\bin' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½Ç
+ÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´Ù
+À½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:843
++ ... nity Edition 2024.2.1\bin;C:\Users\yoonj\.pyenv\pyenv-win\bin;C:\User ...
++                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\.pyenv\pyenv-win\bin:String) [], CommandNotFoundExceptio 
+   n
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\.pyenv\pyenv-win\shims : 'C:\Users\yoonj\.pyenv\pyenv-win\shims' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â
+ ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ
+ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:879
++ ... nj\.pyenv\pyenv-win\bin;C:\Users\yoonj\.pyenv\pyenv-win\shims;C:\Micr ...
++                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\.pyenv\pyenv-win\shims:String) [], CommandNotFoundExcept 
+   ion
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Microsoft : 'C:\Microsoft' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï
+´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:917
++ ... nv-win\bin;C:\Users\yoonj\.pyenv\pyenv-win\shims;C:\Microsoft VS Code ...
++                                                      ~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Microsoft:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\GitHubDesktop\bin : 'C:\Users\yoonj\AppData\Local\GitHubDesktop\bin' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, 
+½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î
+°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:942
++ ... ft VS Code\bin;C:\Users\yoonj\AppData\Local\GitHubDesktop\bin;C:\User ...
++                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...tHubDesktop\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\Antigravity\bin : 'C:\Users\yoonj\AppData\Local\Programs\Antigravity\bin' ¿ë¾î°¡ 
+cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷
+ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:989
++ ... Desktop\bin;C:\Users\yoonj\AppData\Local\Programs\Antigravity\bin;C:\ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...Antigravity\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Programs\cursor\resources\app\bin : 'C:\Users\yoonj\AppData\Local\Programs\cursor\resource
+s\app\bin' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö 
+È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:1043
++ ... gravity\bin;C:\Users\yoonj\AppData\Local\Programs\cursor\resources\ap ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...sources\app\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Roaming\npm : 'C:\Users\yoonj\AppData\Roaming\npm' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇà
+ÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½
+ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:1106
++ ... s\cursor\resources\app\bin;C:\Users\yoonj\AppData\Roaming\npm;C:\User ...
++                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\AppData\Roaming\npm:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3
+d8bbwe\mingw64\bin : 'C:\Users\yoonj\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft
+.Winget.Source_8wekyb3d8bbwe\mingw64\bin' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½Ä
+µÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:1141
++ ... Roaming\npm;C:\Users\yoonj\AppData\Local\Microsoft\WinGet\Packages\Br ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...bwe\mingw64\bin:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Users\yoonj\AppData\Local\OpenAI\Codex\bin\ada252862d154cdd : 'C:\Users\yoonj\AppData\Local\OpenAI\Codex\bin\ada2528
+62d154cdd' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. ÀÌ¸§ÀÌ Á¤È®ÇÑÁö 
+È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:1279
++ ... mingw64\bin;C:\Users\yoonj\AppData\Local\OpenAI\Codex\bin\ada252862d1 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\yoonj\...da252862d154cdd:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+C:\Program : 'C:\Program' ¿ë¾î°¡ cmdlet, ÇÔ¼ö, ½ºÅ©¸³Æ® ÆÄÀÏ ¶Ç´Â ½ÇÇàÇÒ ¼ö ÀÖ´Â ÇÁ·Î±×·¥ ÀÌ¸§À¸·Î ÀÎ½ÄµÇÁö ¾Ê½À´Ï´Ù. 
+ÀÌ¸§ÀÌ Á¤È®ÇÑÁö È®ÀÎÇÏ°í °æ·Î°¡ Æ÷ÇÔµÈ °æ¿ì °æ·Î°¡ ¿Ã¹Ù¸¥Áö °ËÁõÇÑ ´ÙÀ½ ´Ù½Ã ½ÃµµÇÏ½Ê½Ã¿À.
+À§Ä¡ ÁÙ:1 ¹®ÀÚ:1342
++ ... nj\AppData\Local\OpenAI\Codex\bin\ada252862d154cdd;C:\Program Files\W ...
++                                                        ~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Program:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+ âš  Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+ â¨¯ Failed to generate static paths for /tenants/[tenantId]/dashboard:
+[Error: Jest worker encountered 2 child process exceptions, exceeding retry limit] {
+  type: 'WorkerError'
+}
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+ â¨¯ [Error: Jest worker encountered 2 child process exceptions, exceeding retry limit] {
+  type: 'WorkerError',
+  page: '/tenants/589b2016-13bd-4f57-a56a-a53de1a521cc/dashboard'
+}
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module 'styled-jsx/package.json'
+Require stack:
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\require-hook.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\server\dev\static-paths-worker.js
+- C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at resolve (node:internal/modules/helpers:157:19)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\next\src\server\require-hook.ts:21:30)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+    at require (node:internal/modules/helpers:147:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\require-hook.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\server\\dev\\static-paths-worker.js',
+    'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\next\\dist\\compiled\\jest-worker\\processChild.js'
+  ]
+}
+
+Node.js v22.23.1
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\react\jsx-runtime.js'
+    at next/dist/compiled/next-server/pages.runtime.dev.js (C:\Users\yoonj\GateLM\apps\web\.next\server\pages\_document.js:22:18)
+    at (pages-dir-node)/../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/server/route-modules/pages/module.compiled.js (C:\Users\yoonj\GateLM\apps\web\.next\server\vendor-chunks\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7.js:403:1)
+    at (pages-dir-node)/../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/server/route-modules/pages/vendored/contexts/html-context.js (C:\Users\yoonj\GateLM\apps\web\.next\server\vendor-chunks\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7.js:447:1)
+    at (pages-dir-node)/../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/pages/_document.js (C:\Users\yoonj\GateLM\apps\web\.next\server\vendor-chunks\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7.js:183:1)
+    at __webpack_exec__ (C:\Users\yoonj\GateLM\apps\web\.next\server\pages\_document.js:62:39)
+    at <unknown> (C:\Users\yoonj\GateLM\apps\web\.next\server\pages\_document.js:63:214)
+    at <unknown> (C:\Users\yoonj\GateLM\apps\web\.next\server\pages\_document.js:63:47)
+    at Object.<anonymous> (C:\Users\yoonj\GateLM\apps\web\.next\server\pages\_document.js:66:3) {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\react'
+}
+[Error: Jest worker encountered 2 child process exceptions, exceeding retry limit] {
+  type: 'WorkerError',
+  page: '/tenants/589b2016-13bd-4f57-a56a-a53de1a521cc/dashboard'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ ../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/index.js
+Module not found: Can't resolve 'react/jsx-runtime'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+../../node_modules/.pnpm/next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/client/next-dev.js
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+ â¨¯ [Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}
+[Error: Cannot find module 'C:\Users\yoonj\GateLM\node_modules\.pnpm\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\node_modules\@swc\helpers\package.json'] {
+  code: 'MODULE_NOT_FOUND',
+  path: 'C:\\Users\\yoonj\\GateLM\\node_modules\\.pnpm\\next@15.5.19_@babel+core@7.29.7_@playwright+test@1.61.1_react-dom@19.2.7_react@19.2.7__react@19.2.7\\node_modules\\@swc\\helpers'
+}

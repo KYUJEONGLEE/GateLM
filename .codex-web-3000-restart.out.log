@@ -1,0 +1,1239 @@
+.                                        |  WARN  Unsupported engine: wanted: {"node":">=22 <23"} (current: {"node":"v24.14.0","pnpm":"9.15.0"})
+
+> @gatelm/web@0.1.0 dev C:\Users\yoonj\GateLM\apps\web
+> next dev --hostname 0.0.0.0 --port 3000
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://0.0.0.0:3000
+
+ ✓ Starting...
+ ✓ Ready in 5s
+ ○ Compiling / ...
+ ✓ Compiled / in 4.8s (659 modules)
+ GET / 200 in 6835ms
+ GET / 200 in 264ms
+ ○ Compiling /api/control-plane/provider-connections ...
+ ✓ Compiled /api/control-plane/provider-connections in 3s (683 modules)
+ POST /api/control-plane/provider-connections 200 in 4465ms
+ ○ Compiling /tenants/[tenantId]/provider-connections ...
+ ✓ Compiled /api/control-plane/provider-connections in 7.6s (1102 modules)
+ GET / 200 in 4462ms
+ POST /api/control-plane/provider-connections 200 in 4600ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 10715ms
+ GET /tenants/00000000-0000-4000-8000-000000000100/provider-connections 200 in 492ms
+ POST /api/control-plane/provider-connections 200 in 1194ms
+ POST /api/control-plane/provider-connections 200 in 84ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 196ms
+ POST /api/control-plane/provider-connections 200 in 1311ms
+ POST /api/control-plane/provider-connections 200 in 228ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 266ms
+ POST /api/control-plane/provider-connections 200 in 115ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 260ms
+ POST /api/control-plane/provider-connections 200 in 114ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 261ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 324ms
+ POST /api/control-plane/provider-connections 200 in 71ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 179ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 260ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 214ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 153ms
+ ○ Compiling /tenants/[tenantId]/teams ...
+ ✓ Compiled /tenants/[tenantId]/teams in 2.8s (1101 modules)
+ GET /tenants/tenant_demo_acme/teams 200 in 4432ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 247ms
+ POST /api/control-plane/provider-connections 200 in 1697ms
+ POST /api/control-plane/provider-connections 200 in 97ms
+ POST /api/control-plane/provider-connections 200 in 749ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 2.5s (1099 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 5298ms
+ GET /tenants/tenant_demo_acme/projects 200 in 331ms
+ GET /tenants/tenant_demo_acme/projects 200 in 229ms
+ GET /tenants/tenant_demo_acme/projects 200 in 405ms
+ GET /tenants/tenant_demo_acme/projects 200 in 349ms
+ GET /tenants/tenant_demo_acme/projects 200 in 341ms
+ GET /tenants/tenant_demo_acme/projects 200 in 288ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId] ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId] in 2.5s (1120 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 4813ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 352ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 271ms
+ ○ Compiling /tenants/[tenantId]/model-catalog ...
+ ✓ Compiled /tenants/[tenantId]/model-catalog in 970ms (1138 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 291ms
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 2417ms
+ GET /tenants/tenant_demo_acme/projects 200 in 280ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 586ms
+ ○ Compiling /tenants/[tenantId]/applications ...
+ ✓ Compiled /tenants/[tenantId]/applications in 1337ms (1130 modules)
+ GET /tenants/tenant_demo_acme/applications 200 in 3976ms
+ ✓ Compiled in 1151ms (1144 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 488ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 494ms
+ ✓ Compiled in 570ms (499 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 345ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 344ms
+ ✓ Compiled in 1802ms (1144 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 741ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 745ms
+ ✓ Compiled in 1456ms (1140 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 649ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 655ms
+ ○ Compiling /api/control-plane/applications ...
+ ✓ Compiled /api/control-plane/applications in 1655ms (1159 modules)
+ POST /api/control-plane/applications 200 in 2830ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 1447ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 1579ms
+ ○ Compiling /api/control-plane/app-tokens ...
+ ✓ Compiled /api/control-plane/app-tokens in 2.6s (1149 modules)
+ POST /api/control-plane/app-tokens 200 in 3017ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 739ms
+ ✓ Compiled in 1889ms (1163 modules)
+ ✓ Compiled in 1ms (664 modules)
+ ✓ Compiled in 2ms (664 modules)
+ ✓ Compiled in 1ms (664 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 500 in 3767ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 4125ms
+ ✓ Compiled in 2.1s (1163 modules)
+ ✓ Compiled in 1ms (664 modules)
+ ✓ Compiled in 1ms (664 modules)
+ ✓ Compiled in 1ms (664 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 3934ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 4074ms
+ ✓ Compiled in 1631ms (1163 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 758ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 768ms
+ POST /api/control-plane/applications 409 in 144ms
+ POST /api/control-plane/applications 409 in 92ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 401ms
+ ○ Compiling /api/control-plane/provider-connections ...
+ ✓ Compiled /api/control-plane/provider-connections in 993ms (662 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 784ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 966ms
+ POST /api/control-plane/provider-connections 200 in 2569ms
+ POST /api/control-plane/provider-connections 200 in 1309ms
+ POST /api/control-plane/provider-connections 200 in 137ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 215ms
+ GET /tenants/tenant_demo_acme/projects 200 in 249ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 708ms
+ ○ Compiling / ...
+ ✓ Compiled / in 811ms (680 modules)
+ GET / 200 in 1536ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 1228ms (1165 modules)
+ POST /api/control-plane/projects 200 in 1481ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 497ms
+ ○ Compiling /api/control-plane/applications ...
+ ✓ Compiled /api/control-plane/applications in 630ms (682 modules)
+ POST /api/control-plane/applications 200 in 641ms
+ POST /api/control-plane/applications 200 in 1225ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 461ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 1653ms
+ POST /api/control-plane/applications 200 in 122ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 478ms
+ POST /api/control-plane/applications 200 in 94ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 298ms
+ POST /api/control-plane/applications 200 in 115ms
+ POST /api/control-plane/applications 200 in 177ms
+ ○ Compiling /api/control-plane/app-tokens ...
+ ✓ Compiled /api/control-plane/app-tokens in 989ms (686 modules)
+ POST /api/control-plane/app-tokens 200 in 1314ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 440ms
+ POST /api/control-plane/applications 409 in 129ms
+ ✓ Compiled in 2.9s (1140 modules)
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 896ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 898ms
+ ✓ Compiled in 1055ms (1140 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 335ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 576ms
+ ✓ Compiled /api/control-plane/applications in 311ms (660 modules)
+ POST /api/control-plane/applications 409 in 564ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 593ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 598ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies in 4.5s (1190 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 718ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200/applications/6523cac6-11cf-4dc8-8e1d-fd0650dca282/policies 200 in 6918ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200/applications/6523cac6-11cf-4dc8-8e1d-fd0650dca282/policies 200 in 542ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200/applications/6523cac6-11cf-4dc8-8e1d-fd0650dca282/policies 200 in 372ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200/applications/6523cac6-11cf-4dc8-8e1d-fd0650dca282/policies 200 in 245ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200/applications/6523cac6-11cf-4dc8-8e1d-fd0650dca282/policies 200 in 299ms
+ ○ Compiling /api/control-plane/runtime-config ...
+ ✓ Compiled /api/control-plane/runtime-config in 1295ms (1195 modules)
+ POST /api/control-plane/runtime-config 200 in 1703ms
+ POST /api/control-plane/runtime-config 200 in 135ms
+ POST /api/control-plane/runtime-config 200 in 145ms
+ GET /tenants/tenant_demo_acme/projects 200 in 402ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 475ms
+ GET /tenants/tenant_demo_acme/projects 200 in 186ms
+ ○ Compiling /tenants/[tenantId]/onboarding ...
+ ✓ Compiled /tenants/[tenantId]/onboarding in 3.7s (1207 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 5462ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 210ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 137ms
+ GET /tenants/tenant_demo_acme/projects 200 in 198ms
+ GET /tenants/tenant_demo_acme/projects/00000000-0000-4000-8000-000000000200 200 in 386ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 825ms (699 modules)
+ POST /api/control-plane/projects 200 in 1049ms
+ GET /tenants/tenant_demo_acme/projects 200 in 292ms
+ GET /tenants/tenant_demo_acme/projects 200 in 140ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 216ms
+ POST /api/control-plane/projects 409 in 88ms
+ POST /api/control-plane/projects 409 in 1745ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 710ms
+ ○ Compiling /tenants/[tenantId]/dashboard ...
+ ✓ Compiled /tenants/[tenantId]/dashboard in 5.3s (2405 modules)
+ GET /tenants/tenant_demo_acme/dashboard 200 in 6942ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 168ms
+ ○ Compiling /tenants/[tenantId]/teams ...
+ ✓ Compiled /tenants/[tenantId]/teams in 571ms (1305 modules)
+ GET /tenants/tenant_demo_acme/teams 200 in 916ms
+ GET /tenants/tenant_demo_acme/projects 200 in 250ms
+ GET /tenants/tenant_demo_acme/projects 200 in 154ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1396ms (692 modules)
+ GET /?view=landing 200 in 1922ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 2s (1815 modules)
+ GET /api/auth/me 401 in 3535ms
+ GET /api/auth/me 401 in 152ms
+ POST /api/auth/signup 201 in 228ms
+ POST /api/auth/signup 409 in 97ms
+ POST /api/auth/signup 201 in 198ms
+ POST /api/auth/email/verify 401 in 149ms
+ ✓ Compiled in 2.1s (1792 modules)
+ ✓ Compiled in 433ms (1118 modules)
+ ✓ Compiled in 380ms (1118 modules)
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 1570ms (693 modules)
+ POST /api/auth/login 401 in 2307ms
+ POST /api/auth/signup 201 in 201ms
+ ○ Compiling / ...
+ ✓ Compiled / in 647ms (711 modules)
+ GET /?view=landing 200 in 1471ms
+ GET /api/auth/me 401 in 143ms
+ GET / 200 in 920ms
+ ✓ Compiled in 2.2s (1118 modules)
+ GET / 200 in 1339ms
+ GET /?view=landing 200 in 180ms
+ ○ Compiling /tenants/[tenantId]/policies ...
+ GET / 200 in 2434ms
+ GET / 200 in 2251ms
+ ✓ Compiled /tenants/[tenantId]/policies in 6.4s (1315 modules)
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 1833ms (2425 modules)
+ GET /?view=landing 200 in 13927ms
+ GET / 200 in 14042ms
+ GET / 200 in 15676ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 16045ms
+ GET /tenants/tenant_signup_acme/projects 200 in 8124ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 15925ms
+ GET /tenants/tenant_demo_acme/policies 200 in 16717ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 16835ms
+ GET /tenants/tenant_demo_acme/policies 200 in 15992ms
+ GET /tenants/tenant_demo_acme/policies 200 in 15980ms
+ GET /tenants/tenant_demo_acme/policies 200 in 8391ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 1122ms
+ GET /?view=landing 200 in 951ms
+ GET /tenants/tenant_demo_acme/policies 200 in 1698ms
+ GET /?view=landing 200 in 788ms
+ GET / 200 in 178ms
+ GET / 200 in 197ms
+ GET / 200 in 167ms
+ GET / 200 in 171ms
+ GET / 200 in 4290ms
+ GET / 200 in 4485ms
+ GET / 200 in 4487ms
+ GET /?view=landing 200 in 4491ms
+ GET / 200 in 4494ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 4073ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 4212ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 4215ms
+ GET /tenants/tenant_signup_acme/projects 200 in 834ms
+ GET /?view=landing 200 in 498ms
+ GET /?view=landing 200 in 988ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 1000ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 1223ms (1315 modules)
+ POST /api/auth/signup 409 in 1690ms
+ POST /api/auth/login 401 in 175ms
+ POST /api/auth/signup 409 in 95ms
+ POST /api/auth/signup 409 in 148ms
+ POST /api/auth/signup 201 in 184ms
+ GET /api/auth/google/start 302 in 335ms
+ GET /api/auth/google/callback?state=HL-Ur9hkxth68VT9fMnCt9x3xMhteOzZ84O2oiNGJ6M&iss=https%3A%2F%2Faccounts.google.com&code=4%2F0AdkVLPzRHImXwWH0A3e3kj4nH2_DvHSB5AfBsimTWSDrT_BjDEimF-Wh9GKzKqwm24C32A&scope=email+profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+openid&authuser=0&prompt=none 302 in 743ms
+ GET / 200 in 1153ms
+ GET /api/auth/me 401 in 127ms
+ ✓ Compiled in 2.1s (2433 modules)
+ ✓ Compiled in 0ms (1315 modules)
+ ✓ Compiled in 0ms (1315 modules)
+ ✓ Compiled in 0ms (1315 modules)
+ GET /api/auth/me 401 in 2848ms
+ GET / 200 in 3029ms
+ GET /api/auth/google/start 302 in 113ms
+ GET /api/auth/google/callback?state=aHKTNc4v5zc-h3C250YeNG9q1rpz6MOTbdNQvh5NhHw&iss=https%3A%2F%2Faccounts.google.com&code=4%2F0AdkVLPwqaqCYAbVXznVJlofKrUwudEhoQwA5TFuE-8ceDFelz6aJ5i7XxJBLZHQ6Fcv89Q&scope=email+profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&authuser=0&prompt=none 302 in 604ms
+ GET / 200 in 891ms
+ GET /api/auth/me 401 in 148ms
+ ✓ Compiled in 436ms (1118 modules)
+ GET / 200 in 79ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1014ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1155ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/teams in 4.9s (1306 modules)
+ ✓ Compiled (1315 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 9534ms
+ GET /tenants/tenant_demo_acme/teams 200 in 6659ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 6452ms
+ GET /tenants/tenant_demo_acme/projects 200 in 203ms
+ GET / 200 in 248ms
+ GET / 200 in 86ms
+ GET / 200 in 2046ms
+ GET / 200 in 2176ms
+ GET / 200 in 3519ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 3813ms
+ GET /?view=landing 200 in 3624ms
+ GET / 200 in 3158ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 2631ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 3427ms
+ GET /tenants/tenant_signup_acme/projects 200 in 711ms
+ GET /?view=landing 200 in 355ms
+ GET /?view=landing 200 in 1096ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 1049ms
+ GET /?view=landing 200 in 118ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 1437ms (1315 modules)
+ GET /api/auth/me 401 in 1993ms
+ GET /api/auth/me 401 in 83ms
+ POST /api/auth/signup 409 in 98ms
+ POST /api/auth/signup 201 in 178ms
+ POST /api/auth/email/verify 400 in 104ms
+ POST /api/auth/email/verify 401 in 123ms
+ POST /api/auth/signup 201 in 320ms
+ GET / 200 in 557ms
+ GET / 200 in 134ms
+ GET / 200 in 509ms
+ GET / 200 in 1274ms
+ GET / 200 in 2109ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2446ms
+ GET / 200 in 2192ms
+ GET /?view=landing 200 in 1827ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1761ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1919ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 1527ms (1323 modules)
+ GET /?view=landing 200 in 3598ms
+ GET /?view=landing 200 in 3493ms
+ GET /tenants/tenant_signup_acme/projects 200 in 4300ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 615ms
+ ✓ Compiled /api/auth/[...path] in 3.1s (2416 modules)
+ ✓ Compiled in 1ms (1315 modules)
+ GET /?view=landing 200 in 1716ms
+ POST /api/auth/signup 201 in 2475ms
+ GET /?view=landing 200 in 1375ms
+ GET /api/auth/me 401 in 575ms
+ POST /api/auth/signup 201 in 409ms
+ ✓ Compiled in 4.2s (2415 modules)
+ GET /?view=landing 200 in 504ms
+ ✓ Compiled in 3.6s (2416 modules)
+ GET /?view=landing 200 in 308ms
+ GET /?view=landing 200 in 350ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 770ms (1315 modules)
+ GET /api/auth/me 401 in 1136ms
+ POST /api/auth/signup 201 in 189ms
+ GET / 200 in 574ms
+ GET /api/auth/me 401 in 226ms
+ POST /api/auth/signup 201 in 270ms
+ POST /api/auth/organizations 201 in 155ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 3.9s (1323 modules)
+ GET / 200 in 958ms
+ GET /tenants/1b6774ea-b992-4fc9-8bbd-99812872b5b3/projects 200 in 5133ms
+ GET /tenants/1b6774ea-b992-4fc9-8bbd-99812872b5b3/onboarding 200 in 186ms
+ GET /?view=landing 200 in 101ms
+ GET /api/auth/me 200 in 126ms
+ GET /api/auth/me 200 in 54ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 343ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 419ms
+ ○ Compiling /tenants/[tenantId]/request-logs ...
+ ✓ Compiled /tenants/[tenantId]/request-logs in 9s (2424 modules)
+ GET /tenants/tenant_demo_acme/request-logs 200 in 11476ms
+ GET /tenants/tenant_demo_acme/request-logs 200 in 330ms
+ GET /?view=landing 200 in 106ms
+ GET /api/auth/me 200 in 139ms
+ GET /api/auth/me 200 in 50ms
+ GET / 200 in 446ms
+ GET /api/auth/me 200 in 160ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1042ms
+ GET / 200 in 331ms
+ GET /api/auth/me 200 in 145ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 460ms
+ GET /?view=landing 200 in 65ms
+ GET /api/auth/me 200 in 105ms
+ GET /api/auth/me 200 in 52ms
+ ○ Compiling /application ...
+ ✓ Compiled /application in 3.9s (2417 modules)
+ GET /application 200 in 4348ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 390ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 2.4s (1295 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 3555ms
+ GET /tenants/tenant_demo_acme/projects 200 in 463ms
+ ○ Compiling /tenants/[tenantId]/teams ...
+ ✓ Compiled /tenants/[tenantId]/teams in 4.4s (1304 modules)
+ ○ Compiling /tenants/[tenantId]/provider-connections ...
+ GET /tenants/tenant_demo_acme/teams 200 in 5334ms
+ ✓ Compiled /tenants/[tenantId]/provider-connections in 2.8s (1312 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 3631ms
+ ○ Compiling /tenants/[tenantId]/model-catalog ...
+ ✓ Compiled /tenants/[tenantId]/model-catalog in 1321ms (1324 modules)
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 1792ms
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 218ms
+ GET /tenants/tenant_demo_acme/teams 200 in 251ms
+ GET /tenants/tenant_demo_acme/projects 200 in 200ms
+ ○ Compiling /tenants/[tenantId]/onboarding ...
+ ✓ Compiled /tenants/[tenantId]/onboarding in 1664ms (1290 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1979ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 1821ms (668 modules)
+ POST /api/control-plane/projects 200 in 2274ms
+ ○ Compiling /api/control-plane/api-keys ...
+ ✓ Compiled /api/control-plane/api-keys in 2.2s (1776 modules)
+ POST /api/control-plane/api-keys 200 in 2381ms
+ GET /tenants/tenant_demo_acme/projects 200 in 216ms
+ GET /tenants/tenant_demo_acme/projects 200 in 123ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId] ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId] in 3.4s (681 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 3983ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 330ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 194ms
+ GET /tenants/tenant_demo_acme/projects 200 in 164ms
+ GET /tenants/tenant_demo_acme/projects 200 in 175ms
+ GET /tenants/tenant_demo_acme/teams 200 in 150ms
+ ○ Compiling /tenants/[tenantId]/provider-connections ...
+ ✓ Compiled /tenants/[tenantId]/provider-connections in 1203ms (664 modules)
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 1747ms
+ GET /tenants/tenant_demo_acme/projects 200 in 177ms
+ GET /tenants/tenant_demo_acme/model-catalog 200 in 180ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 137ms
+ GET /tenants/tenant_demo_acme/teams 200 in 161ms
+ GET /tenants/tenant_demo_acme/provider-connections 200 in 134ms
+ GET /tenants/tenant_demo_acme/projects 200 in 177ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 273ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 130ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 298ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 104ms
+ ✓ Compiled in 4.4s (1770 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1150ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 2391ms
+ ✓ Compiled in 872ms (1770 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 150ms
+ ✓ Compiled in 702ms (1119 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 168ms
+ ○ Compiling / ...
+ ✓ Compiled / in 552ms (669 modules)
+ GET / 200 in 816ms
+ GET / 200 in 159ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 407ms
+ ○ Compiling /tenants/[tenantId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/dashboard in 1743ms (695 modules)
+ ✓ Compiled (1322 modules)
+ GET / 200 in 5306ms
+ GET / 200 in 5968ms
+ GET / 200 in 5997ms
+ GET /?view=landing 200 in 5297ms
+ GET / 200 in 5787ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 3866ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 6050ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5471ms
+ GET /tenants/tenant_demo_acme/policies 200 in 6152ms
+ GET /tenants/tenant_demo_acme/policies 200 in 6224ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 5866ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 5562ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 506ms
+ GET /?view=landing 200 in 352ms
+ GET /?view=landing 200 in 633ms
+ GET /tenants/tenant_signup_acme/projects 200 in 1337ms
+ GET /tenants/tenant_demo_acme/policies 200 in 1428ms
+ GET /tenants/tenant_demo_acme/policies 200 in 1442ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 554ms
+ GET /tenants/tenant_demo_acme/projects 200 in 211ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 308ms
+ GET / 200 in 211ms
+ GET / 200 in 157ms
+ GET / 200 in 109ms
+ GET / 200 in 91ms
+ GET / 200 in 263ms
+ GET / 200 in 429ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1091ms
+ GET /?view=landing 200 in 2145ms
+ GET / 200 in 1747ms
+ GET / 200 in 1750ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1826ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 1838ms
+ GET /?view=landing 200 in 104ms
+ GET /?view=landing 200 in 250ms
+ GET /tenants/tenant_signup_acme/projects 200 in 552ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 318ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 332ms
+ ○ Compiling /api/control-plane/applications ...
+ ✓ Compiled /api/control-plane/applications in 4.5s (1335 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 619ms
+ POST /api/control-plane/applications 200 in 5258ms
+ ○ Compiling /api/control-plane/app-tokens ...
+ ✓ Compiled /api/control-plane/app-tokens in 1809ms (1338 modules)
+ POST /api/control-plane/app-tokens 200 in 2114ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 965ms
+ ✓ Compiled in 3.7s (1814 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 283ms
+ GET /tenants/tenant_demo_acme/projects 200 in 739ms
+ GET /tenants/tenant_demo_acme/projects 200 in 142ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 147ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 266ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 235ms
+ ✓ Compiled in 3.3s (1792 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 487ms
+ GET /tenants/tenant_demo_acme/projects 200 in 398ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 329ms
+ ✓ Compiled in 1644ms (1792 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 270ms
+ GET /tenants/tenant_demo_acme/projects 200 in 479ms
+ ○ Compiling /tenants/[tenantId]/teams ...
+ ✓ Compiled /tenants/[tenantId]/teams in 4s (677 modules)
+ GET /tenants/tenant_demo_acme/teams 200 in 4402ms
+ GET /tenants/tenant_demo_acme/teams 200 in 126ms
+ GET /tenants/tenant_demo_acme/teams 200 in 133ms
+ ○ Compiling /api/control-plane/teams ...
+ ✓ Compiled /api/control-plane/teams in 1903ms (1801 modules)
+ POST /api/control-plane/teams 200 in 2222ms
+ GET /tenants/tenant_demo_acme/teams 200 in 290ms
+ GET /tenants/tenant_demo_acme/projects 200 in 177ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 141ms
+ GET /tenants/tenant_demo_acme/teams 200 in 147ms
+ GET /tenants/tenant_demo_acme/projects 200 in 128ms
+ GET /tenants/tenant_demo_acme/teams 200 in 125ms
+ GET /tenants/tenant_demo_acme/projects 200 in 127ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 119ms
+ ✓ Compiled in 715ms (1119 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 96ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1104ms (679 modules)
+ GET / 200 in 1509ms
+ GET / 200 in 170ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 542ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 525ms
+ ✓ Compiled in 1625ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 787ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 824ms
+ ✓ Compiled in 1829ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 157ms
+ ✓ Compiled in 838ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 296ms
+ ✓ Compiled in 1760ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 464ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 525ms
+ ✓ Compiled in 657ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 583ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 827ms
+ ✓ Compiled in 588ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 386ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 685ms
+ ✓ Compiled in 557ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 404ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 714ms
+ ✓ Compiled in 675ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 459ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 775ms
+ ✓ Compiled in 708ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 505ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 732ms
+ ✓ Compiled in 812ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 586ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1120ms
+ ✓ Compiled in 776ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 482ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 861ms
+ ✓ Compiled in 774ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 595ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 860ms
+ ✓ Compiled in 618ms (1780 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 435ms
+ GET /tenants/tenant_demo_acme/onboarding 500 in 765ms
+ ✓ Compiled in 2.4s (1782 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1253ms
+ ✓ Compiled in 759ms (1782 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 136ms
+ ○ Compiling / ...
+ ✓ Compiled / in 755ms (1800 modules)
+ GET / 200 in 1061ms
+ GET / 200 in 182ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 463ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 272ms
+ ✓ Compiled in 538ms (1120 modules)
+ ✓ Compiled in 385ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 138ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 90ms
+ GET / 200 in 111ms
+ GET / 200 in 100ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 265ms
+ GET / 200 in 238ms
+ GET / 200 in 206ms
+ GET / 200 in 433ms
+ ○ Compiling /tenants/[tenantId]/dashboard ...
+ GET / 200 in 1883ms
+ ✓ Compiled /tenants/[tenantId]/dashboard in 4s (1316 modules)
+ GET / 200 in 6242ms
+ GET / 200 in 6245ms
+ GET /?view=landing 200 in 6207ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 2132ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 6338ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 6402ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 6410ms
+ GET /?view=landing 200 in 149ms
+ GET /tenants/tenant_signup_acme/projects 200 in 310ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 303ms
+ GET / 200 in 156ms
+ GET / 200 in 139ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 315ms
+ GET /?view=landing 200 in 140ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 204ms
+ GET / 200 in 122ms
+ GET / 200 in 132ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 334ms
+ ✓ Compiled in 2.6s (2410 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 580ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 659ms
+ ✓ Compiled in 807ms (2410 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 700ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1023ms
+ ✓ Compiled in 983ms (2410 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 150ms
+ ✓ Compiled in 1146ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 102ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1403ms (1308 modules)
+ GET / 200 in 1695ms
+ GET / 200 in 161ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 415ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 305ms
+ ✓ Compiled in 1743ms (2410 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 266ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 398ms
+ ✓ Compiled in 950ms (2410 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 133ms
+ ○ Compiling / ...
+ ✓ Compiled / in 853ms (2428 modules)
+ GET / 200 in 1110ms
+ GET / 200 in 216ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 456ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 344ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 192ms
+ ✓ Compiled in 430ms (1120 modules)
+ ✓ Compiled in 401ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 185ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 128ms
+ GET / 200 in 133ms
+ GET / 200 in 152ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 337ms
+ GET /tenants/tenant_demo_acme/projects 200 in 205ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId] ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId] in 5.9s (1297 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 6506ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 364ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 343ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 257ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 233ms
+ GET /tenants/tenant_demo_acme/teams 200 in 167ms
+ GET /tenants/tenant_demo_acme/projects 200 in 169ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 285ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 184ms
+ ○ Compiling /api/control-plane/teams ...
+ ✓ Compiled /api/control-plane/teams in 7.5s (1310 modules)
+ POST /api/control-plane/teams 200 in 8041ms
+ ✓ Compiled in 2s (2430 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 491ms
+ ○ Compiling / ...
+ ✓ Compiled / in 723ms (1328 modules)
+ GET / 200 in 1283ms
+ GET / 200 in 305ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 319ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 691ms
+ ✓ Compiled in 8.2s (2413 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1088ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1212ms (1311 modules)
+ GET / 200 in 2241ms
+ GET / 200 in 646ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 662ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 541ms
+ ✓ Compiled in 539ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 135ms
+ ✓ Compiled in 4.2s (2431 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 330ms
+ ✓ Compiled in 850ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 315ms
+ ✓ Compiled in 1476ms (2413 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 205ms
+ ✓ Compiled in 2.4s (2413 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 592ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1183ms
+ ✓ Compiled in 959ms (2413 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 167ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1469ms (1311 modules)
+ GET / 200 in 1820ms
+ GET / 200 in 677ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1217ms
+ ✓ Compiled in 1707ms (2429 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 2390ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 733ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 2.3s (1314 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 2562ms
+ GET /tenants/tenant_demo_acme/projects 200 in 356ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 889ms
+ ✓ Compiled in 1929ms (2435 modules)
+ ✓ Compiled in 1ms (1315 modules)
+ ✓ Compiled in 1ms (1315 modules)
+ ✓ Compiled in 1ms (1315 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 3337ms
+ GET /tenants/tenant_demo_acme/projects 200 in 4255ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 419ms
+ GET / 200 in 670ms
+ ✓ Compiled in 1100ms (1120 modules)
+ GET / 200 in 1567ms
+ GET /tenants/tenant_demo_acme/projects 200 in 853ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 571ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 291ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 291ms
+ ✓ Compiled in 11.8s (2389 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 727ms
+ ✓ Compiled in 2.1s (1119 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 219ms
+ ✓ Compiled in 17.4s (2386 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 242ms
+ ✓ Compiled in 651ms (1119 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 256ms
+ ✓ Compiled in 763ms (1119 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 356ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 297ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 167ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 244ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId]/policies in 8.6s (2398 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 200 in 10961ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 21.8s (2390 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 9268ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 103ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 308ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 138ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 348ms
+ ✓ Compiled in 10.3s (2378 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 112ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 7143ms
+ ✓ Compiled in 1408ms (2392 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 161ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 126ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/policies 404 in 140ms
+ GET /tenants 404 in 225ms
+ ○ Compiling / ...
+ ✓ Compiled / in 5.4s (1286 modules)
+ GET / 200 in 5846ms
+ ○ Compiling /api/auth/[...path] ...
+ ✓ Compiled /api/auth/[...path] in 2.8s (1303 modules)
+ GET /api/auth/me 200 in 3368ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2126ms
+ GET /tenants/tenant_demo_acme/projects 200 in 440ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 594ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 472ms
+ GET /tenants/tenant_demo_acme/projects 200 in 456ms
+ ✓ Compiled in 2.4s (1120 modules)
+ ✓ Compiled in 976ms (1120 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 626ms
+ GET /tenants/tenant_demo_acme/projects 200 in 175ms
+ GET / 200 in 286ms
+ GET / 200 in 223ms
+ GET / 200 in 1417ms
+ GET /?view=landing 200 in 1680ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 2384ms
+ ○ Compiling /tenants/[tenantId]/onboarding ...
+ GET / 200 in 3209ms
+ ✓ Compiled /tenants/[tenantId]/onboarding in 8.3s (1300 modules)
+ ✓ Compiled (1311 modules)
+ GET / 200 in 14352ms
+ GET / 200 in 14825ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 15759ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 14823ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 15331ms
+ GET /tenants/tenant_demo_acme/policies 200 in 15895ms
+ GET /tenants/tenant_demo_acme/policies 200 in 15261ms
+ GET /tenants/tenant_demo_acme/policies 200 in 4889ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5003ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5018ms
+ GET /?view=landing 200 in 819ms
+ GET /?view=landing 200 in 488ms
+ GET /tenants/tenant_signup_acme/projects 200 in 604ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 660ms
+ ✓ Compiled in 3.2s (1120 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 601ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 329ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 330ms
+ ✓ Compiled in 12.6s (1804 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 783ms
+ ✓ Compiled in 1013ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 271ms
+ ✓ Compiled in 3.7s (1804 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 510ms
+ ✓ Compiled in 6.9s (1804 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1275ms
+ GET /tenants/tenant_demo_acme/onboarding 500 in 1894ms
+ ✓ Compiled in 1519ms (1804 modules)
+ GET /tenants/tenant_demo_acme/onboarding 500 in 1722ms
+ GET /tenants/tenant_demo_acme/onboarding 500 in 1133ms
+ ✓ Compiled in 2.4s (1800 modules)
+ ✓ Compiled in 959ms (1800 modules)
+ GET /tenants/tenant_demo_acme/onboarding 500 in 1209ms
+ GET /tenants/tenant_demo_acme/onboarding 500 in 645ms
+ ✓ Compiled in 721ms (1800 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 716ms
+ GET / 200 in 602ms
+ ✓ Compiled in 835ms (1120 modules)
+ GET / 200 in 396ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 360ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 669ms
+ ✓ Compiled in 785ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 240ms
+ GET / 200 in 168ms
+ GET / 200 in 151ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 366ms
+ ✓ Compiled in 908ms (1120 modules)
+ ✓ Compiled in 993ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 985ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 285ms
+ ✓ Compiled in 544ms (1120 modules)
+ ✓ Compiled in 648ms (1120 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 642ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 233ms
+ GET / 200 in 331ms
+ GET / 200 in 316ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 476ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 7.8s (699 modules)
+ POST /api/control-plane/projects 200 in 9310ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1977ms
+ ○ Compiling /api/control-plane/api-keys ...
+ ✓ Compiled /api/control-plane/api-keys in 4.9s (702 modules)
+ POST /api/control-plane/api-keys 200 in 5736ms
+ ○ Compiling /tenants/[tenantId]/projects ...
+ ✓ Compiled /tenants/[tenantId]/projects in 4.7s (706 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 5082ms
+ ✓ Compiled in 2.7s (1824 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 240ms
+ GET /tenants/tenant_demo_acme/projects 200 in 538ms
+ ✓ Compiled in 3.1s (1804 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 353ms
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 506ms
+ ✓ Compiled in 1720ms (1120 modules)
+ ✓ Compiled in 617ms (1120 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 517ms
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 177ms
+ GET / 200 in 287ms
+ GET / 200 in 117ms
+ GET /tenants/tenant_demo_acme/projects 200 in 423ms
+ ✓ Compiled in 5.4s (1804 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 647ms
+ ✓ Compiled in 7.7s (1806 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 285ms
+ ✓ Compiled in 1147ms (1806 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 225ms
+ GET / 200 in 430ms
+ ✓ Compiled in 576ms (1121 modules)
+ GET / 200 in 234ms
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 198ms
+ GET /tenants/tenant_demo_acme/projects 200 in 435ms
+ ✓ Compiled in 440ms (1121 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 149ms
+ GET / 200 in 141ms
+ GET / 200 in 163ms
+ GET /tenants/tenant_demo_acme/projects 200 in 270ms
+ ✓ Compiled in 688ms (1121 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 207ms
+ GET / 200 in 154ms
+ GET / 200 in 159ms
+ GET /tenants/tenant_demo_acme/projects 200 in 439ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 261ms
+ GET /tenants/tenant_demo_acme/projects 200 in 542ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies in 5.3s (688 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 661ms
+ ✓ Compiled in 843ms (1809 modules)
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 208ms
+ GET / 200 in 511ms
+ GET / 200 in 288ms
+ GET /tenants/tenant_demo_acme/projects 200 in 729ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 351ms
+ GET /tenants/tenant_demo_acme/projects 200 in 467ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/applications/33446004-0b9a-47eb-9a8d-2b6ea49f8b90/policies 200 in 357ms
+ GET /tenants/tenant_demo_acme/projects 200 in 274ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 295ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/applications/33446004-0b9a-47eb-9a8d-2b6ea49f8b90/policies 200 in 283ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7/applications/33446004-0b9a-47eb-9a8d-2b6ea49f8b90/policies 200 in 257ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 363ms
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 461ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 198ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 5.2s (689 modules)
+ POST /api/control-plane/projects 409 in 5521ms
+ POST /api/control-plane/projects 409 in 60ms
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 684ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 453ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 274ms
+ POST /api/control-plane/projects 200 in 753ms
+ ○ Compiling /api/control-plane/api-keys ...
+ ✓ Compiled /api/control-plane/api-keys in 9.9s (692 modules)
+ POST /api/control-plane/api-keys 200 in 10232ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 946ms
+ GET /tenants/tenant_demo_acme/projects 200 in 233ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 327ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 401ms
+ GET /tenants/tenant_demo_acme/projects/66e0ac9f-97f0-4a12-ba04-bbbc67a1357a 200 in 766ms
+ POST /api/control-plane/projects 200 in 248ms
+ GET /tenants/tenant_demo_acme/projects 200 in 530ms
+ GET /tenants/tenant_demo_acme/projects 200 in 514ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 3403ms
+ ✓ Compiled in 6.6s (1810 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 3552ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 545ms
+ ✓ Compiled in 2.4s (1810 modules)
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 2937ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 319ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 302ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 315ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 334ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 348ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 288ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 269ms
+ GET /tenants/tenant_demo_acme/projects/b05eaa98-d61f-4418-9cb0-6518495d4de7 200 in 301ms
+ POST /api/control-plane/projects 200 in 87ms
+ GET /tenants/tenant_demo_acme/projects 200 in 255ms
+ GET /tenants/tenant_demo_acme/projects 200 in 221ms
+ ✓ Compiled in 910ms (1121 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 899ms
+ ✓ Compiled in 705ms (1121 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 5.8s (707 modules)
+ GET / 200 in 6736ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 5822ms
+ GET / 200 in 393ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 406ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 133ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 194ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 591ms
+ ○ Compiling /tenants/[tenantId]/dashboard ...
+ ✓ Compiled /tenants/[tenantId]/dashboard in 8.6s (1332 modules)
+ GET / 200 in 8207ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 11710ms
+ GET / 200 in 14459ms
+ GET /?view=landing 200 in 14466ms
+ GET / 200 in 14259ms
+ GET / 200 in 13753ms
+ GET / 200 in 14357ms
+ GET / 200 in 1323ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 14537ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 14992ms
+ GET /tenants/tenant_demo_acme/projects 200 in 14794ms
+ GET /tenants/tenant_demo_acme/policies 200 in 14695ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 15313ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 14845ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 1854ms
+ GET /tenants/tenant_demo_acme/projects 200 in 4723ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 2117ms
+ GET /tenants/tenant_signup_acme/projects 200 in 4381ms
+ GET /tenants/tenant_demo_acme/policies 200 in 4932ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5173ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5252ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5259ms
+ GET /?view=landing 200 in 2224ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 3742ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 589ms
+ GET /tenants/tenant_demo_acme/projects 200 in 1863ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 608ms
+ GET /tenants/tenant_demo_acme/projects 200 in 6691ms
+ GET /tenants/tenant_demo_acme/projects 200 in 2297ms
+ ✓ Compiled in 21s (2440 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 4641ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 318ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 655ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 560ms
+ GET / 200 in 1143ms
+ ✓ Compiled in 1499ms (1123 modules)
+ GET / 200 in 798ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 1063ms
+ GET / 200 in 634ms
+ GET / 200 in 525ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 983ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 325ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 2.7s (1313 modules)
+ POST /api/control-plane/projects 200 in 3167ms
+ ○ Compiling /api/control-plane/api-keys ...
+ ✓ Compiled /api/control-plane/api-keys in 6.9s (1316 modules)
+ POST /api/control-plane/api-keys 200 in 7190ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies in 1522ms (1319 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 2343ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 575ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 490ms
+ ✓ Compiled in 1456ms (1123 modules)
+ ✓ Compiled in 647ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 552ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 280ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1159ms (1317 modules)
+ GET / 200 in 2327ms
+ GET / 200 in 247ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 567ms
+ ✓ Compiled in 4.3s (1813 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 721ms
+ ✓ Compiled in 2.7s (1813 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 745ms
+ GET / 200 in 336ms
+ GET / 200 in 139ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 462ms
+ ✓ Compiled in 1043ms (1813 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 271ms
+ GET / 200 in 266ms
+ GET / 200 in 135ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 885ms
+ GET /tenants/tenant_demo_acme/projects 200 in 314ms
+ GET /tenants/tenant_demo_acme/projects 200 in 242ms
+ GET /tenants/tenant_demo_acme/projects 200 in 272ms
+ GET /tenants/tenant_demo_acme/projects 200 in 224ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 299ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 226ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 286ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 222ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 310ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 252ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 222ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 323ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 311ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 306ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 290ms
+ ○ Compiling /api/control-plane/teams ...
+ ✓ Compiled /api/control-plane/teams in 8.8s (691 modules)
+ POST /api/control-plane/teams 200 in 10034ms
+ GET /tenants/tenant_demo_acme/projects 200 in 1906ms
+ GET /tenants/tenant_demo_acme/projects 200 in 290ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 257ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 4s (693 modules)
+ POST /api/control-plane/projects 200 in 4340ms
+ POST /api/control-plane/teams 200 in 135ms
+ POST /api/control-plane/teams 200 in 101ms
+ ○ Compiling /api/control-plane/api-keys ...
+ ✓ Compiled /api/control-plane/api-keys in 4.5s (696 modules)
+ POST /api/control-plane/api-keys 200 in 4701ms
+ GET /tenants/tenant_demo_acme/projects 200 in 406ms
+ GET /tenants/tenant_demo_acme/projects 200 in 219ms
+ ✓ Compiled in 5.4s (1795 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 702ms
+ ○ Compiling / ...
+ ✓ Compiled / in 3.9s (690 modules)
+ GET / 200 in 4217ms
+ GET / 200 in 184ms
+ GET /tenants/tenant_demo_acme/projects 200 in 486ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 381ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 219ms
+ ○ Compiling /api/control-plane/projects ...
+ ✓ Compiled /api/control-plane/projects in 3s (691 modules)
+ POST /api/control-plane/projects 200 in 3515ms
+ ○ Compiling /api/control-plane/api-keys ...
+ ✓ Compiled /api/control-plane/api-keys in 877ms (694 modules)
+ POST /api/control-plane/api-keys 200 in 1222ms
+ GET /tenants/tenant_demo_acme/projects 200 in 770ms
+ GET /tenants/tenant_demo_acme/projects 200 in 737ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 390ms
+ ✓ Compiled in 1746ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 235ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1542ms (690 modules)
+ GET / 200 in 2120ms
+ GET / 200 in 114ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 900ms
+ ✓ Compiled in 1652ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 323ms
+ ✓ Compiled in 4.8s (1795 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 1196ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 4635ms
+ ✓ Compiled in 486ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 159ms
+ ✓ Compiled in 3.1s (1795 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 348ms
+ ✓ Compiled in 1624ms (1795 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 497ms
+ ○ Compiling / ...
+ ✓ Compiled / in 7.3s (1813 modules)
+ GET / 200 in 8021ms
+ GET / 200 in 491ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 960ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 708ms
+ GET /tenants/tenant_demo_acme/projects 200 in 4566ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 410ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 295ms
+ ✓ Compiled in 2.1s (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 183ms
+ ✓ Compiled in 3.8s (1796 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 381ms
+ GET /tenants/tenant_demo_acme/projects 200 in 484ms
+ ✓ Compiled in 1783ms (1796 modules)
+ GET /tenants/tenant_demo_acme/projects 200 in 441ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 298ms
+ ✓ Compiled in 9.4s (1793 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 311ms
+ ○ Compiling / ...
+ ✓ Compiled / in 519ms (688 modules)
+ GET / 200 in 1047ms
+ GET / 200 in 226ms
+ GET / 200 in 980ms
+ ○ Compiling /tenants/[tenantId]/dashboard ...
+ GET / 200 in 2159ms
+ ✓ Compiled /tenants/[tenantId]/dashboard in 8.8s (1315 modules)
+ GET /?view=landing 200 in 15361ms
+ GET / 200 in 15363ms
+ GET / 200 in 15380ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 7312ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 16747ms
+ GET /tenants/tenant_demo_acme/onboarding 200 in 16829ms
+ GET /tenants/tenant_demo_acme/projects 200 in 16894ms
+ GET /tenants/tenant_demo_acme/policies 200 in 16947ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 17187ms
+ GET /tenants/tenant_demo_acme/dashboard 200 in 17292ms
+ GET /tenants/tenant_demo_acme/policies 200 in 4996ms
+ GET /tenants/tenant_demo_acme/policies 200 in 5003ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 1467ms
+ GET /?view=landing 200 in 1255ms
+ GET /tenants/tenant_signup_acme/projects 200 in 3426ms
+ GET /?view=landing 200 in 2274ms
+ GET /tenants/tenant_demo_acme/policies 200 in 2852ms
+ GET /tenants/tenant_demo_acme/policies 200 in 2886ms
+ GET /tenants/tenant_signup_acme/onboarding 200 in 2200ms
+ GET / 200 in 323ms
+ GET / 200 in 286ms
+ ✓ Compiled in 7.9s (1123 modules)
+ GET /tenants/tenant_demo_acme/onboarding 200 in 468ms
+ GET /tenants/tenant_demo_acme/projects 200 in 484ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 416ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 403ms
+ ✓ Compiled in 6.6s (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 368ms
+ ✓ Compiled in 1244ms (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 287ms
+ ✓ Compiled in 6.5s (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 276ms
+ ✓ Compiled in 1257ms (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 335ms
+ ✓ Compiled in 782ms (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 185ms
+ ✓ Compiled in 766ms (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 146ms
+ ✓ Compiled in 850ms (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 189ms
+ ✓ Compiled in 437ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 108ms
+ ✓ Compiled in 1594ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 121ms
+ ✓ Compiled in 465ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 104ms
+ ✓ Compiled in 573ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 137ms
+ ✓ Compiled in 582ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 133ms
+ ✓ Compiled in 542ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 147ms
+ ✓ Compiled in 493ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 194ms
+ ✓ Compiled in 5.3s (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 290ms
+ ✓ Compiled in 432ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 106ms
+ ✓ Compiled in 406ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 104ms
+ ✓ Compiled in 617ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 193ms
+ ✓ Compiled in 439ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 120ms
+ ✓ Compiled in 556ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 142ms
+ ✓ Compiled in 966ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 146ms
+ ✓ Compiled in 459ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 134ms
+ ✓ Compiled in 3s (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 143ms
+ ✓ Compiled in 1377ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 121ms
+ ✓ Compiled in 503ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 109ms
+ ✓ Compiled in 489ms (1123 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 132ms
+ ✓ Compiled in 2.7s (2422 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 227ms
+ ○ Compiling /api/control-plane/teams ...
+ ✓ Compiled /api/control-plane/teams in 8.2s (1316 modules)
+ POST /api/control-plane/teams 200 in 8938ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 545ms
+ GET /tenants/tenant_demo_acme/projects 200 in 343ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId]/applications/[applicationId]/policies in 2.9s (1318 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 3520ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 358ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 268ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 341ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 383ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 261ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 193ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 226ms
+ ✓ Compiled in 5.9s (2406 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c/applications/90d8c39d-10a2-4103-b188-5799068d11c9/policies 200 in 619ms
+ GET /tenants/tenant_demo_acme/projects 200 in 309ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 240ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 137ms
+ GET /tenants/tenant_demo_acme/projects 200 in 216ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 178ms
+ ✓ Compiled in 8.9s (2406 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 200 in 283ms
+ ○ Compiling /_error ...
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 16416ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 78ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 54ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 51ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 47ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 57ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 125ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 95ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 106ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 53ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 94ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 118ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 69ms
+ ✓ Compiled / in 11.5s (1494 modules)
+ GET / 500 in 11612ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 83ms
+ GET / 500 in 216ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 81ms
+ ○ Compiling / ...
+ ✓ Compiled / in 747ms (1494 modules)
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 1669ms
+ GET / 500 in 1734ms
+ GET / 500 in 74ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 89ms
+ GET / 500 in 78ms
+ GET / 500 in 123ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 86ms
+ GET /tenants/tenant_demo_acme/projects/cbd6daa3-de9d-4b75-a058-5e0dba41e34c 500 in 70ms
+ GET / 500 in 149ms
+[?25h

@@ -1,0 +1,3 @@
+# test log
+getenv GATELM_TEST_DATABASE_URL
+getenv GATELM_TEST_DATABASE_URL

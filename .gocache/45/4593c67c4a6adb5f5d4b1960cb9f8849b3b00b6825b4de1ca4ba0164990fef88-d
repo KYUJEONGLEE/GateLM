@@ -1,0 +1,7 @@
+./auth_failure.go
+./outcomes.go
+./query_models.go
+./terminal_log.go
+./auth_failure_test.go
+./query_models_test.go
+./terminal_log_test.go

@@ -1,0 +1,14 @@
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://0.0.0.0:3000
+
+ ✓ Starting...
+ ✓ Ready in 2.5s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 4.3s (115 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 20.8s (659 modules)
+ GET / 200 in 622ms
+ ○ Compiling /tenants/[tenantId]/projects/[projectId]/policies ...
+ ✓ Compiled /tenants/[tenantId]/projects/[projectId]/policies in 23.6s (1236 modules)
+ GET /tenants/1a13c59c-16d6-4936-bb1e-ba4ee7c79f47/projects/25063263-346d-4f65-a554-82e08a9db714/policies 307 in 26938ms

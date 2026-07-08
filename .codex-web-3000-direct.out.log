@@ -1,0 +1,10 @@
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+   - Network:      http://0.0.0.0:3000
+
+ ✓ Starting...
+ ✓ Ready in 6.9s
+ ○ Compiling / ...
+ ✓ Compiled / in 2.5s (645 modules)
+ HEAD / 200 in 2801ms
+ HEAD / 200 in 1095ms
