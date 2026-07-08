@@ -1,36 +1,45 @@
 "use client";
 
-import {
-  Building2,
-  CheckCircle2,
-  Crown,
-  KeyRound,
-  LogIn,
-  LogOut,
-  MailCheck,
-  Route,
-  Send,
-  ShieldCheck,
-  UserPlus,
-  X
-} from "lucide-react";
+import { LogIn, LogOut, Route, Send, UserPlus } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import type { Locale } from "@/lib/i18n/locale";
+import type { WebConsoleAuthPanelProps } from "./web-console-auth-panel";
+import type { WebConsoleLandingSectionsProps } from "./web-console-landing-sections";
 
 const defaultTenantId = "tenant_demo_acme";
 const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
 const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
+
+const WebConsoleAuthPanel = dynamic<WebConsoleAuthPanelProps>(
+  () => import("./web-console-auth-panel").then((module) => module.WebConsoleAuthPanel),
+  {
+    loading: () => null,
+    ssr: false
+  }
+);
+
+const WebConsoleLandingSections = dynamic<WebConsoleLandingSectionsProps>(
+  () =>
+    import("./web-console-landing-sections").then(
+      (module) => module.WebConsoleLandingSections
+    ),
+  {
+    loading: () => null,
+    ssr: false
+  }
+);
 
 type WebConsoleInitViewProps = {
   initialAuthStatus: AuthStatus;
   locale: Locale;
 };
 
-type AuthMode = "login" | "signup";
-type AuthStatus = "anonymous" | "authenticated";
-type SignupStepId = "account" | "verify" | "organization" | "ready";
+export type AuthMode = "login" | "signup";
+export type AuthStatus = "anonymous" | "authenticated";
+export type SignupStepId = "account" | "verify" | "organization" | "ready";
 
 type AcceptedProjectInvitation = {
   acceptedAt?: string | null;
@@ -60,15 +69,6 @@ type AuthResponseData = {
     name?: string;
   };
   verificationRequired?: boolean;
-};
-
-const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
-
-const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
-  account: KeyRound,
-  organization: Building2,
-  ready: Crown,
-  verify: MailCheck
 };
 
 function getDashboardHref(tenantId = defaultTenantId) {
@@ -543,6 +543,8 @@ const initText: Record<
   }
 };
 
+export type WebConsoleInitText = (typeof initText)[Locale];
+
 export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInitViewProps) {
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -660,6 +662,13 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
       setSignupStep("account");
     }
     setIsAuthPanelOpen(true);
+  }
+
+  function switchAuthMode(mode: AuthMode) {
+    setAuthMode(mode);
+    if (mode === "signup") {
+      setSignupStep("account");
+    }
   }
 
   function closeAuthPanel() {
@@ -890,142 +899,29 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
         </div>
       </section>
 
-      <section className="landing-provider-band" id="integrations" aria-label={text.providers.label}>
-        <strong>{text.providers.label}</strong>
-        <div>
-          {text.providers.names.map((provider) => (
-            <span key={provider}>{provider}</span>
-          ))}
-        </div>
-      </section>
-
-      <section className="landing-summary-band" id="company">
-        <div>
-          <p>{text.summary.eyebrow}</p>
-          <h2>{text.summary.title}</h2>
-        </div>
-        <p>{text.summary.body}</p>
-        <div className="landing-summary-actions">
-          {authStatus === "authenticated" ? (
-            <>
-              {dashboardTenantId ? (
-                <Link className="landing-summary-link" href={getDashboardHref(dashboardTenantId)}>
-                  <Route aria-hidden="true" size={16} strokeWidth={2.3} />
-                  <span>{text.actions.dashboard}</span>
-                </Link>
-              ) : null}
-              <Link className="landing-summary-link" href="/application">
-                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
-                <span>{text.actions.chat}</span>
-              </Link>
-            </>
-          ) : (
-            <>
-              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
-                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
-                <span>{text.actions.dashboard}</span>
-              </button>
-              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
-                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
-                <span>{text.actions.chat}</span>
-              </button>
-            </>
-          )}
-        </div>
-      </section>
-
-      <LandingFeatureSection text={text.features} />
-      <LandingPolicySection text={text.policies} />
-      <LandingWorkflowSection text={text.workflow} />
-      <section className="landing-section landing-bottom-cta">
-        <div>
-          <h2>{text.bottomCta.title}</h2>
-          <p>{text.bottomCta.body}</p>
-        </div>
-        <button className="landing-cta" onClick={() => openAuthPanel("login")} type="button">
-          <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
-          <span>{text.bottomCta.action}</span>
-        </button>
-      </section>
+      <WebConsoleLandingSections
+        authStatus={authStatus}
+        dashboardTenantId={dashboardTenantId}
+        getDashboardHref={getDashboardHref}
+        onOpenAuthPanel={openAuthPanel}
+        text={text}
+      />
 
       {isAuthPanelOpen ? (
-        <div className="landing-auth-overlay" role="presentation">
-          <section
-            aria-label={authMode === "login" ? text.auth.loginTitle : text.auth.signupTitle}
-            aria-modal="true"
-            className="landing-auth-panel"
-            role="dialog"
-          >
-            <div className="landing-auth-panel-header">
-              <div>
-                <p>GateLM</p>
-                <h2>{authMode === "login" ? text.auth.loginTitle : text.auth.signupTitle}</h2>
-              </div>
-              <button
-                aria-label={text.auth.close}
-                className="landing-auth-close"
-                onClick={closeAuthPanel}
-                title={text.auth.close}
-                type="button"
-              >
-                <X aria-hidden="true" size={18} strokeWidth={2.4} />
-              </button>
-            </div>
-
-            <div className="landing-auth-tabs" role="tablist" aria-label="Authentication mode">
-              <button
-                aria-selected={authMode === "login"}
-                data-active={authMode === "login"}
-                onClick={() => setAuthMode("login")}
-                role="tab"
-                type="button"
-              >
-                {text.actions.login}
-              </button>
-              <button
-                aria-selected={authMode === "signup"}
-                data-active={authMode === "signup"}
-                onClick={() => {
-                  setAuthMode("signup");
-                  setSignupStep("account");
-                }}
-                role="tab"
-                type="button"
-              >
-                {text.actions.signup}
-              </button>
-            </div>
-
-            {authError ? (
-              <p className="landing-auth-message landing-auth-message-error" role="alert">
-                {authError}
-              </p>
-            ) : null}
-            {authNotice ? (
-              <p className="landing-auth-message landing-auth-message-success">
-                {authNotice}
-              </p>
-            ) : null}
-
-            {authMode === "login" ? (
-              <LoginForm
-                isSubmitting={isAuthSubmitting}
-                text={text}
-                onGoogleLogin={startGoogleLogin}
-                onSubmit={submitLogin}
-              />
-            ) : (
-              <SignupFlow
-                isSubmitting={isAuthSubmitting}
-                isProjectInviteSignup={Boolean(projectInviteToken)}
-                signupStep={signupStep}
-                text={text}
-                onGoogleLogin={startGoogleLogin}
-                onSubmit={continueSignup}
-              />
-            )}
-          </section>
-        </div>
+        <WebConsoleAuthPanel
+          authError={authError}
+          authMode={authMode}
+          authNotice={authNotice}
+          isProjectInviteSignup={Boolean(projectInviteToken)}
+          isSubmitting={isAuthSubmitting}
+          signupStep={signupStep}
+          text={text}
+          onClose={closeAuthPanel}
+          onGoogleLogin={startGoogleLogin}
+          onLoginSubmit={submitLogin}
+          onSelectAuthMode={switchAuthMode}
+          onSignupSubmit={continueSignup}
+        />
       ) : null}
     </main>
   );
@@ -1114,253 +1010,4 @@ function readFormString(formData: FormData, key: string) {
 
 function extractAuthErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Authentication request failed.";
-}
-
-function LandingFeatureSection({
-  text
-}: {
-  text: (typeof initText)[Locale]["features"];
-}) {
-  return (
-    <section className="landing-section" id="gateway">
-      <div className="landing-section-heading">
-        <h2>{text.title}</h2>
-        <p>{text.body}</p>
-      </div>
-      <div className="landing-feature-grid">
-        {text.items.map((item) => (
-          <article className="landing-feature-card" key={item.title}>
-            <strong>{item.title}</strong>
-            <p>{item.body}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function LandingPolicySection({
-  text
-}: {
-  text: (typeof initText)[Locale]["policies"];
-}) {
-  return (
-    <section className="landing-section landing-policy-showcase" id="policies">
-      <div className="landing-section-heading">
-        <h2>{text.title}</h2>
-        <p>{text.body}</p>
-      </div>
-      <div className="landing-policy-grid">
-        {text.items.map((item) => (
-          <article className="landing-policy-card" key={item.title}>
-            <span aria-hidden="true" />
-            <strong>{item.title}</strong>
-            <p>{item.body}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function LandingWorkflowSection({
-  text
-}: {
-  text: (typeof initText)[Locale]["workflow"];
-}) {
-  return (
-    <section className="landing-section landing-workflow-section">
-      <div>
-        <h2>{text.title}</h2>
-        <p>{text.body}</p>
-      </div>
-      <ol className="landing-workflow-list">
-        {text.steps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function LoginForm({
-  isSubmitting,
-  onGoogleLogin,
-  onSubmit,
-  text
-}: {
-  isSubmitting: boolean;
-  onGoogleLogin: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  text: (typeof initText)[Locale];
-}) {
-  return (
-    <form className="landing-auth-form" onSubmit={onSubmit}>
-      <button
-        className="landing-google-button"
-        disabled={isSubmitting}
-        onClick={onGoogleLogin}
-        type="button"
-      >
-        <GoogleMark />
-        <strong>{text.actions.googleLogin}</strong>
-      </button>
-      <div className="landing-auth-divider" role="separator">
-        <span>or</span>
-      </div>
-      <label>
-        <span>{text.auth.email}</span>
-        <input autoComplete="email" name="email" required type="email" />
-      </label>
-      <label>
-        <span>{text.auth.password}</span>
-        <input autoComplete="current-password" name="password" required type="password" />
-      </label>
-      <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
-        <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
-        <span>{text.actions.loginSubmit}</span>
-      </button>
-    </form>
-  );
-}
-
-function SignupFlow({
-  isProjectInviteSignup,
-  isSubmitting,
-  onGoogleLogin,
-  onSubmit,
-  signupStep,
-  text
-}: {
-  isProjectInviteSignup: boolean;
-  isSubmitting: boolean;
-  onGoogleLogin: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  signupStep: SignupStepId;
-  text: (typeof initText)[Locale];
-}) {
-  const visibleSignupSteps = isProjectInviteSignup
-    ? signupStepOrder.filter((step) => step !== "organization")
-    : signupStepOrder;
-  const activeIndex = visibleSignupSteps.indexOf(signupStep);
-  const isReadyStep = signupStep === "ready";
-
-  return (
-    <form className="landing-auth-form" onSubmit={onSubmit}>
-      <ol className="landing-signup-steps" aria-label={text.auth.signupTitle}>
-        {visibleSignupSteps.map((step, index) => {
-          const StepIcon = signupStepIcons[step];
-
-          return (
-            <li
-              aria-current={step === signupStep ? "step" : undefined}
-              data-active={step === signupStep}
-              data-complete={index < activeIndex}
-              key={step}
-            >
-              <StepIcon aria-hidden="true" size={15} strokeWidth={2.4} />
-              <span>{text.signupSteps[step]}</span>
-            </li>
-          );
-        })}
-      </ol>
-
-      {signupStep === "account" ? (
-        <>
-          <label>
-            <span>{text.auth.name}</span>
-            <input autoComplete="name" name="name" required type="text" />
-          </label>
-          <label>
-            <span>{text.auth.email}</span>
-            <input autoComplete="email" name="email" required type="email" />
-          </label>
-          <label>
-            <span>{text.auth.password}</span>
-            <input autoComplete="new-password" name="password" required type="password" />
-          </label>
-        </>
-      ) : null}
-
-      {signupStep === "verify" ? (
-        <label>
-          <span>{text.auth.verificationCode}</span>
-          <input inputMode="numeric" name="verificationCode" placeholder="123456" required type="text" />
-        </label>
-      ) : null}
-
-      {signupStep === "organization" ? (
-        <label>
-          <span>{text.auth.organization}</span>
-          <input
-            autoComplete="organization"
-            name="tenant"
-            placeholder={text.auth.organizationPlaceholder}
-            required
-            type="text"
-          />
-        </label>
-      ) : null}
-
-      {isReadyStep ? (
-        <div className="landing-ready-state">
-          <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.4} />
-          <div>
-            <strong>{text.auth.readyTitle}</strong>
-            <span>{text.auth.readyBody}</span>
-          </div>
-        </div>
-      ) : null}
-
-      <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
-        {isReadyStep ? (
-          <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
-        ) : (
-          <UserPlus aria-hidden="true" size={18} strokeWidth={2.4} />
-        )}
-        <span>{isReadyStep ? text.actions.loginSubmit : text.actions.signupSubmit}</span>
-      </button>
-      {!isProjectInviteSignup ? (
-        <>
-          <div className="landing-auth-divider" role="separator">
-            <span>or</span>
-          </div>
-          <button
-            className="landing-google-button"
-            disabled={isSubmitting}
-            onClick={onGoogleLogin}
-            type="button"
-          >
-            <GoogleMark />
-            <strong>{text.actions.googleLogin}</strong>
-          </button>
-        </>
-      ) : null}
-    </form>
-  );
-}
-
-function GoogleMark() {
-  return (
-    <span className="landing-google-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" focusable="false">
-        <path
-          d="M21.6 12.23c0-.76-.07-1.49-.2-2.19H12v4.15h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.32 2.98-7.49Z"
-          fill="#4285f4"
-        />
-        <path
-          d="M12 22c2.7 0 4.97-.9 6.62-2.44l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.12H3.06v2.59A9.99 9.99 0 0 0 12 22Z"
-          fill="#34a853"
-        />
-        <path
-          d="M6.4 13.89a6.01 6.01 0 0 1 0-3.78V7.52H3.06a10 10 0 0 0 0 8.96l3.34-2.59Z"
-          fill="#fbbc05"
-        />
-        <path
-          d="M12 5.99c1.47 0 2.8.51 3.84 1.5l2.86-2.86A9.58 9.58 0 0 0 12 2 9.99 9.99 0 0 0 3.06 7.52l3.34 2.59C7.19 7.75 9.4 5.99 12 5.99Z"
-          fill="#ea4335"
-        />
-      </svg>
-    </span>
-  );
 }
