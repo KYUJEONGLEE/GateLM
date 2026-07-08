@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, KeyRound, Pencil, PlugZap, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, KeyRound, PlugZap, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -557,7 +557,14 @@ export function ProviderConnectionManagement({
     setSubmitState({ message: "", status: "idle" });
   }
 
-  function openEditModal(provider: ProviderConnectionRecord) {
+  function toggleProvider(provider: ProviderConnectionRecord) {
+    if (expandedProviderId === provider.id) {
+      setExpandedProviderId(null);
+      setEditingProviderId(null);
+      setFormValues(emptyProviderForm);
+      return;
+    }
+
     const providerModels = getProviderConfigModels(provider.providerConfig).filter(
       isChatCompletionModelName
     );
@@ -570,14 +577,9 @@ export function ProviderConnectionManagement({
     }));
     setProviderModal(null);
     setExpandedProviderId(provider.id);
-    setEditingProviderId((current) => (current === provider.id ? null : provider.id));
+    setEditingProviderId(provider.id);
     setFormValues(getProviderFormValues(provider));
     setSubmitState({ message: "", status: "idle" });
-  }
-
-  function toggleProvider(providerId: string) {
-    setExpandedProviderId((current) => (current === providerId ? null : providerId));
-    setEditingProviderId(null);
   }
 
   function openCredentialModal(provider: ProviderConnectionRecord) {
@@ -874,6 +876,7 @@ export function ProviderConnectionManagement({
           </Button>
           <Button
             onClick={() => {
+              setExpandedProviderId(null);
               setEditingProviderId(null);
               setFormValues(emptyProviderForm);
             }}
@@ -1020,7 +1023,7 @@ export function ProviderConnectionManagement({
                 <section className="provider-card" data-expanded={expanded} key={provider.id}>
                   <div
                     className="provider-card-row"
-                    onClick={() => toggleProvider(provider.id)}
+                    onClick={() => toggleProvider(provider)}
                   >
                     <div className="provider-card-identity">
                       <ProviderFamilyIcon className="provider-card-icon" family={family} />
@@ -1093,7 +1096,7 @@ export function ProviderConnectionManagement({
                         className="provider-expand-button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          toggleProvider(provider.id);
+                          toggleProvider(provider);
                         }}
                         type="button"
                       >
@@ -1104,19 +1107,6 @@ export function ProviderConnectionManagement({
                   {expanded ? (
                     <div className="provider-card-models">
                       {isEditing ? renderProviderInlineEditor(provider) : renderProviderModels(provider)}
-                      {!isEditing ? (
-                        <div className="provider-card-expanded-actions">
-                          <Button
-                            disabled={pendingAction || discoveringProvider !== null}
-                            onClick={() => openEditModal(provider)}
-                            type="button"
-                            variant="outline"
-                          >
-                            <Pencil aria-hidden="true" />
-                            {text.edit}
-                          </Button>
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </section>
