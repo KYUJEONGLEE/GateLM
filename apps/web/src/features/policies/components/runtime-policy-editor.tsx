@@ -2,7 +2,15 @@
 
 import { Save, UploadCloud } from "lucide-react";
 import dynamic from "next/dynamic";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  Suspense,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -52,6 +60,12 @@ const policySections: PolicySection[] = [
   "safety",
   "streaming"
 ];
+
+const RuntimePolicyMovedBudgetContext = createContext<ReactNode>(null);
+
+export function RuntimePolicyMovedBudgetSlot() {
+  return useContext(RuntimePolicyMovedBudgetContext);
+}
 
 function RuntimePolicyDetailLoadingFallback() {
   return (
@@ -402,6 +416,7 @@ export function RuntimePolicyEditor({
   apiKeyReadiness,
   breadcrumbItems,
   children,
+  generalBudgetPanelPlacement = "afterChildren",
   generalFooter,
   hideStreamingTab = false,
   locale,
@@ -412,6 +427,10 @@ export function RuntimePolicyEditor({
   const text = policyText[locale];
   const hasGeneralSection = Boolean(children || generalFooter);
   const shouldMoveBudgetToGeneral = moveBudgetToGeneral && hasGeneralSection;
+  const shouldRenderMovedBudgetInChildSlot =
+    shouldMoveBudgetToGeneral && generalBudgetPanelPlacement === "childSlot";
+  const shouldRenderMovedBudgetAfterChildren =
+    shouldMoveBudgetToGeneral && generalBudgetPanelPlacement === "afterChildren";
   const [activeApiKeyCount, setActiveApiKeyCount] = useState(
     apiKeyReadiness?.activeApiKeyCount ?? 1
   );
@@ -968,8 +987,12 @@ export function RuntimePolicyEditor({
             role="tabpanel"
             tabIndex={0}
           >
-            {children}
-            {shouldMoveBudgetToGeneral ? renderBudgetPolicyPanel(true) : null}
+            <RuntimePolicyMovedBudgetContext.Provider
+              value={shouldRenderMovedBudgetInChildSlot ? renderBudgetPolicyPanel(true) : null}
+            >
+              {children}
+            </RuntimePolicyMovedBudgetContext.Provider>
+            {shouldRenderMovedBudgetAfterChildren ? renderBudgetPolicyPanel(true) : null}
             {generalFooter}
           </div>
         </section>

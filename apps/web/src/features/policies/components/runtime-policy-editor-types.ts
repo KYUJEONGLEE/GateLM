@@ -14,6 +14,7 @@ export type RuntimePolicyEditorProps = {
   breadcrumbItems?: BreadcrumbItem[];
   children?: ReactNode;
   generalFooter?: ReactNode;
+  generalBudgetPanelPlacement?: "afterChildren" | "childSlot";
   hideStreamingTab?: boolean;
   locale: Locale;
   model: RuntimePolicyModel;
