@@ -162,11 +162,16 @@ func TestNewRouterWiresSimpleRoutingBeforeProviderCall(t *testing.T) {
 	}
 }
 
-func TestNewRouterWritesAuthFailureLogForInvalidAppToken(t *testing.T) {
+func TestNewRouterIgnoresLegacyAppTokenValidator(t *testing.T) {
 	chatCalls := 0
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		chatCalls++
-		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{})
+		writeRouterTestJSON(w, http.StatusOK, provider.ChatCompletionResponse{
+			ID:      "mock_chatcmpl_router_auth_safety",
+			Object:  "chat.completion",
+			Created: 1782108000,
+			Model:   "mock-balanced",
+		})
 	}))
 	defer mockServer.Close()
 
@@ -194,27 +199,20 @@ func TestNewRouterWritesAuthFailureLogForInvalidAppToken(t *testing.T) {
 
 	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if apiAuth.calls != 1 {
 		t.Fatalf("expected API key authenticator to be called once, got %d", apiAuth.calls)
 	}
-	if appValidator.calls != 1 {
-		t.Fatalf("expected app token validator to be called once, got %d", appValidator.calls)
+	if appValidator.calls != 0 {
+		t.Fatalf("expected app token validator not to be called, got %d", appValidator.calls)
 	}
-	if chatCalls != 0 {
-		t.Fatalf("expected no mock provider calls, got %d", chatCalls)
+	if chatCalls != 1 {
+		t.Fatalf("expected one mock provider call, got %d", chatCalls)
 	}
-	if len(authFailureWriter.logs) != 1 {
-		t.Fatalf("expected one auth failure log, got %d", len(authFailureWriter.logs))
-	}
-	authFailureLog := authFailureWriter.logs[0]
-	if authFailureLog.ErrorCode != invocationlog.ErrorCodeInvalidAppToken || authFailureLog.ErrorStage != invocationlog.StageValidateAppToken {
-		t.Fatalf("unexpected auth failure log: %+v", authFailureLog)
-	}
-	if authFailureLog.APIKeyID != "api_key_demo" || authFailureLog.TenantID != "tenant_demo" || authFailureLog.ProjectID != "project_demo" {
-		t.Fatalf("expected known API key identity to be logged, got %+v", authFailureLog)
+	if len(authFailureWriter.logs) != 0 {
+		t.Fatalf("expected no auth failure logs, got %d", len(authFailureWriter.logs))
 	}
 }
 
@@ -465,6 +463,38 @@ func TestNewRouterWiresDashboardOverviewWithDemoTenantScope(t *testing.T) {
 	}
 }
 
+func TestNewRouterWiresAnalyticsPerformanceWithDemoTenantScope(t *testing.T) {
+	p95LatencyMs := 2153.0
+	reader := &routerTestInvocationLogReader{
+		analyticsPerformance: invocationlog.AnalyticsPerformanceFields{
+			Summary: invocationlog.AnalyticsPerformanceSummary{
+				TotalRequests: 2,
+				P95LatencyMs:  &p95LatencyMs,
+			},
+		},
+	}
+	router := NewRouter(config.Config{
+		DemoTenantID:    "tenant_demo",
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}, provider.NewRegistry("mock"), nil, WithInvocationLogReader(reader))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?projectId=project_demo&provider=mock&model=mock-balanced&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.analyticsFilter.TenantID != "tenant_demo" || reader.analyticsFilter.ProjectID != "project_demo" || reader.analyticsFilter.Provider != "mock" || reader.analyticsFilter.Model != "mock-balanced" {
+		t.Fatalf("expected demo tenant and query analytics scope, got %+v", reader.analyticsFilter)
+	}
+	if strings.Contains(rr.Body.String(), "rawPrompt") || strings.Contains(rr.Body.String(), "redactedPromptPreview") {
+		t.Fatalf("analytics response must not include request payload fields: %s", rr.Body.String())
+	}
+}
+
 func TestNewRouterWiresMetricsEndpoint(t *testing.T) {
 	registry := metrics.NewRegistry()
 	registry.MaskingAction("none")
@@ -561,12 +591,14 @@ func (db *routerTestInvocationLogDB) Exec(_ context.Context, query string, argum
 }
 
 type routerTestInvocationLogReader struct {
-	filter          invocationlog.ProjectLogsFilter
-	detailFilter    invocationlog.RequestDetailFilter
-	dashboardFilter invocationlog.DashboardOverviewFilter
-	items           []invocationlog.RequestLogListItem
-	detail          invocationlog.RequestDetail
-	overview        invocationlog.DashboardOverviewFields
+	filter               invocationlog.ProjectLogsFilter
+	detailFilter         invocationlog.RequestDetailFilter
+	dashboardFilter      invocationlog.DashboardOverviewFilter
+	analyticsFilter      invocationlog.AnalyticsPerformanceFilter
+	items                []invocationlog.RequestLogListItem
+	detail               invocationlog.RequestDetail
+	overview             invocationlog.DashboardOverviewFields
+	analyticsPerformance invocationlog.AnalyticsPerformanceFields
 }
 
 func (r *routerTestInvocationLogReader) ListProjectLogs(_ context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -586,6 +618,11 @@ func (r *routerTestInvocationLogReader) GetDashboardOverview(_ context.Context, 
 
 func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
 	return invocationlog.CostReportFields{}, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
+	r.analyticsFilter = filter
+	return r.analyticsPerformance, nil
 }
 
 type routerTestAPIKeyAuthenticator struct {

@@ -33,7 +33,6 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/stagetiming"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
-	"gatelm/apps/gateway-core/internal/pipeline/stages/appauth"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/authenticate"
 	cachestage "gatelm/apps/gateway-core/internal/pipeline/stages/cache"
 	"gatelm/apps/gateway-core/internal/pipeline/stages/identify"
@@ -172,6 +171,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		handleGatewayAuthError(w, reqCtx, err)
 		h.writeAuthFailureLog(r.Context(), reqCtx, startedAt, time.Now())
 		return
+	}
+	if metadataEndUserID := endUserIDFromChatMetadata(chatReq.Metadata); metadataEndUserID != "" {
+		reqCtx.EndUserID = metadataEndUserID
 	}
 	terminalLogEnabled = true
 
@@ -3105,9 +3107,10 @@ func (h *ChatCompletionsHandler) applyProviderUsageCost(ctx context.Context, req
 
 func providerPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTarget) []string {
 	if reqCtx == nil {
-		return uniqueNonEmpty(target.ProviderName, target.ProviderID, target.AdapterType, target.ExecutionConfig.ProviderName, target.ExecutionConfig.ProviderID, target.ExecutionConfig.AdapterType)
+		return uniquePricingKeys(providerPricingAliases, target.ProviderName, target.ProviderID, target.AdapterType, target.ExecutionConfig.ProviderName, target.ExecutionConfig.ProviderID, target.ExecutionConfig.AdapterType)
 	}
-	return uniqueNonEmpty(
+	return uniquePricingKeys(
+		providerPricingAliases,
 		target.ProviderName,
 		target.ProviderID,
 		target.AdapterType,
@@ -3123,26 +3126,90 @@ func providerPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTar
 
 func modelPricingKeys(reqCtx *pipeline.RequestContext, target providerCallTarget) []string {
 	if reqCtx == nil {
-		return uniqueNonEmpty(target.ModelID, target.ModelName)
+		return uniquePricingKeys(modelPricingAliases, target.ModelID, target.ModelName)
 	}
-	return uniqueNonEmpty(target.ModelID, target.ModelName, reqCtx.SelectedModelID, reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
+	return uniquePricingKeys(modelPricingAliases, target.ModelID, target.ModelName, reqCtx.SelectedModelID, reqCtx.SelectedModel, reqCtx.Model, reqCtx.RequestedModel)
 }
 
 func uniqueNonEmpty(values ...string) []string {
+	return uniquePricingKeys(nil, values...)
+}
+
+func uniquePricingKeys(aliasFn func(string) []string, values ...string) []string {
 	seen := map[string]struct{}{}
 	result := make([]string, 0, len(values))
 	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
+		result = appendUniquePricingKey(result, seen, value)
+		if aliasFn == nil {
 			continue
 		}
-		if _, exists := seen[value]; exists {
-			continue
+		for _, alias := range aliasFn(value) {
+			result = appendUniquePricingKey(result, seen, alias)
 		}
-		seen[value] = struct{}{}
-		result = append(result, value)
 	}
 	return result
+}
+
+func appendUniquePricingKey(result []string, seen map[string]struct{}, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return result
+	}
+	if _, exists := seen[value]; exists {
+		return result
+	}
+	seen[value] = struct{}{}
+	return append(result, value)
+}
+
+func providerPricingAliases(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if strings.HasSuffix(value, "-main") {
+		alias := strings.TrimSuffix(value, "-main")
+		if alias != value {
+			return []string{alias}
+		}
+		return nil
+	}
+	if strings.ContainsAny(value, ":/_") || looksLikeUUID(value) {
+		return nil
+	}
+	return []string{value + "-main"}
+}
+
+func modelPricingAliases(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if index := strings.LastIndex(value, ":"); index >= 0 && index+1 < len(value) {
+		alias := strings.TrimSpace(value[index+1:])
+		if alias != "" && alias != value {
+			return []string{alias}
+		}
+	}
+	return nil
+}
+
+func looksLikeUUID(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for index, char := range value {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID string) provider.ChatCompletionRequest {
 	req := chatReq
@@ -3150,6 +3217,43 @@ func providerRequestForTarget(chatReq provider.ChatCompletionRequest, requestID 
 	req.Metadata = nil
 	req.GateLM = nil
 	return req
+}
+
+func endUserIDFromChatMetadata(raw json.RawMessage) string {
+	if strings.TrimSpace(string(raw)) == "" {
+		return ""
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return ""
+	}
+
+	for _, key := range []string{"endUserId", "userName"} {
+		value, ok := metadata[key].(string)
+		if !ok {
+			continue
+		}
+		if normalized := normalizeEndUserID(value); normalized != "" {
+			return normalized
+		}
+	}
+
+	return ""
+}
+
+func normalizeEndUserID(value string) string {
+	normalized := strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(value)
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	if normalized == "" {
+		return ""
+	}
+
+	runes := []rune(normalized)
+	if len(runes) > 160 {
+		return string(runes[:160])
+	}
+	return normalized
 }
 
 func domainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invocationlog.DomainOutcomes {
@@ -3540,17 +3644,13 @@ func (h *ChatCompletionsHandler) recordLogWrite(operation string, err error, dur
 }
 
 func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
-	if h.APIKeyAuthenticator == nil || h.AppTokenValidator == nil {
+	if h.APIKeyAuthenticator == nil {
 		return gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication is not initialized.", nil)
 	}
 
 	bearerToken, ok := extractBearerToken(r.Header.Get("Authorization"))
 	if !ok {
 		return gatewayerrors.InvalidAPIKey(authenticate.StageName)
-	}
-	appToken := strings.TrimSpace(r.Header.Get("X-GateLM-App-Token"))
-	if appToken == "" {
-		return gatewayerrors.InvalidAppToken(appauth.StageName)
 	}
 
 	apiKeyIdentity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
@@ -3562,40 +3662,20 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	}
 
 	reqCtx.APIKeyID = apiKeyIdentity.APIKeyID
-	reqCtx.TenantID = apiKeyIdentity.TenantID
-	reqCtx.ProjectID = apiKeyIdentity.ProjectID
-	if apiKeyIdentity.ApplicationID != "" {
-		reqCtx.ApplicationID = apiKeyIdentity.ApplicationID
-	}
-	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
-
-	appTokenIdentity, err := h.AppTokenValidator.ValidateAppToken(ctx, appToken)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidAppToken) {
-			return gatewayerrors.InvalidAppToken(appauth.StageName)
-		}
+	if err := mergeAuthenticatedScope(&reqCtx.TenantID, apiKeyIdentity.TenantID); err != nil {
 		return err
 	}
-
-	if reqCtx.TenantID != "" && reqCtx.TenantID != appTokenIdentity.TenantID {
-		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	if err := mergeAuthenticatedScope(&reqCtx.ProjectID, apiKeyIdentity.ProjectID); err != nil {
+		return err
 	}
-	if reqCtx.ProjectID != "" && reqCtx.ProjectID != appTokenIdentity.ProjectID {
-		return gatewayerrors.ScopeMismatch(appauth.StageName)
+	if strings.TrimSpace(apiKeyIdentity.ApplicationID) == "" {
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway default application is not configured for this project.", nil)
 	}
-	if reqCtx.ApplicationID != "" && reqCtx.ApplicationID != appTokenIdentity.ApplicationID {
-		return gatewayerrors.ScopeMismatch(appauth.StageName)
-	}
-
-	reqCtx.AppTokenID = appTokenIdentity.AppTokenID
-	if reqCtx.TenantID == "" {
-		reqCtx.TenantID = appTokenIdentity.TenantID
-	}
-	if reqCtx.ProjectID == "" {
-		reqCtx.ProjectID = appTokenIdentity.ProjectID
+	if err := mergeAuthenticatedScope(&reqCtx.ApplicationID, apiKeyIdentity.ApplicationID); err != nil {
+		return err
 	}
 	if reqCtx.ApplicationID == "" {
-		reqCtx.ApplicationID = appTokenIdentity.ApplicationID
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway default application is not configured for this project.", nil)
 	}
 
 	if h.ExpectedTenantID != "" && reqCtx.TenantID != h.ExpectedTenantID {
@@ -3609,6 +3689,25 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 	}
 	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)
 
+	return nil
+}
+
+func mergeAuthenticatedScope(current *string, authenticated string) error {
+	next := strings.TrimSpace(authenticated)
+	if next == "" {
+		return gatewayerrors.InternalError(authenticate.StageName, "Gateway API key scope is incomplete.", nil)
+	}
+
+	existing := strings.TrimSpace(*current)
+	if existing == "" {
+		*current = next
+		return nil
+	}
+	if existing != next {
+		return gatewayerrors.ScopeMismatch(identify.StageName)
+	}
+
+	*current = existing
 	return nil
 }
 

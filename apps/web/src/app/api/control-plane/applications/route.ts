@@ -47,7 +47,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     application: result.data,
-    policyError: "policyError" in result ? result.policyError : undefined,
     status: result.status
   });
 }
@@ -66,16 +65,6 @@ function isApplicationFormValues(value: unknown): value is ApplicationFormValues
     && isBudgetNumber(record.budgetLimitUsd, 100000000)
     && isBudgetNumber(record.budgetLimitPercent, 100)
     && (record.projectId === undefined || typeof record.projectId === "string")
-    && (
-      record.providerConnectionIds === undefined ||
-      (
-        Array.isArray(record.providerConnectionIds) &&
-        record.providerConnectionIds.every((providerConnectionId) =>
-          typeof providerConnectionId === "string"
-        )
-      )
-    )
-    && (record.selectedModelKey === undefined || typeof record.selectedModelKey === "string")
   );
 }
 

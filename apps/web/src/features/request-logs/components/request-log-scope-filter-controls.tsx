@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
+import {
+  formatBudgetScopeDisplayName,
+  formatBudgetScopeTypeDisplayName
+} from "@/lib/formatting/display-identifiers";
 import type { RequestLogBudgetScopeOption, RequestLogFilterState } from "./request-log-table";
 
 type RequestLogScopeFilterControlsProps = {
@@ -61,7 +64,7 @@ export function RequestLogScopeFilterControls({
           <option value="">{allBudgetScopeTypes}</option>
           {scopeTypeOptions.map((scopeType) => (
             <option key={scopeType} value={scopeType}>
-              {scopeType}
+              {formatBudgetScopeTypeDisplayName(scopeType)}
             </option>
           ))}
         </select>
@@ -77,7 +80,7 @@ export function RequestLogScopeFilterControls({
           <option value="">{allBudgetScopeIds}</option>
           {visibleScopeOptions.map((scope) => (
             <option key={`${scope.budgetScopeType}:${scope.budgetScopeId}`} value={scope.budgetScopeId}>
-              {formatBudgetScopeOption(scope, selectedScopeType)}
+              {formatBudgetScopeOption(scope)}
             </option>
           ))}
         </select>
@@ -86,11 +89,6 @@ export function RequestLogScopeFilterControls({
   );
 }
 
-function formatBudgetScopeOption(
-  scope: RequestLogBudgetScopeOption,
-  selectedScopeType: RequestLogFilterState["budgetScopeType"]
-) {
-  const label = formatDisplayIdentifier(scope.budgetScopeId);
-
-  return selectedScopeType ? label : `${scope.budgetScopeType}: ${label}`;
+function formatBudgetScopeOption(scope: RequestLogBudgetScopeOption) {
+  return formatBudgetScopeDisplayName(scope);
 }

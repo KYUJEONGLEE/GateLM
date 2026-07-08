@@ -94,11 +94,11 @@ export type RuntimePolicyConfig = {
   publishState: string;
   publishedAt: string;
   rateLimit: {
-    algorithm: "fixed_window";
+    algorithm: "fixed_window" | "token_bucket";
     enabled: boolean;
     limit: number;
     scope: "application";
-    windowSeconds: 60;
+    windowSeconds: number;
   };
   routingPolicy: {
     defaultModel: string;
@@ -237,6 +237,8 @@ export type RuntimePolicyDraftValues = {
   responseCaptureMaxChars: number;
   rateLimitEnabled: boolean;
   rateLimitLimit: number;
+  rateLimitRefillTokensPerSecond: number;
+  rateLimitWindowSeconds: number;
   routingDefaultModel: string;
   routingDefaultProvider: string;
   routingFallbackModel: string;
@@ -370,6 +372,11 @@ export function getRuntimePolicyDraftValues(
     responseCaptureMaxChars: responseCapturePolicy.maxChars,
     rateLimitEnabled: config.rateLimit.enabled,
     rateLimitLimit: config.rateLimit.limit,
+    rateLimitRefillTokensPerSecond: getRateLimitRefillTokensPerSecond(
+      config.rateLimit.limit,
+      config.rateLimit.windowSeconds
+    ),
+    rateLimitWindowSeconds: config.rateLimit.windowSeconds,
     routingDefaultModel: config.routingPolicy.defaultModel,
     routingDefaultProvider: config.routingPolicy.defaultProvider,
     routingFallbackModel: config.routingPolicy.fallbackModel,
@@ -378,6 +385,14 @@ export function getRuntimePolicyDraftValues(
     routingLowCostProvider: config.routingPolicy.lowCostProvider,
     routingShortPromptMaxChars: config.routingPolicy.shortPromptMaxChars
   };
+}
+
+export function getRateLimitRefillTokensPerSecond(limit: number, windowSeconds: number) {
+  return Math.max(1, Math.round(limit / Math.max(windowSeconds, 1)));
+}
+
+export function getRateLimitWindowSeconds(limit: number, refillTokensPerSecond: number) {
+  return Math.max(1, Math.round(limit / Math.max(refillTokensPerSecond, 1)));
 }
 
 function mergeRuntimePolicyDetectors(

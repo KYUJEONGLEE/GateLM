@@ -3,6 +3,7 @@ import "server-only";
 import type { DashboardOverview } from "@/lib/fixtures/v1-observability-fixtures";
 import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
+import { getAlignedLiveTimeRange } from "@/lib/gateway/time-series-range";
 
 type LiveDashboardOverviewResponse = {
   data?: {
@@ -11,6 +12,15 @@ type LiveDashboardOverviewResponse = {
         applicationId?: string;
         estimatedCostMicroUsd?: number;
         requestCount?: number;
+      }>;
+      byProject?: Array<{
+        completionTokens?: number;
+        costMicroUsd?: number;
+        costUsd?: string;
+        projectId?: string;
+        promptTokens?: number;
+        requestCount?: number;
+        totalTokens?: number;
       }>;
       byBudgetScope?: Array<{
         budgetScopeId?: string;
@@ -91,6 +101,15 @@ type LiveDashboardOverviewResponse = {
         selectedProvider?: string;
         totalTokens?: number;
       }>;
+      costByProject?: Array<{
+        completionTokens?: number;
+        costMicroUsd?: number;
+        costUsd?: string;
+        projectId?: string;
+        promptTokens?: number;
+        requestCount?: number;
+        totalTokens?: number;
+      }>;
       failedRequests?: number;
       failedCount?: number;
       exactCacheHitRate?: number | null;
@@ -126,9 +145,11 @@ export type LiveDashboardRange = "15m" | "1h" | "1d" | "1w";
 export type LiveDashboardOverviewFilters = {
   budgetScopeId?: string;
   budgetScopeType?: string;
+  from?: string;
   projectId?: string;
   range?: LiveDashboardRange;
   resolvedBy?: string;
+  to?: string;
 };
 
 export async function getLiveDashboardOverview(
@@ -136,7 +157,11 @@ export async function getLiveDashboardOverview(
   filters: LiveDashboardOverviewFilters = {}
 ): Promise<DashboardOverview | undefined> {
   const config = getLiveGatewayConfig();
-  const { from, to } = getDashboardLiveRange(filters.range);
+  const liveRange =
+    filters.from && filters.to
+      ? { from: filters.from, to: filters.to }
+      : getDashboardLiveRange(filters.range);
+  const { from, to } = liveRange;
   const gatewayTenantId = toGatewayTenantId(tenantId);
   const query = new URLSearchParams({
     from,
@@ -184,29 +209,7 @@ function isUuid(value: string) {
 }
 
 export function getDashboardLiveRange(range: LiveDashboardRange = "15m") {
-  const to = new Date();
-  const from = new Date(to.getTime() - dashboardRangeToMs(range));
-
-  return {
-    from: from.toISOString(),
-    to: to.toISOString()
-  };
-}
-
-function dashboardRangeToMs(range: LiveDashboardRange) {
-  if (range === "1w") {
-    return 7 * 24 * 60 * 60 * 1000;
-  }
-
-  if (range === "1d") {
-    return 24 * 60 * 60 * 1000;
-  }
-
-  if (range === "1h") {
-    return 60 * 60 * 1000;
-  }
-
-  return 15 * 60 * 1000;
+  return getAlignedLiveTimeRange(range);
 }
 
 function toDashboardOverview(
@@ -293,6 +296,7 @@ function toDashboardOverview(
       costMicroUsd: row.costMicroUsd ?? 0,
       costUsd: row.costUsd ?? formatMicroUsd(row.costMicroUsd ?? 0)
     })),
+    costByProject: normalizeProjectCostRows(totals.costByProject ?? data.breakdowns?.byProject),
     requestIds: [],
     dataFreshness: {
       source: v2Freshness?.source ?? freshness.source ?? "gateway-postgresql",
@@ -347,6 +351,34 @@ function normalizeApplicationRows(
     requestCount: row.requestCount ?? 0,
     estimatedCostMicroUsd: row.estimatedCostMicroUsd ?? 0
   }));
+}
+
+function normalizeProjectCostRows(
+  rows:
+    | Array<{
+        completionTokens?: number;
+        costMicroUsd?: number;
+        costUsd?: string;
+        projectId?: string;
+        promptTokens?: number;
+        requestCount?: number;
+        totalTokens?: number;
+      }>
+    | undefined
+) {
+  return (rows ?? []).map((row) => {
+    const costMicroUsd = row.costMicroUsd ?? 0;
+
+    return {
+      projectId: row.projectId ?? "unknown_project",
+      requestCount: row.requestCount ?? 0,
+      promptTokens: row.promptTokens ?? 0,
+      completionTokens: row.completionTokens ?? 0,
+      totalTokens: row.totalTokens ?? 0,
+      costMicroUsd,
+      costUsd: row.costUsd ?? formatMicroUsd(costMicroUsd)
+    };
+  });
 }
 
 function normalizeBudgetScopeRows(

@@ -48,6 +48,7 @@ describe('RuntimeConfigsService', () => {
       };
       runtimeSnapshot: {
         create: jest.Mock;
+        findUnique: jest.Mock;
       };
       activeRuntimeSnapshot: {
         findUnique: jest.Mock;
@@ -83,6 +84,7 @@ describe('RuntimeConfigsService', () => {
       },
       runtimeSnapshot: {
         create: jest.fn(),
+        findUnique: jest.fn(),
       },
       activeRuntimeSnapshot: {
         findUnique: jest.fn(),
@@ -185,6 +187,26 @@ describe('RuntimeConfigsService', () => {
     );
     expect(prisma.runtimeConfig.create).not.toHaveBeenCalled();
     expect(prisma.runtimeConfig.update).not.toHaveBeenCalled();
+  });
+
+  it('normalizes legacy stored credential resolver for runtime configs', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma, {
+      credentialLast4: '1234',
+      credentialPrefix: 'provided_',
+      resolver: 'credential_store',
+      secretRef: `provider_credential:${providerId}`,
+    });
+    prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+    prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+      Promise.resolve(runtimeConfigRecord(data.document, data)),
+    );
+
+    const result = await service.upsertDraft(applicationId, {});
+
+    expect(result.runtimeConfig.providers[0]?.resolver).toBe(
+      'control_plane_secret_store',
+    );
   });
 
   it('accepts optional v2 safety detector categories in draft configs', async () => {
@@ -870,9 +892,7 @@ describe('RuntimeConfigsService', () => {
     expect(prisma.gatewayApiKey.findUnique).toHaveBeenCalledWith({
       where: { id: apiKeyId },
     });
-    expect(prisma.appToken.findUnique).toHaveBeenCalledWith({
-      where: { id: appTokenId },
-    });
+    expect(prisma.appToken.findUnique).not.toHaveBeenCalled();
     expect(result).toEqual(activeDocument);
   });
 
@@ -1379,6 +1399,166 @@ describe('RuntimeConfigsService', () => {
     });
     expect(JSON.stringify(catalog)).not.toContain('secret/provider/mock');
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
+  });
+
+  it('exposes selected custom model names in RuntimeSnapshot and Provider Catalog', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const selectedModel = 'mock-custom-model-x';
+    const baseDocument = activeRuntimeConfigDocument();
+    const baseProvider = baseDocument.providers[0];
+    if (!baseProvider) {
+      throw new Error('runtime config fixture provider is missing');
+    }
+    const activeDocument: ActiveRuntimeConfigResponseDto = {
+      ...baseDocument,
+      providers: [
+        {
+          ...baseProvider,
+          models: [selectedModel, 'mock-custom-model-y'],
+        },
+      ],
+      models: [
+        {
+          provider: 'mock',
+          model: selectedModel,
+          displayName: 'Mock Custom Model X',
+          status: 'active' as const,
+          contextWindowTokens: 16384,
+          supportsStreaming: true,
+          supportsJsonMode: true,
+        },
+        {
+          provider: 'mock',
+          model: 'mock-custom-model-y',
+          displayName: 'Mock Custom Model Y',
+          status: 'active' as const,
+          contextWindowTokens: 16384,
+          supportsStreaming: true,
+          supportsJsonMode: true,
+        },
+      ],
+      defaultModel: selectedModel,
+      lowCostModel: selectedModel,
+      fallbackModel: selectedModel,
+      routingPolicy: {
+        ...baseDocument.routingPolicy,
+        defaultModel: selectedModel,
+        lowCostModel: selectedModel,
+        fallbackModel: selectedModel,
+      },
+      pricingRules: [
+        {
+          pricingRuleId: `price_mock_${selectedModel}_v1`,
+          provider: 'mock',
+          model: selectedModel,
+          pricingVersion: '2026-06-27.mock.v1',
+          currency: 'USD' as const,
+          unit: 'token' as const,
+          promptTokenMicroUsd: 1,
+          completionTokenMicroUsd: 2,
+          effectiveAt: now.toISOString(),
+        },
+      ],
+    };
+    prisma.runtimeConfig.findFirst.mockResolvedValue(
+      runtimeConfigRecord(activeDocument, {
+        publishState: RuntimeConfigPublishState.ACTIVE,
+        publishedAt: now,
+      }),
+    );
+
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    const catalog = await service.getActiveProviderCatalog(applicationId);
+    const catalogModel = catalog.providers[0]?.models.find(
+      (model) => model.modelName === selectedModel,
+    );
+
+    expect(snapshot.policies.routing).toEqual(
+      expect.objectContaining({
+        defaultModel: selectedModel,
+        lowCostModel: selectedModel,
+      }),
+    );
+    expect(snapshot.policies.fallback.fallbackModel).toBe(selectedModel);
+    expect(catalogModel).toMatchObject({
+      modelId: `${providerId}:${selectedModel}`,
+      modelName: selectedModel,
+      enabled: true,
+      routing: expect.objectContaining({
+        autoRoutingEligible: true,
+      }),
+    });
+  });
+
+  it('returns active Provider Catalog from persisted RuntimeSnapshot before revalidating active Runtime Config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    const runtimeConfig = runtimeConfigRecord(activeDocument, {
+      publishState: RuntimeConfigPublishState.ACTIVE,
+      publishedAt: now,
+    });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(runtimeConfig);
+
+    const expectedCatalog =
+      await service.getActiveProviderCatalog(applicationId);
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    prisma.runtimeConfig.findFirst.mockReset();
+    prisma.activeRuntimeSnapshot.findUnique.mockResolvedValue(
+      activeRuntimeSnapshotRecord(snapshot, {
+        runtimeSnapshot: {
+          runtimeConfig,
+        },
+      }),
+    );
+
+    const result = await service.getActiveProviderCatalog(applicationId);
+
+    expect(result).toEqual(expectedCatalog);
+    expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('secretHash');
+  });
+
+  it('returns canonical Provider Catalog by persisted RuntimeSnapshot ref without revalidating active Runtime Config', async () => {
+    const { service, prisma } = createService();
+    mockRuntimeInputs(prisma);
+    const activeDocument = activeRuntimeConfigDocument();
+    const runtimeConfig = runtimeConfigRecord(activeDocument, {
+      publishState: RuntimeConfigPublishState.ACTIVE,
+      publishedAt: now,
+    });
+    prisma.runtimeConfig.findFirst.mockResolvedValue(runtimeConfig);
+
+    const expectedCatalog =
+      await service.getActiveProviderCatalog(applicationId);
+    const snapshot = await service.getActiveRuntimeSnapshot(applicationId);
+    prisma.runtimeConfig.findFirst.mockReset();
+    prisma.runtimeSnapshot.findUnique.mockResolvedValue({
+      ...activeRuntimeSnapshotRecord(snapshot).runtimeSnapshot,
+      runtimeConfig,
+    });
+
+    const result = await service.getProviderCatalog(
+      expectedCatalog.catalogId,
+    );
+
+    expect(result).toEqual(expectedCatalog);
+    expect(prisma.runtimeConfig.findFirst).not.toHaveBeenCalled();
+    expect(prisma.runtimeSnapshot.findUnique).toHaveBeenCalledWith({
+      where: {
+        applicationId_version: {
+          applicationId,
+          version: BigInt(expectedCatalog.catalogVersion),
+        },
+      },
+      include: {
+        runtimeConfig: true,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('secret/provider/mock');
+    expect(JSON.stringify(result)).not.toContain('secretHash');
   });
 
   it('preserves Anthropic adapter config in the Provider Catalog body', async () => {
@@ -2157,8 +2337,8 @@ describe('RuntimeConfigsService', () => {
       applicationStatus: 'active',
       apiKeyId,
       apiKeyStatus: 'active',
-      appTokenId,
-      appTokenStatus: 'active',
+      appTokenId: null,
+      appTokenStatus: null,
       apiKey: {
         id: apiKeyId,
         type: 'api_key',
@@ -2169,16 +2349,7 @@ describe('RuntimeConfigsService', () => {
         expiresAt: null,
         verification: 'prefix_then_hash_compare',
       },
-      appToken: {
-        id: appTokenId,
-        type: 'app_token',
-        status: 'active',
-        prefix: 'gat_app_',
-        last4: '4tK2',
-        scopes: ['gateway:invoke'],
-        expiresAt: null,
-        verification: 'prefix_then_hash_compare',
-      },
+      appToken: null,
       providers: [
         {
           providerId,

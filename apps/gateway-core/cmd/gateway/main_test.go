@@ -117,6 +117,36 @@ func TestBuildRateLimitStageConfigDefaultsToTokenBucket(t *testing.T) {
 	}
 }
 
+func TestBuildOpenAIStaticCatalogModelsAddsManualExtraModels(t *testing.T) {
+	models := buildOpenAIStaticCatalogModels(config.Config{
+		OpenAIProviderID:        "provider_openai_main",
+		OpenAILowCostModelID:    "openai-low-cost",
+		OpenAILowCostModelName:  "gpt-4o-mini",
+		OpenAIBalancedModelID:   "openai-balanced",
+		OpenAIBalancedModelName: "gpt-4o",
+		OpenAIExtraModelNames:   []string{"gpt-5.4-mini", "gpt-5.4", "gpt-4o"},
+	})
+
+	if len(models) != 4 {
+		t.Fatalf("expected low, balanced, and two unique extra models, got %#v", models)
+	}
+	if models[0].ModelName != "gpt-4o-mini" || !models[0].Routing.AutoRoutingEligible || models[0].Routing.CostTier != "low" {
+		t.Fatalf("low-cost model routing changed: %#v", models[0])
+	}
+	if models[1].ModelName != "gpt-4o" || !models[1].Routing.AutoRoutingEligible || models[1].Routing.CostTier != "balanced" {
+		t.Fatalf("balanced model routing changed: %#v", models[1])
+	}
+	if models[2].ModelID != "provider_openai_main:gpt-5.4-mini" || models[2].ModelName != "gpt-5.4-mini" {
+		t.Fatalf("unexpected first extra model: %#v", models[2])
+	}
+	if models[2].Routing.AutoRoutingEligible {
+		t.Fatalf("extra model should be manual/pinned only by default: %#v", models[2])
+	}
+	if !models[2].Capabilities.StreamingSupported || !models[2].Capabilities.SupportsJSONMode {
+		t.Fatalf("extra OpenAI model capabilities were not set: %#v", models[2].Capabilities)
+	}
+}
+
 type fakeRedisClient struct{}
 
 func (fakeRedisClient) Eval(context.Context, string, []string, ...any) *goredis.Cmd {

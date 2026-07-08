@@ -59,6 +59,20 @@ applicationId
 
 `teamId`는 조직 구조를 표현하는 엔티티로 둔다. v2.0.0에서 `teamId`를 Gateway core identity key로 승격하지 않는다.
 
+### 3.1.1 Project API Key Auth And Default Application Resolution
+
+The v2.0.0 Project API Key-only runtime path authenticates Gateway requests with:
+
+```text
+Authorization: Bearer <Project API Key>
+```
+
+Gateway uses the Project API Key to resolve `tenantId/projectId`, then resolves the project's server-owned hidden default `applicationId`. The client must not send `applicationId` as a runtime selector. Active RuntimeSnapshot lookup remains `tenantId/projectId/applicationId`; the `applicationId` is resolved by Gateway or Control Plane from trusted project state.
+
+`App Token` remains a legacy/dormant credential lifecycle surface during migration, but it is not required for the default v2.0.0 Gateway invocation path and must not be shown as a required runtime readiness item in new UI.
+
+Project onboarding may create a Project record with `status=DRAFT` before provider/model selection is complete. A `DRAFT` Project is a Control Plane onboarding state only and is not runtime-ready. Gateway runtime execution must continue to require an active project and the trusted hidden default application before resolving a published RuntimeSnapshot.
+
 ### 3.2 Budget Scope
 
 비용, 쿼터, 대시보드 귀속은 `budgetScopeType`과 `budgetScopeId`로 표현한다.
@@ -221,10 +235,11 @@ Conversation records:
 - `conversations` stores Application-scoped chat container metadata only.
 - Required scope fields are `tenantId`, `projectId`, and `applicationId`.
 - User attribution may use `endUserId` or `userId`; it is not a Gateway RuntimeSnapshot lookup key.
-- New conversations default to `contextRetentionEnabled=false`.
+- New conversations default to `contextRetentionEnabled=true`.
 - `contextRetentionEnabled=true` allows retained safe messages from the same conversation to be assembled into the next Gateway request.
 - `contextRetentionEnabled=false` means previous conversation messages must never be included in the next Gateway request.
-- When retention is not explicitly enabled, the API must behave as retention off.
+- When retention is not explicitly specified, the API must behave as retention on.
+- Retention must be disabled only when the client explicitly sends `contextRetentionEnabled=false`.
 - Soft delete uses metadata such as `status` and `deletedAt`; physical deletion is not required for the MVP.
 
 Chat message records:
@@ -385,7 +400,7 @@ cancelled
 | exact cache hit | `success` |
 | provider timeout/error 후 Mock fallback success | `success` |
 | invalid API Key | `blocked` |
-| invalid App Token | `blocked` |
+| invalid App Token (legacy/dormant path only) | `blocked` |
 | safety block | `blocked` |
 | budget block | `blocked` |
 | rate limit exceeded | `rate_limited` |
@@ -397,7 +412,7 @@ Auth failure는 `terminalStatus=blocked`로 보되 HTTP status와 error code로 
 
 ```text
 invalid API Key -> httpStatus=401, errorCode=invalid_api_key
-invalid App Token -> httpStatus=403, errorCode=invalid_app_token
+invalid App Token (legacy/dormant path only) -> httpStatus=403, errorCode=invalid_app_token
 ```
 
 Exact Cache hit는 `terminalStatus=success`, `cache.outcome=hit`, `provider.outcome=not_called`로 기록한다. `cache_hit`를 terminal status처럼 사용하지 않는다.

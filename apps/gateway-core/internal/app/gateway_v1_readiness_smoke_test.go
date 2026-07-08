@@ -13,6 +13,7 @@ import (
 
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/config"
+	"gatelm/apps/gateway-core/internal/domain/auth"
 	cachekey "gatelm/apps/gateway-core/internal/domain/cache"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
@@ -56,8 +57,8 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 
 	invalidApp := harness.postChat(t, harness.invalidAppRouter, readinessInvalidAppRequestID, "<safe_prompt_not_logged>")
 	invalidAppResp := readinessDecodeError(t, invalidApp)
-	if invalidApp.Code != http.StatusForbidden || invalidAppResp.Error.Code != "invalid_app_token" {
-		t.Fatalf("expected 403 invalid_app_token, got %d %#v", invalidApp.Code, invalidAppResp)
+	if invalidApp.Code != http.StatusForbidden || invalidAppResp.Error.Code != "scope_mismatch" {
+		t.Fatalf("expected 403 scope_mismatch, got %d %#v", invalidApp.Code, invalidAppResp)
 	}
 
 	safePrompt := "Write a short safe refund response."
@@ -140,8 +141,8 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 	if len(harness.observability.terminalLogs()) != 5 {
 		t.Fatalf("expected five terminal logs, got %d", len(harness.observability.terminalLogs()))
 	}
-	if len(harness.observability.authFailureLogs()) != 2 {
-		t.Fatalf("expected two auth failure logs, got %d", len(harness.observability.authFailureLogs()))
+	if len(harness.observability.authFailureLogs()) != 1 {
+		t.Fatalf("expected one auth failure log, got %d", len(harness.observability.authFailureLogs()))
 	}
 
 	logListRR := harness.get(t, harness.validRouter, "/api/projects/project_demo/logs?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&limit=20", "request_v1_readiness_log_list_009")
@@ -205,22 +206,25 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	t.Helper()
 
 	cfg := config.Config{
-		DefaultProvider:     "mock",
-		DefaultModel:        "mock-balanced",
-		LowCostModel:        "mock-fast",
-		HighQualityModel:    "mock-quality",
-		RoutingPolicyHash:   "hash_routing_policy_v1_readiness",
-		SecurityPolicyHash:  "hash_security_policy_v1_readiness",
-		RuntimeConfigHash:   "hash_runtime_config_v1_readiness",
-		CachePolicyHash:     "hash_cache_policy_v1_readiness",
-		ShortPromptMaxChars: 300,
-		ExactCacheTTL:       10 * time.Minute,
-		ExactCacheKeySecret: "cache_key_secret_for_v1_readiness_smoke_only",
-		DemoTenantID:        "tenant_demo",
-		DemoProjectID:       "project_demo",
-		DemoApplicationID:   "app_demo",
-		DemoAPIKeyID:        "api_key_demo",
-		DemoAppTokenID:      "app_token_demo",
+		DefaultProvider:       "mock",
+		DefaultModel:          "mock-balanced",
+		LowCostModel:          "mock-fast",
+		HighQualityModel:      "mock-quality",
+		RoutingPolicyHash:     "hash_routing_policy_v1_readiness",
+		SecurityPolicyHash:    "hash_security_policy_v1_readiness",
+		RuntimeConfigHash:     "hash_runtime_config_v1_readiness",
+		CachePolicyHash:       "hash_cache_policy_v1_readiness",
+		ShortPromptMaxChars:   300,
+		ExactCacheTTL:         10 * time.Minute,
+		ExactCacheKeySecret:   "cache_key_secret_for_v1_readiness_smoke_only",
+		DemoTenantID:          "tenant_demo",
+		DemoProjectID:         "project_demo",
+		DemoApplicationID:     "app_demo",
+		ExpectedTenantID:      "tenant_demo",
+		ExpectedProjectID:     "project_demo",
+		ExpectedApplicationID: "app_demo",
+		DemoAPIKeyID:          "api_key_demo",
+		DemoAppTokenID:        "app_token_demo",
 	}
 	providerAdapter := &readinessProviderAdapter{}
 	cacheStore := newReadinessExactCacheStore()
@@ -303,7 +307,12 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 		&routerTestAppTokenValidator{identity: routerTestValidAppTokenIdentity()},
 	)
 	harness.invalidAppRouter = harness.newRouter(
-		&routerTestAPIKeyAuthenticator{identity: routerTestValidAPIKeyIdentity()},
+		&routerTestAPIKeyAuthenticator{identity: auth.APIKeyIdentity{
+			APIKeyID:      "api_key_demo",
+			TenantID:      "tenant_demo",
+			ProjectID:     "project_demo",
+			ApplicationID: "other_app",
+		}},
 		&routerTestAppTokenValidator{err: gatewayerrors.InvalidAppToken("validate_app_token")},
 	)
 	return harness
@@ -340,7 +349,6 @@ func (h gatewayReadinessHarness) postChat(t *testing.T, router http.Handler, req
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(readinessChatBody(t, "auto", prompt)))
 	req.Header.Set(middleware.RequestIDHeader, requestID)
 	req.Header.Set("Authorization", "Bearer <redacted>")
-	req.Header.Set("X-GateLM-App-Token", "<redacted>")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	return rr
@@ -566,6 +574,23 @@ func (s *readinessObservabilityStore) GetCostReport(ctx context.Context, filter 
 	return invocationlog.CostReportFields{}, nil
 }
 
+func (s *readinessObservabilityStore) GetAnalyticsPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
+	logs := s.invocationLogs()
+	totalRequests := int64(len(logs))
+	generatedAt := time.Now().UTC()
+	return invocationlog.AnalyticsPerformanceFields{
+		Summary: invocationlog.AnalyticsPerformanceSummary{
+			TotalRequests: totalRequests,
+		},
+		DataFreshness: invocationlog.DashboardDataFreshness{
+			Source:           "readiness_observability_store",
+			RecordCount:      totalRequests,
+			GeneratedAt:      generatedAt,
+			LastAggregatedAt: generatedAt,
+		},
+	}, nil
+}
+
 func (s *readinessObservabilityStore) terminalLogs() []invocationlog.TerminalLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -718,7 +743,7 @@ func readinessProviderPromptAt(t *testing.T, requests []provider.ChatCompletionR
 func readinessExpectedMetricSamples() []string {
 	return []string{
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="invalid_api_key",http_status="401",method="POST",status="blocked"} 1`,
-		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="invalid_app_token",http_status="403",method="POST",status="blocked"} 1`,
+		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="scope_mismatch",http_status="403",method="POST",status="blocked"} 1`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="none",http_status="200",method="POST",status="success"} 3`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="sensitive_data_blocked",http_status="403",method="POST",status="blocked"} 1`,
 		`gatelm_gateway_requests_total{endpoint="/v1/chat/completions",error_code="rate_limited",http_status="429",method="POST",status="rate_limited"} 1`,
@@ -733,7 +758,7 @@ func readinessExpectedMetricSamples() []string {
 		`gatelm_masking_actions_total{masking_action="redacted"} 1`,
 		`gatelm_masking_actions_total{masking_action="blocked"} 1`,
 		`gatelm_log_writes_total{operation="terminal",status="success"} 5`,
-		`gatelm_log_writes_total{operation="auth_failure",status="success"} 2`,
+		`gatelm_log_writes_total{operation="auth_failure",status="success"} 1`,
 	}
 }
 
@@ -742,8 +767,8 @@ func readinessInputOutput(t *testing.T) string {
 	return readinessJSON(t, map[string]any{
 		"requests": []map[string]any{
 			{"name": "model catalog", "http": "GET /v1/models"},
-			{"name": "invalid api key", "http": "POST /v1/chat/completions", "headers": map[string]string{"Authorization": "Bearer <redacted>", "X-GateLM-App-Token": "<redacted>"}, "body": map[string]string{"model": "auto", "message": "<safe_prompt_not_logged>"}},
-			{"name": "invalid app token", "http": "POST /v1/chat/completions", "headers": map[string]string{"Authorization": "Bearer <redacted>", "X-GateLM-App-Token": "<redacted>"}, "body": map[string]string{"model": "auto", "message": "<safe_prompt_not_logged>"}},
+			{"name": "invalid api key", "http": "POST /v1/chat/completions", "headers": map[string]string{"Authorization": "Bearer <redacted>"}, "body": map[string]string{"model": "auto", "message": "<safe_prompt_not_logged>"}},
+			{"name": "default application scope mismatch", "http": "POST /v1/chat/completions", "headers": map[string]string{"Authorization": "Bearer <redacted>"}, "body": map[string]string{"model": "auto", "message": "<safe_prompt_not_logged>"}},
 			{"name": "safe miss", "http": "POST /v1/chat/completions", "body": map[string]string{"model": "auto", "message": "<safe_prompt_short>"}},
 			{"name": "cache hit", "http": "POST /v1/chat/completions", "body": map[string]string{"model": "auto", "message": "<same_safe_prompt_short>"}},
 			{"name": "redacted success", "http": "POST /v1/chat/completions", "body": map[string]string{"model": "auto", "message": "Write a safe reply to <email> and ask them to call <phone_number>."}},
@@ -784,8 +809,8 @@ func readinessGatewayOutput(
 			"catalogStatus": modelsStatus(models),
 			"modelIds":      readinessModelIDs(models),
 		},
-		"invalidApiKey":   readinessErrorSummary(invalidAPI, invalidAPIResp),
-		"invalidAppToken": readinessErrorSummary(invalidApp, invalidAppResp),
+		"invalidApiKey":                   readinessErrorSummary(invalidAPI, invalidAPIResp),
+		"defaultApplicationScopeMismatch": readinessErrorSummary(invalidApp, invalidAppResp),
 		"safeMiss": readinessSuccessSummary(safeMiss, safeMissResp, map[string]any{
 			"providerCalls": providerCallsAfterMiss,
 			"cacheLookups":  cacheLookupsAfterMiss,

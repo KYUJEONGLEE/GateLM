@@ -222,6 +222,12 @@ export class RuntimeConfigsService {
   async getActiveProviderCatalog(
     applicationId: string,
   ): Promise<ProviderCatalogResponseDto> {
+    const persistedCatalog =
+      await this.getPersistedActiveProviderCatalog(applicationId);
+    if (persistedCatalog) {
+      return persistedCatalog;
+    }
+
     const { runtimeConfig, document } =
       await this.getExecutableActiveRuntimeConfig({
         applicationId,
@@ -235,6 +241,15 @@ export class RuntimeConfigsService {
     catalogId: string,
   ): Promise<ProviderCatalogResponseDto> {
     const parsedCatalogId = this.parseProviderCatalogId(catalogId);
+    const persistedCatalog = await this.getPersistedProviderCatalog({
+      applicationId: parsedCatalogId.applicationId,
+      catalogId,
+      catalogVersion: parsedCatalogId.catalogVersion,
+    });
+    if (persistedCatalog) {
+      return persistedCatalog;
+    }
+
     const catalog = await this.getActiveProviderCatalog(
       parsedCatalogId.applicationId,
     );
@@ -247,6 +262,99 @@ export class RuntimeConfigsService {
     }
 
     return catalog;
+  }
+
+  private async getPersistedActiveProviderCatalog(
+    applicationId: string,
+  ): Promise<ProviderCatalogResponseDto | null> {
+    const application = await this.getApplicationContextOrThrow(
+      applicationId,
+    );
+    this.assertActiveContext(application);
+    const activeSnapshot =
+      await this.prisma.activeRuntimeSnapshot.findUnique({
+        where: {
+          tenantId_projectId_applicationId: {
+            tenantId: application.tenantId,
+            projectId: application.projectId,
+            applicationId,
+          },
+        },
+        include: {
+          runtimeSnapshot: {
+            include: {
+              runtimeConfig: true,
+            },
+          },
+        },
+      });
+
+    if (!activeSnapshot) {
+      return null;
+    }
+
+    if (
+      activeSnapshot.runtimeSnapshot.tenantId !== activeSnapshot.tenantId ||
+      activeSnapshot.runtimeSnapshot.projectId !== activeSnapshot.projectId ||
+      activeSnapshot.runtimeSnapshot.applicationId !==
+        activeSnapshot.applicationId
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    return this.toPersistedProviderCatalogResponse(
+      activeSnapshot.runtimeSnapshot,
+    );
+  }
+
+  private async getPersistedProviderCatalog(args: {
+    applicationId: string;
+    catalogId: string;
+    catalogVersion: number;
+  }): Promise<ProviderCatalogResponseDto | null> {
+    const application = await this.getApplicationContextOrThrow(
+      args.applicationId,
+    );
+    this.assertActiveContext(application);
+    const runtimeSnapshot = await this.prisma.runtimeSnapshot.findUnique({
+      where: {
+        applicationId_version: {
+          applicationId: args.applicationId,
+          version: BigInt(args.catalogVersion),
+        },
+      },
+      include: {
+        runtimeConfig: true,
+      },
+    });
+
+    if (!runtimeSnapshot) {
+      return null;
+    }
+
+    if (
+      runtimeSnapshot.tenantId !== application.tenantId ||
+      runtimeSnapshot.projectId !== application.projectId ||
+      runtimeSnapshot.applicationId !== application.id
+    ) {
+      throw new InternalServerErrorException(
+        'RuntimeSnapshot body is inconsistent.',
+      );
+    }
+
+    const snapshot = this.toPersistedRuntimeSnapshotResponse(
+      runtimeSnapshot,
+    );
+    if (
+      snapshot.providerCatalogRef.catalogId !== args.catalogId ||
+      snapshot.providerCatalogRef.catalogVersion !== args.catalogVersion
+    ) {
+      throw new NotFoundException('Provider Catalog not found.');
+    }
+
+    return this.toPersistedProviderCatalogResponse(runtimeSnapshot);
   }
 
   private async getPersistedActiveRuntimeSnapshot(
@@ -661,9 +769,8 @@ export class RuntimeConfigsService {
     const context = await this.getApplicationContextOrThrow(args.applicationId);
     this.assertActiveContext(context);
 
-    const [apiKey, appToken, providers] = await Promise.all([
+    const [apiKey, providers] = await Promise.all([
       this.getActiveApiKeyOrThrow(context.projectId, args.now),
-      this.getActiveAppTokenOrThrow(context.id, args.now),
       this.getApplicationProvidersOrThrow(context.id),
     ]);
     const activeProvider = this.getPrimaryActiveProvider(providers);
@@ -757,10 +864,10 @@ export class RuntimeConfigsService {
       applicationStatus: this.toResourceStatus(context.status),
       apiKeyId: apiKey.id,
       apiKeyStatus: this.toCredentialStatus(apiKey.status),
-      appTokenId: appToken.id,
-      appTokenStatus: this.toCredentialStatus(appToken.status),
+      appTokenId: null,
+      appTokenStatus: null,
       apiKey: this.toCredentialRef(apiKey, 'api_key'),
-      appToken: this.toCredentialRef(appToken, 'app_token'),
+      appToken: null,
       providers: providersResponse,
       models,
       defaultProvider: defaultModel.provider,
@@ -820,7 +927,6 @@ export class RuntimeConfigsService {
 
     await Promise.all([
       this.assertCurrentApiKeyExecutable(args.document, context, args.now),
-      this.assertCurrentAppTokenExecutable(args.document, context, args.now),
       this.assertCurrentRoutingProvidersExecutable(args.document, context),
     ]);
   }
@@ -885,32 +991,6 @@ export class RuntimeConfigsService {
       apiKey.tenantId !== context.tenantId ||
       apiKey.projectId !== context.projectId ||
       !this.isCredentialCurrentlyActive(apiKey, now)
-    ) {
-      throw new ConflictException(
-        ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
-      );
-    }
-  }
-
-  private async assertCurrentAppTokenExecutable(
-    document: ActiveRuntimeConfigResponseDto,
-    context: RuntimeApplicationContext,
-    now: Date,
-  ): Promise<void> {
-    const appToken = await this.prisma.appToken.findUnique({
-      where: { id: document.appTokenId },
-    });
-
-    if (
-      !appToken ||
-      document.appToken.id !== document.appTokenId ||
-      document.appToken.type !== 'app_token' ||
-      document.appTokenStatus !== 'active' ||
-      document.appToken.status !== 'active' ||
-      appToken.tenantId !== context.tenantId ||
-      appToken.projectId !== context.projectId ||
-      appToken.applicationId !== context.id ||
-      !this.isCredentialCurrentlyActive(appToken, now)
     ) {
       throw new ConflictException(
         ACTIVE_RUNTIME_CONFIG_NOT_EXECUTABLE_MESSAGE,
@@ -1049,9 +1129,7 @@ export class RuntimeConfigsService {
     const runtimeDocument = document as unknown as Record<string, unknown>;
     if (
       !this.isNonEmptyString(runtimeDocument.apiKeyId) ||
-      !this.isNonEmptyString(runtimeDocument.appTokenId) ||
       !this.isCredentialRefShape(runtimeDocument.apiKey, 'api_key') ||
-      !this.isCredentialRefShape(runtimeDocument.appToken, 'app_token') ||
       !Array.isArray(document.providers) ||
       document.providers.length === 0 ||
       !Array.isArray(document.models) ||
@@ -1237,28 +1315,6 @@ export class RuntimeConfigsService {
     }
 
     return apiKey;
-  }
-
-  private async getActiveAppTokenOrThrow(
-    applicationId: string,
-    now: Date,
-  ): Promise<AppToken> {
-    const appToken = await this.prisma.appToken.findFirst({
-      where: {
-        applicationId,
-        status: CredentialStatus.ACTIVE,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
-
-    if (!appToken) {
-      throw new ConflictException(
-        'Runtime Config requires an active App Token.',
-      );
-    }
-
-    return appToken;
   }
 
   private async getApplicationProvidersOrThrow(
@@ -1916,6 +1972,38 @@ export class RuntimeConfigsService {
     return document;
   }
 
+  private toPersistedProviderCatalogResponse(
+    runtimeSnapshot: RuntimeSnapshot & {
+      runtimeConfig?: RuntimeConfig | null;
+    },
+  ): ProviderCatalogResponseDto | null {
+    const snapshot = this.toPersistedRuntimeSnapshotResponse(
+      runtimeSnapshot,
+    );
+    const runtimeConfig = runtimeSnapshot.runtimeConfig;
+    if (!runtimeConfig) {
+      return null;
+    }
+
+    const document = this.withProviderCredentialRefBridge(
+      this.toRuntimeConfigDocument(runtimeConfig.document),
+    );
+    const catalog = this.toProviderCatalogResponse(runtimeConfig, document);
+
+    if (
+      !this.providerCatalogMatchesRef(
+        catalog,
+        snapshot.providerCatalogRef,
+      )
+    ) {
+      throw new InternalServerErrorException(
+        'Provider Catalog body is inconsistent.',
+      );
+    }
+
+    return catalog;
+  }
+
   private toProviderCatalogResponse(
     runtimeConfig: RuntimeConfig,
     document: ActiveRuntimeConfigResponseDto,
@@ -1953,6 +2041,17 @@ export class RuntimeConfigsService {
       ...catalogBodyWithoutHash,
       contentHash: this.sha256(this.canonicalJson(catalogBodyWithoutHash)),
     };
+  }
+
+  private providerCatalogMatchesRef(
+    catalog: ProviderCatalogResponseDto,
+    ref: RuntimeSnapshotResponseDto['providerCatalogRef'],
+  ): boolean {
+    return (
+      catalog.catalogId === ref.catalogId &&
+      catalog.catalogVersion === ref.catalogVersion &&
+      catalog.contentHash === ref.contentHash
+    );
   }
 
   private isProviderCatalogProviderExecutable(
@@ -2035,7 +2134,7 @@ export class RuntimeConfigsService {
         maxOutputTokens: this.toMaxOutputTokens(model),
       },
       routing: {
-        autoRoutingEligible: model.status === 'active',
+        autoRoutingEligible: this.isModelSelectedForRouting(model, document),
         costTier: this.toModelCostTier(model, document),
         fallbackPriority: this.toModelFallbackPriority(model, document),
       },
@@ -2220,6 +2319,10 @@ export class RuntimeConfigsService {
     model: RuntimeConfigModelResponseDto,
     document: ActiveRuntimeConfigResponseDto,
   ): 'low' | 'balanced' | 'premium' {
+    if (!document.routingPolicy) {
+      return 'balanced';
+    }
+
     if (
       model.provider === document.routingPolicy.lowCostProvider &&
       model.model === document.routingPolicy.lowCostModel
@@ -2238,10 +2341,40 @@ export class RuntimeConfigsService {
     return 'balanced';
   }
 
+  private isModelSelectedForRouting(
+    model: RuntimeConfigModelResponseDto,
+    document: ActiveRuntimeConfigResponseDto,
+  ): boolean {
+    if (model.status !== 'active') {
+      return false;
+    }
+
+    if (!document.routingPolicy) {
+      return true;
+    }
+
+    return (
+      (model.provider === document.routingPolicy.lowCostProvider &&
+        model.model === document.routingPolicy.lowCostModel) ||
+      (model.provider === document.routingPolicy.defaultProvider &&
+        model.model === document.routingPolicy.defaultModel) ||
+      (document.routingPolicy.highQualityProvider !== undefined &&
+        document.routingPolicy.highQualityModel !== undefined &&
+        model.provider === document.routingPolicy.highQualityProvider &&
+        model.model === document.routingPolicy.highQualityModel) ||
+      (model.provider === document.routingPolicy.fallbackProvider &&
+        model.model === document.routingPolicy.fallbackModel)
+    );
+  }
+
   private toModelFallbackPriority(
     model: RuntimeConfigModelResponseDto,
     document: ActiveRuntimeConfigResponseDto,
   ): number {
+    if (!document.routingPolicy) {
+      return 100;
+    }
+
     if (
       model.provider === document.routingPolicy.lowCostProvider &&
       model.model === document.routingPolicy.lowCostModel
@@ -2752,6 +2885,10 @@ export class RuntimeConfigsService {
   private toResolver(
     resolver: string,
   ): 'none' | 'control_plane_secret_store' | 'environment' {
+    if (resolver === 'credential_store') {
+      return 'control_plane_secret_store';
+    }
+
     if (
       resolver === 'none' ||
       resolver === 'control_plane_secret_store' ||

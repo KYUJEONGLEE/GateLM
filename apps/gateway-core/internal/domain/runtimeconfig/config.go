@@ -199,7 +199,7 @@ func (c ActiveConfig) ValidateActive() error {
 	if c.TenantID == "" || c.ProjectID == "" || c.ApplicationID == "" {
 		return ErrMissingScope
 	}
-	if c.APIKeyID == "" || c.AppTokenID == "" {
+	if c.APIKeyID == "" {
 		return ErrMissingCredentialBinding
 	}
 	if c.ConfigHash == "" || c.SafetyPolicy.SecurityPolicyHash == "" || c.RoutingPolicy.RoutingPolicyHash == "" {
@@ -212,8 +212,10 @@ func (c ActiveConfig) ValidateActive() error {
 		c.TenantStatus != StatusActive ||
 		c.ProjectStatus != StatusActive ||
 		c.ApplicationStatus != StatusActive ||
-		c.APIKeyStatus != StatusActive ||
-		c.AppTokenStatus != StatusActive {
+		c.APIKeyStatus != StatusActive {
+		return ErrInactiveConfig
+	}
+	if c.AppTokenID != "" && c.AppTokenStatus != StatusActive {
 		return ErrInactiveConfig
 	}
 	if !IsValidPromptCapturePolicy(c.PromptCapture) {
@@ -424,7 +426,16 @@ func (p SafetyPolicy) Validate() error {
 
 func IsKnownSafetyDetectorType(detectorType string) bool {
 	switch strings.TrimSpace(detectorType) {
-	case "email", "phone_number", "resident_registration_number", "api_key", "authorization_header", "jwt", "private_key":
+	case "email",
+		"phone_number",
+		"person_name",
+		"postal_address",
+		"organization_name",
+		"resident_registration_number",
+		"api_key",
+		"authorization_header",
+		"jwt",
+		"private_key":
 		return true
 	default:
 		return false

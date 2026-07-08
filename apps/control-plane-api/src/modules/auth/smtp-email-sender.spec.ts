@@ -80,6 +80,28 @@ describe('SmtpEmailSender', () => {
     expect(receivedMessage).toContain('123456');
     expect(receivedMessage).not.toContain('smtp-password');
   });
+
+  it('treats a blank SMTP_PORT value as unset', () => {
+    const sender = new SmtpEmailSender(
+      new ConfigService({
+        SMTP_FROM: 'GateLM <no-reply@gatelm.test>',
+        SMTP_HOST: '127.0.0.1',
+        SMTP_PORT: '',
+        SMTP_SECURE: 'false',
+        SMTP_TLS_MODE: 'disabled',
+      }),
+    );
+
+    const smtpConfig = (
+      sender as unknown as {
+        readConfig(): {
+          port: number;
+        };
+      }
+    ).readConfig();
+
+    expect(smtpConfig.port).toBe(587);
+  });
 });
 
 function handleSmtpSession(

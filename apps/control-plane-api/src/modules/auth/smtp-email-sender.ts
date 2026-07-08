@@ -4,7 +4,7 @@ import { TLSSocket, connect as connectTls } from 'node:tls';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { EmailSender, VerificationEmailMessage } from './email-sender';
+import { EmailSender, ProjectAdminInvitationEmailMessage, VerificationEmailMessage } from './email-sender';
 
 type SmtpSocket = Socket | TLSSocket;
 
@@ -29,6 +29,23 @@ interface SmtpResponse {
 export class SmtpEmailSender implements EmailSender {
   constructor(private readonly config: ConfigService) {}
 
+  async sendProjectAdminInvitationEmail(
+    message: ProjectAdminInvitationEmailMessage,
+  ): Promise<void> {
+    const smtpConfig = this.readConfig();
+    const connection = await SmtpConnection.open(smtpConfig);
+
+    try {
+      await connection.sendMail({
+        body: this.renderProjectAdminInvitationBody(message),
+        from: smtpConfig.from,
+        subject: `GateLM project admin invitation for ${message.projectName}`,
+        to: message.email,
+      });
+    } finally {
+      await connection.close();
+    }
+  }
   async sendVerificationEmail(
     message: VerificationEmailMessage,
   ): Promise<void> {
@@ -47,12 +64,30 @@ export class SmtpEmailSender implements EmailSender {
     }
   }
 
+  private renderProjectAdminInvitationBody(
+    message: ProjectAdminInvitationEmailMessage,
+  ): string {
+    return [
+      `Hello ${message.name},`,
+      '',
+      `You have been invited as a project admin for ${message.projectName} in ${message.tenantName}.`,
+      '',
+      'Use the link below to create your GateLM account and accept the invitation:',
+      message.signupUrl,
+      '',
+      `This invitation expires at: ${message.expiresAt.toISOString()}`,
+      '',
+      'If you did not expect this invitation, you can ignore this email.',
+    ].join('\r\n');
+  }
+
   private readConfig(): SmtpConfig {
     const host = this.readRequired('SMTP_HOST');
     const from = this.readRequired('SMTP_FROM');
     const secure = this.config.get<string>('SMTP_SECURE') === 'true';
-    const port = Number(
-      this.config.get<string | number>('SMTP_PORT') ?? (secure ? 465 : 587),
+    const port = this.readPort(
+      this.config.get<string | number | null>('SMTP_PORT'),
+      secure ? 465 : 587,
     );
     const user = this.readOptional('SMTP_USER');
     const password = this.readOptional('SMTP_PASSWORD');
@@ -63,9 +98,6 @@ export class SmtpEmailSender implements EmailSender {
           ? 'required'
           : 'opportunistic';
 
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw new Error('SMTP_PORT must be an integer between 1 and 65535.');
-    }
     if ((user && !password) || (!user && password)) {
       throw new Error('SMTP_USER and SMTP_PASSWORD must be configured together.');
     }
@@ -93,6 +125,26 @@ export class SmtpEmailSender implements EmailSender {
   private readOptional(key: string): string | null {
     const value = this.config.get<string>(key)?.trim();
     return value ? value : null;
+  }
+
+  private readPort(
+    raw: string | number | null | undefined,
+    defaultPort: number,
+  ): number {
+    if (
+      raw === undefined ||
+      raw === null ||
+      (typeof raw === 'string' && raw.trim().length === 0)
+    ) {
+      return defaultPort;
+    }
+
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error('SMTP_PORT must be an integer between 1 and 65535.');
+    }
+
+    return port;
   }
 
   private renderBody(message: VerificationEmailMessage): string {

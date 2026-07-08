@@ -33,6 +33,7 @@ const DEMO_OPENAI_PROVIDER = 'openai-main';
 const DEMO_OPENAI_PROVIDER_BASE_URL = 'https://api.openai.com/v1';
 const DEMO_OPENAI_LOW_COST_MODEL = 'gpt-4o-mini';
 const DEMO_OPENAI_BALANCED_MODEL = 'gpt-4o';
+const DEMO_OPENAI_EXTRA_MODELS = ['gpt-5.4-mini', 'gpt-5.4'] as const;
 const DEMO_GENERATED_AT = '2026-06-27T02:00:00.000Z';
 const DEMO_PUBLISHED_BY = 'control_plane';
 const DEMO_GATEWAY_INSTANCE_ID = 'gateway_core_static';
@@ -83,6 +84,7 @@ interface DemoRuntimeConfigOptions {
   openAIBaseUrl?: string;
   openAILowCostModel?: string;
   openAIBalancedModel?: string;
+  openAIExtraModels?: string[];
   apiKeyPrefix?: string;
   apiKeyLast4?: string;
   appTokenPrefix?: string;
@@ -113,6 +115,11 @@ export function buildDemoRuntimeConfigDocument(
     options.openAILowCostModel ?? DEMO_OPENAI_LOW_COST_MODEL;
   const openAIBalancedModel =
     options.openAIBalancedModel ?? DEMO_OPENAI_BALANCED_MODEL;
+  const openAIModels = buildOpenAISeedModels(
+    openAILowCostModel,
+    openAIBalancedModel,
+    options.openAIExtraModels ?? [...DEMO_OPENAI_EXTRA_MODELS],
+  );
   const apiKeyPrefix = options.apiKeyPrefix ?? 'gsk_live_';
   const apiKeyLast4 = options.apiKeyLast4 ?? '9xA1';
   const appTokenPrefix = options.appTokenPrefix ?? 'gat_app_';
@@ -135,8 +142,7 @@ export function buildDemoRuntimeConfigDocument(
           buildOpenAIRuntimeProvider({
             providerId: openAIProviderId,
             baseUrl: openAIBaseUrl,
-            lowCostModel: openAILowCostModel,
-            balancedModel: openAIBalancedModel,
+            models: openAIModels.map((model) => model.model),
           }),
           buildMockRuntimeProvider(
             mockProviderId,
@@ -154,8 +160,13 @@ export function buildDemoRuntimeConfigDocument(
   const models =
     providerMode === 'actual'
       ? [
-          buildOpenAIModel(openAILowCostModel, 'OpenAI Low Cost', 128000),
-          buildOpenAIModel(openAIBalancedModel, 'OpenAI Balanced', 128000),
+          ...openAIModels.map((model) =>
+            buildOpenAIModel(
+              model.model,
+              model.displayName,
+              model.contextWindowTokens,
+            ),
+          ),
           buildMockModel('mock-fast', 'Mock Fast'),
           buildMockModel('mock-balanced', 'Mock Balanced'),
         ]
@@ -180,6 +191,22 @@ export function buildDemoRuntimeConfigDocument(
             promptTokenMicroUsd: 3,
             completionTokenMicroUsd: 10,
           }),
+          ...openAIModels
+            .filter(isPricedOpenAISeedModel)
+            .filter(
+              (model) =>
+                model.model !== openAILowCostModel &&
+                model.model !== openAIBalancedModel,
+            )
+            .map((model) =>
+              buildPricingRule({
+                provider: DEMO_OPENAI_PROVIDER,
+                model: model.model,
+                pricingVersion: model.pricingVersion,
+                promptTokenMicroUsd: model.promptTokenMicroUsd,
+                completionTokenMicroUsd: model.completionTokenMicroUsd,
+              }),
+            ),
           buildPricingRule({
             provider: DEMO_PROVIDER,
             model: 'mock-fast',
@@ -427,6 +454,10 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       'GATELM_DEMO_OPENAI_BALANCED_MODEL',
       DEMO_OPENAI_BALANCED_MODEL,
     );
+    const openAIExtraModels = readEnvCSV(
+      'GATELM_DEMO_OPENAI_EXTRA_MODELS',
+      [...DEMO_OPENAI_EXTRA_MODELS],
+    );
     const demoApiKey = readEnvString(
       'GATELM_DEMO_API_KEY',
       'glm_api_test_redacted',
@@ -438,84 +469,63 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
     const apiKeyPreview = credentialPreview(demoApiKey, 'gsk_live_');
     const appTokenPreview = credentialPreview(demoAppToken, 'gat_app_');
 
-    const provider = await tx.providerConnection.upsert({
+    const existingMockProvider = await tx.providerConnection.findFirst({
       where: {
-        projectId_provider: {
-          projectId: DEMO_PROJECT_ID,
-          provider: DEMO_PROVIDER,
-        },
-      },
-      update: {
         tenantId: DEMO_TENANT_ID,
-        displayName: 'Mock Provider',
-        status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: mockProviderBaseUrl,
-        timeoutMs: 30000,
-        secretRef: null,
-        credentialPrefix: null,
-        credentialLast4: null,
-        resolver: 'none',
-        providerConfig: demoProviderConfig(),
-      },
-      create: {
-        id: DEMO_MOCK_PROVIDER_ID,
-        tenantId: DEMO_TENANT_ID,
-        projectId: DEMO_PROJECT_ID,
         provider: DEMO_PROVIDER,
-        displayName: 'Mock Provider',
-        status: ProviderConnectionStatus.ACTIVE,
-        baseUrl: mockProviderBaseUrl,
-        timeoutMs: 30000,
-        secretRef: null,
-        credentialPrefix: null,
-        credentialLast4: null,
-        resolver: 'none',
-        providerConfig: demoProviderConfig(),
       },
     });
+    const provider = existingMockProvider
+      ? await tx.providerConnection.update({
+          where: { id: existingMockProvider.id },
+          data: {
+            tenantId: DEMO_TENANT_ID,
+            projectId: null,
+            displayName: 'Mock Provider',
+            status: ProviderConnectionStatus.ACTIVE,
+            baseUrl: mockProviderBaseUrl,
+            timeoutMs: 30000,
+            secretRef: null,
+            credentialPrefix: null,
+            credentialLast4: null,
+            resolver: 'none',
+            providerConfig: demoProviderConfig(),
+          },
+        })
+      : await tx.providerConnection.create({
+          data: {
+            id: DEMO_MOCK_PROVIDER_ID,
+            tenantId: DEMO_TENANT_ID,
+            projectId: null,
+            provider: DEMO_PROVIDER,
+            displayName: 'Mock Provider',
+            status: ProviderConnectionStatus.ACTIVE,
+            baseUrl: mockProviderBaseUrl,
+            timeoutMs: 30000,
+            secretRef: null,
+            credentialPrefix: null,
+            credentialLast4: null,
+            resolver: 'none',
+            providerConfig: demoProviderConfig(),
+          },
+        });
 
     const openAIProvider =
       providerMode === 'actual'
-        ? await tx.providerConnection.upsert({
-            where: {
-              projectId_provider: {
-                projectId: DEMO_PROJECT_ID,
-                provider: DEMO_OPENAI_PROVIDER,
-              },
-            },
-            update: {
-              tenantId: DEMO_TENANT_ID,
-              displayName: 'OpenAI Main',
-              status: ProviderConnectionStatus.ACTIVE,
-              baseUrl: openAIBaseUrl,
-              timeoutMs: 30000,
-              secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
-              credentialPrefix: 'env_ref_',
-              credentialLast4: '0000',
-              resolver: 'environment',
-              providerConfig: demoOpenAIProviderConfig(
-                openAILowCostModel,
-                openAIBalancedModel,
-              ),
-            },
-            create: {
-              id: DEMO_OPENAI_PROVIDER_ID,
-              tenantId: DEMO_TENANT_ID,
-              projectId: DEMO_PROJECT_ID,
-              provider: DEMO_OPENAI_PROVIDER,
-              displayName: 'OpenAI Main',
-              status: ProviderConnectionStatus.ACTIVE,
-              baseUrl: openAIBaseUrl,
-              timeoutMs: 30000,
-              secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
-              credentialPrefix: 'env_ref_',
-              credentialLast4: '0000',
-              resolver: 'environment',
-              providerConfig: demoOpenAIProviderConfig(
-                openAILowCostModel,
-                openAIBalancedModel,
-              ),
-            },
+        ? await upsertDemoTenantProvider(tx, {
+            baseUrl: openAIBaseUrl,
+            credentialLast4: '0000',
+            credentialPrefix: 'env_ref_',
+            displayName: 'OpenAI Main',
+            fallbackId: DEMO_OPENAI_PROVIDER_ID,
+            provider: DEMO_OPENAI_PROVIDER,
+            providerConfig: demoOpenAIProviderConfig(
+              openAILowCostModel,
+              openAIBalancedModel,
+              openAIExtraModels,
+            ),
+            resolver: 'environment',
+            secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
           })
         : null;
 
@@ -613,6 +623,7 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       openAIBaseUrl,
       openAILowCostModel,
       openAIBalancedModel,
+      openAIExtraModels,
       apiKeyPrefix: apiKeyPreview.prefix,
       apiKeyLast4: apiKeyPreview.last4,
       appTokenPrefix: appTokenPreview.prefix,
@@ -713,6 +724,70 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
   });
 }
 
+async function upsertDemoTenantProvider(
+  tx: Prisma.TransactionClient,
+  args: {
+    baseUrl: string;
+    credentialLast4: string | null;
+    credentialPrefix: string | null;
+    displayName: string;
+    fallbackId: string;
+    provider: string;
+    providerConfig: Prisma.InputJsonObject;
+    resolver: string;
+    secretRef: string | null;
+  },
+) {
+  const existingProvider = await tx.providerConnection.findFirst({
+    where: {
+      tenantId: DEMO_TENANT_ID,
+      provider: args.provider,
+    },
+  });
+
+  if (existingProvider) {
+    return tx.providerConnection.update({
+      where: { id: existingProvider.id },
+      data: {
+        tenantId: DEMO_TENANT_ID,
+        projectId: null,
+        displayName: args.displayName,
+        status: ProviderConnectionStatus.ACTIVE,
+        baseUrl: args.baseUrl,
+        timeoutMs: 30000,
+        secretRef: existingProvider.secretRef ?? args.secretRef,
+        credentialPrefix:
+          existingProvider.credentialPrefix ?? args.credentialPrefix,
+        credentialLast4:
+          existingProvider.credentialLast4 ?? args.credentialLast4,
+        resolver:
+          existingProvider.resolver && existingProvider.resolver !== 'none'
+            ? existingProvider.resolver
+            : args.resolver,
+        providerConfig: args.providerConfig,
+      },
+    });
+  }
+
+  return tx.providerConnection.create({
+    data: {
+      id: args.fallbackId,
+      tenantId: DEMO_TENANT_ID,
+      projectId: null,
+      provider: args.provider,
+      displayName: args.displayName,
+      status: ProviderConnectionStatus.ACTIVE,
+      baseUrl: args.baseUrl,
+      timeoutMs: 30000,
+      secretRef: args.secretRef,
+      credentialPrefix: args.credentialPrefix,
+      credentialLast4: args.credentialLast4,
+      resolver: args.resolver,
+      providerConfig: args.providerConfig,
+    },
+  });
+}
+
 async function seedProviderPresets(
   tx: Prisma.TransactionClient,
 ): Promise<void> {
@@ -763,10 +838,12 @@ async function seedProviderPresets(
 function providerPresetConfig(
   preset: (typeof PROVIDER_PRESETS)[number],
 ): Prisma.InputJsonObject {
+  const models = providerPresetDefaultModels(preset.providerKey);
   return {
     providerKey: preset.providerKey,
     adapterType: preset.adapterType,
     requestFormat: preset.requestFormat,
+    ...(models.length > 0 ? { models } : {}),
     modelsEndpointPath: '/models',
     credentialRequired: true,
     modelDiscovery: {
@@ -774,6 +851,23 @@ function providerPresetConfig(
       cacheTtlSeconds: 3600,
     },
   };
+}
+
+function providerPresetDefaultModels(providerKey: string): string[] {
+  if (providerKey === 'openai') {
+    return buildOpenAISeedModels(
+      DEMO_OPENAI_LOW_COST_MODEL,
+      DEMO_OPENAI_BALANCED_MODEL,
+      [...DEMO_OPENAI_EXTRA_MODELS],
+    ).map((model) => model.model);
+  }
+  if (providerKey === 'gemini') {
+    return ['gemini-1.5-flash', 'gemini-1.5-pro'];
+  }
+  if (providerKey === 'claude') {
+    return ['claude-3.5-sonnet', 'claude-3-haiku'];
+  }
+  return [];
 }
 
 function buildDemoRuntimeSnapshot(
@@ -946,7 +1040,7 @@ function buildDemoProviderCatalog(
               maxOutputTokens: toMaxOutputTokens(model),
             },
             routing: {
-              autoRoutingEligible: model.status === 'active',
+              autoRoutingEligible: isModelSelectedForRouting(model, document),
               costTier: toModelCostTier(model, document),
               fallbackPriority: toModelFallbackPriority(model, document),
             },
@@ -1033,6 +1127,10 @@ function toModelCostTier(
   model: ActiveRuntimeConfigResponseDto['models'][number],
   document: ActiveRuntimeConfigResponseDto,
 ): 'low' | 'balanced' | 'premium' {
+  if (!document.routingPolicy) {
+    return 'balanced';
+  }
+
   if (
     model.provider === document.routingPolicy.lowCostProvider &&
     model.model === document.routingPolicy.lowCostModel
@@ -1043,10 +1141,40 @@ function toModelCostTier(
   return 'balanced';
 }
 
+function isModelSelectedForRouting(
+  model: ActiveRuntimeConfigResponseDto['models'][number],
+  document: ActiveRuntimeConfigResponseDto,
+): boolean {
+  if (model.status !== 'active') {
+    return false;
+  }
+
+  if (!document.routingPolicy) {
+    return true;
+  }
+
+  return (
+    (model.provider === document.routingPolicy.lowCostProvider &&
+      model.model === document.routingPolicy.lowCostModel) ||
+    (model.provider === document.routingPolicy.defaultProvider &&
+      model.model === document.routingPolicy.defaultModel) ||
+    (document.routingPolicy.highQualityProvider !== undefined &&
+      document.routingPolicy.highQualityModel !== undefined &&
+      model.provider === document.routingPolicy.highQualityProvider &&
+      model.model === document.routingPolicy.highQualityModel) ||
+    (model.provider === document.routingPolicy.fallbackProvider &&
+      model.model === document.routingPolicy.fallbackModel)
+  );
+}
+
 function toModelFallbackPriority(
   model: ActiveRuntimeConfigResponseDto['models'][number],
   document: ActiveRuntimeConfigResponseDto,
 ): number {
+  if (!document.routingPolicy) {
+    return 100;
+  }
+
   if (
     model.provider === document.routingPolicy.lowCostProvider &&
     model.model === document.routingPolicy.lowCostModel
@@ -1191,11 +1319,95 @@ function buildMockRuntimeProvider(
   };
 }
 
+type OpenAISeedModel = {
+  model: string;
+  displayName: string;
+  contextWindowTokens: number;
+  pricingVersion?: string;
+  promptTokenMicroUsd?: number;
+  completionTokenMicroUsd?: number;
+};
+
+const OPENAI_MODEL_SEED_METADATA: Record<
+  string,
+  Omit<OpenAISeedModel, 'model'>
+> = {
+  'gpt-4o-mini': {
+    displayName: 'OpenAI Low Cost',
+    contextWindowTokens: 128000,
+    pricingVersion: '2026-06-30.openai.demo.v1',
+    promptTokenMicroUsd: 1,
+    completionTokenMicroUsd: 4,
+  },
+  'gpt-4o': {
+    displayName: 'OpenAI Balanced',
+    contextWindowTokens: 128000,
+    pricingVersion: '2026-06-30.openai.demo.v1',
+    promptTokenMicroUsd: 3,
+    completionTokenMicroUsd: 10,
+  },
+  'gpt-5.4-mini': {
+    displayName: 'GPT-5.4 mini',
+    contextWindowTokens: 400000,
+    pricingVersion: '2026-07-05.openai.official.v1',
+    promptTokenMicroUsd: 1,
+    completionTokenMicroUsd: 5,
+  },
+  'gpt-5.4': {
+    displayName: 'GPT-5.4',
+    contextWindowTokens: 1000000,
+    pricingVersion: '2026-07-05.openai.official.v1',
+    promptTokenMicroUsd: 3,
+    completionTokenMicroUsd: 15,
+  },
+};
+
+function buildOpenAISeedModels(
+  lowCostModel: string,
+  balancedModel: string,
+  extraModels: string[],
+): OpenAISeedModel[] {
+  const seen = new Set<string>();
+  return [lowCostModel, balancedModel, ...extraModels]
+    .map((model) => model.trim())
+    .filter((model) => {
+      if (!model || seen.has(model)) {
+        return false;
+      }
+      seen.add(model);
+      return true;
+    })
+    .map((model) => ({
+      model,
+      ...(OPENAI_MODEL_SEED_METADATA[model] ?? {
+        displayName: model,
+        contextWindowTokens: 128000,
+        // Unknown env-added models are callable through the catalog, but need
+        // an explicit model_pricing_rules seed before cost reporting is valid.
+      }),
+    }));
+}
+
+function isPricedOpenAISeedModel(
+  model: OpenAISeedModel,
+): model is OpenAISeedModel &
+  Required<
+    Pick<
+      OpenAISeedModel,
+      'pricingVersion' | 'promptTokenMicroUsd' | 'completionTokenMicroUsd'
+    >
+  > {
+  return (
+    typeof model.pricingVersion === 'string' &&
+    typeof model.promptTokenMicroUsd === 'number' &&
+    typeof model.completionTokenMicroUsd === 'number'
+  );
+}
+
 function buildOpenAIRuntimeProvider(args: {
   providerId: string;
   baseUrl: string;
-  lowCostModel: string;
-  balancedModel: string;
+  models: string[];
 }): ActiveRuntimeConfigResponseDto['providers'][number] {
   return {
     providerId: args.providerId,
@@ -1218,7 +1430,7 @@ function buildOpenAIRuntimeProvider(args: {
     },
     resolver: 'environment',
     adapterConfig: { requestFormat: 'openai_chat_completions' },
-    models: [args.lowCostModel, args.balancedModel],
+    models: args.models,
     failureMode: 'fail_closed',
   };
 }
@@ -1318,12 +1530,15 @@ function demoProviderConfig(): Prisma.InputJsonObject {
 function demoOpenAIProviderConfig(
   lowCostModel: string,
   balancedModel: string,
+  extraModels: string[],
 ): Prisma.InputJsonObject {
   return {
     adapterType: 'openai_compatible',
     requestFormat: 'openai_chat_completions',
     credentialRequired: true,
-    models: [lowCostModel, balancedModel],
+    models: buildOpenAISeedModels(lowCostModel, balancedModel, extraModels).map(
+      (model) => model.model,
+    ),
     failureMode: 'fail_closed',
   };
 }
@@ -1341,6 +1556,20 @@ function readEnvString(key: string, fallback: string): string {
   }
 
   return value.trim();
+}
+
+function readEnvCSV(key: string, fallback: string[]): string[] {
+  const value = process.env[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return [...fallback];
+  }
+
+  const values = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  return values.length > 0 ? values : [...fallback];
 }
 
 function credentialPreview(

@@ -56,7 +56,7 @@ describe('ConversationsService', () => {
     });
   });
 
-  it('defaults new conversations to context retention off', async () => {
+  it('defaults new conversations to context retention on', async () => {
     const { repository, service } = createService();
 
     const result = await service.createConversation({
@@ -66,9 +66,9 @@ describe('ConversationsService', () => {
     });
 
     expect(repository.createdConversations[0]).toMatchObject({
-      contextRetentionEnabled: false,
+      contextRetentionEnabled: true,
     });
-    expect(result.contextRetentionEnabled).toBe(false);
+    expect(result.contextRetentionEnabled).toBe(true);
   });
 
   it('blocks conversation creation when the application scope does not match', async () => {

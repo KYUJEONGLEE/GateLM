@@ -1,0 +1,13 @@
+# Example host-level Caddy config for the AWS triage EC2 instance.
+# Copy to /etc/caddy/Caddyfile after DNS A records point at the EC2 public IP.
+# If AWS_TRIAGE_WEB_PORT or AWS_TRIAGE_APPLICATION_PORT changes in .env, update the ports below too.
+
+gatelm.co.kr {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+chat.gatelm.co.kr {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3002
+}

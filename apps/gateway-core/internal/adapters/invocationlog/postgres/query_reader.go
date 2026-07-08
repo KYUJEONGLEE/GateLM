@@ -14,6 +14,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/sync/errgroup"
 )
 
 type Queryer interface {
@@ -90,6 +91,9 @@ func (r *QueryReader) GetRequestDetail(ctx context.Context, filter invocationlog
 	normalizedFilter, err := invocationlog.NormalizeRequestDetailFilter(filter)
 	if err != nil {
 		return invocationlog.RequestDetail{}, err
+	}
+	if !isPostgresUUID(normalizedFilter.TenantID) || !isPostgresUUID(normalizedFilter.ProjectID) {
+		return invocationlog.RequestDetail{}, invocationlog.ErrLogNotFound
 	}
 
 	log, err := scanRequestDetailRow(r.db.QueryRow(ctx, requestDetailSQL, normalizedFilter.TenantID, normalizedFilter.ProjectID, normalizedFilter.RequestID))
@@ -325,10 +329,13 @@ func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.Co
 	totals.SavedCostUSD = invocationlog.FormatCostUSDFromMicroUSD(totals.SavedCostMicroUSD)
 
 	generatedAt := time.Now().UTC()
+	bucketConfig := costReportBucketConfig(normalizedFilter)
 	return invocationlog.CostReportFields{
-		Period:  normalizedFilter.Period,
-		Totals:  totals,
-		Buckets: buckets,
+		Period:              normalizedFilter.Period,
+		BucketInterval:      bucketConfig.IntervalLabel,
+		ExpectedBucketCount: bucketConfig.ExpectedBucketCount,
+		Totals:              totals,
+		Buckets:             buckets,
 		Breakdowns: invocationlog.CostReportBreakdowns{
 			ByProject:     projectBreakdown,
 			ByApplication: applicationBreakdown,
@@ -344,6 +351,242 @@ func (r *QueryReader) GetCostReport(ctx context.Context, filter invocationlog.Co
 			IsStale:          false,
 		},
 	}, nil
+}
+
+func (r *QueryReader) GetAnalyticsPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
+	if r == nil || r.db == nil {
+		return invocationlog.AnalyticsPerformanceFields{}, errors.New("query reader requires a database queryer")
+	}
+
+	normalizedFilter, err := invocationlog.NormalizeAnalyticsPerformanceFilter(filter)
+	if err != nil {
+		return invocationlog.AnalyticsPerformanceFields{}, err
+	}
+
+	var summary invocationlog.AnalyticsPerformanceSummary
+	var lastLogCreatedAt *time.Time
+	var providerModelPerformance []invocationlog.AnalyticsProviderModelPerformance
+	var p95LatencyByProvider []invocationlog.AnalyticsProviderLatency
+	var latencyDistribution []invocationlog.AnalyticsLatencyDistributionBucket
+	var slowestRequests []invocationlog.AnalyticsSlowRequest
+
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		summary, lastLogCreatedAt, err = r.queryAnalyticsPerformanceSummary(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		providerModelPerformance, err = r.queryAnalyticsProviderModelPerformance(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		p95LatencyByProvider, err = r.queryAnalyticsP95LatencyByProvider(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		latencyDistribution, err = r.queryAnalyticsLatencyDistribution(groupCtx, normalizedFilter)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		slowestRequests, err = r.queryAnalyticsSlowestRequests(groupCtx, normalizedFilter)
+		return err
+	})
+	if err := group.Wait(); err != nil {
+		return invocationlog.AnalyticsPerformanceFields{}, err
+	}
+
+	generatedAt := time.Now().UTC()
+	bucketConfig := invocationlog.TimeSeriesBucketConfigForRange(normalizedFilter.From, normalizedFilter.To)
+	return invocationlog.AnalyticsPerformanceFields{
+		Summary:                  summary,
+		ProviderModelPerformance: providerModelPerformance,
+		P95LatencyByProvider:     p95LatencyByProvider,
+		LatencyDistribution:      latencyDistribution,
+		SlowestRequests:          slowestRequests,
+		BucketInterval:           bucketConfig.IntervalLabel,
+		ExpectedBucketCount:      bucketConfig.ExpectedBucketCount,
+		DataFreshness: invocationlog.DashboardDataFreshness{
+			Source:           "postgresql_request_log",
+			RecordCount:      summary.TotalRequests,
+			LastLogCreatedAt: lastLogCreatedAt,
+			GeneratedAt:      generatedAt,
+			LastAggregatedAt: generatedAt,
+			IsStale:          false,
+		},
+	}, nil
+}
+
+func (r *QueryReader) queryAnalyticsPerformanceSummary(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceSummary, *time.Time, error) {
+	query, args := buildAnalyticsPerformanceSummaryQuery(filter)
+	var totalRequests int64
+	var avgLatencyMs sql.NullFloat64
+	var p95LatencyMs sql.NullFloat64
+	var p99LatencyMs sql.NullFloat64
+	var errorRate sql.NullFloat64
+	var lastLogCreatedAt sql.NullTime
+	if err := r.db.QueryRow(ctx, query, args...).Scan(
+		&totalRequests,
+		&avgLatencyMs,
+		&p95LatencyMs,
+		&p99LatencyMs,
+		&errorRate,
+		&lastLogCreatedAt,
+	); err != nil {
+		return invocationlog.AnalyticsPerformanceSummary{}, nil, err
+	}
+
+	var throughputPerMinute *float64
+	rangeMinutes := filter.To.Sub(filter.From).Minutes()
+	if totalRequests > 0 && rangeMinutes > 0 {
+		throughput := float64(totalRequests) / rangeMinutes
+		throughputPerMinute = &throughput
+	}
+
+	return invocationlog.AnalyticsPerformanceSummary{
+		AvgLatencyMs:        nullableFloat64Pointer(avgLatencyMs),
+		P95LatencyMs:        nullableFloat64Pointer(p95LatencyMs),
+		P99LatencyMs:        nullableFloat64Pointer(p99LatencyMs),
+		ThroughputPerMinute: throughputPerMinute,
+		ErrorRate:           nullableFloat64Pointer(errorRate),
+		TotalRequests:       totalRequests,
+	}, nullableTimePointer(lastLogCreatedAt), nil
+}
+
+func (r *QueryReader) queryAnalyticsProviderModelPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsProviderModelPerformance, error) {
+	query, args := buildAnalyticsProviderModelPerformanceQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.AnalyticsProviderModelPerformance{}
+	for rows.Next() {
+		var item invocationlog.AnalyticsProviderModelPerformance
+		var avgLatencyMs sql.NullFloat64
+		var p95LatencyMs sql.NullFloat64
+		var p99LatencyMs sql.NullFloat64
+		var errorRate sql.NullFloat64
+		var cacheHitRate sql.NullFloat64
+		if err := rows.Scan(
+			&item.Provider,
+			&item.Model,
+			&item.Requests,
+			&avgLatencyMs,
+			&p95LatencyMs,
+			&p99LatencyMs,
+			&errorRate,
+			&item.TotalCostMicroUSD,
+			&cacheHitRate,
+		); err != nil {
+			return nil, err
+		}
+		item.AvgLatencyMs = nullableFloat64Pointer(avgLatencyMs)
+		item.P95LatencyMs = nullableFloat64Pointer(p95LatencyMs)
+		item.P99LatencyMs = nullableFloat64Pointer(p99LatencyMs)
+		item.ErrorRate = nullableFloat64Pointer(errorRate)
+		item.CacheHitRate = nullableFloat64Pointer(cacheHitRate)
+		item.TotalCostUSD = invocationlog.FormatCostUSDFromMicroUSD(item.TotalCostMicroUSD)
+		if item.Requests > 0 {
+			costPerRequest := float64(item.TotalCostMicroUSD) / 1_000_000 / float64(item.Requests)
+			item.CostPerRequestUSD = &costPerRequest
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *QueryReader) queryAnalyticsP95LatencyByProvider(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsProviderLatency, error) {
+	query, args := buildAnalyticsP95LatencyByProviderQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.AnalyticsProviderLatency{}
+	for rows.Next() {
+		var item invocationlog.AnalyticsProviderLatency
+		var p95LatencyMs sql.NullFloat64
+		if err := rows.Scan(&item.Provider, &p95LatencyMs, &item.Requests); err != nil {
+			return nil, err
+		}
+		item.P95LatencyMs = nullableFloat64Pointer(p95LatencyMs)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *QueryReader) queryAnalyticsLatencyDistribution(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsLatencyDistributionBucket, error) {
+	query, args := buildAnalyticsLatencyDistributionQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.AnalyticsLatencyDistributionBucket{}
+	for rows.Next() {
+		var item invocationlog.AnalyticsLatencyDistributionBucket
+		var p50LatencyMs sql.NullFloat64
+		var p95LatencyMs sql.NullFloat64
+		var p99LatencyMs sql.NullFloat64
+		if err := rows.Scan(&item.Bucket, &item.Requests, &p50LatencyMs, &p95LatencyMs, &p99LatencyMs); err != nil {
+			return nil, err
+		}
+		item.Bucket = item.Bucket.UTC()
+		item.P50LatencyMs = nullableFloat64Pointer(p50LatencyMs)
+		item.P95LatencyMs = nullableFloat64Pointer(p95LatencyMs)
+		item.P99LatencyMs = nullableFloat64Pointer(p99LatencyMs)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return fillAnalyticsLatencyDistributionBuckets(filter, items), nil
+}
+
+func (r *QueryReader) queryAnalyticsSlowestRequests(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsSlowRequest, error) {
+	query, args := buildAnalyticsSlowestRequestsQuery(filter)
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []invocationlog.AnalyticsSlowRequest{}
+	for rows.Next() {
+		var item invocationlog.AnalyticsSlowRequest
+		if err := rows.Scan(
+			&item.RequestID,
+			&item.ProjectID,
+			&item.Provider,
+			&item.Model,
+			&item.LatencyMs,
+			&item.HTTPStatus,
+			&item.TerminalStatus,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		item.CreatedAt = item.CreatedAt.UTC()
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *QueryReader) queryCostReportBuckets(ctx context.Context, filter invocationlog.CostReportFilter) ([]invocationlog.CostReportBucket, *time.Time, error) {
@@ -388,6 +631,7 @@ func (r *QueryReader) queryCostReportBuckets(ctx context.Context, filter invocat
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
+	buckets = fillCostReportBuckets(filter, buckets)
 	var lastLogCreatedAt *time.Time
 	if hasLastLog {
 		lastLogCreatedAt = &maxLastLog
@@ -493,7 +737,7 @@ func (r *QueryReader) queryCostReportBudgetScopeBreakdown(ctx context.Context, f
 
 func buildCostReportBucketsQuery(filter invocationlog.CostReportFilter) (string, []any) {
 	whereSQL, args := buildCostReportWhere(filter)
-	bucketExpression := costReportBucketExpression(filter.Period)
+	bucketExpression := costReportBucketExpression(filter)
 	query := fmt.Sprintf(`
 select
   %s as period_start,
@@ -612,6 +856,9 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 		"created_at >= $1",
 		"created_at < $2",
 	}
+	addOptionalUUIDWhere := func(expression string, value string) {
+		addUUIDWhere(&where, &args, expression, value)
+	}
 	addOptionalWhere := func(expression string, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -620,9 +867,9 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
 	}
 
-	addOptionalWhere("tenant_id", filter.TenantID)
-	addOptionalWhere("project_id", filter.ProjectID)
-	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalUUIDWhere("tenant_id", filter.TenantID)
+	addOptionalUUIDWhere("project_id", filter.ProjectID)
+	addOptionalUUIDWhere("application_id", filter.ApplicationID)
 	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
 	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
@@ -632,19 +879,23 @@ func buildCostReportWhere(filter invocationlog.CostReportFilter) (string, []any)
 	return strings.Join(where, " and "), args
 }
 
-func costReportBucketExpression(period string) string {
-	switch period {
+func costReportBucketExpression(filter invocationlog.CostReportFilter) string {
+	switch filter.Period {
+	case "hour":
+		return timeSeriesBucketExpression(costReportBucketConfig(filter))
 	case "week":
 		return "date_trunc('week', created_at)"
 	case "month":
 		return "date_trunc('month', created_at)"
 	default:
-		return "date_trunc('day', created_at)"
+		return timeSeriesBucketExpression(costReportBucketConfig(filter))
 	}
 }
 
 func costReportBucketEnd(start time.Time, period string) time.Time {
 	switch period {
+	case "hour":
+		return start.Add(time.Hour)
 	case "week":
 		return start.AddDate(0, 0, 7)
 	case "month":
@@ -653,13 +904,266 @@ func costReportBucketEnd(start time.Time, period string) time.Time {
 		return start.AddDate(0, 0, 1)
 	}
 }
-func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
-	args := []any{filter.TenantID, filter.ProjectID, filter.From.UTC(), filter.To.UTC()}
+
+func costReportBucketConfig(filter invocationlog.CostReportFilter) invocationlog.TimeSeriesBucketConfig {
+	switch filter.Period {
+	case "week":
+		return invocationlog.TimeSeriesBucketConfig{
+			Interval:            7 * 24 * time.Hour,
+			IntervalLabel:       "1w",
+			ExpectedBucketCount: 0,
+			Unit:                "week",
+		}
+	case "month":
+		return invocationlog.TimeSeriesBucketConfig{
+			Interval:            0,
+			IntervalLabel:       "1mo",
+			ExpectedBucketCount: 0,
+			Unit:                "month",
+		}
+	default:
+		return invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To)
+	}
+}
+
+func timeSeriesBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
+	switch config.Unit {
+	case "minute":
+		return "date_trunc('minute', created_at)"
+	case "5minute":
+		return "date_trunc('hour', created_at) + ((extract(minute from created_at)::int / 5) * interval '5 minutes')"
+	case "hour":
+		return "date_trunc('hour', created_at)"
+	case "day":
+		return "date_trunc('day', created_at)"
+	default:
+		return "date_trunc('day', created_at)"
+	}
+}
+
+func fillCostReportBuckets(filter invocationlog.CostReportFilter, buckets []invocationlog.CostReportBucket) []invocationlog.CostReportBucket {
+	config := costReportBucketConfig(filter)
+	if config.ExpectedBucketCount <= 0 {
+		return buckets
+	}
+
+	bucketByStart := make(map[time.Time]invocationlog.CostReportBucket, len(buckets))
+	for _, bucket := range buckets {
+		start := invocationlog.AlignTimeSeriesBucketStart(bucket.PeriodStart, config)
+		bucket.PeriodStart = start
+		bucket.PeriodEnd = start.Add(config.Interval)
+		bucketByStart[start] = bucket
+	}
+
+	filled := make([]invocationlog.CostReportBucket, 0, config.ExpectedBucketCount)
+	start := firstExpectedBucketStart(filter.To, config)
+	for index := 0; index < config.ExpectedBucketCount; index++ {
+		periodStart := start.Add(time.Duration(index) * config.Interval)
+		if bucket, ok := bucketByStart[periodStart]; ok {
+			filled = append(filled, bucket)
+			continue
+		}
+		filled = append(filled, invocationlog.CostReportBucket{
+			PeriodStart:  periodStart,
+			PeriodEnd:    periodStart.Add(config.Interval),
+			CostUSD:      invocationlog.FormatCostUSDFromMicroUSD(0),
+			SavedCostUSD: invocationlog.FormatCostUSDFromMicroUSD(0),
+		})
+	}
+
+	return filled
+}
+
+func firstExpectedBucketStart(to time.Time, config invocationlog.TimeSeriesBucketConfig) time.Time {
+	lastStart := invocationlog.AlignTimeSeriesBucketStart(to.Add(-time.Nanosecond), config)
+	return lastStart.Add(-time.Duration(config.ExpectedBucketCount-1) * config.Interval)
+}
+
+func buildAnalyticsPerformanceSummaryQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	query := fmt.Sprintf(`
+%s
+select
+  count(*)::bigint as total_requests,
+  (avg(latency_ms) filter (where %s))::double precision as avg_latency_ms,
+  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
+  (percentile_disc(0.99) within group (order by latency_ms) filter (where %s))::double precision as p99_latency_ms,
+  (count(*) filter (where %s))::double precision / nullif(count(*), 0)::double precision as error_rate,
+  max(created_at) as last_log_created_at
+from filtered`, analyticsPerformanceFilteredCTE(whereSQL), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsErrorSQL())
+	return query, args
+}
+
+func buildAnalyticsProviderModelPerformanceQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	query := fmt.Sprintf(`
+%s
+select
+  provider_key,
+  model_key,
+  count(*)::bigint as request_count,
+  (avg(latency_ms) filter (where %s))::double precision as avg_latency_ms,
+  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
+  (percentile_disc(0.99) within group (order by latency_ms) filter (where %s))::double precision as p99_latency_ms,
+  (count(*) filter (where %s))::double precision / nullif(count(*), 0)::double precision as error_rate,
+  coalesce(sum(cost_micro_usd), 0)::bigint as total_cost_micro_usd,
+  (count(*) filter (where cache_status = 'hit'))::double precision / nullif(count(*), 0)::double precision as cache_hit_rate
+from filtered
+where provider_key is not null and provider_key <> '' and model_key is not null and model_key <> ''
+group by 1, 2
+order by request_count desc, provider_key, model_key
+limit 100`, analyticsPerformanceFilteredCTE(whereSQL), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsErrorSQL())
+	return query, args
+}
+
+func buildAnalyticsP95LatencyByProviderQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	query := fmt.Sprintf(`
+%s
+select
+  provider_key,
+  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
+  count(*)::bigint as request_count
+from filtered
+where provider_key is not null and provider_key <> ''
+group by 1
+order by p95_latency_ms desc nulls last, request_count desc, provider_key
+limit 20`, analyticsPerformanceFilteredCTE(whereSQL), analyticsLatencyEligibleSQL())
+	return query, args
+}
+
+func buildAnalyticsLatencyDistributionQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	bucketExpression := analyticsPerformanceBucketExpression(filter.From, filter.To)
+	query := fmt.Sprintf(`
+%s
+select
+  %s as bucket,
+  count(*)::bigint as request_count,
+  (percentile_disc(0.50) within group (order by latency_ms) filter (where %s))::double precision as p50_latency_ms,
+  (percentile_disc(0.95) within group (order by latency_ms) filter (where %s))::double precision as p95_latency_ms,
+  (percentile_disc(0.99) within group (order by latency_ms) filter (where %s))::double precision as p99_latency_ms
+from filtered
+group by 1
+order by 1`, analyticsPerformanceFilteredCTE(whereSQL), bucketExpression, analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL(), analyticsLatencyEligibleSQL())
+	return query, args
+}
+
+func buildAnalyticsSlowestRequestsQuery(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+	whereSQL, args := buildAnalyticsPerformanceWhere(filter)
+	query := fmt.Sprintf(`
+%s
+select
+  request_id,
+  project_id,
+  coalesce(provider_key, 'unknown') as provider_key,
+  coalesce(model_key, 'unknown') as model_key,
+  latency_ms,
+  http_status,
+  terminal_status,
+  created_at
+from filtered
+where latency_ms is not null
+order by latency_ms desc, created_at desc, request_id desc
+limit 10`, analyticsPerformanceFilteredCTE(whereSQL))
+	return query, args
+}
+
+func buildAnalyticsPerformanceWhere(filter invocationlog.AnalyticsPerformanceFilter) (string, []any) {
+	args := []any{filter.From.UTC(), filter.To.UTC()}
 	where := []string{
-		"tenant_id = $1",
-		"project_id = $2",
-		"created_at >= $3",
-		"created_at < $4",
+		"created_at >= $1",
+		"created_at < $2",
+	}
+	addOptionalUUIDWhere := func(expression string, value string) {
+		addUUIDWhere(&where, &args, expression, value)
+	}
+	addOptionalWhere := func(expression string, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		args = append(args, value)
+		where = append(where, fmt.Sprintf("%s = $%d", expression, len(args)))
+	}
+
+	addOptionalUUIDWhere("tenant_id", filter.TenantID)
+	addOptionalUUIDWhere("project_id", filter.ProjectID)
+	addOptionalWhere("coalesce(nullif(selected_provider, ''), nullif(provider, ''))", filter.Provider)
+	addOptionalWhere("coalesce(nullif(selected_model, ''), nullif(model, ''))", filter.Model)
+
+	return strings.Join(where, " and "), args
+}
+
+func analyticsPerformanceFilteredCTE(whereSQL string) string {
+	return fmt.Sprintf(`with filtered as (
+  select
+    request_id,
+    project_id::text as project_id,
+    coalesce(nullif(selected_provider, ''), nullif(provider, '')) as provider_key,
+    coalesce(nullif(selected_model, ''), nullif(model, '')) as model_key,
+    %s as terminal_status,
+    http_status,
+    latency_ms,
+    cost_micro_usd,
+    coalesce(nullif(cache_status, ''), 'bypass') as cache_status,
+    created_at
+  from p0_llm_invocation_logs
+  where %s
+)`, terminalStatusSQL, whereSQL)
+}
+
+func analyticsLatencyEligibleSQL() string {
+	return "terminal_status in ('success', 'failed') and latency_ms is not null"
+}
+
+func analyticsErrorSQL() string {
+	return "http_status >= 500 or terminal_status = 'failed'"
+}
+
+func analyticsPerformanceBucketExpression(from time.Time, to time.Time) string {
+	return timeSeriesBucketExpression(invocationlog.TimeSeriesBucketConfigForRange(from, to))
+}
+
+func fillAnalyticsLatencyDistributionBuckets(filter invocationlog.AnalyticsPerformanceFilter, buckets []invocationlog.AnalyticsLatencyDistributionBucket) []invocationlog.AnalyticsLatencyDistributionBucket {
+	config := invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To)
+	if config.ExpectedBucketCount <= 0 {
+		return buckets
+	}
+
+	bucketByStart := make(map[time.Time]invocationlog.AnalyticsLatencyDistributionBucket, len(buckets))
+	for _, bucket := range buckets {
+		start := invocationlog.AlignTimeSeriesBucketStart(bucket.Bucket, config)
+		bucket.Bucket = start
+		bucketByStart[start] = bucket
+	}
+
+	filled := make([]invocationlog.AnalyticsLatencyDistributionBucket, 0, config.ExpectedBucketCount)
+	start := firstExpectedBucketStart(filter.To, config)
+	for index := 0; index < config.ExpectedBucketCount; index++ {
+		bucketStart := start.Add(time.Duration(index) * config.Interval)
+		if bucket, ok := bucketByStart[bucketStart]; ok {
+			filled = append(filled, bucket)
+			continue
+		}
+		filled = append(filled, invocationlog.AnalyticsLatencyDistributionBucket{
+			Bucket: bucketStart,
+		})
+	}
+
+	return filled
+}
+
+func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []any) {
+	args := []any{}
+	where := []string{}
+	addUUIDWhere(&where, &args, "tenant_id", filter.TenantID)
+	addUUIDWhere(&where, &args, "project_id", filter.ProjectID)
+	args = append(args, filter.From.UTC())
+	where = append(where, fmt.Sprintf("created_at >= $%d", len(args)))
+	args = append(args, filter.To.UTC())
+	where = append(where, fmt.Sprintf("created_at < $%d", len(args)))
+	addOptionalUUIDWhere := func(column string, value string) {
+		addUUIDWhere(&where, &args, column, value)
 	}
 	addOptionalWhere := func(column string, value string) {
 		if strings.TrimSpace(value) == "" {
@@ -673,7 +1177,7 @@ func buildProjectLogsQuery(filter invocationlog.ProjectLogsFilter) (string, []an
 	addOptionalWhere("provider", filter.Provider)
 	addOptionalWhere("model", filter.Model)
 	addOptionalWhere("cache_status", filter.CacheStatus)
-	addOptionalWhere("application_id", filter.ApplicationID)
+	addOptionalUUIDWhere("application_id", filter.ApplicationID)
 	addOptionalWhere(budgetScopeTypeSQL, filter.BudgetScope.Type)
 	addOptionalWhere(budgetScopeIDSQL, filter.BudgetScope.ID)
 	addOptionalWhere(budgetScopeResolvedBySQL, filter.BudgetScope.ResolvedBy)
@@ -687,6 +1191,7 @@ select
   request_id,
   project_id::text,
   application_id::text,
+  end_user_id,
   %s as budget_scope_type,
   %s as budget_scope_id,
   %s as budget_scope_resolved_by,
@@ -721,14 +1226,8 @@ func buildDashboardOverviewQuery(filter invocationlog.DashboardOverviewFilter) (
 		"created_at >= $1",
 		"created_at < $2",
 	}
-	if filter.TenantID != "" {
-		args = append(args, filter.TenantID)
-		where = append(where, fmt.Sprintf("tenant_id = $%d", len(args)))
-	}
-	if filter.ProjectID != "" {
-		args = append(args, filter.ProjectID)
-		where = append(where, fmt.Sprintf("project_id = $%d", len(args)))
-	}
+	addUUIDWhere(&where, &args, "tenant_id", filter.TenantID)
+	addUUIDWhere(&where, &args, "project_id", filter.ProjectID)
 	addOptionalWhere := func(expression string, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -995,9 +1494,49 @@ where tenant_id = $1
   and request_id = $3
 limit 1`, budgetScopeTypeSQL, budgetScopeIDSQL, budgetScopeResolvedBySQL)
 
+func addUUIDWhere(where *[]string, args *[]any, expression string, value string) {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return
+	}
+	if !isPostgresUUID(normalized) {
+		*where = append(*where, "1 = 0")
+		return
+	}
+	*args = append(*args, normalized)
+	*where = append(*where, fmt.Sprintf("%s = $%d", expression, len(*args)))
+}
+
+func isPostgresUUID(value string) bool {
+	normalized := strings.TrimSpace(value)
+	if len(normalized) != 36 {
+		return false
+	}
+	for index, char := range normalized {
+		switch index {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return false
+			}
+		default:
+			if !isHexChar(char) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isHexChar(char rune) bool {
+	return (char >= '0' && char <= '9') ||
+		(char >= 'a' && char <= 'f') ||
+		(char >= 'A' && char <= 'F')
+}
+
 func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	var log invocationlog.LlmInvocationLog
 	var applicationID sql.NullString
+	var endUserID sql.NullString
 	var budgetScopeType sql.NullString
 	var budgetScopeID sql.NullString
 	var budgetScopeResolvedBy sql.NullString
@@ -1009,6 +1548,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 		&log.RequestID,
 		&log.ProjectID,
 		&applicationID,
+		&endUserID,
 		&budgetScopeType,
 		&budgetScopeID,
 		&budgetScopeResolvedBy,
@@ -1034,6 +1574,7 @@ func scanProjectLogListRow(rows Rows) (invocationlog.LlmInvocationLog, error) {
 	}
 
 	log.ApplicationID = nullableString(applicationID)
+	log.EndUserID = nullableString(endUserID)
 	log.BudgetScope = budget.NormalizeScope(budget.Scope{
 		Type:       nullableString(budgetScopeType),
 		ID:         nullableString(budgetScopeID),

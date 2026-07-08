@@ -84,6 +84,22 @@ describe('Control Plane demo seed baseline', () => {
       resolver: 'environment',
       adapterConfig: { requestFormat: 'openai_chat_completions' },
     });
+    expect(openAIProvider?.models).toEqual([
+      'gpt-4o-mini',
+      'gpt-4o',
+      'gpt-5.4-mini',
+      'gpt-5.4',
+    ]);
+    expect(
+      runtimeConfig.models
+        .filter((model) => model.provider === 'openai-main')
+        .map((model) => model.model),
+    ).toEqual(['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4']);
+    expect(
+      runtimeConfig.pricingRules
+        .filter((rule) => rule.provider === 'openai-main')
+        .map((rule) => rule.model),
+    ).toEqual(['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4']);
     expect(mockProvider).toMatchObject({
       providerId: DEMO_MOCK_PROVIDER_ID,
       adapterType: 'mock',
@@ -185,6 +201,9 @@ describe('Control Plane demo seed baseline', () => {
           defaultResolver: 'environment',
           modelsEndpointPath: '/models',
           status: ResourceStatus.ACTIVE,
+          providerConfig: expect.objectContaining({
+            models: ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4'],
+          }),
         }),
       }),
     );
@@ -242,10 +261,6 @@ describe('Control Plane demo seed baseline', () => {
 
   it('upserts the OpenAI-compatible provider when actual demo mode is enabled', async () => {
     const tx = createMockTransaction();
-    tx.providerConnection.upsert.mockImplementation(
-      (args: { create?: { id?: string } }) =>
-        Promise.resolve({ id: args.create?.id ?? 'provider-demo-id' }),
-    );
     const client = {
       $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
         callback(tx),
@@ -256,11 +271,18 @@ describe('Control Plane demo seed baseline', () => {
       await seedDemoData(client as unknown as PrismaClient);
     });
 
-    expect(tx.providerConnection.upsert).toHaveBeenCalledTimes(2);
-    expect(tx.providerConnection.upsert).toHaveBeenCalledWith(
+    expect(tx.providerConnection.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: '00000000-0000-4000-8000-000000000100',
+        provider: 'openai-main',
+      },
+    });
+    expect(tx.providerConnection.create).toHaveBeenCalledTimes(2);
+    expect(tx.providerConnection.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
+        data: expect.objectContaining({
           id: DEMO_OPENAI_PROVIDER_ID,
+          projectId: null,
           provider: 'openai-main',
           resolver: 'environment',
           secretRef: `provider_credential:${DEMO_OPENAI_PROVIDER_ID}`,
@@ -268,6 +290,7 @@ describe('Control Plane demo seed baseline', () => {
             adapterType: 'openai_compatible',
             requestFormat: 'openai_chat_completions',
             credentialRequired: true,
+            models: ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4'],
           }),
         }),
       }),
@@ -313,9 +336,12 @@ function createMockTransaction() {
     application: { upsert: jest.fn() },
     providerPreset: { updateMany: jest.fn(), upsert: jest.fn() },
     providerConnection: {
-      upsert: jest.fn().mockImplementation(
-        (args: { create?: { id?: string } }) =>
-          Promise.resolve({ id: args.create?.id ?? 'provider-demo-id' }),
+      create: jest.fn((args: { data: { id?: string } }) =>
+        Promise.resolve({ id: args.data.id ?? 'provider-demo-id' }),
+      ),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve({ id: args.where.id }),
       ),
     },
     applicationProviderConnection: {

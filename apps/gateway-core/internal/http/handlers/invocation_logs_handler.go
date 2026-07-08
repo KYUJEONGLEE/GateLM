@@ -43,6 +43,10 @@ type DashboardOverviewReader interface {
 	GetDashboardOverview(ctx context.Context, filter invocationlog.DashboardOverviewFilter) (invocationlog.DashboardOverviewFields, error)
 }
 
+type AnalyticsPerformanceReader interface {
+	GetAnalyticsPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error)
+}
+
 type ProjectLogsHandler struct {
 	Reader   ProjectLogsReader
 	TenantID string
@@ -59,6 +63,11 @@ type DashboardOverviewHandler struct {
 	TenantID string
 }
 
+type AnalyticsPerformanceHandler struct {
+	Reader   AnalyticsPerformanceReader
+	TenantID string
+}
+
 type projectLogsResponse struct {
 	Data       []requestLogListItemResponse `json:"data"`
 	Pagination paginationResponse           `json:"pagination"`
@@ -72,6 +81,10 @@ type dashboardOverviewResponse struct {
 	Data dashboardOverviewDataResponse `json:"data"`
 }
 
+type analyticsPerformanceResponse struct {
+	Data analyticsPerformanceDataResponse `json:"data"`
+}
+
 type dashboardOverviewDataResponse struct {
 	GeneratedAt   time.Time                      `json:"generatedAt"`
 	TimeRange     dashboardTimeRangeResponse     `json:"timeRange"`
@@ -83,6 +96,75 @@ type dashboardOverviewDataResponse struct {
 	Filter        dashboardFilterResponse        `json:"filters"`
 	Totals        dashboardTotalsResponse        `json:"totals"`
 	DataFreshness dashboardDataFreshnessResponse `json:"dataFreshness"`
+}
+
+type analyticsPerformanceDataResponse struct {
+	Summary                  analyticsPerformanceSummaryResponse          `json:"summary"`
+	ProviderModelPerformance []analyticsProviderModelPerformanceResponse  `json:"providerModelPerformance"`
+	P95LatencyByProvider     []analyticsProviderLatencyResponse           `json:"p95LatencyByProvider"`
+	LatencyDistribution      []analyticsLatencyDistributionBucketResponse `json:"latencyDistribution"`
+	SlowestRequests          []analyticsSlowRequestResponse               `json:"slowestRequests"`
+	BucketInterval           string                                       `json:"bucketInterval"`
+	ExpectedBucketCount      int                                          `json:"expectedBucketCount"`
+	Range                    dashboardRangeResponse                       `json:"range"`
+	Filter                   analyticsPerformanceFilterResponse           `json:"filters"`
+	DataFreshness            dashboardDataFreshnessResponse               `json:"dataFreshness"`
+}
+
+type analyticsPerformanceSummaryResponse struct {
+	AvgLatencyMs        *float64 `json:"avgLatencyMs"`
+	P95LatencyMs        *float64 `json:"p95LatencyMs"`
+	P99LatencyMs        *float64 `json:"p99LatencyMs"`
+	ThroughputPerMinute *float64 `json:"throughputPerMinute"`
+	ErrorRate           *float64 `json:"errorRate"`
+	TotalRequests       int64    `json:"totalRequests"`
+}
+
+type analyticsProviderModelPerformanceResponse struct {
+	Provider          string   `json:"provider"`
+	Model             string   `json:"model"`
+	Requests          int64    `json:"requests"`
+	AvgLatencyMs      *float64 `json:"avgLatencyMs"`
+	P95LatencyMs      *float64 `json:"p95LatencyMs"`
+	P99LatencyMs      *float64 `json:"p99LatencyMs"`
+	ErrorRate         *float64 `json:"errorRate"`
+	CostPerRequestUSD *float64 `json:"costPerRequestUsd"`
+	TotalCostMicroUSD int64    `json:"totalCostMicroUsd"`
+	TotalCostUSD      string   `json:"totalCostUsd"`
+	CacheHitRate      *float64 `json:"cacheHitRate"`
+}
+
+type analyticsProviderLatencyResponse struct {
+	Provider     string   `json:"provider"`
+	P95LatencyMs *float64 `json:"p95LatencyMs"`
+	Requests     int64    `json:"requests"`
+}
+
+type analyticsLatencyDistributionBucketResponse struct {
+	Bucket       time.Time `json:"bucket"`
+	Label        string    `json:"label"`
+	P50LatencyMs *float64  `json:"p50LatencyMs"`
+	P95LatencyMs *float64  `json:"p95LatencyMs"`
+	P99LatencyMs *float64  `json:"p99LatencyMs"`
+	Requests     int64     `json:"requests"`
+}
+
+type analyticsSlowRequestResponse struct {
+	RequestID  string    `json:"requestId"`
+	Timestamp  time.Time `json:"timestamp"`
+	ProjectID  string    `json:"projectId"`
+	Provider   string    `json:"provider"`
+	Model      string    `json:"model"`
+	LatencyMs  int64     `json:"latencyMs"`
+	StatusCode int       `json:"statusCode"`
+	Status     string    `json:"status"`
+}
+
+type analyticsPerformanceFilterResponse struct {
+	TenantID  string  `json:"tenantId"`
+	ProjectID *string `json:"projectId"`
+	Provider  *string `json:"provider"`
+	Model     *string `json:"model"`
 }
 
 type dashboardTimeRangeResponse struct {
@@ -410,6 +492,7 @@ type requestLogListItemResponse struct {
 	ProjectID        string                 `json:"projectId"`
 	ApplicationID    string                 `json:"applicationId"`
 	BudgetScope      budgetScopeResponse    `json:"budgetScope"`
+	UserRef          *string                `json:"userRef,omitempty"`
 	Provider         string                 `json:"provider"`
 	Model            string                 `json:"model"`
 	RequestedModel   string                 `json:"requestedModel"`
@@ -535,6 +618,48 @@ func (h DashboardOverviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (h AnalyticsPerformanceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.Reader == nil {
+		writeGatewayError(w, http.StatusServiceUnavailable, "", "invocation_log_reader_unavailable", "Invocation log reader is not configured.")
+		return
+	}
+
+	from, err := parseRequiredRFC3339Query(r, "from")
+	if err != nil {
+		writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
+		return
+	}
+	to, err := parseRequiredRFC3339Query(r, "to")
+	if err != nil {
+		writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
+		return
+	}
+
+	query := r.URL.Query()
+	filter := invocationlog.AnalyticsPerformanceFilter{
+		TenantID:  firstNonEmptyQueryValue(query.Get("tenantId"), h.TenantID),
+		ProjectID: query.Get("projectId"),
+		Provider:  query.Get("provider"),
+		Model:     query.Get("model"),
+		From:      from,
+		To:        to,
+	}
+	performance, err := h.Reader.GetAnalyticsPerformance(r.Context(), filter)
+	if err != nil {
+		if errors.Is(err, invocationlog.ErrInvalidLogQuery) {
+			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
+			return
+		}
+		logInvocationLogInternalError(r, "get_analytics_performance", filter.TenantID, filter.ProjectID, err)
+		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Analytics performance could not be loaded.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, analyticsPerformanceResponse{
+		Data: analyticsPerformanceData(filter, performance),
+	})
+}
+
 func (h ProjectLogsHandler) projectLogsFilterFromRequest(r *http.Request) (invocationlog.ProjectLogsFilter, error) {
 	from, err := parseRequiredRFC3339Query(r, "from")
 	if err != nil {
@@ -656,6 +781,41 @@ func dashboardOverviewData(filter invocationlog.DashboardOverviewFilter, overvie
 	}
 }
 
+func analyticsPerformanceData(filter invocationlog.AnalyticsPerformanceFilter, performance invocationlog.AnalyticsPerformanceFields) analyticsPerformanceDataResponse {
+	return analyticsPerformanceDataResponse{
+		Summary: analyticsPerformanceSummaryResponse{
+			AvgLatencyMs:        performance.Summary.AvgLatencyMs,
+			P95LatencyMs:        performance.Summary.P95LatencyMs,
+			P99LatencyMs:        performance.Summary.P99LatencyMs,
+			ThroughputPerMinute: performance.Summary.ThroughputPerMinute,
+			ErrorRate:           performance.Summary.ErrorRate,
+			TotalRequests:       performance.Summary.TotalRequests,
+		},
+		ProviderModelPerformance: analyticsProviderModelPerformanceResponses(performance.ProviderModelPerformance),
+		P95LatencyByProvider:     analyticsProviderLatencyResponses(performance.P95LatencyByProvider),
+		LatencyDistribution:      analyticsLatencyDistributionResponses(filter, performance.LatencyDistribution),
+		SlowestRequests:          analyticsSlowRequestResponses(performance.SlowestRequests),
+		BucketInterval:           performance.BucketInterval,
+		ExpectedBucketCount:      performance.ExpectedBucketCount,
+		Range: dashboardRangeResponse{
+			From: filter.From,
+			To:   filter.To,
+		},
+		Filter: analyticsPerformanceFilterResponse{
+			TenantID:  filter.TenantID,
+			ProjectID: stringPointerOrNil(filter.ProjectID),
+			Provider:  stringPointerOrNil(filter.Provider),
+			Model:     stringPointerOrNil(filter.Model),
+		},
+		DataFreshness: dashboardDataFreshnessResponse{
+			Source:           performance.DataFreshness.Source,
+			RecordCount:      performance.DataFreshness.RecordCount,
+			LastLogCreatedAt: performance.DataFreshness.LastLogCreatedAt,
+			GeneratedAt:      performance.DataFreshness.GeneratedAt,
+		},
+	}
+}
+
 func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResponse {
 	return requestDetailDataResponse{
 		RequestID:       detail.RequestID,
@@ -747,6 +907,81 @@ func requestDetailData(detail invocationlog.RequestDetail) requestDetailDataResp
 	}
 }
 
+func analyticsProviderModelPerformanceResponses(items []invocationlog.AnalyticsProviderModelPerformance) []analyticsProviderModelPerformanceResponse {
+	responses := make([]analyticsProviderModelPerformanceResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, analyticsProviderModelPerformanceResponse{
+			Provider:          item.Provider,
+			Model:             item.Model,
+			Requests:          item.Requests,
+			AvgLatencyMs:      item.AvgLatencyMs,
+			P95LatencyMs:      item.P95LatencyMs,
+			P99LatencyMs:      item.P99LatencyMs,
+			ErrorRate:         item.ErrorRate,
+			CostPerRequestUSD: item.CostPerRequestUSD,
+			TotalCostMicroUSD: item.TotalCostMicroUSD,
+			TotalCostUSD:      item.TotalCostUSD,
+			CacheHitRate:      item.CacheHitRate,
+		})
+	}
+	return responses
+}
+
+func analyticsProviderLatencyResponses(items []invocationlog.AnalyticsProviderLatency) []analyticsProviderLatencyResponse {
+	responses := make([]analyticsProviderLatencyResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, analyticsProviderLatencyResponse{
+			Provider:     item.Provider,
+			P95LatencyMs: item.P95LatencyMs,
+			Requests:     item.Requests,
+		})
+	}
+	return responses
+}
+
+func analyticsLatencyDistributionResponses(filter invocationlog.AnalyticsPerformanceFilter, items []invocationlog.AnalyticsLatencyDistributionBucket) []analyticsLatencyDistributionBucketResponse {
+	responses := make([]analyticsLatencyDistributionBucketResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, analyticsLatencyDistributionBucketResponse{
+			Bucket:       item.Bucket,
+			Label:        analyticsBucketLabel(filter.From, filter.To, item.Bucket),
+			P50LatencyMs: item.P50LatencyMs,
+			P95LatencyMs: item.P95LatencyMs,
+			P99LatencyMs: item.P99LatencyMs,
+			Requests:     item.Requests,
+		})
+	}
+	return responses
+}
+
+func analyticsSlowRequestResponses(items []invocationlog.AnalyticsSlowRequest) []analyticsSlowRequestResponse {
+	responses := make([]analyticsSlowRequestResponse, 0, len(items))
+	for _, item := range items {
+		responses = append(responses, analyticsSlowRequestResponse{
+			RequestID:  item.RequestID,
+			Timestamp:  item.CreatedAt,
+			ProjectID:  item.ProjectID,
+			Provider:   item.Provider,
+			Model:      item.Model,
+			LatencyMs:  item.LatencyMs,
+			StatusCode: item.HTTPStatus,
+			Status:     item.TerminalStatus,
+		})
+	}
+	return responses
+}
+
+func analyticsBucketLabel(from time.Time, to time.Time, bucket time.Time) string {
+	duration := to.Sub(from)
+	if duration <= time.Hour {
+		return bucket.UTC().Format("15:04")
+	}
+	if duration <= 48*time.Hour {
+		return bucket.UTC().Format("15:00")
+	}
+	return bucket.UTC().Format("Jan 2")
+}
+
 func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []requestLogListItemResponse {
 	responses := make([]requestLogListItemResponse, 0, len(items))
 	for _, item := range items {
@@ -755,6 +990,7 @@ func requestLogListItemResponses(items []invocationlog.RequestLogListItem) []req
 			ProjectID:        item.ProjectID,
 			ApplicationID:    item.ApplicationID,
 			BudgetScope:      budgetScopeResponseFromScope(item.BudgetScope, item.ApplicationID),
+			UserRef:          stringPointerOrNil(item.UserRef),
 			Provider:         item.Provider,
 			Model:            item.Model,
 			RequestedModel:   item.RequestedModel,

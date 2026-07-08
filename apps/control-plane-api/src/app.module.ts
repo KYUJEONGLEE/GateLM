@@ -12,6 +12,7 @@ import { BudgetOperationsModule } from './modules/budget-operations/budget-opera
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { ProjectAdminsModule } from './modules/project-admins/project-admins.module';
 import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
 import { RuntimeConfigsModule } from './modules/runtime-configs/runtime-configs.module';
 import { TeamsModule } from './modules/teams/teams.module';
@@ -27,6 +28,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     DatabaseModule,
     TenantsModule,
     ProjectsModule,
+    ProjectAdminsModule,
     ApplicationsModule,
     ProviderConnectionsModule,
     ApiKeysModule,

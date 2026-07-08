@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,6 +10,7 @@ datasource db {
 
 enum ResourceStatus {
   ACTIVE
+  DRAFT
   DISABLED
   ARCHIVED
 }
@@ -58,6 +60,9 @@ model Tenant {
   teams               Team[]
   projectTeamAssignments ProjectTeamAssignment[]
   tenantMemberships   TenantMembership[]
+  tenantAdmins         TenantAdmin[]
+  projectAdmins        ProjectAdmin[]
+  projectAdminInvitations ProjectAdminInvitation[]
   conversations        Conversation[]
   chatMessages         ChatMessage[]
 
@@ -82,6 +87,9 @@ model User {
   authSessions           AuthSession[]
   oauthAccounts          OAuthAccount[]
   tenantMemberships      TenantMembership[]
+  tenantAdmins           TenantAdmin[]
+  projectAdmins          ProjectAdmin[]
+  sentProjectAdminInvitations ProjectAdminInvitation[] @relation("ProjectAdminInvitationInviter")
 
   @@index([email])
   @@index([status])
@@ -158,6 +166,65 @@ model TenantMembership {
   @@map("tenant_memberships")
 }
 
+model TenantAdmin {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_admins")
+}
+
+model ProjectAdmin {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  projectId String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("project_admins")
+}
+
+model ProjectAdminInvitation {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  projectId       String    @db.Uuid
+  email           String
+  name            String
+  tokenHash       String
+  status          String    @default("pending")
+  invitedByUserId String?   @db.Uuid
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant        Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedByUser User?   @relation("ProjectAdminInvitationInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tokenHash])
+  @@index([tenantId, status])
+  @@index([projectId, status])
+  @@index([email, status])
+  @@map("project_admin_invitations")
+}
+
 model Project {
   id          String         @id @default(uuid()) @db.Uuid
   tenantId    String         @db.Uuid
@@ -181,6 +248,8 @@ model Project {
   budgetAuditLogs     BudgetAuditLog[]
   notificationEvents  NotificationEvent[]
   projectTeamAssignments ProjectTeamAssignment[]
+  projectAdmins          ProjectAdmin[]
+  projectAdminInvitations ProjectAdminInvitation[]
   conversations        Conversation[]
   chatMessages         ChatMessage[]
 

@@ -252,6 +252,41 @@ func TestChatCompletionsHandlerCalculatesCostFromProviderUsage(t *testing.T) {
 		t.Fatalf("costing metadata must describe tenant-owned provider usage, not GateLM billing: %+v", metadata)
 	}
 }
+
+func TestPricingKeysIncludeCanonicalAndCompatibilityAliases(t *testing.T) {
+	reqCtx := &pipeline.RequestContext{
+		SelectedProvider:           "openai",
+		SelectedProviderID:         "79e07d4e-3d26-47fc-b001-ae0e6402ed82",
+		SelectedProviderCatalogKey: "openai",
+		SelectedModel:              "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o",
+		SelectedModelID:            "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o",
+	}
+	target := providerCallTarget{
+		ProviderID:   "79e07d4e-3d26-47fc-b001-ae0e6402ed82",
+		ProviderName: "openai",
+		AdapterType:  "openai_compatible",
+		ModelID:      "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o",
+		ModelName:    "gpt-4o",
+		ExecutionConfig: provider.ExecutionConfig{
+			ProviderID:   "79e07d4e-3d26-47fc-b001-ae0e6402ed82",
+			ProviderName: "openai",
+			AdapterType:  "openai_compatible",
+		},
+	}
+
+	providerKeys := providerPricingKeys(reqCtx, target)
+	modelKeys := modelPricingKeys(reqCtx, target)
+
+	if !containsString(providerKeys, "openai") || !containsString(providerKeys, "openai-main") {
+		t.Fatalf("expected canonical and legacy provider pricing keys, got %+v", providerKeys)
+	}
+	if containsString(providerKeys, "79e07d4e-3d26-47fc-b001-ae0e6402ed82-main") || containsString(providerKeys, "openai_compatible-main") {
+		t.Fatalf("provider aliases must not be generated for ids or adapter types: %+v", providerKeys)
+	}
+	if !containsString(modelKeys, "79e07d4e-3d26-47fc-b001-ae0e6402ed82:gpt-4o") || !containsString(modelKeys, "gpt-4o") {
+		t.Fatalf("expected execution model id and billing model alias, got %+v", modelKeys)
+	}
+}
 func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{
@@ -345,7 +380,7 @@ func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.
 	if logged.TenantID != testTenantID || logged.ProjectID != testProjectID || logged.ApplicationID != testAppID {
 		t.Fatalf("unexpected tenant/project/application metadata: %+v", logged)
 	}
-	if logged.APIKeyID != testAPIKeyID || logged.AppTokenID != testAppTokenID {
+	if logged.APIKeyID != testAPIKeyID || logged.AppTokenID != "" {
 		t.Fatalf("unexpected key/token metadata: %+v", logged)
 	}
 	if logged.EndUserID != "user_demo_001" || logged.FeatureID != "support-reply" {
@@ -359,6 +394,39 @@ func TestChatCompletionsHandlerWritesDay4CIdentityAndRoutingMetadata(t *testing.
 	}
 	if logged.Provider != "mock" || logged.Model != "mock-fast" {
 		t.Fatalf("unexpected provider/model metadata: %+v", logged)
+	}
+}
+
+func TestChatCompletionsHandlerUsesMetadataEndUserIDForTerminalLog(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:         provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:      "mock-balanced",
+		DefaultProvider:   "mock",
+		TerminalLogWriter: logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
+		"model": "mock-balanced",
+		"messages": [{"role": "user", "content": "Write a short refund response."}],
+		"metadata": {"endUserId": " 윤지\nKim "},
+		"stream": false
+	}`))
+	setValidGatewayAuthHeaders(req)
+	req.Header.Set("X-GateLM-End-User-Id", "customer_user_demo_live")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	if logWriter.logs[0].EndUserID != "윤지 Kim" {
+		t.Fatalf("unexpected end user id: %+v", logWriter.logs[0])
 	}
 }
 
@@ -852,10 +920,10 @@ func TestChatCompletionsHandlerAuthenticatesBeforeRejectingMissingMessages(t *te
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusForbidden {
+	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected auth to run before message validation, got %d: %s", rr.Code, rr.Body.String())
 	}
-	assertGatewayErrorCode(t, rr, "invalid_app_token")
+	assertGatewayErrorCode(t, rr, "invalid_request_error")
 }
 
 func TestChatCompletionsHandlerRejectsMissingProviderRegistry(t *testing.T) {
@@ -1078,7 +1146,7 @@ func TestChatCompletionsHandlerRejectsInvalidAPIKeyBeforeProviderCall(t *testing
 	assertGatewayErrorCode(t, rr, "invalid_api_key")
 }
 
-func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testing.T) {
+func TestChatCompletionsHandlerIgnoresLegacyAppTokenHeaderBeforeProviderCall(t *testing.T) {
 	chatCalls := 0
 	handler := ChatCompletionsHandler{
 		Providers:       provider.NewRegistry("mock", countingProviderAdapter{calls: &chatCalls}),
@@ -1097,16 +1165,15 @@ func TestChatCompletionsHandlerRejectsInvalidAppTokenBeforeProviderCall(t *testi
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if chatCalls != 0 {
-		t.Fatalf("expected no provider calls, got %d", chatCalls)
+	if chatCalls != 1 {
+		t.Fatalf("expected one provider call, got %d", chatCalls)
 	}
-	assertGatewayErrorCode(t, rr, "invalid_app_token")
 }
 
-func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeAPIKeyLookup(t *testing.T) {
+func TestChatCompletionsHandlerAuthenticatesProjectAPIKeyWithoutAppToken(t *testing.T) {
 	apiKeyCalls := 0
 	appTokenCalls := 0
 	chatCalls := 0
@@ -1123,18 +1190,18 @@ func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeAPIKeyLookup(t *testi
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
-		"messages": [{"role": "user", "content": "synthetic test message"}]
+		"messages": []
 	}`))
 	req.Header.Set("Authorization", "Bearer "+testAPIKey)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if apiKeyCalls != 0 {
-		t.Fatalf("expected no API key authenticator calls, got %d", apiKeyCalls)
+	if apiKeyCalls != 1 {
+		t.Fatalf("expected one API key authenticator call, got %d", apiKeyCalls)
 	}
 	if appTokenCalls != 0 {
 		t.Fatalf("expected no app token validator calls, got %d", appTokenCalls)
@@ -1142,7 +1209,56 @@ func TestChatCompletionsHandlerRejectsMissingAppTokenBeforeAPIKeyLookup(t *testi
 	if chatCalls != 0 {
 		t.Fatalf("expected no provider calls, got %d", chatCalls)
 	}
-	assertGatewayErrorCode(t, rr, "invalid_app_token")
+	assertGatewayErrorCode(t, rr, "invalid_request_error")
+}
+
+func TestChatCompletionsHandlerAuthenticateRequestRejectsPreResolvedApplicationMismatch(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		APIKeyAuthenticator: newTestCredentialStore(),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	setValidGatewayAuthHeaders(req)
+	reqCtx := &pipeline.RequestContext{
+		TenantID:      testTenantID,
+		ProjectID:     testProjectID,
+		ApplicationID: "other_app",
+	}
+
+	err := handler.authenticateRequest(context.Background(), req, reqCtx)
+
+	var gatewayErr gatewayerrors.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected gateway error, got %v", err)
+	}
+	if gatewayErr.Code != "scope_mismatch" {
+		t.Fatalf("expected scope_mismatch, got %+v", gatewayErr)
+	}
+	if reqCtx.ApplicationID != "other_app" {
+		t.Fatalf("expected existing application scope to remain unchanged, got %q", reqCtx.ApplicationID)
+	}
+}
+
+func TestChatCompletionsHandlerAuthenticateRequestNormalizesBudgetScopeAfterApplicationResolution(t *testing.T) {
+	handler := ChatCompletionsHandler{
+		APIKeyAuthenticator: newTestCredentialStore(),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	setValidGatewayAuthHeaders(req)
+	reqCtx := &pipeline.RequestContext{}
+
+	err := handler.authenticateRequest(context.Background(), req, reqCtx)
+
+	if err != nil {
+		t.Fatalf("authenticate request: %v", err)
+	}
+	if reqCtx.TenantID != testTenantID || reqCtx.ProjectID != testProjectID || reqCtx.ApplicationID != testAppID {
+		t.Fatalf("unexpected authenticated scope: %+v", reqCtx)
+	}
+	if reqCtx.BudgetScope.Type != budget.ScopeTypeApplication ||
+		reqCtx.BudgetScope.ID != testAppID ||
+		reqCtx.BudgetScope.ResolvedBy != budget.ResolvedByDefaultApplication {
+		t.Fatalf("unexpected budget scope: %+v", reqCtx.BudgetScope)
+	}
 }
 
 func TestChatCompletionsHandlerReturnsInternalErrorForAPIKeyStoreFailure(t *testing.T) {
@@ -1177,7 +1293,7 @@ func TestChatCompletionsHandlerReturnsInternalErrorForAPIKeyStoreFailure(t *test
 	assertGatewayErrorCode(t, rr, "internal_error")
 }
 
-func TestChatCompletionsHandlerReturnsInternalErrorForAppTokenStoreFailure(t *testing.T) {
+func TestChatCompletionsHandlerIgnoresLegacyAppTokenStoreFailure(t *testing.T) {
 	chatCalls := 0
 	store := newTestCredentialStore()
 	handler := ChatCompletionsHandler{
@@ -1193,20 +1309,20 @@ func TestChatCompletionsHandlerReturnsInternalErrorForAppTokenStoreFailure(t *te
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
-		"messages": [{"role": "user", "content": "synthetic test message"}]
+		"messages": []
 	}`))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if chatCalls != 0 {
 		t.Fatalf("expected no provider calls, got %d", chatCalls)
 	}
-	assertGatewayErrorCode(t, rr, "internal_error")
+	assertGatewayErrorCode(t, rr, "invalid_request_error")
 }
 
 func TestChatCompletionsHandlerReturnsPipelineAuthErrorsBeforeProviderCall(t *testing.T) {
@@ -1383,13 +1499,13 @@ func TestChatCompletionsHandlerRejectsScopeMismatchBeforeProviderCall(t *testing
 		APIKeyIdentity: auth.APIKeyIdentity{
 			APIKeyID:      testAPIKeyID,
 			TenantID:      testTenantID,
-			ProjectID:     testProjectID,
+			ProjectID:     "other_project",
 			ApplicationID: testAppID,
 		},
 		AppTokenIdentity: auth.AppTokenIdentity{
 			AppTokenID:    testAppTokenID,
 			TenantID:      testTenantID,
-			ProjectID:     "other_project",
+			ProjectID:     testProjectID,
 			ApplicationID: testAppID,
 		},
 	})
@@ -1454,7 +1570,7 @@ func TestChatCompletionsHandlerDoesNotMaskAPIKeyContextCancellation(t *testing.T
 	assertGatewayErrorCode(t, rr, "internal_error")
 }
 
-func TestChatCompletionsHandlerDoesNotMaskAppTokenDeadlineExceeded(t *testing.T) {
+func TestChatCompletionsHandlerDoesNotCallLegacyAppTokenValidatorAfterAPIKeyAuth(t *testing.T) {
 	chatCalls := 0
 	store := newTestCredentialStore()
 	handler := ChatCompletionsHandler{
@@ -1470,20 +1586,20 @@ func TestChatCompletionsHandlerDoesNotMaskAppTokenDeadlineExceeded(t *testing.T)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{
 		"model": "mock-balanced",
-		"messages": [{"role": "user", "content": "synthetic test message"}]
+		"messages": []
 	}`))
 	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 	}
 	if chatCalls != 0 {
 		t.Fatalf("expected no provider calls, got %d", chatCalls)
 	}
-	assertGatewayErrorCode(t, rr, "internal_error")
+	assertGatewayErrorCode(t, rr, "invalid_request_error")
 }
 
 func TestChatCompletionsHandlerUsesPipelineRouteAndContextMetadata(t *testing.T) {
@@ -2859,6 +2975,75 @@ func TestChatCompletionsHandlerUsesLiveRuntimeSnapshotAndProviderCatalog(t *test
 	}
 }
 
+func TestChatCompletionsHandlerUsesApplicationRuntimeSnapshotModelForAutoRequests(t *testing.T) {
+	appA := "app_policy_a"
+	appB := "app_policy_b"
+	catalogA := testProviderCatalogWithPrimaryModel(
+		"provider_catalog:"+appA+":1",
+		"sha256:provider-catalog-app-a",
+		"model_app_a",
+		"provider-model-a",
+	)
+	catalogB := testProviderCatalogWithPrimaryModel(
+		"provider_catalog:"+appB+":1",
+		"sha256:provider-catalog-app-b",
+		"model_app_b",
+		"provider-model-b",
+	)
+	primary := &catalogRecordingProviderAdapter{adapterType: providercatalog.AdapterTypeOpenAICompatible}
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/admin/v1/applications/" + appA + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayloadForApplication(catalogA.Reference(), appA, "model_app_a"))
+		case "/admin/v1/applications/" + appB + "/runtime-snapshot/active":
+			writeTestJSON(t, w, http.StatusOK, liveRuntimeSnapshotPayloadForApplication(catalogB.Reference(), appB, "model_app_b"))
+		case "/admin/v1/provider-catalogs/" + catalogA.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalogA))
+		case "/admin/v1/provider-catalogs/" + catalogB.CatalogID:
+			writeTestJSON(t, w, http.StatusOK, liveProviderCatalogPayload(catalogB))
+		default:
+			t.Fatalf("unexpected control plane path: %s", r.URL.Path)
+		}
+	}))
+	defer controlPlane.Close()
+
+	runtimeSnapshotProvider := controlplaneruntimeconfig.NewProvider(controlPlane.URL, controlPlane.Client())
+	providerCatalogResolver := controlplaneprovidercatalog.NewResolver(controlPlane.URL, controlPlane.Client())
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary),
+		ProviderCatalogResolver: providerCatalogResolver,
+		CredentialResolver:      staticCredentialResolver{},
+		RuntimePolicyPipeline:   pipeline.New(runtimeconfigstage.NewStage(runtimeSnapshotProvider)),
+		APIKeyAuthenticator: &mappedAPIKeyAuthenticator{identities: map[string]auth.APIKeyIdentity{
+			"api-key-a": {
+				APIKeyID:      "api_key_a",
+				TenantID:      testTenantID,
+				ProjectID:     testProjectID,
+				ApplicationID: appA,
+			},
+			"api-key-b": {
+				APIKeyID:      "api_key_b",
+				TenantID:      testTenantID,
+				ProjectID:     testProjectID,
+				ApplicationID: appB,
+			},
+		}},
+		DefaultProvider: "mock",
+		DefaultModel:    "mock-balanced",
+	}
+
+	performAutoRequestWithAPIKey(t, &handler, "api-key-a")
+	if primary.lastRequest.Model != "provider-model-a" {
+		t.Fatalf("expected app A provider modelName provider-model-a, got %s", primary.lastRequest.Model)
+	}
+
+	performAutoRequestWithAPIKey(t, &handler, "api-key-b")
+	if primary.lastRequest.Model != "provider-model-b" {
+		t.Fatalf("expected app B provider modelName provider-model-b, got %s", primary.lastRequest.Model)
+	}
+}
+
 func TestChatCompletionsHandlerAppliesRuntimeSnapshotDetectorSetToMasking(t *testing.T) {
 	catalog := testProviderCatalog()
 	catalog.CatalogID = "provider_catalog:" + testAppID + ":1"
@@ -3460,6 +3645,21 @@ func (cancelingCredentialResolver) Resolve(ctx context.Context, ref credentials.
 	return credentials.Resolved{}, context.Canceled
 }
 
+type mappedAPIKeyAuthenticator struct {
+	identities map[string]auth.APIKeyIdentity
+}
+
+func (a *mappedAPIKeyAuthenticator) AuthenticateAPIKey(_ context.Context, bearerToken string) (auth.APIKeyIdentity, error) {
+	if a == nil {
+		return auth.APIKeyIdentity{}, auth.ErrInvalidAPIKey
+	}
+	identity, ok := a.identities[bearerToken]
+	if !ok {
+		return auth.APIKeyIdentity{}, auth.ErrInvalidAPIKey
+	}
+	return identity, nil
+}
+
 func testProviderCatalogPipeline(providerName string, modelID string) *fakeGatewayPipeline {
 	return &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
@@ -3571,6 +3771,29 @@ func testProviderCatalog() providercatalog.Catalog {
 				}},
 			},
 		},
+	}
+}
+
+func testProviderCatalogWithPrimaryModel(catalogID string, contentHash string, modelID string, modelName string) providercatalog.Catalog {
+	catalog := testProviderCatalog()
+	catalog.CatalogID = catalogID
+	catalog.ContentHash = contentHash
+	catalog.Providers[0].Models[0].ModelID = modelID
+	catalog.Providers[0].Models[0].ModelName = modelName
+	catalog.Providers[0].Models[0].DisplayName = modelName
+	return catalog
+}
+
+func performAutoRequestWithAPIKey(t *testing.T, handler *ChatCompletionsHandler, apiKey string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBodyWithModel("auto", "safe prompt")))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -3742,7 +3965,6 @@ func newTestCredentialStore() *auth.StaticCredentialStore {
 
 func setValidGatewayAuthHeaders(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+testAPIKey)
-	req.Header.Set("X-GateLM-App-Token", testAppToken)
 }
 
 func writeTestJSON(t *testing.T, w http.ResponseWriter, status int, payload any) {
@@ -3879,6 +4101,19 @@ func liveRuntimeSnapshotPayloadWithDetectorSet(ref providercatalog.Reference, de
 	policies := payload["policies"].(map[string]any)
 	safety := policies["safety"].(map[string]any)
 	safety["detectorSet"] = detectorSet
+	return payload
+}
+
+func liveRuntimeSnapshotPayloadForApplication(ref providercatalog.Reference, applicationID string, modelID string) map[string]any {
+	payload := liveRuntimeSnapshotPayload(ref)
+	lookupKey := payload["lookupKey"].(map[string]any)
+	lookupKey["applicationId"] = applicationID
+	policies := payload["policies"].(map[string]any)
+	routing := policies["routing"].(map[string]any)
+	routing["defaultModel"] = modelID
+	routing["lowCostModel"] = modelID
+	fallback := policies["fallback"].(map[string]any)
+	fallback["fallbackModel"] = modelID
 	return payload
 }
 

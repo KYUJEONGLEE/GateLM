@@ -84,6 +84,38 @@ export async function getApiKeysModel(routeTenantId: string): Promise<ApiKeysMod
   };
 }
 
+export async function getProjectApiKeysModel(
+  routeTenantId: string,
+  projectId: string
+): Promise<ApiKeysModel> {
+  const controlPlaneBaseUrl = getControlPlaneBaseUrl();
+  const listResult = await listApiKeys(projectId);
+
+  if (listResult.ok) {
+    return {
+      apiKeys: listResult.data,
+      controlPlaneBaseUrl,
+      controlPlaneProjectId: projectId,
+      loadError: null,
+      routeTenantId,
+      source: "control-plane"
+    };
+  }
+
+  return {
+    apiKeys: [],
+    controlPlaneBaseUrl,
+    controlPlaneProjectId: projectId,
+    loadError: listResult.error,
+    routeTenantId,
+    source: "fixture"
+  };
+}
+
+export async function listApiKeysForProject(projectId: string): Promise<ApiKeyListResult> {
+  return listApiKeys(projectId);
+}
+
 export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApiKeyResult> {
   const projectId = values.projectId ?? getControlPlaneProjectId();
 
@@ -323,6 +355,14 @@ function getErrorMessage(payload: unknown, status: number) {
 
     if (typeof message === "string") {
       return message;
+    }
+
+    if (message && typeof message === "object") {
+      const nestedMessage = (message as Record<string, unknown>).message;
+
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+        return nestedMessage;
+      }
     }
   }
 

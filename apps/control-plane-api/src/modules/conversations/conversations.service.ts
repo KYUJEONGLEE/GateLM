@@ -23,6 +23,7 @@ import {
 } from './dto/conversation.dto';
 
 const DEFAULT_SYSTEM_MESSAGE = 'You are a helpful customer support assistant.';
+const DEFAULT_CONTEXT_RETENTION_ENABLED = true;
 const SLIDING_WINDOW_MAX_PREVIOUS_USER_TURNS = 10;
 const SLIDING_WINDOW_MAX_PREVIOUS_CHARS = 8000;
 const RETAINED_CONTEXT_FETCH_LIMIT = 120;
@@ -39,7 +40,8 @@ export class ConversationsService {
 
     const conversation = await this.repository.createConversation({
       ...scope,
-      contextRetentionEnabled: dto.contextRetentionEnabled ?? false,
+      contextRetentionEnabled:
+        dto.contextRetentionEnabled ?? DEFAULT_CONTEXT_RETENTION_ENABLED,
       endUserId: this.toNullableText(dto.endUserId),
       title: this.toNullableText(dto.title),
     });

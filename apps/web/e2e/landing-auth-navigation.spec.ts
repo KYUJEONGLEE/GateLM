@@ -79,9 +79,6 @@ test("email signup opens the tenant Projects management page", async ({ page }) 
     await route.fulfill({
       body: JSON.stringify({
         data: {
-          session: {
-            kind: "onboarding"
-          },
           user: {
             email: "owner@example.com",
             name: "Owner User"
@@ -146,20 +143,21 @@ test("email signup opens the tenant Projects management page", async ({ page }) 
 
   await createProjectLink.click();
   await expect(page).toHaveURL(/\/tenants\/tenant_signup_acme\/onboarding$/);
-  const tenantField = page.getByRole("textbox", { name: "Tenant" });
-  await expect(tenantField).toHaveValue("Acme AI Operations");
-  await expect(tenantField).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Tenant" })).toHaveCount(0);
+  const budgetFieldShell = page.locator(".onboarding-field").filter({
+    has: page.getByRole("textbox", { name: "Project budget" })
+  });
+  await expect(budgetFieldShell.locator(".onboarding-field-unit")).toHaveText("$");
 });
 
-test("create project allows manual tenant input without an email signup tenant", async ({ page }) => {
+test("create project hides tenant input and shows project budget currency", async ({ page }) => {
   await page.goto("/tenants/tenant_demo_acme/onboarding");
 
-  const tenantField = page.getByRole("textbox", { name: "Tenant" });
-  await expect(tenantField).toBeEnabled();
-  await expect(tenantField).toHaveValue("");
-
-  await tenantField.fill("Google Workspace Tenant");
-  await expect(tenantField).toHaveValue("Google Workspace Tenant");
+  await expect(page.getByRole("textbox", { name: "Tenant" })).toHaveCount(0);
+  const budgetField = page.getByRole("textbox", { name: "Project budget" });
+  await expect(budgetField).toHaveValue("100");
+  const budgetFieldShell = page.locator(".onboarding-field").filter({ has: budgetField });
+  await expect(budgetFieldShell.locator(".onboarding-field-unit")).toHaveText("$");
 });
 
 test("restored full session goes directly to the tenant dashboard", async ({ page }) => {
@@ -188,24 +186,8 @@ test("console brand link keeps authenticated users on the landing page", async (
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("console settings exposes logout below theme and signs out", async ({ page }) => {
-  let hasSession = true;
-  let logoutRequestCount = 0;
-
+test("console settings hides logout below theme", async ({ page }) => {
   await page.route("**/api/auth/me", async (route) => {
-    if (!hasSession) {
-      await route.fulfill({
-        body: JSON.stringify({
-          error: {
-            message: "Not authenticated"
-          }
-        }),
-        contentType: "application/json",
-        status: 401
-      });
-      return;
-    }
-
     await route.fulfill({
       body: JSON.stringify({
         data: {
@@ -218,14 +200,6 @@ test("console settings exposes logout below theme and signs out", async ({ page 
       status: 200
     });
   });
-  await page.route("**/api/auth/logout", async (route) => {
-    logoutRequestCount += 1;
-    hasSession = false;
-    await route.fulfill({
-      body: "",
-      status: 204
-    });
-  });
 
   await page.goto(dashboardPath);
 
@@ -233,27 +207,13 @@ test("console settings exposes logout below theme and signs out", async ({ page 
   const settingsPopover = page.locator(".console-sidebar-settings-popover");
   const settingsRows = settingsPopover.locator(".console-sidebar-settings-row");
 
-  await expect(settingsRows).toHaveCount(3);
+  await expect(settingsRows).toHaveCount(2);
   await expect(settingsRows.nth(0)).toContainText("Console language");
   await expect(settingsRows.nth(1)).toContainText("Theme");
-  await expect(settingsRows.nth(2)).toHaveText("Logout");
-  const logoutButton = settingsRows.nth(2).getByRole("button", { name: "Logout" });
-  await expect(logoutButton).toBeVisible();
-
-  const logoutRequest = page.waitForRequest(
-    (request) => request.url().includes("/api/auth/logout") && request.method() === "POST"
-  );
-  await Promise.all([
-    page.waitForURL(/\/(\?view=landing)?$/),
-    logoutRequest,
-    logoutButton.click()
-  ]);
-
-  await expect.poll(() => logoutRequestCount).toBe(1);
-  await expect(page.getByRole("navigation", { exact: true, name: "GateLM landing navigation" })).toBeVisible();
+  await expect(settingsPopover.getByRole("button", { name: "Logout" })).toHaveCount(0);
 });
 
-test("anonymous landing topbar exposes gateway request and login actions without logout", async ({
+test("anonymous landing topbar hides gateway request and exposes login actions without logout", async ({
   page
 }) => {
   await prepareAnonymousSessionRoute(page);
@@ -264,15 +224,40 @@ test("anonymous landing topbar exposes gateway request and login actions without
   const brandCluster = topbar.locator(".landing-brand-cluster");
   await expect(brandCluster.getByRole("link", { exact: true, name: "GateLM home" })).toBeVisible();
 
-  const gatewayRequestLink = brandCluster.getByRole("link", {
-    name: /Gateway (request|요청)/
-  });
-  await expect(gatewayRequestLink).toBeVisible();
-  await expect(gatewayRequestLink).toHaveAttribute("href", "/application");
+  await expect(brandCluster.locator(".landing-gateway-request-button")).toHaveCount(0);
   await expect(brandCluster.getByRole("link", { name: /Open Dashboard|대시보드로 이동/ })).toBeHidden();
 
   await expect(topbar.locator(".landing-top-actions .landing-auth-button")).toHaveCount(2);
   await expect(topbar.getByRole("button", { name: /Logout|로그아웃/ })).toBeHidden();
+});
+
+test("anonymous landing summary actions open login instead of navigating", async ({ page }) => {
+  await prepareAnonymousSessionRoute(page);
+
+  await page.goto("/");
+
+  const summaryActions = page.locator(".landing-summary-actions");
+  const dashboardButton = summaryActions.getByRole("button", {
+    name: /Open Dashboard|대시보드로 이동/
+  });
+  const chatButton = summaryActions.getByRole("button", {
+    name: /Employee Chat|직원 Chat 확인/
+  });
+
+  await expect(dashboardButton).toBeVisible();
+  await expect(chatButton).toBeVisible();
+  await expect(summaryActions.getByRole("link")).toHaveCount(0);
+
+  await dashboardButton.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.locator(".landing-auth-close").click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  await chatButton.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("authenticated landing topbar shows dashboard and logout actions before logout", async ({
@@ -320,7 +305,7 @@ test("authenticated landing topbar shows dashboard and logout actions before log
 
   await expect(logoutButton).toBeHidden();
   await expect(dashboardLink).toBeHidden();
-  await expect(brandCluster.locator(".landing-auth-button")).toHaveCount(1);
+  await expect(brandCluster.locator(".landing-auth-button")).toHaveCount(0);
   await expect(authButtons).toHaveCount(2);
   await expect.poll(() => logoutRequestCount).toBe(1);
 

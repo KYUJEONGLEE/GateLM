@@ -1,7 +1,9 @@
 import { ResourceStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
-  IsEnum,
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -12,6 +14,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+
+const RESOURCE_STATUS_VALUES = ['ACTIVE', 'DRAFT', 'DISABLED', 'ARCHIVED'];
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -36,6 +40,23 @@ export class CreateProjectDto {
   @Min(0)
   @Max(100000000)
   totalBudgetUsd?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  budgetLimitPercent?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  providerConnectionIds?: string[];
+
+  @IsOptional()
+  @IsIn(RESOURCE_STATUS_VALUES)
+  status?: ResourceStatus;
 }
 
 export class UpdateProjectDto {
@@ -53,7 +74,7 @@ export class UpdateProjectDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(ResourceStatus)
+  @IsIn(RESOURCE_STATUS_VALUES)
   status?: ResourceStatus;
 
   @Type(() => Number)
@@ -84,6 +105,7 @@ export interface ProjectResponseDto {
   description: string | null;
   status: ResourceStatus;
   totalBudgetUsd: number;
+  runtimeApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
 }

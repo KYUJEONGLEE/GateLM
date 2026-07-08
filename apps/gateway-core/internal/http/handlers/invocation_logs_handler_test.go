@@ -25,6 +25,7 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 			RequestID:        "request_001",
 			ProjectID:        "project_demo",
 			ApplicationID:    "app_demo",
+			UserRef:          "Yoonji",
 			Provider:         "mock",
 			Model:            "mock-fast",
 			RequestedModel:   "auto",
@@ -75,6 +76,9 @@ func TestProjectLogsHandlerListsLogsWithTenantAndProjectScope(t *testing.T) {
 	item := response.Data[0]
 	if item.RequestID != "request_001" || item.SelectedModel != "mock-fast" || item.CostUSD != "0.000001" {
 		t.Fatalf("unexpected response item: %+v", item)
+	}
+	if item.UserRef == nil || *item.UserRef != "Yoonji" {
+		t.Fatalf("unexpected user ref: %+v", item)
 	}
 
 	for _, forbidden := range []string{
@@ -692,6 +696,136 @@ func TestDashboardOverviewHandlerMapsUnexpectedReaderErrorToInternalError(t *tes
 	}
 }
 
+func TestAnalyticsPerformanceHandlerReturnsAggregatesAndSafeFields(t *testing.T) {
+	generatedAt := time.Date(2026, 6, 25, 1, 0, 0, 0, time.UTC)
+	lastLogCreatedAt := time.Date(2026, 6, 25, 0, 59, 0, 0, time.UTC)
+	avgLatency := 420.0
+	p95Latency := 2153.0
+	p99Latency := 4102.0
+	throughput := 12.5
+	errorRate := 0.03
+	cacheHitRate := 0.34
+	costPerRequest := 0.0031
+	reader := &recordingAnalyticsPerformanceReader{
+		performance: invocationlog.AnalyticsPerformanceFields{
+			Summary: invocationlog.AnalyticsPerformanceSummary{
+				AvgLatencyMs:        &avgLatency,
+				P95LatencyMs:        &p95Latency,
+				P99LatencyMs:        &p99Latency,
+				ThroughputPerMinute: &throughput,
+				ErrorRate:           &errorRate,
+				TotalRequests:       129512,
+			},
+			ProviderModelPerformance: []invocationlog.AnalyticsProviderModelPerformance{{
+				Provider:          "OpenAI",
+				Model:             "gpt-4o-mini",
+				Requests:          129512,
+				AvgLatencyMs:      &avgLatency,
+				P95LatencyMs:      &p95Latency,
+				P99LatencyMs:      &p99Latency,
+				ErrorRate:         &errorRate,
+				CostPerRequestUSD: &costPerRequest,
+				TotalCostMicroUSD: 401120000,
+				TotalCostUSD:      "401.120000",
+				CacheHitRate:      &cacheHitRate,
+			}},
+			P95LatencyByProvider: []invocationlog.AnalyticsProviderLatency{{
+				Provider:     "OpenAI",
+				P95LatencyMs: &p95Latency,
+				Requests:     129512,
+			}},
+			LatencyDistribution: []invocationlog.AnalyticsLatencyDistributionBucket{{
+				Bucket:       time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC),
+				P50LatencyMs: &avgLatency,
+				P95LatencyMs: &p95Latency,
+				P99LatencyMs: &p99Latency,
+				Requests:     100,
+			}},
+			SlowestRequests: []invocationlog.AnalyticsSlowRequest{{
+				RequestID:      "request_slow_001",
+				ProjectID:      "project_demo",
+				Provider:       "OpenAI",
+				Model:          "gpt-4o-mini",
+				LatencyMs:      12340,
+				HTTPStatus:     200,
+				TerminalStatus: invocationlog.StatusSuccess,
+				CreatedAt:      lastLogCreatedAt,
+			}},
+			BucketInterval:      "1h",
+			ExpectedBucketCount: 24,
+			DataFreshness: invocationlog.DashboardDataFreshness{
+				Source:           "postgresql_request_log",
+				RecordCount:      129512,
+				LastLogCreatedAt: &lastLogCreatedAt,
+				GeneratedAt:      generatedAt,
+			},
+		},
+	}
+	handler := AnalyticsPerformanceHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?projectId=project_demo&provider=OpenAI&model=gpt-4o-mini&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.filter.TenantID != "tenant_demo" || reader.filter.ProjectID != "project_demo" || reader.filter.Provider != "OpenAI" || reader.filter.Model != "gpt-4o-mini" {
+		t.Fatalf("unexpected analytics filter: %+v", reader.filter)
+	}
+	var response analyticsPerformanceResponse
+	if err := json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Data.Summary.TotalRequests != 129512 || response.Data.Summary.P95LatencyMs == nil || *response.Data.Summary.P95LatencyMs != p95Latency {
+		t.Fatalf("unexpected summary: %+v", response.Data.Summary)
+	}
+	if len(response.Data.ProviderModelPerformance) != 1 || response.Data.ProviderModelPerformance[0].Provider != "OpenAI" || response.Data.ProviderModelPerformance[0].TotalCostUSD != "401.120000" {
+		t.Fatalf("unexpected provider/model performance: %+v", response.Data.ProviderModelPerformance)
+	}
+	if len(response.Data.LatencyDistribution) != 1 || response.Data.LatencyDistribution[0].Label != "00:00" {
+		t.Fatalf("unexpected latency distribution: %+v", response.Data.LatencyDistribution)
+	}
+	if response.Data.BucketInterval != "1h" || response.Data.ExpectedBucketCount != 24 {
+		t.Fatalf("unexpected bucket metadata: interval=%s count=%d", response.Data.BucketInterval, response.Data.ExpectedBucketCount)
+	}
+	if len(response.Data.SlowestRequests) != 1 || response.Data.SlowestRequests[0].RequestID != "request_slow_001" {
+		t.Fatalf("unexpected slowest requests: %+v", response.Data.SlowestRequests)
+	}
+	for _, forbidden := range []string{
+		"rawPrompt",
+		"rawResponse",
+		"authorizationHeader",
+		"apiKeyPlaintext",
+		"appTokenPlaintext",
+		"providerApiKey",
+		"metadata",
+		"redactedPromptPreview",
+	} {
+		if strings.Contains(rr.Body.String(), forbidden) {
+			t.Fatalf("response must not include forbidden field %q: %s", forbidden, rr.Body.String())
+		}
+	}
+}
+
+func TestAnalyticsPerformanceHandlerRejectsMissingRange(t *testing.T) {
+	handler := AnalyticsPerformanceHandler{
+		Reader:   &recordingAnalyticsPerformanceReader{},
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func captureStructuredLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
@@ -759,4 +893,18 @@ func (r *recordingDashboardOverviewReader) GetDashboardOverview(_ context.Contex
 		return invocationlog.DashboardOverviewFields{}, r.err
 	}
 	return r.overview, nil
+}
+
+type recordingAnalyticsPerformanceReader struct {
+	filter      invocationlog.AnalyticsPerformanceFilter
+	performance invocationlog.AnalyticsPerformanceFields
+	err         error
+}
+
+func (r *recordingAnalyticsPerformanceReader) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
+	r.filter = filter
+	if r.err != nil {
+		return invocationlog.AnalyticsPerformanceFields{}, r.err
+	}
+	return r.performance, nil
 }

@@ -4,6 +4,7 @@ interface ControlPlaneEnv {
   AUTH_EMAIL_TRANSPORT?: string;
   CONTROL_PLANE_AUTH_COOKIE_SECURE?: string;
   CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY?: string;
+  CONTROL_PLANE_AUTH_STATE_SECRET: string;
   CONTROL_PLANE_PORT: number;
   CONTROL_PLANE_WEB_ORIGIN?: string;
   DATABASE_URL: string;
@@ -130,6 +131,10 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY:
       readBooleanString(config, 'CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY') ??
       defaultDevAutoVerify,
+    CONTROL_PLANE_AUTH_STATE_SECRET: requireString(
+      config,
+      'CONTROL_PLANE_AUTH_STATE_SECRET',
+    ),
     DATABASE_URL: requireString(config, 'DATABASE_URL'),
     CONTROL_PLANE_WEB_ORIGIN:
       config.CONTROL_PLANE_WEB_ORIGIN ?? DEFAULT_CONTROL_PLANE_WEB_ORIGIN,

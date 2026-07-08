@@ -1,8 +1,8 @@
 import {
   getControlPlaneApplicationId,
-  getControlPlaneProjectId,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import { getApplicationChatProfileSelection } from "@/lib/gateway/application-chat-profiles";
 import type {
   CustomerDemoExchange,
   CustomerDemoModel,
@@ -113,20 +113,35 @@ const LIVE_SCENARIO_TEMPLATES: LiveScenarioTemplate[] = [
   }
 ];
 
-export function getCustomerDemoLiveModel(): CustomerDemoModel {
+export function getCustomerDemoLiveModel(
+  options: { profileId?: string | null } = {}
+): Promise<CustomerDemoModel> {
+  return buildCustomerDemoLiveModel(options);
+}
+
+async function buildCustomerDemoLiveModel(
+  options: { profileId?: string | null } = {}
+): Promise<CustomerDemoModel> {
   const tenantId = getControlPlaneTenantId();
-  const projectId = getControlPlaneProjectId();
-  const applicationId = getControlPlaneApplicationId();
+  const profileSelection = await getApplicationChatProfileSelection(options.profileId);
+  const selectedProfile = profileSelection.selectedProfile;
+  const profiles = profileSelection.profiles;
+  const projectId = selectedProfile.projectId;
+  const applicationId = selectedProfile.applicationId || getControlPlaneApplicationId();
   const gatewayConfig = getLiveGatewayConfig();
 
   return {
     applicationId,
+    applicationChatProfileLoadError: profileSelection.loadError,
     applicationChatStreamingEnabled: gatewayConfig.applicationChatStreamingEnabled,
+    chatProfiles: profiles,
     integrationMode: "gateway",
     projectId,
     scenarios: LIVE_SCENARIO_TEMPLATES.map((template) =>
       buildLiveScenario(template, tenantId)
     ),
+    selectedChatProfileId: selectedProfile.id,
+    selectedChatProfileLabel: selectedProfile.label,
     surface: "demo",
     tenantId
   };
@@ -154,10 +169,6 @@ function buildLiveScenario(
         {
           name: "Authorization",
           value: "Bearer <redacted>"
-        },
-        {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
         },
         {
           name: "X-GateLM-End-User-Id",

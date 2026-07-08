@@ -1,22 +1,25 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import {
+  getCurrentConsoleAuth,
+  getVisibleProjectsForConsoleAuth,
+  isProjectScopedForTenant,
+  resolveConsoleTenantIdForAuth,
+  resolveProjectIdForConsoleAuth
+} from "@/lib/auth/current-console-auth";
+import {
   type DashboardRange,
   type DashboardFilterState,
   DashboardOverviewView
 } from "@/features/dashboard/components/dashboard-overview";
-import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
-import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
-import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
-import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
-import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
+import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import {
   getDashboardLiveRange,
   getLiveDashboardOverview,
   type LiveDashboardOverviewFilters
 } from "@/lib/gateway/live-dashboard-overview";
-import { getLiveGatewayRequestDetail } from "@/lib/gateway/live-request-detail";
+import { getLiveOverviewRequests } from "@/lib/gateway/live-overview-requests";
 import { getLiveGatewayRequestLogs } from "@/lib/gateway/live-request-logs";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
@@ -40,52 +43,63 @@ type DashboardPageProps = {
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
-  const requestedTab = resolvedSearchParams?.tab ?? (resolvedSearchParams?.view === "cache" ? "cache" : undefined);
-  const selectedRequestId = resolvedSearchParams?.requestId;
   const { dashboardFilters, liveFilters } = buildDashboardFilters(resolvedSearchParams);
   const liveRange = getDashboardLiveRange(dashboardFilters.range);
-  const activeTab =
-    requestedTab === "requests" ||
-    requestedTab === "traffic"
-      ? "requests"
-      : requestedTab === "cache" ||
-          requestedTab === "routing" ||
-          requestedTab === "safety" ||
-          requestedTab === "limits"
-        ? requestedTab
-        : "overview";
-  const suppressContentMotion = activeTab === "overview" && resolvedSearchParams?.motion === "none";
-  const [locale, overview, recentRecords, rateLimitedRecords, applicationNames] = await Promise.all([
+  const monthToDateRange = getMonthToDateRange();
+  const suppressContentMotion = resolvedSearchParams?.motion === "none";
+  const [locale, auth] = await Promise.all([
     getRequestLocale(),
-    getLiveDashboardOverview(tenantId, liveFilters),
-    getLiveGatewayRequestLogs({ from: liveRange.from, limit: 100, tenantId, to: liveRange.to }),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const projectsModel = await getProjectsModel(effectiveTenantId);
+  const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
+  const effectiveProjectId = resolveProjectIdForConsoleAuth({
+    auth,
+    projects: projectsModel.projects,
+    requestedProjectId: liveFilters.projectId,
+    routeTenantId: effectiveTenantId
+  });
+
+  if (effectiveProjectId === null) {
+    notFound();
+  }
+
+  const scopedLiveFilters = {
+    ...liveFilters,
+    projectId: effectiveProjectId ?? liveFilters.projectId
+  };
+  const scopedDashboardFilters = {
+    ...dashboardFilters,
+    projectId: effectiveProjectId ?? dashboardFilters.projectId
+  };
+  const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId);
+  const [overview, monthToDateOverview, costOverTime, liveRequests, recentRecords] = await Promise.all([
+    getLiveDashboardOverview(effectiveTenantId, scopedLiveFilters),
+    getLiveDashboardOverview(effectiveTenantId, {
+      ...scopedLiveFilters,
+      from: monthToDateRange.from,
+      to: monthToDateRange.to
+    }),
+    getLiveCostOverTime(effectiveTenantId, scopedLiveFilters),
+    getLiveOverviewRequests(effectiveTenantId, scopedLiveFilters),
     getLiveGatewayRequestLogs({
       from: liveRange.from,
-      limit: 5,
-      status: "rate_limited",
-      tenantId,
+      limit: 100,
+      projectId: scopedLiveFilters.projectId,
+      tenantId: effectiveTenantId,
       to: liveRange.to
-    }),
-    getDashboardApplicationNames(tenantId, dashboardFilters.projectId)
+    })
   ]);
-  const selectedRecord = selectedRequestId
-    ? recentRecords?.find((record) => record.requestId === selectedRequestId)
-    : undefined;
-  const selectedDetail = selectedRequestId
-    ? await getLiveGatewayRequestDetail(selectedRequestId, {
-        projectId: selectedRecord?.projectId,
-        tenantId
-      })
-    : null;
-  const scopedSelectedDetail =
-    selectedDetail ?? recentRecords?.find((record) => record.requestId === selectedRequestId);
-  const displayScopedSelectedDetail = scopedSelectedDetail
-    ? toDisplayModelRecord(scopedSelectedDetail)
-    : undefined;
 
   if (!overview) {
     return (
-      <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
+      <ConsoleShell
+        activeMonitoringItem="overview"
+        activeSection="monitoring"
+        locale={locale}
+        tenantId={effectiveTenantId}
+      >
         <main className="console-content">
           <section className="dashboard-hero">
             <div>
@@ -99,59 +113,31 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     );
   }
 
-  if (tenantId !== overview.filters.tenantId) {
+  if (effectiveTenantId !== overview.filters.tenantId) {
     notFound();
   }
 
   return (
-    <ConsoleShell activeSection="dashboard" locale={locale} tenantId={tenantId}>
+    <ConsoleShell
+      activeMonitoringItem="overview"
+      activeSection="monitoring"
+      locale={locale}
+      tenantId={effectiveTenantId}
+    >
       <DashboardOverviewView
-        activeTab={activeTab}
-        applicationNames={applicationNames}
-        applicationTokenRecords={(recentRecords ?? []).map(toDisplayModelRecord)}
-        detailPanel={
-          displayScopedSelectedDetail ? (
-            <RequestLogDetailAside
-              locale={locale}
-              record={displayScopedSelectedDetail}
-              tenantId={tenantId}
-              timezone={DEFAULT_DISPLAY_TIMEZONE}
-            />
-          ) : undefined
-        }
         locale={locale}
-        filters={dashboardFilters}
+        costOverTime={costOverTime}
+        filters={scopedDashboardFilters}
+        liveRequests={liveRequests}
+        monthToDateOverview={monthToDateOverview}
         overview={overview}
-        rateLimitedRecords={(rateLimitedRecords ?? []).map(toDisplayModelRecord)}
-        recentRecords={(recentRecords ?? []).slice(0, 5).map(toDisplayModelRecord)}
+        projects={visibleProjects.filter((project) => project.status !== "ARCHIVED")}
+        recentRecords={recentRecords ?? []}
+        allowAllProjects={!projectScoped}
         suppressContentMotion={suppressContentMotion}
       />
     </ConsoleShell>
   );
-}
-
-async function getDashboardApplicationNames(routeTenantId: string, projectId: string) {
-  const projectsResult = projectId ? null : await getProjectsModel(routeTenantId);
-  const projectIds = projectId
-    ? [projectId]
-    : (projectsResult?.projects ?? []).map((project) => project.id);
-  const applicationModels = await Promise.all(
-    projectIds.map((targetProjectId) => getApplicationsModel(routeTenantId, targetProjectId))
-  );
-
-  return Object.fromEntries(
-    applicationModels.flatMap((model) =>
-      (model?.applications ?? []).map((application) => [application.id, application.name])
-    )
-  );
-}
-
-function toDisplayModelRecord(record: InvocationLogRecord): InvocationLogRecord {
-  return {
-    ...record,
-    requestedModel: record.requestedModel ? formatModelDisplayName(record.requestedModel) : record.requestedModel,
-    selectedModel: record.selectedModel ? formatModelDisplayName(record.selectedModel) : record.selectedModel
-  };
 }
 
 function buildDashboardFilters(searchParams: Awaited<DashboardPageProps["searchParams"]>): {
@@ -200,4 +186,14 @@ function normalizeBudgetScopeTypeFilter(value: string | undefined): DashboardFil
 
 function normalizeOptionalText(value: string | undefined) {
   return value?.trim() ?? "";
+}
+
+function getMonthToDateRange() {
+  const to = new Date();
+  const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
+
+  return {
+    from: from.toISOString(),
+    to: to.toISOString()
+  };
 }

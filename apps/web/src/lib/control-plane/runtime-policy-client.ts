@@ -4,13 +4,14 @@ import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-co
 import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId,
-  getControlPlaneProjectId
+  getControlPlaneProjectId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
   listApplicationProviderConnections,
   listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
+import { applyInitialRuntimePolicyModelSelection } from "@/lib/control-plane/runtime-policy-model-selection";
 import { getRuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 import type {
@@ -121,6 +122,7 @@ export async function getRuntimePolicyModelForApplication(
   void projectId;
 
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const fallbackConfig = getFixtureRuntimeConfig();
 
   const [
@@ -136,7 +138,7 @@ export async function getRuntimePolicyModelForApplication(
     fetchActiveRuntimeSnapshot(applicationId),
     fetchActiveProviderCatalog(applicationId),
     listApplicationProviderConnections(applicationId),
-    listTenantProviderConnections(getControlPlaneTenantId())
+    listTenantProviderConnections(controlPlaneTenantId)
   ]);
   const providerConnectionState = toProviderConnectionState(
     tenantProviderConnections,
@@ -190,12 +192,12 @@ export async function getRuntimePolicyModelForApplication(
     };
   }
 
-  if (activeConfig.status === 404) {
+  if (shouldUseRuntimePolicyTemplate(activeConfig)) {
     const templateConfig = makeRuntimePolicyConfigTemplate(
       fallbackConfig,
-      routeTenantId,
+      controlPlaneTenantId,
       applicationId,
-      providerConnections.ok ? providerConnections.data : []
+      getTemplateProviderConnections(providerConnections, tenantProviderConnections)
     );
 
     return {
@@ -252,12 +254,34 @@ export async function getRuntimePolicyModelForApplication(
   };
 }
 
+function shouldUseRuntimePolicyTemplate(result: ControlPlaneRequestResult) {
+  return !result.ok && (result.status === 404 || result.status === 409);
+}
+
+function getTemplateProviderConnections(
+  applicationProviderConnections: ProviderListLikeResult,
+  tenantProviderConnections: ProviderListLikeResult
+) {
+  return getWritableProviderConnections(
+    applicationProviderConnections.ok ? applicationProviderConnections.data : [],
+    tenantProviderConnections.ok ? tenantProviderConnections.data : []
+  );
+}
+
 function toProviderConnectionState(
   tenantProviderConnections: ProviderListLikeResult,
   applicationProviderConnections: ProviderListLikeResult
 ): RuntimePolicyModel["providerConnections"] {
+  const applicationConnections = applicationProviderConnections.ok
+    ? applicationProviderConnections.data
+    : [];
+  const writableConnections = getWritableProviderConnections(
+    applicationConnections,
+    tenantProviderConnections.ok ? tenantProviderConnections.data : []
+  );
+
   return {
-    available: tenantProviderConnections.ok ? tenantProviderConnections.data : [],
+    available: writableConnections,
     loadError: [
       tenantProviderConnections.ok ? null : tenantProviderConnections.error,
       applicationProviderConnections.ok ? null : applicationProviderConnections.error
@@ -265,9 +289,44 @@ function toProviderConnectionState(
       .filter(Boolean)
       .join(" "),
     selectedIds: applicationProviderConnections.ok
-      ? applicationProviderConnections.data.map((providerConnection) => providerConnection.id)
+      ? applicationConnections
+          .filter(isTenantLevelProviderConnection)
+          .map((providerConnection) => providerConnection.id)
       : []
   };
+}
+
+function getWritableProviderConnections(
+  primaryConnections: ProviderConnectionRecord[],
+  fallbackConnections: ProviderConnectionRecord[]
+) {
+  const merged = new Map<string, ProviderConnectionRecord>();
+
+  for (const providerConnection of [...primaryConnections, ...fallbackConnections].filter(
+    isTenantLevelProviderConnection
+  )) {
+    const providerKey = typeof providerConnection.provider === "string" ? providerConnection.provider.trim() : "";
+
+    if (!providerKey) {
+      continue;
+    }
+
+    const existing = merged.get(providerKey);
+
+    if (!existing || (!hasProviderConfigModels(existing) && hasProviderConfigModels(providerConnection))) {
+      merged.set(providerKey, providerConnection);
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function isTenantLevelProviderConnection(providerConnection: ProviderConnectionRecord) {
+  return providerConnection.projectId === null;
+}
+
+function hasProviderConfigModels(providerConnection: ProviderConnectionRecord) {
+  return getProviderConfigModels(providerConnection.providerConfig).length > 0;
 }
 
 type ProviderListLikeResult =
@@ -399,6 +458,10 @@ function normalizeRuntimeProviderFailureMode(
 }
 
 function normalizeRuntimeProviderResolver(value: string): RuntimePolicyProvider["resolver"] {
+  if (value === "credential_store") {
+    return "control_plane_secret_store";
+  }
+
   if (
     value === "none" ||
     value === "control_plane_secret_store" ||
@@ -432,7 +495,11 @@ export async function getRuntimePolicyConfigForApplication(
 
 export async function publishRuntimePolicyModelSelectionForApplication(
   applicationId: string,
-  selectedModelKey: string
+  selectedModelKey: string,
+  options: {
+    routeTenantId?: string;
+    warningThresholdPercent?: number;
+  } = {}
 ): Promise<{ error?: string; ok: boolean }> {
   const selected = parseRuntimePolicyModelKey(selectedModelKey);
 
@@ -443,7 +510,20 @@ export async function publishRuntimePolicyModelSelectionForApplication(
     };
   }
 
-  const activeConfig = await fetchRuntimeConfigForModelSelection(applicationId);
+  if (
+    options.warningThresholdPercent !== undefined &&
+    !isWarningThresholdPercent(options.warningThresholdPercent)
+  ) {
+    return {
+      error: "Warning threshold must be an integer between 0 and 100.",
+      ok: false
+    };
+  }
+
+  const activeConfig = await fetchRuntimeConfigForModelSelection(
+    applicationId,
+    options.routeTenantId
+  );
 
   if (!activeConfig) {
     return {
@@ -464,11 +544,9 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   }
 
   const draftValues = getRuntimePolicyDraftValues(activeConfig);
-  const nextValues: RuntimePolicyDraftValues = {
-    ...draftValues,
-    routingDefaultModel: selectedModel.model,
-    routingDefaultProvider: selectedModel.provider
-  };
+  const nextValues = applyInitialRuntimePolicyModelSelection(draftValues, selectedModel, {
+    warningThresholdPercent: options.warningThresholdPercent
+  });
   const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
   const draft = await writeRuntimeConfig("draft", nextValues, {
     applicationId,
@@ -497,19 +575,22 @@ export async function publishRuntimePolicyModelSelectionForApplication(
 }
 
 async function fetchRuntimeConfigForModelSelection(
-  applicationId: string
+  applicationId: string,
+  routeTenantId?: string
 ): Promise<RuntimePolicyConfig | null> {
   const targetActiveConfig = await fetchActiveRuntimeConfig(applicationId);
+  const providerConnections = await listApplicationProviderConnections(applicationId);
 
   if (targetActiveConfig.ok) {
-    return targetActiveConfig.data;
+    return mergeProviderConnectionCandidates(
+      targetActiveConfig.data,
+      providerConnections.ok ? providerConnections.data : []
+    );
   }
 
-  if (targetActiveConfig.status !== 404) {
+  if (!shouldUseRuntimePolicyTemplate(targetActiveConfig)) {
     return null;
   }
-
-  const providerConnections = await listApplicationProviderConnections(applicationId);
 
   if (!providerConnections.ok) {
     return null;
@@ -517,7 +598,7 @@ async function fetchRuntimeConfigForModelSelection(
 
   return makeRuntimePolicyConfigTemplate(
     getFixtureRuntimeConfig(),
-    getControlPlaneTenantId(),
+    resolveControlPlaneTenantId(routeTenantId),
     applicationId,
     providerConnections.data
   );
@@ -864,6 +945,10 @@ function parseRuntimePolicyModelKey(value: string) {
     model: model.trim(),
     provider: provider.trim()
   };
+}
+
+function isWarningThresholdPercent(value: number) {
+  return Number.isInteger(value) && value >= 0 && value <= 100;
 }
 
 function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string) {

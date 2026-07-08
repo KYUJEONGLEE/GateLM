@@ -1,9 +1,13 @@
 import {
+  AuthProject,
+  AuthProjectAdmin,
+  AuthProjectAdminInvitation,
   AuthRepository,
   AuthSession,
   AuthSessionKind,
   AuthSessionWithUser,
   AuthTenant,
+  AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
   EmailVerificationCode,
@@ -15,6 +19,10 @@ interface AuthRepositoryState {
   authSessions: AuthSession[];
   emailVerificationCodes: EmailVerificationCode[];
   oauthAccounts: OAuthAccount[];
+  projectAdminInvitations: AuthProjectAdminInvitation[];
+  projectAdmins: AuthProjectAdmin[];
+  projects: AuthProject[];
+  tenantAdmins: AuthTenantAdmin[];
   tenantMemberships: AuthTenantMembership[];
   tenants: AuthTenant[];
   users: AuthUser[];
@@ -25,6 +33,10 @@ function cloneState(state: AuthRepositoryState): AuthRepositoryState {
     authSessions: [...state.authSessions],
     emailVerificationCodes: [...state.emailVerificationCodes],
     oauthAccounts: [...state.oauthAccounts],
+    projectAdminInvitations: [...state.projectAdminInvitations],
+    projectAdmins: [...state.projectAdmins],
+    projects: [...state.projects],
+    tenantAdmins: [...state.tenantAdmins],
     tenantMemberships: [...state.tenantMemberships],
     tenants: [...state.tenants],
     users: [...state.users],
@@ -38,6 +50,10 @@ export function createInMemoryAuthRepository(): AuthRepository & {
     authSessions: [],
     emailVerificationCodes: [],
     oauthAccounts: [],
+    projectAdminInvitations: [],
+    projectAdmins: [],
+    projects: [],
+    tenantAdmins: [],
     tenantMemberships: [],
     tenants: [],
     users: [],
@@ -54,7 +70,105 @@ export function createInMemoryAuthRepository(): AuthRepository & {
     return new Date();
   }
 
+  function ensureTenant(tenantId: string): AuthTenant {
+    let tenant = state.tenants.find((item) => item.id === tenantId);
+    if (!tenant) {
+      const createdAt = now();
+      tenant = {
+        createdAt,
+        id: tenantId,
+        name: 'Invited Tenant',
+        status: 'ACTIVE',
+        updatedAt: createdAt,
+      };
+      state.tenants.push(tenant);
+    }
+
+    return tenant;
+  }
+
+  function ensureProject(projectId: string, tenantId: string): AuthProject {
+    let project = state.projects.find((item) => item.id === projectId);
+    if (!project) {
+      const createdAt = now();
+      project = {
+        createdAt,
+        id: projectId,
+        name: 'Invited Project',
+        status: 'ACTIVE',
+        tenantId,
+        updatedAt: createdAt,
+      };
+      state.projects.push(project);
+    }
+
+    return project;
+  }
+
   const repository: AuthRepository & { dump(): AuthRepositoryState } = {
+    async acceptProjectAdminInvitation(input) {
+      const invitation = state.projectAdminInvitations.find(
+        (item) =>
+          item.tokenHash === input.tokenHash &&
+          item.email === input.email &&
+          item.status === 'pending' &&
+          item.acceptedAt === null &&
+          item.revokedAt === null &&
+          item.expiresAt > input.acceptedAt,
+      );
+      if (!invitation) {
+        throw new Error('Project admin invitation not found.');
+      }
+
+      const tenant = ensureTenant(invitation.tenantId);
+      const project = ensureProject(invitation.projectId, invitation.tenantId);
+      const existingMembership = state.tenantMemberships.find(
+        (item) =>
+          item.tenantId === invitation.tenantId &&
+          item.userId === input.userId &&
+          item.status === 'active' &&
+          item.deletedAt === null,
+      );
+      if (!existingMembership) {
+        state.tenantMemberships.push({
+          createdAt: input.acceptedAt,
+          deletedAt: null,
+          id: id(),
+          joinedAt: input.acceptedAt,
+          role: 'project_admin',
+          status: 'active',
+          tenant,
+          tenantId: invitation.tenantId,
+          updatedAt: input.acceptedAt,
+          userId: input.userId,
+        });
+      }
+
+      if (
+        !state.projectAdmins.some(
+          (item) =>
+            item.projectId === invitation.projectId &&
+            item.userId === input.userId,
+        )
+      ) {
+        state.projectAdmins.push({
+          createdAt: input.acceptedAt,
+          id: id(),
+          projectId: invitation.projectId,
+          tenantId: invitation.tenantId,
+          updatedAt: input.acceptedAt,
+          userId: input.userId,
+        });
+      }
+
+      invitation.acceptedAt = input.acceptedAt;
+      invitation.project = project;
+      invitation.status = 'accepted';
+      invitation.tenant = tenant;
+      invitation.updatedAt = input.acceptedAt;
+      return invitation;
+    },
+
     async consumeOpenVerificationCodes(userId, consumedAt) {
       for (const code of state.emailVerificationCodes) {
         if (code.userId === userId && code.consumedAt === null) {
@@ -104,6 +218,31 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       return oauthAccount;
     },
 
+    async createProjectAdminInvitation(input) {
+      const createdAt = now();
+      const tenant = ensureTenant(input.tenantId);
+      const project = ensureProject(input.projectId, input.tenantId);
+      const invitation: AuthProjectAdminInvitation = {
+        acceptedAt: null,
+        createdAt,
+        email: input.email,
+        expiresAt: input.expiresAt,
+        id: id(),
+        invitedByUserId: input.invitedByUserId ?? null,
+        name: input.name?.trim() || input.email,
+        project,
+        projectId: input.projectId,
+        revokedAt: null,
+        status: 'pending',
+        tenant,
+        tenantId: input.tenantId,
+        tokenHash: input.tokenHash,
+        updatedAt: createdAt,
+      };
+      state.projectAdminInvitations.push(invitation);
+      return invitation;
+    },
+
     async createSession(input) {
       const authSession: AuthSession = {
         createdAt: now(),
@@ -116,6 +255,52 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       };
       state.authSessions.push(authSession);
       return authSession;
+    },
+
+    async createLocalUserTenantAndMembership(input) {
+      const existingUser = state.users.find(
+        (item) => item.email === input.email && item.deletedAt === null,
+      );
+      let user: AuthUser;
+
+      if (existingUser) {
+        const hasActiveMembership = state.tenantMemberships.some(
+          (item) =>
+            item.userId === existingUser.id &&
+            item.status === 'active' &&
+            item.deletedAt === null,
+        );
+        if (hasActiveMembership || existingUser.authProvider !== 'local') {
+          throw new Error('EMAIL_ALREADY_REGISTERED');
+        }
+
+        existingUser.authProvider = 'local';
+        existingUser.emailVerifiedAt = input.emailVerifiedAt;
+        existingUser.name = input.name;
+        existingUser.passwordHash = input.passwordHash;
+        existingUser.status = 'active';
+        existingUser.updatedAt = input.emailVerifiedAt;
+        user = existingUser;
+      } else {
+        user = await repository.createUser({
+          authProvider: 'local',
+          email: input.email,
+          emailVerifiedAt: input.emailVerifiedAt,
+          name: input.name,
+          passwordHash: input.passwordHash,
+          status: 'active',
+        });
+      }
+
+      const created = await repository.createTenantAndMembership({
+        organizationName: input.organizationName,
+        userId: user.id,
+      });
+
+      return {
+        ...created,
+        user,
+      };
     },
 
     async createTenantAndMembership(input) {
@@ -141,6 +326,13 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       };
       state.tenants.push(tenant);
       state.tenantMemberships.push(membership);
+      state.tenantAdmins.push({
+        createdAt,
+        id: id(),
+        tenantId: tenant.id,
+        updatedAt: createdAt,
+        userId: input.userId,
+      });
 
       return { membership, tenant };
     },
@@ -222,6 +414,18 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       );
     },
 
+    async findTenantAdminsByUserId(userId) {
+      return state.tenantAdmins.filter((item) => item.userId === userId);
+    },
+    async findProjectAdminsByUserId(userId) {
+      return state.projectAdmins
+        .filter((item) => item.userId === userId)
+        .map((item) => ({
+          ...item,
+          project: state.projects.find((project) => project.id === item.projectId),
+        }));
+    },
+
     async findOAuthAccount(provider, providerSubject) {
       const oauthAccount = state.oauthAccounts.find(
         (item) =>
@@ -233,6 +437,19 @@ export function createInMemoryAuthRepository(): AuthRepository & {
 
       const user = state.users.find((item) => item.id === oauthAccount.userId);
       return user ? { ...oauthAccount, user } : null;
+    },
+
+    async findProjectAdminInvitationByTokenHash(tokenHash, activeAt) {
+      return (
+        state.projectAdminInvitations.find(
+          (item) =>
+            item.tokenHash === tokenHash &&
+            item.status === 'pending' &&
+            item.acceptedAt === null &&
+            item.revokedAt === null &&
+            item.expiresAt > activeAt,
+        ) ?? null
+      );
     },
 
     async findUserByEmail(email) {

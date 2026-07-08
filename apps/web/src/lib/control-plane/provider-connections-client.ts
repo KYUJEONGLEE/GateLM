@@ -3,8 +3,8 @@ import "server-only";
 import runtimeConfigFixture from "../../../../../docs/v1.0.0/fixtures/runtime-config.fixture.json";
 import {
   getControlPlaneBaseUrl,
-  getControlPlaneTenantId,
-  getControlPlaneProjectId
+  getControlPlaneProjectId,
+  resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import type {
   ProviderConnectionFormValues,
@@ -90,7 +90,7 @@ export async function getProviderConnectionsModel(
 ): Promise<ProviderConnectionsModel> {
   const controlPlaneBaseUrl = getControlPlaneBaseUrl();
   const controlPlaneProjectId = getControlPlaneProjectId();
-  const controlPlaneTenantId = getControlPlaneTenantId();
+  const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const [listResult, presetResult] = await Promise.all([
     listTenantProviderConnections(controlPlaneTenantId),
     listProviderPresets()
@@ -111,6 +111,7 @@ export async function getProviderConnectionsModel(
     return {
       controlPlaneBaseUrl,
       controlPlaneProjectId,
+      controlPlaneTenantId,
       loadError: null,
       providerPresets,
       providers: listResult.data,
@@ -122,6 +123,7 @@ export async function getProviderConnectionsModel(
   return {
     controlPlaneBaseUrl,
     controlPlaneProjectId,
+    controlPlaneTenantId,
     loadError: listResult.error,
     providerPresets,
     providers: getFixtureProviders(),
@@ -131,9 +133,10 @@ export async function getProviderConnectionsModel(
 }
 
 export async function upsertProviderConnection(
-  values: ProviderConnectionFormValues
+  values: ProviderConnectionFormValues,
+  routeTenantId?: string
 ): Promise<ProviderRequestResult> {
-  const tenantId = getControlPlaneTenantId();
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(
@@ -158,8 +161,11 @@ export async function upsertProviderConnection(
   }
 }
 
-export async function deleteProviderConnection(provider: string): Promise<ProviderRequestResult> {
-  const tenantId = getControlPlaneTenantId();
+export async function deleteProviderConnection(
+  provider: string,
+  routeTenantId?: string
+): Promise<ProviderRequestResult> {
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(
@@ -180,8 +186,11 @@ export async function deleteProviderConnection(provider: string): Promise<Provid
   }
 }
 
-export async function discoverProviderModels(provider: string): Promise<ProviderDiscoveryResult> {
-  const tenantId = getControlPlaneTenantId();
+export async function discoverProviderModels(
+  provider: string,
+  routeTenantId?: string
+): Promise<ProviderDiscoveryResult> {
+  const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
   try {
     const response = await fetch(
@@ -204,12 +213,14 @@ export async function discoverProviderModels(provider: string): Promise<Provider
 
 export async function removeProviderModel({
   modelName,
-  provider
+  provider,
+  routeTenantId
 }: {
   modelName: string;
   provider: string;
+  routeTenantId?: string;
 }): Promise<ProviderRequestResult> {
-  const listResult = await listTenantProviderConnections(getControlPlaneTenantId());
+  const listResult = await listTenantProviderConnections(resolveControlPlaneTenantId(routeTenantId));
 
   if (!listResult.ok) {
     return listResult;
@@ -238,57 +249,47 @@ export async function removeProviderModel({
     };
   }
 
-  return upsertProviderConnection({
-    adapterType: getProviderConfigString(
-      providerConnection.providerConfig,
-      "adapterType",
-      getDefaultProviderAdapterType(providerConnection)
-    ),
-    apiVersion: getProviderConfigString(providerConnection.providerConfig, "apiVersion", ""),
-    baseUrl: providerConnection.baseUrl,
-    credentialLast4: providerConnection.credentialPreview.last4 ?? "",
-    credentialPrefix: providerConnection.credentialPreview.prefix ?? "",
-    credentialRequired: getProviderConfigBoolean(
-      providerConnection.providerConfig,
-      "credentialRequired",
-      providerConnection.resolver !== "none"
-    ),
-    credentialValue: "",
-    displayName: providerConnection.displayName,
-    failureMode: getProviderFailureMode(providerConnection.providerConfig),
-    isEdit: true,
-    models: remainingModels.join(", "),
-    modelsEndpointPath: getProviderConfigString(
-      providerConnection.providerConfig,
-      "modelsEndpointPath",
-      "/models"
-    ),
-    provider: providerConnection.provider,
-    requestFormat: getProviderRequestFormat(providerConnection),
-    resolver: providerConnection.resolver,
-    secretRef: "",
-    status: providerConnection.status,
-    timeoutMs: providerConnection.timeoutMs
-  });
-}
-
-export async function listProviderConnections(projectId: string): Promise<ProviderListResult> {
-  try {
-    const response = await fetch(
-      `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/providers?limit=50`,
-      {
-        cache: "no-store"
-      }
-    );
-
-    return readProviderListResponse(response);
-  } catch {
-    return {
-      error: "Control Plane unavailable.",
-      ok: false,
-      status: 0
-    };
-  }
+  return upsertProviderConnection(
+    {
+      adapterType: getProviderConfigString(
+        providerConnection.providerConfig,
+        "adapterType",
+        getDefaultProviderAdapterType(providerConnection)
+      ),
+      apiVersion: getProviderConfigString(providerConnection.providerConfig, "apiVersion", ""),
+      baseUrl: providerConnection.baseUrl,
+      credentialLast4: providerConnection.credentialPreview.last4 ?? "",
+      credentialPrefix: providerConnection.credentialPreview.prefix ?? "",
+      credentialRequired: getProviderConfigBoolean(
+        providerConnection.providerConfig,
+        "credentialRequired",
+        providerConnection.resolver !== "none"
+      ),
+      credentialValue: "",
+      displayName: providerConnection.displayName,
+      failureMode: getProviderFailureMode(providerConnection.providerConfig),
+      isEdit: true,
+      models: remainingModels.join(", "),
+      modelsEndpointPath: getProviderConfigString(
+        providerConnection.providerConfig,
+        "modelsEndpointPath",
+        "/models"
+      ),
+      presetProviderKey: getProviderConfigString(
+        providerConnection.providerConfig,
+        "providerFamily",
+        inferProviderFamily(providerConnection)
+      ),
+      provider: providerConnection.provider,
+      previousProvider: providerConnection.provider,
+      requestFormat: getProviderRequestFormat(providerConnection),
+      resolver: providerConnection.resolver,
+      secretRef: "",
+      status: providerConnection.status,
+      timeoutMs: providerConnection.timeoutMs
+    },
+    routeTenantId
+  );
 }
 
 export async function listTenantProviderConnections(
@@ -384,10 +385,10 @@ async function listProviderPresets(): Promise<ProviderPresetListResult> {
 function toProviderPayload(values: ProviderConnectionFormValues) {
   const models = splitProviderModels(values.models);
   const providerConfig = toProviderConfig(values, models);
-  const secretRef =
-    values.secretRef.trim() ||
-    (values.isEdit ? "" : getDefaultProviderSecretRef(values));
+  const secretRef = values.secretRef.trim();
   const credentialValue = values.credentialValue?.trim() ?? "";
+  const provider = values.provider.trim();
+  const previousProvider = values.previousProvider?.trim();
 
   return {
     baseUrl: values.baseUrl.trim(),
@@ -395,7 +396,9 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
     credentialPrefix: values.credentialPrefix.trim() || undefined,
     credentialValue: credentialValue || undefined,
     displayName: values.displayName.trim(),
-    provider: values.provider.trim(),
+    previousProvider:
+      previousProvider && previousProvider !== provider ? previousProvider : undefined,
+    provider,
     providerConfig,
     resolver: values.resolver.trim() || undefined,
     secretRef: secretRef || undefined,
@@ -404,29 +407,10 @@ function toProviderPayload(values: ProviderConnectionFormValues) {
   };
 }
 
-function getDefaultProviderSecretRef(values: ProviderConnectionFormValues) {
-  if (
-    !values.credentialRequired ||
-    values.resolver.trim().toLowerCase() !== "environment"
-  ) {
-    return "";
-  }
-
-  const provider = values.provider.trim().toLowerCase();
-  if (!provider) {
-    return "";
-  }
-
-  if (provider === "openai" || provider === "openai-main") {
-    return "credential_ref_openai_main";
-  }
-
-  return `credential_ref_${provider.replace(/[^a-z0-9]+/g, "_")}_main`;
-}
-
 function toProviderConfig(values: ProviderConnectionFormValues, models: string[]) {
   const adapterType = values.adapterType.trim();
   const apiVersion = values.apiVersion.trim();
+  const providerFamily = values.presetProviderKey.trim();
   const providerConfig: Record<string, unknown> = {
     credentialRequired: values.credentialRequired,
     failureMode: values.failureMode,
@@ -439,6 +423,10 @@ function toProviderConfig(values: ProviderConnectionFormValues, models: string[]
 
   if (adapterType) {
     providerConfig.adapterType = adapterType;
+  }
+
+  if (providerFamily) {
+    providerConfig.providerFamily = providerFamily;
   }
 
   if (apiVersion) {
@@ -546,6 +534,25 @@ function getDefaultProviderAdapterType(providerConnection: ProviderConnectionRec
   return providerConnection.provider === "claude" ? "anthropic" : "openai_compatible";
 }
 
+function inferProviderFamily(providerConnection: ProviderConnectionRecord) {
+  const provider = providerConnection.provider.toLowerCase();
+  const baseUrl = providerConnection.baseUrl.toLowerCase();
+
+  if (provider.includes("gemini") || baseUrl.includes("generativelanguage.googleapis.com")) {
+    return "gemini";
+  }
+
+  if (provider.includes("claude") || provider.includes("anthropic") || baseUrl.includes("anthropic.com")) {
+    return "claude";
+  }
+
+  if (provider === "mock") {
+    return "mock";
+  }
+
+  return "openai";
+}
+
 async function readProviderResponse(response: Response): Promise<ProviderRequestResult> {
   const payload = await response.json().catch(() => ({}));
 
@@ -637,7 +644,7 @@ async function readProviderDiscoveryResponse(response: Response): Promise<Provid
     if (response.status === 404) {
       return {
         error:
-          "Provider model discovery API is not available in the current Control Plane build.",
+          "Provider connection was not found for the configured Control Plane project.",
         ok: false,
         status: response.status
       };
@@ -899,6 +906,10 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
       providerConfig: {
         adapterType: "openai_compatible",
         credentialRequired: true,
+        modelDiscovery: {
+          cacheTtlSeconds: 3600,
+          type: "openai_compatible_models"
+        },
         requestFormat: "openai_chat_completions"
       },
       providerKey: "openai"

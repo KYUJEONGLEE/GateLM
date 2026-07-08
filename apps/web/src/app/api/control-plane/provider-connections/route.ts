@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import {
+  getCurrentConsoleAuth,
+  isTenantAdminForTenant
+} from "@/lib/auth/current-console-auth";
+import { getControlPlaneTenantId } from "@/lib/control-plane/control-plane-config";
+import {
   deleteProviderConnection,
   discoverProviderModels,
   removeProviderModel,
@@ -15,11 +20,26 @@ const maxProviderTimeoutMs = 120000;
 
 type RequestPayload = {
   action?: unknown;
+  tenantId?: unknown;
   values?: unknown;
 };
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const routeTenantId = typeof payload.tenantId === "string" ? payload.tenantId : undefined;
+  const tenantId = routeTenantId ?? getControlPlaneTenantId();
+  const auth = await getCurrentConsoleAuth(request.headers.get("cookie"));
+
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!isTenantAdminForTenant(auth, tenantId)) {
+    return NextResponse.json(
+      { error: "Only tenant admins can manage provider connections." },
+      { status: 403 }
+    );
+  }
 
   if (payload.action === "discover-models") {
     const provider = getProviderFromPayload(payload.values);
@@ -28,7 +48,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider discovery payload." }, { status: 400 });
     }
 
-    const result = await discoverProviderModels(provider);
+    const result = await discoverProviderModels(provider, routeTenantId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -53,7 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider deletion payload." }, { status: 400 });
     }
 
-    const result = await deleteProviderConnection(provider);
+    const result = await deleteProviderConnection(provider, routeTenantId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -78,7 +98,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid model removal payload." }, { status: 400 });
     }
 
-    const result = await removeProviderModel(values);
+    const result = await removeProviderModel({
+      ...values,
+      routeTenantId
+    });
 
     if (!result.ok) {
       return NextResponse.json(
@@ -104,7 +127,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid provider payload." }, { status: 400 });
   }
 
-  const result = await upsertProviderConnection(payload.values);
+  const result = await upsertProviderConnection(payload.values, routeTenantId);
 
   if (!result.ok) {
     return NextResponse.json(
@@ -150,6 +173,10 @@ function isProviderConnectionFormValues(value: unknown): value is ProviderConnec
     typeof record.resolver === "string" &&
     typeof record.secretRef === "string" &&
     (record.isEdit === undefined || typeof record.isEdit === "boolean") &&
+    typeof record.presetProviderKey === "string" &&
+    (record.previousProvider === undefined ||
+      (typeof record.previousProvider === "string" &&
+        /^[a-z][a-z0-9_-]{1,63}$/.test(record.previousProvider))) &&
     typeof record.credentialPrefix === "string" &&
     typeof record.credentialLast4 === "string" &&
     (record.credentialValue === undefined ||

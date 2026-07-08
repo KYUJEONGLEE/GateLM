@@ -3,6 +3,7 @@
 import {
   ArrowUp,
   Bot,
+  Info,
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -11,7 +12,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { Button } from "@/components/ui/button";
-import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   FixtureGatewayChatClient,
   RouteGatewayChatClient,
@@ -24,10 +24,12 @@ import { MarkdownMessage } from "./markdown-message";
 type CustomerDemoAppProps = {
   locale: Locale;
   model: CustomerDemoModel;
+  userName?: string;
 };
 
 type LocalChatMessage = {
   body: string;
+  generatedByModel?: string | null;
   id: string;
   side: "incoming" | "outgoing";
 };
@@ -64,6 +66,9 @@ const customerDemoText: Record<
       light: string;
       newConversation: string;
       openSidebar: string;
+      profile: string;
+      profileMissing: string;
+      profileReady: string;
       settings: string;
       closeSidebar: string;
       theme: string;
@@ -79,15 +84,15 @@ const customerDemoText: Record<
       replay: "Send again",
       send: "Send"
     },
-    appName: "Acme Support",
+    appName: "Gateway Chat",
     chatPreview: "conversation",
     disclaimer: "AI can make mistakes. Verify important information.",
     emptyState: {
-      subtitle: "Start a new conversation with Acme Support.",
+      subtitle: "Start a new conversation through the selected project Gateway API.",
       title: "What can I help with?"
     },
     error: "Unable to load this request state.",
-    inputPlaceholder: "Ask Acme support anything",
+    inputPlaceholder: "Type a message for this project",
     language: "Console language",
     sidebar: {
       application: "Application",
@@ -100,6 +105,9 @@ const customerDemoText: Record<
       light: "Light",
       newConversation: "New conversation",
       openSidebar: "Open sidebar",
+      profile: "Project profile",
+      profileMissing: "Gateway API key missing",
+      profileReady: "Gateway API connected",
       settings: "User settings",
       closeSidebar: "Close sidebar",
       theme: "Theme",
@@ -114,15 +122,15 @@ const customerDemoText: Record<
       replay: "다시 전송",
       send: "전송"
     },
-    appName: "Acme Support",
+    appName: "Gateway Chat",
     chatPreview: "대화",
     disclaimer: "AI는 실수할 수 있습니다. 중요한 정보는 다시 확인하세요.",
     emptyState: {
-      subtitle: "Acme Support와 새 대화를 시작하세요.",
+      subtitle: "선택한 프로젝트 Gateway API로 새 대화를 시작하세요.",
       title: "무엇을 도와드릴까요?"
     },
     error: "요청 상태를 불러오지 못했습니다.",
-    inputPlaceholder: "Acme 지원팀에 메시지 입력",
+    inputPlaceholder: "이 프로젝트로 보낼 메시지 입력",
     language: "콘솔 언어",
     sidebar: {
       application: "Application",
@@ -132,6 +140,9 @@ const customerDemoText: Record<
       light: "라이트",
       newConversation: "새 대화",
       openSidebar: "좌측탭 열기",
+      profile: "프로젝트 프로필",
+      profileMissing: "Gateway API Key 누락",
+      profileReady: "Gateway API 연결됨",
       settings: "사용자 설정",
       closeSidebar: "좌측탭 닫기",
       theme: "테마",
@@ -142,15 +153,21 @@ const customerDemoText: Record<
 };
 
 const themeStorageKey = "gatelm_console_theme";
+const defaultContextRetentionEnabled = true;
 
-export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
+export function CustomerDemoApp({ locale, model, userName }: CustomerDemoAppProps) {
   const client = useMemo(() => {
     if (model.integrationMode === "gateway") {
-      return new RouteGatewayChatClient(model.tenantId, model.surface);
+      return new RouteGatewayChatClient(
+        model.tenantId,
+        model.surface,
+        model.selectedChatProfileId,
+        userName
+      );
     }
 
     return new FixtureGatewayChatClient(model.scenarios);
-  }, [model.integrationMode, model.scenarios, model.surface, model.tenantId]);
+  }, [model.integrationMode, model.scenarios, model.selectedChatProfileId, model.surface, model.tenantId, userName]);
   const [, setExchange] = useState<CustomerDemoExchange>(() => buildInitialExchange(model));
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -158,7 +175,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [contextRetentionEnabled, setContextRetentionEnabled] = useState(false);
+  const [contextRetentionEnabled, setContextRetentionEnabled] = useState(defaultContextRetentionEnabled);
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
   const requestInFlight = useRef(false);
@@ -166,11 +183,25 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const hasScenarios = model.scenarios.length > 0;
   const text = customerDemoText[locale];
+  const chatProfiles = model.chatProfiles ?? [];
+  const selectedProfile =
+    chatProfiles.find((profile) => profile.id === model.selectedChatProfileId)
+    ?? chatProfiles.find((profile) => profile.isDefault)
+    ?? chatProfiles[0];
+  const selectedProfileId = model.selectedChatProfileId ?? selectedProfile?.id ?? "";
+  const appDisplayName = model.selectedChatProfileLabel ?? selectedProfile?.label ?? text.appName;
+  const profileStatus = selectedProfile?.configured
+    ? text.sidebar.profileReady
+    : (selectedProfile?.disabledReason ?? model.applicationChatProfileLoadError ?? text.sidebar.profileMissing);
+  const isSelectedProfileConfigured =
+    model.integrationMode !== "gateway" || selectedProfile?.configured === true;
   const canStreamApplicationChat =
     model.integrationMode === "gateway" && (model.applicationChatStreamingEnabled ?? true);
+  const canSendMessage = hasScenarios && isSelectedProfileConfigured;
+  const userDisplayName = userName ?? text.sidebar.user;
   const firstUserMessage = messages.find((message) => message.side === "outgoing");
   const currentConversationTitle = firstUserMessage?.body ?? text.sidebar.newConversation;
-  const currentConversationAuthor = messages.length > 0 ? text.chatPreview : text.appName;
+  const currentConversationAuthor = messages.length > 0 ? text.chatPreview : appDisplayName;
 
   useEffect(() => {
     const initialTheme = readStoredTheme() ?? readDocumentTheme();
@@ -217,7 +248,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
   }, [inputValue]);
 
   const startNewChat = useCallback(async () => {
-    if (requestInFlight.current) {
+    if (requestInFlight.current || !isSelectedProfileConfigured) {
       return;
     }
 
@@ -225,12 +256,16 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     setIsLoading(true);
 
     try {
-      const conversation = await client.createConversation({
-        contextRetentionEnabled
-      });
+      if (contextRetentionEnabled) {
+        const conversation = await client.createConversation({
+          contextRetentionEnabled
+        });
 
-      setConversationId(conversation.id);
-      setContextRetentionEnabled(conversation.contextRetentionEnabled);
+        setConversationId(conversation.id);
+        setContextRetentionEnabled(conversation.contextRetentionEnabled);
+      } else {
+        setConversationId(null);
+      }
       setExchange(buildInitialExchange(model));
       setInputValue("");
       setLoadError(null);
@@ -241,7 +276,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
       requestInFlight.current = false;
       setIsLoading(false);
     }
-  }, [client, contextRetentionEnabled, model, text.error]);
+  }, [client, contextRetentionEnabled, isSelectedProfileConfigured, model, text.error]);
 
   const toggleSidebar = useCallback(() => {
     setIsUserSettingsOpen(false);
@@ -252,6 +287,16 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
     setTheme(nextTheme);
     applyTheme(nextTheme);
     writeStoredTheme(nextTheme);
+  }
+
+  function selectProfile(nextProfileId: string) {
+    if (!nextProfileId || nextProfileId === selectedProfileId || typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("profile", nextProfileId);
+    window.location.assign(`${url.pathname}${url.search}${url.hash}`);
   }
 
   const updateContextRetention = useCallback((enabled: boolean) => {
@@ -361,14 +406,24 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
       setConversationId(nextExchange.conversationId ?? conversationId);
       setContextRetentionEnabled(nextExchange.contextRetentionEnabled);
       setMessages((current) => {
+        const generatedByModel = getGeneratedByModel(nextExchange);
+
         if (streamedAssistantMessage && current.some((item) => item.id === assistantMessageId)) {
-          return current;
+          return current.map((item) =>
+            item.id === assistantMessageId
+              ? {
+                  ...item,
+                  generatedByModel
+                }
+              : item
+          );
         }
 
         return [
           ...current,
           {
             body: nextExchange.assistantMessage,
+            generatedByModel,
             id: assistantMessageId,
             side: "incoming"
           }
@@ -415,13 +470,31 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
         <section className="customer-chat-sidebar-history" aria-label={text.sidebar.current}>
           <span>{text.sidebar.application}</span>
           <div className="customer-chat-sidebar-card">
-            <strong>{text.appName}</strong>
-            <small>{formatDisplayIdentifier(model.applicationId)}</small>
+            <strong>{appDisplayName}</strong>
+            <small>{profileStatus}</small>
           </div>
+
+          {chatProfiles.length > 1 ? (
+            <label className="customer-chat-profile-picker">
+              <span>{text.sidebar.profile}</span>
+              <select
+                onChange={(event) => selectProfile(event.target.value)}
+                value={selectedProfileId}
+              >
+                {chatProfiles.map((profile) => (
+                  <option disabled={!profile.configured} key={profile.id} value={profile.id}>
+                    {profile.configured
+                      ? profile.label
+                      : `${profile.label} (${profile.disabledReason ?? text.sidebar.profileMissing})`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <button
             className="customer-chat-new-button"
-            disabled={isLoading}
+            disabled={isLoading || !isSelectedProfileConfigured}
             onClick={() => void startNewChat()}
             type="button"
           >
@@ -466,9 +539,15 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                 <span>{text.sidebar.contextMemory ?? "Context memory"}</span>
                 <label className="customer-chat-context-toggle">
                   <input
+                    aria-disabled={isLoading}
                     checked={contextRetentionEnabled}
-                    disabled={isLoading}
-                    onChange={(event) => updateContextRetention(event.target.checked)}
+                    onChange={(event) => {
+                      if (isLoading) {
+                        return;
+                      }
+
+                      updateContextRetention(event.target.checked);
+                    }}
                     type="checkbox"
                   />
                   <span>
@@ -481,7 +560,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             </div>
           ) : null}
           <div className="customer-chat-user-card">
-            <strong>{text.sidebar.user}</strong>
+            <strong>{userDisplayName}</strong>
             <button
               aria-expanded={isUserSettingsOpen}
               aria-label={text.sidebar.settings}
@@ -524,6 +603,12 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
                   ) : (
                     <p>{message.body}</p>
                   )}
+                  {message.side === "incoming" && message.generatedByModel ? (
+                    <span className="customer-chat-generated-by">
+                      <Info aria-hidden="true" size={16} strokeWidth={2} />
+                      {formatGeneratedByModel(message.generatedByModel, locale)}
+                    </span>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -546,7 +631,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             <label className="customer-chat-input">
               <textarea
                 aria-label={text.inputPlaceholder}
-                disabled={isLoading || !hasScenarios}
+                disabled={!canSendMessage}
                 onChange={(event) => setInputValue(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
@@ -564,7 +649,7 @@ export function CustomerDemoApp({ locale, model }: CustomerDemoAppProps) {
             </label>
             <Button
               className="customer-chat-send-button"
-              disabled={isLoading || !hasScenarios || inputValue.trim().length === 0}
+              disabled={isLoading || !canSendMessage || inputValue.trim().length === 0}
               type="submit"
             >
               <ArrowUp size={19} strokeWidth={2.6} />
@@ -616,6 +701,113 @@ function writeStoredTheme(theme: ConsoleTheme) {
   }
 
   window.localStorage.setItem(themeStorageKey, theme);
+}
+
+function formatGeneratedByModel(modelName: string, locale: Locale) {
+  const displayName = formatModelDisplayName(modelName, locale);
+
+  return locale === "ko" ? `${displayName}로 생성됨` : `Generated with ${displayName}`;
+}
+
+function getGeneratedByModel(exchange: CustomerDemoExchange) {
+  return firstDisplayableModel(
+    getResponseHeader(exchange, "X-GateLM-Routed-Model"),
+    getNestedString(exchange.response.body, ["gate_lm", "selectedModel"]),
+    getNestedString(exchange.response.body, ["gate_lm", "routedModel"]),
+    getNestedString(exchange.response.body, ["model"]),
+    exchange.request.body.model
+  );
+}
+
+function getResponseHeader(exchange: CustomerDemoExchange, name: string) {
+  const targetName = name.toLowerCase();
+
+  return exchange.response.headers.find((header) => header.name.toLowerCase() === targetName)?.value;
+}
+
+function firstDisplayableModel(...values: Array<string | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeModelName(value);
+
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function normalizeModelName(value: string | undefined) {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const unavailableValues = new Set([
+    "auto",
+    "n/a",
+    "none",
+    "not-routed",
+    "not-set",
+    "null",
+    "pending",
+    "unknown"
+  ]);
+
+  return unavailableValues.has(normalized.toLowerCase()) ? null : normalized;
+}
+
+function getNestedString(value: unknown, path: string[]) {
+  let current: unknown = value;
+
+  for (const key of path) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+
+    current = current[key];
+  }
+
+  return typeof current === "string" ? current : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatModelDisplayName(modelName: string, locale: Locale) {
+  const normalized = stripModelNamespace(modelName);
+  const lowerName = normalized.toLowerCase();
+
+  if (lowerName.startsWith("mock-")) {
+    return locale === "ko" ? "데모 모델" : "Demo model";
+  }
+
+  if (lowerName.startsWith("gpt")) {
+    const versionName = normalized
+      .replace(/^gpt[-_]?/i, "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\bturbo\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return versionName ? `GPT-${versionName}` : "GPT";
+  }
+
+  return normalized
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .trim();
+}
+
+function stripModelNamespace(modelName: string) {
+  const withoutProviderPrefix = modelName
+    .trim()
+    .replace(/^(openai|anthropic|google|gemini|mock)[:/]/i, "");
+  const segments = withoutProviderPrefix.split(/[:/]/).map((segment) => segment.trim()).filter(Boolean);
+
+  return segments.at(-1) ?? withoutProviderPrefix;
 }
 
 function buildInitialExchange(model: CustomerDemoModel): CustomerDemoExchange {
@@ -690,10 +882,6 @@ function buildEmptyExchange(model: CustomerDemoModel): CustomerDemoExchange {
         {
           name: "Authorization",
           value: "Bearer <redacted>"
-        },
-        {
-          name: "X-GateLM-App-Token",
-          value: "<redacted>"
         },
         {
           name: "Content-Type",

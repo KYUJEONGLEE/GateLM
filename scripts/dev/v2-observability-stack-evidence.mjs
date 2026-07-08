@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_GATEWAY_BASE_URL = "http://localhost:8080";
 const DEFAULT_PROMETHEUS_BASE_URL = "http://localhost:9090";
-const DEFAULT_GRAFANA_BASE_URL = "http://localhost:3000";
+const DEFAULT_GRAFANA_BASE_URL = "http://localhost:3005";
 const DEFAULT_API_KEY = "glm_api_test_redacted";
 const DEFAULT_APP_TOKEN = "glm_app_token_test_redacted";
 const DEFAULT_GRAFANA_USER = "admin";

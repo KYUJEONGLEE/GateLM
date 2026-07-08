@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 import { ConsoleShell } from "@/components/layout/console-shell";
 import { RuntimePolicyEditor } from "@/features/policies/components/runtime-policy-editor";
-import { listAppTokensForApplication } from "@/lib/control-plane/app-tokens-client";
+import {
+  getCurrentConsoleAuth,
+  resolveConsoleTenantIdForAuth
+} from "@/lib/auth/current-console-auth";
+import { listApiKeysForProject } from "@/lib/control-plane/api-keys-client";
 import { getApplicationsModel } from "@/lib/control-plane/applications-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import { getRuntimePolicyModelForApplication } from "@/lib/control-plane/runtime-policy-client";
@@ -19,25 +23,29 @@ export default async function ApplicationPoliciesPage({
   params
 }: ApplicationPoliciesPageProps) {
   const { applicationId, projectId, tenantId } = await params;
-  const locale = await getRequestLocale();
-  const projectsModel = await getProjectsModel(tenantId);
+  const [locale, auth] = await Promise.all([
+    getRequestLocale(),
+    getCurrentConsoleAuth()
+  ]);
+  const effectiveTenantId = resolveConsoleTenantIdForAuth(auth, tenantId);
+  const projectsModel = await getProjectsModel(effectiveTenantId);
   const project = projectsModel.projects.find((item) => item.id === projectId);
 
-  if (!project) {
+  if (!project || project.status !== "ACTIVE") {
     notFound();
   }
 
-  const applicationsModel = await getApplicationsModel(tenantId, project.id);
+  const applicationsModel = await getApplicationsModel(effectiveTenantId, project.id);
   const application = applicationsModel.applications.find((item) => item.id === applicationId);
 
   if (!application) {
     notFound();
   }
 
-  const model = await getRuntimePolicyModelForApplication(tenantId, application.id, project.id);
-  const appTokensResult = await listAppTokensForApplication(application.id);
-  const activeAppTokenCount = appTokensResult.ok
-    ? appTokensResult.data.filter((appToken) => isActiveAppToken(appToken.status, appToken.expiresAt))
+  const model = await getRuntimePolicyModelForApplication(effectiveTenantId, application.id, project.id);
+  const apiKeysResult = await listApiKeysForProject(project.id);
+  const activeApiKeyCount = apiKeysResult.ok
+    ? apiKeysResult.data.filter((apiKey) => isActiveCredential(apiKey.status, apiKey.expiresAt))
         .length
     : 0;
 
@@ -46,25 +54,23 @@ export default async function ApplicationPoliciesPage({
       activeManagementItem="project"
       activeSection="management"
       locale={locale}
-      tenantId={tenantId}
+      tenantId={effectiveTenantId}
     >
       <RuntimePolicyEditor
-        appTokenReadiness={{
-          activeAppTokenCount,
-          applicationName: application.name,
-          loadError: appTokensResult.ok ? null : appTokensResult.error
+        apiKeyReadiness={{
+          activeApiKeyCount,
+          loadError: apiKeysResult.ok ? null : apiKeysResult.error,
+          projectId: project.id,
+          projectName: project.name
         }}
         breadcrumbItems={[
           {
-            href: `/tenants/${tenantId}/projects`,
+            href: `/tenants/${effectiveTenantId}/projects`,
             label: "Projects"
           },
           {
-            href: `/tenants/${tenantId}/projects/${project.id}`,
+            href: `/tenants/${effectiveTenantId}/projects/${project.id}`,
             label: project.name
-          },
-          {
-            label: application.name
           },
           {
             label: "Policies"
@@ -77,7 +83,7 @@ export default async function ApplicationPoliciesPage({
   );
 }
 
-function isActiveAppToken(status: string, expiresAt: string | null) {
+function isActiveCredential(status: string, expiresAt: string | null) {
   if (status !== "active") {
     return false;
   }

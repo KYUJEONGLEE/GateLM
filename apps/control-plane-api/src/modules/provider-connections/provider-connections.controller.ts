@@ -69,6 +69,20 @@ export class ProviderConnectionsController {
     return this.providerConnectionsService.listProviders(projectId, query);
   }
 
+  @Delete('projects/:projectId/providers/:provider')
+  @HttpCode(HttpStatus.OK)
+  async deleteProvider(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('provider') provider: string,
+  ): Promise<DataEnvelope<ProviderResponseDto>> {
+    return {
+      data: await this.providerConnectionsService.deleteProvider(
+        projectId,
+        provider,
+      ),
+    };
+  }
+
   @Get('tenants/:tenantId/providers')
   async listTenantProviders(
     @Param('tenantId', ParseUUIDPipe) tenantId: string,

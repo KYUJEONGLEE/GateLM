@@ -22,6 +22,33 @@ export interface AuthTenant {
   updatedAt: Date;
 }
 
+export interface AuthProject {
+  id: string;
+  tenantId: string;
+  name: string;
+  status: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuthProjectAdmin {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  project?: AuthProject;
+}
+
+export interface AuthTenantAdmin {
+  id: string;
+  tenantId: string;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AuthTenantMembership {
   id: string;
   tenantId: string;
@@ -33,6 +60,24 @@ export interface AuthTenantMembership {
   updatedAt: Date;
   deletedAt: Date | null;
   tenant?: AuthTenant;
+}
+
+export interface AuthProjectAdminInvitation {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  email: string;
+  name: string;
+  tokenHash: string;
+  status: string;
+  invitedByUserId: string | null;
+  expiresAt: Date;
+  acceptedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  tenant?: AuthTenant;
+  project?: AuthProject;
 }
 
 export interface AuthSession {
@@ -83,6 +128,12 @@ export interface CreateUserInput {
 }
 
 export interface AuthRepository {
+  acceptProjectAdminInvitation(input: {
+    acceptedAt: Date;
+    email: string;
+    tokenHash: string;
+    userId: string;
+  }): Promise<AuthProjectAdminInvitation>;
   consumeOpenVerificationCodes(userId: string, consumedAt: Date): Promise<void>;
   consumeVerificationCode(id: string, consumedAt: Date): Promise<void>;
   createGoogleUserWithOAuth(input: {
@@ -98,12 +149,32 @@ export interface AuthRepository {
     providerSubject: string;
     userId: string;
   }): Promise<OAuthAccount>;
+  createProjectAdminInvitation(input: {
+    email: string;
+    expiresAt: Date;
+    invitedByUserId?: string | null;
+    name?: string | null;
+    projectId: string;
+    tenantId: string;
+    tokenHash: string;
+  }): Promise<AuthProjectAdminInvitation>;
   createSession(input: {
     expiresAt: Date;
     kind: AuthSessionKind;
     sessionTokenHash: string;
     userId: string;
   }): Promise<AuthSession>;
+  createLocalUserTenantAndMembership(input: {
+    email: string;
+    emailVerifiedAt: Date;
+    name: string | null;
+    organizationName: string;
+    passwordHash: string;
+  }): Promise<{
+    membership: AuthTenantMembership;
+    tenant: AuthTenant;
+    user: AuthUser;
+  }>;
   createTenantAndMembership(input: {
     organizationName: string;
     userId: string;
@@ -123,10 +194,16 @@ export interface AuthRepository {
     now: Date,
   ): Promise<EmailVerificationCode | null>;
   findMembershipsByUserId(userId: string): Promise<AuthTenantMembership[]>;
+  findTenantAdminsByUserId(userId: string): Promise<AuthTenantAdmin[]>;
+  findProjectAdminsByUserId(userId: string): Promise<AuthProjectAdmin[]>;
   findOAuthAccount(
     provider: string,
     providerSubject: string,
   ): Promise<OAuthAccountWithUser | null>;
+  findProjectAdminInvitationByTokenHash(
+    tokenHash: string,
+    now: Date,
+  ): Promise<AuthProjectAdminInvitation | null>;
   findUserByEmail(email: string): Promise<AuthUser | null>;
   recordVerificationCodeFailure(
     id: string,

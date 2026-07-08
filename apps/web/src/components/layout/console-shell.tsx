@@ -2,7 +2,9 @@
 
 import {
   Activity,
-  Database,
+  Bell,
+  ChevronDown,
+  CircleHelp,
   FolderKanban,
   House,
   LayoutDashboard,
@@ -14,7 +16,7 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import {
   DropdownMenu,
@@ -24,51 +26,72 @@ import {
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
-type ConsoleSection = "dashboard" | "management" | "analytics";
-type ExpandableConsoleSection = "management" | "analytics";
+type ConsoleSection = "monitoring" | "management";
+type ExpandableConsoleSection = "management" | "monitoring";
 type ConsoleTheme = "light" | "dark";
+type NotificationSeverity = "critical" | "info" | "warning";
+type NotificationCategory = "Budget" | "Cache" | "Cost" | "Provider" | "Rate Limit" | "Safety" | "System";
+
+type CurrentUser = {
+  avatarUrl?: string;
+  displayName: string;
+  email?: string;
+  id: string;
+  role: string;
+  tenantName?: string;
+};
+
+type AdminNotification = {
+  category: NotificationCategory;
+  createdAt: string;
+  id: string;
+  message: string;
+  read: boolean;
+  severity: NotificationSeverity;
+  title: string;
+};
 
 export type ManagementNavItem =
   | "api-keys"
   | "app-tokens"
-  | "model-catalog"
   | "policies"
   | "project"
   | "provider"
   | "teams";
-export type AnalyticsNavItem = "health" | "request-logs";
+export type MonitoringNavItem = "alerts" | "analytics" | "live-logs" | "overview";
 
 const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
-  analytics: Activity,
-  dashboard: LayoutDashboard,
+  monitoring: LayoutDashboard,
   management: FolderKanban
 };
 
-const childIcons: Record<AnalyticsNavItem | ManagementNavItem, typeof LayoutDashboard> = {
+const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
   "api-keys": SettingsIcon,
   "app-tokens": SettingsIcon,
-  health: Activity,
-  "model-catalog": Database,
+  alerts: Bell,
+  analytics: Activity,
+  "live-logs": ScrollText,
+  overview: LayoutDashboard,
   policies: ScrollText,
   project: FolderKanban,
   provider: Plug,
-  "request-logs": ScrollText,
   teams: Users
 };
 
 type ConsoleShellProps = {
   activeSection: ConsoleSection;
   children: ReactNode;
-  activeAnalyticsItem?: AnalyticsNavItem;
   activeManagementItem?: ManagementNavItem;
+  activeMonitoringItem?: MonitoringNavItem;
   locale: Locale;
   tenantId: string;
 };
 
 type ChildNavigationItem = {
+  badge?: string;
   disabled?: boolean;
   labels: Record<Locale, string>;
-  item: AnalyticsNavItem | ManagementNavItem;
+  item: ManagementNavItem | MonitoringNavItem;
   path?: (tenantId: string) => string;
 };
 
@@ -81,11 +104,44 @@ const navigationItems: Array<{
 }> = [
   {
     labels: {
-      en: "Dashboard",
-      ko: "대시보드"
+      en: "Monitoring",
+      ko: "모니터링"
     },
-    section: "dashboard",
-    path: (tenantId) => `/tenants/${tenantId}/dashboard`
+    children: [
+      {
+        labels: {
+          en: "Overview",
+          ko: "개요"
+        },
+        item: "overview",
+        path: (tenantId) => `/tenants/${tenantId}/dashboard`
+      },
+      {
+        labels: {
+          en: "Live Logs",
+          ko: "실시간 로그"
+        },
+        item: "live-logs",
+        path: (tenantId) => `/tenants/${tenantId}/request-logs`
+      },
+      {
+        labels: {
+          en: "Analytics",
+          ko: "분석"
+        },
+        item: "analytics",
+        path: (tenantId) => `/tenants/${tenantId}/analytics`
+      },
+      {
+        labels: {
+          en: "Alerts",
+          ko: "알림"
+        },
+        item: "alerts",
+        path: (tenantId) => `/tenants/${tenantId}/alerts`
+      }
+    ],
+    section: "monitoring"
   },
   {
     labels: {
@@ -103,56 +159,14 @@ const navigationItems: Array<{
       },
       {
         labels: {
-          en: "Teams",
-          ko: "Teams"
-        },
-        item: "teams",
-        path: (tenantId) => `/tenants/${tenantId}/teams`
-      },
-      {
-        labels: {
           en: "Providers",
           ko: "Provider"
         },
         item: "provider",
         path: (tenantId) => `/tenants/${tenantId}/provider-connections`
-      },
-      {
-        labels: {
-          en: "Model Catalog",
-          ko: "Model Catalog"
-        },
-        item: "model-catalog",
-        path: (tenantId) => `/tenants/${tenantId}/model-catalog`
       }
     ],
     section: "management"
-  },
-  {
-    labels: {
-      en: "Analytics",
-      ko: "분석"
-    },
-    children: [
-      {
-        labels: {
-          en: "Health",
-          ko: "Health"
-        },
-        item: "health",
-        path: (tenantId) => `/tenants/${tenantId}/health`
-      },
-      {
-        labels: {
-          en: "Request logs",
-          ko: "요청 로그"
-        },
-        item: "request-logs",
-        path: (tenantId) => `/tenants/${tenantId}/request-logs`
-      }
-    ],
-    path: (tenantId) => `/tenants/${tenantId}/request-logs`,
-    section: "analytics"
   }
 ];
 
@@ -166,7 +180,6 @@ const shellText: Record<
     settings: string;
     light: string;
     dark: string;
-    logout: string;
     theme: string;
     planned: string;
     tenant: string;
@@ -179,7 +192,6 @@ const shellText: Record<
     language: "Console language",
     landing: "Landing",
     light: "Light",
-    logout: "Logout",
     planned: "planned",
     settings: "Tenant settings",
     tenant: "tenant",
@@ -192,7 +204,6 @@ const shellText: Record<
     dark: "다크",
     language: "콘솔 언어",
     light: "라이트",
-    logout: "로그아웃",
     planned: "예정",
     settings: "테넌트 설정",
     tenant: "테넌트",
@@ -203,10 +214,55 @@ const shellText: Record<
 const openSectionsStorageKey = "gatelm_console_open_sections";
 const sidebarCollapsedStorageKey = "gatelm_console_sidebar_collapsed";
 const themeStorageKey = "gatelm_console_theme";
+const notificationReadStorageKey = "gatelm_console_header_notification_read_ids";
+
+// No notification API exists yet; these are preview notifications for the console header demo.
+const previewNotificationSeeds: Array<Omit<AdminNotification, "read">> = [
+  {
+    category: "Budget",
+    createdAt: "2m ago",
+    id: "budget-usage-preview",
+    message: "Monthly budget usage is approaching the configured limit.",
+    severity: "warning",
+    title: "Budget warning"
+  },
+  {
+    category: "Provider",
+    createdAt: "5m ago",
+    id: "provider-error-preview",
+    message: "Recent gateway requests include provider-side 5xx errors.",
+    severity: "critical",
+    title: "Provider error"
+  },
+  {
+    category: "Safety",
+    createdAt: "8m ago",
+    id: "safety-block-preview",
+    message: "Secret-like prompt content was blocked by policy.",
+    severity: "warning",
+    title: "Safety block detected"
+  },
+  {
+    category: "Rate Limit",
+    createdAt: "14m ago",
+    id: "rate-limit-preview",
+    message: "A project is close to its current rate limit window.",
+    severity: "info",
+    title: "Rate limit warning"
+  },
+  {
+    category: "Cache",
+    createdAt: "22m ago",
+    id: "cache-opportunity-preview",
+    message: "Cache hit rate is lower than expected for repeated traffic.",
+    severity: "info",
+    title: "Cache opportunity"
+  }
+];
 
 export function ConsoleShell({
-  activeAnalyticsItem,
   activeManagementItem,
+  activeMonitoringItem,
   activeSection,
   children,
   locale,
@@ -220,7 +276,19 @@ export function ConsoleShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [theme, setTheme] = useState<ConsoleTheme>("light");
+
+  const notifications = useMemo(
+    () =>
+      previewNotificationSeeds.map((notification) => ({
+        ...notification,
+        read: readNotificationIds.includes(notification.id)
+      })),
+    [readNotificationIds]
+  );
+  const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
 
   useEffect(() => {
     const storedOpenSections = readStoredOpenSections();
@@ -241,6 +309,44 @@ export function ConsoleShell({
     setTheme(initialTheme);
     applyTheme(initialTheme);
   }, []);
+
+  useEffect(() => {
+    setReadNotificationIds(readStoredNotificationIds());
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch("/api/auth/me", {
+          credentials: "include"
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!response.ok) {
+          setCurrentUser(null);
+          return;
+        }
+
+        const payload = (await response.json()) as unknown;
+        setCurrentUser(parseCurrentUser(payload, tenantLabel));
+      } catch {
+        if (isMounted) {
+          setCurrentUser(null);
+        }
+      }
+    }
+
+    void loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tenantLabel]);
 
   function toggleSidebar() {
     if (isMobileViewport()) {
@@ -278,6 +384,12 @@ export function ConsoleShell({
     window.location.assign("/?view=landing");
   }
 
+  function markAllNotificationsRead() {
+    const nextReadIds = previewNotificationSeeds.map((notification) => notification.id);
+    setReadNotificationIds(nextReadIds);
+    writeStoredNotificationIds(nextReadIds);
+  }
+
   function toggleSection(section: ConsoleSection) {
     if (!isExpandableSection(section)) {
       return;
@@ -294,8 +406,8 @@ export function ConsoleShell({
   }
 
   function isChildActive(child: ChildNavigationItem) {
-    if (child.item === "health" || child.item === "request-logs") {
-      return child.item === activeAnalyticsItem;
+    if (isMonitoringNavItem(child.item)) {
+      return child.item === activeMonitoringItem;
     }
 
     return child.item === activeManagementItem;
@@ -316,6 +428,7 @@ export function ConsoleShell({
           >
             <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
             <span>{childLabel}</span>
+            {child.badge ? <span className="console-nav-badge">{child.badge}</span> : null}
             <small>{text.planned}</small>
           </span>
         );
@@ -332,6 +445,7 @@ export function ConsoleShell({
         >
           <ChildIcon aria-hidden="true" size={14} strokeWidth={2.2} />
           <span>{childLabel}</span>
+          {child.badge ? <span className="console-nav-badge">{child.badge}</span> : null}
         </Link>
       );
     });
@@ -533,17 +647,6 @@ export function ConsoleShell({
                     </button>
                   </div>
                 </div>
-                <div className="console-sidebar-settings-row" data-align="end">
-                  <button
-                    className="console-sidebar-logout-button"
-                    disabled={isLoggingOut}
-                    onClick={logout}
-                    type="button"
-                  >
-                    <LogOut aria-hidden="true" size={14} strokeWidth={2.3} />
-                    <span>{text.logout}</span>
-                  </button>
-                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -551,10 +654,306 @@ export function ConsoleShell({
       </aside>
 
       <div className="console-main">
+        <ConsoleTopbarActions
+          currentUser={currentUser}
+          isLoggingOut={isLoggingOut}
+          notifications={notifications}
+          onLogout={logout}
+          onMarkAllNotificationsRead={markAllNotificationsRead}
+          tenantLabel={tenantLabel}
+          unreadNotificationCount={unreadNotificationCount}
+        />
         {children}
       </div>
     </div>
   );
+}
+
+function ConsoleTopbarActions({
+  currentUser,
+  isLoggingOut,
+  notifications,
+  onLogout,
+  onMarkAllNotificationsRead,
+  tenantLabel,
+  unreadNotificationCount
+}: {
+  currentUser: CurrentUser | null;
+  isLoggingOut: boolean;
+  notifications: AdminNotification[];
+  onLogout: () => Promise<void>;
+  onMarkAllNotificationsRead: () => void;
+  tenantLabel: string;
+  unreadNotificationCount: number;
+}) {
+  const displayUser = currentUser ?? buildPendingCurrentUser(tenantLabel);
+  const initials = getUserInitials(displayUser.displayName);
+
+  return (
+    <div className="console-topbar-actions" aria-label="Console account actions">
+      <button
+        aria-label="Help"
+        className="console-topbar-icon-button"
+        title="Help"
+        type="button"
+      >
+        <CircleHelp aria-hidden="true" size={18} strokeWidth={2.2} />
+      </button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`${unreadNotificationCount} unread notifications`}
+          className="console-topbar-icon-button console-notification-trigger"
+          title="Notifications"
+        >
+          <Bell aria-hidden="true" size={18} strokeWidth={2.2} />
+          {unreadNotificationCount > 0 ? (
+            <span className="console-notification-badge">
+              {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+            </span>
+          ) : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          aria-label="Notifications"
+          className="console-notification-popover"
+          sideOffset={10}
+        >
+          <div className="console-notification-popover-header">
+            <div>
+              <strong>Notifications</strong>
+              <span>{unreadNotificationCount} unread</span>
+            </div>
+            <button
+              disabled={unreadNotificationCount === 0}
+              onClick={onMarkAllNotificationsRead}
+              type="button"
+            >
+              Mark all as read
+            </button>
+          </div>
+
+          <div className="console-notification-list">
+            {notifications.slice(0, 5).map((notification) => (
+              <article
+                className="console-notification-row"
+                data-read={notification.read}
+                data-severity={notification.severity}
+                key={notification.id}
+              >
+                <span className="console-notification-severity-dot" aria-hidden="true" />
+                <div>
+                  <div className="console-notification-row-title">
+                    <strong>{notification.title}</strong>
+                    {!notification.read ? <span aria-label="Unread notification" /> : null}
+                  </div>
+                  <p>{notification.message}</p>
+                  <footer>
+                    <span>{notification.category}</span>
+                    <small>{notification.createdAt}</small>
+                  </footer>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {/* No notifications route exists yet. Keep this disabled until a backend/page is added. */}
+          <button className="console-notification-view-all" disabled type="button">
+            View all notifications
+          </button>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger className="console-user-trigger" aria-label="Open user profile menu">
+          <span className="console-user-avatar" aria-hidden="true">
+            {displayUser.avatarUrl ? (
+              <span
+                className="console-user-avatar-image"
+                style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
+              />
+            ) : (
+              <span>{initials}</span>
+            )}
+          </span>
+          <span className="console-user-copy">
+            <strong>{displayUser.displayName}</strong>
+            <small>{displayUser.role}</small>
+          </span>
+          <ChevronDown aria-hidden="true" size={14} strokeWidth={2.4} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          aria-label="User profile"
+          className="console-user-popover"
+          sideOffset={10}
+        >
+          <div className="console-user-popover-header">
+            <span className="console-user-avatar" aria-hidden="true">
+              {displayUser.avatarUrl ? (
+                <span
+                  className="console-user-avatar-image"
+                  style={{ backgroundImage: `url(${displayUser.avatarUrl})` }}
+                />
+              ) : (
+                <span>{initials}</span>
+              )}
+            </span>
+            <div>
+              <strong>{displayUser.displayName}</strong>
+              {displayUser.email ? <span>{displayUser.email}</span> : null}
+            </div>
+          </div>
+
+          <dl className="console-user-meta">
+            <div>
+              <dt>Role</dt>
+              <dd>{displayUser.role}</dd>
+            </div>
+            <div>
+              <dt>Organization</dt>
+              <dd>{displayUser.tenantName ?? tenantLabel}</dd>
+            </div>
+          </dl>
+
+          <div className="console-user-menu-actions">
+            <button className="console-user-menu-action" disabled type="button">
+              <SettingsIcon aria-hidden="true" size={14} strokeWidth={2.2} />
+              <span>Settings</span>
+              <small>Not connected</small>
+            </button>
+            <button
+              className="console-user-menu-action"
+              disabled={isLoggingOut}
+              onClick={() => {
+                void onLogout();
+              }}
+              type="button"
+            >
+              <LogOut aria-hidden="true" size={14} strokeWidth={2.2} />
+              <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+            </button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function buildPendingCurrentUser(tenantLabel: string): CurrentUser {
+  return {
+    displayName: "Account",
+    id: "session-loading",
+    role: "Session required",
+    tenantName: tenantLabel
+  };
+}
+
+function parseCurrentUser(payload: unknown, tenantLabel: string): CurrentUser | null {
+  const root = getRecord(payload);
+  const data = getRecord(root?.data);
+  const user = getRecord(data?.user);
+
+  if (!user) {
+    return null;
+  }
+
+  const email = readString(user, "email");
+  const membership = getPrimaryMembership(data);
+  const tenant = getRecord(data?.tenant);
+  const displayName =
+    readString(user, "displayName") ??
+    readString(user, "name") ??
+    getDisplayNameFromEmail(email) ??
+    "Admin";
+
+  return {
+    avatarUrl: readString(user, "avatarUrl") ?? readString(user, "picture") ?? undefined,
+    displayName,
+    email: email ?? undefined,
+    id: readString(user, "id") ?? readString(user, "userId") ?? "current-admin",
+    role: formatRoleLabel(readString(membership, "role") ?? readString(user, "role")),
+    tenantName: readString(tenant, "name") ?? tenantLabel
+  };
+}
+
+function getPrimaryMembership(data: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!data) {
+    return null;
+  }
+
+  const membership = getRecord(data.membership);
+  if (membership) {
+    return membership;
+  }
+
+  if (!Array.isArray(data.memberships)) {
+    return null;
+  }
+
+  return data.memberships.map(getRecord).find((item): item is Record<string, unknown> => Boolean(item)) ?? null;
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readString(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue : null;
+}
+
+function getDisplayNameFromEmail(email: string | null) {
+  if (!email) {
+    return null;
+  }
+
+  const localPart = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!localPart) {
+    return null;
+  }
+
+  return localPart
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatRoleLabel(role: string | null) {
+  if (!role) {
+    return "Tenant Admin";
+  }
+
+  const normalizedRole = role.trim().toLowerCase();
+  if (normalizedRole === "tenant_admin" || normalizedRole === "super_admin") {
+    return "Tenant Admin";
+  }
+
+  return normalizedRole
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Tenant Admin";
+}
+
+function getUserInitials(displayName: string) {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0]?.charAt(0) ?? ""}${parts[1]?.charAt(0) ?? ""}`.toUpperCase();
+  }
+
+  return (parts[0]?.charAt(0) || "A").toUpperCase();
 }
 
 function getActiveOpenSections(activeSection: ConsoleSection): ExpandableConsoleSection[] {
@@ -562,13 +961,47 @@ function getActiveOpenSections(activeSection: ConsoleSection): ExpandableConsole
 }
 
 function isExpandableSection(section: ConsoleSection): section is ExpandableConsoleSection {
-  return section === "management" || section === "analytics";
+  return section === "management" || section === "monitoring";
+}
+
+function isMonitoringNavItem(item: ManagementNavItem | MonitoringNavItem): item is MonitoringNavItem {
+  return item === "alerts" || item === "analytics" || item === "live-logs" || item === "overview";
 }
 
 function mergeOpenSections(
   ...sectionGroups: Array<ExpandableConsoleSection[]>
 ): ExpandableConsoleSection[] {
   return Array.from(new Set(sectionGroups.flat()));
+}
+
+function readStoredNotificationIds(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(notificationReadStorageKey);
+    if (!storedValue) {
+      return [];
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    return parsedValue.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredNotificationIds(notificationIds: string[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(notificationReadStorageKey, JSON.stringify(notificationIds));
 }
 
 function readStoredOpenSections(): ExpandableConsoleSection[] | null {

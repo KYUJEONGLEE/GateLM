@@ -24,14 +24,16 @@ type costReportResponse struct {
 }
 
 type costReportDataResponse struct {
-	GeneratedAt   time.Time                      `json:"generatedAt"`
-	Period        string                         `json:"period"`
-	Range         dashboardRangeResponse         `json:"range"`
-	Filter        costReportFilterResponse       `json:"filters"`
-	Totals        costReportTotalsResponse       `json:"totals"`
-	Buckets       []costReportBucketResponse     `json:"buckets"`
-	Breakdowns    costReportBreakdownResponse    `json:"breakdowns"`
-	DataFreshness dashboardDataFreshnessResponse `json:"dataFreshness"`
+	GeneratedAt         time.Time                      `json:"generatedAt"`
+	Period              string                         `json:"period"`
+	BucketInterval      string                         `json:"bucketInterval"`
+	ExpectedBucketCount int                            `json:"expectedBucketCount"`
+	Range               dashboardRangeResponse         `json:"range"`
+	Filter              costReportFilterResponse       `json:"filters"`
+	Totals              costReportTotalsResponse       `json:"totals"`
+	Buckets             []costReportBucketResponse     `json:"buckets"`
+	Breakdowns          costReportBreakdownResponse    `json:"breakdowns"`
+	DataFreshness       dashboardDataFreshnessResponse `json:"dataFreshness"`
 }
 
 type costReportFilterResponse struct {
@@ -172,8 +174,10 @@ func (h CostReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func costReportData(filter invocationlog.CostReportFilter, report invocationlog.CostReportFields) costReportDataResponse {
 	return costReportDataResponse{
-		GeneratedAt: report.DataFreshness.GeneratedAt,
-		Period:      report.Period,
+		GeneratedAt:         report.DataFreshness.GeneratedAt,
+		Period:              report.Period,
+		BucketInterval:      report.BucketInterval,
+		ExpectedBucketCount: report.ExpectedBucketCount,
 		Range: dashboardRangeResponse{
 			From: filter.From,
 			To:   filter.To,

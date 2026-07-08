@@ -24,12 +24,43 @@ const stayOnLandingHistoryStateKey = "gatelmStayOnLanding";
 const createdTenantDisplayNameStorageKeyPrefix = "gatelmCreatedTenantDisplayName:";
 
 type WebConsoleInitViewProps = {
+  initialAuthStatus: AuthStatus;
   locale: Locale;
 };
 
 type AuthMode = "login" | "signup";
-type AuthStatus = "anonymous" | "authenticated" | "checking";
+type AuthStatus = "anonymous" | "authenticated";
 type SignupStepId = "account" | "verify" | "organization" | "ready";
+
+type AcceptedProjectInvitation = {
+  acceptedAt?: string | null;
+  email: string;
+  expiresAt: string;
+  projectId: string;
+  projectName?: string | null;
+  status: string;
+  tenantId: string;
+  tenantName?: string | null;
+};
+
+type AuthAccessRecord = {
+  status?: string;
+  tenantId?: string | null;
+};
+
+type AuthResponseData = {
+  acceptedProjectInvitation?: AcceptedProjectInvitation;
+  memberships?: AuthAccessRecord[];
+  projectAdmins?: AuthAccessRecord[];
+  session?: {
+    kind?: string;
+  };
+  tenant?: {
+    id?: string;
+    name?: string;
+  };
+  verificationRequired?: boolean;
+};
 
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
 
@@ -40,22 +71,47 @@ const signupStepIcons: Record<SignupStepId, typeof MailCheck> = {
   verify: MailCheck
 };
 
-function getDashboardHref() {
-  return `/tenants/${defaultTenantId}/dashboard`;
+function getDashboardHref(tenantId = defaultTenantId) {
+  return `/tenants/${tenantId}/dashboard`;
 }
 
 function getProjectsHref(tenantId: string) {
   return `/tenants/${encodeURIComponent(tenantId)}/projects`;
 }
 
-function redirectToDashboard(replace = false) {
-  const href = getDashboardHref();
+function redirectToDashboard(replace = false, tenantId = defaultTenantId) {
+  const href = getDashboardHref(tenantId);
   if (replace) {
     window.location.replace(href);
     return;
   }
 
   window.location.assign(href);
+}
+
+function resolveDashboardTenantId(data: AuthResponseData | null | undefined) {
+  const tenantIdFromMembership = findActiveTenantId(data?.memberships);
+  if (tenantIdFromMembership) {
+    return tenantIdFromMembership;
+  }
+
+  const tenantIdFromProjectAdmin = findActiveTenantId(data?.projectAdmins);
+  if (tenantIdFromProjectAdmin) {
+    return tenantIdFromProjectAdmin;
+  }
+
+  const tenantIdFromTenant = normalizeTenantId(data?.tenant?.id);
+  return tenantIdFromTenant;
+}
+
+function findActiveTenantId(records: AuthAccessRecord[] | undefined) {
+  return records
+    ?.find((record) => record.status === undefined || record.status === "active")
+    ?.tenantId?.trim() || null;
+}
+
+function normalizeTenantId(value: string | null | undefined) {
+  return value?.trim() || null;
 }
 
 function redirectToProjects(tenantId: string, replace = false) {
@@ -360,8 +416,8 @@ const initText: Record<
     hero: {
       body:
         "고객사의 기존 서비스와 사내 UI를 유지한 채 모든 LLM 요청을 하나의 Gateway로 통과시켜 비용, 정책, 로그, 보안을 운영 레벨에서 관리합니다.",
-      chips: ["Cost Control", "Policy", "Gateway API"],
-      eyebrow: "B2B LLMOps Gateway for enterprise teams",
+      chips: [],
+      eyebrow: "",
       title: "기업의 LLM 사용을",
       titleAccent: "운영 가능한 Gateway로\n전환합니다."
     },
@@ -463,14 +519,16 @@ const initText: Record<
   }
 };
 
-export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
+export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInitViewProps) {
   const text = initText[locale];
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(initialAuthStatus);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
+  const [dashboardTenantId, setDashboardTenantId] = useState<string | null>(null);
+  const [projectInviteToken, setProjectInviteToken] = useState<string | null>(null);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
 
@@ -482,13 +540,27 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     const params = new URLSearchParams(window.location.search);
     if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
       window.history.replaceState(null, "", "/");
-      redirectToProjects(defaultTenantId, true);
-      return;
+      setAuthMode("signup");
+      setSignupStep("organization");
+      setIsAuthPanelOpen(true);
     }
+    const projectInvite = params.get("projectInvite") ?? params.get("invite");
+    if (projectInvite) {
+      setProjectInviteToken(projectInvite);
+      setAuthMode("signup");
+      setSignupStep("account");
+      setIsAuthPanelOpen(true);
+    }
+
     const hasLandingViewParam = params.get("view") === "landing";
-    const shouldStayOnLanding = hasLandingViewParam || hasStayOnLandingHistoryState();
-    if (hasLandingViewParam) {
+    const shouldStayOnLanding =
+      Boolean(projectInvite) || hasLandingViewParam || hasStayOnLandingHistoryState();
+    if (hasLandingViewParam || projectInvite) {
       replaceLandingUrl();
+    }
+
+    if (initialAuthStatus === "anonymous") {
+      return;
     }
 
     let isMounted = true;
@@ -508,26 +580,28 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
           return;
         }
 
-        const body = (await response.json()) as {
-          data?: {
-            session?: {
-              kind?: string;
-            };
-          };
-        };
+        const body = (await response.json()) as { data?: AuthResponseData };
 
         if (!isMounted) {
           return;
         }
 
-        const hasConsoleSession =
-          body.data?.session?.kind === "full" ||
-          body.data?.session?.kind === "onboarding";
+        const sessionKind = body.data?.session?.kind;
+        const restoredTenantId = resolveDashboardTenantId(body.data);
+        const hasConsoleSession = sessionKind === "full" || sessionKind === "onboarding";
 
         setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
+        setDashboardTenantId(restoredTenantId);
 
-        if (hasConsoleSession && !shouldStayOnLanding) {
-          redirectToDashboard(true);
+        if (sessionKind === "full" && restoredTenantId && !shouldStayOnLanding) {
+          redirectToDashboard(true, restoredTenantId);
+          return;
+        }
+
+        if (sessionKind === "onboarding" && !restoredTenantId && !projectInvite) {
+          setAuthMode("signup");
+          setSignupStep("organization");
+          setIsAuthPanelOpen(true);
         }
       } catch {
         // Anonymous visitors should still see the landing page.
@@ -542,7 +616,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialAuthStatus]);
 
   function openAuthPanel(mode: AuthMode) {
     setAuthError(null);
@@ -565,6 +639,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     setAuthError(null);
     setAuthNotice(null);
     setAuthStatus("anonymous");
+    setDashboardTenantId(null);
     window.history.replaceState(null, "", "/");
     await fetch("/api/auth/logout", {
       credentials: "include",
@@ -572,13 +647,16 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     }).catch(() => undefined);
   }
 
-  function completeAuth() {
+  function completeAuth(tenantId: string | null = dashboardTenantId) {
     setIsAuthPanelOpen(false);
     setAuthError(null);
     setAuthNotice(null);
     setSignupStep("account");
     setAuthStatus("authenticated");
-    redirectToDashboard();
+    setDashboardTenantId(tenantId);
+    if (tenantId) {
+      redirectToDashboard(false, tenantId);
+    }
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -590,11 +668,11 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     const formData = new FormData(event.currentTarget);
 
     await runAuthAction(async () => {
-      await postAuth("login", {
+      const result = await postAuth("login", {
         email: readFormString(formData, "email"),
         password: readFormString(formData, "password")
       });
-      completeAuth();
+      completeAuth(resolveDashboardTenantId(result.data));
     });
   }
 
@@ -607,7 +685,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
     const formData = new FormData(event.currentTarget);
 
     if (signupStep === "ready") {
-      completeAuth();
+      completeAuth(dashboardTenantId);
       return;
     }
 
@@ -617,9 +695,17 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         const result = await postAuth("signup", {
           email,
           name: readFormString(formData, "name"),
-          password: readFormString(formData, "password")
+          password: readFormString(formData, "password"),
+          ...(projectInviteToken ? { projectInviteToken } : {})
         });
         setSignupEmail(email);
+        const acceptedInvitation = result.data?.acceptedProjectInvitation;
+        if (acceptedInvitation) {
+          setDashboardTenantId(acceptedInvitation.tenantId);
+          setAuthNotice("Project admin invitation accepted.");
+          setSignupStep("ready");
+          return;
+        }
         if (result.data?.verificationRequired === false) {
           setAuthNotice("Email verification skipped in local fake mode. Create your tenant.");
           setSignupStep("organization");
@@ -631,10 +717,18 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
       }
 
       if (signupStep === "verify") {
-        await postAuth("email/verify", {
+        const result = await postAuth("email/verify", {
           code: readFormString(formData, "verificationCode"),
-          email: signupEmail
+          email: signupEmail,
+          ...(projectInviteToken ? { projectInviteToken } : {})
         });
+        const acceptedInvitation = result.data?.acceptedProjectInvitation;
+        if (acceptedInvitation) {
+          setDashboardTenantId(acceptedInvitation.tenantId);
+          setAuthNotice("Project admin access granted.");
+          setSignupStep("ready");
+          return;
+        }
         setAuthNotice("Email verified. Create your tenant.");
         setSignupStep("organization");
         return;
@@ -691,12 +785,14 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
             <span className="landing-brand-mark">G</span>
             <strong>GateLM</strong>
           </Link>
-          <Link className="landing-auth-button landing-gateway-request-button" href="/application">
-            <Send aria-hidden="true" size={16} strokeWidth={2.4} />
-            <span>{text.actions.gatewayRequest}</span>
-          </Link>
           {authStatus === "authenticated" ? (
-            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref()}>
+            <Link className="landing-auth-button landing-gateway-request-button" href="/application">
+              <Send aria-hidden="true" size={16} strokeWidth={2.4} />
+              <span>{text.actions.gatewayRequest}</span>
+            </Link>
+          ) : null}
+          {authStatus === "authenticated" && dashboardTenantId ? (
+            <Link className="landing-auth-button landing-auth-button-primary" href={getDashboardHref(dashboardTenantId)}>
               <Route aria-hidden="true" size={17} strokeWidth={2.4} />
               <span>{text.actions.dashboard}</span>
             </Link>
@@ -742,7 +838,6 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
       <section className="landing-hero">
         <GatewayScene text={text.scene} />
         <div className="landing-hero-copy">
-          <p className="landing-eyebrow">{text.hero.eyebrow}</p>
           <div className="landing-chip-row">
             {text.hero.chips.map((chip) => (
               <span key={chip}>{chip}</span>
@@ -772,14 +867,31 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
         </div>
         <p>{text.summary.body}</p>
         <div className="landing-summary-actions">
-          <Link className="landing-summary-link" href={`/tenants/${defaultTenantId}/dashboard`}>
-            <Route aria-hidden="true" size={16} strokeWidth={2.3} />
-            <span>{text.actions.dashboard}</span>
-          </Link>
-          <Link className="landing-summary-link" href="/application">
-            <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
-            <span>{text.actions.chat}</span>
-          </Link>
+          {authStatus === "authenticated" ? (
+            <>
+              {dashboardTenantId ? (
+                <Link className="landing-summary-link" href={getDashboardHref(dashboardTenantId)}>
+                  <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                  <span>{text.actions.dashboard}</span>
+                </Link>
+              ) : null}
+              <Link className="landing-summary-link" href="/application">
+                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.chat}</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
+                <Route aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.dashboard}</span>
+              </button>
+              <button className="landing-summary-link" onClick={() => openAuthPanel("login")} type="button">
+                <ShieldCheck aria-hidden="true" size={16} strokeWidth={2.3} />
+                <span>{text.actions.chat}</span>
+              </button>
+            </>
+          )}
         </div>
       </section>
 
@@ -866,6 +978,7 @@ export function WebConsoleInitView({ locale }: WebConsoleInitViewProps) {
             ) : (
               <SignupFlow
                 isSubmitting={isAuthSubmitting}
+                isProjectInviteSignup={Boolean(projectInviteToken)}
                 signupStep={signupStep}
                 text={text}
                 onGoogleLogin={startGoogleLogin}
@@ -922,6 +1035,7 @@ function GatewayScene({ text }: { text: (typeof initText)[Locale]["scene"] }) {
 
 type AuthPostResponse = {
   data?: {
+    acceptedProjectInvitation?: AcceptedProjectInvitation;
     session?: {
       kind?: string;
     };
@@ -1072,25 +1186,30 @@ function LoginForm({
 }
 
 function SignupFlow({
+  isProjectInviteSignup,
   isSubmitting,
   onGoogleLogin,
   onSubmit,
   signupStep,
   text
 }: {
+  isProjectInviteSignup: boolean;
   isSubmitting: boolean;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   signupStep: SignupStepId;
   text: (typeof initText)[Locale];
 }) {
-  const activeIndex = signupStepOrder.indexOf(signupStep);
+  const visibleSignupSteps = isProjectInviteSignup
+    ? signupStepOrder.filter((step) => step !== "organization")
+    : signupStepOrder;
+  const activeIndex = visibleSignupSteps.indexOf(signupStep);
   const isReadyStep = signupStep === "ready";
 
   return (
     <form className="landing-auth-form" onSubmit={onSubmit}>
       <ol className="landing-signup-steps" aria-label={text.auth.signupTitle}>
-        {signupStepOrder.map((step, index) => {
+        {visibleSignupSteps.map((step, index) => {
           const StepIcon = signupStepIcons[step];
 
           return (
@@ -1162,15 +1281,22 @@ function SignupFlow({
         )}
         <span>{isReadyStep ? text.actions.loginSubmit : text.actions.signupSubmit}</span>
       </button>
-      <button
-        className="landing-google-button"
-        disabled={isSubmitting}
-        onClick={onGoogleLogin}
-        type="button"
-      >
-        <GoogleMark />
-        <strong>{text.actions.googleLogin}</strong>
-      </button>
+      {!isProjectInviteSignup ? (
+        <>
+          <div className="landing-auth-divider" role="separator">
+            <span>or</span>
+          </div>
+          <button
+            className="landing-google-button"
+            disabled={isSubmitting}
+            onClick={onGoogleLogin}
+            type="button"
+          >
+            <GoogleMark />
+            <strong>{text.actions.googleLogin}</strong>
+          </button>
+        </>
+      ) : null}
     </form>
   );
 }
