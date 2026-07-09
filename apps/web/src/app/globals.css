@@ -15175,6 +15175,14 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .employee-invitation-cell {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.employee-invitation-cell button {
+  min-height: 32px;
+  gap: 6px;
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 .employee-pagination {
@@ -15212,6 +15220,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     gap: 12px;
     align-items: center;
     padding: 0;
+  }
+
+  .employee-invitation-cell {
+    align-items: start;
   }
 
   .employee-list-cell::before {

@@ -33,6 +33,21 @@ export type EmployeeCsvImportResult = {
   updatedCount: number;
 };
 
+export type EmployeeOrganizationCsvImportResult = EmployeeCsvImportResult & {
+  assignmentCreatedCount: number;
+  assignmentUpdatedCount: number;
+  assignments: ProjectEmployeeAssignmentRecord[];
+  projectCreatedCount: number;
+  projectUpdatedCount: number;
+  projects: ProjectRecord[];
+};
+
+export type EmployeeInvitationResult = {
+  employee: EmployeeRecord;
+  expiresAt: string;
+  signupUrl: string;
+};
+
 export type ProjectEmployeePolicy = {
   allowedModelKeys: string[];
   allowedProviderConnectionIds: string[];
@@ -104,6 +119,16 @@ export type EmployeeUpdateValues = {
 export type EmployeeCsvImportValues = {
   csvText: string;
   defaultDepartment: string;
+  tenantId: string;
+};
+
+export type EmployeeOrganizationCsvImportValues = {
+  csvText: string;
+  tenantId: string;
+};
+
+export type EmployeeInvitationValues = {
+  employeeId: string;
   tenantId: string;
 };
 

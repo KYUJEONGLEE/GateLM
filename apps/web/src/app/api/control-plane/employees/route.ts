@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   createEmployee,
   disableProjectEmployeeAssignment,
+  importEmployeeOrganizationCsv,
   importEmployeesCsv,
+  sendEmployeeInvitation,
   updateEmployee,
   upsertProjectEmployeeAssignment
 } from "@/lib/control-plane/employees-client";
@@ -10,6 +12,8 @@ import type {
   EmployeeCreateValues,
   EmployeeCsvImportValues,
   EmployeeInvitationStatus,
+  EmployeeInvitationValues,
+  EmployeeOrganizationCsvImportValues,
   EmployeeStatus,
   EmployeeUpdateValues,
   ProjectEmployeeAssignmentValues,
@@ -49,14 +53,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ assignment: result.data, status: result.status });
   }
 
-  if (payload.action === "importCsv") {
+  if (payload.action === "importCsv" || payload.action === "importOrganizationCsv") {
     return NextResponse.json({ importResult: result.data, status: result.status });
+  }
+
+  if (payload.action === "invite") {
+    return NextResponse.json({ invitation: result.data, status: result.status });
   }
 
   return NextResponse.json({ employee: result.data, status: result.status });
 }
 
-type EmployeeAction = "assign" | "create" | "disableAssignment" | "importCsv" | "update";
+type EmployeeAction =
+  | "assign"
+  | "create"
+  | "disableAssignment"
+  | "importCsv"
+  | "importOrganizationCsv"
+  | "invite"
+  | "update";
 
 async function runEmployeeAction(
   action: EmployeeAction,
@@ -65,6 +80,16 @@ async function runEmployeeAction(
 ) {
   if (action === "importCsv") {
     return isEmployeeCsvImportValues(values) ? importEmployeesCsv(values, requestOptions) : null;
+  }
+
+  if (action === "importOrganizationCsv") {
+    return isEmployeeOrganizationCsvImportValues(values)
+      ? importEmployeeOrganizationCsv(values, requestOptions)
+      : null;
+  }
+
+  if (action === "invite") {
+    return isEmployeeInvitationValues(values) ? sendEmployeeInvitation(values, requestOptions) : null;
   }
 
   if (action === "create") {
@@ -92,6 +117,8 @@ function isEmployeeAction(value: unknown): value is EmployeeAction {
     value === "create" ||
     value === "disableAssignment" ||
     value === "importCsv" ||
+    value === "importOrganizationCsv" ||
+    value === "invite" ||
     value === "update"
   );
 }
@@ -122,6 +149,26 @@ function isEmployeeCsvImportValues(value: unknown): value is EmployeeCsvImportVa
     typeof record.defaultDepartment === "string" &&
     typeof record.tenantId === "string"
   );
+}
+
+function isEmployeeOrganizationCsvImportValues(
+  value: unknown
+): value is EmployeeOrganizationCsvImportValues {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Partial<EmployeeOrganizationCsvImportValues>;
+  return typeof record.csvText === "string" && typeof record.tenantId === "string";
+}
+
+function isEmployeeInvitationValues(value: unknown): value is EmployeeInvitationValues {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Partial<EmployeeInvitationValues>;
+  return typeof record.employeeId === "string" && typeof record.tenantId === "string";
 }
 
 function isEmployeeUpdateValues(value: unknown): value is EmployeeUpdateValues {

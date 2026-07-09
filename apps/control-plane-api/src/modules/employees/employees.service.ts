@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -9,19 +11,28 @@ import {
   Prisma,
   Project,
   ProjectEmployeeAssignment,
+  ResourceStatus,
 } from '@prisma/client';
+
+import { ConfigService } from '@nestjs/config';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
-import { normalizeEmail } from '../auth/auth.crypto';
+import { createOpaqueToken, hashSecret, normalizeEmail } from '../auth/auth.crypto';
+import { EMAIL_SENDER } from '../auth/auth.tokens';
+import { EmailSender } from '../auth/email-sender';
 import {
   CreateEmployeeDto,
   EmployeeCsvImportResponseDto,
   EmployeeCsvSkippedRowDto,
+  EmployeeImportProjectResponseDto,
+  EmployeeInvitationResponseDto,
   EmployeeInvitationStatus,
+  EmployeeOrganizationCsvImportResponseDto,
   EmployeeResponseDto,
   EmployeeStatus,
+  ImportEmployeeOrganizationCsvDto,
   ImportEmployeesCsvDto,
   ListEmployeesQueryDto,
   ProjectEmployeeAssignmentResponseDto,
@@ -36,10 +47,41 @@ const DEFAULT_PROJECT_BUDGET_USD = 100;
 const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
 
 const CSV_HEADER_ALIASES = {
+  allowedModelKeys: ['allowedmodelkeys', 'allowed_model_keys', 'models', 'model_keys', '모델'],
+  allowedProviderConnectionIds: [
+    'allowedproviderconnectionids',
+    'allowed_provider_connection_ids',
+    'provider_connection_ids',
+    'providers',
+    'provider_ids',
+    '프로바이더',
+  ],
   department: ['department', 'dept', 'team', '부서', '팀'],
   email: ['email', 'e_mail', 'mail', '이메일', '메일'],
+  employeeBudgetUsd: [
+    'employeebudgetusd',
+    'employee_budget_usd',
+    'monthly_budget_usd',
+    'budget_usd',
+    '직원예산',
+  ],
   jobTitle: ['jobtitle', 'job_title', 'title', 'position', 'role', '직책', '직무'],
   name: ['name', 'full_name', 'fullname', '이름', '성명'],
+  policyNote: ['policynote', 'policy_note', 'note', '메모'],
+  project: ['project', 'project_name', '프로젝트'],
+  projectBudgetUsd: ['projectbudgetusd', 'project_budget_usd', 'project_budget', '프로젝트예산'],
+  projectDescription: [
+    'projectdescription',
+    'project_description',
+    'project_desc',
+    '프로젝트설명',
+  ],
+  warningThresholdPercent: [
+    'warningthresholdpercent',
+    'warning_threshold_percent',
+    'warning_percent',
+    '경고기준',
+  ],
 } as const;
 
 type EmployeeWithProjectCount = Employee & {
@@ -57,6 +99,11 @@ type ProjectBudgetProjection = Pick<
   'id' | 'tenantId' | 'totalBudgetUsd'
 >;
 
+type ProjectImportProjection = Pick<
+  Project,
+  'createdAt' | 'description' | 'id' | 'name' | 'status' | 'tenantId' | 'totalBudgetUsd' | 'updatedAt'
+>;
+
 type ParsedCsvRow = {
   department: string | null;
   email: string;
@@ -65,9 +112,25 @@ type ParsedCsvRow = {
   rowNumber: number;
 };
 
+type ParsedOrganizationCsvRow = ParsedCsvRow & {
+  allowedModelKeys: string[];
+  allowedProviderConnectionIds: string[];
+  employeeBudgetUsd: number;
+  policyNote: string | null;
+  projectBudgetUsd: number | null;
+  projectDescription: string | null;
+  projectName: string | null;
+  warningThresholdPercent: number;
+};
+
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    @Inject(EMAIL_SENDER)
+    private readonly emailSender: EmailSender,
+  ) {}
 
   async listEmployees(
     tenantId: string,
@@ -235,6 +298,313 @@ export class EmployeesService {
       employees: employees.map((employee) => this.toEmployeeResponse(employee)),
       skippedRows: allSkippedRows,
       updatedCount,
+    };
+  }
+
+  async importEmployeeOrganizationCsv(
+    tenantId: string,
+    dto: ImportEmployeeOrganizationCsvDto,
+  ): Promise<EmployeeOrganizationCsvImportResponseDto> {
+    await this.assertTenantExists(tenantId);
+
+    const { rows, skippedRows } = this.parseEmployeeOrganizationCsv(dto.csvText);
+    const allSkippedRows: EmployeeCsvSkippedRowDto[] = [...skippedRows];
+    let createdCount = 0;
+    let updatedCount = 0;
+    let projectCreatedCount = 0;
+    let projectUpdatedCount = 0;
+    let assignmentCreatedCount = 0;
+    let assignmentUpdatedCount = 0;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const employeesByEmail = new Map<string, EmployeeWithProjectCount>();
+      const projectsByName = new Map<
+        string,
+        { project: ProjectImportProjection; runtimeApplicationId: string | null }
+      >();
+      const assignments: ProjectEmployeeWithEmployee[] = [];
+      const touchedAssignmentKeys = new Set<string>();
+
+      for (const row of rows) {
+        const existingEmployee = await tx.employee.findFirst({
+          where: {
+            deletedAt: null,
+            email: row.email,
+            tenantId,
+          },
+        });
+        const employeeData = {
+          department: row.department,
+          email: row.email,
+          jobTitle: row.jobTitle,
+          name: row.name,
+        };
+        const employee = existingEmployee
+          ? await tx.employee.update({
+              where: { id: existingEmployee.id },
+              data: employeeData,
+              include: {
+                _count: {
+                  select: {
+                    projectAssignments: true,
+                  },
+                },
+              },
+            })
+          : await tx.employee.create({
+              data: {
+                ...employeeData,
+                status: 'staged',
+                tenantId,
+              },
+              include: {
+                _count: {
+                  select: {
+                    projectAssignments: true,
+                  },
+                },
+              },
+            });
+
+        if (existingEmployee) {
+          updatedCount += 1;
+        } else {
+          createdCount += 1;
+        }
+        employeesByEmail.set(employee.email, employee);
+
+        if (!row.projectName) {
+          continue;
+        }
+
+        const projectKey = row.projectName.toLocaleLowerCase();
+        let projectEntry = projectsByName.get(projectKey);
+        if (!projectEntry) {
+          const existingProject = await tx.project.findFirst({
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            where: {
+              name: row.projectName,
+              tenantId,
+            },
+          });
+
+          if (existingProject) {
+            const projectUpdateData: Prisma.ProjectUpdateInput = {};
+            if (row.projectDescription !== null) {
+              projectUpdateData.description = row.projectDescription;
+            }
+            if (row.projectBudgetUsd !== null) {
+              projectUpdateData.totalBudgetUsd = row.projectBudgetUsd;
+            }
+
+            const project = Object.keys(projectUpdateData).length > 0
+              ? await tx.project.update({
+                  data: projectUpdateData,
+                  where: { id: existingProject.id },
+                })
+              : existingProject;
+            if (Object.keys(projectUpdateData).length > 0) {
+              projectUpdatedCount += 1;
+            }
+            const runtimeApplication = await tx.application.findFirst({
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: { id: true },
+              where: { projectId: project.id },
+            });
+            projectEntry = {
+              project,
+              runtimeApplicationId: runtimeApplication?.id ?? null,
+            };
+          } else {
+            const project = await tx.project.create({
+              data: {
+                description: row.projectDescription,
+                name: row.projectName,
+                status: ResourceStatus.ACTIVE,
+                tenantId,
+                totalBudgetUsd: row.projectBudgetUsd ?? DEFAULT_PROJECT_BUDGET_USD,
+              },
+            });
+            const runtimeApplication = await tx.application.create({
+              data: {
+                budgetLimitMode: 'PERCENT',
+                budgetLimitPercent: 100,
+                budgetLimitUsd: null,
+                description: row.projectDescription,
+                name: row.projectName,
+                projectId: project.id,
+                tenantId,
+              },
+            });
+            projectCreatedCount += 1;
+            projectEntry = {
+              project,
+              runtimeApplicationId: runtimeApplication.id,
+            };
+          }
+          projectsByName.set(projectKey, projectEntry);
+        }
+
+        const assignmentKey = `${projectEntry.project.id}:${employee.id}`;
+        if (touchedAssignmentKeys.has(assignmentKey)) {
+          allSkippedRows.push({
+            reason: 'Duplicate project employee assignment in CSV.',
+            rowNumber: row.rowNumber,
+          });
+          continue;
+        }
+        touchedAssignmentKeys.add(assignmentKey);
+
+        const existingAssignment = await tx.projectEmployeeAssignment.findUnique({
+          where: {
+            projectId_employeeId: {
+              employeeId: employee.id,
+              projectId: projectEntry.project.id,
+            },
+          },
+        });
+        const policy: Prisma.InputJsonObject = {
+          allowedModelKeys: row.allowedModelKeys,
+          allowedProviderConnectionIds: row.allowedProviderConnectionIds,
+          note: row.policyNote,
+        };
+        const assignment = existingAssignment
+          ? await tx.projectEmployeeAssignment.update({
+              where: { id: existingAssignment.id },
+              data: {
+                monthlyBudgetLimitMicroUsd: this.usdToMicroUsd(row.employeeBudgetUsd),
+                policy,
+                status: 'active',
+                warningThresholdPercent: row.warningThresholdPercent,
+              },
+              include: { employee: true },
+            })
+          : await tx.projectEmployeeAssignment.create({
+              data: {
+                employeeId: employee.id,
+                monthlyBudgetLimitMicroUsd: this.usdToMicroUsd(row.employeeBudgetUsd),
+                policy,
+                projectId: projectEntry.project.id,
+                status: 'active',
+                tenantId,
+                warningThresholdPercent: row.warningThresholdPercent,
+              },
+              include: { employee: true },
+            });
+
+        if (existingAssignment) {
+          assignmentUpdatedCount += 1;
+        } else {
+          assignmentCreatedCount += 1;
+        }
+        assignments.push(assignment);
+      }
+
+      return {
+        assignments,
+        employees: [...employeesByEmail.values()],
+        projects: [...projectsByName.values()],
+      };
+    });
+
+    return {
+      assignmentCreatedCount,
+      assignmentUpdatedCount,
+      assignments: result.assignments.map((assignment) =>
+        this.toProjectEmployeeAssignmentResponse(assignment),
+      ),
+      createdCount,
+      employees: result.employees.map((employee) => this.toEmployeeResponse(employee)),
+      projectCreatedCount,
+      projects: result.projects.map((entry) =>
+        this.toProjectImportResponse(entry.project, entry.runtimeApplicationId),
+      ),
+      projectUpdatedCount,
+      skippedRows: allSkippedRows,
+      updatedCount,
+    };
+  }
+
+  async sendEmployeeInvitation(
+    tenantId: string,
+    employeeId: string,
+  ): Promise<EmployeeInvitationResponseDto> {
+    const employee = await this.prisma.employee.findFirst({
+      include: {
+        _count: {
+          select: {
+            projectAssignments: true,
+          },
+        },
+        tenant: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      where: {
+        deletedAt: null,
+        id: employeeId,
+        tenantId,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+    if (employee.invitationStatus === 'accepted') {
+      throw new BadRequestException('Employee invitation is already accepted.');
+    }
+
+    const now = new Date();
+    const token = createOpaqueToken();
+    const expiresAt = addDays(now, 7);
+    const signupUrl = this.buildEmployeeSignupUrl(token);
+
+    const updatedEmployee = await this.prisma.employee.update({
+      where: { id: employee.id },
+      data: {
+        invitationExpiresAt: expiresAt,
+        invitationRevokedAt: null,
+        invitationStatus: 'pending',
+        invitationTokenHash: hashSecret(token),
+        invitedAt: now,
+      },
+      include: {
+        _count: {
+          select: {
+            projectAssignments: true,
+          },
+        },
+      },
+    });
+
+    try {
+      await this.emailSender.sendEmployeeInvitationEmail({
+        email: employee.email,
+        expiresAt,
+        name: employee.name?.trim() || employee.email,
+        signupUrl,
+        tenantName: employee.tenant.name,
+      });
+    } catch {
+      await this.prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          invitationExpiresAt: null,
+          invitationRevokedAt: now,
+          invitationStatus: 'not_sent',
+          invitationTokenHash: null,
+          invitedAt: null,
+        },
+      });
+      throw new InternalServerErrorException('Employee invitation email failed to send.');
+    }
+
+    return {
+      employee: this.toEmployeeResponse(updatedEmployee),
+      expiresAt: expiresAt.toISOString(),
+      signupUrl,
     };
   }
 
@@ -579,6 +949,108 @@ export class EmployeesService {
     return { rows, skippedRows };
   }
 
+  private parseEmployeeOrganizationCsv(
+    csvText: string,
+  ): { rows: ParsedOrganizationCsvRow[]; skippedRows: EmployeeCsvSkippedRowDto[] } {
+    const table = parseCsvTable(csvText);
+    const [headers, ...dataRows] = table;
+
+    if (!headers || headers.length === 0) {
+      throw new BadRequestException('CSV header row is required.');
+    }
+
+    const headerMap = buildHeaderMap(headers);
+    if (headerMap.email === undefined) {
+      throw new BadRequestException('CSV must include an email column.');
+    }
+    const emailColumnIndex = headerMap.email;
+
+    const rows: ParsedOrganizationCsvRow[] = [];
+    const skippedRows: EmployeeCsvSkippedRowDto[] = [];
+
+    dataRows.forEach((row, index) => {
+      const rowNumber = index + 2;
+      if (row.every((field) => field.trim().length === 0)) {
+        return;
+      }
+
+      const email = normalizeEmail(readCsvCell(row, emailColumnIndex));
+      if (!isValidEmail(email)) {
+        skippedRows.push({
+          reason: 'Valid email is required.',
+          rowNumber,
+        });
+        return;
+      }
+
+      const projectBudgetUsd = parseOptionalNonnegativeNumber(
+        readOptionalCsvCell(row, headerMap.projectBudgetUsd),
+      );
+      const employeeBudgetUsd = parseOptionalNonnegativeNumber(
+        readOptionalCsvCell(row, headerMap.employeeBudgetUsd),
+      );
+      const warningThresholdPercent = parseOptionalIntegerInRange(
+        readOptionalCsvCell(row, headerMap.warningThresholdPercent),
+        0,
+        100,
+      );
+
+      if (
+        projectBudgetUsd === 'invalid' ||
+        employeeBudgetUsd === 'invalid' ||
+        warningThresholdPercent === 'invalid'
+      ) {
+        skippedRows.push({
+          reason: 'Budget and warning threshold columns must be valid non-negative numbers.',
+          rowNumber,
+        });
+        return;
+      }
+
+      rows.push({
+        allowedModelKeys: splitDelimitedList(
+          readOptionalCsvCell(row, headerMap.allowedModelKeys),
+        ),
+        allowedProviderConnectionIds: splitDelimitedList(
+          readOptionalCsvCell(row, headerMap.allowedProviderConnectionIds),
+        ),
+        department: this.toNullableString(readOptionalCsvCell(row, headerMap.department)),
+        email,
+        employeeBudgetUsd: employeeBudgetUsd ?? 0,
+        jobTitle: this.toNullableString(readOptionalCsvCell(row, headerMap.jobTitle)),
+        name: this.toNullableString(readOptionalCsvCell(row, headerMap.name)),
+        policyNote: this.toNullableString(readOptionalCsvCell(row, headerMap.policyNote)),
+        projectBudgetUsd,
+        projectDescription: this.toNullableString(
+          readOptionalCsvCell(row, headerMap.projectDescription),
+        ),
+        projectName: this.toNullableString(readOptionalCsvCell(row, headerMap.project)),
+        rowNumber,
+        warningThresholdPercent: warningThresholdPercent ?? DEFAULT_WARNING_THRESHOLD_PERCENT,
+      });
+    });
+
+    return { rows, skippedRows };
+  }
+
+  private toProjectImportResponse(
+    project: ProjectImportProjection,
+    runtimeApplicationId: string | null,
+  ): EmployeeImportProjectResponseDto {
+    return {
+      createdAt: project.createdAt.toISOString(),
+      description: project.description,
+      id: project.id,
+      name: project.name,
+      runtimeApplicationId,
+      status: project.status,
+      tenantId: project.tenantId,
+      totalBudgetUsd: this.toProjectBudgetUsd(project.totalBudgetUsd),
+      updatedAt: project.updatedAt.toISOString(),
+      warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT,
+    };
+  }
+
   private mergeProjectEmployeePolicy(
     currentPolicy: Prisma.JsonValue | undefined,
     dto: UpsertProjectEmployeeAssignmentDto,
@@ -687,6 +1159,12 @@ export class EmployeesService {
 
   private microUsdToUsdNumber(value: bigint): number {
     return Number(value) / 1000000;
+  }
+
+  private buildEmployeeSignupUrl(token: string): string {
+    const origin = this.config.getOrThrow<string>('CONTROL_PLANE_WEB_ORIGIN');
+
+    return `${origin.replace(/\/+$/, '')}/?employeeInvite=${encodeURIComponent(token)}`;
   }
 
   private isRecordNotFoundError(
@@ -802,6 +1280,42 @@ function readStringArray(value: unknown): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function splitDelimitedList(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return uniqueTrimmedStrings(value.split(/[;,|]/));
+}
+
+function parseOptionalNonnegativeNumber(value: string | null): number | null | 'invalid' {
+  if (!value || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 'invalid';
+}
+
+function parseOptionalIntegerInRange(
+  value: string | null,
+  min: number,
+  max: number,
+): number | null | 'invalid' {
+  if (!value || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max
+    ? parsed
+    : 'invalid';
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 function normalizeEmployeeStatus(value: string): EmployeeStatus {

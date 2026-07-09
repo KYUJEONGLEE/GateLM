@@ -14,7 +14,11 @@ import type {
   EmployeeCreateValues,
   EmployeeCsvImportResult,
   EmployeeCsvImportValues,
+  EmployeeInvitationResult,
   EmployeeInvitationStatus,
+  EmployeeInvitationValues,
+  EmployeeOrganizationCsvImportResult,
+  EmployeeOrganizationCsvImportValues,
   EmployeeRecord,
   EmployeeStatus,
   EmployeeUpdateValues,
@@ -41,6 +45,30 @@ type EmployeeRequestResult =
 type EmployeeImportRequestResult =
   | {
       data: EmployeeCsvImportResult;
+      ok: true;
+      status: number;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
+
+type EmployeeOrganizationImportRequestResult =
+  | {
+      data: EmployeeOrganizationCsvImportResult;
+      ok: true;
+      status: number;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
+
+type EmployeeInvitationRequestResult =
+  | {
+      data: EmployeeInvitationResult;
       ok: true;
       status: number;
     }
@@ -159,6 +187,59 @@ export async function importEmployeesCsv(
     );
 
     return readEmployeeImportResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function importEmployeeOrganizationCsv(
+  values: EmployeeOrganizationCsvImportValues,
+  options?: ControlPlaneRequestOptions
+): Promise<EmployeeOrganizationImportRequestResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(values.tenantId)}/employees/import-organization-csv`,
+      {
+        body: JSON.stringify({
+          csvText: values.csvText
+        }),
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders(options, {
+          "Content-Type": "application/json"
+        }),
+        method: "POST"
+      }
+    );
+
+    return readEmployeeOrganizationImportResponse(response);
+  } catch {
+    return {
+      error: "Control Plane unavailable.",
+      ok: false,
+      status: 0
+    };
+  }
+}
+
+export async function sendEmployeeInvitation(
+  values: EmployeeInvitationValues,
+  options?: ControlPlaneRequestOptions
+): Promise<EmployeeInvitationRequestResult> {
+  try {
+    const response = await fetch(
+      `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(values.tenantId)}/employees/${encodeURIComponent(values.employeeId)}/invitations`,
+      {
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
+        method: "POST"
+      }
+    );
+
+    return readEmployeeInvitationResponse(response);
   } catch {
     return {
       error: "Control Plane unavailable.",
@@ -399,6 +480,66 @@ async function readEmployeeImportResponse(
   };
 }
 
+async function readEmployeeOrganizationImportResponse(
+  response: Response
+): Promise<EmployeeOrganizationImportRequestResult> {
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    return {
+      error: getErrorMessage(payload, response.status),
+      ok: false,
+      status: response.status
+    };
+  }
+
+  const result = getEmployeeOrganizationImportFromPayload(payload);
+
+  if (!result) {
+    return {
+      error: "Control Plane response did not include organization import data.",
+      ok: false,
+      status: response.status
+    };
+  }
+
+  return {
+    data: result,
+    ok: true,
+    status: response.status
+  };
+}
+
+async function readEmployeeInvitationResponse(
+  response: Response
+): Promise<EmployeeInvitationRequestResult> {
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    return {
+      error: getErrorMessage(payload, response.status),
+      ok: false,
+      status: response.status
+    };
+  }
+
+  const invitation = getEmployeeInvitationFromPayload(payload);
+
+  if (!invitation) {
+    return {
+      error: "Control Plane response did not include employee invitation data.",
+      ok: false,
+      status: response.status
+    };
+  }
+
+  return {
+    data: invitation,
+    ok: true,
+    status: response.status
+  };
+}
+
 async function readEmployeeListResponse(response: Response): Promise<EmployeeListResult> {
   const payload = await response.json().catch(() => ({}));
 
@@ -555,6 +696,74 @@ function getEmployeeImportFromPayload(payload: unknown): EmployeeCsvImportResult
   };
 }
 
+function getEmployeeOrganizationImportFromPayload(
+  payload: unknown
+): EmployeeOrganizationCsvImportResult | null {
+  const base = getEmployeeImportFromPayload(payload);
+  if (!base || !payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const data = record.data ?? record;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const value = data as Record<string, unknown>;
+  const projects = Array.isArray(value.projects) ? value.projects.map(toProjectRecord) : null;
+  const assignments = Array.isArray(value.assignments)
+    ? value.assignments.map(toProjectEmployeeAssignmentRecord)
+    : null;
+
+  if (
+    !projects ||
+    !assignments ||
+    projects.some((project) => project === null) ||
+    assignments.some((assignment) => assignment === null) ||
+    typeof value.projectCreatedCount !== "number" ||
+    typeof value.projectUpdatedCount !== "number" ||
+    typeof value.assignmentCreatedCount !== "number" ||
+    typeof value.assignmentUpdatedCount !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    ...base,
+    assignmentCreatedCount: value.assignmentCreatedCount,
+    assignmentUpdatedCount: value.assignmentUpdatedCount,
+    assignments: assignments as ProjectEmployeeAssignmentRecord[],
+    projectCreatedCount: value.projectCreatedCount,
+    projectUpdatedCount: value.projectUpdatedCount,
+    projects: projects as ProjectRecord[]
+  };
+}
+
+function getEmployeeInvitationFromPayload(payload: unknown): EmployeeInvitationResult | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const data = record.data ?? record;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const value = data as Record<string, unknown>;
+  const employee = toEmployeeRecord(value.employee);
+  if (!employee || typeof value.expiresAt !== "string" || typeof value.signupUrl !== "string") {
+    return null;
+  }
+
+  return {
+    employee,
+    expiresAt: value.expiresAt,
+    signupUrl: value.signupUrl
+  };
+}
+
 function getProjectEmployeeFromPayload(payload: unknown): ProjectEmployeeAssignmentRecord | null {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -640,6 +849,41 @@ function toEmployeeRecord(value: unknown): EmployeeRecord | null {
     tenantId: record.tenantId,
     updatedAt: record.updatedAt,
     userId: typeof record.userId === "string" ? record.userId : null
+  };
+}
+
+function toProjectRecord(value: unknown): ProjectRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const status = normalizeProjectStatus(record.status);
+  if (
+    typeof record.id !== "string" ||
+    typeof record.tenantId !== "string" ||
+    typeof record.name !== "string" ||
+    typeof record.totalBudgetUsd !== "number" ||
+    typeof record.warningThresholdPercent !== "number" ||
+    typeof record.createdAt !== "string" ||
+    typeof record.updatedAt !== "string" ||
+    !status
+  ) {
+    return null;
+  }
+
+  return {
+    createdAt: record.createdAt,
+    description: typeof record.description === "string" ? record.description : null,
+    id: record.id,
+    name: record.name,
+    runtimeApplicationId:
+      typeof record.runtimeApplicationId === "string" ? record.runtimeApplicationId : null,
+    status,
+    tenantId: record.tenantId,
+    totalBudgetUsd: record.totalBudgetUsd,
+    updatedAt: record.updatedAt,
+    warningThresholdPercent: record.warningThresholdPercent
   };
 }
 
@@ -749,6 +993,12 @@ function normalizeInvitationStatus(value: unknown): EmployeeInvitationStatus | n
 
 function normalizeProjectEmployeeStatus(value: unknown): ProjectEmployeeStatus | null {
   return value === "active" || value === "disabled" ? value : null;
+}
+
+function normalizeProjectStatus(value: unknown): ProjectRecord["status"] | null {
+  return value === "ACTIVE" || value === "ARCHIVED" || value === "DISABLED" || value === "DRAFT"
+    ? value
+    : null;
 }
 
 function getErrorMessage(payload: unknown, status: number) {

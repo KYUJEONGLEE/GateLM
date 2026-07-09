@@ -115,6 +115,13 @@ export class ImportEmployeesCsvDto {
   defaultDepartment?: string;
 }
 
+export class ImportEmployeeOrganizationCsvDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000000)
+  csvText!: string;
+}
+
 export class ListEmployeesQueryDto {
   @Type(() => Number)
   @IsOptional()
@@ -204,6 +211,34 @@ export interface EmployeeCsvImportResponseDto {
   updatedCount: number;
   skippedRows: EmployeeCsvSkippedRowDto[];
   employees: EmployeeResponseDto[];
+}
+
+export interface EmployeeImportProjectResponseDto {
+  createdAt: string;
+  description: string | null;
+  id: string;
+  name: string;
+  runtimeApplicationId: string | null;
+  status: string;
+  tenantId: string;
+  totalBudgetUsd: number;
+  updatedAt: string;
+  warningThresholdPercent: number;
+}
+
+export interface EmployeeOrganizationCsvImportResponseDto extends EmployeeCsvImportResponseDto {
+  assignmentCreatedCount: number;
+  assignmentUpdatedCount: number;
+  assignments: ProjectEmployeeAssignmentResponseDto[];
+  projectCreatedCount: number;
+  projectUpdatedCount: number;
+  projects: EmployeeImportProjectResponseDto[];
+}
+
+export interface EmployeeInvitationResponseDto {
+  employee: EmployeeResponseDto;
+  expiresAt: string;
+  signupUrl: string;
 }
 
 export interface ProjectEmployeePolicyDto {

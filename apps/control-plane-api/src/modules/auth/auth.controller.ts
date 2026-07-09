@@ -52,6 +52,7 @@ export class AuthController {
 
     return {
       data: {
+        acceptedEmployeeInvitation: result.acceptedEmployeeInvitation,
         acceptedProjectInvitation: result.acceptedProjectInvitation,
         session: result.session
           ? this.toSessionResponse(result.session)

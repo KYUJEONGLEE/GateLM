@@ -36,37 +36,37 @@ enum ProviderConnectionStatus {
 }
 
 model Tenant {
-  id        String         @id @default(uuid()) @db.Uuid
-  name      String
-  status    ResourceStatus @default(ACTIVE)
-  totalBudgetUsd Decimal? @default(1000) @db.Decimal(12, 2)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id             String         @id @default(uuid()) @db.Uuid
+  name           String
+  status         ResourceStatus @default(ACTIVE)
+  totalBudgetUsd Decimal?       @default(1000) @db.Decimal(12, 2)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  projects            Project[]
-  applications        Application[]
-  providerConnections ProviderConnection[]
-  providerCredentials  ProviderCredential[]
+  projects                       Project[]
+  applications                   Application[]
+  providerConnections            ProviderConnection[]
+  providerCredentials            ProviderCredential[]
   applicationProviderConnections ApplicationProviderConnection[]
-  apiKeys             GatewayApiKey[]
-  appTokens           AppToken[]
-  runtimeConfigs      RuntimeConfig[]
-  runtimeSnapshots    RuntimeSnapshot[]
-  activeSnapshots     ActiveRuntimeSnapshot[]
-  budgetLedgerEntries BudgetLedgerEntry[]
-  budgetQuotas        BudgetQuota[]
-  budgetAuditLogs     BudgetAuditLog[]
-  notificationEvents  NotificationEvent[]
-  teams               Team[]
-  projectTeamAssignments ProjectTeamAssignment[]
-  tenantMemberships   TenantMembership[]
-  tenantAdmins         TenantAdmin[]
-  projectAdmins        ProjectAdmin[]
-  projectAdminInvitations ProjectAdminInvitation[]
-  employees            Employee[]
-  projectEmployeeAssignments ProjectEmployeeAssignment[]
-  conversations        Conversation[]
-  chatMessages         ChatMessage[]
+  apiKeys                        GatewayApiKey[]
+  appTokens                      AppToken[]
+  runtimeConfigs                 RuntimeConfig[]
+  runtimeSnapshots               RuntimeSnapshot[]
+  activeSnapshots                ActiveRuntimeSnapshot[]
+  budgetLedgerEntries            BudgetLedgerEntry[]
+  budgetQuotas                   BudgetQuota[]
+  budgetAuditLogs                BudgetAuditLog[]
+  notificationEvents             NotificationEvent[]
+  teams                          Team[]
+  projectTeamAssignments         ProjectTeamAssignment[]
+  tenantMemberships              TenantMembership[]
+  tenantAdmins                   TenantAdmin[]
+  projectAdmins                  ProjectAdmin[]
+  projectAdminInvitations        ProjectAdminInvitation[]
+  employees                      Employee[]
+  projectEmployeeAssignments     ProjectEmployeeAssignment[]
+  conversations                  Conversation[]
+  chatMessages                   ChatMessage[]
 
   @@map("tenants")
 }
@@ -85,14 +85,14 @@ model User {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  emailVerificationCodes EmailVerificationCode[]
-  authSessions           AuthSession[]
-  oauthAccounts          OAuthAccount[]
-  tenantMemberships      TenantMembership[]
-  tenantAdmins           TenantAdmin[]
-  projectAdmins          ProjectAdmin[]
+  emailVerificationCodes      EmailVerificationCode[]
+  authSessions                AuthSession[]
+  oauthAccounts               OAuthAccount[]
+  tenantMemberships           TenantMembership[]
+  tenantAdmins                TenantAdmin[]
+  projectAdmins               ProjectAdmin[]
   sentProjectAdminInvitations ProjectAdminInvitation[] @relation("ProjectAdminInvitationInviter")
-  employees              Employee[]
+  employees                   Employee[]
 
   @@index([email])
   @@index([status])
@@ -229,33 +229,33 @@ model ProjectAdminInvitation {
 }
 
 model Project {
-  id          String         @id @default(uuid()) @db.Uuid
-  tenantId    String         @db.Uuid
-  name        String
-  description String?
-  status      ResourceStatus @default(ACTIVE)
-  totalBudgetUsd Decimal? @default(100) @db.Decimal(12, 2)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id             String         @id @default(uuid()) @db.Uuid
+  tenantId       String         @db.Uuid
+  name           String
+  description    String?
+  status         ResourceStatus @default(ACTIVE)
+  totalBudgetUsd Decimal?       @default(100) @db.Decimal(12, 2)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  tenant              Tenant               @relation(fields: [tenantId], references: [id])
-  applications        Application[]
-  providerConnections ProviderConnection[]
+  tenant                         Tenant                          @relation(fields: [tenantId], references: [id])
+  applications                   Application[]
+  providerConnections            ProviderConnection[]
   applicationProviderConnections ApplicationProviderConnection[]
-  apiKeys             GatewayApiKey[]
-  appTokens           AppToken[]
-  runtimeConfigs      RuntimeConfig[]
-  runtimeSnapshots    RuntimeSnapshot[]
-  activeSnapshots     ActiveRuntimeSnapshot[]
-  budgetLedgerEntries BudgetLedgerEntry[]
-  budgetAuditLogs     BudgetAuditLog[]
-  notificationEvents  NotificationEvent[]
-  projectTeamAssignments ProjectTeamAssignment[]
-  projectAdmins          ProjectAdmin[]
-  projectAdminInvitations ProjectAdminInvitation[]
-  projectEmployeeAssignments ProjectEmployeeAssignment[]
-  conversations        Conversation[]
-  chatMessages         ChatMessage[]
+  apiKeys                        GatewayApiKey[]
+  appTokens                      AppToken[]
+  runtimeConfigs                 RuntimeConfig[]
+  runtimeSnapshots               RuntimeSnapshot[]
+  activeSnapshots                ActiveRuntimeSnapshot[]
+  budgetLedgerEntries            BudgetLedgerEntry[]
+  budgetAuditLogs                BudgetAuditLog[]
+  notificationEvents             NotificationEvent[]
+  projectTeamAssignments         ProjectTeamAssignment[]
+  projectAdmins                  ProjectAdmin[]
+  projectAdminInvitations        ProjectAdminInvitation[]
+  projectEmployeeAssignments     ProjectEmployeeAssignment[]
+  conversations                  Conversation[]
+  chatMessages                   ChatMessage[]
 
   @@index([tenantId])
   @@map("projects")
@@ -279,45 +279,48 @@ model Team {
 }
 
 model ProjectTeamAssignment {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String   @db.Uuid
-  projectId  String   @db.Uuid
-  teamId     String   @db.Uuid
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  projectId String   @db.Uuid
+  teamId    String   @db.Uuid
+  createdAt DateTime @default(now())
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   project Project @relation(fields: [projectId], references: [id])
   team    Team    @relation(fields: [teamId], references: [id])
 
+  @@unique([projectId, teamId])
   @@index([tenantId])
   @@index([projectId])
   @@index([teamId])
-  @@unique([projectId, teamId])
   @@map("project_team_assignments")
 }
 
-
 model Employee {
-  id               String    @id @default(uuid()) @db.Uuid
-  tenantId         String    @db.Uuid
-  userId           String?   @db.Uuid
-  email            String
-  name             String?
-  department       String?
-  jobTitle         String?
-  status           String    @default("staged")
-  invitationStatus String    @default("not_sent")
-  invitedAt        DateTime?
-  acceptedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @db.Uuid
+  userId              String?   @db.Uuid
+  email               String
+  name                String?
+  department          String?
+  jobTitle            String?
+  status              String    @default("staged")
+  invitationStatus    String    @default("not_sent")
+  invitationTokenHash String?   @unique
+  invitationExpiresAt DateTime?
+  invitationRevokedAt DateTime?
+  invitedAt           DateTime?
+  acceptedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
 
   tenant             Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user               User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
   projectAssignments ProjectEmployeeAssignment[]
 
   @@index([tenantId, status])
+  @@index([tenantId, invitationStatus])
   @@index([tenantId, department])
   @@index([userId])
   @@map("employees")
@@ -347,17 +350,17 @@ model ProjectEmployeeAssignment {
 }
 
 model Application {
-  id          String         @id @default(uuid()) @db.Uuid
-  tenantId    String         @db.Uuid
-  projectId   String         @db.Uuid
-  name        String
-  description String?
-  status      ResourceStatus @default(ACTIVE)
-  budgetLimitUsd Decimal? @db.Decimal(12, 2)
-  budgetLimitMode String @default("FIXED")
-  budgetLimitPercent Decimal? @db.Decimal(5, 2)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                 String         @id @default(uuid()) @db.Uuid
+  tenantId           String         @db.Uuid
+  projectId          String         @db.Uuid
+  name               String
+  description        String?
+  status             ResourceStatus @default(ACTIVE)
+  budgetLimitUsd     Decimal?       @db.Decimal(12, 2)
+  budgetLimitMode    String         @default("FIXED")
+  budgetLimitPercent Decimal?       @db.Decimal(5, 2)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   tenant              Tenant                          @relation(fields: [tenantId], references: [id])
   project             Project                         @relation(fields: [projectId], references: [id])
@@ -378,29 +381,29 @@ model Application {
 }
 
 model ProviderConnection {
-  id                String                   @id @default(uuid()) @db.Uuid
-  tenantId          String                   @db.Uuid
-  projectId         String?                  @db.Uuid
-  provider          String
-  displayName       String
-  status            ProviderConnectionStatus @default(ACTIVE)
-  baseUrl           String
-  timeoutMs         Int                      @default(30000)
-  secretRef         String?
-  credentialPrefix  String?
-  credentialLast4   String?
-  resolver          String                   @default("none")
-  providerConfig    Json?
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
+  id               String                   @id @default(uuid()) @db.Uuid
+  tenantId         String                   @db.Uuid
+  projectId        String?                  @db.Uuid
+  provider         String
+  displayName      String
+  status           ProviderConnectionStatus @default(ACTIVE)
+  baseUrl          String
+  timeoutMs        Int                      @default(30000)
+  secretRef        String?
+  credentialPrefix String?
+  credentialLast4  String?
+  resolver         String                   @default("none")
+  providerConfig   Json?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id])
-  project Project? @relation(fields: [projectId], references: [id])
+  tenant                         Tenant                          @relation(fields: [tenantId], references: [id])
+  project                        Project?                        @relation(fields: [projectId], references: [id])
   applicationProviderConnections ApplicationProviderConnection[]
-  providerCredentials ProviderCredential[]
+  providerCredentials            ProviderCredential[]
 
-  @@index([tenantId])
   @@unique([projectId, provider])
+  @@index([tenantId])
   @@map("provider_connections")
 }
 
@@ -444,11 +447,11 @@ model ApplicationProviderConnection {
   application        Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   providerConnection ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Cascade)
 
+  @@unique([applicationId, providerConnectionId])
   @@index([tenantId])
   @@index([projectId])
   @@index([applicationId])
   @@index([providerConnectionId])
-  @@unique([applicationId, providerConnectionId])
   @@map("application_provider_connections")
 }
 
@@ -527,18 +530,18 @@ model AppToken {
 }
 
 model BudgetLedgerEntry {
-  requestId        String    @id @map("request_id")
-  tenantId         String    @map("tenant_id") @db.Uuid
-  projectId        String    @map("project_id") @db.Uuid
-  applicationId    String?   @map("application_id") @db.Uuid
-  budgetScopeType  String    @map("budget_scope_type")
-  budgetScopeId    String    @map("budget_scope_id")
-  monthStart       DateTime  @map("month_start") @db.Date
-  costMicroUsd     BigInt    @default(0) @map("cost_micro_usd")
-  source           String    @default("request_log")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  completedAt      DateTime? @map("completed_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  requestId       String    @id @map("request_id")
+  tenantId        String    @map("tenant_id") @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  applicationId   String?   @map("application_id") @db.Uuid
+  budgetScopeType String    @map("budget_scope_type")
+  budgetScopeId   String    @map("budget_scope_id")
+  monthStart      DateTime  @map("month_start") @db.Date
+  costMicroUsd    BigInt    @default(0) @map("cost_micro_usd")
+  source          String    @default("request_log")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   project     Project      @relation(fields: [projectId], references: [id])
@@ -563,7 +566,7 @@ model BudgetQuota {
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
-  tenant                  Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, budgetScopeType, budgetScopeId, monthStart])
   @@index([tenantId, monthStart, status])
@@ -571,23 +574,23 @@ model BudgetQuota {
 }
 
 model BudgetAuditLog {
-  id                    String    @id @default(uuid()) @db.Uuid
-  tenantId              String    @map("tenant_id") @db.Uuid
-  projectId             String?   @map("project_id") @db.Uuid
-  applicationId         String?   @map("application_id") @db.Uuid
-  budgetScopeType       String    @map("budget_scope_type")
-  budgetScopeId         String    @map("budget_scope_id")
-  action                String    @default("budget_updated")
-  actorType             String    @default("admin_placeholder") @map("actor_type")
-  actorId               String?   @map("actor_id") @db.Uuid
-  oldLimitMicroUsd      BigInt?   @map("old_limit_micro_usd")
-  newLimitMicroUsd      BigInt?   @map("new_limit_micro_usd")
-  oldBudgetLimitMode    String?   @map("old_budget_limit_mode")
-  newBudgetLimitMode    String?   @map("new_budget_limit_mode")
-  oldBudgetLimitPercent Decimal?  @map("old_budget_limit_percent") @db.Decimal(5, 2)
-  newBudgetLimitPercent Decimal?  @map("new_budget_limit_percent") @db.Decimal(5, 2)
-  metadata              Json      @default("{}")
-  createdAt             DateTime  @default(now()) @map("created_at")
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  projectId             String?  @map("project_id") @db.Uuid
+  applicationId         String?  @map("application_id") @db.Uuid
+  budgetScopeType       String   @map("budget_scope_type")
+  budgetScopeId         String   @map("budget_scope_id")
+  action                String   @default("budget_updated")
+  actorType             String   @default("admin_placeholder") @map("actor_type")
+  actorId               String?  @map("actor_id") @db.Uuid
+  oldLimitMicroUsd      BigInt?  @map("old_limit_micro_usd")
+  newLimitMicroUsd      BigInt?  @map("new_limit_micro_usd")
+  oldBudgetLimitMode    String?  @map("old_budget_limit_mode")
+  newBudgetLimitMode    String?  @map("new_budget_limit_mode")
+  oldBudgetLimitPercent Decimal? @map("old_budget_limit_percent") @db.Decimal(5, 2)
+  newBudgetLimitPercent Decimal? @map("new_budget_limit_percent") @db.Decimal(5, 2)
+  metadata              Json     @default("{}")
+  createdAt             DateTime @default(now()) @map("created_at")
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   project     Project?     @relation(fields: [projectId], references: [id])
@@ -635,6 +638,7 @@ model NotificationEvent {
   @@index([applicationId, createdAt])
   @@map("notification_events")
 }
+
 model RuntimeConfig {
   id            String                    @id @default(uuid()) @db.Uuid
   tenantId      String                    @db.Uuid
@@ -654,11 +658,11 @@ model RuntimeConfig {
   application      Application       @relation(fields: [applicationId], references: [id])
   runtimeSnapshots RuntimeSnapshot[]
 
+  @@unique([applicationId, configVersion])
   @@index([tenantId])
   @@index([projectId])
   @@index([applicationId])
   @@index([publishState])
-  @@unique([applicationId, configVersion])
   @@map("runtime_configs")
 }
 
@@ -681,11 +685,11 @@ model RuntimeSnapshot {
   runtimeConfig  RuntimeConfig?          @relation(fields: [runtimeConfigId], references: [id], onDelete: SetNull)
   activePointers ActiveRuntimeSnapshot[]
 
+  @@unique([applicationId, version])
   @@index([tenantId])
   @@index([projectId])
   @@index([applicationId])
   @@index([tenantId, projectId, applicationId, version])
-  @@unique([applicationId, version])
   @@map("runtime_snapshots")
 }
 

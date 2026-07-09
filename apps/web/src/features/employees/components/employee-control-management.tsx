@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import type {
   EmployeeControlModel,
   EmployeeCreateValues,
-  EmployeeCsvImportResult,
+  EmployeeInvitationResult,
+  EmployeeOrganizationCsvImportResult,
   EmployeeRecord,
   ProjectEmployeeAssignmentRecord,
   ProjectEmployeeAssignmentValues
@@ -53,7 +54,12 @@ type EmployeeResponsePayload = {
 
 type EmployeeImportResponsePayload = {
   error?: string;
-  importResult?: EmployeeCsvImportResult;
+  importResult?: EmployeeOrganizationCsvImportResult;
+};
+
+type EmployeeInvitationResponsePayload = {
+  error?: string;
+  invitation?: EmployeeInvitationResult;
 };
 
 type ProjectEmployeeResponsePayload = {
@@ -87,7 +93,10 @@ const employeeText: Record<
     import: string;
     imported: string;
     invitation: string;
+    inviteLink: string;
+    inviteResend: string;
     inviteSend: string;
+    inviteSent: string;
     jobTitle: string;
     listTab: string;
     management: string;
@@ -131,7 +140,10 @@ const employeeText: Record<
     import: "Import",
     imported: "Imported",
     invitation: "Invite",
-    inviteSend: "Add invitee",
+    inviteLink: "Invitation link",
+    inviteResend: "Resend",
+    inviteSend: "Send invite",
+    inviteSent: "Invitation email sent.",
     jobTitle: "Job title",
     listTab: "Employee list",
     management: "management",
@@ -174,7 +186,10 @@ const employeeText: Record<
     import: "등록",
     imported: "등록됨",
     invitation: "초대",
-    inviteSend: "초대 대상 추가",
+    inviteLink: "초대 링크",
+    inviteResend: "재발송",
+    inviteSend: "초대 메일 보내기",
+    inviteSent: "초대 메일을 발송했습니다.",
     jobTitle: "직책",
     listTab: "직원 목록",
     management: "관리",
@@ -634,8 +649,15 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   const text = employeeText[locale];
   const [activeTab, setActiveTab] = useState<"add" | "list">("add");
   const [employees, setEmployees] = useState<EmployeeRecord[]>(model.employees);
-  const [csvText, setCsvText] = useState("email,name,department,jobTitle\n");
+  const [projects, setProjects] = useState<ProjectRecord[]>(model.projects);
+  const [assignmentsByProjectId, setAssignmentsByProjectId] = useState(
+    model.assignmentsByProjectId
+  );
+  const [csvText, setCsvText] = useState(
+    "project,department,email,name,jobTitle,employeeBudgetUsd,projectBudgetUsd\n"
+  );
   const [createValues, setCreateValues] = useState<EmployeeCreateValues>(emptyCreateValues);
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
   const [sortState, setSortState] = useState<{
     direction: EmployeeSortDirection;
     field: EmployeeSortField;
@@ -651,10 +673,10 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   });
 
   const projectNamesByEmployeeId = useMemo(() => {
-    const projectsById = new Map(model.projects.map((project) => [project.id, project.name]));
+    const projectsById = new Map(projects.map((project) => [project.id, project.name]));
     const employeeProjects = new Map<string, string[]>();
 
-    for (const [projectId, assignments] of Object.entries(model.assignmentsByProjectId)) {
+    for (const [projectId, assignments] of Object.entries(assignmentsByProjectId)) {
       const projectName = projectsById.get(projectId) ?? projectId;
       for (const assignment of assignments) {
         const current = employeeProjects.get(assignment.employeeId) ?? [];
@@ -668,7 +690,7 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     }
 
     return employeeProjects;
-  }, [model.assignmentsByProjectId, model.projects]);
+  }, [assignmentsByProjectId, projects]);
 
   const sortedEmployees = useMemo(() => {
     const nextEmployees = [...employees];
@@ -735,13 +757,13 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
 
     setPendingAction("importCsv");
     setSubmitState({ message: "", status: "idle" });
+    setLastInviteUrl(null);
 
     const response = await fetch("/api/control-plane/employees", {
       body: JSON.stringify({
-        action: "importCsv",
+        action: "importOrganizationCsv",
         values: {
           csvText,
-          defaultDepartment: "",
           tenantId: model.controlPlaneTenantId
         }
       }),
@@ -760,12 +782,14 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     }
 
     mergeEmployees(payload.importResult.employees);
+    mergeProjects(payload.importResult.projects);
+    mergeAssignments(payload.importResult.assignments);
     setPageIndex(0);
     setSubmitState({
       message:
         locale === "ko"
-          ? `${payload.importResult.createdCount}명 생성, ${payload.importResult.updatedCount}명 수정`
-          : `${payload.importResult.createdCount} created, ${payload.importResult.updatedCount} updated`,
+          ? `${payload.importResult.projectCreatedCount}개 프로젝트 생성, ${payload.importResult.createdCount}명 직원 생성, ${payload.importResult.assignmentCreatedCount}개 배정 생성`
+          : `${payload.importResult.projectCreatedCount} projects, ${payload.importResult.createdCount} employees, ${payload.importResult.assignmentCreatedCount} assignments created`,
       status: "success"
     });
     setPendingAction(null);
@@ -806,15 +830,65 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       return;
     }
 
-    mergeEmployees([payload.employee]);
+    const invitation = await requestEmployeeInvitation(payload.employee.id);
+    if (!invitation) {
+      mergeEmployees([payload.employee]);
+      setCreateValues(emptyCreateValues);
+      setPageIndex(0);
+      setPendingAction(null);
+      return;
+    }
+
+    mergeEmployees([invitation.employee]);
     setCreateValues(emptyCreateValues);
+    setLastInviteUrl(invitation.signupUrl);
     setPageIndex(0);
-    setSubmitState({
-      message: locale === "ko" ? "직원이 생성되었습니다." : "Employee created.",
-      status: "success"
-    });
+    setSubmitState({ message: text.inviteSent, status: "success" });
     setPendingAction(null);
     router.refresh();
+  }
+
+  async function sendInviteForEmployee(employee: EmployeeRecord) {
+    setPendingAction(`invite:${employee.id}`);
+    setSubmitState({ message: "", status: "idle" });
+    setLastInviteUrl(null);
+
+    const invitation = await requestEmployeeInvitation(employee.id);
+    if (!invitation) {
+      setPendingAction(null);
+      return;
+    }
+
+    mergeEmployees([invitation.employee]);
+    setLastInviteUrl(invitation.signupUrl);
+    setSubmitState({ message: text.inviteSent, status: "success" });
+    setPendingAction(null);
+    router.refresh();
+  }
+
+  async function requestEmployeeInvitation(employeeId: string) {
+    const response = await fetch("/api/control-plane/employees", {
+      body: JSON.stringify({
+        action: "invite",
+        values: {
+          employeeId,
+          tenantId: model.controlPlaneTenantId
+        }
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as EmployeeInvitationResponsePayload;
+
+    if (!response.ok || !payload.invitation) {
+      setSubmitState({
+        message: payload.error ?? "Employee invitation failed.",
+        status: "error"
+      });
+      return null;
+    }
+
+    return payload.invitation;
   }
 
   function mergeEmployees(nextEmployees: EmployeeRecord[]) {
@@ -824,6 +898,26 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
         byId.set(employee.id, employee);
       }
       return [...byId.values()].sort(compareEmployeeName);
+    });
+  }
+
+  function mergeProjects(nextProjects: ProjectRecord[]) {
+    setProjects((current) => {
+      const byId = new Map(current.map((project) => [project.id, project]));
+      for (const project of nextProjects) {
+        byId.set(project.id, project);
+      }
+      return [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
+    });
+  }
+
+  function mergeAssignments(nextAssignments: ProjectEmployeeAssignmentRecord[]) {
+    setAssignmentsByProjectId((current) => {
+      const next = { ...current };
+      for (const assignment of nextAssignments) {
+        next[assignment.projectId] = upsertAssignment(next[assignment.projectId] ?? [], assignment);
+      }
+      return next;
     });
   }
 
@@ -902,6 +996,13 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       {submitState.message ? (
         <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
           <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {lastInviteUrl ? (
+        <Alert variant="success">
+          <AlertDescription>
+            {text.inviteLink}: <a href={lastInviteUrl}>{lastInviteUrl}</a>
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -1048,6 +1149,21 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
                           <Badge variant="outline">
                             {formatInvitationStatus(employee.invitationStatus, locale)}
                           </Badge>
+                          {employee.invitationStatus !== "accepted" ? (
+                            <Button
+                              disabled={pendingAction !== null}
+                              onClick={() => void sendInviteForEmployee(employee)}
+                              type="button"
+                              variant="outline"
+                            >
+                              <UserPlus aria-hidden="true" />
+                              {pendingAction === `invite:${employee.id}`
+                                ? "..."
+                                : employee.invitationStatus === "pending"
+                                  ? text.inviteResend
+                                  : text.inviteSend}
+                            </Button>
+                          ) : null}
                         </div>
                       </article>
                     );

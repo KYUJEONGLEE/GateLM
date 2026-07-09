@@ -17,6 +17,7 @@ describe('Auth HTTP API', () => {
   let repository: ReturnType<typeof createInMemoryAuthRepository>;
   let emailSender: {
     sent: Array<{ email: string; code: string }>;
+    sendEmployeeInvitationEmail: jest.Mock;
     sendProjectAdminInvitationEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
   };
@@ -38,6 +39,7 @@ describe('Auth HTTP API', () => {
     repository = createInMemoryAuthRepository();
     emailSender = {
       sent: [],
+      sendEmployeeInvitationEmail: jest.fn(async () => undefined),
       sendProjectAdminInvitationEmail: jest.fn(async () => undefined),
       sendVerificationEmail: jest.fn(async (message) => {
         emailSender.sent.push(message);

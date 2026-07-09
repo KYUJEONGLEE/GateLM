@@ -17,7 +17,10 @@ import { DataEnvelope, ListEnvelope } from '@/common/types/envelope';
 import {
   CreateEmployeeDto,
   EmployeeCsvImportResponseDto,
+  EmployeeInvitationResponseDto,
+  EmployeeOrganizationCsvImportResponseDto,
   EmployeeResponseDto,
+  ImportEmployeeOrganizationCsvDto,
   ImportEmployeesCsvDto,
   ListEmployeesQueryDto,
   ProjectEmployeeAssignmentResponseDto,
@@ -57,6 +60,32 @@ export class EmployeesController {
   ): Promise<DataEnvelope<EmployeeCsvImportResponseDto>> {
     return {
       data: await this.employeesService.importEmployeesCsv(tenantId, body),
+    };
+  }
+
+  @Post('tenants/:tenantId/employees/import-organization-csv')
+  async importEmployeeOrganizationCsv(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Body() body: ImportEmployeeOrganizationCsvDto,
+  ): Promise<DataEnvelope<EmployeeOrganizationCsvImportResponseDto>> {
+    return {
+      data: await this.employeesService.importEmployeeOrganizationCsv(
+        tenantId,
+        body,
+      ),
+    };
+  }
+
+  @Post('tenants/:tenantId/employees/:employeeId/invitations')
+  async sendEmployeeInvitation(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+  ): Promise<DataEnvelope<EmployeeInvitationResponseDto>> {
+    return {
+      data: await this.employeesService.sendEmployeeInvitation(
+        tenantId,
+        employeeId,
+      ),
     };
   }
 
