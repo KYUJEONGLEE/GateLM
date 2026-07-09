@@ -302,7 +302,7 @@ func TestRawResponseCaptureBlocksProductionLikeEnv(t *testing.T) {
 	}{
 		{name: "node production", key: "NODE_ENV", val: "production"},
 		{name: "app staging", key: "APP_ENV", val: "staging"},
-		{name: "aws region", key: "AWS_REGION", val: "ap-northeast-2"},
+		{name: "aws execution env", key: "AWS_EXECUTION_ENV", val: "AWS_ECS_FARGATE"},
 		{name: "ecs metadata", key: "ECS_CONTAINER_METADATA_URI_V4", val: "http://169.254.170.2/v4/metadata"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -320,6 +320,23 @@ func TestRawResponseCaptureBlocksProductionLikeEnv(t *testing.T) {
 				t.Fatalf("raw response capture should be blocked by %s=%q", tc.key, tc.val)
 			}
 		})
+	}
+}
+
+func TestRawResponseCaptureIgnoresLocalAWSRegionEnv(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetRawResponseCaptureEnv(t)
+	t.Setenv("DEPLOYMENT_MODE", "demo")
+	t.Setenv("RAW_RESPONSE_CAPTURE_ENABLED", "true")
+	t.Setenv("AWS_REGION", "ap-northeast-2")
+	t.Setenv("AWS_DEFAULT_REGION", "ap-northeast-2")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.RawResponseCaptureEnabled {
+		t.Fatal("local AWS region env alone should not block demo raw response capture opt-in")
 	}
 }
 

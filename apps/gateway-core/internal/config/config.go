@@ -320,8 +320,6 @@ func productionLikeEnv() bool {
 	}
 	for _, key := range []string{
 		"AWS_EXECUTION_ENV",
-		"AWS_REGION",
-		"AWS_DEFAULT_REGION",
 		"ECS_CONTAINER_METADATA_URI",
 		"ECS_CONTAINER_METADATA_URI_V4",
 		"AWS_LAMBDA_FUNCTION_NAME",

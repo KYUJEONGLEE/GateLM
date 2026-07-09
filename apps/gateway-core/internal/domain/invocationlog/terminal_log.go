@@ -220,6 +220,7 @@ const PromptCaptureVisibilityAdminRequestDetail = "admin_request_detail"
 const ResponseCaptureVisibilityAdminRequestDetail = "admin_request_detail"
 
 const responseCaptureMaxRunesLimit = 20000
+const responseCaptureSanitizerLookaheadRunes = 512
 
 var (
 	responseCaptureAuthorizationPattern = regexp.MustCompile(`(?i)\bauthorization\s*[:=]\s*bearer\s+[^\s"',}]+`)
@@ -228,7 +229,7 @@ var (
 	responseCaptureSecretTokenPattern   = regexp.MustCompile(`(?i)\b(sk|pk|rk|ak|key|token|secret)-[A-Za-z0-9_-]{8,}\b`)
 	responseCaptureJWTPattern           = regexp.MustCompile(`\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b`)
 	responseCaptureEmailPattern         = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
-	responseCapturePhonePattern         = regexp.MustCompile(`\+?\d[\d\s().-]{7,}\d`)
+	responseCapturePhonePattern         = regexp.MustCompile(`\+?\d[\d ().-]{7,}\d`)
 )
 
 type PromptCaptureFields struct {
@@ -543,8 +544,8 @@ func BuildResponseCaptureFields(policy runtimeconfig.ResponseCapturePolicy, rawR
 	if !runtimeconfig.ResponseCaptureAllowsRawCapture(policy) {
 		return ResponseCaptureFields{}, false
 	}
-	sanitizedResponse := sanitizeCapturedResponseForLog(rawResponse)
-	if sanitizedResponse == "" {
+	rawResponse = strings.TrimSpace(rawResponse)
+	if rawResponse == "" {
 		return ResponseCaptureFields{}, false
 	}
 	maxChars := policy.MaxChars
@@ -555,13 +556,23 @@ func BuildResponseCaptureFields(policy runtimeconfig.ResponseCapturePolicy, rawR
 		maxChars = responseCaptureMaxRunesLimit
 	}
 
-	truncatedResponse, truncated := truncateRunes(sanitizedResponse, maxChars)
+	storagePreview, rawTruncated := truncateRunes(rawResponse, maxChars)
+	sanitizerInput := storagePreview
+	if rawTruncated {
+		sanitizerInput, _ = truncateRunes(rawResponse, maxChars+responseCaptureSanitizerLookaheadRunes)
+	}
+	sanitizedResponse := sanitizeCapturedResponseForLog(sanitizerInput)
+	if sanitizedResponse == "" {
+		return ResponseCaptureFields{}, false
+	}
+
+	truncatedResponse, sanitizedTruncated := truncateRunes(sanitizedResponse, maxChars)
 	return ResponseCaptureFields{
 		Enabled:          true,
 		Mode:             policy.Mode,
 		Visibility:       ResponseCaptureVisibilityAdminRequestDetail,
 		CapturedResponse: truncatedResponse,
-		Truncated:        truncated,
+		Truncated:        rawTruncated || sanitizedTruncated,
 		MaxChars:         maxChars,
 	}, true
 }
