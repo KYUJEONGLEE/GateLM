@@ -152,6 +152,28 @@ describe('AdminAuthGuard', () => {
     expect(prisma.authSession.findUnique).not.toHaveBeenCalled();
   });
 
+  it('rejects wrong-length internal tokens without throwing', async () => {
+    const prisma = newPrismaMock();
+    const guard = newGuard(prisma, internalToken);
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          headers: {
+            'x-gatelm-control-plane-internal-token': 'wrong',
+          },
+          method: 'GET',
+          originalUrl:
+            '/admin/v1/applications/' +
+            applicationId +
+            '/runtime-snapshot/active',
+          params: { applicationId },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.authSession.findUnique).not.toHaveBeenCalled();
+  });
+
   it('does not allow internal tokens on general admin reads', async () => {
     const prisma = newPrismaMock();
     const guard = newGuard(prisma, internalToken);

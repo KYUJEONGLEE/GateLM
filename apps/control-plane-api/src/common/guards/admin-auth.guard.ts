@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { hashSecret } from '@/modules/auth/auth.crypto';
@@ -319,12 +319,8 @@ function isInternalServiceReadPath(path: string): boolean {
 }
 
 function constantTimeEquals(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left, 'utf8');
-  const rightBuffer = Buffer.from(right, 'utf8');
-
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
+  const leftBuffer = createHash('sha256').update(left).digest();
+  const rightBuffer = createHash('sha256').update(right).digest();
 
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
