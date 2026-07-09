@@ -304,6 +304,10 @@ function footerModeText(mode: AiInsightMode) {
 }
 
 function formatRangeDisplayLabel(value: string) {
+  if (value === "Last 5 minutes") {
+    return "최근 5분";
+  }
+
   if (value === "Last 15 minutes") {
     return "최근 15분";
   }

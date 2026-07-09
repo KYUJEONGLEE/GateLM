@@ -92,6 +92,120 @@ func TestBuildProjectLogsQueryRejectsInvalidUUIDScopeWithoutCasting(t *testing.T
 	}
 }
 
+func TestBuildProjectLogFilterOptionsQueryUsesOnlyTenantProjectTimeScope(t *testing.T) {
+	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	normalized, err := normalizeProjectLogFilterOptionsFilter(invocationlog.ProjectLogsFilter{
+		TenantID:      testTenantID,
+		ProjectID:     testProjectID,
+		ApplicationID: testApplicationID,
+		From:          from,
+		To:            to,
+		Status:        invocationlog.StatusSuccess,
+		Provider:      "openai",
+		Model:         "gpt-4.1-mini",
+		CacheStatus:   invocationlog.CacheStatusHit,
+		RequestID:     "request_001",
+		Limit:         100,
+	})
+	if err != nil {
+		t.Fatalf("normalize filter options filter: %v", err)
+	}
+	query, args := buildProjectLogFilterOptionsQuery(normalized)
+
+	for _, expected := range []string{
+		"tenant_id = $1",
+		"project_id = $2",
+		"created_at >= $3",
+		"created_at < $4",
+		"model_options",
+		"budget_scope_options",
+	} {
+		if !strings.Contains(query, expected) {
+			t.Fatalf("expected filter options query to contain %q, got %s", expected, query)
+		}
+	}
+	for _, forbidden := range []string{
+		"provider =",
+		"cache_status =",
+		"application_id =",
+		"request_id =",
+		"raw_prompt",
+		"raw_response",
+		"provider_api_key",
+		"authorization_header",
+		"cache_key_hash",
+	} {
+		if strings.Contains(strings.ToLower(query), strings.ToLower(forbidden)) {
+			t.Fatalf("filter options query must not contain %q: %s", forbidden, query)
+		}
+	}
+	if len(args) != 4 || args[0] != testTenantID || args[1] != testProjectID {
+		t.Fatalf("unexpected filter options args: %#v", args)
+	}
+}
+
+func TestQueryReaderListProjectLogFilterOptionsScansRows(t *testing.T) {
+	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	db := &fakeQueryer{
+		rows: &fakeRows{
+			values: [][]any{
+				{
+					"model",
+					sql.NullString{String: "mock-fast", Valid: true},
+					sql.NullString{},
+					sql.NullString{},
+					sql.NullString{},
+				},
+				{
+					"model",
+					sql.NullString{String: "gpt-4.1-mini", Valid: true},
+					sql.NullString{},
+					sql.NullString{},
+					sql.NullString{},
+				},
+				{
+					"budget_scope",
+					sql.NullString{},
+					sql.NullString{String: "application", Valid: true},
+					sql.NullString{String: testApplicationID, Valid: true},
+					sql.NullString{String: "default_application", Valid: true},
+				},
+			},
+		},
+	}
+
+	reader := NewQueryReader(db)
+	options, err := reader.ListProjectLogFilterOptions(context.Background(), invocationlog.ProjectLogsFilter{
+		TenantID:    testTenantID,
+		ProjectID:   testProjectID,
+		From:        from,
+		To:          to,
+		Status:      invocationlog.StatusSuccess,
+		Provider:    "openai",
+		Model:       "ignored-by-options-query",
+		CacheStatus: invocationlog.CacheStatusHit,
+		RequestID:   "request_001",
+		Limit:       100,
+	})
+	if err != nil {
+		t.Fatalf("expected filter options to succeed, got %v", err)
+	}
+	if len(options.Models) != 2 || options.Models[0] != "gpt-4.1-mini" || options.Models[1] != "mock-fast" {
+		t.Fatalf("unexpected models: %#v", options.Models)
+	}
+	if len(options.BudgetScopes) != 1 ||
+		options.BudgetScopes[0].Type != "application" ||
+		options.BudgetScopes[0].ID != testApplicationID ||
+		options.BudgetScopes[0].ResolvedBy != "default_application" {
+		t.Fatalf("unexpected budget scope options: %#v", options.BudgetScopes)
+	}
+	if strings.Contains(db.query, "cache_status =") || strings.Contains(db.query, "request_id =") {
+		t.Fatalf("option query should ignore narrowing filters, got %s", db.query)
+	}
+}
+
 func TestQueryReaderListProjectLogsScansRows(t *testing.T) {
 	from := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
@@ -605,6 +719,7 @@ func TestQueryReaderGetCostReportFillsExpectedTimeSeriesBuckets(t *testing.T) {
 		expectedCount    int
 		expectedUnitSQL  string
 	}{
+		{name: "last 5 minutes", duration: 5 * time.Minute, expectedInterval: "7s", expectedCount: 43, expectedUnitSQL: "extract(epoch from created_at) / 7"},
 		{name: "last 15 minutes", duration: 15 * time.Minute, expectedInterval: "1m", expectedCount: 15, expectedUnitSQL: "date_trunc('minute', created_at)"},
 		{name: "last 1 hour", duration: time.Hour, expectedInterval: "5m", expectedCount: 12, expectedUnitSQL: "interval '5 minutes'"},
 		{name: "last 24 hours", duration: 24 * time.Hour, expectedInterval: "1h", expectedCount: 24, expectedUnitSQL: "date_trunc('hour', created_at)"},
@@ -676,6 +791,7 @@ func TestQueryReaderGetAnalyticsPerformanceFillsExpectedLatencyBuckets(t *testin
 		expectedCount    int
 		expectedUnitSQL  string
 	}{
+		{name: "last 5 minutes", duration: 5 * time.Minute, expectedInterval: "7s", expectedCount: 43, expectedUnitSQL: "extract(epoch from created_at) / 7"},
 		{name: "last 15 minutes", duration: 15 * time.Minute, expectedInterval: "1m", expectedCount: 15, expectedUnitSQL: "date_trunc('minute', created_at)"},
 		{name: "last 1 hour", duration: time.Hour, expectedInterval: "5m", expectedCount: 12, expectedUnitSQL: "interval '5 minutes'"},
 		{name: "last 24 hours", duration: 24 * time.Hour, expectedInterval: "1h", expectedCount: 24, expectedUnitSQL: "date_trunc('hour', created_at)"},

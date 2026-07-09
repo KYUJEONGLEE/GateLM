@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Save, Settings, Trash2 } from "lucide-react";
+import { ArrowRight, Plus, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -58,6 +58,7 @@ const projectText: Record<
     created: string;
     description: string;
     edit: string;
+    editProject?: string;
     editPolicy: string;
     empty: string;
     budgetAlert: string;
@@ -93,6 +94,7 @@ const projectText: Record<
     created: "Created",
     description: "Description",
     edit: "Edit",
+    editProject: "Edit project",
     editPolicy: "Edit policy",
     empty: "No projects found.",
     budgetAlert: "Limit exceeded",
@@ -127,7 +129,8 @@ const projectText: Record<
     created: "생성일",
     description: "설명",
     edit: "수정",
-    editPolicy: "정책 수정",
+    editProject: "프로젝트 수정",
+    editPolicy: "프로젝트 정책 수정",
     empty: "프로젝트가 없습니다.",
     budgetAlert: "한도 초과",
     budgetWarning: "주의",
@@ -205,7 +208,10 @@ export function ProjectManagement({
         </div>
         {canCreateProject ? (
           <div className="dashboard-hero-actions">
-            <Link className="primary-button" href={`/tenants/${model.routeTenantId}/onboarding`}>
+            <Link
+              className="primary-button project-create-hero-button"
+              href={`/tenants/${model.routeTenantId}/onboarding`}
+            >
               <Plus aria-hidden="true" />
               {text.createProject}
             </Link>
@@ -254,7 +260,15 @@ export function ProjectManagement({
             <div className="project-card-grid">
               {sortedProjects.map((project) => {
                 const projectHref = `/tenants/${model.routeTenantId}/projects/${project.id}`;
-                const policyHref = project.runtimeApplicationId ? `${projectHref}/policies` : null;
+                const editProjectHref = project.runtimeApplicationId
+                  ? `${projectHref}/policies`
+                  : projectHref;
+                const editProjectLabel = project.runtimeApplicationId
+                  ? locale === "ko"
+                    ? text.editPolicy
+                    : text.editProject ?? text.edit
+                  : text.editProject ?? text.edit;
+                const editProjectActionKind = project.runtimeApplicationId ? "policy" : "project";
                 const usage = getProjectUsage(project, projectCostsById.get(project.id), usageKnown);
                 const warningThresholdPercent =
                   warningThresholdsByProjectId.get(project.id) ?? defaultWarningThresholdPercent;
@@ -308,24 +322,14 @@ export function ProjectManagement({
                     </div>
 
                     <div className="project-card-actions">
-                      <Link className="secondary-button project-list-action-link" href={projectHref}>
-                        <Pencil aria-hidden="true" />
-                        {text.edit}
+                      <Link
+                        className="secondary-button project-list-action-link"
+                        data-action-kind={editProjectActionKind}
+                        href={editProjectHref}
+                      >
+                        {editProjectLabel}
+                        <ArrowRight aria-hidden="true" />
                       </Link>
-                      {policyHref ? (
-                        <Link className="secondary-button project-list-action-link" href={policyHref}>
-                          <Settings aria-hidden="true" />
-                          {text.editPolicy}
-                        </Link>
-                      ) : (
-                        <span
-                          aria-disabled="true"
-                          className="secondary-button project-list-action-link project-list-action-disabled"
-                        >
-                          <Settings aria-hidden="true" />
-                          {text.editPolicy}
-                        </span>
-                      )}
                     </div>
                   </article>
                 );
@@ -374,35 +378,42 @@ export function ProjectDetailManagement({
     setPendingAction("save");
     setSubmitState({ message: "", status: "idle" });
 
-    const response = await fetch("/api/control-plane/projects", {
-      body: JSON.stringify({
-        action: "update",
-        tenantId,
-        values
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
 
-    if (!response.ok || !payload.project) {
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project update failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      setValues(getProjectUpdateValues(payload.project));
       setSubmitState({
-        message: payload.error ?? "Project update failed.",
+        message: text.detailSaved,
+        status: "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({
+        message: "Project update failed.",
         status: "error"
       });
+    } finally {
       setPendingAction(null);
-      return;
     }
-
-    setValues(getProjectUpdateValues(payload.project));
-    setSubmitState({
-      message: text.detailSaved,
-      status: "success"
-    });
-    setPendingAction(null);
-    router.refresh();
   }
 
   return (
@@ -513,6 +524,178 @@ export function ProjectDetailManagement({
   );
 }
 
+export function ProjectDetailSection({
+  locale,
+  project,
+  tenantId
+}: Omit<ProjectDetailManagementProps, "breadcrumbItems">) {
+  const router = useRouter();
+  const text = projectText[locale];
+  const [values, setValues] = useState<ProjectUpdateValues>(() => getProjectUpdateValues(project));
+  const [pendingAction, setPendingAction] = useState<"save" | null>(null);
+  const [submitState, setSubmitState] = useState<SubmitState>({
+    message: "",
+    status: "idle"
+  });
+
+  async function saveProjectDetail() {
+    if (!values.name.trim()) {
+      setSubmitState({
+        message: locale === "ko" ? "프로젝트 이름을 입력하세요." : "Project name is required.",
+        status: "error"
+      });
+      return;
+    }
+
+    if (!Number.isFinite(values.totalBudgetUsd) || values.totalBudgetUsd < 0) {
+      setSubmitState({
+        message:
+          locale === "ko" ? "프로젝트 예산은 0 이상으로 입력하세요." : "Project budget must be 0 or more.",
+        status: "error"
+      });
+      return;
+    }
+
+    setPendingAction("save");
+    setSubmitState({ message: "", status: "idle" });
+
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project update failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      setValues(getProjectUpdateValues(payload.project));
+      setSubmitState({
+        message: text.detailSaved,
+        status: "success"
+      });
+      router.refresh();
+    } catch {
+      setSubmitState({
+        message: "Project update failed.",
+        status: "error"
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  return (
+    <>
+      {submitState.message ? (
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="console-panel project-detail-panel">
+        <div className="project-detail-section">
+          <div className="project-detail-section-heading">
+            <h3>{text.general}</h3>
+          </div>
+          <div className="project-detail-general-content">
+            <div className="project-detail-form">
+              <label className="policy-field">
+                <span>{text.name}</span>
+                <input
+                  maxLength={120}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      name: event.target.value
+                    }))
+                  }
+                  type="text"
+                  value={values.name}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.description}</span>
+                <input
+                  maxLength={500}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      description: event.target.value
+                    }))
+                  }
+                  type="text"
+                  value={values.description}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.totalBudget}</span>
+                <input
+                  min={0}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      totalBudgetUsd: Number(event.target.value)
+                    }))
+                  }
+                  step="0.01"
+                  type="number"
+                  value={values.totalBudgetUsd}
+                />
+              </label>
+              <label className="policy-field">
+                <span>{text.status}</span>
+                <select
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      status: event.target.value as ProjectStatus
+                    }))
+                  }
+                  value={values.status}
+                >
+                  {projectStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {formatProjectStatus(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="project-detail-project-id-row">
+                <span>{text.projectId}</span>
+                <code>{project.id}</code>
+              </div>
+            </div>
+            <div className="project-detail-actions">
+              <button
+                className="primary-button"
+                disabled={pendingAction !== null}
+                onClick={() => void saveProjectDetail()}
+                type="button"
+              >
+                <Save aria-hidden="true" />
+                {pendingAction === "save" ? "..." : text.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDetailManagementProps) {
   const router = useRouter();
   const text = projectText[locale];
@@ -527,33 +710,46 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
     setIsDeleting(true);
     setSubmitState({ message: "", status: "idle" });
 
-    const response = await fetch("/api/control-plane/projects", {
-      body: JSON.stringify({
-        action: "update",
-        tenantId,
-        values: {
-          ...getProjectUpdateValues(project),
-          status: "ARCHIVED"
-        }
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+    let didNavigate = false;
 
-    if (!response.ok || !payload.project) {
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values: {
+            ...getProjectUpdateValues(project),
+            status: "ARCHIVED"
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project delete failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      didNavigate = true;
+      router.push(`/tenants/${tenantId}/projects`);
+      router.refresh();
+    } catch {
       setSubmitState({
-        message: payload.error ?? "Project delete failed.",
+        message: "Project delete failed.",
         status: "error"
       });
-      setIsDeleting(false);
-      return;
+    } finally {
+      if (!didNavigate) {
+        setIsDeleting(false);
+      }
     }
-
-    router.push(`/tenants/${tenantId}/projects`);
-    router.refresh();
   }
 
   return (
@@ -580,6 +776,93 @@ export function ProjectDeleteManagement({ locale, project, tenantId }: ProjectDe
         </div>
       </section>
     </main>
+  );
+}
+
+export function ProjectDeleteSection({
+  locale,
+  project,
+  tenantId
+}: Omit<ProjectDetailManagementProps, "breadcrumbItems">) {
+  const router = useRouter();
+  const text = projectText[locale];
+  const [submitState, setSubmitState] = useState<SubmitState>({ message: "", status: "idle" });
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function deleteProject() {
+    if (!window.confirm(text.deleteConfirm)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setSubmitState({ message: "", status: "idle" });
+
+    let didNavigate = false;
+
+    try {
+      const response = await fetch("/api/control-plane/projects", {
+        body: JSON.stringify({
+          action: "update",
+          tenantId,
+          values: {
+            ...getProjectUpdateValues(project),
+            status: "ARCHIVED"
+          }
+        }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProjectResponsePayload;
+
+      if (!response.ok || !payload.project) {
+        setSubmitState({
+          message: payload.error ?? "Project delete failed.",
+          status: "error"
+        });
+        return;
+      }
+
+      didNavigate = true;
+      router.push(`/tenants/${tenantId}/projects`);
+      router.refresh();
+    } catch {
+      setSubmitState({
+        message: "Project delete failed.",
+        status: "error"
+      });
+    } finally {
+      if (!didNavigate) {
+        setIsDeleting(false);
+      }
+    }
+  }
+
+  return (
+    <>
+      {submitState.message ? (
+        <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+          <AlertDescription>{submitState.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="console-panel project-detail-panel">
+        <div className="project-detail-section project-delete-section">
+          <div className="project-detail-actions project-delete-actions">
+            <button
+              className="secondary-button project-danger-button"
+              disabled={isDeleting || project.status === "ARCHIVED"}
+              onClick={() => void deleteProject()}
+              type="button"
+            >
+              <Trash2 aria-hidden="true" />
+              {isDeleting ? "..." : text.delete}
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 

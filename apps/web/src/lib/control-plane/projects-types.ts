@@ -10,6 +10,7 @@ export type ProjectRecord = {
   tenantId: string;
   totalBudgetUsd: number;
   updatedAt: string;
+  warningThresholdPercent: number;
 };
 
 export type ProjectBudgetThresholdRecord = {

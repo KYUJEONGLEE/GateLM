@@ -117,6 +117,90 @@ func TestProjectLogsHandlerUsesTenantQueryOverride(t *testing.T) {
 	}
 }
 
+func TestProjectLogsHandlerIncludesFilterOptionsMetaWhenRequested(t *testing.T) {
+	reader := &recordingProjectLogsReader{
+		filterOptions: invocationlog.RequestLogFilterOptions{
+			Models: []string{"gpt-4.1-mini", "mock-fast"},
+			BudgetScopes: []budget.Scope{{
+				Type:       "application",
+				ID:         "app_demo",
+				ResolvedBy: "default_application",
+			}},
+		},
+	}
+	handler := ProjectLogsHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z&status=success&model=ignored-by-options&includeFilterOptions=true", nil)
+	req.SetPathValue("projectId", "project_demo")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if reader.optionFilter.TenantID != "tenant_demo" || reader.optionFilter.ProjectID != "project_demo" {
+		t.Fatalf("expected option query to use tenant/project scope, got %+v", reader.optionFilter)
+	}
+	var response projectLogsResponse
+	if err := json.NewDecoder(strings.NewReader(rr.Body.String())).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Meta == nil {
+		t.Fatalf("expected meta filter options in response: %s", rr.Body.String())
+	}
+	if got := response.Meta.FilterOptions.Models; len(got) != 2 || got[0] != "gpt-4.1-mini" || got[1] != "mock-fast" {
+		t.Fatalf("unexpected model options: %#v", got)
+	}
+	if got := response.Meta.FilterOptions.BudgetScopes; len(got) != 1 ||
+		got[0].BudgetScopeType != "application" ||
+		got[0].BudgetScopeID != "app_demo" ||
+		got[0].ResolvedBy != "default_application" {
+		t.Fatalf("unexpected budget scope options: %#v", got)
+	}
+	for _, forbidden := range []string{
+		"rawPrompt",
+		"rawResponse",
+		"authorizationHeader",
+		"apiKeyPlaintext",
+		"appTokenPlaintext",
+		"providerApiKey",
+		"requestBodyHash",
+		"promptHash",
+		"cacheKeyHash",
+	} {
+		if strings.Contains(rr.Body.String(), forbidden) {
+			t.Fatalf("filter options response must not include forbidden field %q: %s", forbidden, rr.Body.String())
+		}
+	}
+}
+
+func TestProjectLogsHandlerSerializesEmptyFilterOptionsAsArrays(t *testing.T) {
+	reader := &recordingProjectLogsReader{}
+	handler := ProjectLogsHandler{
+		Reader:   reader,
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project_demo/logs?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z&includeFilterOptions=true", nil)
+	req.SetPathValue("projectId", "project_demo")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, `"models":null`) || !strings.Contains(body, `"models":[]`) {
+		t.Fatalf("expected empty model options to serialize as [], got: %s", body)
+	}
+	if strings.Contains(body, `"budgetScopes":null`) || !strings.Contains(body, `"budgetScopes":[]`) {
+		t.Fatalf("expected empty budget scope options to serialize as [], got: %s", body)
+	}
+}
+
 func TestProjectLogsHandlerRejectsMissingRange(t *testing.T) {
 	handler := ProjectLogsHandler{
 		Reader:   &recordingProjectLogsReader{},
@@ -854,9 +938,12 @@ func decodeSingleStructuredLog(t *testing.T, logs *bytes.Buffer) map[string]any 
 }
 
 type recordingProjectLogsReader struct {
-	filter invocationlog.ProjectLogsFilter
-	items  []invocationlog.RequestLogListItem
-	err    error
+	filter        invocationlog.ProjectLogsFilter
+	optionFilter  invocationlog.ProjectLogsFilter
+	items         []invocationlog.RequestLogListItem
+	filterOptions invocationlog.RequestLogFilterOptions
+	err           error
+	optionErr     error
 }
 
 func (r *recordingProjectLogsReader) ListProjectLogs(_ context.Context, filter invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -865,6 +952,14 @@ func (r *recordingProjectLogsReader) ListProjectLogs(_ context.Context, filter i
 		return nil, r.err
 	}
 	return r.items, nil
+}
+
+func (r *recordingProjectLogsReader) ListProjectLogFilterOptions(_ context.Context, filter invocationlog.ProjectLogsFilter) (invocationlog.RequestLogFilterOptions, error) {
+	r.optionFilter = filter
+	if r.optionErr != nil {
+		return invocationlog.RequestLogFilterOptions{}, r.optionErr
+	}
+	return r.filterOptions, nil
 }
 
 type recordingRequestDetailReader struct {

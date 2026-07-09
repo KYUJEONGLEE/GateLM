@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Application, Prisma, Project, ResourceStatus } from '@prisma/client';
+import {
+  Application,
+  Prisma,
+  Project,
+  ResourceStatus,
+  RuntimeConfigPublishState,
+} from '@prisma/client';
 
 import { ListEnvelope } from '@/common/types/envelope';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
@@ -19,6 +25,7 @@ import {
 const DEFAULT_TENANT_BUDGET_USD = 1000;
 const DEFAULT_PROJECT_BUDGET_USD = 100;
 const DEFAULT_RUNTIME_BUDGET_LIMIT_PERCENT = 100;
+const DEFAULT_WARNING_THRESHOLD_PERCENT = 80;
 
 type RuntimeApplicationProjection = Pick<
   Application,
@@ -91,7 +98,11 @@ export class ProjectsService {
       },
     );
 
-    return this.toProjectResponse(project, runtimeApplicationId);
+    return this.toProjectResponse(
+      project,
+      runtimeApplicationId,
+      DEFAULT_WARNING_THRESHOLD_PERCENT,
+    );
   }
 
   async listProjects(
@@ -113,12 +124,18 @@ export class ProjectsService {
       await this.getRuntimeApplicationIdsByProjectIds(
         page.map((project) => project.id),
       );
+    const warningThresholdPercentsByProjectId =
+      await this.getWarningThresholdPercentsByProjectIds(
+        runtimeApplicationIdsByProjectId,
+      );
 
     return {
       data: page.map((project) =>
         this.toProjectResponse(
           project,
           runtimeApplicationIdsByProjectId.get(project.id) ?? null,
+          warningThresholdPercentsByProjectId.get(project.id) ??
+            DEFAULT_WARNING_THRESHOLD_PERCENT,
         ),
       ),
       pagination: {
@@ -428,10 +445,16 @@ export class ProjectsService {
   ): Promise<ProjectResponseDto> {
     const runtimeApplicationIdsByProjectId =
       await this.getRuntimeApplicationIdsByProjectIds([project.id]);
+    const warningThresholdPercentsByProjectId =
+      await this.getWarningThresholdPercentsByProjectIds(
+        runtimeApplicationIdsByProjectId,
+      );
 
     return this.toProjectResponse(
       project,
       runtimeApplicationIdsByProjectId.get(project.id) ?? null,
+      warningThresholdPercentsByProjectId.get(project.id) ??
+        DEFAULT_WARNING_THRESHOLD_PERCENT,
     );
   }
 
@@ -493,9 +516,95 @@ export class ProjectsService {
     );
   }
 
+  private async getWarningThresholdPercentsByProjectIds(
+    runtimeApplicationIdsByProjectId: Map<string, string>,
+  ): Promise<Map<string, number>> {
+    const runtimeApplicationIds = [
+      ...new Set(runtimeApplicationIdsByProjectId.values()),
+    ];
+
+    if (runtimeApplicationIds.length === 0) {
+      return new Map();
+    }
+
+    const runtimeConfigs = await this.prisma.runtimeConfig.findMany({
+      where: {
+        applicationId: {
+          in: runtimeApplicationIds,
+        },
+        publishState: RuntimeConfigPublishState.ACTIVE,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      select: {
+        applicationId: true,
+        document: true,
+      },
+    });
+    const warningThresholdPercentsByApplicationId = new Map<string, number>();
+
+    for (const runtimeConfig of runtimeConfigs) {
+      if (
+        warningThresholdPercentsByApplicationId.has(
+          runtimeConfig.applicationId,
+        )
+      ) {
+        continue;
+      }
+
+      warningThresholdPercentsByApplicationId.set(
+        runtimeConfig.applicationId,
+        this.getWarningThresholdPercentFromRuntimeConfigDocument(
+          runtimeConfig.document,
+        ),
+      );
+    }
+
+    return new Map(
+      [...runtimeApplicationIdsByProjectId.entries()].map(
+        ([projectId, runtimeApplicationId]) => [
+          projectId,
+          warningThresholdPercentsByApplicationId.get(runtimeApplicationId) ??
+            DEFAULT_WARNING_THRESHOLD_PERCENT,
+        ],
+      ),
+    );
+  }
+
+  private getWarningThresholdPercentFromRuntimeConfigDocument(
+    document: Prisma.JsonValue,
+  ): number {
+    if (!this.isRecord(document)) {
+      return DEFAULT_WARNING_THRESHOLD_PERCENT;
+    }
+
+    const budgetPolicy = document.budgetPolicy;
+
+    if (!this.isRecord(budgetPolicy)) {
+      return DEFAULT_WARNING_THRESHOLD_PERCENT;
+    }
+
+    return this.normalizeWarningThresholdPercent(
+      budgetPolicy.warningThresholdPercent,
+    );
+  }
+
+  private normalizeWarningThresholdPercent(value: unknown): number {
+    return typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= 0 &&
+      value <= 100
+      ? value
+      : DEFAULT_WARNING_THRESHOLD_PERCENT;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
   private toProjectResponse(
     project: Project,
     runtimeApplicationId: string | null,
+    warningThresholdPercent: number,
   ): ProjectResponseDto {
     return {
       id: project.id,
@@ -505,6 +614,7 @@ export class ProjectsService {
       status: project.status,
       totalBudgetUsd: this.toProjectBudgetUsd(project.totalBudgetUsd),
       runtimeApplicationId,
+      warningThresholdPercent,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
     };

@@ -80,6 +80,70 @@ func TestAdapterCreateChatCompletionSupportsPathfulOpenAICompatibleBaseURL(t *te
 	}
 }
 
+func TestAdapterCreateChatCompletionUsesMaxCompletionTokensForGPT5Models(t *testing.T) {
+	var request map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_fake","object":"chat.completion","created":1782108000,"model":"gpt-5.4","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`))
+	}))
+	defer server.Close()
+
+	maxTokens := 16
+	_, err := NewAdapter(server.Client()).CreateChatCompletion(context.Background(), executionConfig(server.URL), provider.ChatCompletionRequest{
+		RequestID: "request_test",
+		Model:     "gpt-5.4",
+		MaxTokens: &maxTokens,
+		Messages: []provider.ChatMessage{{
+			Role:    "user",
+			Content: json.RawMessage(`"hello"`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateChatCompletion returned error: %v", err)
+	}
+	if _, ok := request["max_tokens"]; ok {
+		t.Fatalf("gpt-5 family request must not include max_tokens: %#v", request)
+	}
+	if got := request["max_completion_tokens"]; got != float64(maxTokens) {
+		t.Fatalf("expected max_completion_tokens=%d, got %#v request=%#v", maxTokens, got, request)
+	}
+}
+
+func TestAdapterCreateChatCompletionKeepsMaxTokensForGPT4OModels(t *testing.T) {
+	var request map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_fake","object":"chat.completion","created":1782108000,"model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`))
+	}))
+	defer server.Close()
+
+	maxTokens := 16
+	_, err := NewAdapter(server.Client()).CreateChatCompletion(context.Background(), executionConfig(server.URL), provider.ChatCompletionRequest{
+		RequestID: "request_test",
+		Model:     "gpt-4o-mini",
+		MaxTokens: &maxTokens,
+		Messages: []provider.ChatMessage{{
+			Role:    "user",
+			Content: json.RawMessage(`"hello"`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateChatCompletion returned error: %v", err)
+	}
+	if got := request["max_tokens"]; got != float64(maxTokens) {
+		t.Fatalf("expected max_tokens=%d, got %#v request=%#v", maxTokens, got, request)
+	}
+	if _, ok := request["max_completion_tokens"]; ok {
+		t.Fatalf("gpt-4o family request must keep existing max_tokens behavior: %#v", request)
+	}
+}
+
 func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T) {
 	var gotStream bool
 	var gotIncludeUsage bool
@@ -133,6 +197,41 @@ func TestAdapterCreateChatCompletionStreamReadsOpenAICompatibleSSE(t *testing.T)
 	}
 	if _, err := stream.Next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF after DONE, got %v", err)
+	}
+}
+
+func TestAdapterCreateChatCompletionStreamUsesMaxCompletionTokensForGPT5Models(t *testing.T) {
+	var request map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_stream\",\"object\":\"chat.completion.chunk\",\"created\":1782108000,\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}],\"usage\":null}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	maxTokens := 16
+	stream, err := NewAdapter(server.Client()).CreateChatCompletionStream(context.Background(), executionConfig(server.URL), provider.ChatCompletionRequest{
+		RequestID: "request_test",
+		Model:     "gpt-5.4",
+		MaxTokens: &maxTokens,
+		Messages: []provider.ChatMessage{{
+			Role:    "user",
+			Content: json.RawMessage(`"hello"`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateChatCompletionStream returned error: %v", err)
+	}
+	defer stream.Close()
+
+	if _, ok := request["max_tokens"]; ok {
+		t.Fatalf("gpt-5 family stream request must not include max_tokens: %#v", request)
+	}
+	if got := request["max_completion_tokens"]; got != float64(maxTokens) {
+		t.Fatalf("expected max_completion_tokens=%d, got %#v request=%#v", maxTokens, got, request)
 	}
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronDown, KeyRound, Pencil, PlugZap, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, KeyRound, PlugZap, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -232,7 +232,10 @@ export function ProviderConnectionManagement({
     message: "",
     status: "idle"
   });
-  const activeDiscoveryKey = formValues.previousProvider?.trim() || formValues.provider.trim();
+  const discoveryRequestIdRef = useRef(0);
+  const activeDiscoveryKey = getProviderFormDiscoveryKey(formValues);
+  const activeDiscoveryKeyRef = useRef(activeDiscoveryKey);
+  activeDiscoveryKeyRef.current = activeDiscoveryKey;
   const activeDiscovery = activeDiscoveryKey ? discoveryByProvider[activeDiscoveryKey] : undefined;
 
   async function submitProvider() {
@@ -366,6 +369,10 @@ export function ProviderConnectionManagement({
       return;
     }
 
+    const discoveryRequestId = discoveryRequestIdRef.current + 1;
+    discoveryRequestIdRef.current = discoveryRequestId;
+    const isLatestDiscoveryRequest = () => discoveryRequestIdRef.current === discoveryRequestId;
+
     setDiscoveringProvider(normalizedProvider);
     setSubmitState({ message: "", status: "idle" });
 
@@ -384,17 +391,23 @@ export function ProviderConnectionManagement({
     });
     const payload = (await response.json().catch(() => ({}))) as ProviderResponsePayload;
 
+    if (!isLatestDiscoveryRequest()) {
+      return;
+    }
+
     if (!response.ok || !payload.discovery) {
-      setSubmitState({
-        message:
-          payload.status === 404
-            ? locale === "ko"
-              ? "Tenant/global Provider를 찾을 수 없습니다. Provider를 저장한 뒤 다시 조회하세요."
-              : "Tenant/global provider is not registered. Save the provider and try again."
-            : getProviderDiscoveryErrorMessage(payload.error, normalizedProvider, locale),
-        status: "error"
-      });
-      setDiscoveringProvider(null);
+      if (activeDiscoveryKeyRef.current === normalizedProvider) {
+        setSubmitState({
+          message:
+            payload.status === 404
+              ? locale === "ko"
+                ? "Tenant/global Provider를 찾을 수 없습니다. Provider를 저장한 뒤 다시 조회하세요."
+                : "Tenant/global provider is not registered. Save the provider and try again."
+              : getProviderDiscoveryErrorMessage(payload.error, normalizedProvider, locale),
+          status: "error"
+        });
+      }
+      setDiscoveringProvider((current) => (current === normalizedProvider ? null : current));
       return;
     }
 
@@ -446,6 +459,10 @@ export function ProviderConnectionManagement({
     }));
     if (applyToForm) {
       setFormValues((current) => {
+        if (getProviderFormDiscoveryKey(current) !== normalizedProvider) {
+          return current;
+        }
+
         return {
           ...current,
           adapterType: payload.discovery?.adapterType ?? current.adapterType,
@@ -455,18 +472,20 @@ export function ProviderConnectionManagement({
         };
       });
     }
-    setSubmitState({
-      message:
-        locale === "ko"
-          ? applyToForm
-            ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
-            : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
-          : applyToForm
-            ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
-            : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
-      status: "success"
-    });
-    setDiscoveringProvider(null);
+    if (activeDiscoveryKeyRef.current === normalizedProvider) {
+      setSubmitState({
+        message:
+          locale === "ko"
+            ? applyToForm
+              ? `${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+              : `${normalizedProvider}에서 ${chatModels.length}개 chat 모델을 조회했습니다. 사용할 모델을 선택하세요. 제외된 비채팅 모델: ${skippedModelCount}개.`
+            : applyToForm
+              ? `${chatModels.length} chat models discovered. Select models to use. Excluded non-chat models: ${skippedModelCount}.`
+              : `${chatModels.length} chat models discovered from ${normalizedProvider}. Select models to use. Excluded non-chat models: ${skippedModelCount}.`,
+        status: "success"
+      });
+    }
+    setDiscoveringProvider((current) => (current === normalizedProvider ? null : current));
   }
 
   async function deleteProvider(provider: ProviderConnectionRecord) {
@@ -557,10 +576,18 @@ export function ProviderConnectionManagement({
     setSubmitState({ message: "", status: "idle" });
   }
 
-  function openEditModal(provider: ProviderConnectionRecord) {
+  function toggleProvider(provider: ProviderConnectionRecord) {
+    if (expandedProviderId === provider.id) {
+      setExpandedProviderId(null);
+      setEditingProviderId(null);
+      setFormValues(emptyProviderForm);
+      return;
+    }
+
     const providerModels = getProviderConfigModels(provider.providerConfig).filter(
       isChatCompletionModelName
     );
+    const nextFormValues = getProviderFormValues(provider);
 
     setModelOptionsByProvider((current) => ({
       ...current,
@@ -570,14 +597,19 @@ export function ProviderConnectionManagement({
     }));
     setProviderModal(null);
     setExpandedProviderId(provider.id);
-    setEditingProviderId((current) => (current === provider.id ? null : provider.id));
-    setFormValues(getProviderFormValues(provider));
+    setEditingProviderId(provider.id);
+    setFormValues(nextFormValues);
     setSubmitState({ message: "", status: "idle" });
-  }
 
-  function toggleProvider(providerId: string) {
-    setExpandedProviderId((current) => (current === providerId ? null : providerId));
-    setEditingProviderId(null);
+    if (
+      discoveringProvider === null &&
+      !discoveryByProvider[provider.provider] &&
+      isDiscoverSupportedProvider(nextFormValues.adapterType)
+    ) {
+      void discoverModels(provider.provider, {
+        applyToForm: true
+      });
+    }
   }
 
   function openCredentialModal(provider: ProviderConnectionRecord) {
@@ -655,6 +687,7 @@ export function ProviderConnectionManagement({
 
   function renderProviderInlineEditor(provider: ProviderConnectionRecord) {
     const activeProviderFamily = getProviderFamilyFromKey(activeDiscoveryKey, formValues.baseUrl);
+    const activeProviderIsDiscovering = discoveringProvider === activeDiscoveryKey;
     const activeDiscoveryModelList = activeDiscovery
       ? getModelDisplayList(
           activeDiscovery.chatModels,
@@ -672,40 +705,24 @@ export function ProviderConnectionManagement({
                 ? locale === "ko"
                   ? `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length}개 선택`
                   : `${activeDiscovery.selectedModels.length} / ${activeDiscovery.chatModels.length} selected`
+                : activeProviderIsDiscovering
+                  ? locale === "ko"
+                    ? "모델 조회 중"
+                    : "Discovering models"
                 : locale === "ko"
                   ? "모델 목록"
                   : "Model list"}
             </strong>
-            <div>
-              {activeDiscovery ? (
-                <>
-                  <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)} type="button">
-                    {locale === "ko" ? "전체 선택" : "Select all"}
-                  </button>
-                  <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)} type="button">
-                    {locale === "ko" ? "전체 해제" : "Clear"}
-                  </button>
-                </>
-              ) : null}
-              <Button
-                disabled={
-                  pendingAction ||
-                  discoveringProvider !== null ||
-                  !isDiscoverSupportedProvider(formValues.adapterType)
-                }
-                onClick={() =>
-                  void discoverModels(formValues.previousProvider || formValues.provider, {
-                    applyToForm: true
-                  })
-                }
-                type="button"
-                variant="outline"
-              >
-                {discoveringProvider === (formValues.previousProvider || formValues.provider)
-                  ? "..."
-                  : text.discoverModels}
-              </Button>
-            </div>
+            {activeDiscovery ? (
+              <div>
+                <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, true)} type="button">
+                  {locale === "ko" ? "전체 선택" : "Select all"}
+                </button>
+                <button onClick={() => setAllDiscoveredModels(activeDiscoveryKey, false)} type="button">
+                  {locale === "ko" ? "전체 해제" : "Clear"}
+                </button>
+              </div>
+            ) : null}
         </div>
           {activeDiscovery ? (
             <>
@@ -837,6 +854,8 @@ export function ProviderConnectionManagement({
                 )}
               </div>
             </>
+          ) : activeProviderIsDiscovering ? (
+            renderProviderModelDiscoveryLoading()
           ) : (
             renderProviderModels(provider)
           )}
@@ -874,6 +893,7 @@ export function ProviderConnectionManagement({
           </Button>
           <Button
             onClick={() => {
+              setExpandedProviderId(null);
               setEditingProviderId(null);
               setFormValues(emptyProviderForm);
             }}
@@ -885,6 +905,46 @@ export function ProviderConnectionManagement({
           <Button disabled={pendingAction} onClick={() => void submitProvider()} type="button">
             {text.saveChanges}
           </Button>
+        </div>
+      </>
+    );
+  }
+
+  function renderProviderModelDiscoveryLoading() {
+    return (
+      <>
+        <div className="provider-model-selection-toolbar provider-model-selection-subtoolbar provider-card-model-discovery-note">
+          <span className="project-muted">
+            {locale === "ko"
+              ? "Provider에서 사용 가능한 chat 모델을 불러오는 중입니다."
+              : "Loading available chat models from the provider."}
+          </span>
+        </div>
+        <div className="provider-discovery-model-list provider-model-selection-table">
+          <div className="provider-model-table-wrap provider-model-selection-table-wrap">
+            <table className="provider-model-table">
+              <thead>
+                <tr>
+                  <th>{locale === "ko" ? "모델" : "Model"}</th>
+                  <th>{locale === "ko" ? "기능" : "Capabilities"}</th>
+                  <th>{locale === "ko" ? "컨텍스트" : "Context"}</th>
+                  <th>{locale === "ko" ? "추천" : "Recommended"}</th>
+                  <th>{locale === "ko" ? "출시날짜" : "Release date"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5}>
+                    <span className="project-muted">
+                      {locale === "ko"
+                        ? "모델 조회 결과를 준비 중입니다."
+                        : "Preparing model discovery results."}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </>
     );
@@ -983,7 +1043,7 @@ export function ProviderConnectionManagement({
           <AlertDescription>{model.providerPresets.loadError}</AlertDescription>
         </Alert>
       ) : null}
-      {submitState.message ? (
+      {submitState.message && !providerModal ? (
         <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
           <AlertDescription>{submitState.message}</AlertDescription>
         </Alert>
@@ -1020,7 +1080,7 @@ export function ProviderConnectionManagement({
                 <section className="provider-card" data-expanded={expanded} key={provider.id}>
                   <div
                     className="provider-card-row"
-                    onClick={() => toggleProvider(provider.id)}
+                    onClick={() => toggleProvider(provider)}
                   >
                     <div className="provider-card-identity">
                       <ProviderFamilyIcon className="provider-card-icon" family={family} />
@@ -1093,7 +1153,7 @@ export function ProviderConnectionManagement({
                         className="provider-expand-button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          toggleProvider(provider.id);
+                          toggleProvider(provider);
                         }}
                         type="button"
                       >
@@ -1104,19 +1164,6 @@ export function ProviderConnectionManagement({
                   {expanded ? (
                     <div className="provider-card-models">
                       {isEditing ? renderProviderInlineEditor(provider) : renderProviderModels(provider)}
-                      {!isEditing ? (
-                        <div className="provider-card-expanded-actions">
-                          <Button
-                            disabled={pendingAction || discoveringProvider !== null}
-                            onClick={() => openEditModal(provider)}
-                            type="button"
-                            variant="outline"
-                          >
-                            <Pencil aria-hidden="true" />
-                            {text.edit}
-                          </Button>
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </section>
@@ -1159,6 +1206,11 @@ export function ProviderConnectionManagement({
                 <X aria-hidden="true" />
               </button>
             </div>
+            {submitState.message ? (
+              <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+                <AlertDescription>{submitState.message}</AlertDescription>
+              </Alert>
+            ) : null}
             <div className="provider-form-grid provider-registration-form">
               {providerModal.mode === "create" ? (
                 <>
@@ -1282,6 +1334,10 @@ function getProviderFormValues(provider: ProviderConnectionRecord): ProviderConn
     status: provider.status,
     timeoutMs: provider.timeoutMs
   };
+}
+
+function getProviderFormDiscoveryKey(values: ProviderConnectionFormValues) {
+  return values.previousProvider?.trim() || values.provider.trim();
 }
 
 function getInitialModelOptions(providers: ProviderConnectionRecord[]) {

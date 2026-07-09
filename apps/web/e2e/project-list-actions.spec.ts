@@ -14,40 +14,29 @@ test("project cards expose sorting and action links", async ({ page }) => {
   await expect(budgetSort).toHaveAttribute("aria-pressed", "true");
 
   const projectCard = page.getByTestId("project-card").first();
-  const editLink = projectCard.getByRole("link", { exact: true, name: "Edit" });
-  const policyLink = projectCard.getByRole("link", { exact: true, name: "Edit policy" });
-  const projectDetailPattern = new RegExp(`^${escapeRegExp(projectsPath)}/[^/]+$`);
+  const editProjectLink = projectCard.getByRole("link", { exact: true, name: "Edit project" });
   const policyPattern = new RegExp(`^${escapeRegExp(projectsPath)}/[^/]+/policies$`);
 
-  await expect(editLink).toHaveAttribute("href", projectDetailPattern);
-  await expect(policyLink).toHaveAttribute("href", policyPattern);
+  await expect(projectCard.getByRole("link", { exact: true, name: "Edit" })).toHaveCount(0);
+  await expect(projectCard.getByRole("link", { exact: true, name: "Edit policy" })).toHaveCount(0);
+  await expect(editProjectLink).toHaveAttribute("href", policyPattern);
   await expect(projectCard).not.toHaveAttribute("role", "link");
   await expect(projectCard).not.toHaveAttribute("tabindex", "0");
 
-  const editHref = await editLink.getAttribute("href");
-  const policyHref = await policyLink.getAttribute("href");
+  const editProjectHref = await editProjectLink.getAttribute("href");
 
-  expect(editHref).toBeTruthy();
-  expect(policyHref).toBeTruthy();
-  expect(policyHref).not.toContain("/applications/");
+  expect(editProjectHref).toBeTruthy();
+  expect(editProjectHref).not.toContain("/applications/");
 
   await projectCard.getByRole("heading").click();
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(projectsPath)}$`));
 
-  await editLink.click();
-  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(editHref ?? "")}$`));
-
-  await page.goto(projectsPath);
-  const currentPolicyLink = page.getByTestId("project-card").first().getByRole("link", {
-    exact: true,
-    name: "Edit policy"
-  });
-  const currentPolicyHref = await currentPolicyLink.getAttribute("href");
-
-  expect(currentPolicyHref).toBeTruthy();
-
-  await currentPolicyLink.click();
+  await editProjectLink.click();
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(projectsPath)}/[^/]+/policies$`));
+  await expect(page.getByRole("tab", { exact: true, name: "General" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
 });
 
 function escapeRegExp(value: string) {

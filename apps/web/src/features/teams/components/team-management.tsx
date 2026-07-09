@@ -509,11 +509,15 @@ export function TeamCreateModal({
         </div>
         <div className="modal-form-grid">
           <label className="policy-field">
-            <span>{text.name}</span>
+            <span>
+              {text.name}
+              <span aria-hidden="true" className="required-field-marker">*</span>
+            </span>
             <input
               autoFocus
               maxLength={120}
               onChange={(event) => onChange({ name: event.target.value })}
+              required
               type="text"
               value={createValues.name}
             />
@@ -551,7 +555,15 @@ export function TeamCreateModal({
   );
 }
 
-export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentProps) {
+export function ProjectTeamAssignment(props: ProjectTeamAssignmentProps) {
+  return (
+    <main className="console-content management-line-content">
+      <ProjectTeamAssignmentSection {...props} />
+    </main>
+  );
+}
+
+export function ProjectTeamAssignmentSection({ locale, model }: ProjectTeamAssignmentProps) {
   const router = useRouter();
   const text = teamText[locale];
   const [attachedTeams, setAttachedTeams] = useState<ProjectTeamRecord[]>(model.attachedTeams);
@@ -649,7 +661,6 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
   }
 
   return (
-    <main className="console-content management-line-content">
       <section className="team-section">
         <div className="team-section-header team-section-header-with-actions">
           <div>
@@ -731,7 +742,6 @@ export function ProjectTeamAssignment({ locale, model }: ProjectTeamAssignmentPr
         </div>
       )}
       </section>
-    </main>
   );
 }
 

@@ -18,6 +18,35 @@ import {
   seedDemoData,
 } from './seed';
 
+const EXPECTED_OPENAI_SEED_MODELS = [
+  'gpt-4o-mini',
+  'gpt-4o',
+  'gpt-5.5',
+  'gpt-5.5-pro',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  'gpt-5.4-pro',
+  'gpt-5.3-codex',
+  'gpt-5.2',
+  'gpt-5.2-pro',
+  'gpt-5.2-codex',
+  'gpt-5.1',
+  'gpt-5.1-codex',
+  'gpt-5.1-codex-mini',
+  'gpt-5.1-codex-max',
+  'gpt-5',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-5-pro',
+  'gpt-4.5-preview',
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4.1-nano',
+  'gpt-3.5-turbo',
+  'chat-latest',
+];
+
 describe('Control Plane demo seed baseline', () => {
   it('builds a stable active Runtime Config for Gateway demo readiness', () => {
     const first = buildDemoRuntimeConfigDocument('provider-demo-id');
@@ -84,22 +113,17 @@ describe('Control Plane demo seed baseline', () => {
       resolver: 'environment',
       adapterConfig: { requestFormat: 'openai_chat_completions' },
     });
-    expect(openAIProvider?.models).toEqual([
-      'gpt-4o-mini',
-      'gpt-4o',
-      'gpt-5.4-mini',
-      'gpt-5.4',
-    ]);
+    expect(openAIProvider?.models).toEqual(EXPECTED_OPENAI_SEED_MODELS);
     expect(
       runtimeConfig.models
         .filter((model) => model.provider === 'openai-main')
         .map((model) => model.model),
-    ).toEqual(['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4']);
+    ).toEqual(EXPECTED_OPENAI_SEED_MODELS);
     expect(
       runtimeConfig.pricingRules
         .filter((rule) => rule.provider === 'openai-main')
         .map((rule) => rule.model),
-    ).toEqual(['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4']);
+    ).toEqual(EXPECTED_OPENAI_SEED_MODELS);
     expect(mockProvider).toMatchObject({
       providerId: DEMO_MOCK_PROVIDER_ID,
       adapterType: 'mock',
@@ -202,7 +226,7 @@ describe('Control Plane demo seed baseline', () => {
           modelsEndpointPath: '/models',
           status: ResourceStatus.ACTIVE,
           providerConfig: expect.objectContaining({
-            models: ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4'],
+            models: EXPECTED_OPENAI_SEED_MODELS,
           }),
         }),
       }),
@@ -290,7 +314,7 @@ describe('Control Plane demo seed baseline', () => {
             adapterType: 'openai_compatible',
             requestFormat: 'openai_chat_completions',
             credentialRequired: true,
-            models: ['gpt-4o-mini', 'gpt-4o', 'gpt-5.4-mini', 'gpt-5.4'],
+            models: EXPECTED_OPENAI_SEED_MODELS,
           }),
         }),
       }),

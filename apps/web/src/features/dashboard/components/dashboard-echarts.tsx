@@ -1,33 +1,27 @@
 "use client";
 
-import { BarChart, LineChart, PieChart } from "echarts/charts";
-import {
-  GridComponent,
-  LegendComponent,
-  TitleComponent,
-  TooltipComponent
-} from "echarts/components";
-import * as echarts from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatInteger, formatPercent } from "@/lib/formatting/formatters";
 
-echarts.use([
-  BarChart,
-  GridComponent,
-  LegendComponent,
-  LineChart,
-  PieChart,
-  TitleComponent,
-  TooltipComponent,
-  CanvasRenderer
-]);
-
-type EChartOption = Parameters<ReturnType<typeof echarts.init>["setOption"]>[0];
+type EChartOption = Record<string, unknown>;
+type EChartInstance = {
+  dispose: () => void;
+  resize: () => void;
+  setOption: (option: EChartOption, options?: unknown) => void;
+};
+type EChartsRuntime = {
+  init: (
+    node: HTMLDivElement,
+    theme?: string | null,
+    options?: Record<string, unknown>
+  ) => EChartInstance;
+  use: (components: unknown[]) => void;
+};
 
 const chartAxisColor = "#64748b";
 const chartBorderColor = "#d8dee6";
 const chartForegroundColor = "#111827";
+let dashboardEchartsRuntimePromise: Promise<EChartsRuntime> | null = null;
 
 export type DashboardLineSeries = {
   color: string;
@@ -384,41 +378,90 @@ function DashboardEChart({
   className: string;
   option: EChartOption;
 }) {
-  const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null);
+  const chartRef = useRef<EChartInstance | null>(null);
   const nodeRef = useRef<HTMLDivElement | null>(null);
+  const optionRef = useRef(option);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const node = nodeRef.current;
-    if (!node) {
-      return;
-    }
-
-    const chart = echarts.init(node, undefined, {
-      renderer: "canvas",
-      useDirtyRect: false
-    });
-    chartRef.current = chart;
-
-    const resizeObserver = new ResizeObserver(() => {
-      chart.resize();
-    });
-    resizeObserver.observe(node);
-
-    return () => {
-      resizeObserver.disconnect();
-      chart.dispose();
-      chartRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
+    optionRef.current = option;
     chartRef.current?.setOption(option, {
       lazyUpdate: true,
       notMerge: true
     });
   }, [option]);
 
-  return <div aria-label={ariaLabel} className={className} ref={nodeRef} role="img" />;
+  useEffect(() => {
+    let isDisposed = false;
+    let resizeObserver: ResizeObserver | null = null;
+    const node = nodeRef.current;
+    if (!node) {
+      return;
+    }
+
+    void loadDashboardEchartsRuntime().then((runtime) => {
+      if (isDisposed) {
+        return;
+      }
+
+      const chart = runtime.init(node, null, {
+        renderer: "canvas",
+        useDirtyRect: false
+      });
+      chartRef.current = chart;
+      chart.setOption(optionRef.current, {
+        lazyUpdate: true,
+        notMerge: true
+      });
+      setIsReady(true);
+
+      resizeObserver = new ResizeObserver(() => {
+        chart.resize();
+      });
+      resizeObserver.observe(node);
+    }).catch(() => undefined);
+
+    return () => {
+      isDisposed = true;
+      resizeObserver?.disconnect();
+      chartRef.current?.dispose();
+      chartRef.current = null;
+    };
+  }, []);
+
+  return (
+    <div
+      aria-label={ariaLabel}
+      className={className}
+      data-chart-state={isReady ? "ready" : "loading"}
+      ref={nodeRef}
+      role="img"
+    />
+  );
+}
+
+function loadDashboardEchartsRuntime() {
+  dashboardEchartsRuntimePromise ??= Promise.all([
+    import("echarts/core"),
+    import("echarts/charts"),
+    import("echarts/components"),
+    import("echarts/renderers")
+  ]).then(([core, charts, components, renderers]) => {
+    core.use([
+      charts.BarChart,
+      charts.LineChart,
+      charts.PieChart,
+      components.GridComponent,
+      components.LegendComponent,
+      components.TitleComponent,
+      components.TooltipComponent,
+      renderers.CanvasRenderer
+    ]);
+
+    return core as unknown as EChartsRuntime;
+  });
+
+  return dashboardEchartsRuntimePromise;
 }
 
 function compactAxisNumber(value: string | number) {

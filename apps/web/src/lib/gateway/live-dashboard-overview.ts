@@ -140,7 +140,7 @@ type LiveDashboardOverviewResponse = {
   };
 };
 
-export type LiveDashboardRange = "15m" | "1h" | "1d" | "1w";
+export type LiveDashboardRange = "5m" | "15m" | "1h" | "1d" | "1w";
 
 export type LiveDashboardOverviewFilters = {
   budgetScopeId?: string;

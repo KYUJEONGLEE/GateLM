@@ -10,9 +10,9 @@ import {
   formatLatency,
   nullableText
 } from "@/lib/formatting/formatters";
-import { StatusBadge } from "@/features/request-logs/components/request-log-table";
 import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailDismissLink } from "./request-log-detail-dismiss-link";
+import { StatusBadge } from "./request-log-status-badge";
 
 type RequestLogDetailProps = {
   locale: Locale;

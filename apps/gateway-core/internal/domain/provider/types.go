@@ -12,15 +12,16 @@ type ChatMessage struct {
 }
 
 type ChatCompletionRequest struct {
-	RequestID     string                       `json:"-"`
-	Model         string                       `json:"model"`
-	Messages      []ChatMessage                `json:"messages"`
-	Temperature   *float64                     `json:"temperature,omitempty"`
-	MaxTokens     *int                         `json:"max_tokens,omitempty"`
-	Stream        bool                         `json:"stream,omitempty"`
-	StreamOptions *ChatCompletionStreamOptions `json:"stream_options,omitempty"`
-	Metadata      json.RawMessage              `json:"metadata,omitempty"`
-	GateLM        json.RawMessage              `json:"gate_lm,omitempty"`
+	RequestID           string                       `json:"-"`
+	Model               string                       `json:"model"`
+	Messages            []ChatMessage                `json:"messages"`
+	Temperature         *float64                     `json:"temperature,omitempty"`
+	MaxTokens           *int                         `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int                         `json:"max_completion_tokens,omitempty"`
+	Stream              bool                         `json:"stream,omitempty"`
+	StreamOptions       *ChatCompletionStreamOptions `json:"stream_options,omitempty"`
+	Metadata            json.RawMessage              `json:"metadata,omitempty"`
+	GateLM              json.RawMessage              `json:"gate_lm,omitempty"`
 }
 
 type ChatCompletionStreamOptions struct {

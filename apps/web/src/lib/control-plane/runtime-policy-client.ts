@@ -8,6 +8,12 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  cachedControlPlaneRead,
+  CONTROL_PLANE_READ_CACHE_SECONDS,
+  controlPlaneReadCacheTags,
+  runtimePolicyApplicationReadCacheTag
+} from "@/lib/control-plane/read-cache";
+import {
   listApplicationProviderConnections,
   listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
@@ -488,7 +494,17 @@ function normalizeRuntimeProviderStatus(value: string): RuntimePolicyProvider["s
 export async function getRuntimePolicyConfigForApplication(
   applicationId: string
 ): Promise<RuntimePolicyConfig | null> {
-  const activeConfig = await fetchActiveRuntimeConfig(applicationId);
+  const activeConfig = await cachedControlPlaneRead(
+    ["control-plane-runtime-policy-active", applicationId],
+    () => fetchActiveRuntimeConfig(applicationId),
+    {
+      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.runtimePolicy,
+      tags: [
+        controlPlaneReadCacheTags.runtimePolicy,
+        runtimePolicyApplicationReadCacheTag(applicationId)
+      ]
+    }
+  );
 
   return activeConfig.ok ? activeConfig.data : null;
 }

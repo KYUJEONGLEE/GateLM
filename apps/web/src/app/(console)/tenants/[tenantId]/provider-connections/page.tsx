@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { ProviderConnectionManagement } from "@/features/provider-connections/components/provider-connection-management";
 import { getProviderConnectionsModel } from "@/lib/control-plane/provider-connections-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -14,14 +13,5 @@ export default async function ProviderConnectionsPage({ params }: ProviderConnec
   const locale = await getRequestLocale();
   const model = await getProviderConnectionsModel(tenantId);
 
-  return (
-    <ConsoleShell
-      activeManagementItem="provider"
-      activeSection="management"
-      locale={locale}
-      tenantId={tenantId}
-    >
-      <ProviderConnectionManagement locale={locale} model={model} />
-    </ConsoleShell>
-  );
+  return <ProviderConnectionManagement locale={locale} model={model} />;
 }

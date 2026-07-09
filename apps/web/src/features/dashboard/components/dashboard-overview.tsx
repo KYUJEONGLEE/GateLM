@@ -15,6 +15,7 @@ import {
   DashboardPieEChart
 } from "@/features/dashboard/components/dashboard-echarts";
 import { DashboardFilterForm } from "@/features/dashboard/components/dashboard-filter-form";
+import { DashboardRangePreferenceSync } from "@/features/dashboard/components/dashboard-range-preference-sync";
 import { LiveRequestsCard } from "@/features/dashboard/components/live-requests-card";
 import {
   ProviderModelUsageCard,
@@ -48,6 +49,7 @@ type DashboardOverviewProps = {
   liveRequests?: LiveRequestsPayload;
   locale: Locale;
   monthToDateOverview?: DashboardOverview;
+  monthToDateSpendValue?: ReactNode;
   overview: DashboardOverview;
   projects?: ProjectRecord[];
   rateLimitedRecords?: InvocationLogRecord[];
@@ -57,7 +59,7 @@ type DashboardOverviewProps = {
 
 type DashboardTab = "overview" | "requests" | "cache" | "routing" | "safety" | "limits";
 type DashboardVisibleTab = Exclude<DashboardTab, "overview">;
-export type DashboardRange = "15m" | "1h" | "1d" | "1w";
+export type DashboardRange = "5m" | "15m" | "1h" | "1d" | "1w";
 export type DashboardFilterState = {
   budgetScopeId: string;
   budgetScopeType: "" | "application" | "project" | "team";
@@ -67,7 +69,7 @@ export type DashboardFilterState = {
 };
 
 const dashboardTabs: DashboardVisibleTab[] = ["requests", "cache", "routing", "safety", "limits"];
-const dashboardRanges: DashboardRange[] = ["15m", "1h", "1d", "1w"];
+const dashboardRanges: DashboardRange[] = ["5m", "15m", "1h", "1d", "1w"];
 const statusOrder = ["success", "blocked", "rate_limited", "failed", "cancelled"];
 const chartColors = ["#3b82f6", "#ef4444", "#10a37f", "#f59e0b", "#8b5cf6"];
 
@@ -259,15 +261,19 @@ export function DashboardOverviewView({
   liveRequests,
   locale,
   monthToDateOverview,
+  monthToDateSpendValue,
   overview,
   projects = [],
-  recentRecords = [],
   suppressContentMotion = false
 }: DashboardOverviewProps) {
   const text = dashboardText[locale];
   const monthToDate = monthToDateOverview ?? overview;
   const successRate = ratio(overview.successfulRequests, overview.totalRequests);
-  const dataAsOf = formatDashboardDataAsOf(latestRecordTimestamp(recentRecords) ?? overview.range.to);
+  const dataAsOf = formatDashboardDataAsOf(
+    overview.dataFreshness.lastLogCreatedAt ||
+      overview.dataFreshness.generatedAt ||
+      overview.range.to
+  );
   const selectedProject = filters.projectId
     ? projects.find((project) => project.id === filters.projectId)
     : null;
@@ -298,12 +304,13 @@ export function DashboardOverviewView({
       icon: <DollarSign aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: "이번 달 누적 비용",
       tone: "orange",
-      value: formatMicroUsd(monthToDate.totalCostMicroUsd)
+      value: monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
     }
   ];
 
   return (
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
+      <DashboardRangePreferenceSync range={filters.range} />
       <DashboardAutoRefresh />
       <section className="dashboard-main-header">
         <div>
@@ -407,19 +414,6 @@ function ratio(numerator: number, denominator: number) {
   return numerator / denominator;
 }
 
-function latestRecordTimestamp(records: InvocationLogRecord[]) {
-  let latest = 0;
-
-  for (const record of records) {
-    const timestamp = Date.parse(record.createdAt);
-    if (Number.isFinite(timestamp) && timestamp > latest) {
-      latest = timestamp;
-    }
-  }
-
-  return latest > 0 ? new Date(latest).toISOString() : undefined;
-}
-
 function formatDashboardDataAsOf(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -434,6 +428,10 @@ function formatDashboardDataAsOf(value: string) {
 }
 
 function rangeLabel(range: DashboardRange) {
+  if (range === "5m") {
+    return "Last 5 minutes";
+  }
+
   if (range === "15m") {
     return "Last 15 minutes";
   }
@@ -450,6 +448,10 @@ function rangeLabel(range: DashboardRange) {
 }
 
 function kpiRangeLabel(range: DashboardRange) {
+  if (range === "5m") {
+    return "최근 5분";
+  }
+
   if (range === "15m") {
     return "최근 15분";
   }
@@ -1608,6 +1610,10 @@ function buildTrendSeries(
 }
 
 function buildTrendLabels(range: DashboardRange) {
+  if (range === "5m") {
+    return ["-5m", "-4m", "-3m", "-2m", "-1m", "now"];
+  }
+
   if (range === "15m") {
     return ["-14m", "-12m", "-10m", "-8m", "-6m", "-4m", "-2m", "now"];
   }

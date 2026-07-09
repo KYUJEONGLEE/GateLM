@@ -15,7 +15,7 @@ import type {
   LiveRequestStatusFilter
 } from "@/lib/gateway/live-requests-types";
 
-export const LIVE_REQUESTS_POLL_INTERVAL_MS = 2000;
+export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
 
 type LiveRequestsCardFilters = {
   budgetScopeId: string;
@@ -87,9 +87,10 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
   const [isLoading, setIsLoading] = useState(!initialPayload);
-  const [error, setError] = useState<string | null>(initialPayload ? null : "Failed to load live requests");
+  const [error, setError] = useState<string | null>(null);
   const [copiedRequestId, setCopiedRequestId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const skippedInitialFetchRef = useRef(false);
   const inFlightQueryRef = useRef<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
   const rowCountRef = useRef(rows.length);
@@ -176,7 +177,12 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   );
 
   useEffect(() => {
-    void loadRequests({ silent: false });
+    if (initialPayload && !skippedInitialFetchRef.current) {
+      skippedInitialFetchRef.current = true;
+    } else {
+      void loadRequests({ silent: false });
+    }
+
     const interval = window.setInterval(() => {
       void loadRequests({ silent: true });
     }, LIVE_REQUESTS_POLL_INTERVAL_MS);
@@ -186,7 +192,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
       abortRef.current?.abort();
       inFlightQueryRef.current = null;
     };
-  }, [loadRequests]);
+  }, [initialPayload, loadRequests]);
 
   useEffect(() => {
     return () => {
@@ -460,6 +466,10 @@ function appendQuery(query: URLSearchParams, key: string, value: string | undefi
 }
 
 function requestLogsCreatedRange(range: string) {
+  if (range === "5m") {
+    return "15m";
+  }
+
   if (range === "15m" || range === "1h") {
     return range;
   }

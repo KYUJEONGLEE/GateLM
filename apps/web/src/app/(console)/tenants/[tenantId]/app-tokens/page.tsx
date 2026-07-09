@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { AppTokenManagement } from "@/features/app-tokens/components/app-token-management";
 import { getAppTokensModel } from "@/lib/control-plane/app-tokens-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -15,17 +14,10 @@ export default async function AppTokensPage({ params }: AppTokensPageProps) {
   const model = await getAppTokensModel(tenantId);
 
   return (
-    <ConsoleShell
-      activeManagementItem="app-tokens"
-      activeSection="management"
+    <AppTokenManagement
+      key={`${tenantId}:${model.controlPlaneApplicationId}`}
       locale={locale}
-      tenantId={tenantId}
-    >
-      <AppTokenManagement
-        key={`${tenantId}:${model.controlPlaneApplicationId}`}
-        locale={locale}
-        model={model}
-      />
-    </ConsoleShell>
+      model={model}
+    />
   );
 }

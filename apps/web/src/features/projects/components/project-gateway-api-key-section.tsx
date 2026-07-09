@@ -93,7 +93,15 @@ const gatewayApiKeyText: Record<
   }
 };
 
-export function ProjectGatewayApiKeySection({
+export function ProjectGatewayApiKeySection(props: ProjectGatewayApiKeySectionProps) {
+  return (
+    <main className="console-content management-line-content">
+      <ProjectGatewayApiKeyPanel {...props} />
+    </main>
+  );
+}
+
+export function ProjectGatewayApiKeyPanel({
   locale,
   model
 }: ProjectGatewayApiKeySectionProps) {
@@ -193,7 +201,6 @@ export function ProjectGatewayApiKeySection({
   }
 
   return (
-    <main className="console-content management-line-content">
       <section className="team-section gateway-api-key-section">
         <div className="gateway-api-key-layout">
           <div className="gateway-api-key-heading">
@@ -269,7 +276,7 @@ export function ProjectGatewayApiKeySection({
             <div className="gateway-api-key-actions">
               {representativeKey ? (
                 <Button
-                  className="gateway-api-key-action-button"
+                  className="gateway-api-key-action-button gateway-api-key-rotate-button"
                   disabled={pendingAction !== null || actionsDisabled}
                   onClick={() => void submitRotateApiKey(representativeKey)}
                   type="button"
@@ -290,7 +297,6 @@ export function ProjectGatewayApiKeySection({
           </div>
         </div>
       </section>
-    </main>
   );
 }
 

@@ -1,16 +1,31 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type APIRequestContext, type Page, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const policyPath = "/tenants/tenant_demo_acme/policies";
+const projectsPath = "/tenants/tenant_demo_acme/projects";
+const controlPlaneBaseUrl = (
+  process.env.GATELM_CONTROL_PLANE_BASE_URL ??
+  process.env.CONTROL_PLANE_BASE_URL ??
+  "http://localhost:3001"
+).replace(/\/+$/, "");
 const policyTabs = [
   "Routing",
   "Budget",
   "Rate Limit",
   "Cache",
   "Safety",
-  "Streaming",
-  "Provider/Model"
+  "Streaming"
 ] as const;
+const projectPolicyTabs = [
+  "General",
+  "Routing",
+  "Rate Limit",
+  "Cache",
+  "Safety"
+] as const;
+const e2eBaseUrl =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 const selectableDetectorTypes = [
   "email",
   "phone_number",
@@ -39,6 +54,18 @@ test.beforeAll(async () => {
   fixtureRuntimeConfig = asRecord(fixture.runtimeConfig);
 });
 
+test.beforeEach(async ({ context, request }) => {
+  const sessionCookie = await createConsoleSessionCookie(request);
+
+  await context.addCookies([
+    {
+      name: "gatelm_session",
+      url: e2eBaseUrl,
+      value: sessionCookie
+    }
+  ]);
+});
+
 test("policy editor exposes category tabs and category panels", async ({ page }) => {
   await prepareRuntimeConfigPostRoute(page);
   await page.goto(policyPath);
@@ -49,14 +76,108 @@ test("policy editor exposes category tabs and category panels", async ({ page })
   await expect(page.getByRole("tab")).toHaveText([...policyTabs]);
 
   await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
-  await expect(page.getByText("Default route")).toBeVisible();
+  await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
 
   await page.getByRole("tab", { exact: true, name: "Safety" }).click();
   await expect(page.getByRole("tabpanel", { exact: true, name: "Safety" })).toBeVisible();
-  await expect(
-    page.getByRole("tabpanel", { exact: true, includeHidden: true, name: "Routing" })
-  ).toBeHidden();
+  await expect(page.locator("#policy-panel-routing")).toHaveCount(0);
   await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
+});
+
+test("lazy policy tab panel mounts only for active tab and shows loading fallback", async ({ page }) => {
+  await prepareRuntimeConfigPostRoute(page);
+  await delayRuntimePolicyLazyChunk(page, "safety-panel");
+  await page.goto(policyPath);
+  await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
+  await expect(page.locator("#policy-panel-routing")).toHaveCount(1);
+  await expect(page.locator("#policy-panel-safety")).toHaveCount(0);
+
+  await page.getByRole("tab", { exact: true, name: "Safety" }).click();
+  const safetyPanel = page.getByRole("tabpanel", { exact: true, name: "Safety" });
+  const loadingPanel = safetyPanel
+    .locator(".policy-panel-loading.console-panel.policy-editor-panel")
+    .first();
+
+  await expect(safetyPanel).toBeVisible();
+  await expect(safetyPanel).toHaveClass(/policy-tab-panel/);
+  await expect(page.locator("#policy-panel-routing")).toHaveCount(0);
+  await expect(loadingPanel).toBeVisible();
+  await expect(loadingPanel).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByText("Mandatory sensitive data protection: always active")).toBeVisible();
+});
+
+test("policy detail modal lazy-loads only after click and shows modal fallback", async ({
+  page
+}) => {
+  await prepareRuntimeConfigPostRoute(page);
+  const detailChunk = await delayRuntimePolicyLazyChunk(page, "runtime-policy-detail-modal");
+  const detailChunkRequests: string[] = [];
+
+  page.on("request", (request) => {
+    const url = request.url();
+
+    if (url.includes("runtime-policy-detail-modal")) {
+      detailChunkRequests.push(url);
+    }
+  });
+
+  await page.goto(policyPath);
+  await expect(page.getByRole("table", { exact: true, name: "Routing priority" })).toBeVisible();
+  expect(detailChunkRequests).toHaveLength(0);
+
+  await page.getByRole("button", { exact: true, name: "Details" }).click();
+  const modal = page.getByRole("dialog", { exact: true, name: "Policy details" });
+
+  await expect(modal).toBeVisible();
+  await expect(modal).toHaveAttribute("aria-busy", "true");
+  await expect(modal.locator(".policy-panel-loading").first()).toBeVisible();
+  await expect.poll(() => detailChunkRequests.length).toBeGreaterThan(0);
+  await expect(modal).not.toHaveAttribute("aria-busy", "true");
+  await expect(modal.getByText("lookup key")).toBeVisible();
+  expect(detailChunk.delayedCount).toBeGreaterThan(0);
+});
+
+test("project policy editor opens with project general tab before routing", async ({ page }) => {
+  await prepareRuntimeConfigPostRoute(page);
+  await page.goto(projectsPath);
+  const editProjectLink = page.getByTestId("project-card").first().getByRole("link", {
+    exact: true,
+    name: "Edit project"
+  });
+
+  await Promise.all([
+    page.waitForURL(/\/tenants\/[^/]+\/projects\/[^/]+\/policies$/),
+    editProjectLink.click()
+  ]);
+
+  for (const tabName of projectPolicyTabs) {
+    await expect(page.getByRole("tab", { exact: true, name: tabName })).toBeVisible();
+  }
+  await expect(page.getByRole("tab")).toHaveText([...projectPolicyTabs]);
+  await expect(page.getByRole("tab", { exact: true, name: "General" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+
+  const generalPanel = page.getByRole("tabpanel", { exact: true, name: "General" });
+  await expect(generalPanel).toBeVisible();
+  await expect(generalPanel.getByLabel("Name", { exact: true })).toBeVisible();
+  await expect(generalPanel.getByRole("heading", { exact: true, name: "Budget policy" })).toBeVisible();
+  await expect(generalPanel.getByRole("heading", { exact: true, name: "Project admins" })).toBeVisible();
+  await expect(generalPanel.getByRole("heading", { exact: true, name: "Project teams" })).toBeVisible();
+  await expect(generalPanel.getByRole("heading", { exact: true, name: "Gateway API Key" })).toBeVisible();
+  await expect(page.getByRole("tab", { exact: true, name: "Budget" })).toHaveCount(0);
+
+  const generalHeadings = await generalPanel.locator("h3").evaluateAll((headings) =>
+    headings.map((heading) => heading.textContent?.trim() ?? "")
+  );
+  expect(generalHeadings.indexOf("Budget policy")).toBeLessThan(
+    generalHeadings.indexOf("Project admins")
+  );
+
+  await page.getByRole("tab", { exact: true, name: "Routing" }).click();
+  await expect(page.getByRole("tabpanel", { exact: true, name: "Routing" })).toBeVisible();
+  await expect(page.locator("#policy-panel-general")).toHaveCount(0);
 });
 
 test("safety detectors expose five editable categories and gray locked mandatory protection", async ({
@@ -179,11 +300,92 @@ test("policy tabs scroll inside the control on narrow screens", async ({ page })
   expect(layout.tabScrollWidth).toBeGreaterThan(layout.tabClientWidth);
 });
 
+async function createConsoleSessionCookie(request: APIRequestContext) {
+  const email = `policy-e2e-${randomUUID()}@example.invalid`;
+  const password = "correct-horse-battery-staple";
+  const signupResponse = await request.post(`${controlPlaneBaseUrl}/api/auth/signup`, {
+    data: {
+      email,
+      name: "Policy E2E",
+      password
+    }
+  });
+
+  expect(signupResponse.ok()).toBeTruthy();
+
+  const organizationResponse = await request.post(
+    `${controlPlaneBaseUrl}/api/auth/organizations`,
+    {
+      data: {
+        organizationName: `Policy E2E ${randomUUID().slice(0, 8)}`
+      }
+    }
+  );
+
+  expect(organizationResponse.ok()).toBeTruthy();
+
+  const organizationPayload = asRecord(await organizationResponse.json());
+  const tenant = asRecord(asRecord(organizationPayload.data).tenant);
+  const tenantId = getString(tenant, "id", "");
+  expect(tenantId).not.toBe("");
+
+  const projectResponse = await request.post(
+    `${controlPlaneBaseUrl}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects`,
+    {
+      data: {
+        description: "Project used by runtime policy editor E2E.",
+        name: `Policy E2E Project ${randomUUID().slice(0, 8)}`,
+        status: "ACTIVE",
+        totalBudgetUsd: 100
+      }
+    }
+  );
+
+  expect(projectResponse.ok()).toBeTruthy();
+
+  const sessionCookie = getSetCookieValue(organizationResponse.headersArray(), "gatelm_session");
+  if (!sessionCookie) {
+    throw new Error("Control plane did not issue a gatelm_session cookie.");
+  }
+
+  return sessionCookie;
+}
+
+function getSetCookieValue(headers: { name: string; value: string }[], cookieName: string) {
+  for (const header of headers) {
+    if (header.name.toLowerCase() !== "set-cookie") {
+      continue;
+    }
+
+    const [nameValue] = header.value.split(";");
+    const separatorIndex = nameValue.indexOf("=");
+    const name = separatorIndex >= 0 ? nameValue.slice(0, separatorIndex) : "";
+    const value = separatorIndex >= 0 ? nameValue.slice(separatorIndex + 1) : "";
+
+    if (name === cookieName) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 async function prepareRuntimeConfigPostRoute(
   page: Page,
   createResponse: (payload: JsonRecord) => JsonRecord = createRuntimeConfigResponse
 ) {
   const runtimeConfigPosts: JsonRecord[] = [];
+
+  await page.route("**/api/control-plane/application-providers", async (route) => {
+    await route.fulfill({
+      body: JSON.stringify({
+        providerConnections: [],
+        status: 200
+      }),
+      contentType: "application/json",
+      status: 200
+    });
+  });
 
   await page.route("**/api/control-plane/runtime-config", async (route) => {
     const payload = asRecord(JSON.parse(route.request().postData() ?? "{}"));
@@ -200,6 +402,28 @@ async function prepareRuntimeConfigPostRoute(
   });
 
   return runtimeConfigPosts;
+}
+
+async function delayRuntimePolicyLazyChunk(page: Page, fileFragment: string) {
+  const tracker = { delayedCount: 0 };
+
+  await page.route("**/*", async (route) => {
+    const url = route.request().url();
+    const shouldDelay =
+      tracker.delayedCount === 0 &&
+      url.includes("/_next/static/") &&
+      url.includes(".js") &&
+      url.includes(fileFragment);
+
+    if (shouldDelay) {
+      tracker.delayedCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+
+    await route.fallback();
+  });
+
+  return tracker;
 }
 
 function createRuntimeConfigResponse(payload: JsonRecord) {

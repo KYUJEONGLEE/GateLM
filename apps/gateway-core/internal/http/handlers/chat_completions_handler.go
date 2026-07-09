@@ -3185,13 +3185,83 @@ func modelPricingAliases(value string) []string {
 	if value == "" {
 		return nil
 	}
+	aliases := make([]string, 0, 2)
+	modelName := value
 	if index := strings.LastIndex(value, ":"); index >= 0 && index+1 < len(value) {
 		alias := strings.TrimSpace(value[index+1:])
 		if alias != "" && alias != value {
-			return []string{alias}
+			aliases = append(aliases, alias)
+			modelName = alias
 		}
 	}
+	return append(aliases, openAITextModelPricingAliases(modelName)...)
+}
+
+func openAITextModelPricingAliases(modelName string) []string {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return nil
+	}
+	if strings.HasPrefix(modelName, "gpt-") && strings.HasSuffix(modelName, "-chat-latest") {
+		return []string{"chat-latest"}
+	}
+	for _, canonical := range []string{
+		"gpt-5.5-pro",
+		"gpt-5.5",
+		"gpt-5.4-mini",
+		"gpt-5.4-nano",
+		"gpt-5.4-pro",
+		"gpt-5.4",
+		"gpt-5.2-pro",
+		"gpt-5.2",
+		"gpt-5.1-codex-mini",
+		"gpt-5.1-codex-max",
+		"gpt-5.1-codex",
+		"gpt-5.1",
+		"gpt-5-mini",
+		"gpt-5-nano",
+		"gpt-5-pro",
+		"gpt-5",
+		"gpt-4.1-mini",
+		"gpt-4.1-nano",
+		"gpt-4.1",
+		"gpt-4o-mini",
+		"gpt-4o",
+	} {
+		if isDatedOpenAIModelAlias(modelName, canonical) {
+			return []string{canonical}
+		}
+	}
+	if strings.HasPrefix(modelName, "gpt-3.5-turbo-instruct") {
+		return nil
+	}
+	if strings.HasPrefix(modelName, "gpt-3.5-turbo-") {
+		return []string{"gpt-3.5-turbo"}
+	}
 	return nil
+}
+
+func isDatedOpenAIModelAlias(modelName string, canonical string) bool {
+	prefix := canonical + "-"
+	if !strings.HasPrefix(modelName, prefix) {
+		return false
+	}
+	suffix := strings.TrimPrefix(modelName, prefix)
+	if len(suffix) != len("2006-01-02") {
+		return false
+	}
+	for index, char := range suffix {
+		if index == 4 || index == 7 {
+			if char != '-' {
+				return false
+			}
+			continue
+		}
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func looksLikeUUID(value string) bool {
@@ -3308,11 +3378,13 @@ func buildDomainOutcomesFromRequestContext(reqCtx *pipeline.RequestContext) invo
 
 func requestParamsHash(chatReq provider.ChatCompletionRequest) string {
 	payload, _ := json.Marshal(struct {
-		Temperature *float64 `json:"temperature,omitempty"`
-		MaxTokens   *int     `json:"max_tokens,omitempty"`
+		Temperature         *float64 `json:"temperature,omitempty"`
+		MaxTokens           *int     `json:"max_tokens,omitempty"`
+		MaxCompletionTokens *int     `json:"max_completion_tokens,omitempty"`
 	}{
-		Temperature: chatReq.Temperature,
-		MaxTokens:   chatReq.MaxTokens,
+		Temperature:         chatReq.Temperature,
+		MaxTokens:           chatReq.MaxTokens,
+		MaxCompletionTokens: chatReq.MaxCompletionTokens,
 	})
 	sum := sha256.Sum256(payload)
 	return "sha256:" + hex.EncodeToString(sum[:])

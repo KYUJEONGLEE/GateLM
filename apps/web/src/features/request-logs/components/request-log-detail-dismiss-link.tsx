@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import type { MouseEvent, ReactNode } from "react";
+import { REQUEST_LOG_DETAIL_CLOSE_EVENT } from "./request-log-detail-anchor";
 
 type RequestLogDetailDismissLinkProps = {
   ariaLabel: string;
@@ -21,7 +22,6 @@ export function RequestLogDetailDismissLink({
   href
 }: RequestLogDetailDismissLinkProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const closeHref = getCurrentCloseHref(pathname, searchParams, href);
 
@@ -40,7 +40,10 @@ export function RequestLogDetailDismissLink({
     document.documentElement.dataset.requestLogDetailClosing = "true";
 
     window.setTimeout(() => {
-      router.push(closeHref, { scroll: false });
+      const targetHref = getCurrentCloseHrefFromLocation(closeHref);
+      window.history.pushState(null, "", targetHref);
+      window.dispatchEvent(new CustomEvent(REQUEST_LOG_DETAIL_CLOSE_EVENT));
+      delete document.documentElement.dataset.requestLogDetailClosing;
     }, CLOSE_ANIMATION_MS);
   }
 
@@ -65,4 +68,16 @@ function getCurrentCloseHref(
   const queryString = nextSearchParams.toString();
 
   return queryString ? `${pathname}?${queryString}` : pathname;
+}
+
+function getCurrentCloseHrefFromLocation(fallbackHref: string) {
+  const currentUrl = new URL(window.location.href);
+  if (!currentUrl.searchParams.has("requestId")) {
+    return fallbackHref;
+  }
+
+  currentUrl.searchParams.delete("requestId");
+  const queryString = currentUrl.searchParams.toString();
+
+  return queryString ? `${currentUrl.pathname}?${queryString}` : currentUrl.pathname;
 }

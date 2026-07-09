@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentConsoleAuth, type CurrentConsoleAuth } from "@/lib/auth/current-console-auth";
+import { getCurrentConsoleAuthForCookieHeader, type CurrentConsoleAuth } from "@/lib/auth/current-console-auth";
 import { getControlPlaneBaseUrl } from "@/lib/control-plane/control-plane-config";
 import {
   inviteProjectAdmin,
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const cookieHeader = request.headers.get("cookie");
-  const auth = await getCurrentConsoleAuth(cookieHeader);
+  const auth = await getCurrentConsoleAuthForCookieHeader(cookieHeader);
   const authFailure = await authorizeTenantAdminForProject(auth, values.projectId, cookieHeader);
 
   if (authFailure) {

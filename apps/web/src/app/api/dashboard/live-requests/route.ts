@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getCurrentConsoleAuth,
+  getCurrentConsoleAuthForCookieHeader,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   const requestedProjectId = optionalQueryValue(query, "projectId");
   const [auth, projectsModel] = await Promise.all([
-    getCurrentConsoleAuth(request.headers.get("cookie")),
+    getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie")),
     getProjectsModel(tenantId)
   ]);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
@@ -32,15 +32,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Project access denied" }, { status: 403 });
   }
 
-  const payload = await getLiveOverviewRequests(tenantId, {
-    budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
-    budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
-    model: optionalQueryValue(query, "model"),
-    projectId: effectiveProjectId ?? requestedProjectId,
-    range: normalizeRange(query.get("range")),
-    resolvedBy: optionalQueryValue(query, "resolvedBy"),
-    status: normalizeStatus(query.get("status"))
-  });
+  const projects = projectsModel.projects;
+  const payload = await getLiveOverviewRequests(
+    tenantId,
+    {
+      budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
+      budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
+      model: optionalQueryValue(query, "model"),
+      projectId: effectiveProjectId ?? requestedProjectId,
+      range: normalizeRange(query.get("range")),
+      resolvedBy: optionalQueryValue(query, "resolvedBy"),
+      status: normalizeStatus(query.get("status"))
+    },
+    {
+      projectIds: projects.map((project) => project.id).filter(Boolean),
+      projectNameSource: projectsModel.source,
+      projects
+    }
+  );
 
   if (!payload) {
     return NextResponse.json({ error: "Failed to load live requests" }, { status: 502 });
@@ -55,7 +64,7 @@ function optionalQueryValue(query: URLSearchParams, key: string) {
 }
 
 function normalizeRange(value: string | null): LiveDashboardRange {
-  if (value === "1h" || value === "1d" || value === "1w") {
+  if (value === "5m" || value === "15m" || value === "1h" || value === "1d" || value === "1w") {
     return value;
   }
 

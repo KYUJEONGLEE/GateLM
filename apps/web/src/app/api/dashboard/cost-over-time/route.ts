@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getCurrentConsoleAuth,
+  getCurrentConsoleAuthForCookieHeader,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   const requestedProjectId = optionalQueryValue(query, "projectId");
   const [auth, projectsModel] = await Promise.all([
-    getCurrentConsoleAuth(request.headers.get("cookie")),
+    getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie")),
     getProjectsModel(tenantId)
   ]);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
@@ -58,7 +58,7 @@ function optionalQueryValue(query: URLSearchParams, key: string) {
 }
 
 function normalizeRange(value: string | null): LiveDashboardRange {
-  if (value === "1h" || value === "1d" || value === "1w") {
+  if (value === "5m" || value === "15m" || value === "1h" || value === "1d" || value === "1w") {
     return value;
   }
 

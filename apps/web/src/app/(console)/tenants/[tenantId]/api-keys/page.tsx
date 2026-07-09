@@ -1,4 +1,3 @@
-import { ConsoleShell } from "@/components/layout/console-shell";
 import { ApiKeyManagement } from "@/features/api-keys/components/api-key-management";
 import { getApiKeysModel } from "@/lib/control-plane/api-keys-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
@@ -15,17 +14,10 @@ export default async function ApiKeysPage({ params }: ApiKeysPageProps) {
   const model = await getApiKeysModel(tenantId);
 
   return (
-    <ConsoleShell
-      activeManagementItem="api-keys"
-      activeSection="management"
+    <ApiKeyManagement
+      key={`${tenantId}:${model.controlPlaneProjectId}`}
       locale={locale}
-      tenantId={tenantId}
-    >
-      <ApiKeyManagement
-        key={`${tenantId}:${model.controlPlaneProjectId}`}
-        locale={locale}
-        model={model}
-      />
-    </ConsoleShell>
+      model={model}
+    />
   );
 }

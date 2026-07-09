@@ -173,6 +173,11 @@ type RequestLogListItem struct {
 	CreatedAt        time.Time
 }
 
+type RequestLogFilterOptions struct {
+	Models       []string
+	BudgetScopes []budget.Scope
+}
+
 type RequestDetail struct {
 	RequestID       string
 	TraceID         string
@@ -715,6 +720,14 @@ func TimeSeriesBucketConfigForRange(from time.Time, to time.Time) TimeSeriesBuck
 	duration := to.Sub(from)
 	const tolerance = time.Second
 
+	if duration <= 5*time.Minute+tolerance {
+		return TimeSeriesBucketConfig{
+			Interval:            7 * time.Second,
+			IntervalLabel:       "7s",
+			ExpectedBucketCount: 43,
+			Unit:                "7second",
+		}
+	}
 	if duration <= 15*time.Minute+tolerance {
 		return TimeSeriesBucketConfig{
 			Interval:            time.Minute,
@@ -750,6 +763,12 @@ func TimeSeriesBucketConfigForRange(from time.Time, to time.Time) TimeSeriesBuck
 func AlignTimeSeriesBucketStart(value time.Time, config TimeSeriesBucketConfig) time.Time {
 	utc := value.UTC()
 	switch config.Unit {
+	case "7second":
+		interval := int64(config.Interval)
+		if interval <= 0 {
+			return utc
+		}
+		return time.Unix(0, (utc.UnixNano()/interval)*interval).UTC()
 	case "minute":
 		return utc.Truncate(time.Minute)
 	case "5minute":

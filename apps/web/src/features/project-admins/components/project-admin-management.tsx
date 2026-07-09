@@ -104,7 +104,15 @@ const projectAdminText: Record<
   }
 };
 
-export function ProjectAdminManagement({ locale, model }: ProjectAdminManagementProps) {
+export function ProjectAdminManagement(props: ProjectAdminManagementProps) {
+  return (
+    <main className="console-content management-line-content project-admin-content">
+      <ProjectAdminSection {...props} />
+    </main>
+  );
+}
+
+export function ProjectAdminSection({ locale, model }: ProjectAdminManagementProps) {
   const router = useRouter();
   const text = projectAdminText[locale];
   const [projectAdmins, setProjectAdmins] = useState<ProjectAdminRecord[]>(model.projectAdmins);
@@ -264,7 +272,6 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
   }
 
   return (
-    <main className="console-content management-line-content project-admin-content">
       <section className="project-admin-section">
         <div className="project-admin-heading-row">
           <h3>{text.title}</h3>
@@ -404,7 +411,6 @@ export function ProjectAdminManagement({ locale, model }: ProjectAdminManagement
             : projectAdmins.length + " project admins manage this project."}
         </p>
       </section>
-    </main>
   );
 }
 

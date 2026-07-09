@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { ConsoleShell } from "@/components/layout/console-shell";
 import {
   getCurrentConsoleAuth,
   getProjectAdminProjectIdsForTenant,
@@ -8,7 +7,7 @@ import {
   resolveConsoleTenantIdForAuth,
   resolveProjectIdForConsoleAuth
 } from "@/lib/auth/current-console-auth";
-import { RequestLogDetailAside } from "@/features/request-logs/components/request-log-detail";
+import { RequestLogDetailClient } from "@/features/request-logs/components/request-log-detail-client";
 import {
   type RequestLogCreatedFilter,
   type RequestLogBudgetScopeOption,
@@ -19,9 +18,9 @@ import {
 } from "@/features/request-logs/components/request-log-table";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
 import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
-import { getLiveGatewayRequestDetail } from "@/lib/gateway/live-request-detail";
 import {
-  getLiveGatewayRequestLogs,
+  getLiveGatewayRequestLogsWithMeta,
+  type LiveGatewayRequestLogFilterOptions,
   type LiveGatewayRequestLogFilters
 } from "@/lib/gateway/live-request-logs";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
@@ -64,6 +63,7 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const projectsModel = await getProjectsModel(effectiveTenantId);
   const projectScoped = isProjectScopedForTenant(auth, effectiveTenantId);
   const allowedProjectIds = projectScoped ? getProjectAdminProjectIdsForTenant(auth, effectiveTenantId) : undefined;
+  const scopedProjectIds = allowedProjectIds ?? projectsModel.projects.map((project) => project.id).filter(Boolean);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,
@@ -82,76 +82,51 @@ export default async function RequestLogsPage({ params, searchParams }: RequestL
   const scopedLogFilters: LiveGatewayRequestLogFilters = {
     ...logFilters,
     projectId: effectiveProjectId ?? logFilters.projectId,
-    projectIds: allowedProjectIds
+    projectIds: scopedProjectIds
   };
   const visibleProjects = getVisibleProjectsForConsoleAuth(projectsModel.projects, auth, effectiveTenantId)
     .filter((project) => project.status !== "ARCHIVED");
-  const shouldLoadUnfilteredOptions = hasNarrowingFilters(scopedFilters);
-  const optionRecordsPromise = shouldLoadUnfilteredOptions
-    ? getLiveGatewayRequestLogs({
-        from: scopedLogFilters.from,
-        limit: 100,
-        projectId: scopedLogFilters.projectId,
-        projectIds: allowedProjectIds,
-        tenantId: effectiveTenantId,
-        to: scopedLogFilters.to
-      })
-    : Promise.resolve(undefined);
-  const [records, optionRecords] = await Promise.all([
-    getLiveGatewayRequestLogs({ ...scopedLogFilters, tenantId: effectiveTenantId }),
-    optionRecordsPromise
-  ]);
+  const logsResult = await getLiveGatewayRequestLogsWithMeta({
+    ...scopedLogFilters,
+    tenantId: effectiveTenantId
+  });
+  const records = logsResult?.records;
   const latestSelectedRecord = shouldSelectLatestProjectRequest ? (records ?? [])[0] : undefined;
   const selectedRequestId = explicitSelectedRequestId || latestSelectedRecord?.requestId;
   const selectedRecord = selectedRequestId
     ? (records ?? []).find((record) => record.requestId === selectedRequestId) ?? latestSelectedRecord
     : undefined;
-  const canLoadSelectedDetail = Boolean(selectedRequestId && (!projectScoped || selectedRecord));
-  const selectedDetail = selectedRequestId && canLoadSelectedDetail
-      ? await getLiveGatewayRequestDetail(selectedRequestId, {
-        projectId: selectedRecord?.projectId ?? scopedLogFilters.projectId,
-        tenantId: effectiveTenantId
-      })
-    : null;
-  const scopedSelectedDetail =
-    selectedDetail ?? (records ?? []).find((record) => record.requestId === selectedRequestId);
-  const optionRecordsForFilters = optionRecords ?? records ?? [];
-  const modelOptions = getModelOptions(optionRecordsForFilters, scopedFilters.model);
-  const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, scopedFilters);
+  const optionRecordsForFilters = records ?? [];
+  const modelOptions = getModelOptions(optionRecordsForFilters, scopedFilters.model, logsResult?.filterOptions);
+  const budgetScopeOptions = getBudgetScopeOptions(optionRecordsForFilters, scopedFilters, logsResult?.filterOptions);
   const displayRecords = (records ?? []).map(toDisplayModelRecord);
-  const displaySelectedDetail = scopedSelectedDetail ? toDisplayModelRecord(scopedSelectedDetail) : undefined;
+  const fallbackSelectedRecord = selectedRecord ? toDisplayModelRecord(selectedRecord) : undefined;
 
   return (
-    <ConsoleShell
-      activeMonitoringItem="live-logs"
-      activeSection="monitoring"
+    <RequestLogTable
+      detailPanel={
+        <RequestLogDetailClient
+          initialProjectId={selectedRecord?.projectId ?? scopedLogFilters.projectId}
+          initialRecord={fallbackSelectedRecord}
+          initialRequestId={selectedRequestId || undefined}
+          locale={locale}
+          records={displayRecords}
+          tenantId={effectiveTenantId}
+          timezone={DEFAULT_DISPLAY_TIMEZONE}
+        />
+      }
+      allowAllProjects={!projectScoped}
+      filters={scopedFilters}
       locale={locale}
+      budgetScopeOptions={budgetScopeOptions}
+      modelOptions={modelOptions}
+      projects={visibleProjects}
+      records={displayRecords}
+      selectedRequestId={selectedRequestId || undefined}
+      sourceState={records ? "ready" : "unavailable"}
       tenantId={effectiveTenantId}
-    >
-      <RequestLogTable
-        detailPanel={
-          displaySelectedDetail ? (
-            <RequestLogDetailAside
-              locale={locale}
-              record={displaySelectedDetail}
-              tenantId={effectiveTenantId}
-              timezone={DEFAULT_DISPLAY_TIMEZONE}
-            />
-          ) : undefined
-        }
-        allowAllProjects={!projectScoped}
-        filters={scopedFilters}
-        locale={locale}
-        budgetScopeOptions={budgetScopeOptions}
-        modelOptions={modelOptions}
-        projects={visibleProjects}
-        records={displayRecords}
-        selectedRequestId={displaySelectedDetail?.requestId}
-        sourceState={records ? "ready" : "unavailable"}
-        tenantId={effectiveTenantId}
-        timezone={DEFAULT_DISPLAY_TIMEZONE}
-      />
-    </ConsoleShell>
+      timezone={DEFAULT_DISPLAY_TIMEZONE}
+    />
   );
 }
 
@@ -264,21 +239,6 @@ function normalizeModelFilter(value: string | undefined) {
   return normalized ? formatModelDisplayName(normalized, "") : "";
 }
 
-function hasNarrowingFilters(filters: RequestLogFilterState) {
-  return Boolean(
-    filters.applicationId ||
-      filters.budgetScopeId ||
-      filters.budgetScopeType ||
-      filters.cacheStatus ||
-      filters.model ||
-      filters.projectId ||
-      filters.provider ||
-      filters.requestId ||
-      filters.resolvedBy ||
-      filters.status
-  );
-}
-
 function createdRange(created: RequestLogCreatedFilter) {
   const durationMs: Record<RequestLogCreatedFilter, number> = {
     "15m": 15 * 60 * 1000,
@@ -295,42 +255,67 @@ function createdRange(created: RequestLogCreatedFilter) {
   };
 }
 
-function getModelOptions(records: InvocationLogRecord[], selectedModel: string) {
+function getModelOptions(
+  records: InvocationLogRecord[],
+  selectedModel: string,
+  filterOptions: LiveGatewayRequestLogFilterOptions | undefined
+) {
   const options = new Set<string>();
 
   if (selectedModel) {
     options.add(formatModelDisplayName(selectedModel, ""));
   }
 
-  records.forEach((record) => {
-    const model = record.selectedModel ?? record.requestedModel;
-    if (model) {
-      options.add(formatModelDisplayName(model, ""));
-    }
-  });
+  if (filterOptions?.models.length) {
+    filterOptions.models.forEach((model) => options.add(formatModelDisplayName(model, "")));
+  } else {
+    records.forEach((record) => {
+      const model = record.selectedModel ?? record.requestedModel;
+      if (model) {
+        options.add(formatModelDisplayName(model, ""));
+      }
+    });
+  }
 
   return Array.from(options).sort((first, second) => first.localeCompare(second));
 }
 
 function getBudgetScopeOptions(
   records: InvocationLogRecord[],
-  filters: RequestLogFilterState
+  filters: RequestLogFilterState,
+  filterOptions: LiveGatewayRequestLogFilterOptions | undefined
 ): RequestLogBudgetScopeOption[] {
   const options = new Map<string, RequestLogBudgetScopeOption>();
 
-  records.forEach((record) => {
-    const scopeType = normalizeBudgetScopeTypeFilter(record.budgetScope.budgetScopeType);
-    const scopeId = record.budgetScope.budgetScopeId;
+  if (filterOptions?.budgetScopes.length) {
+    filterOptions.budgetScopes.forEach((scope) => {
+      const scopeType = normalizeBudgetScopeTypeFilter(scope.budgetScopeType);
+      const scopeId = scope.budgetScopeId;
 
-    if (!scopeType || !scopeId) {
-      return;
-    }
+      if (!scopeType || !scopeId) {
+        return;
+      }
 
-    options.set(`${scopeType}:${scopeId}`, {
-      budgetScopeId: scopeId,
-      budgetScopeType: scopeType
+      options.set(`${scopeType}:${scopeId}`, {
+        budgetScopeId: scopeId,
+        budgetScopeType: scopeType
+      });
     });
-  });
+  } else {
+    records.forEach((record) => {
+      const scopeType = normalizeBudgetScopeTypeFilter(record.budgetScope.budgetScopeType);
+      const scopeId = record.budgetScope.budgetScopeId;
+
+      if (!scopeType || !scopeId) {
+        return;
+      }
+
+      options.set(`${scopeType}:${scopeId}`, {
+        budgetScopeId: scopeId,
+        budgetScopeType: scopeType
+      });
+    });
+  }
 
   if (filters.budgetScopeId && filters.budgetScopeType) {
     options.set(`${filters.budgetScopeType}:${filters.budgetScopeId}`, {

@@ -24,21 +24,31 @@ export type LiveOverviewRequestsFilters = {
   status?: LiveRequestStatusFilter;
 };
 
+export type LiveOverviewRequestsOptions = {
+  projectIds?: string[];
+  projectNameSource?: LiveRequestsPayload["projectNameSource"];
+  projects?: ProjectRecord[];
+};
+
 const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
 const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
 
 export async function getLiveOverviewRequests(
   tenantId: string,
-  filters: LiveOverviewRequestsFilters = {}
+  filters: LiveOverviewRequestsFilters = {},
+  options: LiveOverviewRequestsOptions = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const liveRange = getDashboardLiveRange(filters.range);
-  const projectsModel = await getProjectsModel(tenantId);
+  const projectsModel = options.projects ? undefined : await getProjectsModel(tenantId);
+  const projects = options.projects ?? projectsModel?.projects ?? [];
+  const projectIds = options.projectIds ?? projects.map((project) => project.id).filter(Boolean);
   const records = await getLiveGatewayRequestLogs({
     budgetScopeId: filters.budgetScopeId,
     budgetScopeType: filters.budgetScopeType,
     from: liveRange.from,
     limit: filters.model ? LIVE_REQUESTS_FILTER_FETCH_LIMIT : LIVE_REQUESTS_DISPLAY_LIMIT,
     projectId: filters.projectId,
+    projectIds,
     resolvedBy: filters.resolvedBy,
     status: filters.status || undefined,
     tenantId,
@@ -49,7 +59,7 @@ export async function getLiveOverviewRequests(
     return undefined;
   }
 
-  const projectNames = buildProjectNameMap(projectsModel.projects);
+  const projectNames = buildProjectNameMap(projects);
   const allRows = records.map((record) => toLiveRequestRow(record, projectNames));
   const modelFilter = normalizeModelFilter(filters.model);
   const rows = allRows
@@ -60,7 +70,7 @@ export async function getLiveOverviewRequests(
   return {
     generatedAt: new Date().toISOString(),
     modelOptions,
-    projectNameSource: projectsModel.source,
+    projectNameSource: options.projectNameSource ?? projectsModel?.source ?? "control-plane",
     rows
   };
 }
