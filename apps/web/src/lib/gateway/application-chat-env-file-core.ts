@@ -96,7 +96,8 @@ function resolveApplicationChatEnvFilePath(options: EnvFileOptions) {
     return path.resolve(override);
   }
 
-  let currentDir = options.cwd ?? process.cwd();
+  const baseDir = options.cwd ?? process.cwd();
+  let currentDir = baseDir;
 
   for (let depth = 0; depth < 6; depth += 1) {
     if (existsSync(path.join(currentDir, "docs", "v2.0.0", "contracts.md"))) {
@@ -112,7 +113,7 @@ function resolveApplicationChatEnvFilePath(options: EnvFileOptions) {
     currentDir = parentDir;
   }
 
-  return path.resolve(process.cwd(), "..", "..", ".env");
+  return path.resolve(baseDir, "..", "..", ".env");
 }
 
 async function readTextFileIfExists(filePath: string) {
