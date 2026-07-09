@@ -934,7 +934,7 @@ func normalizePromptCaptureFields(fields PromptCaptureFields) PromptCaptureField
 func normalizeResponseCaptureFields(fields ResponseCaptureFields) ResponseCaptureFields {
 	fields.Mode = strings.TrimSpace(fields.Mode)
 	fields.Visibility = strings.TrimSpace(fields.Visibility)
-	fields.CapturedResponse = strings.TrimSpace(fields.CapturedResponse)
+	fields.CapturedResponse = ""
 	if fields.MaxChars <= 0 {
 		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
 	}

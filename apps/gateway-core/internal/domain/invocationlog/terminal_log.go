@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"strings"
 	"time"
 
@@ -217,6 +218,19 @@ type TerminalLogInput struct {
 const PromptCaptureVisibilityAdminRequestDetail = "admin_request_detail"
 
 const ResponseCaptureVisibilityAdminRequestDetail = "admin_request_detail"
+
+const responseCaptureMaxRunesLimit = 20000
+const responseCaptureSanitizerLookaheadRunes = 512
+
+var (
+	responseCaptureAuthorizationPattern = regexp.MustCompile(`(?i)\bauthorization\s*[:=]\s*bearer\s+[^\s"',}]+`)
+	responseCaptureBearerPattern        = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}`)
+	responseCaptureSecretFieldPattern   = regexp.MustCompile(`(?i)\b(api[_-]?key|app[_-]?token|provider[_-]?(api[_-]?)?key|provider[_-]?secret|secret|token)\b\s*[:=]\s*["']?[^"',\s}]+`)
+	responseCaptureSecretTokenPattern   = regexp.MustCompile(`(?i)\b(sk|pk|rk|ak|key|token|secret)-[A-Za-z0-9_-]{8,}\b`)
+	responseCaptureJWTPattern           = regexp.MustCompile(`\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b`)
+	responseCaptureEmailPattern         = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
+	responseCapturePhonePattern         = regexp.MustCompile(`\+?\d[\d ().-]{7,}\d`)
+)
 
 type PromptCaptureFields struct {
 	Enabled        bool   `json:"enabled"`
@@ -534,16 +548,48 @@ func BuildResponseCaptureFields(policy runtimeconfig.ResponseCapturePolicy, rawR
 	if rawResponse == "" {
 		return ResponseCaptureFields{}, false
 	}
+	maxChars := policy.MaxChars
+	if maxChars <= 0 {
+		maxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
+	}
+	if maxChars > responseCaptureMaxRunesLimit {
+		maxChars = responseCaptureMaxRunesLimit
+	}
 
-	truncatedResponse, truncated := truncateRunes(rawResponse, policy.MaxChars)
+	storagePreview, rawTruncated := truncateRunes(rawResponse, maxChars)
+	sanitizerInput := storagePreview
+	if rawTruncated {
+		sanitizerInput, _ = truncateRunes(rawResponse, maxChars+responseCaptureSanitizerLookaheadRunes)
+	}
+	sanitizedResponse := sanitizeCapturedResponseForLog(sanitizerInput)
+	if sanitizedResponse == "" {
+		return ResponseCaptureFields{}, false
+	}
+
+	truncatedResponse, sanitizedTruncated := truncateRunes(sanitizedResponse, maxChars)
 	return ResponseCaptureFields{
 		Enabled:          true,
 		Mode:             policy.Mode,
 		Visibility:       ResponseCaptureVisibilityAdminRequestDetail,
 		CapturedResponse: truncatedResponse,
-		Truncated:        truncated,
-		MaxChars:         policy.MaxChars,
+		Truncated:        rawTruncated || sanitizedTruncated,
+		MaxChars:         maxChars,
 	}, true
+}
+
+func sanitizeCapturedResponseForLog(rawResponse string) string {
+	sanitized := strings.TrimSpace(rawResponse)
+	if sanitized == "" {
+		return ""
+	}
+	sanitized = responseCaptureAuthorizationPattern.ReplaceAllString(sanitized, "Authorization: [REDACTED]")
+	sanitized = responseCaptureBearerPattern.ReplaceAllString(sanitized, "Bearer [REDACTED]")
+	sanitized = responseCaptureSecretFieldPattern.ReplaceAllString(sanitized, "[SECRET_REDACTED]")
+	sanitized = responseCaptureSecretTokenPattern.ReplaceAllString(sanitized, "[SECRET_REDACTED]")
+	sanitized = responseCaptureJWTPattern.ReplaceAllString(sanitized, "[SECRET_REDACTED]")
+	sanitized = responseCaptureEmailPattern.ReplaceAllString(sanitized, "[EMAIL_REDACTED]")
+	sanitized = responseCapturePhonePattern.ReplaceAllString(sanitized, "[PHONE_REDACTED]")
+	return strings.TrimSpace(sanitized)
 }
 
 func logHash(parts ...string) string {

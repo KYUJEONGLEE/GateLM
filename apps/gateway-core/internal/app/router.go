@@ -306,6 +306,7 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		TerminalLogWriter:                    terminalLogWriter,
 		CostCalculator:                       routerOptions.CostCalculator,
 		MaskingEngine:                        maskingEngine,
+		RawResponseCaptureEnabled:            cfg.RawResponseCaptureEnabled,
 		MetricsRegistry:                      metricsRegistry,
 		ExactCacheStore:                      routerOptions.ExactCacheStore,
 		ExactCacheKeyBuilder:                 exactCacheKeyBuilder,

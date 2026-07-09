@@ -174,6 +174,91 @@ func TestBuildTerminalLogStoresRawResponseCaptureWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildResponseCaptureFieldsSanitizesSensitiveValues(t *testing.T) {
+	capture, ok := BuildResponseCaptureFields(runtimeconfig.ResponseCapturePolicy{
+		Enabled:  true,
+		Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+		MaxChars: 8000,
+	}, `Authorization: Bearer fake_redaction_token api_key=fake_redaction_key app_token=fake_redaction_token 문의 person@example.invalid 전화 +82 10 0000 0000`)
+	if !ok {
+		t.Fatal("expected response capture fields")
+	}
+	for _, forbidden := range []string{
+		"Bearer fake_redaction_token",
+		"fake_redaction_key",
+		"fake_redaction_token",
+		"person@example.invalid",
+		"+82 10 0000 0000",
+	} {
+		if strings.Contains(capture.CapturedResponse, forbidden) {
+			t.Fatalf("captured response contains forbidden value %q: %s", forbidden, capture.CapturedResponse)
+		}
+	}
+	for _, expected := range []string{"Authorization: [REDACTED]", "[SECRET_REDACTED]", "[EMAIL_REDACTED]", "[PHONE_REDACTED]"} {
+		if !strings.Contains(capture.CapturedResponse, expected) {
+			t.Fatalf("captured response missing %q: %s", expected, capture.CapturedResponse)
+		}
+	}
+}
+
+func TestBuildResponseCaptureFieldsSanitizesNearTruncationBoundary(t *testing.T) {
+	raw := strings.Repeat("a", 7970) + " api_key=fake_boundary_secret_value " + strings.Repeat("b", 200)
+	capture, ok := BuildResponseCaptureFields(runtimeconfig.ResponseCapturePolicy{
+		Enabled:  true,
+		Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+		MaxChars: 8000,
+	}, raw)
+	if !ok {
+		t.Fatal("expected response capture fields")
+	}
+	if !capture.Truncated {
+		t.Fatalf("expected boundary response capture to be truncated: %+v", capture)
+	}
+	if strings.Contains(capture.CapturedResponse, "fake_boundary_secret_value") {
+		t.Fatalf("boundary secret must be redacted before final truncation: %s", capture.CapturedResponse)
+	}
+	if !strings.Contains(capture.CapturedResponse, "[SECRET_REDACTED]") {
+		t.Fatalf("expected redacted boundary secret marker: %s", capture.CapturedResponse)
+	}
+	if got := len([]rune(capture.CapturedResponse)); got > 8000 {
+		t.Fatalf("captured response exceeded max chars: %d", got)
+	}
+}
+
+func TestBuildResponseCaptureFieldsDoesNotTreatMultilineNumbersAsPhone(t *testing.T) {
+	capture, ok := BuildResponseCaptureFields(runtimeconfig.ResponseCapturePolicy{
+		Enabled:  true,
+		Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+		MaxChars: 8000,
+	}, "values:\n1234\n5678\n9012")
+	if !ok {
+		t.Fatal("expected response capture fields")
+	}
+	if strings.Contains(capture.CapturedResponse, "[PHONE_REDACTED]") {
+		t.Fatalf("multiline numeric block must not be redacted as one phone number: %s", capture.CapturedResponse)
+	}
+}
+
+func TestBuildResponseCaptureFieldsCapsMaxChars(t *testing.T) {
+	capture, ok := BuildResponseCaptureFields(runtimeconfig.ResponseCapturePolicy{
+		Enabled:  true,
+		Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+		MaxChars: responseCaptureMaxRunesLimit + 100,
+	}, strings.Repeat("a", responseCaptureMaxRunesLimit+10))
+	if !ok {
+		t.Fatal("expected response capture fields")
+	}
+	if capture.MaxChars != responseCaptureMaxRunesLimit {
+		t.Fatalf("expected max chars cap %d, got %d", responseCaptureMaxRunesLimit, capture.MaxChars)
+	}
+	if !capture.Truncated {
+		t.Fatalf("expected response capture to be truncated: %+v", capture)
+	}
+	if got := len([]rune(capture.CapturedResponse)); got != responseCaptureMaxRunesLimit {
+		t.Fatalf("expected captured response length %d, got %d", responseCaptureMaxRunesLimit, got)
+	}
+}
+
 func TestBuildTerminalLogSkipsResponseCaptureWhenDisabledOrEmpty(t *testing.T) {
 	startedAt := time.Date(2026, 7, 3, 1, 2, 3, 0, time.UTC)
 	disabled := BuildTerminalLog(TerminalLogInput{

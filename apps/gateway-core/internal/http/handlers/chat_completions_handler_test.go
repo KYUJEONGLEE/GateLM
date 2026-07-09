@@ -312,7 +312,7 @@ func TestPricingKeysIncludeOpenAITextModelVersionAliases(t *testing.T) {
 	}
 }
 
-func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEnablesIt(t *testing.T) {
+func TestChatCompletionsHandlerStoresPromptCaptureButSkipsResponseCaptureWithoutRawGate(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
 	runtimePolicy := &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *request.GatewayContext) {
@@ -360,6 +360,45 @@ func TestChatCompletionsHandlerStoresPromptAndResponseCaptureWhenRuntimePolicyEn
 		capture.CapturedPrompt != "Send a reply to [EMAIL_1]." ||
 		strings.Contains(capture.CapturedPrompt, "user@example.invalid") {
 		t.Fatalf("unexpected prompt capture metadata: %+v", capture)
+	}
+	if _, exists := logWriter.logs[0].Metadata["responseCapture"]; exists {
+		t.Fatalf("response capture must require global raw capture gate: %+v", logWriter.logs[0].Metadata["responseCapture"])
+	}
+}
+
+func TestChatCompletionsHandlerStoresResponseCaptureOnlyWhenRawGateAndRuntimePolicyAllowIt(t *testing.T) {
+	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.ResponseCapture = runtimeconfig.ResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasResponseCapture = true
+		},
+	}
+	handler := ChatCompletionsHandler{
+		Providers:                 provider.NewRegistry("mock", recordingProviderAdapter{}),
+		DefaultModel:              "mock-balanced",
+		DefaultProvider:           "mock",
+		RuntimePolicyPipeline:     runtimePolicy,
+		RawResponseCaptureEnabled: true,
+		TerminalLogWriter:         logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionBody("Send a reply.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
 	}
 	responseCapture, ok := logWriter.logs[0].Metadata["responseCapture"].(invocationlog.ResponseCaptureFields)
 	if !ok {
@@ -486,6 +525,16 @@ func TestChatCompletionsHandlerTerminalLogIgnoresRequestCancellation(t *testing.
 
 func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testing.T) {
 	logWriter := &recordingTerminalLogWriter{}
+	runtimePolicy := &fakeGatewayPipeline{
+		mutate: func(gatewayCtx *request.GatewayContext) {
+			gatewayCtx.Runtime.ResponseCapture = runtimeconfig.ResponseCapturePolicy{
+				Enabled:  true,
+				Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+				MaxChars: 8000,
+			}
+			gatewayCtx.Runtime.HasResponseCapture = true
+		},
+	}
 	streamingAdapter := &streamingProviderAdapter{
 		events: []provider.ChatCompletionStreamEvent{
 			streamEvent(t, `{"id":"chatcmpl_stream_test","object":"chat.completion.chunk","created":1782108000,"model":"mock-balanced","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`),
@@ -495,10 +544,12 @@ func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testi
 		},
 	}
 	handler := ChatCompletionsHandler{
-		Providers:         provider.NewRegistry("mock", streamingAdapter),
-		DefaultModel:      "mock-balanced",
-		DefaultProvider:   "mock",
-		TerminalLogWriter: logWriter,
+		Providers:                 provider.NewRegistry("mock", streamingAdapter),
+		DefaultModel:              "mock-balanced",
+		DefaultProvider:           "mock",
+		RuntimePolicyPipeline:     runtimePolicy,
+		RawResponseCaptureEnabled: true,
+		TerminalLogWriter:         logWriter,
 	}
 	withTestAuth(&handler)
 
@@ -551,6 +602,9 @@ func TestChatCompletionsHandlerRelaysProviderStreamAfterProviderSuccess(t *testi
 	}
 	if strings.Contains(string(loggedJSON), "안녕하세요") || strings.Contains(string(loggedJSON), "실제 provider streaming") {
 		t.Fatalf("terminal log must not store streamed response chunks: %s", string(loggedJSON))
+	}
+	if _, exists := logged.Metadata["responseCapture"]; exists {
+		t.Fatalf("streaming terminal log must not store response capture: %+v", logged.Metadata["responseCapture"])
 	}
 }
 
