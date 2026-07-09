@@ -83,20 +83,22 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
 }
 
 export async function listControlPlaneProjects(
-  tenantId: string
+  tenantId: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectListResult> {
-  return listControlPlaneProjectsFresh(tenantId);
+  return listControlPlaneProjectsFresh(tenantId, options);
 }
 
 export async function listControlPlaneProjectsFresh(
-  tenantId: string
+  tenantId: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects?limit=50`,
       {
         cache: "no-store",
-        headers: await buildControlPlaneHeaders()
+        headers: await buildControlPlaneHeaders(options)
       }
     );
 

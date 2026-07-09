@@ -483,9 +483,7 @@ export function CustomerDemoApp({ locale, model, userName }: CustomerDemoAppProp
               >
                 {chatProfiles.map((profile) => (
                   <option disabled={!profile.configured} key={profile.id} value={profile.id}>
-                    {profile.configured
-                      ? profile.label
-                      : `${profile.label} (${profile.disabledReason ?? text.sidebar.profileMissing})`}
+                    {profile.label}
                   </option>
                 ))}
               </select>

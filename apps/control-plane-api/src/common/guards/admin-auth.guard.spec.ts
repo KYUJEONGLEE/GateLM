@@ -163,11 +163,30 @@ describe('AdminAuthGuard', () => {
             'x-gatelm-control-plane-internal-token': internalToken,
           },
           method: 'GET',
-          originalUrl: '/admin/v1/tenants/' + tenantId + '/projects',
+          originalUrl: '/admin/v1/tenants/' + tenantId + '/teams',
           params: { tenantId },
         }),
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.authSession.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('allows internal token reads for tenant project lists', async () => {
+    const prisma = newPrismaMock();
+    const guard = newGuard(prisma, internalToken);
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          headers: {
+            'x-gatelm-control-plane-internal-token': internalToken,
+          },
+          method: 'GET',
+          originalUrl: '/admin/v1/tenants/' + tenantId + '/projects?limit=50',
+          params: { tenantId },
+        }),
+      ),
+    ).resolves.toBe(true);
     expect(prisma.authSession.findUnique).not.toHaveBeenCalled();
   });
 

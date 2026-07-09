@@ -314,7 +314,9 @@ function isInternalServiceReadPath(path: string): boolean {
   return (
     /^\/admin\/v1\/applications\/[^/?#]+\/runtime-snapshot\/active$/.test(
       path,
-    ) || /^\/admin\/v1\/provider-catalogs\/[^/?#]+$/.test(path)
+    ) ||
+    /^\/admin\/v1\/provider-catalogs\/[^/?#]+$/.test(path) ||
+    /^\/admin\/v1\/tenants\/[^/?#]+\/projects$/.test(path)
   );
 }
 

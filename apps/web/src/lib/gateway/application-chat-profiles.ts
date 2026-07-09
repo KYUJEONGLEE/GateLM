@@ -149,7 +149,9 @@ async function getControlPlaneApplicationChatProfiles(): Promise<ApplicationChat
     return buildUnavailableControlPlaneProfileResult(message);
   }
 
-  const result = await listControlPlaneProjects(getControlPlaneTenantId());
+  const result = await listControlPlaneProjects(getControlPlaneTenantId(), {
+    internalServiceRead: true
+  });
 
   if (!result.ok) {
     return buildUnavailableControlPlaneProfileResult(result.error);

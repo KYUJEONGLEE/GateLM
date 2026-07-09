@@ -81,9 +81,7 @@ export function ApplicationLauncherForm({
             </option>
             {chatProfiles.map((profile) => (
               <option disabled={!profile.configured} key={profile.id} value={profile.id}>
-                {profile.configured
-                  ? profile.label
-                  : `${profile.label} (${profile.disabledReason ?? text.profileMissing})`}
+                {profile.label}
               </option>
             ))}
           </select>
