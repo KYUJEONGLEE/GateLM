@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import { OnboardingIntegrationGuide } from "@/features/onboarding/components/onboarding-integration-guide";
@@ -237,6 +237,7 @@ export function AdminOnboardingFlow({
     error: "",
     status: "idle"
   });
+  const isProjectDraftRequestInFlight = useRef(false);
   const activeFlowStepId = onboardingFlowStepIds[activeIndex] ?? "project";
   const visualActiveIndex = activeIndex;
   const text = onboardingText[locale];
@@ -249,8 +250,7 @@ export function AdminOnboardingFlow({
   const isIntegrationStepIncomplete =
     activeFlowStepId === "integration-guide" && projectSetupState.status !== "issued";
   const isPrimaryActionDisabled =
-    isCreatingCredential ||
-    isCompletingProject ||
+    (activeFlowStepId !== "project" && (isCreatingCredential || isCompletingProject)) ||
     isProjectStepIncomplete ||
     isIntegrationStepIncomplete;
   const isPreviousActionDisabled =
@@ -387,10 +387,15 @@ export function AdminOnboardingFlow({
   }
 
   async function createProjectDraft() {
+    if (isProjectDraftRequestInFlight.current) {
+      return false;
+    }
+
     if (isProjectStepIncomplete) {
       return false;
     }
 
+    isProjectDraftRequestInFlight.current = true;
     setProjectSetupState((current) => ({
       ...current,
       error: "",
@@ -500,6 +505,8 @@ export function AdminOnboardingFlow({
         status: "error"
       });
       return false;
+    } finally {
+      isProjectDraftRequestInFlight.current = false;
     }
   }
 
@@ -653,12 +660,12 @@ export function AdminOnboardingFlow({
   }
 
   function getPrimaryActionLabel() {
-    if (isCreatingCredential || isCompletingProject) {
-      return text.savingProject;
-    }
-
     if (activeFlowStepId === "project") {
       return text.saveNext;
+    }
+
+    if (isCreatingCredential || isCompletingProject) {
+      return text.savingProject;
     }
 
     if (activeFlowStepId === "provider") {
@@ -954,7 +961,6 @@ function OnboardingTeamPicker({
         ) : null}
         <button
           aria-expanded={isTeamDropdownOpen}
-          aria-required="true"
           className="onboarding-team-toggle"
           onClick={() => setIsTeamDropdownOpen((current) => !current)}
           type="button"
