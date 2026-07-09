@@ -239,6 +239,23 @@ func TestBuildResponseCaptureFieldsDoesNotTreatMultilineNumbersAsPhone(t *testin
 	}
 }
 
+func TestBuildResponseCaptureFieldsDoesNotTreatIsoDateAsPhone(t *testing.T) {
+	capture, ok := BuildResponseCaptureFields(runtimeconfig.ResponseCapturePolicy{
+		Enabled:  true,
+		Mode:     runtimeconfig.ResponseCaptureModeRawFull,
+		MaxChars: 8000,
+	}, "completed at 2026-07-09 with request count 123456789")
+	if !ok {
+		t.Fatal("expected response capture fields")
+	}
+	if strings.Contains(capture.CapturedResponse, "[PHONE_REDACTED]") {
+		t.Fatalf("date or plain counter must not be redacted as phone number: %s", capture.CapturedResponse)
+	}
+	if !strings.Contains(capture.CapturedResponse, "2026-07-09") {
+		t.Fatalf("expected ISO date to remain visible: %s", capture.CapturedResponse)
+	}
+}
+
 func TestBuildResponseCaptureFieldsCapsMaxChars(t *testing.T) {
 	capture, ok := BuildResponseCaptureFields(runtimeconfig.ResponseCapturePolicy{
 		Enabled:  true,

@@ -302,6 +302,8 @@ func TestRawResponseCaptureBlocksProductionLikeEnv(t *testing.T) {
 	}{
 		{name: "node production", key: "NODE_ENV", val: "production"},
 		{name: "app staging", key: "APP_ENV", val: "staging"},
+		{name: "deployment env production", key: "DEPLOYMENT_ENV", val: "production"},
+		{name: "gatelm deployment env aws", key: "GATELM_DEPLOYMENT_ENV", val: "aws"},
 		{name: "aws execution env", key: "AWS_EXECUTION_ENV", val: "AWS_ECS_FARGATE"},
 		{name: "ecs metadata", key: "ECS_CONTAINER_METADATA_URI_V4", val: "http://169.254.170.2/v4/metadata"},
 	} {

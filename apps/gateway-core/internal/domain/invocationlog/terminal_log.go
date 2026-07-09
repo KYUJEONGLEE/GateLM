@@ -229,7 +229,7 @@ var (
 	responseCaptureSecretTokenPattern   = regexp.MustCompile(`(?i)\b(sk|pk|rk|ak|key|token|secret)-[A-Za-z0-9_-]{8,}\b`)
 	responseCaptureJWTPattern           = regexp.MustCompile(`\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b`)
 	responseCaptureEmailPattern         = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)
-	responseCapturePhonePattern         = regexp.MustCompile(`\+?\d[\d ().-]{7,}\d`)
+	responseCapturePhonePattern         = regexp.MustCompile(`(?:\+\d{1,3}[ \t().-]*)?(?:\(\d{2,4}\)|\d{2,4})[ \t.-]+\d{3,4}[ \t.-]+\d{4}\b`)
 )
 
 type PromptCaptureFields struct {

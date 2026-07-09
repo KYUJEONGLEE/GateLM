@@ -360,7 +360,7 @@ function runtimePolicySupportsApplicationChatStreaming(config: RuntimePolicyConf
   );
 
   for (const provider of routingProviders) {
-    const providerConfig = config.providers.find((item) => item.provider === provider);
+    const providerConfig = config.providers?.find((item) => item.provider === provider);
 
     if (isAnthropicProvider(provider, providerConfig)) {
       return false;
