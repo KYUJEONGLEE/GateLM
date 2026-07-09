@@ -18,10 +18,17 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedProjectId = optionalQueryValue(query, "projectId");
-  const [auth, projectsModel] = await Promise.all([
-    getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie")),
-    getProjectsModel(tenantId)
-  ]);
+  const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
+
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (auth.memberships.length === 0 && auth.projectAdmins.length === 0) {
+    return NextResponse.json({ error: "Project access denied" }, { status: 403 });
+  }
+
+  const projectsModel = await getProjectsModel(tenantId);
   const effectiveProjectId = resolveProjectIdForConsoleAuth({
     auth,
     projects: projectsModel.projects,
