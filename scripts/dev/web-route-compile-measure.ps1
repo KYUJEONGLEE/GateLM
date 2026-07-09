@@ -258,14 +258,14 @@ function Invoke-RouteRequest {
 function Get-InterestingLogLines {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
 
-    return @(
-        $Lines |
-            Where-Object {
-                ($_ -match "Compiled\s+.+\s+in\s+[0-9.]+(ms|s)\s+\([0-9]+\s+modules\)") -or
-                ($_ -match "GET\s+/\S*\s+[0-9]{3}\s+in\s+[0-9]+ms")
-            } |
-            ForEach-Object { $_.Trim() }
-    )
+    $matched = $Lines |
+        Where-Object {
+            ($_ -match "Compiled\s+.+\s+in\s+[0-9.]+(ms|s)\s+\([0-9]+\s+modules\)") -or
+            ($_ -match "GET\s+/\S*\s+[0-9]{3}\s+in\s+[0-9]+ms")
+        } |
+        ForEach-Object { $_.Trim() }
+
+    return Convert-ToSafeArray $matched
 }
 
 function ConvertTo-CompileRows {
