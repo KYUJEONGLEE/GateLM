@@ -135,7 +135,13 @@ function parseApplicationChatApiKeys(content: string): Record<string, string> {
     return {};
   }
 
-  const parsed = JSON.parse(stripEnvQuotes(value)) as unknown;
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(stripEnvQuotes(value));
+  } catch {
+    return {};
+  }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`${API_KEYS_KEY} must be a JSON object.`);
@@ -171,7 +177,7 @@ function upsertEnvValue(content: string, key: string, value: string) {
   );
 
   if (pattern.test(content)) {
-    return content.replace(pattern, assignment);
+    return content.replace(pattern, () => assignment);
   }
 
   const lines = content.length > 0 ? content.split(/\r?\n/) : [];

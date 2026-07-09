@@ -156,7 +156,6 @@ function isProductionLikeEnv() {
   }
   if (
     process.env.AWS_EXECUTION_ENV ||
-    process.env.AWS_REGION ||
     process.env.ECS_CONTAINER_METADATA_URI ||
     process.env.ECS_CONTAINER_METADATA_URI_V4
   ) {

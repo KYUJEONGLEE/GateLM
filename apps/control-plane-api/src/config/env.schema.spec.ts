@@ -9,6 +9,17 @@ describe('validateEnv', () => {
     expect(env.CONTROL_PLANE_ADMIN_AUTH_MODE).toBe('session_cookie');
   });
 
+  it('does not treat a local AWS region setting as production-like by itself', () => {
+    const env = validateEnv({
+      ...baseEnv(),
+      AWS_DEFAULT_REGION: 'ap-northeast-2',
+      AWS_REGION: 'ap-northeast-2',
+    });
+
+    expect(env.AUTH_EMAIL_TRANSPORT).toBe('dev_memory');
+    expect(env.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY).toBe('true');
+  });
+
   it('rejects demo admin auth mode in production-like envs', () => {
     expect(() =>
       validateEnv({

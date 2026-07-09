@@ -213,7 +213,6 @@ function isProductionLikeEnv(env: RawEnv): boolean {
   }
   if (
     env.AWS_EXECUTION_ENV ||
-    env.AWS_REGION ||
     env.ECS_CONTAINER_METADATA_URI ||
     env.ECS_CONTAINER_METADATA_URI_V4
   ) {
