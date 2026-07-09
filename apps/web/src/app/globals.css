@@ -9478,7 +9478,8 @@ html[data-theme="dark"] .request-log-screen {
 
 .one-time-secret-copy-button:hover,
 .one-time-secret-copy-button:focus-visible {
-  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--warning);
   outline: none;
 }
 
@@ -9499,7 +9500,8 @@ html[data-theme="dark"] .request-log-screen {
 
 .one-time-secret-copy-button[data-copied="true"]:hover,
 .one-time-secret-copy-button[data-copied="true"]:focus-visible {
-  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .one-time-secret[data-hidden="true"] {

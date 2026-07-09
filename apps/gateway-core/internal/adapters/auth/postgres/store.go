@@ -191,6 +191,9 @@ select
   coalesce(default_application.id::text, '') as "applicationId",
   api_keys."secretHash"
 from gateway_api_keys api_keys
+join projects on projects.id = api_keys."projectId"
+  and projects."tenantId" = api_keys."tenantId"
+  and projects.status = 'ACTIVE'
 left join lateral (
   select applications.id
   from applications

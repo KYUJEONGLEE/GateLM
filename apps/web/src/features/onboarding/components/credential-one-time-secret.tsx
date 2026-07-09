@@ -1,4 +1,4 @@
-import { Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import type { CredentialIssueResponse } from "@/lib/fixtures/v1-admin-fixtures";
 import type { Locale } from "@/lib/i18n/locale";
@@ -70,7 +70,7 @@ export function CredentialOneTimeSecret({
             title={copyLabel}
             type="button"
           >
-            <Copy aria-hidden="true" />
+            {hasCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
           </button>
         </div>
       )}

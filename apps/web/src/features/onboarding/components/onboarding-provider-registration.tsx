@@ -88,7 +88,6 @@ const onboardingProviderText: Record<
     apiKeyHelp: string;
     apiKeyRegistered: string;
     choose: string;
-    description: string;
     providerRequired: string;
     registered: string;
     save: string;
@@ -102,7 +101,6 @@ const onboardingProviderText: Record<
     apiKeyHelp: "GateLM stores the provider key server-side and issues a Project API Key for Gateway calls.",
     apiKeyRegistered: "Provider key saved. Choose models without entering it again.",
     choose: "Choose",
-    description: "Select the Provider and model this project will use, then add the provider key.",
     providerRequired: "Choose a provider and enter the provider API key.",
     registered: "Provider saved.",
     save: "Add selected model key",
@@ -115,7 +113,6 @@ const onboardingProviderText: Record<
     apiKeyHelp: "GateLM은 provider credential을 직접 노출하지 않고, 팀 전용 Gateway API Key만 발급합니다.",
     apiKeyRegistered: "Provider key가 저장되어 있습니다. 다시 입력하지 않고 모델을 선택할 수 있습니다.",
     choose: "선택",
-    description: "이 팀에서 사용할 Provider와 모델을 선택하고, API Key를 추가합니다.",
     providerRequired: "Provider를 선택하고 Provider API Key를 입력하세요.",
     registered: "Provider가 저장되었습니다.",
     save: "선택한 모델 Key 추가",
@@ -489,7 +486,6 @@ export function OnboardingProviderRegistration({
       <div className="onboarding-provider-stack">
         <div>
           <h3>{text.title}</h3>
-          <p>{text.description}</p>
         </div>
         <p className="project-empty">No provider presets are available.</p>
       </div>
@@ -501,7 +497,6 @@ export function OnboardingProviderRegistration({
       <div className="onboarding-provider-heading">
         <div>
           <h3>{text.title}</h3>
-          <p>{text.description}</p>
         </div>
         <KeyRound aria-hidden="true" />
       </div>

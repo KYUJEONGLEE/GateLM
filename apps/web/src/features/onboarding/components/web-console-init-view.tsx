@@ -34,6 +34,7 @@ const WebConsoleLandingSections = dynamic<WebConsoleLandingSectionsProps>(
 
 type WebConsoleInitViewProps = {
   initialAuthStatus: AuthStatus;
+  initialDashboardTenantId?: string | null;
   locale: Locale;
 };
 
@@ -545,15 +546,25 @@ const initText: Record<
 
 export type WebConsoleInitText = (typeof initText)[Locale];
 
-export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInitViewProps) {
+export function WebConsoleInitView({
+  initialAuthStatus,
+  initialDashboardTenantId,
+  locale
+}: WebConsoleInitViewProps) {
   const text = initText[locale];
+  const initialDashboardTenantIdForAuth =
+    initialAuthStatus === "authenticated"
+      ? normalizeTenantId(initialDashboardTenantId) ?? defaultTenantId
+      : null;
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>(initialAuthStatus);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
-  const [dashboardTenantId, setDashboardTenantId] = useState<string | null>(null);
+  const [dashboardTenantId, setDashboardTenantId] = useState<string | null>(
+    initialDashboardTenantIdForAuth
+  );
   const [projectInviteToken, setProjectInviteToken] = useState<string | null>(null);
   const [signupEmail, setSignupEmail] = useState("");
   const [signupStep, setSignupStep] = useState<SignupStepId>("account");
@@ -618,7 +629,9 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
         }
 
         const sessionKind = body.data?.session?.kind;
-        const restoredTenantId = resolveDashboardTenantId(body.data);
+        const restoredTenantId =
+          resolveDashboardTenantId(body.data) ??
+          (sessionKind === "full" ? initialDashboardTenantIdForAuth : null);
         const hasConsoleSession = sessionKind === "full" || sessionKind === "onboarding";
 
         setAuthStatus(hasConsoleSession ? "authenticated" : "anonymous");
@@ -652,7 +665,7 @@ export function WebConsoleInitView({ initialAuthStatus, locale }: WebConsoleInit
     return () => {
       isMounted = false;
     };
-  }, [initialAuthStatus]);
+  }, [initialAuthStatus, initialDashboardTenantIdForAuth]);
 
   function openAuthPanel(mode: AuthMode) {
     setAuthError(null);

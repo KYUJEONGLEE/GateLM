@@ -2,6 +2,23 @@ import { expect, type Page, test } from "@playwright/test";
 
 const dashboardPath = "/tenants/tenant_demo_acme/dashboard";
 const signupProjectsPath = "/tenants/tenant_signup_acme/projects";
+const landingTestBaseUrl =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+
+async function prepareInitialAuthenticatedLanding(page: Page) {
+  await page.context().addCookies([
+    {
+      name: "gatelm_session",
+      url: landingTestBaseUrl,
+      value: "playwright-session"
+    },
+    {
+      name: "gatelm_locale",
+      url: landingTestBaseUrl,
+      value: "en"
+    }
+  ]);
+}
 
 async function prepareDashboardRoute(page: Page) {
   await page.route(`**${dashboardPath}`, async (route) => {
@@ -167,6 +184,58 @@ test("restored full session goes directly to the tenant dashboard", async ({ pag
   await page.goto("/");
 
   await expect(page).toHaveURL(new RegExp(`${dashboardPath}$`));
+});
+
+test("authenticated landing renders dashboard action before session restore completes", async ({
+  page
+}) => {
+  await prepareInitialAuthenticatedLanding(page);
+  let releaseSessionRestore: () => void = () => undefined;
+  const sessionRestoreRelease = new Promise<void>((resolve) => {
+    releaseSessionRestore = resolve;
+  });
+  const sessionRestoreStarted = new Promise<void>((resolve) => {
+    void page.route("**/api/auth/me", async (route) => {
+      resolve();
+      await sessionRestoreRelease;
+      await route.fulfill({
+        body: JSON.stringify({
+          data: {
+            memberships: [
+              {
+                role: "tenant_admin",
+                status: "active",
+                tenantId: "tenant_demo_acme"
+              }
+            ],
+            session: {
+              kind: "full"
+            },
+            user: {
+              email: "owner@example.com",
+              id: "user_demo_owner"
+            }
+          }
+        }),
+        contentType: "application/json",
+        status: 200
+      });
+    });
+  });
+
+  await page.goto("/?view=landing");
+  await sessionRestoreStarted;
+
+  const topbar = page.getByRole("navigation", { exact: true, name: "GateLM landing navigation" });
+  const brandCluster = topbar.locator(".landing-brand-cluster");
+  const dashboardLink = brandCluster.getByRole("link", { name: "Open Dashboard" });
+
+  await expect(brandCluster.locator(".landing-auth-button")).toHaveCount(2);
+  await expect(dashboardLink).toBeVisible();
+  await expect(dashboardLink).toHaveAttribute("href", dashboardPath);
+
+  releaseSessionRestore();
+  await expect(dashboardLink).toBeVisible();
 });
 
 test("console brand link keeps authenticated users on the landing page", async ({ page }) => {

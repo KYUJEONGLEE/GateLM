@@ -264,6 +264,7 @@ function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
+    status: values.status,
     totalBudgetUsd: values.totalBudgetUsd
   };
 }
