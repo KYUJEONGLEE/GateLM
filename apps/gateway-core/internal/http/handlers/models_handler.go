@@ -1,17 +1,25 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 	"gatelm/apps/gateway-core/internal/pipeline"
+	runtimeconfigstage "gatelm/apps/gateway-core/internal/pipeline/stages/runtimeconfig"
 )
 
 type ModelsHandler struct {
-	Providers           *provider.Registry
-	PreProviderPipeline GatewayPipeline
+	ProviderCatalogResolver providercatalog.Resolver
+	APIKeyAuthenticator     APIKeyAuthenticator
+	ExpectedTenantID        string
+	ExpectedProjectID       string
+	ExpectedAppID           string
+	RuntimePolicyPipeline   GatewayPipeline
 }
 
 func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -29,34 +37,127 @@ func (h ModelsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		StartedAt: startedAt.UTC(),
 	})
 
+	if err := authenticateGatewayAPIKeyRequest(
+		r.Context(),
+		r,
+		reqCtx,
+		h.APIKeyAuthenticator,
+		h.ExpectedTenantID,
+		h.ExpectedProjectID,
+		h.ExpectedAppID,
+	); err != nil {
+		handleGatewayAuthError(w, reqCtx, err)
+		return
+	}
+
+	if h.RuntimePolicyPipeline == nil {
+		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway runtime policy pipeline is not initialized.", runtimeconfigstage.StageName)
+		return
+	}
+
 	gatewayCtx := newGatewayContext(reqCtx, "")
-	if h.PreProviderPipeline != nil {
-		if err := h.PreProviderPipeline.Execute(r.Context(), gatewayCtx); err != nil {
-			applyGatewayContext(reqCtx, gatewayCtx)
-			writeGatewayPipelineFailure(w, reqCtx, err)
-			return
-		}
+	if err := h.RuntimePolicyPipeline.Execute(r.Context(), gatewayCtx); err != nil {
 		applyGatewayContext(reqCtx, gatewayCtx)
-	}
-
-	if h.Providers == nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Providers registry is not initialized.", "resolve_provider_adapter")
+		writeGatewayPipelineFailure(w, reqCtx, err)
 		return
 	}
-	adapter, err := h.Providers.Get("")
-	if err != nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway provider is not configured.", "resolve_provider_adapter")
-		return
-	}
+	applyGatewayContext(reqCtx, gatewayCtx)
 
-	reqCtx.SelectedProvider = adapter.AdapterType()
-
-	models, err := adapter.ListModels(r.Context(), provider.ExecutionConfig{AdapterType: adapter.AdapterType()})
+	models, err := h.modelsFromRuntimeCatalog(r.Context(), reqCtx)
 	if err != nil {
-		writeGatewayErrorWithContext(w, reqCtx, http.StatusBadGateway, "provider_error", "Provider request failed.", "call_provider_model_catalog")
+		writeModelCatalogResolutionFailure(w, reqCtx, err)
 		return
 	}
 
 	setGatewayHeaders(w, reqCtx)
 	writeJSON(w, http.StatusOK, models)
+}
+
+func (h ModelsHandler) modelsFromRuntimeCatalog(ctx context.Context, reqCtx *pipeline.RequestContext) (*provider.ModelListResponse, error) {
+	if h.ProviderCatalogResolver == nil {
+		return nil, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Provider catalog is unavailable.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrUnavailable,
+		}
+	}
+
+	ref := reqCtx.RuntimeSnapshot.ProviderCatalogRef.Normalize()
+	if ref.IsZero() {
+		return nil, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_unavailable",
+			message:    "Provider catalog is unavailable.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrUnavailable,
+		}
+	}
+
+	catalog, err := h.ProviderCatalogResolver.GetCatalog(ctx, ref, providercatalog.Scope{
+		TenantID:      reqCtx.TenantID,
+		ProjectID:     reqCtx.ProjectID,
+		ApplicationID: reqCtx.ApplicationID,
+	})
+	if err != nil {
+		code := "provider_catalog_unavailable"
+		if errors.Is(err, providercatalog.ErrMismatch) {
+			code = "provider_catalog_mismatch"
+		}
+		return nil, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       code,
+			message:    "Provider catalog could not be verified.",
+			stage:      "resolve_provider_catalog",
+			err:        err,
+		}
+	}
+	catalog = catalog.Normalize()
+	if !catalog.Matches(ref) {
+		return nil, providerResolutionFailure{
+			httpStatus: http.StatusInternalServerError,
+			code:       "provider_catalog_mismatch",
+			message:    "Provider catalog reference mismatch.",
+			stage:      "resolve_provider_catalog",
+			err:        providercatalog.ErrMismatch,
+		}
+	}
+
+	return modelListFromProviderCatalog(catalog), nil
+}
+
+func modelListFromProviderCatalog(catalog providercatalog.Catalog) *provider.ModelListResponse {
+	resp := &provider.ModelListResponse{Object: "list"}
+	for _, catalogProvider := range catalog.Normalize().Providers {
+		if !catalogProvider.Enabled {
+			continue
+		}
+		owner := firstNonEmpty(catalogProvider.ProviderName, catalogProvider.ProviderID, catalogProvider.AdapterType)
+		for _, catalogModel := range catalogProvider.Models {
+			catalogModel = catalogModel.Normalize()
+			if !catalogModel.Enabled {
+				continue
+			}
+			modelID := firstNonEmpty(catalogModel.ModelID, catalogModel.ModelName)
+			if modelID == "" {
+				continue
+			}
+			resp.Data = append(resp.Data, provider.ModelInfo{
+				ID:      modelID,
+				Object:  "model",
+				OwnedBy: owner,
+			})
+		}
+	}
+	return resp
+}
+
+func writeModelCatalogResolutionFailure(w http.ResponseWriter, reqCtx *pipeline.RequestContext, err error) {
+	var resolutionErr providerResolutionFailure
+	if errors.As(err, &resolutionErr) {
+		writeGatewayErrorWithContext(w, reqCtx, resolutionErr.httpStatus, resolutionErr.code, resolutionErr.message, resolutionErr.stage)
+		return
+	}
+	writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "provider_catalog_unavailable", "Provider catalog is unavailable.", "resolve_provider_catalog")
 }

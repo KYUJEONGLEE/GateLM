@@ -34,6 +34,7 @@ type RouterOptions struct {
 	MetricsRegistry       *metrics.Registry
 	RateLimitPipeline     handlers.GatewayPipeline
 	RuntimePolicyPipeline handlers.GatewayPipeline
+	ModelsRuntimePipeline handlers.GatewayPipeline
 	PreProviderPipeline   handlers.GatewayPipeline
 	MaskingEngine         handlers.MaskingEngine
 	ProviderCatalogs      providercatalog.Resolver
@@ -114,6 +115,12 @@ func WithRateLimitPipeline(rateLimitPipeline handlers.GatewayPipeline) RouterOpt
 func WithRuntimePolicyPipeline(runtimePolicyPipeline handlers.GatewayPipeline) RouterOption {
 	return func(options *RouterOptions) {
 		options.RuntimePolicyPipeline = runtimePolicyPipeline
+	}
+}
+
+func WithModelsRuntimePipeline(modelsRuntimePipeline handlers.GatewayPipeline) RouterOption {
+	return func(options *RouterOptions) {
+		options.ModelsRuntimePipeline = modelsRuntimePipeline
 	}
 }
 
@@ -262,8 +269,12 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		Checks:  readinessChecks,
 	})
 	mux.Handle("GET /v1/models", handlers.ModelsHandler{
-		Providers:           providers,
-		PreProviderPipeline: preProviderPipeline,
+		ProviderCatalogResolver: routerOptions.ProviderCatalogs,
+		APIKeyAuthenticator:     apiKeyAuthenticator,
+		ExpectedTenantID:        cfg.ExpectedTenantID,
+		ExpectedProjectID:       cfg.ExpectedProjectID,
+		ExpectedAppID:           cfg.ExpectedApplicationID,
+		RuntimePolicyPipeline:   routerOptions.ModelsRuntimePipeline,
 	})
 	mux.Handle("GET /api/projects/{projectId}/logs", handlers.ProjectLogsHandler{
 		Reader:   routerOptions.InvocationLogReader,
