@@ -2,7 +2,7 @@
 
 import { Save, Upload, UserPlus, Users, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,19 @@ import type {
   ProjectEmployeeAssignmentRecord,
   ProjectEmployeeAssignmentValues
 } from "@/lib/control-plane/employees-types";
+import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type EmployeeControlManagementProps = {
   locale: Locale;
   model: EmployeeControlModel;
+};
+
+type ProjectEmployeeAssignmentProps = {
+  locale: Locale;
+  model: EmployeeControlModel;
+  project: ProjectRecord;
 };
 
 type SubmitState = {
@@ -146,6 +153,433 @@ const employeeText: Record<
     warning: "경고"
   }
 };
+
+const projectEmployeeText: Record<
+  Locale,
+  {
+    assigned: string;
+    budget: string;
+    department: string;
+    disable: string;
+    email: string;
+    employees: string;
+    fixtureFallback: string;
+    modelKeys: string;
+    noAssignments: string;
+    noDepartments: string;
+    noEmployees: string;
+    note: string;
+    providerIds: string;
+    remaining: string;
+    save: string;
+    title: string;
+    warning: string;
+  }
+> = {
+  en: {
+    assigned: "Assigned",
+    budget: "Monthly limit",
+    department: "Department",
+    disable: "Disable",
+    email: "Email",
+    employees: "Employees",
+    fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
+    modelKeys: "Models",
+    noAssignments: "No project employees.",
+    noDepartments: "No departments found.",
+    noEmployees: "No employees in this department.",
+    note: "Note",
+    providerIds: "Providers",
+    remaining: "Remaining",
+    save: "Save",
+    title: "Department employees",
+    warning: "Warning"
+  },
+  ko: {
+    assigned: "배정",
+    budget: "월 한도",
+    department: "부서",
+    disable: "비활성화",
+    email: "이메일",
+    employees: "직원",
+    fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
+    modelKeys: "모델",
+    noAssignments: "Project에 배정된 직원이 없습니다.",
+    noDepartments: "등록된 부서가 없습니다.",
+    noEmployees: "이 부서에 배정 가능한 직원이 없습니다.",
+    note: "메모",
+    providerIds: "Provider",
+    remaining: "잔여",
+    save: "저장",
+    title: "부서 직원 배정",
+    warning: "경고"
+  }
+};
+
+export function ProjectEmployeeAssignment({
+  locale,
+  model,
+  project
+}: ProjectEmployeeAssignmentProps) {
+  const router = useRouter();
+  const text = projectEmployeeText[locale];
+  const departments = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          model.employees
+            .map((employee) => employee.department?.trim())
+            .filter((department): department is string => Boolean(department))
+        )
+      ).sort((left, right) => left.localeCompare(right)),
+    [model.employees]
+  );
+  const [selectedDepartment, setSelectedDepartment] = useState(departments[0] ?? "");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [assignments, setAssignments] = useState<ProjectEmployeeAssignmentRecord[]>(
+    model.assignmentsByProjectId[project.id] ?? []
+  );
+  const [assignmentValues, setAssignmentValues] = useState({
+    allowedModelKeys: "",
+    allowedProviderConnectionIds: "",
+    monthlyBudgetLimitUsd: 0,
+    policyNote: "",
+    warningThresholdPercent: 80
+  });
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [submitState, setSubmitState] = useState<SubmitState>({
+    message: "",
+    status: "idle"
+  });
+
+  useEffect(() => {
+    if (!selectedDepartment && departments[0]) {
+      setSelectedDepartment(departments[0]);
+      return;
+    }
+
+    if (selectedDepartment && !departments.includes(selectedDepartment)) {
+      setSelectedDepartment(departments[0] ?? "");
+    }
+  }, [departments, selectedDepartment]);
+
+  const departmentEmployees = useMemo(
+    () =>
+      model.employees
+        .filter(
+          (employee) =>
+            employee.department === selectedDepartment &&
+            (employee.status === "active" || employee.status === "staged")
+        )
+        .sort((left, right) => left.email.localeCompare(right.email)),
+    [model.employees, selectedDepartment]
+  );
+
+  useEffect(() => {
+    if (!departmentEmployees.some((employee) => employee.id === selectedEmployeeId)) {
+      setSelectedEmployeeId(departmentEmployees[0]?.id ?? "");
+    }
+  }, [departmentEmployees, selectedEmployeeId]);
+
+  useEffect(() => {
+    const existingAssignment = assignments.find(
+      (assignment) => assignment.employeeId === selectedEmployeeId
+    );
+
+    setAssignmentValues({
+      allowedModelKeys: existingAssignment?.policy.allowedModelKeys.join(", ") ?? "",
+      allowedProviderConnectionIds:
+        existingAssignment?.policy.allowedProviderConnectionIds.join(", ") ?? "",
+      monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
+      policyNote: existingAssignment?.policy.note ?? "",
+      warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
+    });
+  }, [assignments, selectedEmployeeId]);
+
+  const activeAssignments = assignments.filter((assignment) => assignment.status === "active");
+  const assignedBudgetUsd = activeAssignments.reduce(
+    (total, assignment) => total + assignment.monthlyBudgetLimitUsd,
+    0
+  );
+  const remainingBudgetUsd = project.totalBudgetUsd - assignedBudgetUsd;
+
+  async function submitAssignment() {
+    if (!selectedEmployeeId) {
+      return;
+    }
+
+    const values: ProjectEmployeeAssignmentValues = {
+      allowedModelKeys: splitCommaList(assignmentValues.allowedModelKeys),
+      allowedProviderConnectionIds: splitCommaList(assignmentValues.allowedProviderConnectionIds),
+      employeeId: selectedEmployeeId,
+      monthlyBudgetLimitUsd: assignmentValues.monthlyBudgetLimitUsd,
+      policyNote: assignmentValues.policyNote,
+      projectId: project.id,
+      status: "active",
+      warningThresholdPercent: assignmentValues.warningThresholdPercent
+    };
+
+    setPendingAction("assign");
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/employees", {
+      body: JSON.stringify({ action: "assign", values }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as ProjectEmployeeResponsePayload;
+
+    if (!response.ok || !payload.assignment) {
+      setSubmitState({
+        message: payload.error ?? "Project employee assignment failed.",
+        status: "error"
+      });
+      setPendingAction(null);
+      return;
+    }
+
+    const assignment = payload.assignment;
+    setAssignments((current) => upsertAssignment(current, assignment));
+    setSubmitState({
+      message: locale === "ko" ? "직원 한도가 저장되었습니다." : "Employee limit saved.",
+      status: "success"
+    });
+    setPendingAction(null);
+    router.refresh();
+  }
+
+  async function disableAssignment(assignment: ProjectEmployeeAssignmentRecord) {
+    setPendingAction(`disable:${assignment.id}`);
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/employees", {
+      body: JSON.stringify({
+        action: "disableAssignment",
+        values: {
+          employeeId: assignment.employeeId,
+          projectId: assignment.projectId
+        }
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as ProjectEmployeeResponsePayload;
+
+    if (!response.ok || !payload.assignment) {
+      setSubmitState({
+        message: payload.error ?? "Project employee disable failed.",
+        status: "error"
+      });
+      setPendingAction(null);
+      return;
+    }
+
+    const disabledAssignment = payload.assignment;
+    setAssignments((current) => upsertAssignment(current, disabledAssignment));
+    setSubmitState({
+      message: locale === "ko" ? "배정이 비활성화되었습니다." : "Assignment disabled.",
+      status: "success"
+    });
+    setPendingAction(null);
+    router.refresh();
+  }
+
+  return (
+    <main className="console-content management-line-content">
+      <section className="team-section">
+        <div className="team-section-header team-section-header-with-actions">
+          <div>
+            <h3>{text.title}</h3>
+          </div>
+          <div
+            className="project-budget-badge"
+            data-budget-state={remainingBudgetUsd < 0 ? "over" : "ok"}
+          >
+            <Wallet aria-hidden="true" size={16} />
+            {formatBudgetUsd(assignedBudgetUsd)} / {formatBudgetUsd(project.totalBudgetUsd)}
+          </div>
+        </div>
+
+        {model.source === "fixture" ? (
+          <Alert variant="warning">
+            <AlertDescription>
+              {text.fixtureFallback} {model.loadError}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {submitState.message ? (
+          <Alert variant={submitState.status === "error" ? "destructive" : "success"}>
+            <AlertDescription>{submitState.message}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="modal-form-grid">
+          <label className="policy-field">
+            <span>{text.department}</span>
+            <select
+              disabled={pendingAction !== null || departments.length === 0}
+              onChange={(event) => setSelectedDepartment(event.target.value)}
+              value={selectedDepartment}
+            >
+              {departments.length === 0 ? (
+                <option value="">{text.noDepartments}</option>
+              ) : null}
+              {departments.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="policy-field">
+            <span>{text.employees}</span>
+            <select
+              disabled={pendingAction !== null || departmentEmployees.length === 0}
+              onChange={(event) => setSelectedEmployeeId(event.target.value)}
+              value={selectedEmployeeId}
+            >
+              {departmentEmployees.length === 0 ? (
+                <option value="">{text.noEmployees}</option>
+              ) : null}
+              {departmentEmployees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name ? `${employee.name} · ${employee.email}` : employee.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="policy-field">
+            <span>{text.budget}</span>
+            <input
+              min={0}
+              onChange={(event) =>
+                setAssignmentValues((current) => ({
+                  ...current,
+                  monthlyBudgetLimitUsd: Number(event.target.value)
+                }))
+              }
+              step="0.01"
+              type="number"
+              value={assignmentValues.monthlyBudgetLimitUsd}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.warning}</span>
+            <input
+              max={100}
+              min={0}
+              onChange={(event) =>
+                setAssignmentValues((current) => ({
+                  ...current,
+                  warningThresholdPercent: Number(event.target.value)
+                }))
+              }
+              type="number"
+              value={assignmentValues.warningThresholdPercent}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.modelKeys}</span>
+            <input
+              onChange={(event) =>
+                setAssignmentValues((current) => ({
+                  ...current,
+                  allowedModelKeys: event.target.value
+                }))
+              }
+              type="text"
+              value={assignmentValues.allowedModelKeys}
+            />
+          </label>
+          <label className="policy-field">
+            <span>{text.providerIds}</span>
+            <input
+              onChange={(event) =>
+                setAssignmentValues((current) => ({
+                  ...current,
+                  allowedProviderConnectionIds: event.target.value
+                }))
+              }
+              type="text"
+              value={assignmentValues.allowedProviderConnectionIds}
+            />
+          </label>
+          <label className="policy-field team-description-field">
+            <span>{text.note}</span>
+            <input
+              maxLength={500}
+              onChange={(event) =>
+                setAssignmentValues((current) => ({
+                  ...current,
+                  policyNote: event.target.value
+                }))
+              }
+              type="text"
+              value={assignmentValues.policyNote}
+            />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <span className="application-budget-summary">
+            {text.remaining}: {formatBudgetUsd(remainingBudgetUsd)}
+          </span>
+          <Button
+            disabled={pendingAction !== null || !selectedEmployeeId}
+            onClick={() => void submitAssignment()}
+            type="button"
+          >
+            <Save aria-hidden="true" />
+            {pendingAction === "assign" ? "..." : text.save}
+          </Button>
+        </div>
+
+        {assignments.length === 0 ? (
+          <p className="project-empty">
+            {departments.length === 0 ? text.noDepartments : text.noAssignments}
+          </p>
+        ) : (
+          <div className="team-list">
+            {assignments.map((assignment) => (
+              <article className="team-row" key={assignment.id}>
+                <div className="team-row-summary">
+                  <div>
+                    <span>{text.email}</span>
+                    <strong>{assignment.employeeEmail}</strong>
+                  </div>
+                  <div>
+                    <span>{text.department}</span>
+                    <p>{nullableText(assignment.employeeDepartment, "-")}</p>
+                  </div>
+                  <div>
+                    <span>{text.budget}</span>
+                    <p>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</p>
+                  </div>
+                  <div>
+                    <span>{text.modelKeys}</span>
+                    <p>{assignment.policy.allowedModelKeys.join(", ") || "-"}</p>
+                  </div>
+                  <div>
+                    <span>{text.assigned}</span>
+                    <p>{formatDateTime(assignment.createdAt)}</p>
+                  </div>
+                  <Button
+                    disabled={pendingAction !== null || assignment.status === "disabled"}
+                    onClick={() => void disableAssignment(assignment)}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Users aria-hidden="true" />
+                    {pendingAction === `disable:${assignment.id}` ? "..." : text.disable}
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
 
 export function EmployeeControlManagement({ locale, model }: EmployeeControlManagementProps) {
   const router = useRouter();
@@ -323,9 +757,10 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       return;
     }
 
+    const assignment = payload.assignment;
     setAssignmentsByProjectId((current) => ({
       ...current,
-      [selectedProjectId]: upsertAssignment(current[selectedProjectId] ?? [], payload.assignment)
+      [selectedProjectId]: upsertAssignment(current[selectedProjectId] ?? [], assignment)
     }));
     setSubmitState({
       message: locale === "ko" ? "직원 한도가 저장되었습니다." : "Employee limit saved.",
@@ -361,9 +796,13 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
       return;
     }
 
+    const disabledAssignment = payload.assignment;
     setAssignmentsByProjectId((current) => ({
       ...current,
-      [assignment.projectId]: upsertAssignment(current[assignment.projectId] ?? [], payload.assignment)
+      [assignment.projectId]: upsertAssignment(
+        current[assignment.projectId] ?? [],
+        disabledAssignment
+      )
     }));
     setSubmitState({
       message: locale === "ko" ? "배정이 비활성화되었습니다." : "Assignment disabled.",
@@ -553,7 +992,10 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
           <div>
             <h3>{text.allocation}</h3>
           </div>
-          <div className="project-budget-badge" data-budget-state={remainingBudgetUsd < 0 ? "over" : "ok"}>
+          <div
+            className="project-budget-badge"
+            data-budget-state={remainingBudgetUsd < 0 ? "over" : "ok"}
+          >
             <Wallet aria-hidden="true" size={16} />
             {formatBudgetUsd(assignedBudgetUsd)} / {formatBudgetUsd(projectBudgetUsd)}
           </div>
@@ -619,7 +1061,10 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
             <span>{text.modelKeys}</span>
             <input
               onChange={(event) =>
-                setAssignmentValues((current) => ({ ...current, allowedModelKeys: event.target.value }))
+                setAssignmentValues((current) => ({
+                  ...current,
+                  allowedModelKeys: event.target.value
+                }))
               }
               type="text"
               value={assignmentValues.allowedModelKeys}
@@ -643,7 +1088,10 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
             <input
               maxLength={500}
               onChange={(event) =>
-                setAssignmentValues((current) => ({ ...current, policyNote: event.target.value }))
+                setAssignmentValues((current) => ({
+                  ...current,
+                  policyNote: event.target.value
+                }))
               }
               type="text"
               value={assignmentValues.policyNote}
