@@ -54,6 +54,7 @@ type AdminNotification = {
 export type ManagementNavItem =
   | "api-keys"
   | "app-tokens"
+  | "employees"
   | "policies"
   | "project"
   | "provider"
@@ -68,6 +69,7 @@ const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
 const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
   "api-keys": SettingsIcon,
   "app-tokens": SettingsIcon,
+  employees: Users,
   alerts: Bell,
   analytics: Activity,
   "live-logs": ScrollText,
@@ -163,6 +165,14 @@ const navigationItems: Array<{
         },
         item: "project",
         path: (tenantId) => `/tenants/${tenantId}/projects`
+      },
+      {
+        labels: {
+          en: "Employees",
+          ko: "직원"
+        },
+        item: "employees",
+        path: (tenantId) => `/tenants/${tenantId}/employees`
       },
       {
         labels: {
@@ -426,13 +436,13 @@ export function ConsoleShell({
         >
           <Menu aria-hidden="true" size={18} strokeWidth={2.4} />
         </button>
-        <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
+        <a className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
           <span className="console-brand-mark">G</span>
           <span className="console-brand-copy">
             <strong>GateLM</strong>
           </span>
-        </Link>
-        <Link
+        </a>
+        <a
           aria-label={text.landing}
           className="console-mobile-landing-link"
           href="/?view=landing"
@@ -440,7 +450,7 @@ export function ConsoleShell({
         >
           <House aria-hidden="true" size={17} strokeWidth={2.4} />
           <span>{text.landing}</span>
-        </Link>
+        </a>
       </header>
       <button
         aria-label={text.collapseNavigation}
@@ -450,13 +460,13 @@ export function ConsoleShell({
       />
       <aside className="console-sidebar" aria-label="GateLM console navigation">
         <div className="console-sidebar-topbar">
-          <Link className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
+          <a className="console-brand" href="/?view=landing" aria-label="GateLM Web Console home">
             <span className="console-brand-mark">G</span>
             <span className="console-brand-copy">
               <strong>GateLM</strong>
               <small>Web Console</small>
             </span>
-          </Link>
+          </a>
           <button
             aria-expanded={!isSidebarCollapsed}
             aria-label={isSidebarCollapsed ? text.expandNavigation : text.collapseNavigation}
@@ -469,7 +479,7 @@ export function ConsoleShell({
           </button>
         </div>
 
-        <Link
+        <a
           className="console-landing-link"
           href="/?view=landing"
           onClick={closeMobileNavigation}
@@ -477,7 +487,7 @@ export function ConsoleShell({
         >
           <House aria-hidden="true" size={16} strokeWidth={2.4} />
           <span>{text.landing}</span>
-        </Link>
+        </a>
 
         <nav className="console-nav" aria-hidden={isSidebarCollapsed}>
           {navigationItems.map((item) => {
@@ -660,6 +670,11 @@ function getConsoleNavigationState(pathname: string | null): ConsoleNavigationSt
     case "policies":
       return {
         activeManagementItem: "policies",
+        activeSection: "management"
+      };
+    case "employees":
+      return {
+        activeManagementItem: "employees",
         activeSection: "management"
       };
     case "provider-connections":

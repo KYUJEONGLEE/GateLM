@@ -215,6 +215,32 @@ Employee Browser
 | Employee UI | response, requestId, simple status | raw token, detector detail, raw prompt/response, policy internals |
 | Admin/Developer UI | routing, cache, safety, provider, latency, cost, RuntimeSnapshot provenance, opt-in log-safe captured prompt | raw secret, raw prompt/response, provider raw error body |
 
+### 4.0.1 Employee Control Setup Surface
+
+Employee Control PR1은 Control Plane 관리 surface로 둔다. 이는 Gateway RuntimeSnapshot lookup key를 바꾸지 않는다.
+
+원칙:
+
+- CSV로 등록된 직원 레코드는 tenant-scoped Control Plane 관리 데이터다.
+- 직원 `userId` 연결은 초대 수락 이후의 인증 귀속 정보이며, `tenantId/projectId/applicationId` RuntimeSnapshot lookup key에 포함하지 않는다.
+- Project budget이 예산 소유자다. 직원별 월 한도는 Project budget 내부 배정 guard/read model이며 `budgetScopeType=user`를 만들지 않는다.
+- `department`는 직원 표시, 필터, 집계용 메타데이터이며 공식 budget scope가 아니다.
+- 직원별 Provider/Model 허용 값은 문자열/catalog reference로 저장한다. Provider/Model을 DB enum 또는 code enum으로 고정하지 않는다.
+- 직원 초대 토큰, 비밀번호 설정, Employee Chat login/session 연결은 PR2 범위다. PR1은 초대 발송 전 준비 상태만 표현한다.
+- Employee Control API/DB/UI는 raw prompt, raw response, Provider Key, API Key, App Token, Authorization header, actual secret을 저장하거나 노출하지 않는다.
+
+관리 API 후보:
+
+```text
+GET  /admin/v1/tenants/:tenantId/employees
+POST /admin/v1/tenants/:tenantId/employees
+POST /admin/v1/tenants/:tenantId/employees/import-csv
+PATCH /admin/v1/tenants/:tenantId/employees/:employeeId
+GET  /admin/v1/projects/:projectId/employees
+POST /admin/v1/projects/:projectId/employees/:employeeId
+DELETE /admin/v1/projects/:projectId/employees/:employeeId
+```
+
 ### 4.1 Chat Conversation And Session Context
 
 Chat conversations are an Application-boundary convenience for Employee Chat and Customer Demo Chat. They are not a raw transcript store and must not be used to persist raw prompt, raw response, raw detected value, raw prompt fragment, API Key, App Token, Provider Key, Authorization header, provider raw error body, or actual secret.

@@ -10,6 +10,7 @@ import { AppTokensModule } from './modules/app-tokens/app-tokens.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BudgetOperationsModule } from './modules/budget-operations/budget-operations.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
+import { EmployeesModule } from './modules/employees/employees.module';
 import { HealthModule } from './modules/health/health.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ProjectAdminsModule } from './modules/project-admins/project-admins.module';
@@ -36,6 +37,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     AuthModule,
     BudgetOperationsModule,
     ConversationsModule,
+    EmployeesModule,
     RuntimeConfigsModule,
     TeamsModule,
     HealthModule,

@@ -63,6 +63,8 @@ model Tenant {
   tenantAdmins         TenantAdmin[]
   projectAdmins        ProjectAdmin[]
   projectAdminInvitations ProjectAdminInvitation[]
+  employees            Employee[]
+  projectEmployeeAssignments ProjectEmployeeAssignment[]
   conversations        Conversation[]
   chatMessages         ChatMessage[]
 
@@ -90,6 +92,7 @@ model User {
   tenantAdmins           TenantAdmin[]
   projectAdmins          ProjectAdmin[]
   sentProjectAdminInvitations ProjectAdminInvitation[] @relation("ProjectAdminInvitationInviter")
+  employees              Employee[]
 
   @@index([email])
   @@index([status])
@@ -250,6 +253,7 @@ model Project {
   projectTeamAssignments ProjectTeamAssignment[]
   projectAdmins          ProjectAdmin[]
   projectAdminInvitations ProjectAdminInvitation[]
+  projectEmployeeAssignments ProjectEmployeeAssignment[]
   conversations        Conversation[]
   chatMessages         ChatMessage[]
 
@@ -290,6 +294,56 @@ model ProjectTeamAssignment {
   @@index([teamId])
   @@unique([projectId, teamId])
   @@map("project_team_assignments")
+}
+
+
+model Employee {
+  id               String    @id @default(uuid()) @db.Uuid
+  tenantId         String    @db.Uuid
+  userId           String?   @db.Uuid
+  email            String
+  name             String?
+  department       String?
+  jobTitle         String?
+  status           String    @default("staged")
+  invitationStatus String    @default("not_sent")
+  invitedAt        DateTime?
+  acceptedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  tenant             Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user               User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectAssignments ProjectEmployeeAssignment[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, department])
+  @@index([userId])
+  @@map("employees")
+}
+
+model ProjectEmployeeAssignment {
+  id                         String   @id @default(uuid()) @db.Uuid
+  tenantId                   String   @db.Uuid
+  projectId                  String   @db.Uuid
+  employeeId                 String   @db.Uuid
+  monthlyBudgetLimitMicroUsd BigInt   @default(0)
+  warningThresholdPercent    Int      @default(80)
+  policy                     Json     @default("{}")
+  status                     String   @default("active")
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, employeeId])
+  @@index([tenantId])
+  @@index([projectId, status])
+  @@index([employeeId, status])
+  @@map("project_employee_assignments")
 }
 
 model Application {
