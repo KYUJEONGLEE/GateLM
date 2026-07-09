@@ -5,6 +5,10 @@ import {
   getControlPlaneApplicationId,
   getControlPlaneBaseUrl
 } from "@/lib/control-plane/control-plane-config";
+import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
 import type {
   AppTokenIssueValues,
   AppTokenListItem,
@@ -85,7 +89,8 @@ export async function getAppTokensModel(routeTenantId: string): Promise<AppToken
 }
 
 export async function issueAppToken(
-  values: AppTokenIssueValues
+  values: AppTokenIssueValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<OneTimeAppTokenResult> {
   const applicationId = values.applicationId ?? getControlPlaneApplicationId();
 
@@ -95,9 +100,9 @@ export async function issueAppToken(
       {
         body: JSON.stringify(toIssuePayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -112,12 +117,16 @@ export async function issueAppToken(
   }
 }
 
-export async function rotateAppToken(appTokenId: string): Promise<OneTimeAppTokenResult> {
+export async function rotateAppToken(
+  appTokenId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<OneTimeAppTokenResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/app-tokens/${encodeURIComponent(appTokenId)}/rotate`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "POST"
       }
     );
@@ -132,12 +141,16 @@ export async function rotateAppToken(appTokenId: string): Promise<OneTimeAppToke
   }
 }
 
-export async function revokeAppToken(appTokenId: string): Promise<AppTokenRevokeResult> {
+export async function revokeAppToken(
+  appTokenId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<AppTokenRevokeResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/app-tokens/${encodeURIComponent(appTokenId)}/revoke`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "POST"
       }
     );

@@ -6,6 +6,10 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
+import {
   cachedControlPlaneRead,
   CONTROL_PLANE_READ_CACHE_SECONDS,
   controlPlaneReadCacheTags,
@@ -123,7 +127,8 @@ export async function listControlPlaneProjectsFresh(
 
 export async function createProject(
   values: ProjectFormValues,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectRequestResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -133,9 +138,9 @@ export async function createProject(
       {
         body: JSON.stringify(toProjectPayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -159,6 +164,7 @@ export async function createProject(
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        cookieHeader: options?.cookieHeader,
         routeTenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
@@ -181,7 +187,8 @@ export async function createProject(
 
 export async function updateProject(
   values: ProjectUpdateValues,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectRequestResult> {
   try {
     const response = await fetch(
@@ -194,9 +201,9 @@ export async function updateProject(
           totalBudgetUsd: values.totalBudgetUsd
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "PATCH"
       }
     );
@@ -220,7 +227,7 @@ export async function updateProject(
       const providerConnections = await setApplicationProviderConnections({
         applicationId: runtimeApplicationId,
         providerConnectionIds: values.providerConnectionIds
-      });
+      }, options);
 
       if (!providerConnections.ok) {
         return {
@@ -234,6 +241,7 @@ export async function updateProject(
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        cookieHeader: options?.cookieHeader,
         routeTenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }

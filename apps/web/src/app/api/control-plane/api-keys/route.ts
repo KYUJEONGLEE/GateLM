@@ -31,6 +31,7 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (
     payload.action !== "issue" &&
@@ -64,10 +65,10 @@ export async function POST(request: Request) {
       payload.values,
       routeTenantId,
       {
-        attachProjectTeam,
-        createProject,
-        issueApiKey,
-        updateProject
+        attachProjectTeam: (values) => attachProjectTeam(values, requestOptions),
+        createProject: (values, tenantId) => createProject(values, tenantId, requestOptions),
+        issueApiKey: (values) => issueApiKey(values, requestOptions),
+        updateProject: (values, tenantId) => updateProject(values, tenantId, requestOptions)
       }
     );
 
@@ -97,12 +98,12 @@ export async function POST(request: Request) {
   const result =
     payload.action === "issue"
       ? isApiKeyIssueValues(payload.values)
-        ? await issueApiKey(payload.values)
+        ? await issueApiKey(payload.values, requestOptions)
         : null
       : typeof payload.apiKeyId === "string"
         ? payload.action === "rotate"
-          ? await rotateApiKey(payload.apiKeyId)
-          : await revokeApiKey(payload.apiKeyId)
+          ? await rotateApiKey(payload.apiKeyId, requestOptions)
+          : await revokeApiKey(payload.apiKeyId, requestOptions)
         : null;
 
   if (!result) {

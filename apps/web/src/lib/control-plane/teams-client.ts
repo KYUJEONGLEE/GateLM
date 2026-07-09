@@ -5,6 +5,10 @@ import {
   getControlPlaneTenantId,
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
 import type {
   ProjectTeamMutationValues,
   ProjectTeamRecord,
@@ -125,7 +129,10 @@ export async function getProjectTeamsModel(
   };
 }
 
-export async function createTeam(values: TeamFormValues): Promise<TeamRequestResult> {
+export async function createTeam(
+  values: TeamFormValues,
+  options?: ControlPlaneRequestOptions
+): Promise<TeamRequestResult> {
   const tenantId = values.tenantId?.trim() || getControlPlaneTenantId();
 
   try {
@@ -134,9 +141,9 @@ export async function createTeam(values: TeamFormValues): Promise<TeamRequestRes
       {
         body: JSON.stringify(toTeamPayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -151,7 +158,10 @@ export async function createTeam(values: TeamFormValues): Promise<TeamRequestRes
   }
 }
 
-export async function updateTeam(values: TeamUpdateValues): Promise<TeamRequestResult> {
+export async function updateTeam(
+  values: TeamUpdateValues,
+  options?: ControlPlaneRequestOptions
+): Promise<TeamRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/teams/${encodeURIComponent(values.teamId)}`,
@@ -162,9 +172,9 @@ export async function updateTeam(values: TeamUpdateValues): Promise<TeamRequestR
           status: values.status
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "PATCH"
       }
     );
@@ -179,12 +189,16 @@ export async function updateTeam(values: TeamUpdateValues): Promise<TeamRequestR
   }
 }
 
-export async function archiveTeam(teamId: string): Promise<TeamRequestResult> {
+export async function archiveTeam(
+  teamId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<TeamRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/teams/${encodeURIComponent(teamId)}`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "DELETE"
       }
     );
@@ -200,7 +214,8 @@ export async function archiveTeam(teamId: string): Promise<TeamRequestResult> {
 }
 
 export async function attachProjectTeam(
-  values: ProjectTeamMutationValues
+  values: ProjectTeamMutationValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectTeamRequestResult> {
   try {
     const response = await fetch(
@@ -210,9 +225,9 @@ export async function attachProjectTeam(
           teamId: values.teamId
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -228,13 +243,15 @@ export async function attachProjectTeam(
 }
 
 export async function detachProjectTeam(
-  values: ProjectTeamMutationValues
+  values: ProjectTeamMutationValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectTeamRequestResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(values.projectId)}/teams/${encodeURIComponent(values.teamId)}`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "DELETE"
       }
     );

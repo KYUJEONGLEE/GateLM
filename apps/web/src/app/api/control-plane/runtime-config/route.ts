@@ -20,6 +20,7 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (
     payload.action !== "save-draft" &&
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     }
 
     const applicationId = getOptionalApplicationId(payload.applicationId);
-    const result = await rollbackRuntimePolicy(payload.targetConfigVersion, applicationId);
+    const result = await rollbackRuntimePolicy(payload.targetConfigVersion, applicationId, requestOptions);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -62,8 +63,8 @@ export async function POST(request: Request) {
   const applicationId = getOptionalApplicationId(payload.applicationId);
   const result =
     payload.action === "save-draft"
-      ? await saveRuntimePolicyDraft(payload.values, applicationId)
-      : await publishRuntimePolicy(payload.values, applicationId);
+      ? await saveRuntimePolicyDraft(payload.values, applicationId, requestOptions)
+      : await publishRuntimePolicy(payload.values, applicationId, requestOptions);
 
   if (!result.ok) {
     return NextResponse.json(

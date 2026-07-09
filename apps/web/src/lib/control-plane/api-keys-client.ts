@@ -5,6 +5,10 @@ import {
   getControlPlaneBaseUrl,
   getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
+import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
 import type {
   ApiKeyIssueValues,
   ApiKeyListItem,
@@ -116,7 +120,10 @@ export async function listApiKeysForProject(projectId: string): Promise<ApiKeyLi
   return listApiKeys(projectId);
 }
 
-export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApiKeyResult> {
+export async function issueApiKey(
+  values: ApiKeyIssueValues,
+  options?: ControlPlaneRequestOptions
+): Promise<OneTimeApiKeyResult> {
   const projectId = values.projectId ?? getControlPlaneProjectId();
 
   try {
@@ -125,9 +132,9 @@ export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApi
       {
         body: JSON.stringify(toIssuePayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -142,12 +149,16 @@ export async function issueApiKey(values: ApiKeyIssueValues): Promise<OneTimeApi
   }
 }
 
-export async function rotateApiKey(apiKeyId: string): Promise<OneTimeApiKeyResult> {
+export async function rotateApiKey(
+  apiKeyId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<OneTimeApiKeyResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/api-keys/${encodeURIComponent(apiKeyId)}/rotate`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "POST"
       }
     );
@@ -162,12 +173,16 @@ export async function rotateApiKey(apiKeyId: string): Promise<OneTimeApiKeyResul
   }
 }
 
-export async function revokeApiKey(apiKeyId: string): Promise<ApiKeyRevokeResult> {
+export async function revokeApiKey(
+  apiKeyId: string,
+  options?: ControlPlaneRequestOptions
+): Promise<ApiKeyRevokeResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/api-keys/${encodeURIComponent(apiKeyId)}/revoke`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "POST"
       }
     );
