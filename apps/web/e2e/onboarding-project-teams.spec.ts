@@ -373,18 +373,29 @@ test("create project can select existing teams and create a team inline before a
   await expect(page.getByRole("heading", { name: /Integration guide|연동 가이드/ })).toBeVisible();
   await expect(page.getByText(["App", "Token"].join(" "))).toHaveCount(0);
   await expect(page.getByText(issuedPlaintext)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Previous|이전/ })).toHaveCount(0);
+  const integrationPreviousButton = page.getByRole("button", { name: /Previous|이전/ });
+  await expect(integrationPreviousButton).toBeEnabled();
   await expect(page.getByRole("button", { name: "Copy document" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Run test" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Copy placeholder" })).toHaveCount(0);
   await expect(page.getByText("Required values")).toHaveCount(0);
 
   const saveToProjectsButton = page.getByRole("button", {
-    name: /Save and go to Projects|저장 후 Projects로 이동/
+    name: /Create project|프로젝트 생성/
   });
   await expect(saveToProjectsButton).toBeDisabled();
   await page.getByRole("button", { name: "Create API Key" }).click();
   await expect(page.getByText(issuedPlaintext)).toBeVisible();
+  await expect(saveToProjectsButton).toBeEnabled();
+
+  await integrationPreviousButton.click();
+  await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
+  await expect(page.getByText(issuedPlaintext)).toHaveCount(0);
+  await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
+  await expect(page.locator(".onboarding-step").nth(2)).toHaveAttribute("data-active", "true");
+  await expect(page.getByText(issuedPlaintext)).toHaveCount(0);
+  await expect(page.locator(".one-time-secret")).toHaveAttribute("data-hidden", "true");
+  await expect(page.getByText(/Plaintext hidden|원문은 숨겨졌습니다/)).toBeVisible();
   await expect(saveToProjectsButton).toBeEnabled();
 
   const latestRequestLink = page.getByRole("link", { name: "Review latest request" });

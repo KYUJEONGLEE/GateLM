@@ -116,7 +116,7 @@ const onboardingText: Record<
     noTeams: "No active teams available.",
     previous: "Previous",
     saveNext: "Save and continue",
-    saveToProjects: "Save and go to Projects",
+    saveToProjects: "Create project",
     savingProject: "Creating project...",
     step: "Step",
     team: "Team",
@@ -135,7 +135,7 @@ const onboardingText: Record<
     noTeams: "No active teams available.",
     previous: "이전",
     saveNext: "저장 후 다음",
-    saveToProjects: "저장 후 Projects로 이동",
+    saveToProjects: "프로젝트 생성",
     savingProject: "API key 발급 중",
     step: "단계",
     team: "Team",
@@ -252,9 +252,7 @@ export function AdminOnboardingFlow({
     isCreatingCredential ||
     isCompletingProject ||
     activeFlowStepId === "project";
-  const shouldShowPreviousAction = !(
-    activeFlowStepId === "integration-guide" || activeFlowStepId === "project"
-  );
+  const shouldShowPreviousAction = activeFlowStepId !== "project";
   const isCreateApiKeyDisabled =
     isCreatingCredential ||
     projectSetupState.status === "issued" ||
