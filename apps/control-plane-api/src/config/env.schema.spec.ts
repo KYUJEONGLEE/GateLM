@@ -61,6 +61,16 @@ describe('validateEnv', () => {
     ).toThrow(
       'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
     );
+
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        CONTROL_PLANE_INTERNAL_SERVICE_TOKEN:
+          'local-control-plane-internal-token-for-dev-only',
+      }),
+    ).toThrow(
+      'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
+    );
   });
 
   it('accepts session cookie, smtp, and strong internal token in production-like envs', () => {

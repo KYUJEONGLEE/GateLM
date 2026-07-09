@@ -249,6 +249,7 @@ function isWeakInternalServiceToken(value: string): boolean {
     value.trim().length < 32 ||
     normalized.includes('changeme') ||
     normalized.includes('demo') ||
+    normalized.includes('dev-only') ||
     normalized.includes('example') ||
     normalized.includes('placeholder') ||
     normalized.includes('replace-me')
