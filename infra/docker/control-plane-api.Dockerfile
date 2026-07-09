@@ -26,6 +26,7 @@ RUN pnpm install --frozen-lockfile --filter @gatelm/control-plane-api...
 FROM deps AS builder
 
 COPY apps/control-plane-api apps/control-plane-api
+COPY scripts/dev/ensure-control-plane-prisma-client.mjs scripts/dev/ensure-control-plane-prisma-client.mjs
 
 RUN pnpm --filter @gatelm/control-plane-api db:generate \
   && pnpm --filter @gatelm/control-plane-api build
