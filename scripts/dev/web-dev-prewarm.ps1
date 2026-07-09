@@ -77,7 +77,7 @@ function Write-NewLogLines {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][ref]$Cursor,
-        [Parameter(Mandatory = $true)][string]$Prefix
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Prefix
     )
 
     $lines = Read-LogLines -Path $Path
