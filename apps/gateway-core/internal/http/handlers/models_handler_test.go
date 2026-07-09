@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
@@ -83,6 +84,21 @@ func TestModelsHandlerPassesStartedAtToRuntimePipeline(t *testing.T) {
 	}
 	if runtimePolicy.calls != 1 {
 		t.Fatalf("expected one runtime policy call, got %d", runtimePolicy.calls)
+	}
+}
+
+func TestModelListFromProviderCatalogReturnsEmptyArray(t *testing.T) {
+	resp := modelListFromProviderCatalog(providercatalog.Catalog{})
+	if resp.Data == nil {
+		t.Fatalf("expected non-nil empty data slice")
+	}
+
+	body, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal model response: %v", err)
+	}
+	if !strings.Contains(string(body), `"data":[]`) {
+		t.Fatalf("expected empty JSON array for data, got %s", body)
 	}
 }
 

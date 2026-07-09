@@ -128,7 +128,10 @@ func (h ModelsHandler) modelsFromRuntimeCatalog(ctx context.Context, reqCtx *pip
 }
 
 func modelListFromProviderCatalog(catalog providercatalog.Catalog) *provider.ModelListResponse {
-	resp := &provider.ModelListResponse{Object: "list"}
+	resp := &provider.ModelListResponse{
+		Object: "list",
+		Data:   []provider.ModelInfo{},
+	}
 	for _, catalogProvider := range catalog.Normalize().Providers {
 		if !catalogProvider.Enabled {
 			continue
