@@ -8,6 +8,10 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
+import {
   cachedControlPlaneRead,
   CONTROL_PLANE_READ_CACHE_SECONDS,
   controlPlaneReadCacheTags,
@@ -513,6 +517,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   applicationId: string,
   selectedModelKey: string,
   options: {
+    cookieHeader?: string | null;
     routeTenantId?: string;
     warningThresholdPercent?: number;
   } = {}
@@ -566,6 +571,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
   const draft = await writeRuntimeConfig("draft", nextValues, {
     applicationId,
+    cookieHeader: options.cookieHeader,
     draftConfigVersion
   });
 
@@ -578,6 +584,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
 
   const published = await writeRuntimeConfig("publish", nextValues, {
     applicationId,
+    cookieHeader: options.cookieHeader,
     draftConfigVersion,
     publishedConfigVersion: createPublishedRuntimeConfigVersion()
   });
@@ -622,25 +629,29 @@ async function fetchRuntimeConfigForModelSelection(
 
 export async function saveRuntimePolicyDraft(
   values: RuntimePolicyDraftValues,
-  applicationId?: string
+  applicationId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ControlPlaneRequestResult> {
   const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
 
   return writeRuntimeConfig("draft", values, {
     applicationId: targetApplicationId,
+    cookieHeader: options?.cookieHeader,
     draftConfigVersion: getRuntimePolicyDraftConfigVersion(values, targetApplicationId)
   });
 }
 
 export async function publishRuntimePolicy(
   values: RuntimePolicyDraftValues,
-  applicationId?: string
+  applicationId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ControlPlaneRequestResult> {
   const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
   const draftConfigVersion = getRuntimePolicyDraftConfigVersion(values, targetApplicationId);
   const publishedConfigVersion = createPublishedRuntimeConfigVersion();
   const draft = await writeRuntimeConfig("draft", values, {
     applicationId: targetApplicationId,
+    cookieHeader: options?.cookieHeader,
     draftConfigVersion
   });
 
@@ -650,6 +661,7 @@ export async function publishRuntimePolicy(
 
   return writeRuntimeConfig("publish", values, {
     applicationId: targetApplicationId,
+    cookieHeader: options?.cookieHeader,
     draftConfigVersion,
     publishedConfigVersion
   });
@@ -657,7 +669,8 @@ export async function publishRuntimePolicy(
 
 export async function rollbackRuntimePolicy(
   targetConfigVersion: string,
-  applicationId = getControlPlaneApplicationId()
+  applicationId = getControlPlaneApplicationId(),
+  options?: ControlPlaneRequestOptions
 ): Promise<ControlPlaneRequestResult> {
   try {
     const response = await fetch(
@@ -667,9 +680,9 @@ export async function rollbackRuntimePolicy(
           targetConfigVersion: targetConfigVersion.trim()
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -903,6 +916,7 @@ async function writeRuntimeConfig(
   values: RuntimePolicyDraftValues,
   options: {
     applicationId?: string;
+    cookieHeader?: string | null;
     draftConfigVersion?: string;
     publishedConfigVersion?: string;
   } = {}
@@ -924,9 +938,12 @@ async function writeRuntimeConfig(
       {
         body: JSON.stringify(body),
         cache: "no-store",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: await buildControlPlaneHeaders(
+          { cookieHeader: options.cookieHeader },
+          {
+            "Content-Type": "application/json"
+          }
+        ),
         method: "POST"
       }
     );

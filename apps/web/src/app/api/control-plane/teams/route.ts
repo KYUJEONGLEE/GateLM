@@ -20,12 +20,13 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (!isTeamAction(payload.action)) {
     return NextResponse.json({ error: "Unknown team action." }, { status: 400 });
   }
 
-  const result = await runTeamAction(payload.action, payload.values);
+  const result = await runTeamAction(payload.action, payload.values, requestOptions);
 
   if (!result) {
     return NextResponse.json({ error: "Invalid team payload." }, { status: 400 });
@@ -54,24 +55,28 @@ export async function POST(request: Request) {
   });
 }
 
-async function runTeamAction(action: TeamAction, values: unknown) {
+async function runTeamAction(
+  action: TeamAction,
+  values: unknown,
+  requestOptions: { cookieHeader: string | null }
+) {
   if (action === "create") {
-    return isTeamFormValues(values) ? createTeam(values) : null;
+    return isTeamFormValues(values) ? createTeam(values, requestOptions) : null;
   }
 
   if (action === "update") {
-    return isTeamUpdateValues(values) ? updateTeam(values) : null;
+    return isTeamUpdateValues(values) ? updateTeam(values, requestOptions) : null;
   }
 
   if (action === "archive") {
-    return isArchiveValues(values) ? archiveTeam(values.teamId) : null;
+    return isArchiveValues(values) ? archiveTeam(values.teamId, requestOptions) : null;
   }
 
   if (action === "attach") {
-    return isProjectTeamMutationValues(values) ? attachProjectTeam(values) : null;
+    return isProjectTeamMutationValues(values) ? attachProjectTeam(values, requestOptions) : null;
   }
 
-  return isProjectTeamMutationValues(values) ? detachProjectTeam(values) : null;
+  return isProjectTeamMutationValues(values) ? detachProjectTeam(values, requestOptions) : null;
 }
 
 type TeamAction = "archive" | "attach" | "create" | "detach" | "update";

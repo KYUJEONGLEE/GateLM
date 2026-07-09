@@ -25,6 +25,8 @@ export async function POST(request: Request) {
   const result = await setApplicationProviderConnections({
     applicationId: payload.applicationId,
     providerConnectionIds: payload.providerConnectionIds
+  }, {
+    cookieHeader: request.headers.get("cookie")
   });
 
   if (!result.ok) {

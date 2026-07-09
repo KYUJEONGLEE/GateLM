@@ -1,9 +1,9 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request = require('supertest');
 
 import { AdminAuthGuard } from '@/common/guards/admin-auth.guard';
+import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
@@ -73,13 +73,8 @@ describe('ConversationsController', () => {
         },
         AdminAuthGuard,
         {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string) =>
-              key === 'CONTROL_PLANE_ADMIN_AUTH_MODE'
-                ? 'demo_admin_placeholder'
-                : undefined,
-          },
+          provide: PrismaService,
+          useValue: {},
         },
       ],
     }).compile();

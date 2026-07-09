@@ -7,6 +7,10 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
+import {
   cachedControlPlaneRead,
   CONTROL_PLANE_READ_CACHE_SECONDS,
   controlPlaneReadCacheTags,
@@ -140,7 +144,8 @@ export async function getProviderConnectionsModel(
 
 export async function upsertProviderConnection(
   values: ProviderConnectionFormValues,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProviderRequestResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -150,9 +155,9 @@ export async function upsertProviderConnection(
       {
         body: JSON.stringify(toProviderPayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -169,7 +174,8 @@ export async function upsertProviderConnection(
 
 export async function deleteProviderConnection(
   provider: string,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProviderRequestResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -178,6 +184,7 @@ export async function deleteProviderConnection(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(provider)}`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "DELETE"
       }
     );
@@ -194,7 +201,8 @@ export async function deleteProviderConnection(
 
 export async function discoverProviderModels(
   provider: string,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProviderDiscoveryResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -203,6 +211,7 @@ export async function discoverProviderModels(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(provider)}/discover-models`,
       {
         cache: "no-store",
+        headers: await buildControlPlaneHeaders(options),
         method: "POST"
       }
     );
@@ -219,12 +228,14 @@ export async function discoverProviderModels(
 
 export async function removeProviderModel({
   modelName,
+  options,
   provider,
   routeTenantId
 }: {
   modelName: string;
   provider: string;
   routeTenantId?: string;
+  options?: ControlPlaneRequestOptions;
 }): Promise<ProviderRequestResult> {
   const listResult = await listTenantProviderConnectionsFresh(resolveControlPlaneTenantId(routeTenantId));
 
@@ -294,7 +305,8 @@ export async function removeProviderModel({
       status: providerConnection.status,
       timeoutMs: providerConnection.timeoutMs
     },
-    routeTenantId
+    routeTenantId,
+    options
   );
 }
 
@@ -362,7 +374,7 @@ export async function setApplicationProviderConnections({
 }: {
   applicationId: string;
   providerConnectionIds: string[];
-}): Promise<ProviderListResult> {
+}, options?: ControlPlaneRequestOptions): Promise<ProviderListResult> {
   try {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/providers`,
@@ -371,9 +383,9 @@ export async function setApplicationProviderConnections({
           providerConnectionIds
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );

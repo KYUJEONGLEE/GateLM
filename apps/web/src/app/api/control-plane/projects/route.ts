@@ -33,6 +33,7 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (payload.action !== "create" && payload.action !== "update") {
     return NextResponse.json({ error: "Unknown project action." }, { status: 400 });
@@ -61,10 +62,10 @@ export async function POST(request: Request) {
   const result =
     payload.action === "create"
       ? isProjectFormValues(payload.values)
-        ? await createProject(payload.values, routeTenantId)
+        ? await createProject(payload.values, routeTenantId, requestOptions)
         : null
       : isProjectUpdateValues(payload.values)
-        ? await updateProject(payload.values, routeTenantId)
+        ? await updateProject(payload.values, routeTenantId, requestOptions)
         : null;
 
   if (!result) {

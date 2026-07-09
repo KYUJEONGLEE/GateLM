@@ -17,6 +17,7 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (payload.action !== "create" && payload.action !== "update") {
     return NextResponse.json({ error: "Unknown application action." }, { status: 400 });
@@ -25,10 +26,10 @@ export async function POST(request: Request) {
   const result =
     payload.action === "create"
       ? isApplicationFormValues(payload.values)
-        ? await createApplication(payload.values)
+        ? await createApplication(payload.values, requestOptions)
         : null
       : isApplicationUpdateValues(payload.values)
-        ? await updateApplication(payload.values)
+        ? await updateApplication(payload.values, requestOptions)
         : null;
 
   if (!result) {
