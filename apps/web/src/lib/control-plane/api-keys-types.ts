@@ -1,3 +1,5 @@
+import type { ProjectFormValues, ProjectRecord } from "@/lib/control-plane/projects-types";
+
 export type ApiKeyStatus = "active" | "revoked" | "expired" | "disabled";
 
 export type ApiKeyListItem = {
@@ -32,6 +34,17 @@ export type ApiKeyIssueValues = {
   expiresAt: string;
   projectId?: string;
   scopes: string;
+};
+
+export type OnboardingDraftProjectApiKeyIssueValues = ApiKeyIssueValues & {
+  project: ProjectFormValues;
+  teamIds?: string[];
+  tenantId?: string;
+};
+
+export type OnboardingDraftProjectApiKeyIssueResponse = {
+  apiKey: OneTimeApiKeyResponse;
+  project: ProjectRecord;
 };
 
 export type ApiKeysModel = {

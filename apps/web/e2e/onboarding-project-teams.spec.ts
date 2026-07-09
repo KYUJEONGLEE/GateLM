@@ -1,20 +1,40 @@
-import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { expect, type APIRequestContext, type BrowserContext, test } from "@playwright/test";
+
+const e2eBaseUrl =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+const controlPlaneBaseUrl = (
+  process.env.GATELM_CONTROL_PLANE_BASE_URL ??
+  process.env.CONTROL_PLANE_BASE_URL ??
+  "http://localhost:3001"
+).replace(/\/+$/, "");
+const e2eCookieUrls = Array.from(
+  new Set([
+    e2eBaseUrl,
+    `http://127.0.0.1:${process.env.PORT ?? "3000"}`,
+    `http://localhost:${process.env.PORT ?? "3000"}`
+  ])
+);
 
 test("create project can select existing teams and create a team inline before attaching all selected teams", async ({
   context,
-  page
+  page,
+  request
 }) => {
-  const attachedTeamIds: string[] = [];
   const issuedPlaintext = "gatelm_test_onboarding_team_demo";
-  let createdProjectValues: Record<string, unknown> = {};
+  let apiKeyAction = "";
+  let draftProjectValues: Record<string, unknown> = {};
+  let draftTenantId = "tenant_demo_acme";
+  let draftTeamIds: string[] = [];
   let savedProviderValues: Record<string, unknown> = {};
   let firstAttachedTeamId = "";
-  let selectedProviderModel = "";
+  let projectCreateCallCount = 0;
   let updatedProjectValues: Record<string, unknown> = {};
 
   await page.route("**/api/control-plane/projects", async (route) => {
     const body = route.request().postDataJSON() as {
       action?: string;
+      tenantId?: string;
       values?: Record<string, unknown>;
     };
 
@@ -51,7 +71,7 @@ test("create project can select existing teams and create a team inline before a
       return;
     }
 
-    createdProjectValues = body.values ?? {};
+    projectCreateCallCount += 1;
 
     await route.fulfill({
       body: JSON.stringify({
@@ -62,7 +82,7 @@ test("create project can select existing teams and create a team inline before a
           name: body.values?.name,
           runtimeApplicationId: "app_onboarding_team_demo",
           status: body.values?.status ?? "DRAFT",
-          tenantId: "tenant_demo_acme",
+          tenantId: String(body.tenantId ?? savedProviderValues.tenantId ?? draftTenantId),
           totalBudgetUsd: body.values?.totalBudgetUsd,
           updatedAt: "2026-07-06T00:00:00.000Z"
         },
@@ -101,23 +121,10 @@ test("create project can select existing teams and create a team inline before a
     }
 
     if (body.action === "attach") {
-      attachedTeamIds.push(String(body.values?.teamId));
       await route.fulfill({
-        body: JSON.stringify({
-          projectTeam: {
-            assignedAt: "2026-07-06T00:00:00.000Z",
-            id: `project_team_${body.values?.teamId}`,
-            projectId: body.values?.projectId,
-            teamDescription: "",
-            teamId: body.values?.teamId,
-            teamName: body.values?.teamId,
-            teamStatus: "ACTIVE",
-            tenantId: "tenant_demo_acme"
-          },
-          status: 201
-        }),
+        body: JSON.stringify({ error: "Team attach should happen inside onboarding API key issue." }),
         contentType: "application/json",
-        status: 200
+        status: 400
       });
       return;
     }
@@ -225,7 +232,7 @@ test("create project can select existing teams and create a team inline before a
           displayName: savedProviderValues.displayName,
           id: "provider_onboarding_openai",
           projectId: null,
-          provider: savedProviderValues.provider,
+          provider: "openai",
           providerConfig: {
             adapterType: savedProviderValues.adapterType,
             credentialRequired: savedProviderValues.credentialRequired,
@@ -249,6 +256,27 @@ test("create project can select existing teams and create a team inline before a
   });
 
   await page.route("**/api/control-plane/api-keys", async (route) => {
+    const body = route.request().postDataJSON() as {
+      action?: string;
+      values?: Record<string, unknown> & {
+        project?: Record<string, unknown>;
+        teamIds?: string[];
+      };
+    };
+    apiKeyAction = body.action ?? "";
+    draftProjectValues = body.values?.project ?? {};
+    draftTenantId = String(body.values?.tenantId ?? draftTenantId);
+    draftTeamIds = body.values?.teamIds ?? [];
+
+    if (body.action !== "issueForOnboardingDraftProject") {
+      await route.fulfill({
+        body: JSON.stringify({ error: "Unexpected API Key action" }),
+        contentType: "application/json",
+        status: 400
+      });
+      return;
+    }
+
     await route.fulfill({
       body: JSON.stringify({
         apiKey: {
@@ -264,6 +292,18 @@ test("create project can select existing teams and create a team inline before a
           status: "active",
           warning: "Store this value now."
         },
+        project: {
+          createdAt: "2026-07-06T00:00:00.000Z",
+          description: body.values?.project?.description ?? "",
+          id: "project_onboarding_team_demo",
+          name: body.values?.project?.name,
+          runtimeApplicationId: "app_onboarding_team_demo",
+          status: "DRAFT",
+          tenantId: draftTenantId,
+          totalBudgetUsd: body.values?.project?.totalBudgetUsd,
+          updatedAt: "2026-07-06T00:00:00.000Z",
+          warningThresholdPercent: body.values?.project?.warningThresholdPercent
+        },
         status: 201
       }),
       contentType: "application/json",
@@ -272,10 +312,10 @@ test("create project can select existing teams and create a team inline before a
   });
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await prepareAuthenticatedConsole(context, request);
   await page.goto("/tenants/tenant_demo_acme/onboarding");
 
   await page.getByRole("textbox", { name: "Project name" }).fill("Team enabled project");
-  await page.getByRole("textbox", { name: "Warning threshold" }).fill("75");
   const teamGroup = page.getByRole("group", { name: "Team" });
   const teamToggle = teamGroup.getByRole("button", { name: "Select teams" });
   await teamToggle.click();
@@ -311,32 +351,13 @@ test("create project can select existing teams and create a team inline before a
   await expect(page.getByRole("button", { name: /Previous|이전/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
-  await expect(page.locator(".onboarding-step").nth(0)).toHaveAttribute("data-active", "true");
-  await expect(page.getByRole("textbox", { name: "API Key name" })).toBeVisible();
-  await expect(page.getByLabel("Publish state")).toBeVisible();
-  await expect(page.locator(".onboarding-field > span").filter({ hasText: /^Cache$/ })).toBeVisible();
-  await expect(page.getByLabel("Safety mode")).toBeVisible();
-  const projectPreviousButton = page.getByRole("button", { name: /Previous|이전/ });
-  await expect(projectPreviousButton).toBeEnabled();
-  await projectPreviousButton.click();
-  await expect(page.getByRole("textbox", { name: "Project name" })).toBeVisible();
-  await expect(page.getByLabel("Model")).toHaveCount(0);
-  await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
-  await expect(page.getByRole("textbox", { name: "API Key name" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Save and continue|저장 후 다음/ })).toBeDisabled();
-  await page.getByRole("button", { name: "Create API Key" }).click();
-  await expect(page.getByText(issuedPlaintext)).toBeVisible();
-  const projectDoneButton = page.getByRole("button", {
-    name: /Save and continue|저장 후 다음/
-  });
-  await expect(projectDoneButton).toBeEnabled();
-  await projectDoneButton.click();
+  expect(projectCreateCallCount).toBe(0);
   await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
   const providerPreviousButton = page.getByRole("button", { name: /Previous|이전/ });
   await expect(providerPreviousButton).toBeEnabled();
   await providerPreviousButton.click();
   await expect(page.locator(".onboarding-step").nth(0)).toHaveAttribute("data-active", "true");
-  await expect(page.getByRole("textbox", { name: "API Key name" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Project name" })).toBeVisible();
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
   await expect(providerPreviousButton).toBeEnabled();
@@ -347,69 +368,7 @@ test("create project can select existing teams and create a team inline before a
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Choose OpenAI" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Choose OpenAI" }).click();
-  const providerApiKeyInput = page.locator('input[type="password"]');
-  await expect(providerApiKeyInput).toBeVisible();
-  await expect(page.getByText(/Provider key saved|Provider key가 저장되어 있습니다/)).toHaveCount(0);
-  await expect(page.getByText(/provided_.*C_MA/)).toHaveCount(0);
-  const projectDefaultHeading = page.getByRole("heading", {
-    name: /Project default 모델 선택|Project default model/
-  });
-  const addModelKeyButton = page.getByRole("button", {
-    name: /Add selected model key|선택한 모델 Key 추가/
-  });
-  await expect(projectDefaultHeading).toHaveCount(0);
-  await expect(page.getByRole("group", { name: /Provider selectable models|Provider 모델 선택/ })).toHaveCount(0);
-  const addModelKeyBox = await addModelKeyButton.boundingBox();
-  const apiKeyBox = await providerApiKeyInput.boundingBox();
-  expect(apiKeyBox?.y).toBeLessThan(addModelKeyBox?.y ?? 0);
-  await addModelKeyButton.click();
-  await expect(page.getByText(/Choose a provider and enter the provider API key|Provider를 선택/)).toBeVisible();
-  await providerApiKeyInput.fill("synthetic_onboarding_credential");
-  await addModelKeyButton.click();
-  await expect(page.getByText(/Provider saved|Provider가 저장되었습니다/)).toBeVisible();
-  const providerModelPanel = page.getByRole("group", {
-    name: /Provider selectable models|Provider 모델 선택/
-  });
-  await expect(providerModelPanel).toBeVisible();
-  const defaultProviderModelCheckboxes = [
-    providerModelPanel.getByRole("checkbox", { name: "chat-latest", exact: true }),
-    providerModelPanel.getByRole("checkbox", { name: "gpt-4o", exact: true }),
-    providerModelPanel.getByRole("checkbox", { name: "gpt-4o-mini", exact: true })
-  ];
-  for (const checkbox of defaultProviderModelCheckboxes) {
-    await expect(checkbox).toBeVisible();
-    await expect(checkbox).toBeChecked();
-  }
-  await expect(providerModelPanel.getByText("text-embedding-3-small")).toHaveCount(0);
-  await providerModelPanel.getByRole("button", { name: /Save selected models|선택 모델 저장/ }).click();
-  await expect(page.getByText(/Selected provider models saved|선택 모델을 저장했습니다/)).toBeVisible();
-
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
-  await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
-  await expect(projectDefaultHeading).toBeVisible();
-  const projectDefaultModelSelect = page.getByLabel(/Model|모델 선택/);
-  await expect(projectDefaultModelSelect).toBeVisible();
-  selectedProviderModel = await projectDefaultModelSelect.inputValue();
-  const providerDefaultPreviousButton = page.getByRole("button", { name: /Previous|이전/ });
-  await expect(providerDefaultPreviousButton).toBeEnabled();
-  await providerDefaultPreviousButton.click();
-  await expect(page.locator(".onboarding-step").nth(1)).toHaveAttribute("data-active", "true");
-  await expect(
-    page.getByRole("heading", {
-      name: /Register Provider model key \(optional\)|Provider 모델 Key 등록 \(선택\)/
-    })
-  ).toBeVisible();
-  await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
-  await expect(projectDefaultHeading).toBeVisible();
-  await expect(projectDefaultModelSelect).toBeVisible();
-  selectedProviderModel = await projectDefaultModelSelect.inputValue();
-
-  const completeProjectButton = page.getByRole("button", {
-    name: /Create Project|Project 생성/
-  });
-  await expect(completeProjectButton).toBeEnabled();
-  await completeProjectButton.click();
   await expect(page.locator(".onboarding-step").nth(2)).toHaveAttribute("data-active", "true");
   await expect(page.getByRole("heading", { name: /Integration guide|연동 가이드/ })).toBeVisible();
   await expect(page.getByText(["App", "Token"].join(" "))).toHaveCount(0);
@@ -420,50 +379,53 @@ test("create project can select existing teams and create a team inline before a
   await expect(page.getByRole("button", { name: "Copy placeholder" })).toHaveCount(0);
   await expect(page.getByText("Required values")).toHaveCount(0);
 
+  const saveToProjectsButton = page.getByRole("button", {
+    name: /Save and go to Projects|저장 후 Projects로 이동/
+  });
+  await expect(saveToProjectsButton).toBeDisabled();
+  await page.getByRole("button", { name: "Create API Key" }).click();
+  await expect(page.getByText(issuedPlaintext)).toBeVisible();
+  await expect(saveToProjectsButton).toBeEnabled();
+
   const latestRequestLink = page.getByRole("link", { name: "Review latest request" });
   const projectPolicyLink = page.getByRole("link", { name: "Project Policy settings" });
 
   await expect(latestRequestLink).toHaveAttribute(
     "href",
-    "/tenants/tenant_demo_acme/request-logs?latest=project&projectId=project_onboarding_team_demo&applicationId=app_onboarding_team_demo"
+    `/tenants/${draftTenantId}/request-logs?latest=project&projectId=project_onboarding_team_demo&applicationId=app_onboarding_team_demo`
   );
   await expect(projectPolicyLink).toHaveAttribute(
     "href",
-    "/tenants/tenant_demo_acme/projects/project_onboarding_team_demo/policies"
+    `/tenants/${draftTenantId}/projects/project_onboarding_team_demo/policies`
   );
-  expect(createdProjectValues).toMatchObject({
+  expect(projectCreateCallCount).toBe(0);
+  expect(apiKeyAction).toBe("issueForOnboardingDraftProject");
+  expect(draftProjectValues).toMatchObject({
     name: "Team enabled project",
     status: "DRAFT",
-    warningThresholdPercent: 75
+    warningThresholdPercent: 80
   });
-  expect(createdProjectValues).not.toHaveProperty("selectedModelKey");
-  expect(createdProjectValues).not.toHaveProperty("budgetLimitPercent");
+  expect(draftProjectValues).not.toHaveProperty("selectedModelKey");
+  expect(draftProjectValues).not.toHaveProperty("budgetLimitPercent");
+  expect(draftTeamIds).toEqual(expect.arrayContaining(["team_field_ops", firstAttachedTeamId]));
+  expect(new Set(draftTeamIds).size).toBe(draftTeamIds.length);
+  await page.locator("form.onboarding-form").evaluate((form) => {
+    (form as HTMLFormElement).requestSubmit();
+  });
+  await expect.poll(() => updatedProjectValues.status).toBe("ACTIVE");
   expect(updatedProjectValues).toMatchObject({
     selectedModelKey: expect.any(String),
     status: "ACTIVE",
-    warningThresholdPercent: 75
+    warningThresholdPercent: 80
   });
-  expect(savedProviderValues).toMatchObject({
-    provider: "openai"
-  });
-  expect(
-    String(savedProviderValues.models)
-      .split(",")
-      .map((model) => model.trim())
-  ).toEqual(expect.arrayContaining(["chat-latest", "gpt-4o", "gpt-4o-mini"]));
-  expect(
-    String(savedProviderValues.models)
-      .split(",")
-      .map((model) => model.trim())
-  ).toContain(selectedProviderModel.split("::").pop());
-  await expect.poll(() => attachedTeamIds.length).toBe(2);
-  expect(attachedTeamIds).toContain("team_field_ops");
-  expect(attachedTeamIds).toContain(firstAttachedTeamId);
-  expect(new Set(attachedTeamIds).size).toBe(attachedTeamIds.length);
 });
 
-test("create project shows the Control Plane project conflict message", async ({ page }) => {
-  await page.route("**/api/control-plane/projects", async (route) => {
+test("create project shows the Control Plane project conflict message", async ({
+  context,
+  page,
+  request
+}) => {
+  await page.route("**/api/control-plane/api-keys", async (route) => {
     await route.fulfill({
       body: JSON.stringify({
         error: "Project budgets exceed the tenant budget.",
@@ -474,15 +436,111 @@ test("create project shows the Control Plane project conflict message", async ({
     });
   });
 
+  await prepareAuthenticatedConsole(context, request);
   await page.goto("/tenants/tenant_demo_acme/onboarding");
   await page.getByRole("textbox", { name: "Project name" }).fill("Budget conflict project");
+  await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   await page.getByRole("button", { name: /Save and continue|저장 후 다음/ }).click();
   await page.getByRole("button", { name: "Create API Key" }).click();
 
   await expect(page.getByText("Project budgets exceed the tenant budget.")).toBeVisible();
-  await expect(page.locator(".onboarding-step").nth(0)).toHaveAttribute("data-active", "true");
+  await expect(page.locator(".onboarding-step").nth(2)).toHaveAttribute("data-active", "true");
 });
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function prepareAuthenticatedConsole(
+  context: BrowserContext,
+  request: APIRequestContext
+) {
+  const sessionCookie = await createConsoleSessionCookie(request);
+
+  await context.addCookies(
+    e2eCookieUrls.flatMap((url) => [
+      {
+        name: "gatelm_session",
+        url,
+        value: sessionCookie
+      },
+      {
+        name: "gatelm_locale",
+        url,
+        value: "en"
+      }
+    ])
+  );
+}
+
+async function createConsoleSessionCookie(request: APIRequestContext) {
+  const email = `onboarding-e2e-${randomUUID()}@example.invalid`;
+  const signupResponse = await request.post(`${controlPlaneBaseUrl}/api/auth/signup`, {
+    data: {
+      email,
+      name: "Onboarding E2E",
+      password: "correct-horse-battery-staple"
+    }
+  });
+
+  expect(signupResponse.ok()).toBeTruthy();
+
+  const organizationResponse = await request.post(
+    `${controlPlaneBaseUrl}/api/auth/organizations`,
+    {
+      data: {
+        organizationName: `Onboarding E2E ${randomUUID().slice(0, 8)}`
+      }
+    }
+  );
+
+  expect(organizationResponse.ok()).toBeTruthy();
+
+  const organizationPayload = (await organizationResponse.json()) as {
+    data?: {
+      tenant?: {
+        id?: string;
+      };
+    };
+  };
+  const tenantId = organizationPayload.data?.tenant?.id ?? "";
+  expect(tenantId).not.toBe("");
+
+  const teamResponse = await request.post(
+    `${controlPlaneBaseUrl}/admin/v1/tenants/${encodeURIComponent(tenantId)}/teams`,
+    {
+      data: {
+        description: "Existing team used by onboarding E2E.",
+        name: `Onboarding E2E Team ${randomUUID().slice(0, 8)}`
+      }
+    }
+  );
+
+  expect(teamResponse.ok()).toBeTruthy();
+
+  const sessionCookie = getSetCookieValue(organizationResponse.headersArray(), "gatelm_session");
+  if (!sessionCookie) {
+    throw new Error("Control plane did not issue a gatelm_session cookie.");
+  }
+
+  return sessionCookie;
+}
+
+function getSetCookieValue(headers: { name: string; value: string }[], cookieName: string) {
+  for (const header of headers) {
+    if (header.name.toLowerCase() !== "set-cookie") {
+      continue;
+    }
+
+    const [nameValue] = header.value.split(";");
+    const separatorIndex = nameValue.indexOf("=");
+    const name = separatorIndex >= 0 ? nameValue.slice(0, separatorIndex) : "";
+    const value = separatorIndex >= 0 ? nameValue.slice(separatorIndex + 1) : "";
+
+    if (name === cookieName) {
+      return value;
+    }
+  }
+
+  return null;
 }

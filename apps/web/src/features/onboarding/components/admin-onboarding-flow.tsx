@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CredentialOneTimeSecret } from "@/features/onboarding/components/credential-one-time-secret";
 import { OnboardingIntegrationGuide } from "@/features/onboarding/components/onboarding-integration-guide";
@@ -166,6 +166,7 @@ type ProjectCompletionState = {
 type ApiKeyIssuePayload = {
   apiKey?: OneTimeApiKeyResponse;
   error?: string;
+  project?: ProjectRecord;
 };
 
 type ProjectResponsePayload = {
@@ -177,11 +178,6 @@ type ProjectResponsePayload = {
 type TeamResponsePayload = {
   error?: string;
   team?: TeamRecord;
-};
-
-type ProjectTeamResponsePayload = {
-  error?: string;
-  projectTeam?: unknown;
 };
 
 type TeamCreateState = {
@@ -237,7 +233,6 @@ export function AdminOnboardingFlow({
     error: "",
     status: "idle"
   });
-  const isProjectDraftRequestInFlight = useRef(false);
   const activeFlowStepId = onboardingFlowStepIds[activeIndex] ?? "project";
   const visualActiveIndex = activeIndex;
   const text = onboardingText[locale];
@@ -263,7 +258,7 @@ export function AdminOnboardingFlow({
   const isCreateApiKeyDisabled =
     isCreatingCredential ||
     projectSetupState.status === "issued" ||
-    !projectSetupState.project;
+    draft.projectName.trim().length === 0;
 
   function toggleTeamSelection(teamId: string) {
     setSelectedTeamIds((current) => {
@@ -376,162 +371,38 @@ export function AdminOnboardingFlow({
     }
 
     if (activeFlowStepId === "project") {
-      const created = await createProjectDraft();
-
-      if (!created) {
-        return;
-      }
-
       setActiveIndex(1);
     }
   }
 
-  async function createProjectDraft() {
-    if (isProjectDraftRequestInFlight.current) {
+  async function issueProjectApiKey() {
+    if (isCreateApiKeyDisabled) {
       return false;
     }
 
-    if (isProjectStepIncomplete) {
-      return false;
-    }
-
-    isProjectDraftRequestInFlight.current = true;
     setProjectSetupState((current) => ({
       ...current,
       error: "",
       status: "saving"
     }));
 
-    let project = projectSetupState.project;
-
     try {
-      if (!project) {
-        const projectResponse = await fetch("/api/control-plane/projects", {
-          body: JSON.stringify({
-            action: "create",
-            tenantId: model.tenantId,
-            values: {
+      const response = await fetch("/api/control-plane/api-keys", {
+        body: JSON.stringify({
+          action: "issueForOnboardingDraftProject",
+          values: {
+            displayName: defaultProjectApiKeyDisplayName,
+            expiresAt: "",
+            project: {
               description: draft.projectDescription,
               name: draft.projectName,
               status: "DRAFT",
               totalBudgetUsd: Number(draft.projectTotalBudgetUsd),
               warningThresholdPercent: Number(draft.warningThresholdPercent)
-            }
-          }),
-          headers: {
-            "Content-Type": "application/json"
-          },
-          method: "POST"
-        });
-        const projectPayload = (await projectResponse
-          .json()
-          .catch(() => ({}))) as ProjectResponsePayload;
-
-        if (!projectResponse.ok || !projectPayload.project) {
-          setProjectSetupState({
-            apiKey: null,
-            error: projectPayload.error ?? text.createProjectError,
-            project: null,
-            status: "error"
-          });
-          return false;
-        }
-
-        project = projectPayload.project;
-      }
-
-      if (!project) {
-        setProjectSetupState({
-          apiKey: null,
-          error: text.createProjectError,
-          project: null,
-          status: "error"
-        });
-        return false;
-      }
-
-      const activeProject = project;
-      const attachableTeamIds = new Set(
-        activeTeams
-          .filter((team) => team.tenantId === activeProject.tenantId && isUuid(team.id))
-          .map((team) => team.id)
-      );
-
-      for (const teamId of selectedTeamIds) {
-        if (!attachableTeamIds.has(teamId)) {
-          continue;
-        }
-
-        const attachResponse = await fetch("/api/control-plane/teams", {
-          body: JSON.stringify({
-            action: "attach",
-            values: {
-              projectId: activeProject.id,
-              teamId
-            }
-          }),
-          headers: {
-            "Content-Type": "application/json"
-          },
-          method: "POST"
-        });
-        const attachPayload = (await attachResponse
-          .json()
-          .catch(() => ({}))) as ProjectTeamResponsePayload;
-
-        if (!attachResponse.ok || !attachPayload.projectTeam) {
-          setProjectSetupState({
-            apiKey: null,
-            error: attachPayload.error ?? text.attachTeamError,
-            project: activeProject,
-            status: "error"
-          });
-          return false;
-        }
-      }
-
-      setProjectSetupState({
-        apiKey: null,
-        error: "",
-        project: activeProject,
-        status: "idle"
-      });
-      return true;
-    } catch {
-      setProjectSetupState({
-        apiKey: null,
-        error: text.createProjectError,
-        project,
-        status: "error"
-      });
-      return false;
-    } finally {
-      isProjectDraftRequestInFlight.current = false;
-    }
-  }
-
-  async function issueProjectApiKey() {
-    if (isCreateApiKeyDisabled || !projectSetupState.project) {
-      return false;
-    }
-
-    setProjectSetupState((current) => ({
-      ...current,
-      error: "",
-      status: "saving"
-    }));
-
-    const activeProject = projectSetupState.project;
-
-    try {
-      const response = await fetch("/api/control-plane/api-keys", {
-        body: JSON.stringify({
-          action: "issue",
-          values: {
-            displayName: defaultProjectApiKeyDisplayName,
-            expiresAt: "",
-            projectId: activeProject.id,
-            scopes: "gateway:invoke"
+            },
+            scopes: "gateway:invoke",
+            teamIds: Array.from(selectedTeamIds),
+            tenantId: model.tenantId
           }
         }),
         headers: {
@@ -541,11 +412,11 @@ export function AdminOnboardingFlow({
       });
       const payload = (await response.json().catch(() => ({}))) as ApiKeyIssuePayload;
 
-      if (!response.ok || !payload.apiKey) {
+      if (!response.ok || !payload.apiKey || !payload.project) {
         setProjectSetupState({
           apiKey: null,
           error: payload.error ?? text.issueApiKeyError,
-          project: activeProject,
+          project: null,
           status: "error"
         });
         return false;
@@ -554,7 +425,7 @@ export function AdminOnboardingFlow({
       setProjectSetupState({
         apiKey: payload.apiKey,
         error: "",
-        project: activeProject,
+        project: payload.project,
         status: "issued"
       });
       return true;
@@ -562,7 +433,7 @@ export function AdminOnboardingFlow({
       setProjectSetupState({
         apiKey: null,
         error: text.issueApiKeyError,
-        project: activeProject,
+        project: null,
         status: "error"
       });
       return false;
@@ -664,10 +535,6 @@ export function AdminOnboardingFlow({
       return text.saveNext;
     }
 
-    if (isCreatingCredential || isCompletingProject) {
-      return text.savingProject;
-    }
-
     if (activeFlowStepId === "provider") {
       return text.saveNext;
     }
@@ -738,6 +605,7 @@ export function AdminOnboardingFlow({
                 },
                 selectedTeamIds,
                 teamCreateError: teamCreateState.error,
+                tenantId: model.tenantId,
                 text,
                 updateDraft
               })}
@@ -806,6 +674,7 @@ function renderStepContent({
   providerConnectionsModel,
   selectedTeamIds,
   teamCreateError,
+  tenantId,
   text,
   updateDraft
 }: {
@@ -824,6 +693,7 @@ function renderStepContent({
   providerConnectionsModel: ProviderConnectionsModel;
   selectedTeamIds: Set<string>;
   teamCreateError: string;
+  tenantId: string;
   text: (typeof onboardingText)[Locale];
   updateDraft: (field: keyof OnboardingDraft, value: string) => void;
 }) {
@@ -901,7 +771,7 @@ function renderStepContent({
         locale={locale}
         project={projectSetupState.project}
         selectedModelKey={draft.selectedModelKey}
-        tenantId={projectSetupState.project?.tenantId ?? ""}
+        tenantId={projectSetupState.project?.tenantId ?? tenantId}
       />
     </div>
   );
@@ -1195,10 +1065,6 @@ function isTenantLevelProviderConnection(
   controlPlaneTenantId: string
 ) {
   return providerConnection.projectId === null && providerConnection.tenantId === controlPlaneTenantId;
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function getProviderConfigModels(providerConfig: Record<string, unknown> | null) {
