@@ -19,14 +19,13 @@ type TerminalLogDefaults struct {
 }
 
 type TerminalLogWriter struct {
-	db       Execer
-	defaults TerminalLogDefaults
+	db Execer
 }
 
 func NewTerminalLogWriter(db Execer, defaults TerminalLogDefaults) *TerminalLogWriter {
+	_ = defaults
 	return &TerminalLogWriter{
-		db:       db,
-		defaults: defaults,
+		db: db,
 	}
 }
 
@@ -175,12 +174,12 @@ func (w *TerminalLogWriter) record(log invocationlog.TerminalLog) (terminalLogRe
 		return terminalLogRecord{}, errors.New("terminal log requires request id")
 	}
 
-	tenantID := firstValidUUID(log.TenantID, w.defaults.TenantID)
-	projectID := firstValidUUID(log.ProjectID, w.defaults.ProjectID)
-	if tenantID == "" || projectID == "" {
-		return terminalLogRecord{}, errors.New("terminal log requires valid tenant and project UUIDs")
+	tenantID := firstValidUUID(log.TenantID)
+	projectID := firstValidUUID(log.ProjectID)
+	applicationID := firstValidUUID(log.ApplicationID)
+	if tenantID == "" || projectID == "" || applicationID == "" {
+		return terminalLogRecord{}, errors.New("terminal log requires valid tenant, project, and application UUIDs")
 	}
-	applicationID := firstValidUUID(log.ApplicationID, w.defaults.ApplicationID)
 	resolvedBudgetScope := budget.NormalizeScope(log.BudgetScope, applicationID)
 
 	id, err := newUUID()

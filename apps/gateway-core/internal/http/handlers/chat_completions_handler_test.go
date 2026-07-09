@@ -857,6 +857,59 @@ func TestChatCompletionsHandlerStreamingProviderErrorAfterChunkRecordsInterrupte
 	}
 }
 
+func TestChatCompletionsHandlerStreamingFallbackSuccessRecordsFallbackOutcome(t *testing.T) {
+	catalog := testProviderCatalog()
+	catalog.Providers[1].Models[0].Capabilities.StreamingSupported = true
+	primary := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeOpenAICompatible,
+		openErr:     provider.NewError(provider.ErrorKindTimeout, provider.ErrorCodeProviderTimeout, errors.New("synthetic timeout")),
+	}
+	fallback := &streamingProviderAdapter{
+		adapterType: providercatalog.AdapterTypeMock,
+		events: []provider.ChatCompletionStreamEvent{
+			streamContentEvent(t, "mock-fallback-model", "fallback stream response"),
+		},
+	}
+	logWriter := &recordingTerminalLogWriter{}
+	handler := ChatCompletionsHandler{
+		Providers:               provider.NewRegistry("mock", primary, fallback),
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		CredentialResolver:      staticCredentialResolver{},
+		DefaultProvider:         "openai-main",
+		DefaultModel:            "model_low",
+		PreProviderPipeline:     testProviderCatalogPipeline("openai-main", "model_low"),
+		TerminalLogWriter:       logWriter,
+	}
+	withTestAuth(&handler)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatCompletionStreamBody("fallback streaming success를 재현해줘.")))
+	setValidGatewayAuthHeaders(req)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected fallback stream 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "fallback stream response") || !strings.Contains(rr.Body.String(), "data: [DONE]") {
+		t.Fatalf("expected completed fallback stream, got %q", rr.Body.String())
+	}
+	if primary.streamCalls != 1 || fallback.streamCalls != 1 {
+		t.Fatalf("expected primary and fallback stream calls, got primary=%d fallback=%d", primary.streamCalls, fallback.streamCalls)
+	}
+	if len(logWriter.logs) != 1 {
+		t.Fatalf("expected one terminal log, got %d", len(logWriter.logs))
+	}
+	logged := logWriter.logs[0]
+	if !logged.FallbackOccurred ||
+		logged.Status != invocationlog.StatusSuccess ||
+		logged.DomainOutcomes.Provider.Outcome != "timeout" ||
+		logged.DomainOutcomes.Fallback.Outcome != "success" ||
+		logged.DomainOutcomes.Streaming.Outcome != "completed" {
+		t.Fatalf("unexpected streaming fallback log: %+v outcomes=%+v", logged, logged.DomainOutcomes)
+	}
+}
+
 func TestChatCompletionsHandlerStreamingFallbackResolveCancellationRecordsCancelled(t *testing.T) {
 	catalog := testProviderCatalog()
 	catalog.Providers[0].CredentialRequired = false

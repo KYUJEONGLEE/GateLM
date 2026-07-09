@@ -211,14 +211,16 @@ func TestTerminalLogWriterMapsSuccessToP0InvocationLog(t *testing.T) {
 func TestTerminalLogWriterDoesNotPersistRawPromptOrCredentials(t *testing.T) {
 	execer := &fakeExecer{}
 	writer := NewTerminalLogWriter(execer, TerminalLogDefaults{
-		TenantID:  "00000000-0000-4000-8000-000000000100",
-		ProjectID: "00000000-0000-4000-8000-000000000200",
+		TenantID:      "00000000-0000-4000-8000-000000000100",
+		ProjectID:     "00000000-0000-4000-8000-000000000200",
+		ApplicationID: "00000000-0000-4000-8000-000000000300",
 	})
 
 	err := writer.WriteTerminalLog(context.Background(), invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
 		RequestID:             "request_security_check",
 		TenantID:              "00000000-0000-4000-8000-000000000100",
 		ProjectID:             "00000000-0000-4000-8000-000000000200",
+		ApplicationID:         "00000000-0000-4000-8000-000000000300",
 		Status:                invocationlog.StatusBlocked,
 		HTTPStatus:            403,
 		ErrorCode:             "sensitive_data_blocked",
@@ -245,5 +247,31 @@ func TestTerminalLogWriterDoesNotPersistRawPromptOrCredentials(t *testing.T) {
 		if strings.Contains(args, forbidden) {
 			t.Fatalf("terminal insert args must not contain %q: %s", forbidden, args)
 		}
+	}
+}
+
+func TestTerminalLogWriterRejectsMissingScopeInsteadOfUsingDefaults(t *testing.T) {
+	execer := &fakeExecer{}
+	writer := NewTerminalLogWriter(execer, TerminalLogDefaults{
+		TenantID:      "00000000-0000-4000-8000-000000000100",
+		ProjectID:     "00000000-0000-4000-8000-000000000200",
+		ApplicationID: "00000000-0000-4000-8000-000000000300",
+	})
+
+	err := writer.WriteTerminalLog(context.Background(), invocationlog.BuildTerminalLog(invocationlog.TerminalLogInput{
+		RequestID:   "request_missing_scope",
+		Status:      invocationlog.StatusSuccess,
+		HTTPStatus:  200,
+		StartedAt:   time.Now(),
+		CompletedAt: time.Now(),
+	}))
+	if err == nil {
+		t.Fatalf("expected missing scope error")
+	}
+	if !strings.Contains(err.Error(), "valid tenant, project, and application UUIDs") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if execer.called {
+		t.Fatalf("missing terminal scope must not be persisted with demo defaults")
 	}
 }

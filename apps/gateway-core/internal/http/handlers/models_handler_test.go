@@ -4,35 +4,31 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
-	"gatelm/apps/gateway-core/internal/adapters/providers/mock"
+	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	gatewayerrors "gatelm/apps/gateway-core/internal/domain/errors"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	gatewayrequest "gatelm/apps/gateway-core/internal/domain/request"
+	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 	"gatelm/apps/gateway-core/internal/http/middleware"
 )
 
-func TestModelsHandlerReturnsProviderCatalog(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/models" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-
-		writeJSON(w, http.StatusOK, provider.ModelListResponse{
-			Object: "list",
-			Data: []provider.ModelInfo{
-				{ID: "mock-fast", Object: "model", OwnedBy: "mock"},
-				{ID: "mock-balanced", Object: "model", OwnedBy: "mock"},
-			},
-		})
-	}))
-	defer mockServer.Close()
-
-	registry := provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client()))
-	handler := ModelsHandler{Providers: registry}
+func TestModelsHandlerReturnsRuntimeCatalogModels(t *testing.T) {
+	catalog := testProviderCatalog()
+	handler := ModelsHandler{
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(catalog),
+		APIKeyAuthenticator:     newTestCredentialStore(),
+		ExpectedTenantID:        testTenantID,
+		ExpectedProjectID:       testProjectID,
+		ExpectedAppID:           testAppID,
+		RuntimePolicyPipeline:   testProviderCatalogPipeline("", ""),
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -40,34 +36,45 @@ func TestModelsHandlerReturnsProviderCatalog(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+
+	var resp provider.ModelListResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode model response: %v", err)
+	}
+	if resp.Object != "list" {
+		t.Fatalf("unexpected object: %s", resp.Object)
+	}
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected two enabled catalog models, got %#v", resp.Data)
+	}
+	if resp.Data[0].ID != "model_low" || resp.Data[0].OwnedBy != "openai-main" {
+		t.Fatalf("unexpected primary model info: %#v", resp.Data[0])
+	}
+	if resp.Data[1].ID != "model_mock_fallback" || resp.Data[1].OwnedBy != "mock-fallback" {
+		t.Fatalf("unexpected fallback model info: %#v", resp.Data[1])
+	}
 }
 
-func TestModelsHandlerPassesStartedAtToPipeline(t *testing.T) {
-	modelCalls := 0
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		modelCalls++
-		writeJSON(w, http.StatusOK, provider.ModelListResponse{
-			Object: "list",
-			Data: []provider.ModelInfo{
-				{ID: "mock-fast", Object: "model", OwnedBy: "mock"},
-			},
-		})
-	}))
-	defer mockServer.Close()
-
-	preflight := &fakeGatewayPipeline{
+func TestModelsHandlerPassesStartedAtToRuntimePipeline(t *testing.T) {
+	runtimePolicy := &fakeGatewayPipeline{
 		mutate: func(gatewayCtx *gatewayrequest.GatewayContext) {
 			if gatewayCtx.Request.StartedAt.IsZero() {
 				t.Fatalf("expected non-zero started at")
 			}
+			gatewayCtx.Runtime.Snapshot = testRuntimeSnapshotForModels(testProviderCatalog())
 		},
 	}
 	handler := ModelsHandler{
-		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
-		PreProviderPipeline: preflight,
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		APIKeyAuthenticator:     newTestCredentialStore(),
+		ExpectedTenantID:        testTenantID,
+		ExpectedProjectID:       testProjectID,
+		ExpectedAppID:           testAppID,
+		RuntimePolicyPipeline:   runtimePolicy,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -75,18 +82,47 @@ func TestModelsHandlerPassesStartedAtToPipeline(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if preflight.calls != 1 {
-		t.Fatalf("expected one preflight call, got %d", preflight.calls)
-	}
-	if modelCalls != 1 {
-		t.Fatalf("expected one mock provider call, got %d", modelCalls)
+	if runtimePolicy.calls != 1 {
+		t.Fatalf("expected one runtime policy call, got %d", runtimePolicy.calls)
 	}
 }
 
-func TestModelsHandlerRejectsMissingProviderRegistry(t *testing.T) {
-	handler := ModelsHandler{}
+func TestModelListFromProviderCatalogReturnsEmptyArray(t *testing.T) {
+	resp := modelListFromProviderCatalog(providercatalog.Catalog{})
+	if resp.Data == nil {
+		t.Fatalf("expected non-nil empty data slice")
+	}
+
+	body, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal model response: %v", err)
+	}
+	if !strings.Contains(string(body), `"data":[]`) {
+		t.Fatalf("expected empty JSON array for data, got %s", body)
+	}
+}
+
+func testRuntimeSnapshotForModels(catalog providercatalog.Catalog) runtimeconfig.RuntimeSnapshotProvenance {
+	return runtimeconfig.RuntimeSnapshotProvenance{
+		RuntimeSnapshotID:      "runtime_snapshot_models_test",
+		RuntimeSnapshotVersion: 1,
+		ContentHash:            "sha256:runtime-models-test",
+		RuntimeState:           runtimeconfig.RuntimeStateSnapshotActive,
+		ProviderCatalogRef:     catalog.Reference(),
+	}
+}
+
+func TestModelsHandlerRejectsMissingRuntimePipeline(t *testing.T) {
+	handler := ModelsHandler{
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		APIKeyAuthenticator:     newTestCredentialStore(),
+		ExpectedTenantID:        testTenantID,
+		ExpectedProjectID:       testProjectID,
+		ExpectedAppID:           testAppID,
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -110,20 +146,16 @@ func TestModelsHandlerRejectsMissingProviderRegistry(t *testing.T) {
 	}
 }
 
-func TestModelsHandlerReturnsPipelineAuthErrorBeforeProviderCall(t *testing.T) {
-	modelCalls := 0
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		modelCalls++
-		writeJSON(w, http.StatusOK, provider.ModelListResponse{})
-	}))
-	defer mockServer.Close()
-
+func TestModelsHandlerReturnsAuthErrorBeforeRuntimeCatalogLookup(t *testing.T) {
+	runtimePolicy := &fakeGatewayPipeline{}
 	handler := ModelsHandler{
-		Providers:           provider.NewRegistry("mock", mock.NewAdapter(mockServer.URL, mockServer.Client())),
-		PreProviderPipeline: &fakeGatewayPipeline{err: gatewayerrors.InvalidAPIKey("authenticate_api_key")},
+		ProviderCatalogResolver: staticprovidercatalog.NewResolver(testProviderCatalog()),
+		APIKeyAuthenticator:     failingAPIKeyAuthenticator{err: gatewayerrors.InvalidAPIKey("authenticate_api_key")},
+		RuntimePolicyPipeline:   runtimePolicy,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	setValidGatewayAuthHeaders(req)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -131,8 +163,8 @@ func TestModelsHandlerReturnsPipelineAuthErrorBeforeProviderCall(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if modelCalls != 0 {
-		t.Fatalf("expected no mock provider calls, got %d", modelCalls)
+	if runtimePolicy.calls != 0 {
+		t.Fatalf("expected no runtime policy calls, got %d", runtimePolicy.calls)
 	}
 	if rr.Header().Get(middleware.RequestIDHeader) == "" {
 		t.Fatalf("missing response request id header")
