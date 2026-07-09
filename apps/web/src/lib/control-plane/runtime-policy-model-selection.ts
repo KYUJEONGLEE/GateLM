@@ -141,7 +141,7 @@ function findPreferredModel(
   );
 }
 
-function getProviderFamilyForModel(model: RuntimePolicyModelConfig) {
+function getProviderFamilyForModel(model: RuntimePolicyRouteSelection) {
   const provider = model.provider.toLowerCase();
   const modelName = model.model.toLowerCase();
 

@@ -352,7 +352,8 @@ function runtimePolicySupportsApplicationChatStreaming(config: RuntimePolicyConf
     [
       config.routingPolicy.lowCostProvider,
       config.routingPolicy.defaultProvider,
-      config.routingPolicy.fallbackProvider
+      config.routingPolicy.fallbackProvider,
+      config.routingPolicy.highQualityProvider ?? ""
     ]
       .map((provider) => provider.trim())
       .filter(Boolean)
