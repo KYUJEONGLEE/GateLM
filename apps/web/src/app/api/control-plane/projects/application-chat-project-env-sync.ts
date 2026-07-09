@@ -34,7 +34,7 @@ export async function syncApplicationChatEnvAfterProjectMutation({
     return;
   }
 
-  if (updatedProject.status === "ARCHIVED") {
+  if (updatedProject.status !== "ACTIVE" || !updatedProject.runtimeApplicationId) {
     await removeProjectEnv(updatedProject.id);
     return;
   }
