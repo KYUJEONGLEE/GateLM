@@ -2017,7 +2017,7 @@ func applyInvocationMetadataFields(log *invocationlog.LlmInvocationLog, raw []by
 			Enabled:          metadata.ResponseCapture.Enabled,
 			Mode:             strings.TrimSpace(metadata.ResponseCapture.Mode),
 			Visibility:       strings.TrimSpace(metadata.ResponseCapture.Visibility),
-			CapturedResponse: strings.TrimSpace(metadata.ResponseCapture.CapturedResponse),
+			CapturedResponse: "",
 			Truncated:        metadata.ResponseCapture.Truncated,
 			MaxChars:         metadata.ResponseCapture.MaxChars,
 		}

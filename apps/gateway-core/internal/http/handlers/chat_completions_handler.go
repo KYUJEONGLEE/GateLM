@@ -92,6 +92,7 @@ type ChatCompletionsHandler struct {
 	TerminalLogWriter                    invocationlog.TerminalLogWriter
 	CostCalculator                       CostCalculator
 	MaskingEngine                        MaskingEngine
+	RawResponseCaptureEnabled            bool
 	MetricsRegistry                      *metrics.Registry
 	ExactCacheStore                      ports.CacheStore
 	ExactCacheKeyBuilder                 ExactCacheKeyBuilder
@@ -1952,7 +1953,8 @@ func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context
 		return
 	}
 
-	if responseText := capturedChatCompletionResponse(providerResp); responseText != "" {
+	if h.shouldCaptureRawResponse(reqCtx) {
+		responseText := capturedChatCompletionResponse(providerResp)
 		reqCtx.CapturedResponse = responseText
 	}
 
@@ -3580,7 +3582,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		RedactedPromptForHash:       redactedPrompt,
 		PromptCapturePolicy:         promptCapturePolicyForLog(reqCtx),
 		CapturedPrompt:              redactedPrompt,
-		ResponseCapturePolicy:       responseCapturePolicyForLog(reqCtx),
+		ResponseCapturePolicy:       h.responseCapturePolicyForLog(reqCtx),
 		CapturedResponse:            reqCtx.CapturedResponse,
 		StartedAt:                   startedAt,
 		CompletedAt:                 completedAt,
@@ -3602,11 +3604,24 @@ func promptCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.Pr
 	return reqCtx.RuntimePromptCapture
 }
 
-func responseCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.ResponseCapturePolicy {
-	if reqCtx == nil || !reqCtx.HasRuntimeResponseCapture {
+func (h *ChatCompletionsHandler) responseCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.ResponseCapturePolicy {
+	if !h.shouldCaptureRawResponse(reqCtx) || strings.TrimSpace(reqCtx.CapturedResponse) == "" {
 		return runtimeconfig.DefaultResponseCapturePolicy()
 	}
-	return reqCtx.RuntimeResponseCapture
+	return runtimeconfig.NormalizeResponseCapturePolicy(reqCtx.RuntimeResponseCapture)
+}
+
+func (h *ChatCompletionsHandler) shouldCaptureRawResponse(reqCtx *pipeline.RequestContext) bool {
+	if h == nil || !h.RawResponseCaptureEnabled || reqCtx == nil {
+		return false
+	}
+	if reqCtx.Stream || reqCtx.CacheStatus == cachestage.CacheStatusHit {
+		return false
+	}
+	if !reqCtx.HasRuntimeResponseCapture {
+		return false
+	}
+	return runtimeconfig.ResponseCaptureAllowsRawCapture(reqCtx.RuntimeResponseCapture)
 }
 
 func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {

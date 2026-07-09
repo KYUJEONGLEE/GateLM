@@ -119,6 +119,8 @@ type Config struct {
 	AsyncLogShutdownTimeout                time.Duration
 	PromptCaptureEnabled                   bool
 	PromptCaptureMaxChars                  int
+	DeploymentMode                         string
+	RawResponseCaptureEnabled              bool
 	ResponseCaptureEnabled                 bool
 	ResponseCaptureMaxChars                int
 	SemanticCache                          SemanticCacheConfig
@@ -184,6 +186,7 @@ func LoadWithError() (Config, error) {
 	semanticCache, err := LoadSemanticCacheConfig()
 	rateLimitBackend := normalizeRateLimitBackend(envString("GATEWAY_RATE_LIMIT_BACKEND", RateLimitBackendRedis))
 	rateLimitAlgorithm := normalizeRateLimitAlgorithm(os.Getenv("GATEWAY_RATE_LIMIT_ALGORITHM"), rateLimitBackend)
+	deploymentMode := normalizeDeploymentMode(envString("DEPLOYMENT_MODE", ""))
 	cfg := Config{
 		Port:                envString("GATEWAY_PORT", "8080"),
 		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
@@ -261,16 +264,18 @@ func LoadWithError() (Config, error) {
 			DetectorSet: envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
 			Locale:      envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
 		},
-		AsyncLogEnabled:         envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
-		AsyncLogQueueSize:       envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
-		AsyncLogWorkerCount:     envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
-		AsyncLogWriteTimeout:    envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
-		AsyncLogShutdownTimeout: envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
-		PromptCaptureEnabled:    envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
-		PromptCaptureMaxChars:   envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
-		ResponseCaptureEnabled:  envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
-		ResponseCaptureMaxChars: envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
-		SemanticCache:           semanticCache,
+		AsyncLogEnabled:           envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
+		AsyncLogQueueSize:         envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
+		AsyncLogWorkerCount:       envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
+		AsyncLogWriteTimeout:      envDurationMillis("GATEWAY_ASYNC_LOG_WRITE_TIMEOUT_MS", 2000),
+		AsyncLogShutdownTimeout:   envDurationMillis("GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS", 5000),
+		PromptCaptureEnabled:      envBool("GATEWAY_PROMPT_CAPTURE_ENABLED", false),
+		PromptCaptureMaxChars:     envInt("GATEWAY_PROMPT_CAPTURE_MAX_CHARS", 8000),
+		DeploymentMode:            deploymentMode,
+		RawResponseCaptureEnabled: rawResponseCaptureAllowed(deploymentMode),
+		ResponseCaptureEnabled:    envBool("GATEWAY_RESPONSE_CAPTURE_ENABLED", false),
+		ResponseCaptureMaxChars:   envInt("GATEWAY_RESPONSE_CAPTURE_MAX_CHARS", 8000),
+		SemanticCache:             semanticCache,
 	}
 	if err != nil {
 		return cfg, err
@@ -279,6 +284,62 @@ func LoadWithError() (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func normalizeDeploymentMode(value string) string {
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	switch normalized {
+	case "selfhost", "self_hosted", "selfhosted":
+		return "self_host"
+	default:
+		return normalized
+	}
+}
+
+func rawResponseCaptureAllowed(deploymentMode string) bool {
+	if !envBool("RAW_RESPONSE_CAPTURE_ENABLED", false) {
+		return false
+	}
+	if productionLikeEnv() {
+		return false
+	}
+	switch normalizeDeploymentMode(deploymentMode) {
+	case "self_host", "demo":
+		return true
+	default:
+		return false
+	}
+}
+
+func productionLikeEnv() bool {
+	for _, key := range []string{"NODE_ENV", "APP_ENV", "ENV"} {
+		if productionLikeMode(os.Getenv(key)) {
+			return true
+		}
+	}
+	for _, key := range []string{
+		"AWS_EXECUTION_ENV",
+		"AWS_REGION",
+		"AWS_DEFAULT_REGION",
+		"ECS_CONTAINER_METADATA_URI",
+		"ECS_CONTAINER_METADATA_URI_V4",
+		"AWS_LAMBDA_FUNCTION_NAME",
+	} {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func productionLikeMode(value string) bool {
+	switch normalizeDeploymentMode(value) {
+	case "prod", "production", "saas", "aws", "cloud", "public", "stage", "staging":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeRateLimitBackend(value string) string {

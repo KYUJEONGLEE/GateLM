@@ -1359,15 +1359,11 @@ func responseCaptureResponseFromDomain(fields invocationlog.ResponseCaptureField
 	if fields.MaxChars <= 0 {
 		fields.MaxChars = runtimeconfig.ResponseCaptureDefaultMaxChars
 	}
-	var capturedResponse *string
-	if fields.Enabled && strings.TrimSpace(fields.CapturedResponse) != "" {
-		capturedResponse = stringPointerOrNil(fields.CapturedResponse)
-	}
 	return responseCaptureResponse{
 		Enabled:          fields.Enabled,
 		Mode:             fields.Mode,
 		Visibility:       fields.Visibility,
-		CapturedResponse: capturedResponse,
+		CapturedResponse: nil,
 		Truncated:        fields.Truncated,
 		MaxChars:         fields.MaxChars,
 	}
