@@ -63,6 +63,9 @@ func main() {
 	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneBaseURL) == "" {
 		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_BASE_URL")
 	}
+	if isStrictRuntimeSnapshotMode(cfg) && strings.TrimSpace(cfg.ControlPlaneInternalToken) == "" {
+		log.Fatalf("gateway-core strict runtime snapshot mode requires GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN")
+	}
 
 	providerHTTPClient := &http.Client{Timeout: cfg.ProviderTimeout}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
@@ -164,8 +167,12 @@ func main() {
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)
+	modelsRuntimePipeline := pipeline.New(
+		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
+	)
 
 	routerOptions = append(routerOptions, app.WithRuntimePolicyPipeline(runtimePolicyPipeline))
+	routerOptions = append(routerOptions, app.WithModelsRuntimePipeline(modelsRuntimePipeline))
 	router := app.NewRouter(
 		cfg,
 		providers,
@@ -219,14 +226,22 @@ func buildProviderCredentialResolver(cfg config.Config, postgresPool *pgxpool.Po
 func buildRuntimePolicySources(cfg config.Config) (runtimeconfig.SnapshotProvider, providercatalog.Resolver) {
 	if strings.TrimSpace(cfg.ControlPlaneBaseURL) != "" {
 		client := &http.Client{Timeout: cfg.ControlPlaneTimeout}
-		var snapshotProvider runtimeconfig.SnapshotProvider = controlplaneruntimeconfig.NewProvider(cfg.ControlPlaneBaseURL, client)
+		var snapshotProvider runtimeconfig.SnapshotProvider = controlplaneruntimeconfig.NewProvider(
+			cfg.ControlPlaneBaseURL,
+			client,
+			cfg.ControlPlaneInternalToken,
+		)
 		if cfg.RuntimeSnapshotCache.Enabled {
 			snapshotProvider = cachedruntimeconfig.NewProvider(snapshotProvider, cachedruntimeconfig.Config{
 				FreshTTL: cfg.RuntimeSnapshotCache.TTL,
 				StaleTTL: cfg.RuntimeSnapshotCache.StaleTTL,
 			})
 		}
-		var catalogResolver providercatalog.Resolver = controlplaneprovidercatalog.NewResolver(cfg.ControlPlaneBaseURL, client)
+		var catalogResolver providercatalog.Resolver = controlplaneprovidercatalog.NewResolver(
+			cfg.ControlPlaneBaseURL,
+			client,
+			cfg.ControlPlaneInternalToken,
+		)
 		if cfg.ProviderCatalogCache.Enabled {
 			catalogResolver = cachedprovidercatalog.NewResolver(catalogResolver, cachedprovidercatalog.Config{
 				FreshTTL: cfg.ProviderCatalogCache.TTL,

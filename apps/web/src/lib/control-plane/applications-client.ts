@@ -5,6 +5,10 @@ import {
   getControlPlaneBaseUrl,
   getControlPlaneProjectId
 } from "@/lib/control-plane/control-plane-config";
+import {
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
 import type {
   ApplicationFormValues,
   ApplicationRecord,
@@ -76,7 +80,8 @@ export async function getApplicationsModel(
 }
 
 export async function createApplication(
-  values: ApplicationFormValues
+  values: ApplicationFormValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ApplicationRequestResult> {
   const projectId = values.projectId ?? getControlPlaneProjectId();
 
@@ -86,9 +91,9 @@ export async function createApplication(
       {
         body: JSON.stringify(toApplicationPayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -104,7 +109,8 @@ export async function createApplication(
 }
 
 export async function updateApplication(
-  values: ApplicationUpdateValues
+  values: ApplicationUpdateValues,
+  options?: ControlPlaneRequestOptions
 ): Promise<ApplicationRequestResult> {
   try {
     const response = await fetch(
@@ -119,9 +125,9 @@ export async function updateApplication(
           status: values.status
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "PATCH"
       }
     );
@@ -141,7 +147,8 @@ async function listApplications(projectId: string): Promise<ApplicationListResul
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/applications?limit=50`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 

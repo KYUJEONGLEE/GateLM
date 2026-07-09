@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   const tenantId = routeTenantId ?? getControlPlaneTenantId();
   const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
   const auth = await getCurrentConsoleAuthForCookieHeader(request.headers.get("cookie"));
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (!auth.isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider discovery payload." }, { status: 400 });
     }
 
-    const result = await discoverProviderModels(provider, routeTenantId);
+    const result = await discoverProviderModels(provider, routeTenantId, requestOptions);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid provider deletion payload." }, { status: 400 });
     }
 
-    const result = await deleteProviderConnection(provider, routeTenantId);
+    const result = await deleteProviderConnection(provider, routeTenantId, requestOptions);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
 
     const result = await removeProviderModel({
       ...values,
+      options: requestOptions,
       routeTenantId
     });
 
@@ -140,7 +142,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid provider payload." }, { status: 400 });
   }
 
-  const result = await upsertProviderConnection(payload.values, routeTenantId);
+  const result = await upsertProviderConnection(payload.values, routeTenantId, requestOptions);
 
   if (!result.ok) {
     return NextResponse.json(

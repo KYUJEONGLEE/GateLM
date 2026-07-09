@@ -252,6 +252,27 @@ describe('Control Plane demo seed baseline', () => {
     );
   });
 
+  it('does not reject demo seed for a local AWS region setting alone', async () => {
+    const tx = createMockTransaction();
+    const client = {
+      $transaction: jest.fn((callback: (transaction: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+
+    await withEnv(
+      {
+        AWS_DEFAULT_REGION: 'ap-northeast-2',
+        AWS_REGION: 'ap-northeast-2',
+      },
+      async () => {
+        await seedDemoData(client as unknown as PrismaClient);
+      },
+    );
+
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
+  });
+
   it('connects the demo application to the mock provider in mock mode', async () => {
     const tx = createMockTransaction();
     const client = {

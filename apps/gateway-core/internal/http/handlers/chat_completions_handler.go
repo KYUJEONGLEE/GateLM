@@ -92,6 +92,7 @@ type ChatCompletionsHandler struct {
 	TerminalLogWriter                    invocationlog.TerminalLogWriter
 	CostCalculator                       CostCalculator
 	MaskingEngine                        MaskingEngine
+	RawResponseCaptureEnabled            bool
 	MetricsRegistry                      *metrics.Registry
 	ExactCacheStore                      ports.CacheStore
 	ExactCacheKeyBuilder                 ExactCacheKeyBuilder
@@ -1076,6 +1077,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 	reqCtx.SelectedModel = fallbackTarget.ModelID
 	reqCtx.Provider = fallbackTarget.ProviderName
 	reqCtx.Model = fallbackTarget.ModelID
+	reqCtx.FallbackOccurred = true
 
 	streamMetrics := h.startStreamMetrics(fallbackTarget.ProviderName, fallbackTarget.ModelID, fallbackStartedAt)
 	started, usage, _, streamErr := writeProviderStreamingChatCompletion(r.Context(), w, reqCtx, stream, streamMetrics)
@@ -1104,7 +1106,7 @@ func (h *ChatCompletionsHandler) handleStreamingOpenFailure(w http.ResponseWrite
 		reqCtx.LatencyMs = time.Since(startedAt).Milliseconds()
 		reqCtx.SavedCostMicroUSD = 0
 		h.applyProviderUsageCost(r.Context(), reqCtx, fallbackTarget)
-		reqCtx.DomainOutcomes = streamingFinalDomainOutcomes(reqCtx, "completed")
+		reqCtx.DomainOutcomes = withStreamingOutcome(primaryOutcomes, reqCtx, "completed")
 		return
 	}
 
@@ -1952,7 +1954,8 @@ func (h *ChatCompletionsHandler) writeChatCompletionResponse(ctx context.Context
 		return
 	}
 
-	if responseText := capturedChatCompletionResponse(providerResp); responseText != "" {
+	if h.shouldCaptureRawResponse(reqCtx) {
+		responseText := capturedChatCompletionResponse(providerResp)
 		reqCtx.CapturedResponse = responseText
 	}
 
@@ -3580,7 +3583,7 @@ func (h *ChatCompletionsHandler) writeTerminalLog(ctx context.Context, reqCtx *p
 		RedactedPromptForHash:       redactedPrompt,
 		PromptCapturePolicy:         promptCapturePolicyForLog(reqCtx),
 		CapturedPrompt:              redactedPrompt,
-		ResponseCapturePolicy:       responseCapturePolicyForLog(reqCtx),
+		ResponseCapturePolicy:       h.responseCapturePolicyForLog(reqCtx),
 		CapturedResponse:            reqCtx.CapturedResponse,
 		StartedAt:                   startedAt,
 		CompletedAt:                 completedAt,
@@ -3602,11 +3605,24 @@ func promptCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.Pr
 	return reqCtx.RuntimePromptCapture
 }
 
-func responseCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.ResponseCapturePolicy {
-	if reqCtx == nil || !reqCtx.HasRuntimeResponseCapture {
+func (h *ChatCompletionsHandler) responseCapturePolicyForLog(reqCtx *pipeline.RequestContext) runtimeconfig.ResponseCapturePolicy {
+	if !h.shouldCaptureRawResponse(reqCtx) || strings.TrimSpace(reqCtx.CapturedResponse) == "" {
 		return runtimeconfig.DefaultResponseCapturePolicy()
 	}
-	return reqCtx.RuntimeResponseCapture
+	return runtimeconfig.NormalizeResponseCapturePolicy(reqCtx.RuntimeResponseCapture)
+}
+
+func (h *ChatCompletionsHandler) shouldCaptureRawResponse(reqCtx *pipeline.RequestContext) bool {
+	if h == nil || !h.RawResponseCaptureEnabled || reqCtx == nil {
+		return false
+	}
+	if reqCtx.Stream || reqCtx.CacheStatus == cachestage.CacheStatusHit {
+		return false
+	}
+	if !reqCtx.HasRuntimeResponseCapture {
+		return false
+	}
+	return runtimeconfig.ResponseCaptureAllowsRawCapture(reqCtx.RuntimeResponseCapture)
 }
 
 func shouldWriteTerminalLog(reqCtx *pipeline.RequestContext) bool {
@@ -3716,7 +3732,11 @@ func (h *ChatCompletionsHandler) recordLogWrite(operation string, err error, dur
 }
 
 func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext) error {
-	if h.APIKeyAuthenticator == nil {
+	return authenticateGatewayAPIKeyRequest(ctx, r, reqCtx, h.APIKeyAuthenticator, h.ExpectedTenantID, h.ExpectedProjectID, h.ExpectedAppID)
+}
+
+func authenticateGatewayAPIKeyRequest(ctx context.Context, r *http.Request, reqCtx *pipeline.RequestContext, authenticator APIKeyAuthenticator, expectedTenantID string, expectedProjectID string, expectedAppID string) error {
+	if authenticator == nil {
 		return gatewayerrors.InternalError(authenticate.StageName, "Gateway authentication is not initialized.", nil)
 	}
 
@@ -3725,7 +3745,7 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 		return gatewayerrors.InvalidAPIKey(authenticate.StageName)
 	}
 
-	apiKeyIdentity, err := h.APIKeyAuthenticator.AuthenticateAPIKey(ctx, bearerToken)
+	apiKeyIdentity, err := authenticator.AuthenticateAPIKey(ctx, bearerToken)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidAPIKey) {
 			return gatewayerrors.InvalidAPIKey(authenticate.StageName)
@@ -3750,13 +3770,13 @@ func (h *ChatCompletionsHandler) authenticateRequest(ctx context.Context, r *htt
 		return gatewayerrors.InternalError(authenticate.StageName, "Gateway default application is not configured for this project.", nil)
 	}
 
-	if h.ExpectedTenantID != "" && reqCtx.TenantID != h.ExpectedTenantID {
+	if expectedTenantID != "" && reqCtx.TenantID != expectedTenantID {
 		return gatewayerrors.ScopeMismatch(identify.StageName)
 	}
-	if h.ExpectedProjectID != "" && reqCtx.ProjectID != h.ExpectedProjectID {
+	if expectedProjectID != "" && reqCtx.ProjectID != expectedProjectID {
 		return gatewayerrors.ScopeMismatch(identify.StageName)
 	}
-	if h.ExpectedAppID != "" && reqCtx.ApplicationID != h.ExpectedAppID {
+	if expectedAppID != "" && reqCtx.ApplicationID != expectedAppID {
 		return gatewayerrors.ScopeMismatch(identify.StageName)
 	}
 	reqCtx.BudgetScope = budget.NormalizeScope(reqCtx.BudgetScope, reqCtx.ApplicationID)

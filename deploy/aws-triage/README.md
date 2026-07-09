@@ -1,6 +1,6 @@
 # GateLM AWS Triage Compose
 
-This is a source-build deployment path for one EC2 instance. It is not a production self-host bundle. Use it to expose packaging, migration, seed, runtime, and provider-key gaps quickly while keeping AWS costs small.
+This is a source-build deployment path for one EC2 instance. It is not a production self-host bundle. Use it to expose packaging, migration, runtime, and provider-key gaps quickly while keeping AWS costs small.
 
 It differs from `deploy/selfhost` on purpose:
 
@@ -10,7 +10,7 @@ It differs from `deploy/selfhost` on purpose:
 - PostgreSQL, Redis, mock provider, and AI service are not published to the EC2 host
 - the customer application runs on port 3002 so Web Console application/chat links do not fall back to localhost
 - the default provider mode is mock
-- the current Gateway chat path authenticates with the project Gateway API key; the demo app token is still seeded for Control Plane compatibility and credential-management screens
+- the current Gateway chat path authenticates with the project Gateway API key; demo seed credentials are not used in AWS/prod-like environments
 
 ## EC2 Setup
 
@@ -44,10 +44,11 @@ Replace:
 - `GATELM_PUBLIC_BASE_URL`
 - `GATELM_APPLICATION_BASE_URL`
 - `POSTGRES_PASSWORD`
+- `CONTROL_PLANE_INTERNAL_SERVICE_TOKEN`
+- `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` (use the same value)
+- `GATELM_GATEWAY_API_KEY`
 - `GATEWAY_EXACT_CACHE_KEY_SECRET`
 - `GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY`
-- `GATELM_DEMO_API_KEY`
-- `GATELM_DEMO_APP_TOKEN`
 
 Use simple generated values for secrets so the interpolated database URL stays valid:
 
@@ -55,28 +56,28 @@ Use simple generated values for secrets so the interpolated database URL stays v
 openssl rand -hex 32
 ```
 
-`GATELM_DEMO_API_KEY` is used by the Web/Application BFF when it calls Gateway. `GATELM_DEMO_APP_TOKEN` is still used by the demo seed to populate the app-token management surface, but current Gateway chat requests no longer require `X-GateLM-App-Token`.
-
-The default triage signup flow does not use SMTP:
+The AWS triage stack uses the same admin auth boundary as production. Configure SMTP and keep dev auto-verify disabled:
 
 ```bash
-AUTH_EMAIL_TRANSPORT=dev_memory
-CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=true
+AUTH_EMAIL_TRANSPORT=smtp
+CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=false
 CONTROL_PLANE_AUTH_STATE_SECRET=<random-long-value>
-SMTP_HOST=
-SMTP_PORT=
-SMTP_SECURE=
-SMTP_TLS_MODE=
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_FROM=
+CONTROL_PLANE_INTERNAL_SERVICE_TOKEN=<random-long-value>
+GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN=<same-random-long-value>
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_TLS_MODE=opportunistic
+SMTP_USER=<smtp-user-if-required>
+SMTP_PASSWORD=<smtp-password-if-required>
+SMTP_FROM=<verified-sender>
 ```
 
 `CONTROL_PLANE_AUTH_STATE_SECRET` signs the signup draft cookie. Generate a
 long random value for each deployment and do not reuse the placeholder from
 `.env.example`.
 
-Leave the SMTP values blank until a real mail sender is configured.
+Do not deploy AWS triage with `AUTH_EMAIL_TRANSPORT=dev_memory` or `CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=true`; the Control Plane now refuses those values in production-like environments.
 
 Provider credentials registered through the Web Console are encrypted before
 being stored. Set a stable 32-byte encryption key before using the Provider
@@ -103,8 +104,7 @@ GATELM_APPLICATION_CHAT_API_KEYS='{"<project-uuid>":"<project-gateway-api-key>"}
 GATELM_APPLICATION_CHAT_PROFILES='[{"id":"support","label":"Customer Support","projectId":"<project-uuid>","apiKey":"<project-gateway-api-key>"}]'
 ```
 
-Leave these values blank to use the seeded demo tenant, project, application,
-and Gateway API key. Do not commit real project API keys or provider keys.
+Do not leave `GATELM_GATEWAY_API_KEY` blank in AWS/prod-like environments. The public Web/Application containers no longer fall back to the seeded demo key. Do not commit real project API keys or provider keys.
 
 Optional Google login for the main landing page uses the Web Console auth proxy and Control Plane OAuth handler. Configure these only after creating a Google Cloud OAuth client for the exact callback URL:
 
@@ -132,7 +132,7 @@ Recommended public exposure:
 - Control Plane `3001`: localhost-bound by default; do not expose publicly
 - Gateway `8080`: localhost-bound by default; do not expose publicly
 
-When HTTPS is enabled through a host-level reverse proxy such as Caddy, open `80` and `443`, keep `22` restricted to your IP, and prefer closing public `3000`/`3002` access. Keep `3001` and `8080` blocked from the public internet while `CONTROL_PLANE_ADMIN_AUTH_MODE=demo_admin_placeholder`.
+When HTTPS is enabled through a host-level reverse proxy such as Caddy, open `80` and `443`, keep `22` restricted to your IP, and prefer closing public `3000`/`3002` access. Keep `3001` and `8080` blocked from the public internet even with `CONTROL_PLANE_ADMIN_AUTH_MODE=session_cookie`.
 
 The default `.env.example` binds host ports like this:
 
@@ -182,11 +182,7 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
 ```
 
-Seed the current MVP demo tenant, project, application, credentials, provider, and active RuntimeSnapshot:
-
-```bash
-docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
-```
+Do not run the demo seed in AWS/prod-like environments. The Control Plane now refuses the demo seed path there; create the tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API.
 
 For an existing triage DB with old zero-cost successful logs, optionally backfill dashboard pricing metadata after the pricing seed:
 
@@ -207,10 +203,9 @@ OPENAI_API_KEY=<server-only-provider-secret>
 
 The right side of each env-map entry is the environment variable name. Put the real provider secret only in `OPENAI_API_KEY`, never in the map string.
 
-Then rerun seed and recreate the runtime services:
+Then publish a new RuntimeSnapshot from the Console or admin API and recreate the runtime services:
 
 ```bash
-docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
 docker compose --env-file .env up -d --force-recreate control-plane-api gateway-core application web
 ```
 
@@ -284,7 +279,6 @@ docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" 
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/012_create_model_pricing_catalog_compat.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/migrations/013_seed_openai_canonical_pricing_aliases.sql
 docker compose --env-file .env exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q' < ../../db/seeds/002_seed_dashboard_pricing_catalog.sql
-docker compose --env-file .env run --rm control-plane-api node dist/prisma/seed.js
 docker compose --env-file .env up -d --force-recreate ai-service control-plane-api gateway-core application web
 docker compose --env-file .env ps
 ```
@@ -318,7 +312,7 @@ Stopping the EC2 instance stops compute charges, but the EBS volume still exists
 
 - provider API keys are still supplied through environment variables
 - changing provider credential env-map values requires restarting Gateway
-- the demo seed supports the default UUID values only
+- demo seed is blocked in AWS/prod-like environments; use real tenant/project/application setup
 - Gateway success can come from mock fallback; inspect Gateway metadata when testing live providers
 - this path has no managed backup, centralized logs, or multi-instance availability
 - HTTPS/domain support is host-level triage configuration, not a production ALB/ACM deployment

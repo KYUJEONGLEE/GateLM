@@ -9,8 +9,10 @@ import {
   resolveApplicationChatProfile,
   type ResolvedApplicationChatProfile
 } from "@/lib/gateway/application-chat-profiles";
+import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
+import { runtimePolicySupportsApplicationChatStreaming } from "@/lib/gateway/customer-demo-streaming-support";
 import type {
   CustomerDemoExchange,
   CustomerDemoHeader,
@@ -153,8 +155,14 @@ export async function POST(request: Request) {
 
   const scenarioId = payload.scenarioId;
   const scenario = model.scenarios.find((item) => item.scenarioId === scenarioId);
+  const applicationChatStreamingSupported =
+    payload.surface !== "application"
+      ? true
+      : await getApplicationChatStreamingSupported(profile.applicationId);
   const streamRequested =
-    payload.stream && (payload.surface !== "application" || (model.applicationChatStreamingEnabled ?? true));
+    payload.stream &&
+    (payload.surface !== "application" ||
+      ((model.applicationChatStreamingEnabled ?? true) && applicationChatStreamingSupported));
 
   if (!scenario) {
     return NextResponse.json({ error: "Customer demo scenario is not configured." }, { status: 404 });
@@ -327,6 +335,16 @@ function isCustomerDemoScenarioId(value: string): value is CustomerDemoScenarioI
 
 function normalizeCustomerDemoSurface(value: unknown): CustomerDemoSurface {
   return value === "application" ? "application" : "demo";
+}
+
+async function getApplicationChatStreamingSupported(applicationId: string) {
+  try {
+    const config = await getRuntimePolicyConfigForApplication(applicationId);
+
+    return config ? runtimePolicySupportsApplicationChatStreaming(config) : true;
+  } catch {
+    return true;
+  }
 }
 
 async function getRequestProfile(profileId: string): Promise<RequestProfileResult> {
@@ -544,6 +562,19 @@ async function callGatewayStreaming(
   if (!response.body || !isEventStreamResponse(response)) {
     const responseText = await response.text();
     const body = buildGatewayResponseBody(response, responseText, requestBody.stream);
+
+    if (isStreamingUnsupportedGatewayResult(response.status, body)) {
+      return callGatewayWithoutStreamingWithContext(
+        scenarioId,
+        `${requestIdSuffix}_nonstream`,
+        {
+          ...options,
+          stream: false
+        },
+        conversationContext
+      );
+    }
+
     await retainAssistantMessage({
       body,
       conversationContext,
@@ -593,6 +624,64 @@ async function callGatewayStreaming(
       chunkCount: summary.chunkCount,
       requested: true
     }
+  };
+}
+
+async function callGatewayWithoutStreamingWithContext(
+  scenarioId: CustomerDemoScenarioId,
+  requestIdSuffix: string,
+  options: GatewayCallOptions,
+  conversationContext: ConversationGatewayContext | null
+): Promise<GatewayCallResult> {
+  const config = getLiveGatewayConfig({ apiKey: options.profile.apiKey });
+  const definition = LIVE_SCENARIOS[scenarioId];
+  const requestId = buildRequestId(scenarioId, requestIdSuffix);
+  const requestBody = buildGatewayRequestBody(
+    definition,
+    scenarioId,
+    false,
+    options.message,
+    options.surface ?? "application",
+    config.applicationChatModel,
+    config.applicationChatMaxTokens,
+    conversationContext?.messages,
+    options.userName
+  );
+  const startedAt = Date.now();
+  const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+      "X-GateLM-End-User-Id": "customer_user_demo_live",
+      "X-GateLM-Feature-Id": "support-reply",
+      "X-GateLM-Request-Id": requestId
+    },
+    body: JSON.stringify(requestBody),
+    cache: "no-store"
+  });
+
+  const responseText = await response.text();
+  const body = buildGatewayResponseBody(response, responseText, false);
+  await retainAssistantMessage({
+    body,
+    conversationContext,
+    profile: options.profile,
+    requestId,
+    status: response.status
+  });
+
+  return {
+    body,
+    contextRetentionEnabled: conversationContext?.contextRetentionEnabled ?? false,
+    conversationId: conversationContext?.conversationId ?? options.conversationId ?? null,
+    headers: response.headers,
+    httpStatus: response.status,
+    latencyMs: Date.now() - startedAt,
+    requestBody: buildDisplayRequestBody(requestBody),
+    requestHeaders: buildDisplayRequestHeaders(requestId),
+    requestId,
+    streaming: buildGatewayStreamingSummary(response, responseText, false)
   };
 }
 
@@ -978,6 +1067,10 @@ function buildGatewayStreamingSummary(
 
 function isEventStreamResponse(response: Response) {
   return response.headers.get("Content-Type")?.includes("text/event-stream") ?? false;
+}
+
+function isStreamingUnsupportedGatewayResult(httpStatus: number, body: JsonRecord) {
+  return httpStatus === 400 && getNestedString(body, ["error", "code"]) === "streaming_not_supported";
 }
 
 function parseGatewaySseSummary(text: string) {

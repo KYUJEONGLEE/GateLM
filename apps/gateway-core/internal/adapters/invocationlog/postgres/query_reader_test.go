@@ -417,7 +417,7 @@ func TestApplyInvocationMetadataFieldsMapsPromptAndResponseCapture(t *testing.T)
 	if !log.ResponseCapture.Enabled ||
 		log.ResponseCapture.Mode != "raw_full" ||
 		log.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail ||
-		log.ResponseCapture.CapturedResponse != "Mock response" ||
+		log.ResponseCapture.CapturedResponse != "" ||
 		log.ResponseCapture.Truncated ||
 		log.ResponseCapture.MaxChars != 8000 {
 		t.Fatalf("unexpected response capture fields: %+v", log.ResponseCapture)

@@ -53,7 +53,7 @@ export type PolicySection =
   | "cache"
   | "streaming";
 
-export type RoutingPriorityRoute = "default" | "fallback" | "lowCost";
+export type RoutingPriorityRoute = "default" | "fallback" | "highQuality" | "lowCost";
 
 export type RoutingProviderOption = {
   displayName: string;
@@ -107,6 +107,7 @@ export type RuntimePolicyEditorText = {
   fixtureFallback: string;
   general: string;
   history: string;
+  highQualityRoute: string;
   issueApiKey: string;
   issuingApiKey: string;
   jsonMode: string;

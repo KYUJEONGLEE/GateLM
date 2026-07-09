@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"gatelm/apps/gateway-core/internal/domain/auth"
@@ -35,6 +36,13 @@ func TestStoreAuthenticatesAPIKeyWithHashCandidate(t *testing.T) {
 		t.Fatalf("unexpected api key identity: %+v", identity)
 	}
 	assertLookupArgs(t, queryer, "gsk_live_", "1234")
+}
+
+func TestAPIKeyLookupRequiresActiveProject(t *testing.T) {
+	if !strings.Contains(apiKeyLookupSQL, "join projects") ||
+		!strings.Contains(apiKeyLookupSQL, "projects.status = 'ACTIVE'") {
+		t.Fatal("api key lookup must require the owning project to be ACTIVE")
+	}
 }
 
 func TestStoreRejectsAPIKeyHashMismatch(t *testing.T) {

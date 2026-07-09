@@ -84,10 +84,11 @@ Minimum values to review:
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 | `POSTGRES_DB` | PostgreSQL database name |
 | `GATEWAY_EXACT_CACHE_KEY_SECRET` | Secret used for exact cache key derivation |
-| `GATELM_DEMO_API_KEY` | Demo Gateway API key for the MVP path |
-| `GATELM_DEMO_APP_TOKEN` | Demo app token for the MVP path |
+| `GATELM_GATEWAY_API_KEY` | Runtime project Gateway API key for smoke and public chat |
+| `CONTROL_PLANE_INTERNAL_SERVICE_TOKEN` | Control Plane internal read token for Gateway |
+| `GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN` | Gateway copy of the Control Plane internal read token |
 
-For the current MVP, keep the demo UUID values unchanged unless you also customize the seed path:
+Demo seed is disabled for self-host/prod-like deployments. Keep demo UUID values only for non-prod local seed experiments:
 
 ```text
 GATELM_DEMO_TENANT_ID
@@ -136,26 +137,20 @@ This applies:
 - Control Plane Prisma migrations
 - Gateway runtime SQL in `deploy/selfhost/migrations/`
 
-If migration fails, do not run seed yet. Fix the migration issue first.
+If migration fails, fix the migration issue before creating runtime resources.
 
-## 5. Seed The Demo Runtime
+## 5. Create Runtime Resources
 
-Run:
-
-```bash
-bash scripts/seed.sh
-```
-
-This creates the first demo:
+Create the first real runtime boundary through the Console or admin API:
 
 - tenant
 - project
 - application
-- Gateway credential metadata
+- Gateway API key
 - provider configuration
 - active RuntimeSnapshot pointer
 
-The seed path stores credential hashes and previews, not plaintext secrets.
+Do not run `scripts/seed.sh` in self-host/prod-like deployments; it exits with a clear error.
 
 ## 6. Smoke Test
 

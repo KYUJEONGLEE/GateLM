@@ -437,8 +437,7 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 		t.Fatalf("unexpected prompt capture response: %+v", response.Data.PromptCapture)
 	}
 	if !response.Data.ResponseCapture.Enabled ||
-		response.Data.ResponseCapture.CapturedResponse == nil ||
-		*response.Data.ResponseCapture.CapturedResponse != "Mock response" ||
+		response.Data.ResponseCapture.CapturedResponse != nil ||
 		response.Data.ResponseCapture.Visibility != invocationlog.ResponseCaptureVisibilityAdminRequestDetail {
 		t.Fatalf("unexpected response capture response: %+v", response.Data.ResponseCapture)
 	}
@@ -461,6 +460,7 @@ func TestRequestDetailHandlerGetsDetailWithTenantProjectAndRequestScope(t *testi
 		"apiKeyPlaintext",
 		"appTokenPlaintext",
 		"providerApiKey",
+		"Mock response",
 		"metadata",
 	} {
 		if strings.Contains(body, forbidden) {

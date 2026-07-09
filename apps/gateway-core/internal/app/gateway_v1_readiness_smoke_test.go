@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	staticprovidercatalog "gatelm/apps/gateway-core/internal/adapters/providercatalog/static"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
 	"gatelm/apps/gateway-core/internal/config"
 	"gatelm/apps/gateway-core/internal/domain/auth"
@@ -19,6 +20,7 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
+	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 	"gatelm/apps/gateway-core/internal/domain/ratelimit"
 	"gatelm/apps/gateway-core/internal/domain/routing"
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
@@ -129,8 +131,8 @@ func TestGatewayV1ReadinessSmoke(t *testing.T) {
 		t.Fatalf("rate limited request must stop before provider, before=%d after=%d", providerCallsBeforeRateLimit, harness.provider.chatCallCount())
 	}
 
-	if harness.provider.modelCallCount() != 1 {
-		t.Fatalf("expected one provider model catalog call, got %d", harness.provider.modelCallCount())
+	if harness.provider.modelCallCount() != 0 {
+		t.Fatalf("expected no provider model catalog calls, got %d", harness.provider.modelCallCount())
 	}
 	if harness.provider.chatCallCount() != 2 {
 		t.Fatalf("expected exactly two provider chat calls, got %d", harness.provider.chatCallCount())
@@ -199,6 +201,8 @@ type gatewayReadinessHarness struct {
 	observability     *readinessObservabilityStore
 	metricsRegistry   *metrics.Registry
 	rateLimitPipeline pipeline.Pipeline
+	modelsPipeline    pipeline.Pipeline
+	providerCatalog   providercatalog.Catalog
 	cfg               config.Config
 }
 
@@ -239,10 +243,14 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	}
 	observability := &readinessObservabilityStore{}
 	registry := metrics.NewRegistry()
+	providerCatalog := readinessProviderCatalog(cfg)
 	runtimeConfigProvider := staticruntimeconfig.NewProvider(runtimeconfig.ActiveConfig{
-		ConfigVersion:     "runtime_config_v1_readiness",
-		ConfigHash:        cfg.RuntimeConfigHash,
-		PublishState:      runtimeconfig.PublishStateActive,
+		ConfigVersion: "runtime_config_v1_readiness",
+		ConfigHash:    cfg.RuntimeConfigHash,
+		PublishState:  runtimeconfig.PublishStateActive,
+		Snapshot: runtimeconfig.RuntimeSnapshotProvenance{
+			ProviderCatalogRef: providerCatalog.Reference(),
+		},
 		TenantID:          cfg.DemoTenantID,
 		TenantStatus:      runtimeconfig.StatusActive,
 		ProjectID:         cfg.DemoProjectID,
@@ -289,6 +297,9 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 			Limit:         4,
 		}),
 	)
+	modelsPipeline := pipeline.New(
+		runtimeconfigstage.NewStage(runtimeConfigProvider),
+	)
 	harness := gatewayReadinessHarness{
 		provider:          providerAdapter,
 		cache:             cacheStore,
@@ -296,6 +307,8 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 		observability:     observability,
 		metricsRegistry:   registry,
 		rateLimitPipeline: rateLimitPipeline,
+		modelsPipeline:    modelsPipeline,
+		providerCatalog:   providerCatalog,
 		cfg:               cfg,
 	}
 	harness.validRouter = harness.newRouter(
@@ -318,6 +331,50 @@ func newGatewayReadinessHarness(t *testing.T) gatewayReadinessHarness {
 	return harness
 }
 
+func readinessProviderCatalog(cfg config.Config) providercatalog.Catalog {
+	return providercatalog.Catalog{
+		CatalogID:      "provider_catalog_v1_readiness",
+		CatalogVersion: 1,
+		ContentHash:    "sha256:provider-catalog-v1-readiness",
+		UpdatedAt:      time.Now().UTC(),
+		Providers: []providercatalog.Provider{{
+			ProviderID:         "provider_mock_readiness",
+			ProviderName:       "mock",
+			AdapterType:        providercatalog.AdapterTypeMock,
+			Enabled:            true,
+			TimeoutMs:          1000,
+			CredentialRequired: false,
+			FallbackEligible:   true,
+			AdapterConfig: providercatalog.AdapterConfig{
+				RequestFormat: providercatalog.RequestFormatMockChatCompletions,
+			},
+			Models: []providercatalog.Model{
+				readinessCatalogModel(cfg.LowCostModel, "Mock Fast", 10),
+				readinessCatalogModel(cfg.DefaultModel, "Mock Balanced", 20),
+			},
+		}},
+	}
+}
+
+func readinessCatalogModel(modelID string, displayName string, fallbackPriority int) providercatalog.Model {
+	return providercatalog.Model{
+		ModelID:     modelID,
+		ModelName:   modelID,
+		DisplayName: displayName,
+		Enabled:     true,
+		Capabilities: providercatalog.ModelCapabilities{
+			StreamingSupported: true,
+			MaxInputTokens:     4096,
+			MaxOutputTokens:    1024,
+		},
+		Routing: providercatalog.ModelRouting{
+			AutoRoutingEligible: true,
+			CostTier:            "low",
+			FallbackPriority:    fallbackPriority,
+		},
+	}
+}
+
 func (h gatewayReadinessHarness) newRouter(apiKeyAuthenticator *routerTestAPIKeyAuthenticator, appTokenValidator *routerTestAppTokenValidator) http.Handler {
 	return NewRouter(
 		h.cfg,
@@ -330,6 +387,8 @@ func (h gatewayReadinessHarness) newRouter(apiKeyAuthenticator *routerTestAPIKey
 		WithExactCache(h.cache, cachekey.NewExactKeyBuilder([]byte(h.cfg.ExactCacheKeySecret))),
 		WithMetrics(h.metricsRegistry),
 		WithRateLimitPipeline(h.rateLimitPipeline),
+		WithModelsRuntimePipeline(h.modelsPipeline),
+		WithProviderExecution(staticprovidercatalog.NewResolver(h.providerCatalog), nil),
 	)
 }
 
@@ -338,6 +397,7 @@ func (h gatewayReadinessHarness) get(t *testing.T, router http.Handler, path str
 
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set(middleware.RequestIDHeader, requestID)
+	req.Header.Set("Authorization", "Bearer <redacted>")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	return rr

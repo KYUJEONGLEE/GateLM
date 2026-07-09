@@ -1,4 +1,5 @@
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+import { getPreferredRuntimePolicyRouteModel } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -90,6 +91,7 @@ export function getSelectedRoutingProviderNames(values: RuntimePolicyDraftValues
     new Set(
       [
         values.routingDefaultProvider,
+        values.routingHighQualityProvider,
         values.routingLowCostProvider,
         values.routingFallbackProvider
       ]
@@ -165,36 +167,78 @@ export function normalizeDraftRoutingForProviderConnections(
     values.routingLowCostModel,
     modelOptionsByProvider
   );
+  const highQualityRouteAvailable = hasRoutingModelSelection(
+    values.routingHighQualityProvider,
+    values.routingHighQualityModel,
+    modelOptionsByProvider
+  );
   const fallbackRouteAvailable = hasRoutingModelSelection(
     values.routingFallbackProvider,
     values.routingFallbackModel,
     modelOptionsByProvider
   );
 
-  if (defaultRouteAvailable && lowCostRouteAvailable && fallbackRouteAvailable) {
+  if (
+    defaultRouteAvailable &&
+    lowCostRouteAvailable &&
+    highQualityRouteAvailable &&
+    fallbackRouteAvailable
+  ) {
     return values;
   }
 
+  const normalizeRouteSelection = (
+    route: "default" | "fallback" | "highQuality" | "lowCost",
+    provider: string,
+    model: string,
+    isAvailable: boolean
+  ) => {
+    if (isAvailable) {
+      return { model, provider };
+    }
+
+    const providerWithModels = modelOptionsByProvider.has(provider) ? provider : firstActiveModel.provider;
+    return (
+      getPreferredRuntimePolicyRouteModel(runtimeModels, providerWithModels, route, firstActiveModel) ??
+      firstActiveModel
+    );
+  };
+
+  const defaultRoute = normalizeRouteSelection(
+    "default",
+    values.routingDefaultProvider,
+    values.routingDefaultModel,
+    defaultRouteAvailable
+  );
+  const fallbackRoute = normalizeRouteSelection(
+    "fallback",
+    values.routingFallbackProvider,
+    values.routingFallbackModel,
+    fallbackRouteAvailable
+  );
+  const highQualityRoute = normalizeRouteSelection(
+    "highQuality",
+    values.routingHighQualityProvider,
+    values.routingHighQualityModel,
+    highQualityRouteAvailable
+  );
+  const lowCostRoute = normalizeRouteSelection(
+    "lowCost",
+    values.routingLowCostProvider,
+    values.routingLowCostModel,
+    lowCostRouteAvailable
+  );
+
   return {
     ...values,
-    routingDefaultModel: defaultRouteAvailable
-      ? values.routingDefaultModel
-      : firstActiveModel.model,
-    routingDefaultProvider: defaultRouteAvailable
-      ? values.routingDefaultProvider
-      : firstActiveModel.provider,
-    routingFallbackModel: fallbackRouteAvailable
-      ? values.routingFallbackModel
-      : firstActiveModel.model,
-    routingFallbackProvider: fallbackRouteAvailable
-      ? values.routingFallbackProvider
-      : firstActiveModel.provider,
-    routingLowCostModel: lowCostRouteAvailable
-      ? values.routingLowCostModel
-      : firstActiveModel.model,
-    routingLowCostProvider: lowCostRouteAvailable
-      ? values.routingLowCostProvider
-      : firstActiveModel.provider
+    routingDefaultModel: defaultRoute.model,
+    routingDefaultProvider: defaultRoute.provider,
+    routingFallbackModel: fallbackRoute.model,
+    routingFallbackProvider: fallbackRoute.provider,
+    routingHighQualityModel: highQualityRoute.model,
+    routingHighQualityProvider: highQualityRoute.provider,
+    routingLowCostModel: lowCostRoute.model,
+    routingLowCostProvider: lowCostRoute.provider
   };
 }
 

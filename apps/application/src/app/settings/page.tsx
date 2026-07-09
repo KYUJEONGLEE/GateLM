@@ -2,7 +2,12 @@ import Link from "next/link";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
 
 const gatewayUrlKeys = ["GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL"] as const;
-const apiKeyKeys = ["GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY"] as const;
+const explicitApiKeyKeys = ["GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY"] as const;
+const localApiKeyKeys = [
+  "GATELM_GATEWAY_API_KEY",
+  "GATEWAY_API_KEY",
+  "GATELM_DEMO_API_KEY"
+] as const;
 const streamingKeys = [
   "GATELM_APPLICATION_CHAT_STREAMING_ENABLED",
   "GATEWAY_APPLICATION_CHAT_STREAMING_ENABLED"
@@ -12,7 +17,9 @@ export default async function ApplicationSettingsPage() {
   const locale = await getRequestLocale();
   const text = locale === "ko" ? copy.ko : copy.en;
   const gatewayUrl = getEnvStatus(gatewayUrlKeys, "http://localhost:8080");
-  const apiKey = getEnvStatus(apiKeyKeys);
+  const apiKey = getSecretEnvStatus(
+    isProductionLikeEnv() ? explicitApiKeyKeys : localApiKeyKeys
+  );
   const streaming = getEnvStatus(streamingKeys, "true");
   const streamingMode = parseBooleanString(streaming.value, true) ? text.enabled : text.disabled;
 
@@ -94,6 +101,38 @@ function getEnvStatus(keys: readonly string[], fallback = "") {
   };
 }
 
+function getSecretEnvStatus(keys: readonly string[]) {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+
+    if (value && !isPlaceholderSecret(value)) {
+      return {
+        configured: true,
+        key,
+        value
+      };
+    }
+  }
+
+  return {
+    configured: false,
+    key: "",
+    value: ""
+  };
+}
+
+function isPlaceholderSecret(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    normalized.includes("replace-me") ||
+    normalized === "gsk_live_replace_me" ||
+    normalized === "glm_api_test_redacted" ||
+    normalized === "replace_me" ||
+    normalized === "your_gateway_api_key"
+  );
+}
+
 function parseBooleanString(value: string, fallback: boolean) {
   switch (value.trim().toLowerCase()) {
     case "1":
@@ -109,6 +148,40 @@ function parseBooleanString(value: string, fallback: boolean) {
     default:
       return fallback;
   }
+}
+
+function isProductionLikeEnv() {
+  if (process.env.NODE_ENV === "production") {
+    return true;
+  }
+  if (
+    process.env.AWS_EXECUTION_ENV ||
+    process.env.ECS_CONTAINER_METADATA_URI ||
+    process.env.ECS_CONTAINER_METADATA_URI_V4
+  ) {
+    return true;
+  }
+
+  const deploymentEnv = (
+    process.env.GATELM_DEPLOYMENT_ENV ??
+    process.env.APPLICATION_DEPLOYMENT_ENV ??
+    process.env.DEPLOYMENT_ENV ??
+    process.env.APP_ENV ??
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return [
+    "aws",
+    "aws-triage",
+    "prod",
+    "production",
+    "release",
+    "selfhost",
+    "staging",
+    "stage"
+  ].includes(deploymentEnv);
 }
 
 const copy = {

@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { applyPrimaryRuntimePolicyRouteSelection } from "@/lib/control-plane/runtime-policy-model-selection";
+import { getPreferredRuntimePolicyRouteModel } from "@/lib/control-plane/runtime-policy-model-selection";
 import {
   getRuntimePolicyDraftValues,
   type RuntimePolicyConfig,
@@ -212,6 +212,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
     general: "General",
+    highQualityRoute: "High-quality route",
     jsonMode: "JSON",
     limit: "Limit",
     lowCostRoute: "Low-cost route",
@@ -305,6 +306,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
     general: "일반",
+    highQualityRoute: "High-quality route",
     jsonMode: "JSON",
     limit: "한도",
     lowCostRoute: "Low-cost route",
@@ -496,6 +498,7 @@ export function RuntimePolicyEditor({
     () =>
       getRoutingProviderOptions(model.providerConnections.available, draftValues.models, [
         draftValues.routingDefaultProvider,
+        draftValues.routingHighQualityProvider,
         draftValues.routingLowCostProvider,
         draftValues.routingFallbackProvider
       ]),
@@ -503,6 +506,7 @@ export function RuntimePolicyEditor({
       draftValues.models,
       draftValues.routingDefaultProvider,
       draftValues.routingFallbackProvider,
+      draftValues.routingHighQualityProvider,
       draftValues.routingLowCostProvider,
       model.providerConnections.available
     ]
@@ -522,6 +526,11 @@ export function RuntimePolicyEditor({
       modelOptionsByProvider
     ) &&
     hasRoutingModelSelection(
+      draftValues.routingHighQualityProvider,
+      draftValues.routingHighQualityModel,
+      modelOptionsByProvider
+    ) &&
+    hasRoutingModelSelection(
       draftValues.routingLowCostProvider,
       draftValues.routingLowCostModel,
       modelOptionsByProvider
@@ -533,27 +542,36 @@ export function RuntimePolicyEditor({
     );
 
   function updateRoutingProvider(route: RoutingPriorityRoute, provider: string) {
-    const nextModel = modelOptionsByProvider.get(provider)?.[0]?.model ?? "";
-
     setDraftValues((current) => {
+      const nextModel =
+        getPreferredRuntimePolicyRouteModel(current.models, provider, route)?.model ??
+        modelOptionsByProvider.get(provider)?.[0]?.model ??
+        "";
+
       if (route === "default") {
-        return applyPrimaryRuntimePolicyRouteSelection(current, {
-          model: nextModel,
-          provider
-        });
+        return {
+          ...current,
+          routingDefaultModel: nextModel,
+          routingDefaultProvider: provider
+        };
       }
 
       return {
         ...current,
-        ...(route === "lowCost"
+        ...(route === "highQuality"
           ? {
-              routingLowCostModel: nextModel,
-              routingLowCostProvider: provider
+              routingHighQualityModel: nextModel,
+              routingHighQualityProvider: provider
             }
-          : {
-              routingFallbackModel: nextModel,
-              routingFallbackProvider: provider
-            })
+          : route === "lowCost"
+            ? {
+                routingLowCostModel: nextModel,
+                routingLowCostProvider: provider
+              }
+            : {
+                routingFallbackModel: nextModel,
+                routingFallbackProvider: provider
+              })
       };
     });
   }
@@ -561,17 +579,19 @@ export function RuntimePolicyEditor({
   function updateRoutingModel(route: RoutingPriorityRoute, modelName: string) {
     setDraftValues((current) => {
       if (route === "default") {
-        return applyPrimaryRuntimePolicyRouteSelection(current, {
-          model: modelName,
-          provider: current.routingDefaultProvider
-        });
+        return {
+          ...current,
+          routingDefaultModel: modelName
+        };
       }
 
       return {
         ...current,
-        ...(route === "lowCost"
-          ? { routingLowCostModel: modelName }
-          : { routingFallbackModel: modelName })
+        ...(route === "highQuality"
+          ? { routingHighQualityModel: modelName }
+          : route === "lowCost"
+            ? { routingLowCostModel: modelName }
+            : { routingFallbackModel: modelName })
       };
     });
   }

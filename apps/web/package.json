@@ -9,6 +9,7 @@
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "lint": "eslint . --max-warnings=0",
     "test:e2e": "playwright test",
+    "test:unit": "playwright test --config playwright.unit.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

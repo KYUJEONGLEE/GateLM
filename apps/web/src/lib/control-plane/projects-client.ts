@@ -6,11 +6,9 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
-  cachedControlPlaneRead,
-  CONTROL_PLANE_READ_CACHE_SECONDS,
-  controlPlaneReadCacheTags,
-  controlPlaneTenantReadCacheTag
-} from "@/lib/control-plane/read-cache";
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
 import {
   publishRuntimePolicyModelSelectionForApplication
 } from "@/lib/control-plane/runtime-policy-client";
@@ -87,17 +85,7 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
 export async function listControlPlaneProjects(
   tenantId: string
 ): Promise<ProjectListResult> {
-  return cachedControlPlaneRead(
-    ["control-plane-projects", tenantId],
-    () => listControlPlaneProjectsFresh(tenantId),
-    {
-      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.projects,
-      tags: [
-        controlPlaneReadCacheTags.projects,
-        controlPlaneTenantReadCacheTag("projects", tenantId)
-      ]
-    }
-  );
+  return listControlPlaneProjectsFresh(tenantId);
 }
 
 export async function listControlPlaneProjectsFresh(
@@ -107,7 +95,8 @@ export async function listControlPlaneProjectsFresh(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects?limit=50`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -123,7 +112,8 @@ export async function listControlPlaneProjectsFresh(
 
 export async function createProject(
   values: ProjectFormValues,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectRequestResult> {
   const tenantId = resolveControlPlaneTenantId(routeTenantId);
 
@@ -133,9 +123,9 @@ export async function createProject(
       {
         body: JSON.stringify(toProjectPayload(values)),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -159,6 +149,7 @@ export async function createProject(
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        cookieHeader: options?.cookieHeader,
         routeTenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
@@ -181,7 +172,8 @@ export async function createProject(
 
 export async function updateProject(
   values: ProjectUpdateValues,
-  routeTenantId?: string
+  routeTenantId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ProjectRequestResult> {
   try {
     const response = await fetch(
@@ -194,9 +186,9 @@ export async function updateProject(
           totalBudgetUsd: values.totalBudgetUsd
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "PATCH"
       }
     );
@@ -220,7 +212,7 @@ export async function updateProject(
       const providerConnections = await setApplicationProviderConnections({
         applicationId: runtimeApplicationId,
         providerConnectionIds: values.providerConnectionIds
-      });
+      }, options);
 
       if (!providerConnections.ok) {
         return {
@@ -234,6 +226,7 @@ export async function updateProject(
       runtimeApplicationId,
       values.selectedModelKey,
       {
+        cookieHeader: options?.cookieHeader,
         routeTenantId,
         warningThresholdPercent: values.warningThresholdPercent
       }
@@ -264,6 +257,7 @@ function toProjectPayload(values: ProjectFormValues) {
   return {
     description: values.description.trim() || undefined,
     name: values.name.trim(),
+    status: values.status,
     totalBudgetUsd: values.totalBudgetUsd
   };
 }

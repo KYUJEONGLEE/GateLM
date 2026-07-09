@@ -19,7 +19,11 @@ import type {
   ProjectStatus,
   ProjectUpdateValues
 } from "@/lib/control-plane/projects-types";
-import { syncApplicationChatEnvForProjects } from "@/lib/gateway/application-chat-env-file";
+import {
+  removeApplicationChatEnvProject,
+  syncApplicationChatEnvForProjects
+} from "@/lib/gateway/application-chat-env-file";
+import { syncApplicationChatEnvAfterProjectMutation } from "./application-chat-project-env-sync";
 
 type RequestPayload = {
   action?: unknown;
@@ -29,6 +33,7 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (payload.action !== "create" && payload.action !== "update") {
     return NextResponse.json({ error: "Unknown project action." }, { status: 400 });
@@ -57,10 +62,10 @@ export async function POST(request: Request) {
   const result =
     payload.action === "create"
       ? isProjectFormValues(payload.values)
-        ? await createProject(payload.values, routeTenantId)
+        ? await createProject(payload.values, routeTenantId, requestOptions)
         : null
       : isProjectUpdateValues(payload.values)
-        ? await updateProject(payload.values, routeTenantId)
+        ? await updateProject(payload.values, routeTenantId, requestOptions)
         : null;
 
   if (!result) {
@@ -84,18 +89,18 @@ export async function POST(request: Request) {
     controlPlaneReadCacheTags.runtimePolicy
   ]);
 
-  const syncProjectList = await listControlPlaneProjectsFresh(controlPlaneTenantId);
-
-  if (syncProjectList.ok) {
-    await syncApplicationChatEnvForProjects(syncProjectList.data).catch((error) => {
+  await syncApplicationChatEnvAfterProjectMutation({
+    controlPlaneTenantId,
+    listProjectsFresh: listControlPlaneProjectsFresh,
+    removeProjectEnv: removeApplicationChatEnvProject,
+    syncProjectsEnv: syncApplicationChatEnvForProjects,
+    updatedProject: result.data
+  }).catch((error) => {
       console.warn(
         "Application Chat env sync failed.",
         error instanceof Error ? error.message : "unknown error"
       );
-    });
-  } else {
-    console.warn("Application Chat env sync skipped.", syncProjectList.error);
-  }
+  });
 
   return NextResponse.json({
     project: result.data,

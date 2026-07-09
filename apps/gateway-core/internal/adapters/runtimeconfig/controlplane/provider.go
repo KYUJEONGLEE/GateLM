@@ -18,11 +18,15 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/runtimeconfig"
 )
 
-const maxRuntimeSnapshotBodyBytes = 1 << 20
+const (
+	internalServiceTokenHeader  = "X-GateLM-Control-Plane-Internal-Token"
+	maxRuntimeSnapshotBodyBytes = 1 << 20
+)
 
 type Provider struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL       string
+	httpClient    *http.Client
+	internalToken string
 
 	mu        sync.RWMutex
 	lastKnown map[lookupKey]runtimeconfig.ExecutionSnapshot
@@ -34,14 +38,19 @@ type lookupKey struct {
 	applicationID string
 }
 
-func NewProvider(baseURL string, httpClient *http.Client) *Provider {
+func NewProvider(baseURL string, httpClient *http.Client, internalTokens ...string) *Provider {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 2 * time.Second}
 	}
+	internalToken := ""
+	if len(internalTokens) > 0 {
+		internalToken = strings.TrimSpace(internalTokens[0])
+	}
 	return &Provider{
-		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		httpClient: httpClient,
-		lastKnown:  make(map[lookupKey]runtimeconfig.ExecutionSnapshot),
+		baseURL:       strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		httpClient:    httpClient,
+		internalToken: internalToken,
+		lastKnown:     make(map[lookupKey]runtimeconfig.ExecutionSnapshot),
 	}
 }
 
@@ -59,6 +68,7 @@ func (p *Provider) GetExecutionSnapshot(ctx context.Context, tenantID string, pr
 		return runtimeconfig.ExecutionSnapshot{}, err
 	}
 	req.Header.Set("Accept", "application/json")
+	setInternalServiceTokenHeader(req, p.internalToken)
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -92,6 +102,14 @@ func (p *Provider) GetExecutionSnapshot(ctx context.Context, tenantID string, pr
 	p.lastKnown[key] = snapshot
 	p.mu.Unlock()
 	return snapshot, nil
+}
+
+func setInternalServiceTokenHeader(req *http.Request, token string) {
+	if strings.TrimSpace(token) == "" {
+		return
+	}
+
+	req.Header.Set(internalServiceTokenHeader, strings.TrimSpace(token))
 }
 
 func (p *Provider) endpoint(path string) string {

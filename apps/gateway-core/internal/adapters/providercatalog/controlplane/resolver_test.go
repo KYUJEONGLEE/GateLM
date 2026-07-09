@@ -47,6 +47,23 @@ func TestResolverLoadsProviderCatalogByRuntimeSnapshotRef(t *testing.T) {
 	}
 }
 
+func TestResolverSendsInternalServiceToken(t *testing.T) {
+	const token = "gateway-internal-token-for-test"
+	ref := testCatalogRef()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get(internalServiceTokenHeader); got != token {
+			t.Fatalf("unexpected internal service token header: %q", got)
+		}
+		writeProviderCatalog(t, w, testProviderCatalogResponse(ref, catalogTestApplicationID))
+	}))
+	defer server.Close()
+
+	resolver := NewResolver(server.URL, server.Client(), token)
+	if _, err := resolver.GetCatalog(context.Background(), ref, providercatalog.Scope{ApplicationID: catalogTestApplicationID}); err != nil {
+		t.Fatalf("expected provider catalog, got %v", err)
+	}
+}
+
 func TestResolverNormalizesNullProviderModelsToEmptySlice(t *testing.T) {
 	ref := testCatalogRef()
 	response := testProviderCatalogResponse(ref, catalogTestApplicationID)

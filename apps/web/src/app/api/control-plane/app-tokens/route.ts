@@ -14,6 +14,7 @@ type RequestPayload = {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => ({}))) as RequestPayload;
+  const requestOptions = { cookieHeader: request.headers.get("cookie") };
 
   if (
     payload.action !== "issue" &&
@@ -26,12 +27,12 @@ export async function POST(request: Request) {
   const result =
     payload.action === "issue"
       ? isAppTokenIssueValues(payload.values)
-        ? await issueAppToken(payload.values)
+        ? await issueAppToken(payload.values, requestOptions)
         : null
       : typeof payload.appTokenId === "string"
         ? payload.action === "rotate"
-          ? await rotateAppToken(payload.appTokenId)
-          : await revokeAppToken(payload.appTokenId)
+          ? await rotateAppToken(payload.appTokenId, requestOptions)
+          : await revokeAppToken(payload.appTokenId, requestOptions)
         : null;
 
   if (!result) {

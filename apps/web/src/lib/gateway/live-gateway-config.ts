@@ -1,6 +1,7 @@
 import "server-only";
 
 import { existsSync } from "node:fs";
+import { isProductionLikeEnv } from "@/lib/env/production-like";
 
 const DEFAULT_RATE_LIMIT_MAX_ATTEMPTS = 60;
 const HARD_RATE_LIMIT_MAX_ATTEMPTS = 60;
@@ -22,8 +23,8 @@ export type LiveGatewayConfig = {
 export function getLiveGatewayConfig(options: { apiKey?: string } = {}): LiveGatewayConfig {
   return {
     apiKey: options.apiKey
-      ?? firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY")
-      ?? "glm_api_test_redacted",
+      ?? getGatewayApiKey()
+      ?? "",
     applicationChatMaxTokens: getApplicationChatMaxTokens(),
     applicationChatModel: "auto",
     applicationChatStreamingEnabled: getApplicationChatStreamingEnabled(),
@@ -41,6 +42,44 @@ export function getLiveGatewayConfig(options: { apiKey?: string } = {}): LiveGat
     providerFailureModels: getProviderFailureModels(),
     rateLimitMaxAttempts: getRateLimitMaxAttempts()
   };
+}
+
+function getGatewayApiKey(): string | undefined {
+  const explicitApiKey = normalizeApiKey(
+    firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY")
+  );
+  if (explicitApiKey) {
+    return explicitApiKey;
+  }
+
+  if (isProductionLikeEnv()) {
+    return undefined;
+  }
+
+  return normalizeApiKey(firstEnv("GATELM_DEMO_API_KEY")) ?? "glm_api_test_redacted";
+}
+
+function normalizeApiKey(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+
+  if (!normalized || isPlaceholderApiKey(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function isPlaceholderApiKey(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    normalized.startsWith("paste_gateway_api_key_for_") ||
+    normalized.includes("replace-me") ||
+    normalized === "gsk_live_replace_me" ||
+    normalized === "glm_api_test_redacted" ||
+    normalized === "replace_me" ||
+    normalized === "your_gateway_api_key"
+  );
 }
 
 function firstEnv(...keys: string[]): string | undefined {

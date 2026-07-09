@@ -8,11 +8,9 @@ import {
   resolveControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
 import {
-  cachedControlPlaneRead,
-  CONTROL_PLANE_READ_CACHE_SECONDS,
-  controlPlaneReadCacheTags,
-  runtimePolicyApplicationReadCacheTag
-} from "@/lib/control-plane/read-cache";
+  buildControlPlaneHeaders,
+  type ControlPlaneRequestOptions
+} from "@/lib/control-plane/control-plane-request";
 import {
   listApplicationProviderConnections,
   listTenantProviderConnections
@@ -494,17 +492,7 @@ function normalizeRuntimeProviderStatus(value: string): RuntimePolicyProvider["s
 export async function getRuntimePolicyConfigForApplication(
   applicationId: string
 ): Promise<RuntimePolicyConfig | null> {
-  const activeConfig = await cachedControlPlaneRead(
-    ["control-plane-runtime-policy-active", applicationId],
-    () => fetchActiveRuntimeConfig(applicationId),
-    {
-      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.runtimePolicy,
-      tags: [
-        controlPlaneReadCacheTags.runtimePolicy,
-        runtimePolicyApplicationReadCacheTag(applicationId)
-      ]
-    }
-  );
+  const activeConfig = await fetchActiveRuntimeConfig(applicationId);
 
   return activeConfig.ok ? activeConfig.data : null;
 }
@@ -513,6 +501,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   applicationId: string,
   selectedModelKey: string,
   options: {
+    cookieHeader?: string | null;
     routeTenantId?: string;
     warningThresholdPercent?: number;
   } = {}
@@ -566,6 +555,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
   const draftConfigVersion = createApplicationRuntimeDraftVersion(applicationId);
   const draft = await writeRuntimeConfig("draft", nextValues, {
     applicationId,
+    cookieHeader: options.cookieHeader,
     draftConfigVersion
   });
 
@@ -578,6 +568,7 @@ export async function publishRuntimePolicyModelSelectionForApplication(
 
   const published = await writeRuntimeConfig("publish", nextValues, {
     applicationId,
+    cookieHeader: options.cookieHeader,
     draftConfigVersion,
     publishedConfigVersion: createPublishedRuntimeConfigVersion()
   });
@@ -622,25 +613,29 @@ async function fetchRuntimeConfigForModelSelection(
 
 export async function saveRuntimePolicyDraft(
   values: RuntimePolicyDraftValues,
-  applicationId?: string
+  applicationId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ControlPlaneRequestResult> {
   const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
 
   return writeRuntimeConfig("draft", values, {
     applicationId: targetApplicationId,
+    cookieHeader: options?.cookieHeader,
     draftConfigVersion: getRuntimePolicyDraftConfigVersion(values, targetApplicationId)
   });
 }
 
 export async function publishRuntimePolicy(
   values: RuntimePolicyDraftValues,
-  applicationId?: string
+  applicationId?: string,
+  options?: ControlPlaneRequestOptions
 ): Promise<ControlPlaneRequestResult> {
   const targetApplicationId = applicationId ?? getControlPlaneApplicationId();
   const draftConfigVersion = getRuntimePolicyDraftConfigVersion(values, targetApplicationId);
   const publishedConfigVersion = createPublishedRuntimeConfigVersion();
   const draft = await writeRuntimeConfig("draft", values, {
     applicationId: targetApplicationId,
+    cookieHeader: options?.cookieHeader,
     draftConfigVersion
   });
 
@@ -650,6 +645,7 @@ export async function publishRuntimePolicy(
 
   return writeRuntimeConfig("publish", values, {
     applicationId: targetApplicationId,
+    cookieHeader: options?.cookieHeader,
     draftConfigVersion,
     publishedConfigVersion
   });
@@ -657,7 +653,8 @@ export async function publishRuntimePolicy(
 
 export async function rollbackRuntimePolicy(
   targetConfigVersion: string,
-  applicationId = getControlPlaneApplicationId()
+  applicationId = getControlPlaneApplicationId(),
+  options?: ControlPlaneRequestOptions
 ): Promise<ControlPlaneRequestResult> {
   try {
     const response = await fetch(
@@ -667,9 +664,9 @@ export async function rollbackRuntimePolicy(
           targetConfigVersion: targetConfigVersion.trim()
         }),
         cache: "no-store",
-        headers: {
+        headers: await buildControlPlaneHeaders(options, {
           "Content-Type": "application/json"
-        },
+        }),
         method: "POST"
       }
     );
@@ -738,6 +735,8 @@ function makeRuntimePolicyConfigTemplate(
         defaultProvider: "",
         fallbackModel: "",
         fallbackProvider: "",
+        highQualityModel: "",
+        highQualityProvider: "",
         lowCostModel: "",
         lowCostProvider: ""
       }
@@ -752,6 +751,8 @@ function makeRuntimePolicyConfigTemplate(
       defaultProvider: preferredModel.provider,
       fallbackModel: preferredModel.model,
       fallbackProvider: preferredModel.provider,
+      highQualityModel: preferredModel.model,
+      highQualityProvider: preferredModel.provider,
       lowCostModel: preferredModel.model,
       lowCostProvider: preferredModel.provider
     }
@@ -780,7 +781,8 @@ async function fetchActiveRuntimeConfig(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/active`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -801,7 +803,8 @@ async function fetchRuntimeConfigHistory(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/history?limit=20`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -823,7 +826,8 @@ async function fetchRuntimeConfigHistoryDetail(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/history/${encodeURIComponent(configVersion)}`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -844,7 +848,8 @@ async function fetchActiveRuntimeSnapshot(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-snapshot/active`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -865,7 +870,8 @@ async function fetchActiveProviderCatalog(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/provider-catalog/active`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -884,7 +890,8 @@ async function fetchProviderCatalog(catalogId: string): Promise<ProviderCatalogR
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/provider-catalogs/${encodeURIComponent(catalogId)}`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -903,6 +910,7 @@ async function writeRuntimeConfig(
   values: RuntimePolicyDraftValues,
   options: {
     applicationId?: string;
+    cookieHeader?: string | null;
     draftConfigVersion?: string;
     publishedConfigVersion?: string;
   } = {}
@@ -924,9 +932,12 @@ async function writeRuntimeConfig(
       {
         body: JSON.stringify(body),
         cache: "no-store",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: await buildControlPlaneHeaders(
+          { cookieHeader: options.cookieHeader },
+          {
+            "Content-Type": "application/json"
+          }
+        ),
         method: "POST"
       }
     );
@@ -999,6 +1010,8 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
       defaultProvider: values.routingDefaultProvider,
       fallbackModel: values.routingFallbackModel,
       fallbackProvider: values.routingFallbackProvider,
+      highQualityModel: values.routingHighQualityModel,
+      highQualityProvider: values.routingHighQualityProvider,
       lowCostModel: values.routingLowCostModel,
       lowCostProvider: values.routingLowCostProvider,
       shortPromptMaxChars: values.routingShortPromptMaxChars

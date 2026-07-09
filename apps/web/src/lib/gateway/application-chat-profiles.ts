@@ -5,6 +5,7 @@ import {
   getControlPlaneProjectId,
   getControlPlaneTenantId
 } from "@/lib/control-plane/control-plane-config";
+import { isProductionLikeEnv } from "@/lib/env/production-like";
 import { listControlPlaneProjects } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 
@@ -220,10 +221,12 @@ function selectProfileFromList(
 }
 
 function getDefaultApplicationChatProfile(): InternalApplicationChatProfile {
+  const apiKey = getGatewayApiKey() ?? "";
+
   return {
-    apiKey: firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY", "GATELM_DEMO_API_KEY")
-      ?? "glm_api_test_redacted",
+    apiKey,
     applicationId: getControlPlaneApplicationId(),
+    disabledReason: apiKey ? undefined : GATEWAY_API_KEY_MISSING,
     id: normalizeProfileId(
       firstEnv("GATELM_APPLICATION_CHAT_PROFILE_ID", "GATELM_GATEWAY_PROJECT_ID", "GATEWAY_PROJECT_ID")
     ) ?? "default",
@@ -232,6 +235,21 @@ function getDefaultApplicationChatProfile(): InternalApplicationChatProfile {
     projectId: firstEnv("GATELM_CONTROL_PLANE_PROJECT_ID", "GATELM_DEMO_PROJECT_ID")
       ?? getControlPlaneProjectId()
   };
+}
+
+function getGatewayApiKey(): string | undefined {
+  const explicitApiKey = normalizeApiKey(
+    firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY")
+  );
+  if (explicitApiKey) {
+    return explicitApiKey;
+  }
+
+  if (isProductionLikeEnv()) {
+    return undefined;
+  }
+
+  return normalizeApiKey(firstEnv("GATELM_DEMO_API_KEY")) ?? "glm_api_test_redacted";
 }
 
 function parseProfiles(value: string | undefined): InternalApplicationChatProfile[] {
@@ -429,7 +447,9 @@ function isPlaceholderApiKey(value: string) {
 
   return (
     normalized.startsWith("paste_gateway_api_key_for_") ||
+    normalized.includes("replace-me") ||
     normalized === "gsk_live_replace_me" ||
+    normalized === "glm_api_test_redacted" ||
     normalized === "replace_me" ||
     normalized === "your_gateway_api_key"
   );
