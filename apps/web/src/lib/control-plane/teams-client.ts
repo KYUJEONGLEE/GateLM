@@ -271,7 +271,8 @@ async function listTeams(tenantId: string): Promise<TeamListResult> {
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/teams?limit=100`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -290,7 +291,8 @@ async function listProjectTeams(projectId: string): Promise<ProjectTeamListResul
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/teams`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 

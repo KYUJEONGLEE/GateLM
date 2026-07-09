@@ -16,24 +16,33 @@ import (
 	"gatelm/apps/gateway-core/internal/domain/providercatalog"
 )
 
-const maxProviderCatalogBodyBytes = 2 << 20
+const (
+	internalServiceTokenHeader  = "X-GateLM-Control-Plane-Internal-Token"
+	maxProviderCatalogBodyBytes = 2 << 20
+)
 
 type Resolver struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL       string
+	httpClient    *http.Client
+	internalToken string
 
 	mu        sync.RWMutex
 	lastKnown map[providercatalog.Reference]providercatalog.Catalog
 }
 
-func NewResolver(baseURL string, httpClient *http.Client) *Resolver {
+func NewResolver(baseURL string, httpClient *http.Client, internalTokens ...string) *Resolver {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 2 * time.Second}
 	}
+	internalToken := ""
+	if len(internalTokens) > 0 {
+		internalToken = strings.TrimSpace(internalTokens[0])
+	}
 	return &Resolver{
-		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		httpClient: httpClient,
-		lastKnown:  make(map[providercatalog.Reference]providercatalog.Catalog),
+		baseURL:       strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		httpClient:    httpClient,
+		internalToken: internalToken,
+		lastKnown:     make(map[providercatalog.Reference]providercatalog.Catalog),
 	}
 }
 
@@ -48,6 +57,7 @@ func (r *Resolver) GetCatalog(ctx context.Context, ref providercatalog.Reference
 		return providercatalog.Catalog{}, err
 	}
 	req.Header.Set("Accept", "application/json")
+	setInternalServiceTokenHeader(req, r.internalToken)
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
@@ -77,6 +87,14 @@ func (r *Resolver) GetCatalog(ctx context.Context, ref providercatalog.Reference
 	r.lastKnown[ref] = catalog
 	r.mu.Unlock()
 	return catalog, nil
+}
+
+func setInternalServiceTokenHeader(req *http.Request, token string) {
+	if strings.TrimSpace(token) == "" {
+		return
+	}
+
+	req.Header.Set(internalServiceTokenHeader, strings.TrimSpace(token))
 }
 
 func (r *Resolver) endpoint(path string) string {

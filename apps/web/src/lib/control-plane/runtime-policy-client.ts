@@ -12,12 +12,6 @@ import {
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
 import {
-  cachedControlPlaneRead,
-  CONTROL_PLANE_READ_CACHE_SECONDS,
-  controlPlaneReadCacheTags,
-  runtimePolicyApplicationReadCacheTag
-} from "@/lib/control-plane/read-cache";
-import {
   listApplicationProviderConnections,
   listTenantProviderConnections
 } from "@/lib/control-plane/provider-connections-client";
@@ -498,17 +492,7 @@ function normalizeRuntimeProviderStatus(value: string): RuntimePolicyProvider["s
 export async function getRuntimePolicyConfigForApplication(
   applicationId: string
 ): Promise<RuntimePolicyConfig | null> {
-  const activeConfig = await cachedControlPlaneRead(
-    ["control-plane-runtime-policy-active", applicationId],
-    () => fetchActiveRuntimeConfig(applicationId),
-    {
-      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.runtimePolicy,
-      tags: [
-        controlPlaneReadCacheTags.runtimePolicy,
-        runtimePolicyApplicationReadCacheTag(applicationId)
-      ]
-    }
-  );
+  const activeConfig = await fetchActiveRuntimeConfig(applicationId);
 
   return activeConfig.ok ? activeConfig.data : null;
 }
@@ -797,7 +781,8 @@ async function fetchActiveRuntimeConfig(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/active`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -818,7 +803,8 @@ async function fetchRuntimeConfigHistory(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/history?limit=20`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -840,7 +826,8 @@ async function fetchRuntimeConfigHistoryDetail(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-config/history/${encodeURIComponent(configVersion)}`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -861,7 +848,8 @@ async function fetchActiveRuntimeSnapshot(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/runtime-snapshot/active`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -882,7 +870,8 @@ async function fetchActiveProviderCatalog(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/provider-catalog/active`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -901,7 +890,8 @@ async function fetchProviderCatalog(catalogId: string): Promise<ProviderCatalogR
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/provider-catalogs/${encodeURIComponent(catalogId)}`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 

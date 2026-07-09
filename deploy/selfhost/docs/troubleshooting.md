@@ -190,29 +190,26 @@ docker compose --env-file .env logs --tail=100 postgres
 docker compose --env-file .env logs --tail=100 control-plane-api
 ```
 
-Do not run `seed.sh` until migrations pass.
+Do not create runtime resources until migrations pass.
 
-## Seed Failed
+## Runtime Resources Missing
 
 Cause:
 
 Common causes:
 
 - `migrate.sh` was not run first
-- demo UUID values were changed
-- control-plane-api image tag does not match the bundle
+- tenant/project/application setup has not been completed
+- no Gateway API key has been issued for the runtime project
+- no active RuntimeSnapshot has been published
 
 Fix:
 
-1. Keep the demo UUID values from `.env.example`.
-2. Run:
+1. Run `bash scripts/migrate.sh`.
+2. Create a real tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API.
+3. Set `GATELM_GATEWAY_API_KEY` in `.env` to the project Gateway API key and recreate `web`.
 
-```bash
-bash scripts/migrate.sh
-bash scripts/seed.sh
-```
-
-The seed script hides command output to avoid printing credentials or connection strings.
+`scripts/seed.sh` is disabled for self-host/prod-like deployments.
 
 ## Smoke Test Gateway Request Failed
 
@@ -221,7 +218,7 @@ Cause:
 Common causes:
 
 - Gateway is not ready
-- seed did not create the active RuntimeSnapshot
+- no active RuntimeSnapshot is published
 - API key or app token in `.env` does not match the running Gateway container
 - mock-provider is not healthy
 
@@ -231,7 +228,6 @@ Fix:
 docker compose --env-file .env ps
 docker compose --env-file .env logs --tail=100 gateway-core
 docker compose --env-file .env logs --tail=100 mock-provider
-bash scripts/seed.sh
 bash scripts/smoke-test.sh
 ```
 

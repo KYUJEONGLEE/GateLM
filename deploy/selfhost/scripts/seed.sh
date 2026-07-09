@@ -7,6 +7,7 @@ source "${SCRIPT_DIR}/lib.sh"
 
 gatelm_log "Starting GateLM self-host demo seed."
 gatelm_load_env
+gatelm_fail "Demo seed is disabled for self-host/prod-like deployments. Create real tenants, projects, applications, Gateway API keys, provider connections, and a published RuntimeSnapshot through the Console or admin API."
 gatelm_require_env_vars \
   POSTGRES_USER \
   POSTGRES_PASSWORD \

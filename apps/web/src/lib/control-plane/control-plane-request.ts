@@ -21,7 +21,14 @@ export async function buildControlPlaneHeaders(
 }
 
 async function getServerCookieHeader() {
-  const cookieStore = await cookies();
+  let cookieStore: Awaited<ReturnType<typeof cookies>>;
+
+  try {
+    cookieStore = await cookies();
+  } catch {
+    return null;
+  }
+
   const pairs = ["gatelm_session", "gatelm_onboarding"]
     .map((name) => {
       const value = cookieStore.get(name)?.value;

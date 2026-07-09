@@ -3,24 +3,36 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { hashSecret } from '@/modules/auth/auth.crypto';
 import { AUTH_COOKIE_NAMES } from '@/modules/auth/auth.tokens';
 
-const MUTATION_METHODS = new Set(['DELETE', 'PATCH', 'POST', 'PUT']);
+const ADMIN_PATH_PREFIX = '/admin/v1';
+const INTERNAL_SERVICE_TOKEN_HEADER =
+  'x-gatelm-control-plane-internal-token';
 
 @Injectable()
 export class AdminAuthGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
 
-    if (!this.requiresAdminMutationAuth(request)) {
+    if (!this.requiresAdminAuth(request)) {
+      return true;
+    }
+
+    if (this.allowsInternalServiceRead(request)) {
       return true;
     }
 
@@ -65,14 +77,38 @@ export class AdminAuthGuard implements CanActivate {
     return true;
   }
 
-  private requiresAdminMutationAuth(request: Request): boolean {
+  private requiresAdminAuth(request: Request): boolean {
     const method = request.method?.toUpperCase();
-    const path = request.originalUrl ?? request.url ?? '';
+    const path = requestPath(request);
 
     return Boolean(
       method &&
-        MUTATION_METHODS.has(method) &&
-        (path === '/admin/v1' || path.startsWith('/admin/v1/')),
+        (path === ADMIN_PATH_PREFIX || path.startsWith(`${ADMIN_PATH_PREFIX}/`)),
+    );
+  }
+
+  private allowsInternalServiceRead(request: Request): boolean {
+    if (request.method?.toUpperCase() !== 'GET') {
+      return false;
+    }
+
+    const path = requestPath(request);
+    if (!isInternalServiceReadPath(path)) {
+      return false;
+    }
+
+    const expectedToken = this.config
+      ?.get<string>('CONTROL_PLANE_INTERNAL_SERVICE_TOKEN')
+      ?.trim();
+    const providedToken = this.readHeader(
+      request,
+      INTERNAL_SERVICE_TOKEN_HEADER,
+    );
+
+    return Boolean(
+      expectedToken &&
+        providedToken &&
+        constantTimeEquals(providedToken, expectedToken),
     );
   }
 
@@ -138,6 +174,16 @@ export class AdminAuthGuard implements CanActivate {
         'projectAdminInvitation',
         invitationId,
       );
+    }
+
+    const catalogId = this.readParam(params, 'catalogId');
+    if (catalogId) {
+      const catalogApplicationId = applicationIdFromProviderCatalogId(catalogId);
+      if (!catalogApplicationId) {
+        throw new ForbiddenException('Control Plane resource is outside admin scope.');
+      }
+
+      return this.findTenantIdForResource('application', catalogApplicationId);
     }
 
     return null;
@@ -249,6 +295,48 @@ export class AdminAuthGuard implements CanActivate {
 
     return null;
   }
+
+  private readHeader(request: Request, name: string): string | null {
+    const value = request.headers[name];
+    const raw = Array.isArray(value) ? value[0] : value;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+  }
+}
+
+function requestPath(request: Request): string {
+  const value = request.originalUrl ?? request.url ?? '';
+  const queryStart = value.indexOf('?');
+  const path = queryStart >= 0 ? value.slice(0, queryStart) : value;
+  return path.replace(/\/+$/, '') || '/';
+}
+
+function isInternalServiceReadPath(path: string): boolean {
+  return (
+    /^\/admin\/v1\/applications\/[^/?#]+\/runtime-snapshot\/active$/.test(
+      path,
+    ) || /^\/admin\/v1\/provider-catalogs\/[^/?#]+$/.test(path)
+  );
+}
+
+function constantTimeEquals(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function applicationIdFromProviderCatalogId(catalogId: string): string | null {
+  const parts = catalogId.split(':');
+  if (parts.length !== 3 || parts[0] !== 'provider_catalog') {
+    return null;
+  }
+
+  const applicationId = parts[1];
+  return applicationId && isUuid(applicationId) ? applicationId : null;
 }
 
 function isUuid(value: string): boolean {

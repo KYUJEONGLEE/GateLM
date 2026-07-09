@@ -402,6 +402,8 @@ export function buildDemoRuntimeConfigDocument(
 }
 
 export async function seedDemoData(client: PrismaClient): Promise<void> {
+  assertDemoSeedAllowed(process.env);
+
   await client.$transaction(async (tx) => {
     await seedProviderPresets(tx);
 
@@ -747,6 +749,51 @@ export async function seedDemoData(client: PrismaClient): Promise<void> {
       },
     });
   });
+}
+
+function assertDemoSeedAllowed(env: NodeJS.ProcessEnv): void {
+  if (!isProductionLikeDemoSeedEnv(env)) {
+    return;
+  }
+
+  throw new Error(
+    'Refusing to run demo seed in production-like environments. Create real tenants, projects, applications, and credentials instead.',
+  );
+}
+
+function isProductionLikeDemoSeedEnv(env: NodeJS.ProcessEnv): boolean {
+  if (env.NODE_ENV === 'production') {
+    return true;
+  }
+  if (
+    env.AWS_EXECUTION_ENV ||
+    env.AWS_REGION ||
+    env.ECS_CONTAINER_METADATA_URI ||
+    env.ECS_CONTAINER_METADATA_URI_V4
+  ) {
+    return true;
+  }
+
+  const deploymentEnv = (
+    env.GATELM_DEPLOYMENT_ENV ??
+    env.CONTROL_PLANE_DEPLOYMENT_ENV ??
+    env.DEPLOYMENT_ENV ??
+    env.APP_ENV ??
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+  return [
+    'aws',
+    'aws-triage',
+    'prod',
+    'production',
+    'release',
+    'selfhost',
+    'staging',
+    'stage',
+  ].includes(deploymentEnv);
 }
 
 async function upsertDemoTenantProvider(

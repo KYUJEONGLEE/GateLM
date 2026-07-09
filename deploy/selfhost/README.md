@@ -24,7 +24,6 @@ Run from `deploy/selfhost`:
 Copy-Item .env.example .env
 bash scripts/install.sh
 bash scripts/migrate.sh
-bash scripts/seed.sh
 bash scripts/smoke-test.sh
 ```
 
@@ -34,7 +33,6 @@ On Linux or macOS:
 cp .env.example .env
 bash scripts/install.sh
 bash scripts/migrate.sh
-bash scripts/seed.sh
 bash scripts/smoke-test.sh
 ```
 
@@ -42,7 +40,7 @@ Before exposing the stack, edit `.env` and replace placeholder secret values. Ke
 
 If your shell says `permission denied`, keep using the explicit `bash scripts/<name>.sh` form. The scripts intentionally avoid printing secret values, request bodies, and response bodies.
 
-For the current MVP, keep the demo UUID values in `.env` unchanged. Replace the API key, app token, database password, and cache secret values before production exposure.
+Before running smoke tests, create a real tenant, project, application, Gateway API key, provider connection, and published RuntimeSnapshot through the Console or admin API. Demo seed is disabled for self-host/prod-like deployments.
 
 ## URLs
 
@@ -102,8 +100,7 @@ bash scripts/smoke-test.sh
 |---|---|---|
 | 1 | `scripts/install.sh` | validates `.env`, pulls images, and starts the Compose stack |
 | 2 | `scripts/migrate.sh` | runs Control Plane Prisma migrations and Gateway runtime table SQL |
-| 3 | `scripts/seed.sh` | seeds the demo tenant, project, application, credentials, provider, and active RuntimeSnapshot |
-| 4 | `scripts/smoke-test.sh` | checks health endpoints, sends one Gateway request, and verifies the Request Log |
+| 3 | `scripts/smoke-test.sh` | checks health endpoints, sends one Gateway request, and verifies the Request Log after real runtime resources exist |
 
 The Gateway runtime SQL lives in:
 

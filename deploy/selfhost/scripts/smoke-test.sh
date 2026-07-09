@@ -86,7 +86,7 @@ if [[ ! "${http_code}" =~ ^[0-9]{3}$ ]]; then
 fi
 
 if (( http_code < 200 || http_code >= 300 )); then
-  gatelm_fail "Gateway request failed with HTTP ${http_code}. Run migrate.sh and seed.sh first, then check gateway-core logs. Response body is hidden."
+  gatelm_fail "Gateway request failed with HTTP ${http_code}. Run migrate.sh, confirm real runtime resources are published, then check gateway-core logs. Response body is hidden."
 fi
 
 gatelm_log "Gateway request succeeded with request id: ${request_id}"

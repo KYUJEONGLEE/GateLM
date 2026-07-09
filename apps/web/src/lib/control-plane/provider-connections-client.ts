@@ -10,12 +10,6 @@ import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
-import {
-  cachedControlPlaneRead,
-  CONTROL_PLANE_READ_CACHE_SECONDS,
-  controlPlaneReadCacheTags,
-  controlPlaneTenantReadCacheTag
-} from "@/lib/control-plane/read-cache";
 import type {
   ProviderConnectionFormValues,
   ProviderConnectionRecord,
@@ -313,17 +307,7 @@ export async function removeProviderModel({
 export async function listTenantProviderConnections(
   tenantId: string
 ): Promise<ProviderListResult> {
-  return cachedControlPlaneRead(
-    ["control-plane-tenant-providers", tenantId],
-    () => listTenantProviderConnectionsFresh(tenantId),
-    {
-      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.providerConnections,
-      tags: [
-        controlPlaneReadCacheTags.providerConnections,
-        controlPlaneTenantReadCacheTag("providerConnections", tenantId)
-      ]
-    }
-  );
+  return listTenantProviderConnectionsFresh(tenantId);
 }
 
 export async function listTenantProviderConnectionsFresh(
@@ -333,7 +317,8 @@ export async function listTenantProviderConnectionsFresh(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/providers?limit=50`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -354,7 +339,8 @@ export async function listApplicationProviderConnections(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/applications/${encodeURIComponent(applicationId)}/providers`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 
@@ -401,20 +387,14 @@ export async function setApplicationProviderConnections({
 }
 
 async function listProviderPresets(): Promise<ProviderPresetListResult> {
-  return cachedControlPlaneRead(
-    ["control-plane-provider-presets"],
-    listProviderPresetsFresh,
-    {
-      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.providerPresets,
-      tags: [controlPlaneReadCacheTags.providerPresets]
-    }
-  );
+  return listProviderPresetsFresh();
 }
 
 async function listProviderPresetsFresh(): Promise<ProviderPresetListResult> {
   try {
     const response = await fetch(`${getControlPlaneBaseUrl()}/admin/v1/provider-presets`, {
-      cache: "no-store"
+      cache: "no-store",
+      headers: await buildControlPlaneHeaders()
     });
 
     return readProviderPresetListResponse(response);
