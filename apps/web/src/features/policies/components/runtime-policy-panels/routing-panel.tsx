@@ -52,19 +52,25 @@ export function RoutingPolicyPanel({
           providerOptions={providerOptions}
           rows={[
             {
-              priority: "High",
-              provider: draftValues.routingLowCostProvider,
-              route: "lowCost",
-              selectedModel: draftValues.routingLowCostModel
+              priority: text.highQualityRoute,
+              provider: draftValues.routingHighQualityProvider,
+              route: "highQuality",
+              selectedModel: draftValues.routingHighQualityModel
             },
             {
-              priority: "Default",
+              priority: text.defaultRoute,
               provider: draftValues.routingDefaultProvider,
               route: "default",
               selectedModel: draftValues.routingDefaultModel
             },
             {
-              priority: "Fallback",
+              priority: text.lowCostRoute,
+              provider: draftValues.routingLowCostProvider,
+              route: "lowCost",
+              selectedModel: draftValues.routingLowCostModel
+            },
+            {
+              priority: text.fallbackRoute,
               provider: draftValues.routingFallbackProvider,
               route: "fallback",
               selectedModel: draftValues.routingFallbackModel

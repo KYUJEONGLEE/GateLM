@@ -105,6 +105,8 @@ export type RuntimePolicyConfig = {
     defaultProvider: string;
     fallbackModel: string;
     fallbackProvider: string;
+    highQualityModel?: string;
+    highQualityProvider?: string;
     lowCostModel: string;
     lowCostProvider: string;
     routingPolicyHash: string;
@@ -183,6 +185,10 @@ export type RuntimePolicySnapshot = {
       defaultModel: string;
       defaultProvider: string;
       defaultRequestedModel: string;
+      highQualityModel?: string;
+      highQualityProvider?: string;
+      lowCostModel?: string;
+      lowCostProvider?: string;
       routingPolicyHash: string;
     };
     safety: {
@@ -243,6 +249,8 @@ export type RuntimePolicyDraftValues = {
   routingDefaultProvider: string;
   routingFallbackModel: string;
   routingFallbackProvider: string;
+  routingHighQualityModel: string;
+  routingHighQualityProvider: string;
   routingLowCostModel: string;
   routingLowCostProvider: string;
   routingShortPromptMaxChars: number;
@@ -381,6 +389,10 @@ export function getRuntimePolicyDraftValues(
     routingDefaultProvider: config.routingPolicy.defaultProvider,
     routingFallbackModel: config.routingPolicy.fallbackModel,
     routingFallbackProvider: config.routingPolicy.fallbackProvider,
+    routingHighQualityModel:
+      config.routingPolicy.highQualityModel || config.routingPolicy.defaultModel,
+    routingHighQualityProvider:
+      config.routingPolicy.highQualityProvider || config.routingPolicy.defaultProvider,
     routingLowCostModel: config.routingPolicy.lowCostModel,
     routingLowCostProvider: config.routingPolicy.lowCostProvider,
     routingShortPromptMaxChars: config.routingPolicy.shortPromptMaxChars

@@ -4,24 +4,28 @@ import type {
 } from "./runtime-policy-types";
 
 type RuntimePolicyRouteSelection = Pick<RuntimePolicyModelConfig, "model" | "provider">;
+type RuntimePolicyRouteKey = "default" | "fallback" | "highQuality" | "lowCost";
 
 const onboardingRouteModelPreferences: Record<
   string,
   {
     default: string[];
     fallback: string[];
-    high: string[];
+    highQuality: string[];
+    lowCost: string[];
   }
 > = {
   gemini: {
     default: ["gemini-3.5-flash"],
     fallback: ["gemini-3.5-flash"],
-    high: ["gemini-2.5-pro"]
+    highQuality: ["gemini-2.5-pro"],
+    lowCost: ["gemini-3.5-flash"]
   },
   openai: {
     default: ["gpt-4o"],
     fallback: ["gpt-4o-mini"],
-    high: ["chat-latest"]
+    highQuality: ["chat-latest"],
+    lowCost: ["gpt-4o-mini"]
   }
 };
 
@@ -42,8 +46,10 @@ export function applyInitialRuntimePolicyModelSelection(
     routingDefaultProvider: routeModels.default.provider,
     routingFallbackModel: routeModels.fallback.model,
     routingFallbackProvider: routeModels.fallback.provider,
-    routingLowCostModel: routeModels.high.model,
-    routingLowCostProvider: routeModels.high.provider
+    routingHighQualityModel: routeModels.highQuality.model,
+    routingHighQualityProvider: routeModels.highQuality.provider,
+    routingLowCostModel: routeModels.lowCost.model,
+    routingLowCostProvider: routeModels.lowCost.provider
   };
 }
 
@@ -51,42 +57,74 @@ export function applyPrimaryRuntimePolicyRouteSelection(
   draftValues: RuntimePolicyDraftValues,
   selectedModel: RuntimePolicyRouteSelection
 ): RuntimePolicyDraftValues {
+  const routeModels = getInitialRouteModelSelection(draftValues.models, selectedModel);
+
   return {
     ...draftValues,
-    routingDefaultModel: selectedModel.model,
-    routingDefaultProvider: selectedModel.provider,
-    routingFallbackModel: selectedModel.model,
-    routingFallbackProvider: selectedModel.provider,
-    routingLowCostModel: selectedModel.model,
-    routingLowCostProvider: selectedModel.provider
+    routingDefaultModel: routeModels.default.model,
+    routingDefaultProvider: routeModels.default.provider,
+    routingFallbackModel: routeModels.fallback.model,
+    routingFallbackProvider: routeModels.fallback.provider,
+    routingHighQualityModel: routeModels.highQuality.model,
+    routingHighQualityProvider: routeModels.highQuality.provider,
+    routingLowCostModel: routeModels.lowCost.model,
+    routingLowCostProvider: routeModels.lowCost.provider
   };
+}
+
+export function getPreferredRuntimePolicyRouteModel(
+  models: RuntimePolicyModelConfig[],
+  provider: string,
+  route: RuntimePolicyRouteKey,
+  fallbackModel?: RuntimePolicyRouteSelection
+): RuntimePolicyRouteSelection | null {
+  const normalizedProvider = provider.trim();
+  const activeProviderModels = models.filter(
+    (model) => model.provider.trim() === normalizedProvider && model.status === "active"
+  );
+  const selectedModel = activeProviderModels[0] ?? fallbackModel;
+
+  if (!selectedModel) {
+    return null;
+  }
+
+  const family = getProviderFamilyForModel(selectedModel);
+  const preferences = onboardingRouteModelPreferences[family]?.[route];
+
+  if (!preferences) {
+    return selectedModel;
+  }
+
+  return findPreferredModel(activeProviderModels, selectedModel, preferences);
 }
 
 function getInitialRouteModelSelection(
   models: RuntimePolicyModelConfig[],
-  selectedModel: RuntimePolicyModelConfig
+  selectedModel: RuntimePolicyRouteSelection
 ) {
-  const family = getProviderFamilyForModel(selectedModel);
-  const preferences = onboardingRouteModelPreferences[family];
-
-  if (!preferences) {
-    return {
-      default: selectedModel,
-      fallback: selectedModel,
-      high: selectedModel
-    };
-  }
-
   return {
-    default: findPreferredModel(models, selectedModel, preferences.default),
-    fallback: findPreferredModel(models, selectedModel, preferences.fallback),
-    high: findPreferredModel(models, selectedModel, preferences.high)
+    default:
+      getPreferredRuntimePolicyRouteModel(models, selectedModel.provider, "default", selectedModel) ??
+      selectedModel,
+    fallback:
+      getPreferredRuntimePolicyRouteModel(models, selectedModel.provider, "fallback", selectedModel) ??
+      selectedModel,
+    highQuality:
+      getPreferredRuntimePolicyRouteModel(
+        models,
+        selectedModel.provider,
+        "highQuality",
+        selectedModel
+      ) ?? selectedModel,
+    lowCost:
+      getPreferredRuntimePolicyRouteModel(models, selectedModel.provider, "lowCost", selectedModel) ??
+      selectedModel
   };
 }
 
 function findPreferredModel(
   models: RuntimePolicyModelConfig[],
-  selectedModel: RuntimePolicyModelConfig,
+  selectedModel: RuntimePolicyRouteSelection,
   preferredModelNames: string[]
 ) {
   const selectedProvider = selectedModel.provider.trim();
@@ -103,7 +141,7 @@ function findPreferredModel(
   );
 }
 
-function getProviderFamilyForModel(model: RuntimePolicyModelConfig) {
+function getProviderFamilyForModel(model: RuntimePolicyRouteSelection) {
   const provider = model.provider.toLowerCase();
   const modelName = model.model.toLowerCase();
 

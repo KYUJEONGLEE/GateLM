@@ -4144,6 +4144,10 @@ select {
   object-fit: contain;
 }
 
+html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img {
+  filter: brightness(0) invert(1);
+}
+
 .policy-routing-provider-cell select,
 .policy-routing-model-cell select {
   width: 100%;
@@ -6245,10 +6249,18 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   color: #111827;
 }
 
+html[data-theme="dark"] .provider-card-icon[data-family="openai"] {
+  color: #f8fafc;
+}
+
 .provider-card-icon img {
   width: 28px;
   height: 28px;
   object-fit: contain;
+}
+
+html[data-theme="dark"] .provider-card-icon[data-family="openai"] img {
+  filter: brightness(0) invert(1);
 }
 
 .provider-card-icon[data-family="gemini"] {
@@ -6256,6 +6268,8 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 }
 
 .provider-card-icon[data-family="gemini"] img {
+  width: 24px;
+  height: 24px;
   border-radius: 7px;
 }
 
@@ -6870,6 +6884,33 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
 
 .provider-registration-form {
   border-top: 1px solid var(--border);
+}
+
+.provider-registration-preset-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.provider-registration-preset-option {
+  width: 100%;
+}
+
+.provider-registration-preset-action {
+  justify-self: end;
+  min-width: 58px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--foreground);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
+.provider-registration-preset-option[data-selected="true"] .provider-registration-preset-action {
+  background: color-mix(in srgb, var(--brand-blue) 16%, transparent);
+  color: color-mix(in srgb, var(--brand-blue) 78%, var(--foreground));
 }
 
 .provider-registration-note {
@@ -8966,9 +9007,21 @@ html[data-theme="dark"] .request-log-screen {
   background: #ffffff;
 }
 
+html[data-theme="dark"] .onboarding-provider-logo[data-family="openai"] {
+  background: var(--surface-subtle);
+}
+
+html[data-theme="dark"] .onboarding-provider-logo[data-family="openai"] img {
+  filter: brightness(0) invert(1);
+}
+
 .onboarding-provider-logo[data-family="gemini"] {
   overflow: hidden;
   background: #ffffff;
+}
+
+html[data-theme="dark"] .onboarding-provider-logo[data-family="gemini"] {
+  background: var(--surface-subtle);
 }
 
 .onboarding-provider-option[data-kind="registered"] .onboarding-provider-logo {
@@ -8984,8 +9037,9 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .onboarding-provider-logo[data-family="gemini"] img {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   object-fit: cover;
 }
 

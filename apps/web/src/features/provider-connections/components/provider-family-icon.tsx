@@ -82,6 +82,10 @@ export function getProviderFamilyIconSrc(providerFamily: string) {
     return "/openai-streamline.png";
   }
 
+  if (providerFamily === "claude") {
+    return "/claude-provider-icon.svg";
+  }
+
   if (providerFamily === "gemini") {
     return "/gemini-provider-icon.webp";
   }

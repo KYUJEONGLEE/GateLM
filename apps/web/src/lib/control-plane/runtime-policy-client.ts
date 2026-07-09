@@ -751,6 +751,8 @@ function makeRuntimePolicyConfigTemplate(
         defaultProvider: "",
         fallbackModel: "",
         fallbackProvider: "",
+        highQualityModel: "",
+        highQualityProvider: "",
         lowCostModel: "",
         lowCostProvider: ""
       }
@@ -765,6 +767,8 @@ function makeRuntimePolicyConfigTemplate(
       defaultProvider: preferredModel.provider,
       fallbackModel: preferredModel.model,
       fallbackProvider: preferredModel.provider,
+      highQualityModel: preferredModel.model,
+      highQualityProvider: preferredModel.provider,
       lowCostModel: preferredModel.model,
       lowCostProvider: preferredModel.provider
     }
@@ -1016,6 +1020,8 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
       defaultProvider: values.routingDefaultProvider,
       fallbackModel: values.routingFallbackModel,
       fallbackProvider: values.routingFallbackProvider,
+      highQualityModel: values.routingHighQualityModel,
+      highQualityProvider: values.routingHighQualityProvider,
       lowCostModel: values.routingLowCostModel,
       lowCostProvider: values.routingLowCostProvider,
       shortPromptMaxChars: values.routingShortPromptMaxChars
