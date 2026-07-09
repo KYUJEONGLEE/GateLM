@@ -183,6 +183,23 @@ func TestProviderCatalogCacheConfigLoadsEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestControlPlaneInternalTokenLoadsEnvOverride(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	t.Setenv("GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN", " internal-token-for-test ")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.ControlPlaneInternalToken != "internal-token-for-test" {
+		t.Fatalf("unexpected control plane internal token: %q", cfg.ControlPlaneInternalToken)
+	}
+}
+
 func TestOpenAIExtraModelConfigDefaultsAndLoadsEnvOverrides(t *testing.T) {
 	resetSemanticCacheEnv(t)
 	resetAISafetySidecarEnv(t)

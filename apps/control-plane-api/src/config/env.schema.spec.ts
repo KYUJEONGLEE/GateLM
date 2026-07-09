@@ -1,0 +1,97 @@
+import { validateEnv } from './env.schema';
+
+describe('validateEnv', () => {
+  it('keeps local dev_memory auto verify defaults outside production-like envs', () => {
+    const env = validateEnv(baseEnv());
+
+    expect(env.AUTH_EMAIL_TRANSPORT).toBe('dev_memory');
+    expect(env.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY).toBe('true');
+    expect(env.CONTROL_PLANE_ADMIN_AUTH_MODE).toBe('session_cookie');
+  });
+
+  it('rejects demo admin auth mode in production-like envs', () => {
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        CONTROL_PLANE_ADMIN_AUTH_MODE: 'demo_admin_placeholder',
+      }),
+    ).toThrow(
+      'CONTROL_PLANE_ADMIN_AUTH_MODE must be session_cookie in production-like environments',
+    );
+  });
+
+  it('rejects dev memory email transport in production-like envs', () => {
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        AUTH_EMAIL_TRANSPORT: 'dev_memory',
+        CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: 'false',
+      }),
+    ).toThrow(
+      'AUTH_EMAIL_TRANSPORT=dev_memory is not allowed in production-like environments',
+    );
+  });
+
+  it('rejects dev auto verify in production-like envs', () => {
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: 'true',
+      }),
+    ).toThrow(
+      'CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY=true is not allowed in production-like environments',
+    );
+  });
+
+  it('rejects missing or placeholder internal service tokens in production-like envs', () => {
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: '',
+      }),
+    ).toThrow(
+      'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
+    );
+
+    expect(() =>
+      validateEnv({
+        ...prodEnv(),
+        CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: 'replace-me-internal-token-1234567890',
+      }),
+    ).toThrow(
+      'CONTROL_PLANE_INTERNAL_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments',
+    );
+  });
+
+  it('accepts session cookie, smtp, and strong internal token in production-like envs', () => {
+    const env = validateEnv(prodEnv());
+
+    expect(env.CONTROL_PLANE_ADMIN_AUTH_MODE).toBe('session_cookie');
+    expect(env.AUTH_EMAIL_TRANSPORT).toBe('smtp');
+    expect(env.CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY).toBe('false');
+    expect(env.CONTROL_PLANE_INTERNAL_SERVICE_TOKEN).toBe(
+      'prod-internal-token-1234567890abcdef123456',
+    );
+  });
+
+  function baseEnv() {
+    return {
+      CONTROL_PLANE_AUTH_STATE_SECRET: 'state-secret-for-test',
+      DATABASE_URL: 'postgresql://gatelm:gatelm@localhost:5432/gatelm',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+  }
+
+  function prodEnv() {
+    return {
+      ...baseEnv(),
+      AUTH_EMAIL_TRANSPORT: 'smtp',
+      CONTROL_PLANE_AUTH_DEV_AUTO_VERIFY: 'false',
+      CONTROL_PLANE_INTERNAL_SERVICE_TOKEN:
+        'prod-internal-token-1234567890abcdef123456',
+      NODE_ENV: 'production',
+      SMTP_FROM: 'security@example.test',
+      SMTP_HOST: 'smtp.example.test',
+    };
+  }
+});

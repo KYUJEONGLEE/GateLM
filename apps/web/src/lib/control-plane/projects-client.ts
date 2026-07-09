@@ -10,12 +10,6 @@ import {
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
 import {
-  cachedControlPlaneRead,
-  CONTROL_PLANE_READ_CACHE_SECONDS,
-  controlPlaneReadCacheTags,
-  controlPlaneTenantReadCacheTag
-} from "@/lib/control-plane/read-cache";
-import {
   publishRuntimePolicyModelSelectionForApplication
 } from "@/lib/control-plane/runtime-policy-client";
 import { setApplicationProviderConnections } from "@/lib/control-plane/provider-connections-client";
@@ -91,17 +85,7 @@ export async function getProjectsModel(routeTenantId: string): Promise<ProjectsM
 export async function listControlPlaneProjects(
   tenantId: string
 ): Promise<ProjectListResult> {
-  return cachedControlPlaneRead(
-    ["control-plane-projects", tenantId],
-    () => listControlPlaneProjectsFresh(tenantId),
-    {
-      revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.projects,
-      tags: [
-        controlPlaneReadCacheTags.projects,
-        controlPlaneTenantReadCacheTag("projects", tenantId)
-      ]
-    }
-  );
+  return listControlPlaneProjectsFresh(tenantId);
 }
 
 export async function listControlPlaneProjectsFresh(
@@ -111,7 +95,8 @@ export async function listControlPlaneProjectsFresh(
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(tenantId)}/projects?limit=50`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 

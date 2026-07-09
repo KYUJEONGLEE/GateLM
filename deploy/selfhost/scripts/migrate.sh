@@ -39,4 +39,4 @@ for migration in "${MIGRATIONS_DIR}"/*.sql; do
   fi
 done
 
-gatelm_log "Database migration finished. Next run: bash scripts/seed.sh"
+gatelm_log "Database migration finished. Create real runtime resources, then run: bash scripts/smoke-test.sh"

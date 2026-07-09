@@ -57,6 +57,7 @@ type Config struct {
 	DatabaseURL                            string
 	RedisURL                               string
 	ControlPlaneBaseURL                    string
+	ControlPlaneInternalToken              string
 	ControlPlaneTimeout                    time.Duration
 	RuntimeSnapshotMode                    string
 	RuntimeSnapshotCache                   RuntimeSnapshotCacheConfig
@@ -188,6 +189,9 @@ func LoadWithError() (Config, error) {
 		DatabaseURL:         envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public"),
 		RedisURL:            envString("REDIS_URL", "redis://localhost:6379"),
 		ControlPlaneBaseURL: envString("GATEWAY_CONTROL_PLANE_BASE_URL", ""),
+		ControlPlaneInternalToken: strings.TrimSpace(
+			envString("GATEWAY_CONTROL_PLANE_INTERNAL_TOKEN", ""),
+		),
 		ControlPlaneTimeout: envDurationMillis("GATEWAY_CONTROL_PLANE_TIMEOUT_MS", 2000),
 		RuntimeSnapshotMode: envString("GATEWAY_RUNTIME_SNAPSHOT_MODE", "demo"),
 		RuntimeSnapshotCache: RuntimeSnapshotCacheConfig{

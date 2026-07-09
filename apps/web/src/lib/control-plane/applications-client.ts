@@ -147,7 +147,8 @@ async function listApplications(projectId: string): Promise<ApplicationListResul
     const response = await fetch(
       `${getControlPlaneBaseUrl()}/admin/v1/projects/${encodeURIComponent(projectId)}/applications?limit=50`,
       {
-        cache: "no-store"
+        cache: "no-store",
+        headers: await buildControlPlaneHeaders()
       }
     );
 

@@ -76,6 +76,22 @@ func TestProviderLoadsRuntimeSnapshotExecutionView(t *testing.T) {
 	}
 }
 
+func TestProviderSendsInternalServiceToken(t *testing.T) {
+	const token = "gateway-internal-token-for-test"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get(internalServiceTokenHeader); got != token {
+			t.Fatalf("unexpected internal service token header: %q", got)
+		}
+		writeRuntimeSnapshot(t, w, testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID))
+	}))
+	defer server.Close()
+
+	provider := NewProvider(server.URL, server.Client(), token)
+	if _, err := provider.GetExecutionSnapshot(context.Background(), testTenantID, testProjectID, testApplicationID); err != nil {
+		t.Fatalf("expected runtime snapshot, got %v", err)
+	}
+}
+
 func TestProviderMapsBudgetHighQualityRestrictionToggle(t *testing.T) {
 	restrictHighQuality := false
 	response := testRuntimeSnapshotResponse(testProviderCatalogRef(), testApplicationID)
