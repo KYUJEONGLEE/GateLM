@@ -31,6 +31,8 @@ test("initial model selection applies the selected model to all routing tiers", 
     routingDefaultProvider: "provider-two",
     routingFallbackModel: "balanced-v2",
     routingFallbackProvider: "provider-two",
+    routingHighQualityModel: "balanced-v2",
+    routingHighQualityProvider: "provider-two",
     routingLowCostModel: "balanced-v2",
     routingLowCostProvider: "provider-two"
   });
@@ -38,6 +40,8 @@ test("initial model selection applies the selected model to all routing tiers", 
     budgetWarningThresholdPercent: 80,
     routingFallbackModel: "fallback-v1",
     routingFallbackProvider: "provider-fallback",
+    routingHighQualityModel: "high-v1",
+    routingHighQualityProvider: "provider-high",
     routingLowCostModel: "cheap-v1",
     routingLowCostProvider: "provider-cheap"
   });
@@ -57,6 +61,8 @@ test("primary route selection updates every auto routing tier", () => {
     routingDefaultProvider: "provider-two",
     routingFallbackModel: "balanced-v2",
     routingFallbackProvider: "provider-two",
+    routingHighQualityModel: "balanced-v2",
+    routingHighQualityProvider: "provider-two",
     routingLowCostModel: "balanced-v2",
     routingLowCostProvider: "provider-two"
   });
@@ -105,6 +111,8 @@ function createDraftValues(): RuntimePolicyDraftValues {
     routingDefaultProvider: "provider-default",
     routingFallbackModel: "fallback-v1",
     routingFallbackProvider: "provider-fallback",
+    routingHighQualityModel: "high-v1",
+    routingHighQualityProvider: "provider-high",
     routingLowCostModel: "cheap-v1",
     routingLowCostProvider: "provider-cheap",
     routingShortPromptMaxChars: 2000

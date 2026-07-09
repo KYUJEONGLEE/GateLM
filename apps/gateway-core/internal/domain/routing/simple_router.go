@@ -257,6 +257,9 @@ func autoRouteForCategory(category string, diagnostics CategoryDiagnostics, prom
 	case CategorySupportRefund:
 		return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonSupportRefundLowCost
 	case CategoryUnknown:
+		if strings.TrimSpace(prompt) != "" && utf8.RuneCountInString(prompt) <= config.ShortPromptMaxChars {
+			return config.LowCostProvider, config.LowCostModel, TierLowCost, ReasonShortPromptLowCost
+		}
 		return config.DefaultProvider, config.DefaultModel, TierBalanced, ReasonDefaultBalanced
 	}
 

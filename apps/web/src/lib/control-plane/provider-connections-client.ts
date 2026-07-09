@@ -103,7 +103,7 @@ export async function getProviderConnectionsModel(
   ]);
   const providerPresets = presetResult.ok
     ? {
-        items: presetResult.data,
+        items: withRequiredProviderPresets(presetResult.data),
         loadError: null,
         source: "control-plane" as const
       }
@@ -961,8 +961,52 @@ function getFallbackProviderPresets(): ProviderPresetRecord[] {
         requestFormat: "openai_chat_completions"
       },
       providerKey: "gemini"
+    },
+    {
+      adapterType: "anthropic",
+      baseUrl: "https://api.anthropic.com/v1",
+      credentialRequired: true,
+      defaultResolver: "environment",
+      defaultTimeoutMs: 30000,
+      displayName: "Claude",
+      modelsEndpointPath: "/models",
+      providerConfig: {
+        adapterType: "anthropic",
+        credentialRequired: true,
+        requestFormat: "anthropic_messages"
+      },
+      providerKey: "claude"
     }
   ];
+}
+
+function withRequiredProviderPresets(presets: ProviderPresetRecord[]) {
+  const existingProviderKeys = new Set(presets.map((preset) => preset.providerKey));
+  const missingRequiredPresets = getFallbackProviderPresets().filter(
+    (preset) => !existingProviderKeys.has(preset.providerKey)
+  );
+
+  return [...presets, ...missingRequiredPresets].sort(compareProviderPresets);
+}
+
+function compareProviderPresets(left: ProviderPresetRecord, right: ProviderPresetRecord) {
+  return getProviderPresetOrder(left.providerKey) - getProviderPresetOrder(right.providerKey);
+}
+
+function getProviderPresetOrder(providerKey: string) {
+  if (providerKey === "openai") {
+    return 10;
+  }
+
+  if (providerKey === "claude") {
+    return 20;
+  }
+
+  if (providerKey === "gemini") {
+    return 30;
+  }
+
+  return 100;
 }
 
 function toProviderRecord(value: unknown): ProviderConnectionRecord | null {

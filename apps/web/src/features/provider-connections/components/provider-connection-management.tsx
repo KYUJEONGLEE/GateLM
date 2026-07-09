@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, KeyRound, PlugZap, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, KeyRound, PlugZap, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1189,8 +1189,8 @@ export function ProviderConnectionManagement({
                 <h3>
                   {providerModal.mode === "create"
                     ? locale === "ko"
-                      ? "Provider 등록"
-                      : "Register provider"
+                      ? "Provider 모델 Key 등록"
+                      : "Register provider model key"
                     : locale === "ko"
                       ? "API key 변경"
                       : "Change API key"}
@@ -1213,35 +1213,49 @@ export function ProviderConnectionManagement({
             ) : null}
             <div className="provider-form-grid provider-registration-form">
               {providerModal.mode === "create" ? (
-                <>
-                  <label className="policy-field">
-                    <span>{text.provider}</span>
-                    <select
-                      onChange={(event) => applyProviderPresetToForm(event.target.value)}
-                      value={formValues.presetProviderKey}
-                    >
-                      {model.providerPresets.items.map((preset) => (
-                        <option key={preset.providerKey} value={preset.providerKey}>
-                          {preset.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="policy-field">
-                    <span>{text.displayName}</span>
-                    <input
-                      autoComplete="off"
-                      maxLength={120}
-                      onChange={(event) =>
-                        setFormValues((current) => ({
-                          ...current,
-                          displayName: event.target.value
-                        }))
-                      }
-                      value={formValues.displayName}
-                    />
-                  </label>
-                </>
+                <div
+                  aria-label={text.provider}
+                  className="provider-registration-preset-list"
+                  role="radiogroup"
+                >
+                  {model.providerPresets.items.map((preset) => {
+                    const selected = formValues.presetProviderKey === preset.providerKey;
+
+                    return (
+                      <button
+                        aria-checked={selected}
+                        className="onboarding-provider-option provider-registration-preset-option"
+                        data-kind="unregistered"
+                        data-selected={selected}
+                        key={preset.providerKey}
+                        onClick={() => applyProviderPresetToForm(preset.providerKey)}
+                        role="radio"
+                        type="button"
+                      >
+                        <span className="onboarding-provider-radio" aria-hidden="true">
+                          {selected ? <Check aria-hidden="true" /> : null}
+                        </span>
+                        <ProviderFamilyIcon
+                          className="onboarding-provider-logo"
+                          family={preset.providerKey}
+                          size={24}
+                        />
+                        <span className="onboarding-provider-copy">
+                          <strong>{getProviderPresetDisplayName(preset)}</strong>
+                        </span>
+                        <span className="provider-registration-preset-action">
+                          {selected
+                            ? locale === "ko"
+                              ? "선택됨"
+                              : "Selected"
+                            : locale === "ko"
+                              ? "선택"
+                              : "Choose"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               ) : (
                 <div className="policy-field">
                   <span>{text.provider}</span>
@@ -1371,6 +1385,18 @@ function getProviderFamilyLabel(providerFamily: string) {
   }
 
   return providerFamily;
+}
+
+function getProviderPresetDisplayName(preset: ProviderPresetRecord) {
+  if (preset.providerKey === "claude") {
+    return "Anthropic";
+  }
+
+  if (preset.providerKey === "gemini") {
+    return "Google Gemini";
+  }
+
+  return preset.displayName || getProviderFamilyLabel(preset.providerKey);
 }
 
 function getProviderFormValuesFromPreset(

@@ -127,9 +127,10 @@ const onboardingProviderText: Record<
 
 const preferredProviderOrder = ["openai", "claude", "anthropic", "gemini", "cohere", "local", "mock"];
 const providerModelSummaryVisibleCount = 3;
-const onboardingPresetProviderKeys = ["openai", "gemini"];
+const onboardingPresetProviderKeys = ["openai", "gemini", "claude"];
 const onboardingProviderModelPageSize = 10;
 const onboardingDefaultProviderModels: Record<string, string[]> = {
+  claude: ["claude-3.5-sonnet", "claude-3-haiku"],
   gemini: ["gemini-3.5-flash", "gemini-2.5-pro"],
   openai: ["chat-latest", "gpt-4o", "gpt-4o-mini"]
 };
@@ -943,7 +944,7 @@ function getPresetModelOptions(providerKey: string) {
   }
 
   if (providerKey === "claude" || providerKey === "anthropic") {
-    return ["claude-3.5-sonnet", "claude-3-haiku"];
+    return onboardingDefaultProviderModels.claude;
   }
 
   if (providerKey === "cohere") {

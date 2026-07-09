@@ -124,6 +124,8 @@ function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraft
     typeof record.routingDefaultProvider === "string" &&
     typeof record.routingFallbackModel === "string" &&
     typeof record.routingFallbackProvider === "string" &&
+    typeof record.routingHighQualityModel === "string" &&
+    typeof record.routingHighQualityProvider === "string" &&
     typeof record.routingLowCostModel === "string" &&
     typeof record.routingLowCostProvider === "string" &&
     Number.isInteger(record.routingShortPromptMaxChars) &&

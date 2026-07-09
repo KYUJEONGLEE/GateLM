@@ -33,6 +33,60 @@ func TestSimpleRouterRoutesShortAutoPromptToLowCostModel(t *testing.T) {
 	}))
 }
 
+func TestSimpleRouterRoutesShortKoreanGreetingAutoPromptToLowCostModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "안녕",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-cheap", "mock-fast", ReasonShortPromptLowCost, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryGeneral,
+		Tier:          TierLowCost,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
+func TestSimpleRouterRoutesShortUnknownNonEmptyAutoPromptToLowCostModel(t *testing.T) {
+	router := NewSimpleRouter(SimpleRouterConfig{
+		DefaultProvider:     "mock",
+		DefaultModel:        "mock-balanced",
+		LowCostProvider:     "mock-cheap",
+		LowCostModel:        "mock-fast",
+		PolicyHash:          "route_p0_v1",
+		ShortPromptMaxChars: 300,
+	})
+
+	decision, err := router.DecideRoute(context.Background(), Request{
+		RequestedModel: "auto",
+		PromptText:     "🙂",
+	})
+	if err != nil {
+		t.Fatalf("DecideRoute returned error: %v", err)
+	}
+
+	assertDecision(t, decision, expectedDecision("auto", "mock-cheap", "mock-fast", ReasonShortPromptLowCost, "route_p0_v1", DecisionMaterial{
+		RoutingMode:   RoutingModeAuto,
+		Category:      CategoryUnknown,
+		Tier:          TierLowCost,
+		Capability:    CapabilityChat,
+		PolicyVariant: PolicyVariantDefault,
+	}))
+}
+
 func TestSimpleRouterRoutesLongAutoPromptToDefaultModel(t *testing.T) {
 	router := NewSimpleRouter(SimpleRouterConfig{
 		DefaultProvider:     "mock",

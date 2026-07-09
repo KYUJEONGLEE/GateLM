@@ -72,6 +72,8 @@ test("writable draft values normalize missing routes to the first active provide
     routingDefaultProvider: "active-provider",
     routingFallbackModel: "fast-model",
     routingFallbackProvider: "active-provider",
+    routingHighQualityModel: "fast-model",
+    routingHighQualityProvider: "active-provider",
     routingLowCostModel: "fast-model",
     routingLowCostProvider: "active-provider"
   });
@@ -213,6 +215,8 @@ function createRuntimePolicyConfig(): RuntimePolicyConfig {
       defaultProvider: "stale-provider",
       fallbackModel: "disabled-model",
       fallbackProvider: "disabled-provider",
+      highQualityModel: "stale-model",
+      highQualityProvider: "stale-provider",
       lowCostModel: "fast-model",
       lowCostProvider: "active-provider",
       routingPolicyHash: "sha256:test-routing-policy",
@@ -252,6 +256,8 @@ function createDraftValues(
     routingDefaultProvider: "active-provider",
     routingFallbackModel: "fast-model",
     routingFallbackProvider: "active-provider",
+    routingHighQualityModel: "fast-model",
+    routingHighQualityProvider: "active-provider",
     routingLowCostModel: "fast-model",
     routingLowCostProvider: "active-provider",
     routingShortPromptMaxChars: 2000,
