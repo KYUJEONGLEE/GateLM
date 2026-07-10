@@ -555,7 +555,6 @@ export function AdminOnboardingFlow({
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">management</p>
           <h2>{text.title}</h2>
         </div>
       </section>

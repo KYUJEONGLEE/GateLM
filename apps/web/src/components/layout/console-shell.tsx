@@ -54,6 +54,7 @@ type AdminNotification = {
 export type ManagementNavItem =
   | "api-keys"
   | "app-tokens"
+  | "employees"
   | "policies"
   | "project"
   | "provider"
@@ -68,6 +69,7 @@ const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
 const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDashboard> = {
   "api-keys": SettingsIcon,
   "app-tokens": SettingsIcon,
+  employees: Users,
   alerts: Bell,
   analytics: Activity,
   "live-logs": ScrollText,
@@ -163,6 +165,14 @@ const navigationItems: Array<{
         },
         item: "project",
         path: (tenantId) => `/tenants/${tenantId}/projects`
+      },
+      {
+        labels: {
+          en: "Employees",
+          ko: "직원"
+        },
+        item: "employees",
+        path: (tenantId) => `/tenants/${tenantId}/employees`
       },
       {
         labels: {
@@ -660,6 +670,11 @@ function getConsoleNavigationState(pathname: string | null): ConsoleNavigationSt
     case "policies":
       return {
         activeManagementItem: "policies",
+        activeSection: "management"
+      };
+    case "employees":
+      return {
+        activeManagementItem: "employees",
         activeSection: "management"
       };
     case "provider-connections":

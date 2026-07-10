@@ -903,28 +903,6 @@ export function RuntimePolicyEditor({
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
           <h2>{text.title}</h2>
         </div>
-        <div className="policy-actions">
-          <Button onClick={() => setIsDetailOpen(true)} type="button" variant="outline">
-            {text.details}
-          </Button>
-          <Button
-            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
-            onClick={() => void submitPolicy("save-draft")}
-            type="button"
-            variant="outline"
-          >
-            <Save aria-hidden="true" />
-            {text.saveDraft}
-          </Button>
-          <Button
-            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
-            onClick={() => void submitPolicy("publish")}
-            type="button"
-          >
-            <UploadCloud aria-hidden="true" />
-            {text.publish}
-          </Button>
-        </div>
       </section>
 
       {model.source === "fixture" ? (
@@ -976,26 +954,50 @@ export function RuntimePolicyEditor({
         </Alert>
       ) : null}
 
-      <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
-        {visiblePolicySections.map((section) => {
-          const label = getPolicySectionLabel(section, text);
-          const isActive = activePolicySection === section;
+      <div className="policy-section-toolbar">
+        <div className="policy-section-tabs" aria-label="Policy sections" role="tablist">
+          {visiblePolicySections.map((section) => {
+            const label = getPolicySectionLabel(section, text);
+            const isActive = activePolicySection === section;
 
-          return (
-            <button
-              aria-controls={getPolicyPanelId(section)}
-              aria-selected={isActive}
-              data-active={isActive}
-              id={getPolicyTabId(section)}
-              key={section}
-              onClick={() => setActivePolicySection(section)}
-              role="tab"
-              type="button"
-            >
-              {label}
-            </button>
-          );
-        })}
+            return (
+              <button
+                aria-controls={getPolicyPanelId(section)}
+                aria-selected={isActive}
+                data-active={isActive}
+                id={getPolicyTabId(section)}
+                key={section}
+                onClick={() => setActivePolicySection(section)}
+                role="tab"
+                type="button"
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="policy-actions">
+          <Button onClick={() => setIsDetailOpen(true)} type="button" variant="outline">
+            {text.details}
+          </Button>
+          <Button
+            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+            onClick={() => void submitPolicy("save-draft")}
+            type="button"
+            variant="outline"
+          >
+            <Save aria-hidden="true" />
+            {text.saveDraft}
+          </Button>
+          <Button
+            disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
+            onClick={() => void submitPolicy("publish")}
+            type="button"
+          >
+            <UploadCloud aria-hidden="true" />
+            {text.publish}
+          </Button>
+        </div>
       </div>
 
       {hasGeneralSection && activePolicySection === "general" ? (

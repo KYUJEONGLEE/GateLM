@@ -1,40 +1,40 @@
 import {
   AlertTriangle,
-  Building2,
-  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CircleMinus,
   Coins,
   Database,
   Eye,
-  RotateCw,
-  Search
+  RotateCw
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   formatInteger,
-  formatLatency,
-  nullableText
+  formatLatency
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
-import { RequestLogScopeFilterControls } from "./request-log-scope-filter-controls";
+import {
+  RequestLogFilterForm,
+  RequestLogUnifiedSearch
+} from "./request-log-filter-form";
 import { StatusBadge } from "./request-log-status-badge";
 
 type RequestLogTableProps = {
   allowAllProjects?: boolean;
-  budgetScopeOptions: RequestLogBudgetScopeOption[];
   detailPanel?: ReactNode;
+  employeeDirectory: Record<string, RequestLogEmployeeDisplay>;
   filters: RequestLogFilterState;
   locale: Locale;
   modelOptions: string[];
   projects?: ProjectRecord[];
+  providerOptions: string[];
   records: InvocationLogRecord[];
   selectedRequestId?: string;
   sourceState: "ready" | "unavailable";
@@ -51,27 +51,26 @@ export const requestLogStatusFilters = [
   "cancelled"
 ] as const satisfies readonly InvocationLogRecord["status"][];
 export const requestLogCacheStatusFilters = ["hit", "miss", "bypass"] as const;
-export const requestLogBudgetScopeTypeFilters = ["application", "project", "team"] as const;
 
 export type RequestLogCreatedFilter = (typeof requestLogCreatedFilters)[number];
 export type RequestLogFilterState = {
   applicationId: string;
-  budgetScopeId: string;
-  budgetScopeType: "" | (typeof requestLogBudgetScopeTypeFilters)[number];
   cacheStatus: "" | (typeof requestLogCacheStatusFilters)[number];
   created: RequestLogCreatedFilter;
   model: string;
   page: number;
   projectId: string;
   provider: string;
-  requestId: string;
-  resolvedBy: string;
+  search: string;
   status: "" | InvocationLogRecord["status"];
 };
 
-export type RequestLogBudgetScopeOption = {
-  budgetScopeId: string;
-  budgetScopeType: (typeof requestLogBudgetScopeTypeFilters)[number];
+export type RequestLogEmployeeDisplay = {
+  department: string | null;
+  email: string;
+  employeeId: string;
+  name: string;
+  userId: string | null;
 };
 
 const requestLogText: Record<
@@ -80,20 +79,12 @@ const requestLogText: Record<
     allModels: string;
     allProviders: string;
     allCacheStatuses: string;
-    allApplications: string;
-    allBudgetScopeTypes: string;
-    allBudgetScopeIds: string;
-    allResolvedBy: string;
-    applicationLabel: string;
-    budgetScopeIdLabel: string;
-    budgetScopeTypeLabel: string;
     cacheLabel: string;
     allStatuses: string;
     createdLabel: string;
     createdOptions: Record<RequestLogCreatedFilter, string>;
     emptyPreview: string;
     filterLabel: string;
-    kicker: string;
     modelLabel: string;
     nextPage: string;
     pageSummary: string;
@@ -115,40 +106,24 @@ const requestLogText: Record<
     submitLabel: string;
     table: {
       actions: string;
-      cache: string;
-      cacheBypass: string;
-      cacheHit: string;
-      cacheMiss: string;
-      cacheUnknown: string;
       cost: string;
       empty: string;
       latency: string;
       model: string;
       name: string;
       project: string;
-      provider: string;
-      requestId: string;
-      safety: string;
       status: string;
       time: string;
-      tokens: string;
       unavailable: string;
     };
     title: string;
   }
 > = {
   en: {
-    allApplications: "All applications",
-    allBudgetScopeIds: "All policies/budgets",
-    allBudgetScopeTypes: "All policy boundaries",
     allCacheStatuses: "All cache states",
     allModels: "All models",
     allProviders: "All providers",
-    allResolvedBy: "All resolution sources",
     allStatuses: "All statuses",
-    applicationLabel: "Application",
-    budgetScopeIdLabel: "Project policy/budget",
-    budgetScopeTypeLabel: "Policy boundary",
     cacheLabel: "Cache",
     createdLabel: "Created",
     createdOptions: {
@@ -159,8 +134,7 @@ const requestLogText: Record<
     },
     emptyPreview: "No preview stored",
     filterLabel: "Log filters",
-    kicker: "Monitoring",
-    modelLabel: "Model",
+    modelLabel: "Detailed model",
     nextPage: "Next",
     pageSummary: "Showing {start}-{end} of {total}",
     previousPage: "Previous",
@@ -168,7 +142,7 @@ const requestLogText: Record<
     rangeEndLabel: "End of logs in this range",
     refreshLabel: "Refresh",
     searchLabel: "Search logs",
-    searchPlaceholder: "Search by requestId",
+    searchPlaceholder: "Project, department, employee, model",
     statusLabel: "Status",
     summary: {
       blocked: "Blocked",
@@ -181,39 +155,23 @@ const requestLogText: Record<
     submitLabel: "Search",
     table: {
       actions: "Open detail",
-      cache: "Cache",
-      cacheBypass: "Bypass",
-      cacheHit: "Hit",
-      cacheMiss: "Miss",
-      cacheUnknown: "-",
       cost: "Cost",
       empty: "No Gateway request logs found for the current range.",
       latency: "Latency",
       model: "Model",
       name: "Name",
       project: "Project",
-      provider: "Provider",
-      requestId: "Request ID",
-      safety: "Safety",
       status: "Status",
       time: "Time",
-      tokens: "Tokens",
       unavailable: "Live Gateway request logs are not available right now."
     },
     title: "Live Logs"
   },
   ko: {
-    allApplications: "전체 Application",
-    allBudgetScopeIds: "전체 정책/예산",
-    allBudgetScopeTypes: "전체 정책 경계",
     allCacheStatuses: "전체 캐시 상태",
     allModels: "전체 모델",
     allProviders: "전체 Provider",
-    allResolvedBy: "전체 결정 경로",
     allStatuses: "전체 상태",
-    applicationLabel: "Application",
-    budgetScopeIdLabel: "Project 정책/예산",
-    budgetScopeTypeLabel: "정책 경계",
     cacheLabel: "Cache",
     createdLabel: "생성 시각",
     createdOptions: {
@@ -224,8 +182,7 @@ const requestLogText: Record<
     },
     emptyPreview: "저장된 preview 없음",
     filterLabel: "로그 필터",
-    kicker: "모니터링",
-    modelLabel: "모델",
+    modelLabel: "상세 모델",
     nextPage: "다음",
     pageSummary: "{total}개 중 {start}-{end}개 표시",
     previousPage: "이전",
@@ -233,7 +190,7 @@ const requestLogText: Record<
     rangeEndLabel: "현재 범위의 마지막 로그",
     refreshLabel: "새로고침",
     searchLabel: "로그 검색",
-    searchPlaceholder: "requestId 검색",
+    searchPlaceholder: "프로젝트, 부서, 직원, 모델 검색",
     statusLabel: "상태",
     summary: {
       blocked: "차단",
@@ -246,23 +203,14 @@ const requestLogText: Record<
     submitLabel: "검색",
     table: {
       actions: "상세 보기",
-      cache: "Cache",
-      cacheBypass: "Bypass",
-      cacheHit: "Hit",
-      cacheMiss: "Miss",
-      cacheUnknown: "-",
       cost: "비용",
       empty: "현재 범위에 Gateway 요청 로그가 없습니다.",
       latency: "지연 시간",
       model: "모델",
-      name: "Name",
-      project: "Project",
-      provider: "Provider",
-      requestId: "요청 ID",
-      safety: "Safety",
+      name: "이름",
+      project: "프로젝트",
       status: "상태",
-      time: "시간",
-      tokens: "토큰",
+      time: "요청 시각",
       unavailable: "현재 Gateway 요청 로그를 불러올 수 없습니다."
     },
     title: "실시간 로그"
@@ -271,12 +219,13 @@ const requestLogText: Record<
 
 export function RequestLogTable({
   allowAllProjects = true,
-  budgetScopeOptions,
   detailPanel,
+  employeeDirectory = {},
   filters,
   locale,
   modelOptions,
   projects = [],
+  providerOptions = [],
   records,
   selectedRequestId,
   sourceState,
@@ -298,32 +247,19 @@ export function RequestLogTable({
     .replace("{total}", String(totalRecords));
   const summaryItems = buildRequestLogSummaryItems(records, text.summary);
   const refreshHref = requestLogPageHref(tenantId, filters, currentPage);
-  const headerDate = formatHeaderDate(records);
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
 
   return (
     <main className="console-content request-log-screen">
       <section className="request-log-hero">
         <div>
-          <p className="console-kicker">{text.kicker}</p>
           <h2>{text.title}</h2>
-        </div>
-        <div className="request-log-hero-actions" aria-label="Live log controls">
-          <span className="request-log-hero-control">
-            <CalendarDays aria-hidden="true" size={16} strokeWidth={2.2} />
-            {headerDate}
-          </span>
-          <span className="request-log-hero-control">{text.createdOptions[filters.created]}</span>
-          <Link className="request-log-refresh-link" href={refreshHref}>
-            <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
-            {text.refreshLabel}
-          </Link>
         </div>
       </section>
 
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={selectedRequestId ? "open" : "closed"}>
-          <div className="console-panel request-log-list-panel">
+          <div className="request-log-list-panel">
             <section className="request-log-summary-strip" aria-label="Request log summary">
               {summaryItems.map((item) => (
                 <article className="request-log-summary-item" data-tone={item.tone} key={item.label}>
@@ -337,29 +273,32 @@ export function RequestLogTable({
               ))}
             </section>
 
-            <form action={`/tenants/${tenantId}/request-logs`} className="request-log-search-panel">
+            <RequestLogFilterForm action={`/tenants/${tenantId}/request-logs`}>
               <input name="page" type="hidden" value="1" />
-              <div className="request-log-search-shell">
-                <input
-                  aria-label={text.searchLabel}
-                  defaultValue={filters.requestId}
-                  name="searchRequestId"
-                  placeholder={text.searchPlaceholder}
-                  type="search"
-                />
-                <button aria-label={text.submitLabel} className="request-log-search-button" type="submit">
-                  <Search aria-hidden="true" size={18} strokeWidth={2.2} />
-                </button>
-              </div>
+              {filters.applicationId ? (
+                <input name="applicationId" type="hidden" value={filters.applicationId} />
+              ) : null}
 
               <div aria-label={text.filterLabel} className="request-log-filter-settings">
-                <label className="request-log-filter-control">
+                <label className="request-log-filter-control request-log-filter-control-status">
                   <span>{text.statusLabel}</span>
                   <select defaultValue={filters.status} name="status">
                     <option value="">{text.allStatuses}</option>
                     {requestLogStatusFilters.map((status) => (
                       <option key={status} value={status}>
                         {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="request-log-filter-control request-log-filter-control-provider">
+                  <span>Provider</span>
+                  <select defaultValue={filters.provider} name="provider">
+                    <option value="">{text.allProviders}</option>
+                    {providerOptions.map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
                       </option>
                     ))}
                   </select>
@@ -377,19 +316,16 @@ export function RequestLogTable({
                   </select>
                 </label>
 
-                <label className="request-log-filter-control">
+                <label className="request-log-filter-control request-log-filter-control-project">
                   <span>Project</span>
-                  <div className="dashboard-filter-input">
-                    <Building2 aria-hidden="true" size={16} strokeWidth={2.1} />
-                    <select defaultValue={filters.projectId} name="projectId">
-                      {allowAllProjects ? <option value="">All projects</option> : null}
-                      {projects.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <select defaultValue={filters.projectId} name="projectId">
+                    {allowAllProjects ? <option value="">All projects</option> : null}
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="request-log-filter-control request-log-filter-control-cache">
                   <span>{text.cacheLabel}</span>
@@ -403,18 +339,7 @@ export function RequestLogTable({
                   </select>
                 </label>
 
-                <RequestLogScopeFilterControls
-                  allBudgetScopeIds={text.allBudgetScopeIds}
-                  allBudgetScopeTypes={text.allBudgetScopeTypes}
-                  budgetScopeId={filters.budgetScopeId}
-                  budgetScopeIdLabel={text.budgetScopeIdLabel}
-                  budgetScopeOptions={budgetScopeOptions}
-                  budgetScopeType={filters.budgetScopeType}
-                  budgetScopeTypeLabel={text.budgetScopeTypeLabel}
-                  scopeTypeOptions={requestLogBudgetScopeTypeFilters}
-                />
-
-                <label className="request-log-filter-control">
+                <label className="request-log-filter-control request-log-filter-control-created">
                   <span>{text.createdLabel}</span>
                   <select defaultValue={filters.created} name="created">
                     {requestLogCreatedFilters.map((created) => (
@@ -424,6 +349,21 @@ export function RequestLogTable({
                     ))}
                   </select>
                 </label>
+
+                <RequestLogUnifiedSearch
+                  defaultValue={filters.search}
+                  label={text.searchLabel}
+                  placeholder={text.searchPlaceholder}
+                  submitLabel={text.submitLabel}
+                />
+                <Link
+                  aria-label={text.refreshLabel}
+                  className="request-log-refresh-button"
+                  href={refreshHref}
+                  title={text.refreshLabel}
+                >
+                  <RotateCw aria-hidden="true" size={18} strokeWidth={2.2} />
+                </Link>
               </div>
 
               <div className="request-log-pagination">
@@ -447,23 +387,18 @@ export function RequestLogTable({
                   <ChevronRight aria-hidden="true" size={18} strokeWidth={2.4} />
                 </Link>
               </div>
-            </form>
+            </RequestLogFilterForm>
 
             <div className="table-wrap">
               <table className="data-table request-table">
                 <thead>
                   <tr>
                     <th>{text.table.time}</th>
-                    <th>{text.table.requestId}</th>
-                    <th>{text.table.project}</th>
                     <th>{text.table.name}</th>
-                    <th>{text.table.provider}</th>
+                    <th>{text.table.project}</th>
                     <th>{text.table.model}</th>
                     <th>{text.table.status}</th>
-                    <th>{text.table.cache}</th>
-                    <th>{text.table.safety}</th>
                     <th>{text.table.latency}</th>
-                    <th>{text.table.tokens}</th>
                     <th>{text.table.cost}</th>
                     <th aria-label={text.table.actions} />
                   </tr>
@@ -471,12 +406,12 @@ export function RequestLogTable({
                 <tbody>
                   {sourceState === "unavailable" ? (
                     <tr>
-                      <td colSpan={13}>{text.table.unavailable}</td>
+                      <td colSpan={8}>{text.table.unavailable}</td>
                     </tr>
                   ) : null}
                   {sourceState === "ready" && records.length === 0 ? (
                     <tr>
-                      <td colSpan={13}>{text.table.empty}</td>
+                      <td colSpan={8}>{text.table.empty}</td>
                     </tr>
                   ) : null}
                   {pageRecords.map((record) => {
@@ -484,6 +419,9 @@ export function RequestLogTable({
                     const detailHref = requestLogDetailHref(tenantId, record.requestId, filters);
                     const displayRequestId = formatDisplayIdentifier(record.requestId);
                     const projectName = projectNameById.get(record.projectId) ?? formatDisplayIdentifier(record.projectId);
+                    const employee = record.endUserId
+                      ? employeeDirectory[record.endUserId.trim().toLocaleLowerCase()]
+                      : undefined;
 
                     return (
                       <tr data-selected={isSelected ? "true" : undefined} key={record.requestId}>
@@ -491,16 +429,14 @@ export function RequestLogTable({
                           {formatShortTime(record.createdAt, timezone)}
                         </td>
                         <td>
-                          <Link
-                            className="request-link"
-                            data-request-log-anchor
-                            data-request-log-project-id={record.projectId}
-                            data-request-log-request-id={record.requestId}
-                            href={detailHref}
-                            scroll={false}
-                          >
-                            {displayRequestId}
-                          </Link>
+                          {record.endUserId ? (
+                            <span className="request-log-name-cell" title={record.endUserId}>
+                              <strong>{employee?.name || formatDisplayIdentifier(record.endUserId)}</strong>
+                              {employee?.department ? <small>{employee.department}</small> : null}
+                            </span>
+                          ) : (
+                            <span className="request-log-muted-value">-</span>
+                          )}
                         </td>
                         <td>
                           <span
@@ -512,29 +448,15 @@ export function RequestLogTable({
                           </span>
                         </td>
                         <td>
-                          {record.endUserId ? (
-                            <span className="request-log-name-cell" title={record.endUserId}>
-                              {formatDisplayIdentifier(record.endUserId)}
-                            </span>
-                          ) : (
-                            <span className="request-log-muted-value">-</span>
-                          )}
+                          <ProviderModelCell
+                            model={record.selectedModel ?? record.requestedModel}
+                            provider={record.selectedProvider ?? record.requestedProvider}
+                          />
                         </td>
-                        <td>
-                          <ProviderBadge provider={record.selectedProvider ?? record.requestedProvider} />
-                        </td>
-                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
                         <td>
                           <StatusBadge label={formatHttpStatus(record)} status={record.status} />
                         </td>
-                        <td>
-                          <CacheHitBadge record={record} text={text.table} />
-                        </td>
-                        <td>
-                          <SafetyBadge record={record} />
-                        </td>
                         <td>{formatLatency(record.latencyMs)}</td>
-                        <td>{formatInteger(record.totalTokens)}</td>
                         <td>{formatMicroUsd(record.costMicroUsd)}</td>
                         <td className="request-log-action-cell">
                           <Link
@@ -569,13 +491,11 @@ export function RequestLogTable({
 function requestLogDetailHref(tenantId: string, requestId: string, filters: RequestLogFilterState) {
   const query = new URLSearchParams();
   appendRequestLogQuery(query, "applicationId", filters.applicationId);
-  appendRequestLogQuery(query, "budgetScopeId", filters.budgetScopeId);
-  appendRequestLogQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
   if (filters.status) {
     query.set("status", filters.status);
   }
-  appendRequestLogQuery(query, "searchRequestId", filters.requestId);
+  appendRequestLogQuery(query, "search", filters.search);
   if (filters.model) {
     query.set("model", filters.model);
   }
@@ -584,7 +504,6 @@ function requestLogDetailHref(tenantId: string, requestId: string, filters: Requ
   }
   appendRequestLogQuery(query, "provider", filters.provider);
   appendRequestLogQuery(query, "projectId", filters.projectId);
-  appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
   }
@@ -600,14 +519,11 @@ function requestLogPageHref(
 ) {
   const query = new URLSearchParams();
   appendRequestLogQuery(query, "applicationId", filters.applicationId);
-  appendRequestLogQuery(query, "budgetScopeId", filters.budgetScopeId);
-  appendRequestLogQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendRequestLogQuery(query, "cacheStatus", filters.cacheStatus);
   appendRequestLogQuery(query, "model", filters.model);
   appendRequestLogQuery(query, "provider", filters.provider);
   appendRequestLogQuery(query, "projectId", filters.projectId);
-  appendRequestLogQuery(query, "resolvedBy", filters.resolvedBy);
-  appendRequestLogQuery(query, "searchRequestId", filters.requestId);
+  appendRequestLogQuery(query, "search", filters.search);
   appendRequestLogQuery(query, "status", filters.status);
   if (filters.created !== "24h") {
     query.set("created", filters.created);
@@ -625,79 +541,25 @@ function appendRequestLogQuery(query: URLSearchParams, key: string, value: strin
   }
 }
 
-function CacheHitBadge({
-  record,
-  text
+function ProviderModelCell({
+  model,
+  provider
 }: {
-  record: InvocationLogRecord;
-  text: (typeof requestLogText)[Locale]["table"];
+  model: string | null | undefined;
+  provider: string | null | undefined;
 }) {
-  const cache = getCacheHitDisplay(record, text);
-  const Icon = cache.tone === "hit" ? CheckCircle2 : cache.tone === "miss" ? CircleMinus : Database;
-
-  return (
-    <span className="request-log-cache-badge" data-cache-tone={cache.tone}>
-      <Icon aria-hidden="true" size={16} strokeWidth={2.4} />
-      {cache.label}
-    </span>
-  );
-}
-
-function getCacheHitDisplay(
-  record: InvocationLogRecord,
-  text: (typeof requestLogText)[Locale]["table"]
-) {
-  const cacheSignal = `${record.cacheStatus} ${record.domainOutcomes?.cache?.outcome ?? ""}`.toLowerCase();
-
-  if (cacheSignal.includes("hit")) {
-    return {
-      label: text.cacheHit,
-      tone: "hit"
-    } as const;
-  }
-
-  if (cacheSignal.includes("miss")) {
-    return {
-      label: text.cacheMiss,
-      tone: "miss"
-    } as const;
-  }
-
-  if (cacheSignal.includes("bypass")) {
-    return {
-      label: text.cacheBypass,
-      tone: "bypass"
-    } as const;
-  }
-
-  return {
-    label: text.cacheUnknown,
-    tone: "unknown"
-  } as const;
-}
-
-function ProviderBadge({ provider }: { provider: string | null | undefined }) {
   const normalized = normalizeProvider(provider);
+  const providerName = providerLabel(normalized, provider);
+  const modelName = model?.trim() || "not routed";
 
   return (
-    <span className="request-log-provider-badge" data-provider={normalized}>
-      <span>{providerMark(normalized)}</span>
-      {providerLabel(normalized, provider)}
-    </span>
-  );
-}
-
-function SafetyBadge({ record }: { record: InvocationLogRecord }) {
-  const outcome = record.domainOutcomes?.safety?.outcome ?? record.maskingAction;
-  const normalized = normalizeSafetyOutcome(outcome);
-
-  if (normalized === "none") {
-    return <span className="request-log-muted-value">-</span>;
-  }
-
-  return (
-    <span className="request-log-safety-badge" data-safety-tone={normalized}>
-      {safetyLabel(normalized)}
+    <span className="request-log-provider-model" title={`${providerName} · ${modelName}`}>
+      <ProviderFamilyIcon
+        className="request-log-provider-icon"
+        family={providerFamily(normalized)}
+        size={24}
+      />
+      <strong>{modelName}</strong>
     </span>
   );
 }
@@ -738,48 +600,20 @@ function providerLabel(normalized: string, provider: string | null | undefined) 
   return provider?.trim() ? formatDisplayIdentifier(provider) : "Unknown";
 }
 
-function providerMark(provider: string) {
-  if (provider === "openai") {
-    return "O";
-  }
+function providerFamily(provider: string) {
   if (provider === "anthropic") {
-    return "A";
+    return "claude";
   }
+
   if (provider === "gemini") {
-    return "G";
+    return "gemini";
   }
+
   if (provider === "mock") {
-    return "M";
+    return "mock";
   }
 
-  return "?";
-}
-
-function normalizeSafetyOutcome(value: string | null | undefined) {
-  const normalized = value?.trim().toLowerCase() ?? "";
-
-  if (!normalized || normalized === "none" || normalized === "passed" || normalized === "pass") {
-    return "none";
-  }
-  if (normalized.includes("mask") || normalized.includes("redact")) {
-    return "masked";
-  }
-  if (normalized.includes("block")) {
-    return "blocked";
-  }
-
-  return "flagged";
-}
-
-function safetyLabel(value: string) {
-  if (value === "masked") {
-    return "MASKED";
-  }
-  if (value === "blocked") {
-    return "BLOCKED";
-  }
-
-  return "FLAGGED";
+  return provider === "openai" ? "openai" : "new-provider";
 }
 
 function projectTone(value: string) {
@@ -943,17 +777,4 @@ function formatShortTime(value: string | null | undefined, timezone: string) {
     second: "2-digit",
     timeZone: timezone
   }).format(date);
-}
-
-function formatHeaderDate(records: InvocationLogRecord[]) {
-  const latest = records[0]?.createdAt;
-  const date = latest ? new Date(latest) : new Date();
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }

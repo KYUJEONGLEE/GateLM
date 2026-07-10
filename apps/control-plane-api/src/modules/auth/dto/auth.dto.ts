@@ -35,6 +35,13 @@ export class SignupDto {
   @MinLength(16)
   @MaxLength(512)
   projectInviteToken?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @MaxLength(512)
+  employeeInviteToken?: string;
 }
 
 export class VerifyEmailDto {
@@ -54,6 +61,13 @@ export class VerifyEmailDto {
   @MinLength(16)
   @MaxLength(512)
   projectInviteToken?: string;
+
+  @Transform(({ value }) => trimString(value))
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @MaxLength(512)
+  employeeInviteToken?: string;
 }
 
 export class CreateOrganizationDto {

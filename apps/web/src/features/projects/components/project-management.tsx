@@ -67,7 +67,6 @@ const projectText: Record<
     fixtureFallback: string;
     detailSaved: string;
     general: string;
-    management: string;
     name: string;
     operating: string;
     project: string;
@@ -103,7 +102,6 @@ const projectText: Record<
     fixtureFallback: "Control Plane unavailable. Showing fixture project.",
     detailSaved: "Project saved.",
     general: "General",
-    management: "management",
     name: "Name",
     operating: "Operating",
     project: "Project",
@@ -138,7 +136,6 @@ const projectText: Record<
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 프로젝트를 표시 중입니다.",
     detailSaved: "프로젝트가 저장되었습니다.",
     general: "일반",
-    management: "관리",
     name: "이름",
     operating: "운영 중",
     project: "프로젝트",
@@ -203,23 +200,9 @@ export function ProjectManagement({
 
   return (
     <main className="console-content management-line-content">
-      <section className="dashboard-hero">
-        <div>
-          <p className="console-kicker">{text.management}</p>
-          <h2>{text.title}</h2>
-        </div>
-        {canCreateProject ? (
-          <div className="dashboard-hero-actions">
-            <Link
-              className="primary-button project-create-hero-button"
-              href={`/tenants/${model.routeTenantId}/onboarding`}
-            >
-              <Plus aria-hidden="true" />
-              {text.createProject}
-            </Link>
-          </div>
-        ) : null}
-      </section>
+      <header className="project-page-header">
+        <h2>{text.title}</h2>
+      </header>
 
       {model.source === "fixture" ? (
         <Alert variant="warning">
@@ -234,9 +217,6 @@ export function ProjectManagement({
       ) : null}
 
       <section className="console-panel project-list-panel">
-        <div className="panel-heading">
-          <h3>{text.title}</h3>
-        </div>
         {projects.length === 0 ? (
           <p className="project-empty">{text.empty}</p>
         ) : (
@@ -257,6 +237,15 @@ export function ProjectManagement({
                   </button>
                 ))}
               </div>
+              {canCreateProject ? (
+                <Link
+                  className="primary-button project-create-button"
+                  href={`/tenants/${model.routeTenantId}/onboarding`}
+                >
+                  <Plus aria-hidden="true" />
+                  {text.createProject}
+                </Link>
+              ) : null}
             </div>
 
             <div className="project-card-grid">
@@ -423,7 +412,6 @@ export function ProjectDetailManagement({
       <section className="dashboard-hero">
         <div>
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
-          <p className="console-kicker">{text.project}</p>
           <h2>{project.name}</h2>
         </div>
       </section>

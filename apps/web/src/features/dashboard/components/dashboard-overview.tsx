@@ -659,15 +659,8 @@ function DashboardOverviewLegacyView({
     <main className="console-content" data-motion={suppressContentMotion ? "none" : undefined}>
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">dashboard</p>
           <h2>{text.title}</h2>
         </div>
-        <Link
-          className="primary-link"
-          href={`/tenants/${overview.filters.tenantId}/request-logs`}
-        >
-          {text.actionRequestLogs}
-        </Link>
       </section>
 
       <DashboardTabs
@@ -810,6 +803,12 @@ function DashboardTabs({
           text={text}
         />
       </div>
+      <Link
+        className="primary-link dashboard-request-log-link"
+        href={`/tenants/${overview.filters.tenantId}/request-logs`}
+      >
+        {text.actionRequestLogs}
+      </Link>
     </section>
   );
 }

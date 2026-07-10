@@ -283,7 +283,6 @@ export function TeamManagement({ locale, model }: TeamManagementProps) {
     <main className="console-content management-line-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">{text.management}</p>
           <h2>{text.title}</h2>
         </div>
       </section>

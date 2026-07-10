@@ -10,12 +10,9 @@ export function ConsoleRouteLoading({ variant = "management" }: ConsoleRouteLoad
   return (
     <main className="console-content" data-motion="none">
       <section className="dashboard-hero">
-        <div className="flex min-w-0 flex-col gap-2">
-          <Skeleton className="h-3 w-20" />
+        <div className="flex min-w-0 flex-col">
           <Skeleton className="h-9 w-52 max-w-full" />
-          <Skeleton className="h-4 w-72 max-w-full" />
         </div>
-        <Skeleton className="h-9 w-36 shrink-0 rounded-md" />
       </section>
 
       {variant === "dashboard" ? <DashboardLoadingBody /> : null}

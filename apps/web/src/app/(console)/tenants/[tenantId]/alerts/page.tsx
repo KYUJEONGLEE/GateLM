@@ -35,9 +35,7 @@ export default async function AlertsPage() {
     <main className="console-content">
       <section className="dashboard-hero">
         <div>
-          <p className="console-kicker">{text.kicker}</p>
           <h2>{text.title}</h2>
-          <p>{text.body}</p>
         </div>
       </section>
 

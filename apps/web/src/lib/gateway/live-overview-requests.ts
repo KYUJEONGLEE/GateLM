@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
@@ -32,14 +33,16 @@ export type LiveOverviewRequestsOptions = {
 
 const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
 const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
-
 export async function getLiveOverviewRequests(
   tenantId: string,
   filters: LiveOverviewRequestsFilters = {},
   options: LiveOverviewRequestsOptions = {}
 ): Promise<LiveRequestsPayload | undefined> {
   const liveRange = getDashboardLiveRange(filters.range);
-  const projectsModel = options.projects ? undefined : await getProjectsModel(tenantId);
+  const [projectsModel, employees] = await Promise.all([
+    options.projects ? Promise.resolve(undefined) : getProjectsModel(tenantId),
+    getTenantEmployees(tenantId)
+  ]);
   const projects = options.projects ?? projectsModel?.projects ?? [];
   const projectIds = options.projectIds ?? projects.map((project) => project.id).filter(Boolean);
   const records = await getLiveGatewayRequestLogs({
@@ -60,7 +63,8 @@ export async function getLiveOverviewRequests(
   }
 
   const projectNames = buildProjectNameMap(projects);
-  const allRows = records.map((record) => toLiveRequestRow(record, projectNames));
+  const employeeNames = buildEmployeeNameMap(employees);
+  const allRows = records.map((record) => toLiveRequestRow(record, projectNames, employeeNames));
   const modelFilter = normalizeModelFilter(filters.model);
   const rows = allRows
     .filter((row) => !modelFilter || normalizeModelFilter(row.model) === modelFilter)
@@ -79,7 +83,28 @@ function buildProjectNameMap(projects: ProjectRecord[]) {
   return new Map(projects.map((project) => [project.id, project.name]));
 }
 
-function toLiveRequestRow(record: InvocationLogRecord, projectNames: Map<string, string>) {
+function buildEmployeeNameMap(
+  employees: Awaited<ReturnType<typeof getTenantEmployees>>
+) {
+  const names = new Map<string, string>();
+
+  employees.forEach((employee) => {
+    const name = employee.name?.trim() || employee.email;
+    [employee.id, employee.userId, employee.email].forEach((alias) => {
+      if (alias) {
+        names.set(alias.trim().toLocaleLowerCase(), name);
+      }
+    });
+  });
+
+  return names;
+}
+
+function toLiveRequestRow(
+  record: InvocationLogRecord,
+  projectNames: Map<string, string>,
+  employeeNames: Map<string, string>
+) {
   const projectId = record.projectId;
   const provider = normalizeProvider(record.selectedProvider ?? record.requestedProvider);
   const statusCode = record.httpStatus || statusToFallbackCode(record.status);
@@ -101,14 +126,19 @@ function toLiveRequestRow(record: InvocationLogRecord, projectNames: Map<string,
     statusLabel: statusLabel(statusCode, record.status),
     timestamp: record.createdAt,
     totalTokens: record.totalTokens,
-    userName: normalizeUserName(record.endUserId)
+    userName: normalizeUserName(record.endUserId, employeeNames)
   };
 }
 
-function normalizeUserName(value: string | null | undefined) {
+function normalizeUserName(
+  value: string | null | undefined,
+  employeeNames: Map<string, string>
+) {
   const normalized = value?.trim();
 
-  return normalized ? normalized : null;
+  return normalized
+    ? employeeNames.get(normalized.toLocaleLowerCase()) ?? normalized
+    : null;
 }
 
 function normalizeProvider(value: string | null | undefined): LiveRequestProvider {
