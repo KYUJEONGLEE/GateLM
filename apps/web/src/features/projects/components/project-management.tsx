@@ -17,6 +17,7 @@ import type {
 import type { ProjectMonthlyCostReport } from "@/lib/gateway/live-cost-report";
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
+import { getProjectCreateActionLocation } from "./project-management-state";
 
 type ProjectManagementProps = {
   budgetThresholds: ProjectBudgetThresholdRecord[];
@@ -197,6 +198,19 @@ export function ProjectManagement({
       ),
     [projectCostsById, projects, sortMode, usageKnown]
   );
+  const createProjectActionLocation = getProjectCreateActionLocation(
+    projects.length,
+    canCreateProject
+  );
+  const createProjectAction = createProjectActionLocation ? (
+    <Link
+      className="primary-button project-create-button"
+      href={`/tenants/${model.routeTenantId}/onboarding`}
+    >
+      <Plus aria-hidden="true" />
+      {text.createProject}
+    </Link>
+  ) : null;
 
   return (
     <main className="console-content management-line-content">
@@ -218,7 +232,10 @@ export function ProjectManagement({
 
       <section className="console-panel project-list-panel">
         {projects.length === 0 ? (
-          <p className="project-empty">{text.empty}</p>
+          <div className="project-empty-state">
+            <p className="project-empty">{text.empty}</p>
+            {createProjectActionLocation === "empty" ? createProjectAction : null}
+          </div>
         ) : (
           <div className="project-card-list">
             <div className="project-sort-control" aria-label={text.sortLabel}>
@@ -237,15 +254,7 @@ export function ProjectManagement({
                   </button>
                 ))}
               </div>
-              {canCreateProject ? (
-                <Link
-                  className="primary-button project-create-button"
-                  href={`/tenants/${model.routeTenantId}/onboarding`}
-                >
-                  <Plus aria-hidden="true" />
-                  {text.createProject}
-                </Link>
-              ) : null}
+              {createProjectActionLocation === "toolbar" ? createProjectAction : null}
             </div>
 
             <div className="project-card-grid">

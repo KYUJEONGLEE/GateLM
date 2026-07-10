@@ -4654,7 +4654,7 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   line-height: var(--line-height-tight);
 }
 
-.project-sort-control .project-create-button {
+.project-create-button {
   min-height: 49px;
   margin-left: auto;
   gap: 8px;
@@ -4664,7 +4664,7 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
   white-space: nowrap;
 }
 
-.project-sort-control .project-create-button svg {
+.project-create-button svg {
   width: 18px;
   height: 18px;
 }
@@ -6362,6 +6362,14 @@ button.gateway-api-key-action-button:active:not([aria-haspopup="true"]) {
   color: var(--text-muted);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
+}
+
+.project-empty-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-width: 0;
 }
 
 .provider-form-grid {
