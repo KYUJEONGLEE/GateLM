@@ -227,9 +227,13 @@ const employeeText: Record<
 const projectEmployeeText: Record<
   Locale,
   {
+    addEmployee: string;
+    assign: string;
     assigned: string;
+    assignmentCreated: string;
     available: string;
     budget: string;
+    cancel: string;
     department: string;
     disable: string;
     email: string;
@@ -237,20 +241,27 @@ const projectEmployeeText: Record<
     fixtureFallback: string;
     modelKeys: string;
     noAssignments: string;
+    noCandidates: string;
     noDepartments: string;
     noEmployees: string;
     note: string;
     providerIds: string;
     remaining: string;
     save: string;
+    searchEmployee: string;
+    selectDepartment: string;
     title: string;
     warning: string;
   }
 > = {
   en: {
+    addEmployee: "Assign employee",
+    assign: "Assign",
     assigned: "Assigned",
+    assignmentCreated: "Employee assigned to this project.",
     available: "Available",
     budget: "Monthly limit",
+    cancel: "Cancel",
     department: "Department",
     disable: "Disable",
     email: "Email",
@@ -258,19 +269,26 @@ const projectEmployeeText: Record<
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
     modelKeys: "Models",
     noAssignments: "No project employees.",
+    noCandidates: "No employees available for assignment.",
     noDepartments: "No departments found.",
     noEmployees: "No employees in this department.",
     note: "Note",
     providerIds: "Providers",
     remaining: "Remaining",
     save: "Save",
+    searchEmployee: "Search by name or email",
+    selectDepartment: "Select department",
     title: "Department employees",
     warning: "Warning"
   },
   ko: {
+    addEmployee: "직원 배정",
+    assign: "배정",
     assigned: "배정",
+    assignmentCreated: "직원을 현재 프로젝트에 배정했습니다.",
     available: "미배정",
     budget: "월 한도",
+    cancel: "취소",
     department: "부서",
     disable: "비활성화",
     email: "이메일",
@@ -278,12 +296,15 @@ const projectEmployeeText: Record<
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
     modelKeys: "모델",
     noAssignments: "Project에 배정된 직원이 없습니다.",
+    noCandidates: "배정할 수 있는 직원이 없습니다.",
     noDepartments: "등록된 부서가 없습니다.",
     noEmployees: "이 부서에 배정 가능한 직원이 없습니다.",
     note: "메모",
     providerIds: "Provider",
     remaining: "잔여",
     save: "저장",
+    searchEmployee: "이름 또는 이메일 검색",
+    selectDepartment: "부서 선택",
     title: "부서 직원 배정",
     warning: "경고"
   }
@@ -304,7 +325,36 @@ export function ProjectEmployeeAssignmentSection({
 }: ProjectEmployeeAssignmentProps) {
   const router = useRouter();
   const text = projectEmployeeText[locale];
+  const [assignments, setAssignments] = useState<ProjectEmployeeAssignmentRecord[]>(
+    model.assignmentsByProjectId[project.id] ?? []
+  );
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
+  const [assignmentDepartment, setAssignmentDepartment] = useState("");
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
+  const [candidateEmployeeId, setCandidateEmployeeId] = useState("");
+  const activeAssignments = useMemo(
+    () => assignments.filter((assignment) => assignment.status === "active"),
+    [assignments]
+  );
+  const activeAssignmentByEmployeeId = useMemo(
+    () => new Map(activeAssignments.map((assignment) => [assignment.employeeId, assignment])),
+    [activeAssignments]
+  );
   const departments = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          model.employees
+            .filter((employee) => activeAssignmentByEmployeeId.has(employee.id))
+            .map((employee) => employee.department?.trim())
+            .filter((department): department is string => Boolean(department))
+        )
+      ).sort((left, right) => left.localeCompare(right)),
+    [activeAssignmentByEmployeeId, model.employees]
+  );
+  const tenantDepartments = useMemo(
     () =>
       Array.from(
         new Set(
@@ -317,11 +367,6 @@ export function ProjectEmployeeAssignmentSection({
         )
       ).sort((left, right) => left.localeCompare(right)),
     [model.employees]
-  );
-  const [selectedDepartment, setSelectedDepartment] = useState(departments[0] ?? "");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
-  const [assignments, setAssignments] = useState<ProjectEmployeeAssignmentRecord[]>(
-    model.assignmentsByProjectId[project.id] ?? []
   );
   const [assignmentValues, setAssignmentValues] = useState({
     allowedModelKeys: "",
@@ -353,33 +398,66 @@ export function ProjectEmployeeAssignmentSection({
         .filter(
           (employee) =>
             employee.department?.trim() === selectedDepartment &&
-            (employee.status === "active" || employee.status === "staged")
+            activeAssignmentByEmployeeId.has(employee.id)
         )
         .sort((left, right) => left.email.localeCompare(right.email)),
-    [model.employees, selectedDepartment]
+    [activeAssignmentByEmployeeId, model.employees, selectedDepartment]
   );
   const employeeCountByDepartment = useMemo(() => {
     const counts = new Map<string, number>();
 
     for (const employee of model.employees) {
       const department = employee.department?.trim();
-      if (
-        !department ||
-        (employee.status !== "active" && employee.status !== "staged")
-      ) {
+      if (!department || !activeAssignmentByEmployeeId.has(employee.id)) {
         continue;
       }
       counts.set(department, (counts.get(department) ?? 0) + 1);
     }
 
     return counts;
-  }, [model.employees]);
+  }, [activeAssignmentByEmployeeId, model.employees]);
+  const assignableEmployees = useMemo(() => {
+    const normalizedQuery = employeeSearchQuery.trim().toLocaleLowerCase();
+
+    return model.employees
+      .filter((employee) => {
+        if (
+          (employee.status !== "active" && employee.status !== "staged") ||
+          activeAssignmentByEmployeeId.has(employee.id) ||
+          employee.department?.trim() !== assignmentDepartment
+        ) {
+          return false;
+        }
+
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        return `${employee.name ?? ""} ${employee.email}`
+          .toLocaleLowerCase()
+          .includes(normalizedQuery);
+      })
+      .sort((left, right) =>
+        (left.name?.trim() || left.email).localeCompare(right.name?.trim() || right.email)
+      );
+  }, [
+    activeAssignmentByEmployeeId,
+    assignmentDepartment,
+    employeeSearchQuery,
+    model.employees
+  ]);
 
   useEffect(() => {
     if (!departmentEmployees.some((employee) => employee.id === selectedEmployeeId)) {
       setSelectedEmployeeId(departmentEmployees[0]?.id ?? "");
     }
   }, [departmentEmployees, selectedEmployeeId]);
+
+  useEffect(() => {
+    if (!assignableEmployees.some((employee) => employee.id === candidateEmployeeId)) {
+      setCandidateEmployeeId("");
+    }
+  }, [assignableEmployees, candidateEmployeeId]);
 
   useEffect(() => {
     const existingAssignment = assignments.find(
@@ -396,21 +474,68 @@ export function ProjectEmployeeAssignmentSection({
     });
   }, [assignments, selectedEmployeeId]);
 
-  const activeAssignments = assignments.filter((assignment) => assignment.status === "active");
-  const activeAssignmentByEmployeeId = useMemo(
-    () =>
-      new Map(
-        assignments
-          .filter((assignment) => assignment.status === "active")
-          .map((assignment) => [assignment.employeeId, assignment])
-      ),
-    [assignments]
-  );
   const assignedBudgetUsd = activeAssignments.reduce(
     (total, assignment) => total + assignment.monthlyBudgetLimitUsd,
     0
   );
   const remainingBudgetUsd = project.totalBudgetUsd - assignedBudgetUsd;
+
+  function openAssignmentDialog() {
+    setAssignmentDepartment(tenantDepartments[0] ?? "");
+    setEmployeeSearchQuery("");
+    setCandidateEmployeeId("");
+    setIsAssignmentDialogOpen(true);
+  }
+
+  async function submitNewAssignment() {
+    const employee = model.employees.find((item) => item.id === candidateEmployeeId);
+    if (!employee) {
+      return;
+    }
+
+    const existingAssignment = assignments.find(
+      (assignment) => assignment.employeeId === employee.id
+    );
+    const values: ProjectEmployeeAssignmentValues = {
+      allowedModelKeys: existingAssignment?.policy.allowedModelKeys ?? [],
+      allowedProviderConnectionIds:
+        existingAssignment?.policy.allowedProviderConnectionIds ?? [],
+      employeeId: employee.id,
+      monthlyBudgetLimitUsd: existingAssignment?.monthlyBudgetLimitUsd ?? 0,
+      policyNote: existingAssignment?.policy.note ?? "",
+      projectId: project.id,
+      status: "active",
+      warningThresholdPercent: existingAssignment?.warningThresholdPercent ?? 80
+    };
+
+    setPendingAction("assign-new");
+    setSubmitState({ message: "", status: "idle" });
+
+    const response = await fetch("/api/control-plane/employees", {
+      body: JSON.stringify({ action: "assign", values }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
+    const payload = (await response.json().catch(() => ({}))) as ProjectEmployeeResponsePayload;
+
+    if (!response.ok || !payload.assignment) {
+      setSubmitState({
+        message: payload.error ?? "Project employee assignment failed.",
+        status: "error"
+      });
+      setPendingAction(null);
+      return;
+    }
+
+    const assignment = payload.assignment;
+    setAssignments((current) => upsertAssignment(current, assignment));
+    setSelectedDepartment(employee.department?.trim() ?? "");
+    setSelectedEmployeeId(employee.id);
+    setIsAssignmentDialogOpen(false);
+    setSubmitState({ message: text.assignmentCreated, status: "success" });
+    setPendingAction(null);
+    router.refresh();
+  }
 
   async function submitAssignment() {
     if (!selectedEmployeeId) {
@@ -495,10 +620,11 @@ export function ProjectEmployeeAssignmentSection({
 
   return (
     <section className="team-section project-department-section">
-        <div className="team-section-header team-section-header-with-actions">
-          <div>
-            <h3>{text.title}</h3>
-          </div>
+      <div className="team-section-header team-section-header-with-actions">
+        <div>
+          <h3>{text.title}</h3>
+        </div>
+        <div className="project-department-header-actions">
           <div
             className="project-budget-badge"
             data-budget-state={remainingBudgetUsd < 0 ? "over" : "ok"}
@@ -506,7 +632,16 @@ export function ProjectEmployeeAssignmentSection({
             <Wallet aria-hidden="true" size={16} />
             {formatBudgetUsd(assignedBudgetUsd)} / {formatBudgetUsd(project.totalBudgetUsd)}
           </div>
+          <Button
+            disabled={pendingAction !== null}
+            onClick={openAssignmentDialog}
+            type="button"
+          >
+            <UserPlus aria-hidden="true" />
+            {text.addEmployee}
+          </Button>
         </div>
+      </div>
 
         {model.source === "fixture" ? (
           <Alert variant="warning">
@@ -522,7 +657,7 @@ export function ProjectEmployeeAssignmentSection({
         ) : null}
 
         {departments.length === 0 ? (
-          <p className="project-empty">{text.noDepartments}</p>
+          <p className="project-empty">{text.noAssignments}</p>
         ) : (
           <div
             aria-label={text.department}
@@ -591,7 +726,9 @@ export function ProjectEmployeeAssignmentSection({
           </div>
         ) : null}
 
-        <div className="modal-form-grid project-employee-policy-fields">
+        {selectedEmployeeId ? (
+          <>
+          <div className="modal-form-grid project-employee-policy-fields">
           <label className="policy-field">
             <span>{text.budget}</span>
             <input
@@ -662,8 +799,8 @@ export function ProjectEmployeeAssignmentSection({
               value={assignmentValues.policyNote}
             />
           </label>
-        </div>
-        <div className="modal-actions">
+          </div>
+          <div className="modal-actions">
           <span className="application-budget-summary">
             {text.remaining}: {formatBudgetUsd(remainingBudgetUsd)}
           </span>
@@ -675,13 +812,11 @@ export function ProjectEmployeeAssignmentSection({
             <Save aria-hidden="true" />
             {pendingAction === "assign" ? "..." : text.save}
           </Button>
-        </div>
+          </div>
+          </>
+        ) : null}
 
-        {activeAssignments.length === 0 ? (
-          <p className="project-empty">
-            {departments.length === 0 ? text.noDepartments : text.noAssignments}
-          </p>
-        ) : (
+        {activeAssignments.length > 0 ? (
           <div className="team-list">
             {activeAssignments.map((assignment) => (
               <article className="team-row" key={assignment.id}>
@@ -719,7 +854,111 @@ export function ProjectEmployeeAssignmentSection({
               </article>
             ))}
           </div>
-        )}
+        ) : null}
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (pendingAction !== "assign-new") {
+            setIsAssignmentDialogOpen(open);
+          }
+        }}
+        open={isAssignmentDialogOpen}
+      >
+        <DialogContent className="employee-assignment-dialog">
+          <DialogHeader>
+            <DialogTitle>{text.addEmployee}</DialogTitle>
+          </DialogHeader>
+
+          <div className="employee-assignment-controls">
+            <label className="policy-field">
+              <span>{text.selectDepartment}</span>
+              <select
+                disabled={pendingAction !== null || tenantDepartments.length === 0}
+                onChange={(event) => {
+                  setAssignmentDepartment(event.target.value);
+                  setCandidateEmployeeId("");
+                }}
+                value={assignmentDepartment}
+              >
+                {tenantDepartments.length === 0 ? (
+                  <option value="">{text.noDepartments}</option>
+                ) : null}
+                {tenantDepartments.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="policy-field">
+              <span>{text.searchEmployee}</span>
+              <input
+                disabled={pendingAction !== null || !assignmentDepartment}
+                onChange={(event) => setEmployeeSearchQuery(event.target.value)}
+                placeholder={text.searchEmployee}
+                type="search"
+                value={employeeSearchQuery}
+              />
+            </label>
+          </div>
+
+          <div className="project-assignment-candidate-list">
+            {assignableEmployees.length === 0 ? (
+              <p className="project-empty">{text.noCandidates}</p>
+            ) : (
+              assignableEmployees.map((employee) => {
+                const isSelected = candidateEmployeeId === employee.id;
+
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className="project-department-employee"
+                    data-active={isSelected}
+                    disabled={pendingAction !== null}
+                    key={employee.id}
+                    onClick={() => setCandidateEmployeeId(employee.id)}
+                    type="button"
+                  >
+                    <span className="project-department-employee-icon">
+                      <Users aria-hidden="true" />
+                    </span>
+                    <span className="project-department-employee-copy">
+                      <strong>{employee.name?.trim() || employee.email}</strong>
+                      <small>{employee.email}</small>
+                    </span>
+                    <Badge
+                      className="project-status-badge"
+                      data-status="DISABLED"
+                      variant="outline"
+                    >
+                      {text.available}
+                    </Badge>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="modal-actions">
+            <Button
+              disabled={pendingAction === "assign-new"}
+              onClick={() => setIsAssignmentDialogOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={pendingAction !== null || !candidateEmployeeId}
+              onClick={() => void submitNewAssignment()}
+              type="button"
+            >
+              <UserPlus aria-hidden="true" />
+              {pendingAction === "assign-new" ? "..." : text.assign}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
