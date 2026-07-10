@@ -10,9 +10,9 @@ import {
   type ResolvedApplicationChatProfile
 } from "@/lib/gateway/application-chat-profiles";
 import { getRuntimePolicyConfigForApplication } from "@/lib/control-plane/runtime-policy-client";
-import type { RuntimePolicyConfig } from "@/lib/control-plane/runtime-policy-types";
 import { getLiveGatewayConfig } from "@/lib/gateway/live-gateway-config";
 import { getCustomerDemoLiveModel } from "@/lib/gateway/customer-demo-live-model";
+import { runtimePolicySupportsApplicationChatStreaming } from "@/lib/gateway/customer-demo-streaming-support";
 import type {
   CustomerDemoExchange,
   CustomerDemoHeader,
@@ -345,46 +345,6 @@ async function getApplicationChatStreamingSupported(applicationId: string) {
   } catch {
     return true;
   }
-}
-
-function runtimePolicySupportsApplicationChatStreaming(config: RuntimePolicyConfig) {
-  const routingProviders = new Set(
-    [
-      config.routingPolicy.lowCostProvider,
-      config.routingPolicy.defaultProvider,
-      config.routingPolicy.fallbackProvider,
-      config.routingPolicy.highQualityProvider ?? ""
-    ]
-      .map((provider) => provider.trim())
-      .filter(Boolean)
-  );
-
-  for (const provider of routingProviders) {
-    const providerConfig = config.providers.find((item) => item.provider === provider);
-
-    if (isAnthropicProvider(provider, providerConfig)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function isAnthropicProvider(
-  provider: string,
-  providerConfig: RuntimePolicyConfig["providers"][number] | undefined
-) {
-  const providerKey = provider.toLowerCase();
-  const baseUrl = providerConfig?.baseUrl.toLowerCase() ?? "";
-  const displayName = providerConfig?.displayName.toLowerCase() ?? "";
-
-  return (
-    providerKey.includes("anthropic") ||
-    providerKey.includes("claude") ||
-    baseUrl.includes("anthropic.com") ||
-    displayName.includes("anthropic") ||
-    displayName.includes("claude")
-  );
 }
 
 async function getRequestProfile(profileId: string): Promise<RequestProfileResult> {

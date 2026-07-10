@@ -313,7 +313,7 @@ func rawResponseCaptureAllowed(deploymentMode string) bool {
 }
 
 func productionLikeEnv() bool {
-	for _, key := range []string{"NODE_ENV", "APP_ENV", "ENV"} {
+	for _, key := range []string{"NODE_ENV", "APP_ENV", "ENV", "DEPLOYMENT_ENV", "GATELM_DEPLOYMENT_ENV"} {
 		if productionLikeMode(os.Getenv(key)) {
 			return true
 		}

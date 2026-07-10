@@ -167,8 +167,12 @@ func main() {
 		budgetstage.NewStage(postgresbudget.NewChecker(postgresPool)),
 		ratelimitstage.NewStage(rateLimiter, buildRateLimitStageConfig(cfg)),
 	)
+	modelsRuntimePipeline := pipeline.New(
+		runtimeconfigstage.NewStage(runtimeSnapshotProvider),
+	)
 
 	routerOptions = append(routerOptions, app.WithRuntimePolicyPipeline(runtimePolicyPipeline))
+	routerOptions = append(routerOptions, app.WithModelsRuntimePipeline(modelsRuntimePipeline))
 	router := app.NewRouter(
 		cfg,
 		providers,
