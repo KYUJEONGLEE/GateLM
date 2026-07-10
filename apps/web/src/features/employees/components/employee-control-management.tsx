@@ -41,6 +41,10 @@ import type {
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+import {
+  getRateLimitRefillTokensPerSecond,
+  getRateLimitWindowSeconds
+} from "@/lib/control-plane/runtime-policy-types";
 import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -280,6 +284,7 @@ const projectEmployeeText: Record<
     quotaWithinLimit: string;
     rateLimit: string;
     remaining: string;
+    refillRequestsPerSecond: string;
     requestsPerMinute: string;
     removeModel: string;
     save: string;
@@ -287,7 +292,7 @@ const projectEmployeeText: Record<
     selectDepartment: string;
     selectModel: string;
     selectProvider: string;
-    warning: string;
+    budgetWarning: string;
   }
 > = {
   en: {
@@ -328,8 +333,9 @@ const projectEmployeeText: Record<
     quotaNotConfigured: "No quota",
     quotaWarning: "Near limit",
     quotaWithinLimit: "Within limit",
-    rateLimit: "Employee rate limit",
-    remaining: "Remaining",
+    rateLimit: "Enable employee rate limit",
+    remaining: "Project remaining budget",
+    refillRequestsPerSecond: "Refill tokens / sec (Token Bucket)",
     requestsPerMinute: "Requests per minute",
     removeModel: "Remove model",
     save: "Save",
@@ -337,7 +343,7 @@ const projectEmployeeText: Record<
     selectDepartment: "Select department",
     selectModel: "Select model",
     selectProvider: "Select Provider",
-    warning: "Warning"
+    budgetWarning: "Budget warning"
   },
   ko: {
     addEmployee: "직원 배정",
@@ -377,8 +383,9 @@ const projectEmployeeText: Record<
     quotaNotConfigured: "한도 미설정",
     quotaWarning: "한도 임박",
     quotaWithinLimit: "정상",
-    rateLimit: "개인 Rate Limit",
-    remaining: "잔여",
+    rateLimit: "개인 Rate Limit 활성화",
+    remaining: "프로젝트 잔여 예산",
+    refillRequestsPerSecond: "초당 충전 토큰 (Token Bucket)",
     requestsPerMinute: "분당 요청 한도",
     removeModel: "모델 삭제",
     save: "저장",
@@ -386,7 +393,7 @@ const projectEmployeeText: Record<
     selectDepartment: "부서 선택",
     selectModel: "모델 선택",
     selectProvider: "Provider 선택",
-    warning: "경고"
+    budgetWarning: "예산 경고"
   }
 };
 
@@ -457,6 +464,7 @@ export function ProjectEmployeeAssignmentSection({
     policyNote: "",
     rateLimitEnabled: false,
     rateLimitLimit: 60,
+    rateLimitRefillTokensPerSecond: 1,
     rateLimitWindowSeconds: 60,
     warningThresholdPercent: 80
   });
@@ -582,9 +590,16 @@ export function ProjectEmployeeAssignmentSection({
     !Number.isInteger(assignmentValues.rateLimitLimit) ||
     assignmentValues.rateLimitLimit < 1 ||
     assignmentValues.rateLimitLimit > 100000 ||
+    !Number.isInteger(assignmentValues.rateLimitRefillTokensPerSecond) ||
+    assignmentValues.rateLimitRefillTokensPerSecond < 1 ||
+    assignmentValues.rateLimitRefillTokensPerSecond > 100000 ||
+    !Number.isInteger(assignmentValues.rateLimitWindowSeconds) ||
+    assignmentValues.rateLimitWindowSeconds < 1 ||
+    assignmentValues.rateLimitWindowSeconds > 3600 ||
     !Number.isInteger(assignmentValues.warningThresholdPercent) ||
     assignmentValues.warningThresholdPercent < 0 ||
     assignmentValues.warningThresholdPercent > 100 ||
+    assignmentValues.warningThresholdPercent % 5 !== 0 ||
     providerModelRows.some((row) => !row.providerConnectionId || !row.model) ||
     selectedProviderModelKeys.size !== providerModelRows.length;
   const employeeToDisable = assignmentToDisable
@@ -985,6 +1000,25 @@ export function ProjectEmployeeAssignmentSection({
                     value={assignmentValues.monthlyBudgetLimitUsd}
                   />
                 </label>
+                <label className="policy-field employee-budget-warning-field">
+                  <span>{text.budgetWarning}</span>
+                  <span className="employee-policy-input-suffix">
+                    <input
+                      max={100}
+                      min={0}
+                      onChange={(event) =>
+                        setAssignmentValues((current) => ({
+                          ...current,
+                          warningThresholdPercent: Number(event.target.value)
+                        }))
+                      }
+                      step={5}
+                      type="number"
+                      value={assignmentValues.warningThresholdPercent}
+                    />
+                    <span aria-hidden="true">%</span>
+                  </span>
+                </label>
                 <div className="employee-rate-limit-control">
                   <div className="employee-rate-limit-heading">
                     <Gauge aria-hidden="true" size={18} />
@@ -1003,38 +1037,52 @@ export function ProjectEmployeeAssignmentSection({
                     <span>{text.enabled}</span>
                   </label>
                 </div>
-                <label className="policy-field">
-                  <span>{text.requestsPerMinute}</span>
-                  <input
-                    disabled={!assignmentValues.rateLimitEnabled}
-                    max={100000}
-                    min={1}
-                    onChange={(event) =>
-                      setAssignmentValues((current) => ({
-                        ...current,
-                        rateLimitLimit: Number(event.target.value)
-                      }))
-                    }
-                    step={1}
-                    type="number"
-                    value={assignmentValues.rateLimitLimit}
-                  />
-                </label>
-                <label className="policy-field">
-                  <span>{text.warning}</span>
-                  <input
-                    max={100}
-                    min={0}
-                    onChange={(event) =>
-                      setAssignmentValues((current) => ({
-                        ...current,
-                        warningThresholdPercent: Number(event.target.value)
-                      }))
-                    }
-                    type="number"
-                    value={assignmentValues.warningThresholdPercent}
-                  />
-                </label>
+                {assignmentValues.rateLimitEnabled ? (
+                  <div className="employee-rate-limit-fields">
+                    <label className="policy-field">
+                      <span>{text.requestsPerMinute}</span>
+                      <input
+                        max={100000}
+                        min={1}
+                        onChange={(event) => {
+                          const limit = Number(event.target.value);
+                          setAssignmentValues((current) => ({
+                            ...current,
+                            rateLimitLimit: limit,
+                            rateLimitWindowSeconds: getRateLimitWindowSeconds(
+                              limit,
+                              current.rateLimitRefillTokensPerSecond
+                            )
+                          }));
+                        }}
+                        step={1}
+                        type="number"
+                        value={assignmentValues.rateLimitLimit}
+                      />
+                    </label>
+                    <label className="policy-field">
+                      <span>{text.refillRequestsPerSecond}</span>
+                      <input
+                        max={100000}
+                        min={1}
+                        onChange={(event) => {
+                          const refillTokensPerSecond = Number(event.target.value);
+                          setAssignmentValues((current) => ({
+                            ...current,
+                            rateLimitRefillTokensPerSecond: refillTokensPerSecond,
+                            rateLimitWindowSeconds: getRateLimitWindowSeconds(
+                              current.rateLimitLimit,
+                              refillTokensPerSecond
+                            )
+                          }));
+                        }}
+                        step={1}
+                        type="number"
+                        value={assignmentValues.rateLimitRefillTokensPerSecond}
+                      />
+                    </label>
+                  </div>
+                ) : null}
                 <label className="policy-field team-description-field">
                   <span>{text.note}</span>
                   <input
@@ -2098,6 +2146,10 @@ function getEmployeePolicyFormState(
       policyNote: assignment?.policy.note ?? "",
       rateLimitEnabled: assignment?.policy.rateLimit.enabled ?? false,
       rateLimitLimit: assignment?.policy.rateLimit.limit ?? 60,
+      rateLimitRefillTokensPerSecond: getRateLimitRefillTokensPerSecond(
+        assignment?.policy.rateLimit.limit ?? 60,
+        assignment?.policy.rateLimit.windowSeconds ?? 60
+      ),
       rateLimitWindowSeconds: assignment?.policy.rateLimit.windowSeconds ?? 60,
       warningThresholdPercent: assignment?.warningThresholdPercent ?? 80
     },

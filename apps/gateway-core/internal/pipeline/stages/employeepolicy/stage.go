@@ -34,7 +34,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		return nil
 	}
 	if s == nil || s.resolver == nil {
-		return s.fail(gatewayCtx, employeepolicy.ErrUnavailable)
+		return fail(gatewayCtx, employeepolicy.ErrUnavailable)
 	}
 	now := time.Now()
 	if s.now != nil {
@@ -50,13 +50,13 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 		return nil
 	}
 	if err != nil {
-		return s.fail(gatewayCtx, err)
+		return fail(gatewayCtx, err)
 	}
 	policy = employeepolicy.Normalize(policy)
 	if policy.EmployeeID == "" ||
 		policy.TenantID != gatewayCtx.Identity.TenantID ||
 		policy.ProjectID != gatewayCtx.Identity.ProjectID {
-		return s.fail(gatewayCtx, employeepolicy.ErrNotFound)
+		return fail(gatewayCtx, employeepolicy.ErrNotFound)
 	}
 
 	gatewayCtx.Identity.EmployeeID = policy.EmployeeID
@@ -68,7 +68,7 @@ func (s *Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext)
 	return nil
 }
 
-func (s *Stage) fail(gatewayCtx *request.GatewayContext, err error) error {
+func fail(gatewayCtx *request.GatewayContext, err error) error {
 	gatewayCtx.SetError(500, "internal_error", "Gateway employee policy resolution failed.", StageName)
 	gatewayCtx.BypassCache()
 	return gatewayerrors.InternalError(StageName, "Gateway employee policy resolution failed.", err)

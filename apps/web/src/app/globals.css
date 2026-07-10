@@ -15737,6 +15737,32 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   background: var(--surface);
 }
 
+.employee-rate-limit-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.employee-policy-input-suffix {
+  position: relative;
+  display: block;
+}
+
+.employee-policy-dialog .employee-policy-input-suffix > input {
+  padding-right: 38px;
+}
+
+.employee-policy-input-suffix > span {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
 .employee-rate-limit-heading,
 .employee-rate-limit-toggle {
   display: flex;
@@ -16174,6 +16200,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .employee-policy-dialog .project-employee-policy-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-rate-limit-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 

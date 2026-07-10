@@ -75,6 +75,18 @@ func TestStageFailsClosedWhenPolicyStoreFails(t *testing.T) {
 	}
 }
 
+func TestNilStageFailsClosedWithoutPanicking(t *testing.T) {
+	var stage *Stage
+	gatewayCtx := &request.GatewayContext{Identity: request.IdentityContext{TrustedActorID: "actor"}}
+
+	if err := stage.Execute(context.Background(), gatewayCtx); err == nil {
+		t.Fatal("expected uninitialized employee policy stage error")
+	}
+	if gatewayCtx.Status.HTTPStatus != 500 || gatewayCtx.Cache.CacheStatus != "bypass" {
+		t.Fatalf("expected fail-closed context, got %#v", gatewayCtx)
+	}
+}
+
 func TestStageRejectsPolicyOutsideAuthenticatedScope(t *testing.T) {
 	stage := NewStage(&fakeResolver{policy: employeepolicy.Policy{
 		TenantID:   "other_tenant",
