@@ -1,18 +1,21 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LiveRequestsFocusDialog, type FocusOriginRect } from "./live-requests-focus-dialog";
+import { LiveRequestsView } from "./live-requests-view";
 import {
-  Eye,
-  Info,
-  RotateCw
-} from "lucide-react";
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
+  countPendingLiveRequests,
+  liveRequestHistoryCutoff,
+  mergeLiveRequestHistory
+} from "@/features/dashboard/live-requests-history";
+import { RequestLogDetailClient } from "@/features/request-logs/components/request-log-detail-client";
+import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import type {
   LiveRequestRow,
   LiveRequestsPayload,
   LiveRequestStatusFilter
 } from "@/lib/gateway/live-requests-types";
+import type { Locale } from "@/lib/i18n/locale";
 
 export const LIVE_REQUESTS_POLL_INTERVAL_MS = 1000;
 
@@ -28,6 +31,7 @@ type LiveRequestsCardFilters = {
 type LiveRequestsCardProps = {
   filters: LiveRequestsCardFilters;
   initialPayload?: LiveRequestsPayload;
+  locale: Locale;
 };
 
 type LiveRequestsApiResponse = {
@@ -35,44 +39,16 @@ type LiveRequestsApiResponse = {
   error?: string;
 };
 
-const statusFilters: Array<{ label: string; value: LiveRequestStatusFilter }> = [
-  { label: "All Status", value: "" },
-  { label: "success", value: "success" },
-  { label: "failed", value: "failed" },
-  { label: "blocked", value: "blocked" },
-  { label: "rate_limited", value: "rate_limited" }
-];
+type SelectedRequest = {
+  projectId: string;
+  requestId: string;
+};
 
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  hour12: false,
-  hourCycle: "h23",
-  minute: "2-digit",
-  second: "2-digit",
-  timeZone: "Asia/Seoul"
-});
-
-const compactUsdFormatter = new Intl.NumberFormat("en-US", {
-  currency: "USD",
-  maximumFractionDigits: 6,
-  minimumFractionDigits: 4,
-  style: "currency"
-});
-
-const integerFormatter = new Intl.NumberFormat("en-US");
-
-const projectPillTones = [
-  { background: "rgba(37, 99, 235, 0.24)", border: "rgba(96, 165, 250, 0.44)", text: "#bfdbfe" },
-  { background: "rgba(13, 148, 136, 0.24)", border: "rgba(45, 212, 191, 0.44)", text: "#99f6e4" },
-  { background: "rgba(124, 58, 237, 0.24)", border: "rgba(167, 139, 250, 0.44)", text: "#ddd6fe" },
-  { background: "rgba(219, 39, 119, 0.22)", border: "rgba(244, 114, 182, 0.42)", text: "#fbcfe8" },
-  { background: "rgba(217, 119, 6, 0.22)", border: "rgba(251, 191, 36, 0.42)", text: "#fde68a" },
-  { background: "rgba(22, 163, 74, 0.22)", border: "rgba(74, 222, 128, 0.42)", text: "#bbf7d0" },
-  { background: "rgba(8, 145, 178, 0.24)", border: "rgba(34, 211, 238, 0.42)", text: "#a5f3fc" },
-  { background: "rgba(225, 29, 72, 0.21)", border: "rgba(251, 113, 133, 0.42)", text: "#fecdd3" }
-];
-
-export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardProps) {
+export function LiveRequestsCard({
+  filters,
+  initialPayload,
+  locale
+}: LiveRequestsCardProps) {
   const {
     budgetScopeId,
     budgetScopeType,
@@ -81,13 +57,27 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
     resolvedBy,
     tenantId
   } = filters;
-  const [rows, setRows] = useState<LiveRequestRow[]>(() => normalizeLiveRequestRows(initialPayload?.rows));
-  const [modelOptions, setModelOptions] = useState<string[]>(() => normalizeModelOptions(initialPayload?.modelOptions));
+  const initialRows = normalizeLiveRequestRows(initialPayload?.rows);
+  const [rows, setRows] = useState<LiveRequestRow[]>(initialRows);
+  const [historyRows, setHistoryRows] = useState<LiveRequestRow[]>(initialRows);
+  const [focusRows, setFocusRows] = useState<LiveRequestRow[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>(() =>
+    normalizeModelOptions(initialPayload?.modelOptions)
+  );
   const [statusFilter, setStatusFilter] = useState<LiveRequestStatusFilter>("");
   const [modelFilter, setModelFilter] = useState("");
   const [isLoading, setIsLoading] = useState(!initialPayload);
   const [error, setError] = useState<string | null>(null);
+  const [isFocusOpen, setIsFocusOpen] = useState(false);
+  const [focusOrigin, setFocusOrigin] = useState<FocusOriginRect | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null);
+  const [detailFocusRequestId, setDetailFocusRequestId] = useState<string>();
   const abortRef = useRef<AbortController | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const detailReturnButtonRef = useRef<HTMLButtonElement | null>(null);
+  const detailOpenTimerRef = useRef<number | null>(null);
+  const focusTriggerRef = useRef<HTMLElement | null>(null);
+  const isFocusOpenRef = useRef(false);
   const skippedInitialFetchRef = useRef(false);
   const inFlightQueryRef = useRef<string | null>(null);
   const rowCountRef = useRef(rows.length);
@@ -116,6 +106,11 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
       statusFilter
     ]
   );
+  const historyQueryRef = useRef(requestQueryString);
+
+  const bindDetailReturnButton = useCallback((element: HTMLButtonElement | null) => {
+    detailReturnButtonRef.current = element;
+  }, []);
 
   useEffect(() => {
     rowCountRef.current = rows.length;
@@ -140,7 +135,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
       }
 
       try {
-        const response = await fetch(`/api/dashboard/live-requests?${requestQueryString}`, {
+        const response = await fetch("/api/dashboard/live-requests?" + requestQueryString, {
           cache: "no-store",
           signal: controller.signal
         });
@@ -151,8 +146,22 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
         }
 
         const nextRows = normalizeLiveRequestRows(payload.data.rows);
+        const queryChanged = historyQueryRef.current !== requestQueryString;
+        historyQueryRef.current = requestQueryString;
         rowCountRef.current = nextRows.length;
         setRows(nextRows);
+        if (queryChanged) {
+          setHistoryRows(nextRows);
+          if (isFocusOpenRef.current) {
+            setFocusRows(nextRows);
+          }
+        } else {
+          setHistoryRows((currentRows) =>
+            mergeLiveRequestHistory(currentRows, nextRows, {
+              minimumTimestampMs: liveRequestHistoryCutoff(range)
+            })
+          );
+        }
         setModelOptions(mergeModelOptions(payload.data.modelOptions, modelFilter));
         setError(null);
       } catch (fetchError) {
@@ -170,7 +179,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
         }
       }
     },
-    [modelFilter, requestQueryString]
+    [modelFilter, range, requestQueryString]
   );
 
   useEffect(() => {
@@ -191,182 +200,161 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
     };
   }, [initialPayload, loadRequests]);
 
+  useEffect(() => {
+    if (!isFocusOpen) {
+      return;
+    }
+
+    function updateOrigin() {
+      setFocusOrigin(readFocusOrigin(cardRef.current));
+    }
+
+    window.addEventListener("resize", updateOrigin);
+    return () => window.removeEventListener("resize", updateOrigin);
+  }, [isFocusOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (detailOpenTimerRef.current !== null) {
+        window.clearTimeout(detailOpenTimerRef.current);
+      }
+    };
+  }, []);
+
   const viewAllLogsHref = useMemo(
     () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId),
     [modelFilter, projectId, range, statusFilter, tenantId]
   );
+  const pendingCount = isFocusOpen
+    ? countPendingLiveRequests(focusRows, historyRows)
+    : 0;
 
-  return (
-    <section className="dashboard-live-requests-panel" aria-label="Live Requests">
-      <div className="dashboard-live-requests-header">
-        <div>
-          <div className="dashboard-live-requests-title">
-            <h2>Live Requests</h2>
-            <Info aria-hidden="true" size={15} strokeWidth={2.1} />
-          </div>
-        </div>
-        <div className="dashboard-live-requests-actions">
-          <select
-            aria-label="Filter live requests by status"
-            onChange={(event) => setStatusFilter(event.target.value as LiveRequestStatusFilter)}
-            value={statusFilter}
-          >
-            {statusFilters.map((status) => (
-              <option key={status.value || "all"} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Filter live requests by model"
-            onChange={(event) => setModelFilter(event.target.value)}
-            value={modelFilter}
-          >
-            <option value="">All Models</option>
-            {modelOptions.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-          <Link className="dashboard-live-requests-view-all" href={viewAllLogsHref}>
-            View all logs
-          </Link>
-        </div>
-      </div>
+  function openFocusView() {
+    focusTriggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setFocusOrigin(readFocusOrigin(cardRef.current));
+    setFocusRows(historyRows);
+    isFocusOpenRef.current = true;
+    setIsFocusOpen(true);
+  }
 
-      {error ? (
-        <div className="dashboard-live-requests-error" role="status">
-          <span>{error}</span>
-          {rows.length > 0 ? <small>Showing last successful refresh</small> : null}
-        </div>
-      ) : null}
+  function closeFocusView() {
+    if (detailOpenTimerRef.current !== null) {
+      window.clearTimeout(detailOpenTimerRef.current);
+      detailOpenTimerRef.current = null;
+    }
 
-      <div className="dashboard-live-requests-table-wrap">
-        <table className="dashboard-live-requests-table">
-          <thead>
-            <tr>
-              <th>Request Time</th>
-              <th>Name</th>
-              <th>Project</th>
-              <th>Model</th>
-              <th>Status</th>
-              <th>Cache</th>
-              <th>Safety</th>
-              <th>Latency</th>
-              <th>Tokens</th>
-              <th>Cost (USD)</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && rows.length === 0 ? (
-              <tr>
-                <td className="dashboard-live-requests-state" colSpan={11}>
-                  <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
-                  Loading live requests
-                </td>
-              </tr>
-            ) : null}
-            {!isLoading && rows.length === 0 ? (
-              <tr>
-                <td className="dashboard-live-requests-state" colSpan={11}>
-                  No recent requests for selected filters
-                </td>
-              </tr>
-            ) : null}
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{formatLiveTime(row.timestamp)}</td>
-                <td>
-                  {row.userName ? (
-                    <span title={row.userName}>{row.userName}</span>
-                  ) : (
-                    <span className="dashboard-live-muted-value">-</span>
-                  )}
-                </td>
-                <td>
-                  <span
-                    className="dashboard-live-project-pill"
-                    style={projectPillStyle(row.projectId || row.projectName)}
-                    title={row.projectId}
-                  >
-                    {row.projectName}
-                  </span>
-                </td>
-                <td>
-                  <LiveProviderModel row={row} />
-                </td>
-                <td>
-                  <span className="dashboard-live-status-badge" data-status-tone={statusTone(row)}>
-                    {row.statusLabel}
-                  </span>
-                </td>
-                <td>
-                  <OptionalBadge kind="cache" value={row.cacheStatus} />
-                </td>
-                <td>
-                  <OptionalBadge kind="safety" value={row.safetyAction} />
-                </td>
-                <td>{formatLiveLatency(row.latencyMs)}</td>
-                <td>{integerFormatter.format(row.totalTokens)}</td>
-                <td>{compactUsdFormatter.format(row.costUsd)}</td>
-                <td>
-                  <Link
-                    aria-label={`Open request log ${row.requestId}`}
-                    className="dashboard-live-action-link"
-                    href={requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId, row.requestId)}
-                  >
-                    <Eye aria-hidden="true" size={15} strokeWidth={2.2} />
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    setSelectedRequest(null);
+    setDetailFocusRequestId(undefined);
+    isFocusOpenRef.current = false;
+    setIsFocusOpen(false);
+    window.setTimeout(() => {
+      focusTriggerRef.current?.focus({ preventScroll: true });
+    }, motionDuration(380));
+  }
 
-      <div className="dashboard-live-requests-footer">
-        <span>Showing latest 5 requests</span>
-      </div>
-    </section>
-  );
-}
+  function openRequestDetail(row: LiveRequestRow) {
+    setDetailFocusRequestId(row.requestId);
 
-function OptionalBadge({
-  kind,
-  value
-}: {
-  kind: "cache" | "safety";
-  value: LiveRequestRow["cacheStatus"] | LiveRequestRow["safetyAction"];
-}) {
-  if (value === "NONE") {
-    return <span className="dashboard-live-muted-value">-</span>;
+    const selectRequest = () => {
+      setSelectedRequest({
+        projectId: row.projectId,
+        requestId: row.requestId
+      });
+      detailOpenTimerRef.current = null;
+    };
+
+    if (isFocusOpen) {
+      selectRequest();
+      return;
+    }
+
+    openFocusView();
+    detailOpenTimerRef.current = window.setTimeout(() => {
+      detailReturnButtonRef.current?.focus({ preventScroll: true });
+      selectRequest();
+    }, motionDuration(380));
+  }
+
+  function closeRequestDetail() {
+    setSelectedRequest(null);
   }
 
   return (
-    <span className="dashboard-live-mini-badge" data-kind={kind} data-value={value}>
-      {value}
-    </span>
+    <>
+      <div className="dashboard-live-requests-slot" ref={cardRef}>
+        <LiveRequestsView
+          error={error}
+          isLoading={isLoading}
+          mode="compact"
+          modelFilter={modelFilter}
+          modelOptions={modelOptions}
+          onModelFilterChange={setModelFilter}
+          onOpenFocus={openFocusView}
+          onOpenRequest={openRequestDetail}
+          onStatusFilterChange={setStatusFilter}
+          rows={rows.slice(0, 5)}
+          statusFilter={statusFilter}
+          viewAllLogsHref={viewAllLogsHref}
+        />
+      </div>
+
+      <LiveRequestsFocusDialog
+        onClose={closeFocusView}
+        open={isFocusOpen}
+        origin={focusOrigin}
+      >
+        <LiveRequestsView
+          detailFocusRef={bindDetailReturnButton}
+          detailFocusRequestId={detailFocusRequestId}
+          error={error}
+          isLoading={isLoading}
+          mode="focus"
+          modelFilter={modelFilter}
+          modelOptions={modelOptions}
+          onApplyPending={() => setFocusRows(historyRows)}
+          onCloseFocus={closeFocusView}
+          onModelFilterChange={setModelFilter}
+          onOpenRequest={openRequestDetail}
+          onStatusFilterChange={setStatusFilter}
+          pendingCount={pendingCount}
+          rows={focusRows}
+          selectedRequestId={selectedRequest?.requestId}
+          statusFilter={statusFilter}
+          viewAllLogsHref={viewAllLogsHref}
+        />
+        <RequestLogDetailClient
+          locale={locale}
+          onClose={closeRequestDetail}
+          selectedProjectId={selectedRequest?.projectId}
+          selectedRequestId={selectedRequest?.requestId}
+          tenantId={tenantId}
+          timezone={DEFAULT_DISPLAY_TIMEZONE}
+          variant="drawer"
+        />
+      </LiveRequestsFocusDialog>
+    </>
   );
 }
 
-function projectPillStyle(value: string): CSSProperties {
-  const tone = projectPillTones[stableHash(value) % projectPillTones.length];
+function readFocusOrigin(element: HTMLElement | null): FocusOriginRect | null {
+  if (!element) {
+    return null;
+  }
 
+  const rect = element.getBoundingClientRect();
   return {
-    "--project-pill-bg": tone.background,
-    "--project-pill-border": tone.border,
-    "--project-pill-text": tone.text
-  } as CSSProperties;
+    height: rect.height,
+    left: rect.left,
+    top: rect.top,
+    viewportHeight: window.innerHeight,
+    viewportWidth: window.innerWidth,
+    width: rect.width
+  };
 }
 
-function stableHash(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index++) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
+function motionDuration(durationMs: number) {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : durationMs;
 }
 
 function liveRequestsApiQuery(
@@ -393,8 +381,7 @@ function requestLogsHref(
   range: string,
   status: LiveRequestStatusFilter,
   model: string,
-  projectId?: string,
-  requestId?: string
+  projectId?: string
 ) {
   const query = new URLSearchParams();
   const created = requestLogsCreatedRange(range);
@@ -405,10 +392,9 @@ function requestLogsHref(
   appendQuery(query, "status", status);
   appendQuery(query, "model", model);
   appendQuery(query, "projectId", projectId);
-  appendQuery(query, "requestId", requestId);
 
   const queryString = query.toString();
-  return `/tenants/${tenantId}/request-logs${queryString ? `?${queryString}` : ""}`;
+  return "/tenants/" + tenantId + "/request-logs" + (queryString ? "?" + queryString : "");
 }
 
 function appendQuery(query: URLSearchParams, key: string, value: string | undefined) {
@@ -422,15 +408,12 @@ function requestLogsCreatedRange(range: string) {
   if (range === "5m") {
     return "15m";
   }
-
   if (range === "15m" || range === "1h") {
     return range;
   }
-
   if (range === "1w") {
     return "7d";
   }
-
   return "24h";
 }
 
@@ -439,7 +422,6 @@ function mergeModelOptions(options: string[] | undefined, selectedModel: string)
   if (selectedModel.trim()) {
     merged.add(selectedModel.trim());
   }
-
   return Array.from(merged).sort((first, second) => first.localeCompare(second));
 }
 
@@ -456,66 +438,4 @@ function normalizeModelOptions(options: string[] | undefined) {
     .filter((option): option is string => typeof option === "string")
     .map((option) => option.trim())
     .filter(Boolean);
-}
-
-function formatLiveTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return timeFormatter.format(date);
-}
-
-function LiveProviderModel({ row }: { row: LiveRequestRow }) {
-  return (
-    <span className="dashboard-live-provider-model" title={`${row.providerLabel} · ${row.model}`}>
-      <ProviderFamilyIcon
-        className="dashboard-live-provider-icon"
-        family={liveProviderFamily(row.provider)}
-        size={22}
-      />
-      <strong>{row.model}</strong>
-    </span>
-  );
-}
-
-function liveProviderFamily(provider: LiveRequestRow["provider"]) {
-  if (provider === "anthropic") {
-    return "claude";
-  }
-
-  if (provider === "gemini" || provider === "google") {
-    return "gemini";
-  }
-
-  if (provider === "mock") {
-    return "mock";
-  }
-
-  return provider === "openai" ? "openai" : "new-provider";
-}
-
-function statusTone(row: LiveRequestRow) {
-  if (row.statusCode >= 500 || row.status === "failed") {
-    return "error";
-  }
-
-  if (row.statusCode >= 400 || row.status === "blocked" || row.status === "rate_limited") {
-    return "warning";
-  }
-
-  if (row.statusCode >= 200 && row.statusCode < 300) {
-    return "success";
-  }
-
-  return "neutral";
-}
-
-function formatLiveLatency(value: number) {
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(2)} s`;
-  }
-
-  return `${integerFormatter.format(Math.max(0, Math.round(value)))} ms`;
 }
