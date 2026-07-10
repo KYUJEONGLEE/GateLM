@@ -1,5 +1,12 @@
 export type AuthSessionKind = 'full' | 'onboarding';
 
+export class EmployeeInvitationNotFoundError extends Error {
+  constructor() {
+    super('Employee invitation not found.');
+    this.name = 'EmployeeInvitationNotFoundError';
+  }
+}
+
 export interface AuthUser {
   id: string;
   email: string;

@@ -8,6 +8,12 @@ import {
   buildControlPlaneHeaders,
   type ControlPlaneRequestOptions
 } from "@/lib/control-plane/control-plane-request";
+import {
+  cachedControlPlaneRead,
+  CONTROL_PLANE_READ_CACHE_SECONDS,
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag
+} from "@/lib/control-plane/read-cache";
 import { listControlPlaneProjectsFresh } from "@/lib/control-plane/projects-client";
 import type {
   EmployeeControlModel,
@@ -168,9 +174,27 @@ export async function getEmployeeControlModel(
 
 export async function getTenantEmployees(routeTenantId: string): Promise<EmployeeRecord[]> {
   const controlPlaneTenantId = resolveControlPlaneTenantId(routeTenantId);
-  const result = await listEmployees(controlPlaneTenantId);
-
-  return result.ok ? result.data : getFixtureEmployees(controlPlaneTenantId);
+  try {
+    return await cachedControlPlaneRead(
+      ["control-plane", "employees", controlPlaneTenantId],
+      async () => {
+        const result = await listEmployees(controlPlaneTenantId);
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+        return result.data;
+      },
+      {
+        revalidate: CONTROL_PLANE_READ_CACHE_SECONDS.employees,
+        tags: [
+          controlPlaneReadCacheTags.employees,
+          controlPlaneTenantReadCacheTag("employees", controlPlaneTenantId)
+        ]
+      }
+    );
+  } catch {
+    return getFixtureEmployees(controlPlaneTenantId);
+  }
 }
 
 export async function getProjectEmployeeControlModel(
@@ -355,9 +379,9 @@ export async function updateEmployee(
       `${getControlPlaneBaseUrl()}/admin/v1/tenants/${encodeURIComponent(values.tenantId)}/employees/${encodeURIComponent(values.employeeId)}`,
       {
         body: JSON.stringify({
-          department: values.department.trim(),
+          department: values.department?.trim(),
           invitationStatus: values.invitationStatus,
-          name: values.name.trim(),
+          name: values.name?.trim(),
           status: values.status
         }),
         cache: "no-store",

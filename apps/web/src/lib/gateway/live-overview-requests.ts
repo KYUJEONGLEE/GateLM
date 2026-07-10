@@ -1,6 +1,5 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
 import { getTenantEmployees } from "@/lib/control-plane/employees-client";
 import { getProjectsModel } from "@/lib/control-plane/projects-client";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
@@ -34,12 +33,6 @@ export type LiveOverviewRequestsOptions = {
 
 const LIVE_REQUESTS_DISPLAY_LIMIT = 5;
 const LIVE_REQUESTS_FILTER_FETCH_LIMIT = 50;
-const getCachedTenantEmployees = unstable_cache(
-  async (tenantId: string) => getTenantEmployees(tenantId),
-  ["live-overview-request-employees"],
-  { revalidate: 30 }
-);
-
 export async function getLiveOverviewRequests(
   tenantId: string,
   filters: LiveOverviewRequestsFilters = {},
@@ -48,7 +41,7 @@ export async function getLiveOverviewRequests(
   const liveRange = getDashboardLiveRange(filters.range);
   const [projectsModel, employees] = await Promise.all([
     options.projects ? Promise.resolve(undefined) : getProjectsModel(tenantId),
-    getCachedTenantEmployees(tenantId)
+    getTenantEmployees(tenantId)
   ]);
   const projects = options.projects ?? projectsModel?.projects ?? [];
   const projectIds = options.projectIds ?? projects.map((project) => project.id).filter(Boolean);

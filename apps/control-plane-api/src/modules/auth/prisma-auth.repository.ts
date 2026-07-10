@@ -14,6 +14,7 @@ import {
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
+  EmployeeInvitationNotFoundError,
   EmailVerificationCode,
   OAuthAccount,
   OAuthAccountWithUser,
@@ -50,7 +51,7 @@ export class PrismaAuthRepository implements AuthRepository {
         },
       });
       if (!employee) {
-        throw new Error('Employee invitation not found.');
+        throw new EmployeeInvitationNotFoundError();
       }
 
       const existingUser = await tx.user.findFirst({

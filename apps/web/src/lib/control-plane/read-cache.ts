@@ -3,6 +3,7 @@ import "server-only";
 import { revalidateTag, unstable_cache } from "next/cache";
 
 export const CONTROL_PLANE_READ_CACHE_SECONDS = {
+  employees: 30,
   projects: 15,
   providerConnections: 15,
   providerPresets: 300,
@@ -10,6 +11,7 @@ export const CONTROL_PLANE_READ_CACHE_SECONDS = {
 } as const;
 
 export const controlPlaneReadCacheTags = {
+  employees: "control-plane:employees",
   projects: "control-plane:projects",
   providerConnections: "control-plane:provider-connections",
   providerPresets: "control-plane:provider-presets",
@@ -30,7 +32,10 @@ export async function cachedControlPlaneRead<T>(
   })();
 }
 
-export function controlPlaneTenantReadCacheTag(kind: "projects" | "providerConnections", tenantId: string) {
+export function controlPlaneTenantReadCacheTag(
+  kind: "employees" | "projects" | "providerConnections",
+  tenantId: string
+) {
   return `${controlPlaneReadCacheTags[kind]}:${tenantId}`;
 }
 

@@ -104,11 +104,11 @@ export type EmployeeCreateValues = {
 };
 
 export type EmployeeUpdateValues = {
-  department: string;
+  department?: string;
   employeeId: string;
-  invitationStatus: EmployeeInvitationStatus;
-  name: string;
-  status: EmployeeStatus;
+  invitationStatus?: EmployeeInvitationStatus;
+  name?: string;
+  status?: EmployeeStatus;
   tenantId: string;
 };
 

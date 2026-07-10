@@ -8,6 +8,11 @@ import {
   updateEmployee,
   upsertProjectEmployeeAssignment
 } from "@/lib/control-plane/employees-client";
+import {
+  controlPlaneReadCacheTags,
+  controlPlaneTenantReadCacheTag,
+  revalidateControlPlaneRead
+} from "@/lib/control-plane/read-cache";
 import type {
   EmployeeCreateValues,
   EmployeeCsvImportValues,
@@ -47,6 +52,14 @@ export async function POST(request: Request) {
       },
       { status: result.status > 0 ? result.status : 502 }
     );
+  }
+
+  const tenantId = getEmployeeMutationTenantId(payload.values, result.data);
+  if (tenantId) {
+    revalidateControlPlaneRead([
+      controlPlaneReadCacheTags.employees,
+      controlPlaneTenantReadCacheTag("employees", tenantId)
+    ]);
   }
 
   if (payload.action === "assign" || payload.action === "disableAssignment") {
@@ -177,13 +190,31 @@ function isEmployeeUpdateValues(value: unknown): value is EmployeeUpdateValues {
 
   const record = value as Partial<EmployeeUpdateValues>;
   return (
-    typeof record.department === "string" &&
+    (record.department === undefined || typeof record.department === "string") &&
     typeof record.employeeId === "string" &&
-    isInvitationStatus(record.invitationStatus) &&
-    typeof record.name === "string" &&
-    isEmployeeStatus(record.status) &&
+    (record.invitationStatus === undefined || isInvitationStatus(record.invitationStatus)) &&
+    (record.name === undefined || typeof record.name === "string") &&
+    (record.status === undefined || isEmployeeStatus(record.status)) &&
     typeof record.tenantId === "string"
   );
+}
+
+function getEmployeeMutationTenantId(values: unknown, data: unknown) {
+  if (values && typeof values === "object" && "tenantId" in values) {
+    const tenantId = (values as { tenantId?: unknown }).tenantId;
+    if (typeof tenantId === "string") {
+      return tenantId;
+    }
+  }
+
+  if (data && typeof data === "object" && "tenantId" in data) {
+    const tenantId = (data as { tenantId?: unknown }).tenantId;
+    if (typeof tenantId === "string") {
+      return tenantId;
+    }
+  }
+
+  return null;
 }
 
 function isProjectEmployeeAssignmentValues(

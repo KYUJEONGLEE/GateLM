@@ -112,6 +112,11 @@ type ProjectImportProjection = Pick<
   'createdAt' | 'description' | 'id' | 'name' | 'status' | 'tenantId' | 'totalBudgetUsd' | 'updatedAt'
 >;
 
+type ProjectImportEntry = {
+  project: ProjectImportProjection;
+  runtimeApplicationId: string | null;
+};
+
 type ParsedCsvRow = {
   department: string | null;
   email: string;
@@ -128,6 +133,12 @@ type ParsedOrganizationCsvRow = ParsedCsvRow & {
   projectDescription: string | null;
   projectName: string | null;
   warningThresholdPercent: number;
+};
+
+type PreparedOrganizationAssignment = {
+  employee: EmployeeWithProjectCount;
+  projectEntry: ProjectImportEntry;
+  row: ParsedOrganizationCsvRow;
 };
 
 @Injectable()
@@ -343,11 +354,9 @@ export class EmployeesService {
       const employeesByEmail = new Map<string, EmployeeWithProjectCount>(
         existingEmployees.map((employee) => [employee.email, employee]),
       );
-      const projectsByName = new Map<
-        string,
-        { project: ProjectImportProjection; runtimeApplicationId: string | null }
-      >();
+      const projectsByName = new Map<string, ProjectImportEntry>();
       const assignments: ProjectEmployeeWithEmployee[] = [];
+      const preparedAssignments: PreparedOrganizationAssignment[] = [];
       const touchedAssignmentKeys = new Set<string>();
 
       for (const row of rows) {
@@ -476,14 +485,38 @@ export class EmployeesService {
         }
         touchedAssignmentKeys.add(assignmentKey);
 
-        const existingAssignment = await tx.projectEmployeeAssignment.findUnique({
-          where: {
-            projectId_employeeId: {
-              employeeId: employee.id,
-              projectId: projectEntry.project.id,
+        preparedAssignments.push({ employee, projectEntry, row });
+      }
+
+      const existingAssignments = preparedAssignments.length > 0
+        ? await tx.projectEmployeeAssignment.findMany({
+            where: {
+              employeeId: {
+                in: [...new Set(preparedAssignments.map(({ employee }) => employee.id))],
+              },
+              projectId: {
+                in: [
+                  ...new Set(
+                    preparedAssignments.map(({ projectEntry }) => projectEntry.project.id),
+                  ),
+                ],
+              },
+              tenantId,
             },
-          },
-        });
+          })
+        : [];
+      const existingAssignmentsByKey = new Map(
+        existingAssignments.map((assignment) => [
+          `${assignment.projectId}:${assignment.employeeId}`,
+          assignment,
+        ]),
+      );
+
+      for (const { employee, projectEntry, row } of preparedAssignments) {
+        const existingAssignment = existingAssignmentsByKey.get(
+          `${projectEntry.project.id}:${employee.id}`,
+        );
+
         const policy: Prisma.InputJsonObject = {
           allowedModelKeys: row.allowedModelKeys,
           allowedProviderConnectionIds: row.allowedProviderConnectionIds,

@@ -25,6 +25,7 @@ import {
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
+  EmployeeInvitationNotFoundError,
 } from './auth.repository';
 import { AUTH_REPOSITORY, EMAIL_SENDER, GOOGLE_OAUTH_CLIENT } from './auth.tokens';
 import {
@@ -159,8 +160,11 @@ export class AuthService {
           passwordHash,
           tokenHash: hashSecret(dto.employeeInviteToken),
         });
-      } catch {
-        throw new UnauthorizedException('Invalid or expired employee invitation.');
+      } catch (error) {
+        if (error instanceof EmployeeInvitationNotFoundError) {
+          throw new UnauthorizedException('Invalid or expired employee invitation.');
+        }
+        throw error;
       }
       const session = await this.issueSession(accepted.user.id, 'full');
 
