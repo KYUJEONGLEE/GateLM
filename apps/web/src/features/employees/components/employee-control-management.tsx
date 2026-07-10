@@ -32,7 +32,7 @@ import type {
   ProjectEmployeeAssignmentValues
 } from "@/lib/control-plane/employees-types";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
-import { formatDateTime, nullableText } from "@/lib/formatting/formatters";
+import { nullableText } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type EmployeeControlManagementProps = {
@@ -237,9 +237,12 @@ const projectEmployeeText: Record<
     department: string;
     disable: string;
     email: string;
+    employeeList: string;
     employees: string;
     fixtureFallback: string;
+    management: string;
     modelKeys: string;
+    name: string;
     noAssignments: string;
     noCandidates: string;
     noDepartments: string;
@@ -265,9 +268,12 @@ const projectEmployeeText: Record<
     department: "Department",
     disable: "Disable",
     email: "Email",
+    employeeList: "Employee list",
     employees: "Employees",
     fixtureFallback: "Control Plane unavailable. Showing fixture employees.",
+    management: "Management",
     modelKeys: "Models",
+    name: "Name",
     noAssignments: "No project employees.",
     noCandidates: "No employees available for assignment.",
     noDepartments: "No departments found.",
@@ -292,9 +298,12 @@ const projectEmployeeText: Record<
     department: "부서",
     disable: "비활성화",
     email: "이메일",
+    employeeList: "직원 목록",
     employees: "직원",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 직원을 표시 중입니다.",
+    management: "관리",
     modelKeys: "모델",
+    name: "이름",
     noAssignments: "Project에 배정된 직원이 없습니다.",
     noCandidates: "배정할 수 있는 직원이 없습니다.",
     noDepartments: "등록된 부서가 없습니다.",
@@ -342,17 +351,27 @@ export function ProjectEmployeeAssignmentSection({
     () => new Map(activeAssignments.map((assignment) => [assignment.employeeId, assignment])),
     [activeAssignments]
   );
+  const projectEmployees = useMemo(
+    () =>
+      model.employees
+        .filter((employee) => activeAssignmentByEmployeeId.has(employee.id))
+        .sort((left, right) =>
+          (left.name?.trim() || left.email).localeCompare(
+            right.name?.trim() || right.email
+          )
+        ),
+    [activeAssignmentByEmployeeId, model.employees]
+  );
   const departments = useMemo(
     () =>
       Array.from(
         new Set(
-          model.employees
-            .filter((employee) => activeAssignmentByEmployeeId.has(employee.id))
+          projectEmployees
             .map((employee) => employee.department?.trim())
             .filter((department): department is string => Boolean(department))
         )
       ).sort((left, right) => left.localeCompare(right)),
-    [activeAssignmentByEmployeeId, model.employees]
+    [projectEmployees]
   );
   const tenantDepartments = useMemo(
     () =>
@@ -394,28 +413,24 @@ export function ProjectEmployeeAssignmentSection({
 
   const departmentEmployees = useMemo(
     () =>
-      model.employees
-        .filter(
-          (employee) =>
-            employee.department?.trim() === selectedDepartment &&
-            activeAssignmentByEmployeeId.has(employee.id)
-        )
-        .sort((left, right) => left.email.localeCompare(right.email)),
-    [activeAssignmentByEmployeeId, model.employees, selectedDepartment]
+      projectEmployees.filter(
+        (employee) => employee.department?.trim() === selectedDepartment
+      ),
+    [projectEmployees, selectedDepartment]
   );
   const employeeCountByDepartment = useMemo(() => {
     const counts = new Map<string, number>();
 
-    for (const employee of model.employees) {
+    for (const employee of projectEmployees) {
       const department = employee.department?.trim();
-      if (!department || !activeAssignmentByEmployeeId.has(employee.id)) {
+      if (!department) {
         continue;
       }
       counts.set(department, (counts.get(department) ?? 0) + 1);
     }
 
     return counts;
-  }, [activeAssignmentByEmployeeId, model.employees]);
+  }, [projectEmployees]);
   const assignableEmployees = useMemo(() => {
     const normalizedQuery = employeeSearchQuery.trim().toLocaleLowerCase();
 
@@ -686,57 +701,6 @@ export function ProjectEmployeeAssignmentSection({
           </div>
         )}
 
-        {selectedDepartment ? (
-          <section
-            aria-labelledby="project-department-employee-heading"
-            className="project-department-employee-group"
-          >
-            <div className="project-department-employee-heading">
-              <h4 id="project-department-employee-heading">
-                {selectedDepartment} · {text.employees}
-              </h4>
-              <span>{departmentEmployees.length}</span>
-            </div>
-            <div className="project-department-employees">
-              {departmentEmployees.length === 0 ? (
-                <p className="project-empty">{text.noEmployees}</p>
-              ) : (
-                departmentEmployees.map((employee) => {
-                  const isAssigned = activeAssignmentByEmployeeId.has(employee.id);
-                  const isSelected = selectedEmployeeId === employee.id;
-
-                  return (
-                    <button
-                      aria-pressed={isSelected}
-                      className="project-department-employee"
-                      data-active={isSelected}
-                      disabled={pendingAction !== null}
-                      key={employee.id}
-                      onClick={() => setSelectedEmployeeId(employee.id)}
-                      type="button"
-                    >
-                      <span className="project-department-employee-icon">
-                        <Users aria-hidden="true" />
-                      </span>
-                      <span className="project-department-employee-copy">
-                        <strong>{employee.name?.trim() || employee.email}</strong>
-                        <small>{employee.email}</small>
-                      </span>
-                      <Badge
-                        className="project-status-badge"
-                        data-status={isAssigned ? "ACTIVE" : "DISABLED"}
-                        variant="outline"
-                      >
-                        {isAssigned ? text.assigned : text.available}
-                      </Badge>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </section>
-        ) : null}
-
         {selectedEmployeeId ? (
           <>
           <div className="modal-form-grid project-employee-policy-fields">
@@ -827,44 +791,82 @@ export function ProjectEmployeeAssignmentSection({
           </>
         ) : null}
 
-        {activeAssignments.length > 0 ? (
-          <div className="team-list">
-            {activeAssignments.map((assignment) => (
-              <article className="team-row" key={assignment.id}>
-                <div className="team-row-summary">
-                  <div>
-                    <span>{text.email}</span>
-                    <strong>{assignment.employeeEmail}</strong>
-                  </div>
-                  <div>
-                    <span>{text.department}</span>
-                    <p>{nullableText(assignment.employeeDepartment, "-")}</p>
-                  </div>
-                  <div>
-                    <span>{text.budget}</span>
-                    <p>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</p>
-                  </div>
-                  <div>
-                    <span>{text.modelKeys}</span>
-                    <p>{assignment.policy.allowedModelKeys.join(", ") || "-"}</p>
-                  </div>
-                  <div>
-                    <span>{text.assigned}</span>
-                    <p>{formatDateTime(assignment.createdAt)}</p>
-                  </div>
-                  <Button
-                    disabled={pendingAction !== null || assignment.status === "disabled"}
-                    onClick={() => void disableAssignment(assignment)}
-                    type="button"
-                    variant="outline"
-                  >
-                    <Users aria-hidden="true" />
-                    {pendingAction === `disable:${assignment.id}` ? "..." : text.disable}
-                  </Button>
-                </div>
-              </article>
-            ))}
-          </div>
+        {projectEmployees.length > 0 ? (
+          <section
+            aria-labelledby="project-employee-list-heading"
+            className="project-employee-list-section"
+          >
+            <div className="project-employee-list-heading">
+              <h4 id="project-employee-list-heading">{text.employeeList}</h4>
+              <span>{projectEmployees.length}</span>
+            </div>
+            <div className="project-employee-table-wrap">
+              <table className="project-employee-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{text.name}</th>
+                    <th scope="col">{text.department}</th>
+                    <th scope="col">{text.budget}</th>
+                    <th scope="col">{text.management}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectEmployees.map((employee) => {
+                    const assignment = activeAssignmentByEmployeeId.get(employee.id);
+                    if (!assignment) {
+                      return null;
+                    }
+
+                    const isSelected = selectedEmployeeId === employee.id;
+                    const selectEmployee = () => {
+                      setSelectedDepartment(employee.department?.trim() ?? "");
+                      setSelectedEmployeeId(employee.id);
+                    };
+
+                    return (
+                      <tr
+                        data-active={isSelected}
+                        key={assignment.id}
+                        onClick={selectEmployee}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) {
+                            return;
+                          }
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            selectEmployee();
+                          }
+                        }}
+                        tabIndex={0}
+                      >
+                        <td>
+                          <strong>{employee.name?.trim() || "-"}</strong>
+                        </td>
+                        <td>{employee.department?.trim() || "-"}</td>
+                        <td>{formatBudgetUsd(assignment.monthlyBudgetLimitUsd)}</td>
+                        <td className="project-employee-table-action">
+                          <Button
+                            disabled={pendingAction !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void disableAssignment(assignment);
+                            }}
+                            type="button"
+                            variant="outline"
+                          >
+                            <Users aria-hidden="true" />
+                            {pendingAction === `disable:${assignment.id}`
+                              ? "..."
+                              : text.disable}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
         ) : null}
 
       <Dialog
