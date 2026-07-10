@@ -24,13 +24,11 @@ test("tenant management renders the requested routing configuration", async ({ p
   await expect(tabList.getByRole("tab")).toHaveText(["예산", "라우팅"]);
 
   const budgetTab = tabList.getByRole("tab", { exact: true, name: "예산" });
-  await expect(budgetTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { exact: true, name: "예산" })).toBeEmpty();
-
-  await tabList.getByRole("tab", { exact: true, name: "라우팅" }).click();
+  const routingTab = tabList.getByRole("tab", { exact: true, name: "라우팅" });
+  await expect(budgetTab).toHaveAttribute("aria-selected", "false");
+  await expect(routingTab).toHaveAttribute("aria-selected", "true");
 
   const routingPanel = page.getByRole("tabpanel", { exact: true, name: "라우팅" });
-  await expect(budgetTab).toHaveAttribute("aria-selected", "false");
   await expect(routingPanel.getByRole("heading", { exact: true, name: "Auto routing" })).toBeVisible();
   await expect(
     routingPanel.getByRole("heading", { exact: true, name: "카테고리별 모델 설정" })
@@ -50,11 +48,13 @@ test("tenant management renders the requested routing configuration", async ({ p
   await expect(routingPanel.getByRole("rowheader")).toHaveText([
     "일반 채팅",
     "코드 생성",
-    "검색 / RAG",
-    "요약 / 문서"
+    "번역",
+    "요약 / 문서",
+    "추론"
   ]);
 
   for (const removedCopy of [
+    "검색 / RAG",
     "자동 분류",
     "분류되지 않은 요청: 일반 채팅으로 처리",
     "분류 기준"

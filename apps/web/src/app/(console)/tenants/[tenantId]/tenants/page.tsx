@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Code2, FileText, MessageSquareMore, RefreshCcw, Search } from "lucide-react";
+import {
+  BrainCircuit,
+  Code2,
+  FileText,
+  Languages,
+  MessageSquareMore,
+  RefreshCcw
+} from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
 import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
@@ -50,9 +57,9 @@ const initialRoutingRows: RoutingCategoryRow[] = [
   {
     defaultRoute: { model: "Gemini Pro", provider: "google" },
     highQualityRoute: { model: "GPT-4o", provider: "openai" },
-    icon: Search,
-    id: "search-rag",
-    label: "검색 / RAG"
+    icon: Languages,
+    id: "translation",
+    label: "번역"
   },
   {
     defaultRoute: { model: "Gemini Flash", provider: "google" },
@@ -60,6 +67,13 @@ const initialRoutingRows: RoutingCategoryRow[] = [
     icon: FileText,
     id: "summary-document",
     label: "요약 / 문서"
+  },
+  {
+    defaultRoute: { model: "Claude Sonnet", provider: "anthropic" },
+    highQualityRoute: { model: "Claude Opus", provider: "anthropic" },
+    icon: BrainCircuit,
+    id: "reasoning",
+    label: "추론"
   }
 ];
 
@@ -108,8 +122,16 @@ function getProvider(provider: string) {
   return providerCatalog.find((entry) => entry.provider === provider) ?? providerCatalog[0];
 }
 
+function createInitialRoutingRows(): RoutingCategoryRow[] {
+  return initialRoutingRows.map((row) => ({
+    ...row,
+    defaultRoute: { ...row.defaultRoute },
+    highQualityRoute: { ...row.highQualityRoute }
+  }));
+}
+
 export default function TenantsPage() {
-  const [activeSection, setActiveSection] = useState<TenantManagementSection>("budget");
+  const [activeSection, setActiveSection] = useState<TenantManagementSection>("routing");
 
   return (
     <main className="console-content management-line-content tenant-management-content">
@@ -157,10 +179,14 @@ export default function TenantsPage() {
 }
 
 function TenantRoutingPanel() {
-  const [fallbackRoute, setFallbackRoute] = useState(initialFallbackRoute);
+  const [fallbackRoute, setFallbackRoute] = useState<RoutingModelSelection>(() => ({
+    ...initialFallbackRoute
+  }));
   const [isRoutingEnabled, setIsRoutingEnabled] = useState(true);
-  const [offDefaultRoute, setOffDefaultRoute] = useState(initialOffDefaultRoute);
-  const [routingRows, setRoutingRows] = useState(initialRoutingRows);
+  const [offDefaultRoute, setOffDefaultRoute] = useState<RoutingModelSelection>(() => ({
+    ...initialOffDefaultRoute
+  }));
+  const [routingRows, setRoutingRows] = useState<RoutingCategoryRow[]>(createInitialRoutingRows);
   const [statusMessage, setStatusMessage] = useState("");
 
   function updateProvider(rowId: string, routeKey: RoutingRouteKey, provider: string) {
@@ -230,10 +256,10 @@ function TenantRoutingPanel() {
   }
 
   function resetRoutingSettings() {
-    setFallbackRoute(initialFallbackRoute);
+    setFallbackRoute({ ...initialFallbackRoute });
     setIsRoutingEnabled(true);
-    setOffDefaultRoute(initialOffDefaultRoute);
-    setRoutingRows(initialRoutingRows);
+    setOffDefaultRoute({ ...initialOffDefaultRoute });
+    setRoutingRows(createInitialRoutingRows());
     setStatusMessage("라우팅 설정을 초기화했습니다.");
   }
 

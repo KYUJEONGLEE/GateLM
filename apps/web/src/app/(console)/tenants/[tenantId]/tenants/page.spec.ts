@@ -22,7 +22,8 @@ test("tenant routing page keeps the requested copy contract", async () => {
 test("tenant routing page renders all requested display categories", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
-  for (const category of ["일반 채팅", "코드 생성", "검색 / RAG", "요약 / 문서"]) {
+  for (const category of ["일반 채팅", "코드 생성", "번역", "요약 / 문서", "추론"]) {
     expect(pageSource).toContain(category);
   }
+  expect(pageSource).not.toContain("검색 / RAG");
 });
