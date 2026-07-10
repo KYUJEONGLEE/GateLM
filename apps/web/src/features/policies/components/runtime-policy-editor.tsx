@@ -30,7 +30,6 @@ import type {
   RuntimePolicyEditorText,
   SubmitState
 } from "./runtime-policy-editor-types";
-import type { RuntimePolicyDetailModalProps } from "./runtime-policy-detail-modal";
 import {
   getRoutingProviderOptions,
   getSelectedRoutingProviderConnections,
@@ -41,7 +40,6 @@ import {
   mergeDraftValuesWithProviderConnections
 } from "./runtime-policy-editor-utils";
 import {
-  PolicyDetailModalFallback,
   PolicyPanelFallback,
   PolicyPanelFallbackGroup
 } from "./runtime-policy-panel-fallback";
@@ -65,29 +63,6 @@ const RuntimePolicyMovedBudgetContext = createContext<ReactNode>(null);
 
 export function RuntimePolicyMovedBudgetSlot() {
   return useContext(RuntimePolicyMovedBudgetContext);
-}
-
-function RuntimePolicyDetailLoadingFallback() {
-  return (
-    <section
-      aria-busy="true"
-      aria-labelledby="policy-detail-title"
-      aria-modal="true"
-      className="modal-panel policy-detail-modal"
-      onClick={(event) => event.stopPropagation()}
-      role="dialog"
-    >
-      <div className="panel-heading">
-        <h3 id="policy-detail-title">Policy details</h3>
-      </div>
-
-      <div className="policy-detail-layout">
-        <PolicyPanelFallback heading="Runtime snapshot" />
-        <PolicyPanelFallback heading="Provider catalog" />
-        <PolicyPanelFallback heading="History" wide />
-      </div>
-    </section>
-  );
 }
 
 const BudgetPolicyPanel = dynamic<BudgetPolicyPanelProps>(() =>
@@ -149,13 +124,6 @@ const StreamingPolicyPanel = dynamic<StreamingPolicyPanelProps>(() =>
     loading: () => <PolicyPanelFallback heading="Streaming" />
   }
 );
-const RuntimePolicyDetailModal = dynamic<RuntimePolicyDetailModalProps>(() =>
-  import("./runtime-policy-detail-modal").then((module) => module.RuntimePolicyDetailModal),
-  {
-    loading: RuntimePolicyDetailLoadingFallback
-  }
-);
-
 function getPolicyTabId(section: PolicySection) {
   return `policy-tab-${section}`;
 }
@@ -192,10 +160,16 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
       "Active API Key prepared. Store the plaintext now; it will not be displayed again.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
+    budgetPolicyEnabled: "Use budget policy",
+    budgetPolicyHint: "Controls what happens when the project budget is exceeded.",
     budgetTab: "Budget",
     budgetWarning: "Warning threshold",
+    blockAction: "Block",
     cache: "Exact cache",
     cacheEnabled: "Cache enabled",
+    cacheEnabledHint:
+      "Reuse completed responses for identical requests before a Provider call.",
+    cacheSettings: "Cache settings",
     cacheSection: "Cache",
     cacheTab: "Cache",
     cacheTtl: "TTL seconds",
@@ -203,11 +177,24 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     configVersion: "Config version",
     completionPrice: "Completion micro USD",
     defaultRoute: "Default route",
+    detectorNames: {
+      api_key: "API key",
+      authorization_header: "Authorization header",
+      email: "Email address",
+      jwt: "JWT",
+      organization_name: "Organization name",
+      person_name: "Person name",
+      phone_number: "Phone number",
+      postal_address: "Postal address",
+      private_key: "Private key",
+      resident_registration_number: "Resident registration number"
+    },
     detectors: "Safety detectors",
     detectorType: "Detector",
     close: "Close",
     details: "Details",
     disabled: "Disabled",
+    edit: "Edit",
     enabled: "Enabled",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane unavailable. Showing fixture values.",
@@ -218,9 +205,8 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     lowCostRoute: "Low-cost route",
     logSafeCaptureHint:
       "Stores only the post-masking log-safe prompt in Request Detail when enabled.",
-    mandatoryProtection: "Mandatory sensitive data protection: always active",
-    mandatoryProtectionHint:
-      "API key, JWT, Authorization header, private key, and RRN stay protected regardless of PII masking settings.",
+    mandatoryProtection: "Sensitive data protection",
+    mandatoryProtectionHint: "These detectors cannot be disabled.",
     maxBucketTokens: "Max bucket tokens",
     mode: "Mode",
     model: "Model",
@@ -230,6 +216,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     policyDetails: "Policy details",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    privacyMasking: "Personal data masking",
     promptCapture: "Prompt capture",
     promptCaptureEnabled: "Log-safe capture",
     promptCaptureMaxChars: "Max characters",
@@ -246,6 +233,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     rateLimitInfo:
       "Rate limit prevents request bursts. Each request uses one token, and tokens refill every second by the configured amount. Tokens never accumulate above the max bucket size; when tokens run out, the request is blocked before the Provider call.",
     rateLimitTab: "Rate Limit",
+    redactAction: "Redact",
     refillRate: "Refill tokens / sec",
     remove: "Remove",
     rollback: "Rollback",
@@ -275,7 +263,8 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     templateFallback:
       "This application does not have an active policy yet. Configure and publish this policy to enable the Gateway path.",
     title: "Policies",
-    tokens: "Context tokens"
+    tokens: "Context tokens",
+    unsavedChanges: "Unsaved changes"
   },
   ko: {
     activeConfig: "Active config",
@@ -286,10 +275,16 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
       "Active API Key가 준비되었습니다. 원문은 지금 저장해야 하며 다시 표시되지 않습니다.",
     budget: "Budget policy",
     budgetEnforcement: "Enforcement",
+    budgetPolicyEnabled: "예산 정책 사용",
+    budgetPolicyHint: "프로젝트 예산 초과 시 동작을 제어합니다.",
     budgetTab: "Budget",
     budgetWarning: "Warning threshold",
+    blockAction: "차단",
     cache: "Exact cache",
     cacheEnabled: "캐시 사용",
+    cacheEnabledHint:
+      "동일한 요청은 Provider 호출 전에 기존 응답을 재사용합니다.",
+    cacheSettings: "캐시 설정",
     cacheSection: "캐시",
     cacheTab: "Cache",
     cacheTtl: "TTL 초",
@@ -297,11 +292,24 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     configVersion: "Config version",
     completionPrice: "Completion micro USD",
     defaultRoute: "Default route",
+    detectorNames: {
+      api_key: "API 키",
+      authorization_header: "Authorization 헤더",
+      email: "이메일",
+      jwt: "JWT",
+      organization_name: "조직명",
+      person_name: "이름",
+      phone_number: "전화번호",
+      postal_address: "주소",
+      private_key: "Private Key",
+      resident_registration_number: "주민등록번호"
+    },
     detectors: "Safety detector",
     detectorType: "Detector",
     close: "닫기",
     details: "상세보기",
     disabled: "비활성화",
+    edit: "편집",
     enabled: "사용",
     fallbackRoute: "Fallback route",
     fixtureFallback: "Control Plane을 사용할 수 없어 fixture 값을 표시 중입니다.",
@@ -312,9 +320,8 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     lowCostRoute: "Low-cost route",
     logSafeCaptureHint:
       "켜져 있을 때 Request Detail에 masking 이후 log-safe prompt만 저장합니다.",
-    mandatoryProtection: "중요 민감정보 보호: 항상 활성화",
-    mandatoryProtectionHint:
-      "API key, JWT, Authorization header, private key, 주민등록번호는 PII masking 설정과 관계없이 항상 보호됩니다.",
+    mandatoryProtection: "중요 민감정보 보호",
+    mandatoryProtectionHint: "이 항목은 사용 중지할 수 없습니다.",
     maxBucketTokens: "최대 버킷 토큰",
     mode: "모드",
     model: "Model",
@@ -324,6 +331,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     policyDetails: "정책 상세",
     pricing: "Pricing rules",
     pricingVersion: "Pricing version",
+    privacyMasking: "개인정보 마스킹",
     promptCapture: "프롬프트 캡처",
     promptCaptureEnabled: "로그 안전 캡처",
     promptCaptureMaxChars: "최대 글자 수",
@@ -340,6 +348,7 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     rateLimitInfo:
       "요청 폭주를 막기 위한 제한입니다. 요청 1건은 토큰 1개를 사용하고, 토큰은 매초 설정한 수만큼 다시 채워집니다. 최대 버킷 토큰 수를 넘어서 쌓이지 않으며, 토큰이 부족하면 Provider 호출 전에 차단됩니다.",
     rateLimitTab: "Rate Limit",
+    redactAction: "마스킹",
     refillRate: "초당 충전 토큰",
     remove: "삭제",
     rollback: "Rollback",
@@ -369,7 +378,8 @@ const policyText: Record<Locale, RuntimePolicyEditorText> = {
     templateFallback:
       "이 애플리케이션에는 아직 활성 정책이 없습니다. 정책을 설정하고 게시하면 Gateway 경로에 적용됩니다.",
     title: "정책",
-    tokens: "Context tokens"
+    tokens: "Context tokens",
+    unsavedChanges: "저장되지 않은 변경사항"
   }
 };
 
@@ -403,8 +413,7 @@ function getPolicyPanelFallback(section: PolicySection, text: RuntimePolicyEdito
         <PolicyPanelFallbackGroup
           panels={[
             { heading: text.detectors, lineCount: 4, wide: true },
-            { heading: text.promptCapture },
-            { heading: text.responseCapture }
+            { heading: text.promptCapture }
           ]}
         />
       );
@@ -442,6 +451,12 @@ export function RuntimePolicyEditor({
       model.providerConnections.available
     )
   );
+  const [savedDraftValues, setSavedDraftValues] = useState<RuntimePolicyDraftValues>(() =>
+    getWritableRuntimePolicyDraftValues(
+      model.activeConfig,
+      model.providerConnections.available
+    )
+  );
   const [submitState, setSubmitState] = useState<SubmitState>({
     message: "",
     status: "idle"
@@ -449,11 +464,9 @@ export function RuntimePolicyEditor({
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>(
     hasGeneralSection ? "general" : "routing"
   );
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   const visiblePolicySections = useMemo(
     () => {
       const policySectionsForContext = shouldMoveBudgetToGeneral
@@ -478,17 +491,17 @@ export function RuntimePolicyEditor({
     }
   }, [activePolicySection, hasGeneralSection, shouldMoveBudgetToGeneral]);
   useEffect(() => {
-    setDraftValues(
-      getWritableRuntimePolicyDraftValues(
-        model.activeConfig,
-        model.providerConnections.available
-      )
+    const nextDraftValues = getWritableRuntimePolicyDraftValues(
+      model.activeConfig,
+      model.providerConnections.available
     );
+    setDraftValues(nextDraftValues);
+    setSavedDraftValues(nextDraftValues);
   }, [model.activeConfig, model.applicationId, model.providerConnections.available]);
-  const displayConfig =
-    submitState.status === "success" && "runtimeConfig" in submitState
-      ? submitState.runtimeConfig
-      : model.activeConfig;
+  const hasUnsavedChanges = useMemo(
+    () => JSON.stringify(draftValues) !== JSON.stringify(savedDraftValues),
+    [draftValues, savedDraftValues]
+  );
   const hasActiveApiKey = activeApiKeyCount > 0;
   const modelOptionsByProvider = useMemo(
     () => groupRoutingModelsByProvider(draftValues.models, model.providerConnections.available),
@@ -687,7 +700,9 @@ export function RuntimePolicyEditor({
       runtimeConfig: payload.runtimeConfig,
       status: "success"
     });
-    setDraftValues(getRuntimePolicyDraftValues(payload.runtimeConfig));
+    const nextDraftValues = getRuntimePolicyDraftValues(payload.runtimeConfig);
+    setDraftValues(nextDraftValues);
+    setSavedDraftValues(nextDraftValues);
     setIsSubmitting(false);
     if (action === "publish") {
       router.refresh();
@@ -740,44 +755,6 @@ export function RuntimePolicyEditor({
     });
     setIsIssuingApiKey(false);
     router.refresh();
-  }
-
-  async function rollbackPolicy(targetConfigVersion: string) {
-    setRollbackTarget(targetConfigVersion);
-    setSubmitState({ message: "", status: "idle" });
-
-    const response = await fetch("/api/control-plane/runtime-config", {
-      body: JSON.stringify({
-        action: "rollback",
-        applicationId: model.applicationId,
-        targetConfigVersion
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      runtimeConfig?: RuntimePolicyConfig;
-    };
-
-    if (!response.ok || !payload.runtimeConfig) {
-      setSubmitState({
-        message: payload.error ?? "Runtime policy rollback failed.",
-        status: "error"
-      });
-      setRollbackTarget(null);
-      return;
-    }
-
-    setSubmitState({
-      message: `Rolled back from ${targetConfigVersion}.`,
-      runtimeConfig: payload.runtimeConfig,
-      status: "success"
-    });
-    setDraftValues(getRuntimePolicyDraftValues(payload.runtimeConfig));
-    setRollbackTarget(null);
   }
 
   function renderBudgetPolicyPanel(projectPanel = false) {
@@ -977,10 +954,14 @@ export function RuntimePolicyEditor({
           })}
         </div>
         <div className="policy-actions">
-          <Button onClick={() => setIsDetailOpen(true)} type="button" variant="outline">
-            {text.details}
-          </Button>
           <Button
+            aria-label={
+              hasUnsavedChanges
+                ? `${text.saveDraft}: ${text.unsavedChanges}`
+                : text.saveDraft
+            }
+            className="policy-draft-button"
+            data-unsaved={hasUnsavedChanges}
             disabled={isSubmitting || !hasActiveApiKey || !hasRoutingCandidates}
             onClick={() => void submitPolicy("save-draft")}
             type="button"
@@ -1021,29 +1002,6 @@ export function RuntimePolicyEditor({
       ) : null}
 
       {renderActivePolicyPanel()}
-
-      {isDetailOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsDetailOpen(false)} role="presentation">
-          <Suspense
-            fallback={
-              <PolicyDetailModalFallback
-                onClose={() => setIsDetailOpen(false)}
-                text={text}
-              />
-            }
-          >
-            <RuntimePolicyDetailModal
-              displayConfig={displayConfig}
-              isSubmitting={isSubmitting}
-              model={model}
-              onClose={() => setIsDetailOpen(false)}
-              onRollback={(configVersion: string) => void rollbackPolicy(configVersion)}
-              rollbackTarget={rollbackTarget}
-              text={text}
-            />
-          </Suspense>
-        </div>
-      ) : null}
     </main>
   );
 }
