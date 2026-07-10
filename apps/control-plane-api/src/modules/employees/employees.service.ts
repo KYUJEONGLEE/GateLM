@@ -401,7 +401,10 @@ export class EmployeesService {
           const existingProject = await tx.project.findFirst({
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             where: {
-              name: row.projectName,
+              name: {
+                equals: row.projectName,
+                mode: 'insensitive',
+              },
               tenantId,
             },
           });
@@ -631,7 +634,9 @@ export class EmployeesService {
     employeeId: string,
     dto: UpdateEmployeeDto,
   ): Promise<EmployeeResponseDto> {
-    await this.getEmployeeOrThrow(tenantId, employeeId);
+    await this.getEmployeeOrThrow(tenantId, employeeId, {
+      includeDeleted: true,
+    });
 
     const data: Prisma.EmployeeUpdateInput = {};
     if (dto.name !== undefined) {
@@ -642,16 +647,16 @@ export class EmployeesService {
     }
     if (dto.status !== undefined) {
       data.status = dto.status;
-      if (dto.status === 'archived') {
-        data.deletedAt = new Date();
-      }
+      data.deletedAt = dto.status === 'archived' ? new Date() : null;
     }
     if (dto.invitationStatus !== undefined) {
       data.invitationStatus = dto.invitationStatus;
     }
 
     if (Object.keys(data).length === 0) {
-      return this.getEmployeeResponseOrThrow(tenantId, employeeId);
+      return this.getEmployeeResponseOrThrow(tenantId, employeeId, {
+        includeDeleted: true,
+      });
     }
 
     const employee = await this.prisma.employee.update({
@@ -877,10 +882,11 @@ export class EmployeesService {
   private async getEmployeeOrThrow(
     tenantId: string,
     employeeId: string,
+    options: { includeDeleted?: boolean } = {},
   ): Promise<Employee> {
     const employee = await this.prisma.employee.findFirst({
       where: {
-        deletedAt: null,
+        ...(options.includeDeleted ? {} : { deletedAt: null }),
         id: employeeId,
         tenantId,
       },
@@ -896,10 +902,11 @@ export class EmployeesService {
   private async getEmployeeResponseOrThrow(
     tenantId: string,
     employeeId: string,
+    options: { includeDeleted?: boolean } = {},
   ): Promise<EmployeeResponseDto> {
     const employee = await this.prisma.employee.findFirst({
       where: {
-        deletedAt: null,
+        ...(options.includeDeleted ? {} : { deletedAt: null }),
         id: employeeId,
         tenantId,
       },

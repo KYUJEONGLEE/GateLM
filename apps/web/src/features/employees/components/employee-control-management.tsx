@@ -686,6 +686,9 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
     for (const [projectId, assignments] of Object.entries(assignmentsByProjectId)) {
       const projectName = projectsById.get(projectId) ?? projectId;
       for (const assignment of assignments) {
+        if (assignment.status !== "active") {
+          continue;
+        }
         const current = employeeProjects.get(assignment.employeeId) ?? [];
         current.push(projectName);
         employeeProjects.set(assignment.employeeId, current);
