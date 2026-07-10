@@ -3,6 +3,7 @@
 import {
   Activity,
   Bell,
+  Building2,
   ChevronDown,
   CircleHelp,
   FolderKanban,
@@ -20,6 +21,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import {
+  getConsoleNavigationState,
+  type ConsoleSection,
+  type ManagementNavItem,
+  type MonitoringNavItem
+} from "@/components/layout/console-navigation";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger
@@ -27,7 +34,6 @@ import {
 import { formatTenantDisplayName } from "@/lib/formatting/display-identifiers";
 import type { Locale } from "@/lib/i18n/locale";
 
-type ConsoleSection = "monitoring" | "management";
 type ConsoleTheme = "light" | "dark";
 type NotificationSeverity = "critical" | "info" | "warning";
 type NotificationCategory = "Budget" | "Cache" | "Cost" | "Provider" | "Rate Limit" | "Safety" | "System";
@@ -51,16 +57,6 @@ type AdminNotification = {
   title: string;
 };
 
-export type ManagementNavItem =
-  | "api-keys"
-  | "app-tokens"
-  | "employees"
-  | "policies"
-  | "project"
-  | "provider"
-  | "teams";
-export type MonitoringNavItem = "alerts" | "analytics" | "live-logs" | "overview";
-
 const sectionIcons: Record<ConsoleSection, typeof LayoutDashboard> = {
   monitoring: LayoutDashboard,
   management: FolderKanban
@@ -77,6 +73,7 @@ const childIcons: Record<ManagementNavItem | MonitoringNavItem, typeof LayoutDas
   policies: ScrollText,
   project: FolderKanban,
   provider: Plug,
+  tenant: Building2,
   teams: Users
 };
 
@@ -88,12 +85,6 @@ type ConsoleShellProps = {
   currentUser: CurrentUser | null;
   locale: Locale;
   tenantId: string;
-};
-
-type ConsoleNavigationState = {
-  activeManagementItem?: ManagementNavItem;
-  activeMonitoringItem?: MonitoringNavItem;
-  activeSection: ConsoleSection;
 };
 
 type ChildNavigationItem = {
@@ -158,6 +149,14 @@ const navigationItems: Array<{
       ko: "관리"
     },
     children: [
+      {
+        labels: {
+          en: "Tenant",
+          ko: "Tenant"
+        },
+        item: "tenant",
+        path: (tenantId) => `/tenants/${tenantId}/tenants`
+      },
       {
         labels: {
           en: "Project",
@@ -628,85 +627,6 @@ export function ConsoleShell({
       </div>
     </div>
   );
-}
-
-function getConsoleNavigationState(pathname: string | null): ConsoleNavigationState {
-  switch (getTenantConsoleRoute(pathname)) {
-    case "dashboard":
-      return {
-        activeMonitoringItem: "overview",
-        activeSection: "monitoring"
-      };
-    case "request-logs":
-    case "metrics":
-      return {
-        activeMonitoringItem: "live-logs",
-        activeSection: "monitoring"
-      };
-    case "analytics":
-      return {
-        activeMonitoringItem: "analytics",
-        activeSection: "monitoring"
-      };
-    case "alerts":
-      return {
-        activeMonitoringItem: "alerts",
-        activeSection: "monitoring"
-      };
-    case "health":
-      return {
-        activeSection: "monitoring"
-      };
-    case "api-keys":
-      return {
-        activeManagementItem: "api-keys",
-        activeSection: "management"
-      };
-    case "app-tokens":
-      return {
-        activeManagementItem: "app-tokens",
-        activeSection: "management"
-      };
-    case "policies":
-      return {
-        activeManagementItem: "policies",
-        activeSection: "management"
-      };
-    case "employees":
-      return {
-        activeManagementItem: "employees",
-        activeSection: "management"
-      };
-    case "provider-connections":
-    case "model-catalog":
-      return {
-        activeManagementItem: "provider",
-        activeSection: "management"
-      };
-    case "teams":
-      return {
-        activeManagementItem: "teams",
-        activeSection: "management"
-      };
-    case "applications":
-    case "onboarding":
-    case "projects":
-      return {
-        activeManagementItem: "project",
-        activeSection: "management"
-      };
-    default:
-      return {
-        activeSection: "management"
-      };
-  }
-}
-
-function getTenantConsoleRoute(pathname: string | null) {
-  const segments = (pathname ?? "").split("/").filter(Boolean);
-  const tenantIndex = segments.indexOf("tenants");
-
-  return tenantIndex >= 0 ? segments[tenantIndex + 2] : undefined;
 }
 
 function ConsoleTopbarActions({
