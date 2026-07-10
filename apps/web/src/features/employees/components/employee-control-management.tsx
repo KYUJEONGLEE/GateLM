@@ -687,43 +687,54 @@ export function ProjectEmployeeAssignmentSection({
         )}
 
         {selectedDepartment ? (
-          <div className="project-department-employees">
-            {departmentEmployees.length === 0 ? (
-              <p className="project-empty">{text.noEmployees}</p>
-            ) : (
-              departmentEmployees.map((employee) => {
-                const isAssigned = activeAssignmentByEmployeeId.has(employee.id);
-                const isSelected = selectedEmployeeId === employee.id;
+          <section
+            aria-labelledby="project-department-employee-heading"
+            className="project-department-employee-group"
+          >
+            <div className="project-department-employee-heading">
+              <h4 id="project-department-employee-heading">
+                {selectedDepartment} · {text.employees}
+              </h4>
+              <span>{departmentEmployees.length}</span>
+            </div>
+            <div className="project-department-employees">
+              {departmentEmployees.length === 0 ? (
+                <p className="project-empty">{text.noEmployees}</p>
+              ) : (
+                departmentEmployees.map((employee) => {
+                  const isAssigned = activeAssignmentByEmployeeId.has(employee.id);
+                  const isSelected = selectedEmployeeId === employee.id;
 
-                return (
-                  <button
-                    aria-pressed={isSelected}
-                    className="project-department-employee"
-                    data-active={isSelected}
-                    disabled={pendingAction !== null}
-                    key={employee.id}
-                    onClick={() => setSelectedEmployeeId(employee.id)}
-                    type="button"
-                  >
-                    <span className="project-department-employee-icon">
-                      <Users aria-hidden="true" />
-                    </span>
-                    <span className="project-department-employee-copy">
-                      <strong>{employee.name?.trim() || employee.email}</strong>
-                      <small>{employee.email}</small>
-                    </span>
-                    <Badge
-                      className="project-status-badge"
-                      data-status={isAssigned ? "ACTIVE" : "DISABLED"}
-                      variant="outline"
+                  return (
+                    <button
+                      aria-pressed={isSelected}
+                      className="project-department-employee"
+                      data-active={isSelected}
+                      disabled={pendingAction !== null}
+                      key={employee.id}
+                      onClick={() => setSelectedEmployeeId(employee.id)}
+                      type="button"
                     >
-                      {isAssigned ? text.assigned : text.available}
-                    </Badge>
-                  </button>
-                );
-              })
-            )}
-          </div>
+                      <span className="project-department-employee-icon">
+                        <Users aria-hidden="true" />
+                      </span>
+                      <span className="project-department-employee-copy">
+                        <strong>{employee.name?.trim() || employee.email}</strong>
+                        <small>{employee.email}</small>
+                      </span>
+                      <Badge
+                        className="project-status-badge"
+                        data-status={isAssigned ? "ACTIVE" : "DISABLED"}
+                        variant="outline"
+                      >
+                        {isAssigned ? text.assigned : text.available}
+                      </Badge>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </section>
         ) : null}
 
         {selectedEmployeeId ? (
