@@ -105,7 +105,6 @@ const employeeText: Record<
     inviteResend: string;
     inviteSend: string;
     inviteSent: string;
-    management: string;
     modelKeys: string;
     name: string;
     next: string;
@@ -152,7 +151,6 @@ const employeeText: Record<
     inviteResend: "Resend",
     inviteSend: "Send invite",
     inviteSent: "Invitation email sent.",
-    management: "management",
     modelKeys: "Models",
     name: "Name",
     next: "Next",
@@ -172,7 +170,7 @@ const employeeText: Record<
     sortProject: "Project",
     staged: "Staged",
     status: "Status",
-    title: "Employee Control",
+    title: "Employee Management",
     warning: "Warning"
   },
   ko: {
@@ -198,7 +196,6 @@ const employeeText: Record<
     inviteResend: "재발송",
     inviteSend: "초대 메일 보내기",
     inviteSent: "초대 메일을 발송했습니다.",
-    management: "관리",
     modelKeys: "모델",
     name: "이름",
     next: "다음",
@@ -218,7 +215,7 @@ const employeeText: Record<
     sortProject: "프로젝트순",
     staged: "대기",
     status: "상태",
-    title: "직원 통제",
+    title: "직원 관리",
     warning: "경고"
   }
 };
@@ -1405,10 +1402,7 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
   return (
     <main className="console-content employee-console">
       <section className="employee-hero">
-        <div>
-          <p className="console-kicker">{text.management}</p>
-          <h2>{text.title}</h2>
-        </div>
+        <h2>{text.title}</h2>
       </section>
 
       {model.source === "fixture" ? (
