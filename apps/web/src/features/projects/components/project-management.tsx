@@ -167,8 +167,12 @@ export function ProjectManagement({
 }: ProjectManagementProps) {
   const text = projectText[locale];
   const [sortMode, setSortMode] = useState<ProjectSortMode>("usage");
-  const projects = model.projects.filter(
-    (project) => project.status !== "ARCHIVED" && project.status !== "DRAFT"
+  const projects = useMemo(
+    () =>
+      model.projects.filter(
+        (project) => project.status !== "ARCHIVED" && project.status !== "DRAFT"
+      ),
+    [model.projects]
   );
   const projectCostsById = useMemo(
     () => new Map(monthlyCostReport.projectCosts.map((cost) => [cost.projectId, cost])),

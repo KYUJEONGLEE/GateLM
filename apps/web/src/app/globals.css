@@ -4656,12 +4656,15 @@ html[data-theme="dark"] .policy-routing-provider-icon[data-family="openai"] img 
 
 .project-create-button {
   min-height: 49px;
-  margin-left: auto;
   gap: 8px;
   padding: 0 16px;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
+}
+
+.project-sort-control .project-create-button {
+  margin-left: auto;
 }
 
 .project-create-button svg {
