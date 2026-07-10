@@ -1,10 +1,8 @@
 import {
   AlertTriangle,
-  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CircleMinus,
   Coins,
   Database,
   Eye,
@@ -14,11 +12,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import type { InvocationLogRecord } from "@/lib/fixtures/v1-observability-fixtures";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import { formatDisplayIdentifier } from "@/lib/formatting/display-identifiers";
 import {
   formatInteger,
-  formatLatency,
-  nullableText
+  formatLatency
 } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 import { RequestLogDetailAnchor } from "./request-log-detail-anchor";
@@ -108,23 +106,14 @@ const requestLogText: Record<
     submitLabel: string;
     table: {
       actions: string;
-      cache: string;
-      cacheBypass: string;
-      cacheHit: string;
-      cacheMiss: string;
-      cacheUnknown: string;
       cost: string;
       empty: string;
       latency: string;
       model: string;
       name: string;
       project: string;
-      provider: string;
-      requestId: string;
-      safety: string;
       status: string;
       time: string;
-      tokens: string;
       unavailable: string;
     };
     title: string;
@@ -153,7 +142,7 @@ const requestLogText: Record<
     rangeEndLabel: "End of logs in this range",
     refreshLabel: "Refresh",
     searchLabel: "Search logs",
-    searchPlaceholder: "Project, department, employee, Request ID",
+    searchPlaceholder: "Project, department, employee, model",
     statusLabel: "Status",
     summary: {
       blocked: "Blocked",
@@ -166,23 +155,14 @@ const requestLogText: Record<
     submitLabel: "Search",
     table: {
       actions: "Open detail",
-      cache: "Cache",
-      cacheBypass: "Bypass",
-      cacheHit: "Hit",
-      cacheMiss: "Miss",
-      cacheUnknown: "-",
       cost: "Cost",
       empty: "No Gateway request logs found for the current range.",
       latency: "Latency",
       model: "Model",
       name: "Name",
       project: "Project",
-      provider: "Provider",
-      requestId: "Request ID",
-      safety: "Safety",
       status: "Status",
       time: "Time",
-      tokens: "Tokens",
       unavailable: "Live Gateway request logs are not available right now."
     },
     title: "Live Logs"
@@ -210,7 +190,7 @@ const requestLogText: Record<
     rangeEndLabel: "현재 범위의 마지막 로그",
     refreshLabel: "새로고침",
     searchLabel: "로그 검색",
-    searchPlaceholder: "프로젝트, 부서, 직원, Request ID 검색",
+    searchPlaceholder: "프로젝트, 부서, 직원, 모델 검색",
     statusLabel: "상태",
     summary: {
       blocked: "차단",
@@ -223,23 +203,14 @@ const requestLogText: Record<
     submitLabel: "검색",
     table: {
       actions: "상세 보기",
-      cache: "Cache",
-      cacheBypass: "Bypass",
-      cacheHit: "Hit",
-      cacheMiss: "Miss",
-      cacheUnknown: "-",
       cost: "비용",
       empty: "현재 범위에 Gateway 요청 로그가 없습니다.",
       latency: "지연 시간",
       model: "모델",
-      name: "Name",
-      project: "Project",
-      provider: "Provider",
-      requestId: "요청 ID",
-      safety: "Safety",
+      name: "이름",
+      project: "프로젝트",
       status: "상태",
-      time: "시간",
-      tokens: "토큰",
+      time: "요청 시각",
       unavailable: "현재 Gateway 요청 로그를 불러올 수 없습니다."
     },
     title: "실시간 로그"
@@ -276,7 +247,6 @@ export function RequestLogTable({
     .replace("{total}", String(totalRecords));
   const summaryItems = buildRequestLogSummaryItems(records, text.summary);
   const refreshHref = requestLogPageHref(tenantId, filters, currentPage);
-  const headerDate = formatHeaderDate(records);
   const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
 
   return (
@@ -290,21 +260,6 @@ export function RequestLogTable({
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={selectedRequestId ? "open" : "closed"}>
           <div className="request-log-list-panel">
-            <div className="request-log-workspace-toolbar">
-              <div className="request-log-hero-actions" aria-label="Live log controls">
-                <span className="request-log-hero-control">
-                  <CalendarDays aria-hidden="true" size={16} strokeWidth={2.2} />
-                  {headerDate}
-                </span>
-                <span className="request-log-hero-control">
-                  {text.createdOptions[filters.created]}
-                </span>
-                <Link className="request-log-refresh-link" href={refreshHref}>
-                  <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
-                  {text.refreshLabel}
-                </Link>
-              </div>
-            </div>
             <section className="request-log-summary-strip" aria-label="Request log summary">
               {summaryItems.map((item) => (
                 <article className="request-log-summary-item" data-tone={item.tone} key={item.label}>
@@ -401,6 +356,14 @@ export function RequestLogTable({
                   placeholder={text.searchPlaceholder}
                   submitLabel={text.submitLabel}
                 />
+                <Link
+                  aria-label={text.refreshLabel}
+                  className="request-log-refresh-button"
+                  href={refreshHref}
+                  title={text.refreshLabel}
+                >
+                  <RotateCw aria-hidden="true" size={18} strokeWidth={2.2} />
+                </Link>
               </div>
 
               <div className="request-log-pagination">
@@ -431,16 +394,11 @@ export function RequestLogTable({
                 <thead>
                   <tr>
                     <th>{text.table.time}</th>
-                    <th>{text.table.requestId}</th>
-                    <th>{text.table.project}</th>
                     <th>{text.table.name}</th>
-                    <th>{text.table.provider}</th>
+                    <th>{text.table.project}</th>
                     <th>{text.table.model}</th>
                     <th>{text.table.status}</th>
-                    <th>{text.table.cache}</th>
-                    <th>{text.table.safety}</th>
                     <th>{text.table.latency}</th>
-                    <th>{text.table.tokens}</th>
                     <th>{text.table.cost}</th>
                     <th aria-label={text.table.actions} />
                   </tr>
@@ -448,12 +406,12 @@ export function RequestLogTable({
                 <tbody>
                   {sourceState === "unavailable" ? (
                     <tr>
-                      <td colSpan={13}>{text.table.unavailable}</td>
+                      <td colSpan={8}>{text.table.unavailable}</td>
                     </tr>
                   ) : null}
                   {sourceState === "ready" && records.length === 0 ? (
                     <tr>
-                      <td colSpan={13}>{text.table.empty}</td>
+                      <td colSpan={8}>{text.table.empty}</td>
                     </tr>
                   ) : null}
                   {pageRecords.map((record) => {
@@ -471,16 +429,14 @@ export function RequestLogTable({
                           {formatShortTime(record.createdAt, timezone)}
                         </td>
                         <td>
-                          <Link
-                            className="request-link"
-                            data-request-log-anchor
-                            data-request-log-project-id={record.projectId}
-                            data-request-log-request-id={record.requestId}
-                            href={detailHref}
-                            scroll={false}
-                          >
-                            {displayRequestId}
-                          </Link>
+                          {record.endUserId ? (
+                            <span className="request-log-name-cell" title={record.endUserId}>
+                              <strong>{employee?.name || formatDisplayIdentifier(record.endUserId)}</strong>
+                              {employee?.department ? <small>{employee.department}</small> : null}
+                            </span>
+                          ) : (
+                            <span className="request-log-muted-value">-</span>
+                          )}
                         </td>
                         <td>
                           <span
@@ -492,30 +448,15 @@ export function RequestLogTable({
                           </span>
                         </td>
                         <td>
-                          {record.endUserId ? (
-                            <span className="request-log-name-cell" title={record.endUserId}>
-                              <strong>{employee?.name || formatDisplayIdentifier(record.endUserId)}</strong>
-                              {employee?.department ? <small>{employee.department}</small> : null}
-                            </span>
-                          ) : (
-                            <span className="request-log-muted-value">-</span>
-                          )}
+                          <ProviderModelCell
+                            model={record.selectedModel ?? record.requestedModel}
+                            provider={record.selectedProvider ?? record.requestedProvider}
+                          />
                         </td>
-                        <td>
-                          <ProviderBadge provider={record.selectedProvider ?? record.requestedProvider} />
-                        </td>
-                        <td>{nullableText(record.selectedModel, record.requestedModel ?? "not routed")}</td>
                         <td>
                           <StatusBadge label={formatHttpStatus(record)} status={record.status} />
                         </td>
-                        <td>
-                          <CacheHitBadge record={record} text={text.table} />
-                        </td>
-                        <td>
-                          <SafetyBadge record={record} />
-                        </td>
                         <td>{formatLatency(record.latencyMs)}</td>
-                        <td>{formatInteger(record.totalTokens)}</td>
                         <td>{formatMicroUsd(record.costMicroUsd)}</td>
                         <td className="request-log-action-cell">
                           <Link
@@ -600,79 +541,25 @@ function appendRequestLogQuery(query: URLSearchParams, key: string, value: strin
   }
 }
 
-function CacheHitBadge({
-  record,
-  text
+function ProviderModelCell({
+  model,
+  provider
 }: {
-  record: InvocationLogRecord;
-  text: (typeof requestLogText)[Locale]["table"];
+  model: string | null | undefined;
+  provider: string | null | undefined;
 }) {
-  const cache = getCacheHitDisplay(record, text);
-  const Icon = cache.tone === "hit" ? CheckCircle2 : cache.tone === "miss" ? CircleMinus : Database;
-
-  return (
-    <span className="request-log-cache-badge" data-cache-tone={cache.tone}>
-      <Icon aria-hidden="true" size={16} strokeWidth={2.4} />
-      {cache.label}
-    </span>
-  );
-}
-
-function getCacheHitDisplay(
-  record: InvocationLogRecord,
-  text: (typeof requestLogText)[Locale]["table"]
-) {
-  const cacheSignal = `${record.cacheStatus} ${record.domainOutcomes?.cache?.outcome ?? ""}`.toLowerCase();
-
-  if (cacheSignal.includes("hit")) {
-    return {
-      label: text.cacheHit,
-      tone: "hit"
-    } as const;
-  }
-
-  if (cacheSignal.includes("miss")) {
-    return {
-      label: text.cacheMiss,
-      tone: "miss"
-    } as const;
-  }
-
-  if (cacheSignal.includes("bypass")) {
-    return {
-      label: text.cacheBypass,
-      tone: "bypass"
-    } as const;
-  }
-
-  return {
-    label: text.cacheUnknown,
-    tone: "unknown"
-  } as const;
-}
-
-function ProviderBadge({ provider }: { provider: string | null | undefined }) {
   const normalized = normalizeProvider(provider);
+  const providerName = providerLabel(normalized, provider);
+  const modelName = model?.trim() || "not routed";
 
   return (
-    <span className="request-log-provider-badge" data-provider={normalized}>
-      <span>{providerMark(normalized)}</span>
-      {providerLabel(normalized, provider)}
-    </span>
-  );
-}
-
-function SafetyBadge({ record }: { record: InvocationLogRecord }) {
-  const outcome = record.domainOutcomes?.safety?.outcome ?? record.maskingAction;
-  const normalized = normalizeSafetyOutcome(outcome);
-
-  if (normalized === "none") {
-    return <span className="request-log-muted-value">-</span>;
-  }
-
-  return (
-    <span className="request-log-safety-badge" data-safety-tone={normalized}>
-      {safetyLabel(normalized)}
+    <span className="request-log-provider-model" title={`${providerName} · ${modelName}`}>
+      <ProviderFamilyIcon
+        className="request-log-provider-icon"
+        family={providerFamily(normalized)}
+        size={24}
+      />
+      <strong>{modelName}</strong>
     </span>
   );
 }
@@ -713,48 +600,20 @@ function providerLabel(normalized: string, provider: string | null | undefined) 
   return provider?.trim() ? formatDisplayIdentifier(provider) : "Unknown";
 }
 
-function providerMark(provider: string) {
-  if (provider === "openai") {
-    return "O";
-  }
+function providerFamily(provider: string) {
   if (provider === "anthropic") {
-    return "A";
+    return "claude";
   }
+
   if (provider === "gemini") {
-    return "G";
+    return "gemini";
   }
+
   if (provider === "mock") {
-    return "M";
+    return "mock";
   }
 
-  return "?";
-}
-
-function normalizeSafetyOutcome(value: string | null | undefined) {
-  const normalized = value?.trim().toLowerCase() ?? "";
-
-  if (!normalized || normalized === "none" || normalized === "passed" || normalized === "pass") {
-    return "none";
-  }
-  if (normalized.includes("mask") || normalized.includes("redact")) {
-    return "masked";
-  }
-  if (normalized.includes("block")) {
-    return "blocked";
-  }
-
-  return "flagged";
-}
-
-function safetyLabel(value: string) {
-  if (value === "masked") {
-    return "MASKED";
-  }
-  if (value === "blocked") {
-    return "BLOCKED";
-  }
-
-  return "FLAGGED";
+  return provider === "openai" ? "openai" : "new-provider";
 }
 
 function projectTone(value: string) {
@@ -918,17 +777,4 @@ function formatShortTime(value: string | null | undefined, timezone: string) {
     second: "2-digit",
     timeZone: timezone
   }).format(date);
-}
-
-function formatHeaderDate(records: InvocationLogRecord[]) {
-  const latest = records[0]?.createdAt;
-  const date = latest ? new Date(latest) : new Date();
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }

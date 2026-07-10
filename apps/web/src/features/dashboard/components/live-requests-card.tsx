@@ -1,14 +1,13 @@
 "use client";
 
 import {
-  Check,
-  Copy,
   Eye,
   Info,
   RotateCw
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ProviderFamilyIcon } from "@/features/provider-connections/components/provider-family-icon";
 import type {
   LiveRequestRow,
   LiveRequestsPayload,
@@ -88,11 +87,9 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
   const [modelFilter, setModelFilter] = useState("");
   const [isLoading, setIsLoading] = useState(!initialPayload);
   const [error, setError] = useState<string | null>(null);
-  const [copiedRequestId, setCopiedRequestId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const skippedInitialFetchRef = useRef(false);
   const inFlightQueryRef = useRef<string | null>(null);
-  const copyTimerRef = useRef<number | null>(null);
   const rowCountRef = useRef(rows.length);
   const requestQueryString = useMemo(
     () =>
@@ -194,31 +191,10 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
     };
   }, [initialPayload, loadRequests]);
 
-  useEffect(() => {
-    return () => {
-      if (copyTimerRef.current !== null) {
-        window.clearTimeout(copyTimerRef.current);
-      }
-    };
-  }, []);
-
   const viewAllLogsHref = useMemo(
     () => requestLogsHref(tenantId, range, statusFilter, modelFilter, projectId),
     [modelFilter, projectId, range, statusFilter, tenantId]
   );
-
-  async function copyRequestId(requestId: string) {
-    try {
-      await navigator.clipboard.writeText(requestId);
-      setCopiedRequestId(requestId);
-      if (copyTimerRef.current !== null) {
-        window.clearTimeout(copyTimerRef.current);
-      }
-      copyTimerRef.current = window.setTimeout(() => setCopiedRequestId(null), 1200);
-    } catch (copyError) {
-      console.warn("Failed to copy request id", copyError);
-    }
-  }
 
   return (
     <section className="dashboard-live-requests-panel" aria-label="Live Requests">
@@ -270,11 +246,9 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
         <table className="dashboard-live-requests-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Request ID</th>
-              <th>Project</th>
+              <th>Request Time</th>
               <th>Name</th>
-              <th>Provider</th>
+              <th>Project</th>
               <th>Model</th>
               <th>Status</th>
               <th>Cache</th>
@@ -288,7 +262,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
           <tbody>
             {isLoading && rows.length === 0 ? (
               <tr>
-                <td className="dashboard-live-requests-state" colSpan={13}>
+                <td className="dashboard-live-requests-state" colSpan={11}>
                   <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
                   Loading live requests
                 </td>
@@ -296,7 +270,7 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
             ) : null}
             {!isLoading && rows.length === 0 ? (
               <tr>
-                <td className="dashboard-live-requests-state" colSpan={13}>
+                <td className="dashboard-live-requests-state" colSpan={11}>
                   No recent requests for selected filters
                 </td>
               </tr>
@@ -305,21 +279,11 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
               <tr key={row.id}>
                 <td>{formatLiveTime(row.timestamp)}</td>
                 <td>
-                  <div className="dashboard-live-request-id">
-                    <span title={row.requestId}>{compactRequestId(row.requestId)}</span>
-                    <button
-                      aria-label={`Copy request id ${row.requestId}`}
-                      onClick={() => void copyRequestId(row.requestId)}
-                      type="button"
-                    >
-                      {copiedRequestId === row.requestId ? (
-                        <Check aria-hidden="true" size={14} strokeWidth={2.4} />
-                      ) : (
-                        <Copy aria-hidden="true" size={14} strokeWidth={2.2} />
-                      )}
-                    </button>
-                    {copiedRequestId === row.requestId ? <em>Copied</em> : null}
-                  </div>
+                  {row.userName ? (
+                    <span title={row.userName}>{row.userName}</span>
+                  ) : (
+                    <span className="dashboard-live-muted-value">-</span>
+                  )}
                 </td>
                 <td>
                   <span
@@ -331,19 +295,8 @@ export function LiveRequestsCard({ filters, initialPayload }: LiveRequestsCardPr
                   </span>
                 </td>
                 <td>
-                  {row.userName ? (
-                    <span title={row.userName}>{row.userName}</span>
-                  ) : (
-                    <span className="dashboard-live-muted-value">-</span>
-                  )}
+                  <LiveProviderModel row={row} />
                 </td>
-                <td>
-                  <span className="dashboard-live-provider" data-provider={row.provider}>
-                    <span>{providerMark(row.provider)}</span>
-                    {row.providerLabel}
-                  </span>
-                </td>
-                <td>{row.model}</td>
                 <td>
                   <span className="dashboard-live-status-badge" data-status-tone={statusTone(row)}>
                     {row.statusLabel}
@@ -514,25 +467,33 @@ function formatLiveTime(value: string) {
   return timeFormatter.format(date);
 }
 
-function compactRequestId(value: string) {
-  if (value.length <= 28) {
-    return value;
-  }
-
-  return `${value.slice(0, 16)}...${value.slice(-6)}`;
+function LiveProviderModel({ row }: { row: LiveRequestRow }) {
+  return (
+    <span className="dashboard-live-provider-model" title={`${row.providerLabel} · ${row.model}`}>
+      <ProviderFamilyIcon
+        className="dashboard-live-provider-icon"
+        family={liveProviderFamily(row.provider)}
+        size={22}
+      />
+      <strong>{row.model}</strong>
+    </span>
+  );
 }
 
-function providerMark(provider: LiveRequestRow["provider"]) {
-  const marks: Record<LiveRequestRow["provider"], string> = {
-    anthropic: "A",
-    gemini: "G",
-    google: "G",
-    mock: "M",
-    openai: "O",
-    unknown: "?"
-  };
+function liveProviderFamily(provider: LiveRequestRow["provider"]) {
+  if (provider === "anthropic") {
+    return "claude";
+  }
 
-  return marks[provider];
+  if (provider === "gemini" || provider === "google") {
+    return "gemini";
+  }
+
+  if (provider === "mock") {
+    return "mock";
+  }
+
+  return provider === "openai" ? "openai" : "new-provider";
 }
 
 function statusTone(row: LiveRequestRow) {
