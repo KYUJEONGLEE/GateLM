@@ -315,7 +315,7 @@ func TestChatCompletionsHandlerFallsBackToLocalMaskingWhenAiSafetySidecarTimesOu
 			Local:       maskdomain.NewP0Engine(),
 			EndpointURL: sidecar.URL,
 			HTTPClient:  sidecar.Client(),
-			Timeout:     5 * time.Millisecond,
+			Timeout:     50 * time.Millisecond,
 		}),
 	}
 	withTestAuth(&handler)

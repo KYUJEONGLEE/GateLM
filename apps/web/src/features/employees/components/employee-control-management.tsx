@@ -1795,8 +1795,9 @@ export function EmployeeControlManagement({ locale, model }: EmployeeControlMana
 
     return (
       <button
-        aria-label={`${label} ${locale === "ko" ? "정렬" : "sort"}`}
-        aria-sort={isActive ? directionLabel : "none"}
+        aria-label={`${label} ${locale === "ko" ? "정렬" : "sort"}${
+          isActive ? ` (${directionLabel})` : ""
+        }`}
         className="employee-list-sort-button"
         data-active={isActive}
         onClick={() => changeEmployeeSort(field)}
