@@ -89,9 +89,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       <main className="console-content">
         <section className="dashboard-hero">
           <div>
-            <p className="console-kicker">Gateway connection</p>
             <h2>Dashboard unavailable</h2>
-            <p>Live Gateway metrics are not available right now.</p>
           </div>
         </section>
       </main>

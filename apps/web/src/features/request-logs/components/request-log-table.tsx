@@ -305,25 +305,28 @@ export function RequestLogTable({
     <main className="console-content request-log-screen">
       <section className="request-log-hero">
         <div>
-          <p className="console-kicker">{text.kicker}</p>
           <h2>{text.title}</h2>
-        </div>
-        <div className="request-log-hero-actions" aria-label="Live log controls">
-          <span className="request-log-hero-control">
-            <CalendarDays aria-hidden="true" size={16} strokeWidth={2.2} />
-            {headerDate}
-          </span>
-          <span className="request-log-hero-control">{text.createdOptions[filters.created]}</span>
-          <Link className="request-log-refresh-link" href={refreshHref}>
-            <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
-            {text.refreshLabel}
-          </Link>
         </div>
       </section>
 
       <RequestLogDetailAnchor>
         <section className="request-log-workspace" data-detail={selectedRequestId ? "open" : "closed"}>
           <div className="console-panel request-log-list-panel">
+            <div className="request-log-workspace-toolbar">
+              <div className="request-log-hero-actions" aria-label="Live log controls">
+                <span className="request-log-hero-control">
+                  <CalendarDays aria-hidden="true" size={16} strokeWidth={2.2} />
+                  {headerDate}
+                </span>
+                <span className="request-log-hero-control">
+                  {text.createdOptions[filters.created]}
+                </span>
+                <Link className="request-log-refresh-link" href={refreshHref}>
+                  <RotateCw aria-hidden="true" size={16} strokeWidth={2.2} />
+                  {text.refreshLabel}
+                </Link>
+              </div>
+            </div>
             <section className="request-log-summary-strip" aria-label="Request log summary">
               {summaryItems.map((item) => (
                 <article className="request-log-summary-item" data-tone={item.tone} key={item.label}>

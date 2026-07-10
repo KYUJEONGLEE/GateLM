@@ -412,7 +412,6 @@ export function ProjectDetailManagement({
       <section className="dashboard-hero">
         <div>
           {breadcrumbItems ? <Breadcrumb items={breadcrumbItems} /> : null}
-          <p className="console-kicker">{text.project}</p>
           <h2>{project.name}</h2>
         </div>
       </section>
